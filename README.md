@@ -108,13 +108,31 @@ Built with:
 
 ## Contributing
 
-Contributions welcome! Please:
+Contributions welcome! We follow a feature branch workflow with pull requests.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Ensure `cargo test` and `cargo clippy` pass
-5. Submit a pull request
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+**Quick Start:**
+
+```bash
+# Create feature branch
+git checkout -b feature/your-feature
+
+# Make changes and test
+cargo nextest run --lib
+cargo +nightly fmt
+cargo clippy -- -D warnings
+cargo deny check
+
+# Push and create PR
+git push origin feature/your-feature
+```
+
+**CI Checks:**
+- Tests on Linux, macOS, Windows (cargo-nextest)
+- Formatting (rustfmt nightly)
+- Lints (clippy)
+- Security audit (cargo-deny)
 
 ## License
 

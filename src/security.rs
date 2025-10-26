@@ -81,6 +81,9 @@ pub enum SecurityError {
 
     #[error("Invalid UTF-8 encoding")]
     InvalidEncoding,
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 }
 
 /// User-facing error messages (sanitized)
@@ -276,6 +279,104 @@ pub mod sanitizer {
     }
 }
 
+/// Safe arithmetic operations for scoring and calculations
+pub mod arithmetic {
+    use super::*;
+
+    /// Safely calculates score with overflow prevention
+    ///
+    /// # Errors
+    /// Returns `ScoreOverflow` if the calculation would overflow
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let score = checked_score_calculation(5, 10, 100)?;
+    /// assert_eq!(score, 50);
+    /// ```
+    pub fn checked_score_calculation(
+        optimal_count: usize,
+        actual_count: usize,
+        max_points: u32,
+    ) -> Result<u32, SecurityError> {
+        // Validate inputs to prevent division by zero and negative scenarios
+        if optimal_count == 0 || actual_count == 0 {
+            return Err(SecurityError::ScoreOverflow);
+        }
+
+        // Use checked arithmetic to prevent overflow
+        let numerator = (max_points as u64)
+            .checked_mul(optimal_count as u64)
+            .ok_or(SecurityError::ScoreOverflow)?;
+
+        let result = numerator
+            .checked_div(actual_count as u64)
+            .ok_or(SecurityError::ScoreOverflow)?;
+
+        // Ensure result fits in u32 and doesn't exceed max_points
+        let final_score = result.min(max_points as u64) as u32;
+
+        Ok(final_score)
+    }
+
+    /// Safely adds two scores with overflow prevention
+    ///
+    /// # Errors
+    /// Returns `ScoreOverflow` if the sum would overflow
+    pub fn checked_score_add(a: u32, b: u32) -> Result<u32, SecurityError> {
+        a.checked_add(b).ok_or(SecurityError::ScoreOverflow)
+    }
+
+    /// Safely multiplies a score with a multiplier (for alternatives)
+    ///
+    /// # Errors
+    /// Returns `ScoreOverflow` if the multiplication would overflow
+    pub fn checked_score_multiply(score: u32, multiplier: f32) -> Result<u32, SecurityError> {
+        // Ensure multiplier is reasonable (0.0 to 2.0)
+        if !(0.0..=2.0).contains(&multiplier) {
+            return Err(SecurityError::ScoreOverflow);
+        }
+
+        let result = (score as f64 * multiplier as f64) as u64;
+
+        // Check if result fits in u32
+        if result > u32::MAX as u64 {
+            return Err(SecurityError::ScoreOverflow);
+        }
+
+        Ok(result as u32)
+    }
+
+    /// Validates that action counts are within reasonable bounds
+    ///
+    /// # Errors
+    /// Returns `TooManyActions` if count exceeds maximum
+    pub fn validate_action_count(count: usize) -> Result<(), SecurityError> {
+        if count > 1_000_000 {
+            return Err(SecurityError::TooManyActions);
+        }
+        Ok(())
+    }
+
+    /// Validates cursor position is within bounds
+    ///
+    /// # Errors
+    /// Returns `InvalidCursorPosition` if row or col exceeds reasonable bounds
+    pub fn validate_cursor_position(
+        row: usize,
+        col: usize,
+        max_content_size: usize,
+    ) -> Result<(), SecurityError> {
+        // Cursor position should be reasonable - not exceeding a line that's 10x the content size
+        let max_reasonable = max_content_size.saturating_mul(10);
+
+        if row > max_reasonable || col > max_reasonable {
+            return Err(SecurityError::InvalidCursorPosition);
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,5 +429,90 @@ mod tests {
             user_err.to_string(),
             "Failed to load scenario file. Please check the file path and format."
         );
+    }
+
+    // Arithmetic safety tests
+    #[test]
+    fn test_normal_score_calculation() {
+        let result = arithmetic::checked_score_calculation(5, 10, 100);
+        assert_eq!(result.unwrap(), 50);
+    }
+
+    #[test]
+    fn test_score_calculation_zero_optimal() {
+        let result = arithmetic::checked_score_calculation(0, 10, 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_score_calculation_zero_actual() {
+        let result = arithmetic::checked_score_calculation(10, 0, 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_score_calculation_capped_at_max() {
+        // If actual < optimal, score should be capped at max_points
+        let result = arithmetic::checked_score_calculation(10, 5, 100);
+        assert_eq!(result.unwrap(), 100);
+    }
+
+    #[test]
+    fn test_score_calculation_overflow_prevention() {
+        // Test with values that would overflow
+        let result = arithmetic::checked_score_calculation(usize::MAX / 2, 1, u32::MAX);
+        // This will overflow when computing the numerator
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_score_add_normal() {
+        let result = arithmetic::checked_score_add(50, 30);
+        assert_eq!(result.unwrap(), 80);
+    }
+
+    #[test]
+    fn test_score_add_overflow() {
+        let result = arithmetic::checked_score_add(u32::MAX, 1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_score_multiply_normal() {
+        let result = arithmetic::checked_score_multiply(100, 0.5);
+        assert_eq!(result.unwrap(), 50);
+    }
+
+    #[test]
+    fn test_score_multiply_invalid_multiplier() {
+        let result = arithmetic::checked_score_multiply(100, -0.5);
+        assert!(result.is_err());
+
+        let result = arithmetic::checked_score_multiply(100, 3.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_action_count_validation_normal() {
+        let result = arithmetic::validate_action_count(1000);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_action_count_validation_exceeds() {
+        let result = arithmetic::validate_action_count(2_000_000);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cursor_position_validation_normal() {
+        let result = arithmetic::validate_cursor_position(10, 5, 1000);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cursor_position_validation_excessive() {
+        let result = arithmetic::validate_cursor_position(1_000_000_000, 0, 100);
+        assert!(result.is_err());
     }
 }

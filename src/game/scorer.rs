@@ -454,7 +454,10 @@ mod tests {
             PerformanceRating::Perfect.description(),
             "Perfect! Optimal solution."
         );
-        assert_eq!(PerformanceRating::Excellent.description(), "Excellent work!");
+        assert_eq!(
+            PerformanceRating::Excellent.description(),
+            "Excellent work!"
+        );
         assert_eq!(PerformanceRating::Good.description(), "Good job!");
         assert_eq!(PerformanceRating::Fair.description(), "Fair attempt.");
         assert_eq!(PerformanceRating::Poor.description(), "Keep practicing!");

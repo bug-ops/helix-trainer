@@ -22,6 +22,7 @@ Cargo.lock
 *.launch
 .settings/
 *.sublime-workspace
+.claude
 
 # OS
 .DS_Store
@@ -38,6 +39,7 @@ Thumbs.db
 *.log
 debug/
 tmp/
+.local
 
 # Temporary files
 *.tmp

@@ -1,0 +1,83 @@
+# Basic Helix Keybindings Training Scenarios
+# These scenarios cover fundamental Helix editor operations
+
+[[scenarios]]
+id = "delete_line_001"
+name = "Delete current line"
+description = "Delete the current line where the cursor is located. In Helix, 'd' is the delete operator."
+
+[scenarios.setup]
+file_content = "first line\nsecond line\nthird line"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "first line\nthird line"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["d", "d"]
+description = "Press 'd' twice: first 'd' activates delete mode, second 'd' targets the current line"
+
+hints = ["In Helix (like Vim), 'd' is a modal operator that needs a motion target", "When you press 'd' twice, the second 'd' means 'delete this line'"]
+
+[[scenarios.alternatives]]
+commands = ["c", "c"]
+points_multiplier = 0.8
+description = "Alternative: Use 'cc' (change line)"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 1
+
+---
+
+[[scenarios]]
+id = "move_line_up_001"
+name = "Move line up"
+description = "Move the current line up one position using Alt+Up"
+
+[scenarios.setup]
+file_content = "function start() {\n  console.log('Hello');\n  console.log('World');\n}"
+cursor_position = [2, 2]
+
+[scenarios.target]
+file_content = "function start() {\n  console.log('World');\n  console.log('Hello');\n}"
+cursor_position = [1, 2]
+
+[scenarios.solution]
+commands = ["alt-up"]
+description = "Press Alt+Up to move the current line up"
+
+hints = ["Helix has convenient keybindings for moving lines up and down"]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+---
+
+[[scenarios]]
+id = "select_word_001"
+name = "Select current word"
+description = "Select the word under the cursor"
+
+[scenarios.setup]
+file_content = "The quick brown fox"
+cursor_position = [0, 4]
+
+[scenarios.target]
+file_content = "The quick brown fox"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["e"]
+description = "Press 'e' to select to the end of the current word"
+
+hints = ["In Helix, 'e' extends selection to the end of the word", "After selecting, you can delete with 'd', change with 'c', etc."]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0

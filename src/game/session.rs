@@ -1,0 +1,843 @@
+//! Game session management for training scenarios
+//!
+//! This module provides the GameSession type which manages the user's attempt
+//! at solving a scenario. It tracks user actions, maintains game state, and
+//! provides feedback based on performance.
+//!
+//! # Examples
+//!
+//! ```ignore
+//! use helix_trainer::game::GameSession;
+//! use helix_trainer::config::Scenario;
+//!
+//! // Create a new session for a scenario
+//! let scenario = /* load from file */;
+//! let mut session = GameSession::new(scenario)?;
+//!
+//! // User performs actions
+//! session.record_action("d".to_string())?;
+//! session.record_action("d".to_string())?;
+//!
+//! // Update editor state
+//! let new_state = /* get from editor */;
+//! session.update_state(new_state)?;
+//!
+//! // Check if scenario is complete
+//! if session.is_completed() {
+//!     let feedback = session.get_feedback()?;
+//!     println!("{}", feedback.summary());
+//! }
+//! # Ok::<(), helix_trainer::security::UserError>(())
+//! ```
+
+use crate::config::Scenario;
+use crate::game::{EditorState, PerformanceRating, Scorer};
+use crate::security::{self, SecurityError, UserError};
+use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
+
+/// Represents a single user action during gameplay
+///
+/// Stores the command/key sequence and timestamp for tracking
+/// action sequence and timing analytics.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserAction {
+    /// The command or key sequence entered by user
+    pub command: String,
+    /// Elapsed time when action was performed
+    pub timestamp: Duration,
+}
+
+impl UserAction {
+    /// Create a new user action with timestamp
+    ///
+    /// # Arguments
+    /// * `command` - The command/key sequence entered
+    /// * `elapsed` - Elapsed time since session start
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::UserAction;
+    /// use std::time::Duration;
+    ///
+    /// let action = UserAction::new("d".to_string(), Duration::from_secs(1));
+    /// assert_eq!(action.command, "d");
+    /// # Ok::<(), helix_trainer::security::SecurityError>(())
+    /// ```
+    pub fn new(command: String, elapsed: Duration) -> Self {
+        Self {
+            command,
+            timestamp: elapsed,
+        }
+    }
+}
+
+/// Represents the current state of a game session
+///
+/// Tracks whether the session is ongoing, completed, or abandoned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionState {
+    /// Session is active and user is still playing
+    Active,
+    /// Session completed successfully (target state achieved)
+    Completed,
+    /// Session abandoned (user gave up or skipped)
+    Abandoned,
+}
+
+/// Feedback provided to user after completing a scenario
+///
+/// Contains performance metrics, score, and guidance for improvement.
+#[derive(Debug, Clone)]
+pub struct Feedback {
+    /// Whether the scenario was completed successfully
+    pub success: bool,
+    /// Score earned (0 to max_points)
+    pub score: u32,
+    /// Maximum possible points for this scenario
+    pub max_points: u32,
+    /// Performance rating (Perfect, Excellent, Good, Fair, Poor)
+    pub rating: PerformanceRating,
+    /// Number of actions actually taken
+    pub actions_taken: usize,
+    /// Optimal number of actions for this scenario
+    pub optimal_actions: usize,
+    /// Total time taken to complete scenario
+    pub duration: Duration,
+    /// Optional hint if user struggled
+    pub hint: Option<String>,
+    /// Whether user achieved optimal solution
+    pub is_optimal: bool,
+}
+
+impl Feedback {
+    /// Get a summary message for the user
+    ///
+    /// Returns a human-readable single-line summary with emoji, score,
+    /// and action counts.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::{Feedback, PerformanceRating};
+    /// use std::time::Duration;
+    ///
+    /// let feedback = Feedback {
+    ///     success: true,
+    ///     score: 100,
+    ///     max_points: 100,
+    ///     rating: PerformanceRating::Perfect,
+    ///     actions_taken: 2,
+    ///     optimal_actions: 2,
+    ///     duration: Duration::from_secs(5),
+    ///     hint: None,
+    ///     is_optimal: true,
+    /// };
+    /// let summary = feedback.summary();
+    /// assert!(summary.contains("100/100"));
+    /// # Ok::<(), helix_trainer::security::SecurityError>(())
+    /// ```
+    pub fn summary(&self) -> String {
+        if self.success {
+            format!(
+                "{} Score: {}/{} - {} actions (optimal: {})",
+                self.rating.emoji(),
+                self.score,
+                self.max_points,
+                self.actions_taken,
+                self.optimal_actions
+            )
+        } else {
+            "Scenario not completed. Try again!".to_string()
+        }
+    }
+}
+
+/// Manages a single training scenario session
+///
+/// Tracks the user's progress through a scenario, including:
+/// - Initial and target editor states
+/// - Current editor state
+/// - All user actions taken
+/// - Session timing
+/// - State (active, completed, abandoned)
+///
+/// The session validates all state transitions and provides
+/// score calculation and feedback generation.
+pub struct GameSession {
+    /// The scenario being played
+    scenario: Scenario,
+    /// Initial state from scenario setup
+    initial_state: EditorState,
+    /// Target state to achieve
+    target_state: EditorState,
+    /// Current editor state
+    current_state: EditorState,
+    /// All user actions taken so far
+    user_actions: Vec<UserAction>,
+    /// When the session started
+    started_at: Instant,
+    /// Current session state (Active, Completed, or Abandoned)
+    state: SessionState,
+    /// Number of hints shown to user
+    hints_shown: usize,
+}
+
+impl GameSession {
+    /// Create a new game session for a scenario
+    ///
+    /// Initializes the session with the scenario's setup state and
+    /// prepares it for user interaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UserError` if:
+    /// - Scenario setup or target content is invalid
+    /// - Cursor positions are out of bounds
+    /// - Content size exceeds limits
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let scenario = /* load from file */;
+    /// let session = GameSession::new(scenario)?;
+    /// assert!(session.is_active());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn new(scenario: Scenario) -> Result<Self, UserError> {
+        // Create initial state from scenario setup
+        let initial_state = EditorState::from_setup(
+            &scenario.setup.file_content,
+            [
+                scenario.setup.cursor_position.0,
+                scenario.setup.cursor_position.1,
+            ],
+        )
+        .map_err(|_| UserError::ScenarioTooComplex)?;
+
+        // Create target state
+        let target_state = EditorState::from_setup(
+            &scenario.target.file_content,
+            [
+                scenario.target.cursor_position.0,
+                scenario.target.cursor_position.1,
+            ],
+        )
+        .map_err(|_| UserError::ScenarioTooComplex)?;
+
+        // Clone initial state as current state
+        let current_state = initial_state.clone();
+
+        Ok(Self {
+            scenario,
+            initial_state,
+            target_state,
+            current_state,
+            user_actions: Vec::new(),
+            started_at: Instant::now(),
+            state: SessionState::Active,
+            hints_shown: 0,
+        })
+    }
+
+    /// Get reference to the scenario being played
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let scenario = /* scenario */;
+    /// let session = GameSession::new(scenario.clone())?;
+    /// assert_eq!(session.scenario().id, scenario.id);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn scenario(&self) -> &Scenario {
+        &self.scenario
+    }
+
+    /// Get reference to the current editor state
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let session = GameSession::new(scenario)?;
+    /// let current = session.current_state();
+    /// assert_eq!(current.content(), scenario.setup.file_content.as_str());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn current_state(&self) -> &EditorState {
+        &self.current_state
+    }
+
+    /// Get reference to the target editor state
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let session = GameSession::new(scenario)?;
+    /// let target = session.target_state();
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn target_state(&self) -> &EditorState {
+        &self.target_state
+    }
+
+    /// Get the current session state
+    ///
+    /// Returns Active, Completed, or Abandoned.
+    pub fn state(&self) -> SessionState {
+        self.state
+    }
+
+    /// Get the number of actions taken so far
+    pub fn action_count(&self) -> usize {
+        self.user_actions.len()
+    }
+
+    /// Get elapsed time since session start
+    pub fn elapsed(&self) -> Duration {
+        self.started_at.elapsed()
+    }
+
+    /// Record a user action
+    ///
+    /// Validates that the action count doesn't exceed security limits
+    /// and adds the action to the history with current timestamp.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityError::TooManyActions` if action count would
+    /// exceed the maximum allowed.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// session.record_action("d".to_string())?;
+    /// assert_eq!(session.action_count(), 1);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn record_action(&mut self, command: String) -> Result<(), SecurityError> {
+        // Validate action count doesn't exceed limits
+        security::arithmetic::validate_action_count(self.user_actions.len() + 1)?;
+
+        let elapsed = self.elapsed();
+        let action = UserAction::new(command, elapsed);
+        self.user_actions.push(action);
+
+        Ok(())
+    }
+
+    /// Update the current editor state
+    ///
+    /// Updates the internal editor state and automatically checks if
+    /// the scenario has been completed. If the new state matches the
+    /// target state, the session is automatically marked as completed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityError` if state validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// let target = session.target_state().clone();
+    /// session.update_state(target)?;
+    /// assert!(session.is_completed());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn update_state(&mut self, new_state: EditorState) -> Result<(), SecurityError> {
+        self.current_state = new_state;
+
+        // Check if scenario is completed
+        if self.check_completion() {
+            self.state = SessionState::Completed;
+        }
+
+        Ok(())
+    }
+
+    /// Check if the scenario is completed successfully
+    ///
+    /// Compares current state with target state (both content and cursor).
+    /// Returns true only if they match exactly.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// assert!(!session.check_completion());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn check_completion(&self) -> bool {
+        self.current_state.matches(&self.target_state)
+    }
+
+    /// Check if content matches target (ignoring cursor position)
+    ///
+    /// Returns true if file content is correct but cursor position
+    /// may differ from target.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let session = GameSession::new(scenario)?;
+    /// if session.check_content_matches() {
+    ///     println!("Content is correct!");
+    /// }
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn check_content_matches(&self) -> bool {
+        self.current_state.content_matches(&self.target_state)
+    }
+
+    /// Get the next available hint
+    ///
+    /// Returns hints in order from the scenario. Once all hints are
+    /// shown, subsequent calls return None.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// if let Some(hint) = session.get_hint() {
+    ///     println!("Hint: {}", hint);
+    /// }
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn get_hint(&mut self) -> Option<String> {
+        if self.hints_shown < self.scenario.hints.len() {
+            let hint = self.scenario.hints[self.hints_shown].clone();
+            self.hints_shown += 1;
+            Some(hint)
+        } else {
+            None
+        }
+    }
+
+    /// Abandon the session (give up)
+    ///
+    /// Marks the session as abandoned. This results in a score of 0
+    /// if feedback is requested.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::{GameSession, SessionState};
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// session.abandon();
+    /// assert_eq!(session.state(), SessionState::Abandoned);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn abandon(&mut self) {
+        self.state = SessionState::Abandoned;
+    }
+
+    /// Calculate the final score for this session
+    ///
+    /// Applies the scenario's scoring configuration to the actual
+    /// number of actions taken. Returns 0 if session is not completed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityError` if score calculation fails (e.g., overflow).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// // ... perform actions and complete scenario ...
+    /// let score = session.calculate_score()?;
+    /// println!("Score: {}", score);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn calculate_score(&self) -> Result<u32, SecurityError> {
+        if self.state != SessionState::Completed {
+            return Ok(0);
+        }
+
+        Scorer::score_with_config(&self.scenario.scoring, self.user_actions.len())
+    }
+
+    /// Get detailed feedback for the session
+    ///
+    /// Generates comprehensive feedback including score, performance
+    /// rating, hint if needed, and optimality assessment.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityError` if feedback generation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// // ... complete scenario ...
+    /// let feedback = session.get_feedback()?;
+    /// println!("{}", feedback.summary());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn get_feedback(&self) -> Result<Feedback, SecurityError> {
+        let success = self.state == SessionState::Completed;
+        let actions_taken = self.user_actions.len();
+        let optimal_actions = self.scenario.scoring.optimal_count;
+        let max_points = self.scenario.scoring.max_points;
+
+        let score = if success { self.calculate_score()? } else { 0 };
+
+        let rating = Scorer::get_rating(score, max_points);
+        let duration = self.elapsed();
+
+        // Provide hint if user struggled (took >2x optimal actions)
+        let hint = if success && actions_taken > optimal_actions * 2 {
+            Some(format!(
+                "Try using: {}. {}",
+                self.scenario.solution.commands.join(", "),
+                self.scenario.solution.description
+            ))
+        } else {
+            None
+        };
+
+        let is_optimal = actions_taken <= optimal_actions + self.scenario.scoring.tolerance;
+
+        Ok(Feedback {
+            success,
+            score,
+            max_points,
+            rating,
+            actions_taken,
+            optimal_actions,
+            duration,
+            hint,
+            is_optimal,
+        })
+    }
+
+    /// Reset the session to start over
+    ///
+    /// Clears all actions, resets state to initial editor state,
+    /// and marks session as Active again. Allows user to retry
+    /// the same scenario.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityError` if state validation fails during reset.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::{GameSession, SessionState};
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// session.record_action("d".to_string())?;
+    /// session.reset()?;
+    /// assert_eq!(session.action_count(), 0);
+    /// assert_eq!(session.state(), SessionState::Active);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn reset(&mut self) -> Result<(), SecurityError> {
+        self.current_state = self.initial_state.clone();
+        self.user_actions.clear();
+        self.started_at = Instant::now();
+        self.state = SessionState::Active;
+        self.hints_shown = 0;
+        Ok(())
+    }
+
+    /// Get reference to all user actions
+    ///
+    /// Returns a slice of all actions taken during the session.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let session = GameSession::new(scenario)?;
+    /// let actions = session.actions();
+    /// println!("Total actions: {}", actions.len());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn actions(&self) -> &[UserAction] {
+        &self.user_actions
+    }
+
+    /// Check if session is still active
+    ///
+    /// Returns true if state is Active (neither Completed nor Abandoned).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let mut session = GameSession::new(scenario)?;
+    /// assert!(session.is_active());
+    /// session.abandon();
+    /// assert!(!session.is_active());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn is_active(&self) -> bool {
+        self.state == SessionState::Active
+    }
+
+    /// Check if session is completed
+    ///
+    /// Returns true if state is Completed.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::game::GameSession;
+    ///
+    /// let session = GameSession::new(scenario)?;
+    /// assert!(!session.is_completed());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// ```
+    pub fn is_completed(&self) -> bool {
+        self.state == SessionState::Completed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+
+    fn create_test_scenario() -> Scenario {
+        Scenario {
+            id: "test_001".to_string(),
+            name: "Test Scenario".to_string(),
+            description: "A test scenario".to_string(),
+            setup: Setup {
+                file_content: "line 1\nline 2\nline 3\n".to_string(),
+                cursor_position: (0, 0),
+            },
+            target: TargetState {
+                file_content: "line 2\nline 3\n".to_string(),
+                cursor_position: (0, 0),
+            },
+            solution: Solution {
+                commands: vec!["d".to_string(), "d".to_string()],
+                description: "Delete first line".to_string(),
+            },
+            alternatives: vec![],
+            hints: vec!["Use dd to delete a line".to_string()],
+            scoring: ScoringConfig {
+                optimal_count: 2,
+                max_points: 100,
+                tolerance: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn test_session_creation() {
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario);
+        assert!(session.is_ok());
+    }
+
+    #[test]
+    fn test_initial_state() {
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+
+        assert_eq!(session.action_count(), 0);
+        assert_eq!(session.state(), SessionState::Active);
+        assert!(session.is_active());
+        assert!(!session.is_completed());
+    }
+
+    #[test]
+    fn test_record_action() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        session.record_action("d".to_string()).unwrap();
+        assert_eq!(session.action_count(), 1);
+    }
+
+    #[test]
+    fn test_check_completion() {
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+
+        // Initially not completed
+        assert!(!session.check_completion());
+    }
+
+    #[test]
+    fn test_completion_detection() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        // Update to target state
+        let target = session.target_state().clone();
+        session.update_state(target).unwrap();
+
+        // Should be completed now
+        assert!(session.is_completed());
+        assert_eq!(session.state(), SessionState::Completed);
+    }
+
+    #[test]
+    fn test_get_hint() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        let hint = session.get_hint();
+        assert!(hint.is_some());
+        assert_eq!(hint.unwrap(), "Use dd to delete a line");
+
+        // Second call should return None (only one hint)
+        let hint2 = session.get_hint();
+        assert!(hint2.is_none());
+    }
+
+    #[test]
+    fn test_abandon_session() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        session.abandon();
+        assert_eq!(session.state(), SessionState::Abandoned);
+        assert!(!session.is_active());
+    }
+
+    #[test]
+    fn test_calculate_score_perfect() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        // Record optimal number of actions
+        session.record_action("d".to_string()).unwrap();
+        session.record_action("d".to_string()).unwrap();
+
+        // Complete the scenario
+        let target = session.target_state().clone();
+        session.update_state(target).unwrap();
+
+        let score = session.calculate_score().unwrap();
+        assert_eq!(score, 100); // Perfect score
+    }
+
+    #[test]
+    fn test_calculate_score_incomplete() {
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+
+        // Session not completed
+        let score = session.calculate_score().unwrap();
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_get_feedback_success() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        // Complete perfectly
+        session.record_action("d".to_string()).unwrap();
+        session.record_action("d".to_string()).unwrap();
+        let target = session.target_state().clone();
+        session.update_state(target).unwrap();
+
+        let feedback = session.get_feedback().unwrap();
+        assert!(feedback.success);
+        assert_eq!(feedback.score, 100);
+        assert_eq!(feedback.rating, PerformanceRating::Perfect);
+        assert!(feedback.is_optimal);
+    }
+
+    #[test]
+    fn test_get_feedback_with_hint() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        // Take many actions (>2x optimal)
+        for _ in 0..6 {
+            session.record_action("x".to_string()).unwrap();
+        }
+
+        // Complete
+        let target = session.target_state().clone();
+        session.update_state(target).unwrap();
+
+        let feedback = session.get_feedback().unwrap();
+        assert!(feedback.success);
+        assert!(feedback.hint.is_some()); // Should provide hint
+        assert!(!feedback.is_optimal);
+    }
+
+    #[test]
+    fn test_reset_session() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        // Record some actions
+        session.record_action("d".to_string()).unwrap();
+        session.record_action("d".to_string()).unwrap();
+
+        // Reset
+        session.reset().unwrap();
+
+        assert_eq!(session.action_count(), 0);
+        assert_eq!(session.state(), SessionState::Active);
+    }
+
+    #[test]
+    fn test_elapsed_time() {
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        let elapsed = session.elapsed();
+        assert!(elapsed.as_millis() >= 10);
+    }
+
+    #[test]
+    fn test_feedback_summary() {
+        let feedback = Feedback {
+            success: true,
+            score: 100,
+            max_points: 100,
+            rating: PerformanceRating::Perfect,
+            actions_taken: 2,
+            optimal_actions: 2,
+            duration: Duration::from_secs(5),
+            hint: None,
+            is_optimal: true,
+        };
+
+        let summary = feedback.summary();
+        assert!(summary.contains("100/100"));
+        assert!(summary.contains("2 actions"));
+    }
+}

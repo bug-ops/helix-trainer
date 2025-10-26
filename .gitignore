@@ -1,6 +1,6 @@
 # Rust
 /target/
-Cargo.lock
+# Cargo.lock - committed for binary applications for reproducible builds
 *.rlib
 *.rmeta
 *.so

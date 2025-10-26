@@ -1,10 +1,26 @@
-// Main entry point for the Helix Keybindings Trainer
+//! Main entry point for the Helix Keybindings Trainer
+//!
+//! This is the application's entry point. It initializes the terminal UI,
+//! loads scenarios, and runs the main event loop.
 
 use anyhow::Result;
+use crossterm::{
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use helix_trainer::{
+    config::ScenarioLoader,
+    ui::{self, AppState, Message},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io;
+use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
+/// Initialize secure logging
 fn init_secure_logging() -> Result<()> {
     // Create filter that excludes sensitive modules at high log levels
     let filter = EnvFilter::builder()
@@ -30,6 +46,7 @@ fn init_secure_logging() -> Result<()> {
     Ok(())
 }
 
+/// Main entry point
 #[tokio::main]
 async fn main() -> Result<()> {
     // Warn if running debug build
@@ -44,8 +61,202 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting Helix Keybindings Trainer");
 
-    // Placeholder for application logic
-    println!("Welcome to Helix Keybindings Trainer!");
+    // Load scenarios from default location
+    let loader = ScenarioLoader::new();
+    let scenario_file = loader.load(std::path::Path::new("./scenarios/basic.toml"))?;
+
+    tracing::info!("Loaded {} scenarios", scenario_file.len());
+
+    // Initialize app state
+    let mut app_state = AppState::new(scenario_file);
+
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    tracing::debug!("Terminal initialized");
+
+    // Run the main event loop
+    let result = run_app(&mut terminal, &mut app_state);
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    tracing::info!("Exiting Helix Keybindings Trainer");
+
+    result
+}
+
+/// Main application event loop
+///
+/// This function runs the core event loop that:
+/// 1. Renders the current state
+/// 2. Handles user input
+/// 3. Updates state based on messages
+/// 4. Repeats until the app exits
+fn run_app(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    state: &mut AppState,
+) -> Result<()> {
+    loop {
+        // Render the current state
+        terminal.draw(|f| ui::render(f, state))?;
+
+        // Check if we should exit
+        if !state.running {
+            break;
+        }
+
+        // Handle events with timeout
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                // Handle global quit shortcut first
+                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                    tracing::debug!("User pressed Ctrl+C");
+                    ui::update(state, Message::QuitApp)?;
+                    continue;
+                }
+
+                // Dispatch to screen-specific handlers
+                if let Some(msg) = handle_key_event(key, state) {
+                    tracing::debug!("Message: {:?}", msg);
+                    ui::update(state, msg)?;
+                }
+            }
+        }
+    }
 
     Ok(())
+}
+
+/// Handle keyboard events and convert them to messages
+///
+/// This function is responsible for converting keyboard input into
+/// application messages based on the current screen.
+fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
+    match state.screen {
+        ui::Screen::MainMenu => handle_menu_keys(key),
+        ui::Screen::Task => handle_task_keys(key),
+        ui::Screen::Results => handle_results_keys(key),
+    }
+}
+
+/// Handle keyboard events on the main menu screen
+fn handle_menu_keys(key: KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Up | KeyCode::Char('k') => Some(Message::MenuUp),
+        KeyCode::Down | KeyCode::Char('j') => Some(Message::MenuDown),
+        KeyCode::Enter => Some(Message::MenuSelect),
+        _ => None,
+    }
+}
+
+/// Handle keyboard events on the task screen
+fn handle_task_keys(key: KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Char('h') => Some(Message::ShowHint),
+        KeyCode::Esc => Some(Message::AbandonScenario),
+        _ => None,
+    }
+}
+
+/// Handle keyboard events on the results screen
+fn handle_results_keys(key: KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Char('r') => Some(Message::RetryScenario),
+        KeyCode::Char('m') => Some(Message::BackToMenu),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_menu_key_q_quits() {
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_menu_keys(key);
+        assert_eq!(msg, Some(Message::QuitApp));
+    }
+
+    #[test]
+    fn test_menu_key_j_moves_down() {
+        let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_menu_keys(key);
+        assert_eq!(msg, Some(Message::MenuDown));
+    }
+
+    #[test]
+    fn test_menu_key_k_moves_up() {
+        let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_menu_keys(key);
+        assert_eq!(msg, Some(Message::MenuUp));
+    }
+
+    #[test]
+    fn test_menu_key_enter_selects() {
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_menu_keys(key);
+        assert_eq!(msg, Some(Message::MenuSelect));
+    }
+
+    #[test]
+    fn test_task_key_h_shows_hint() {
+        let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_task_keys(key);
+        assert_eq!(msg, Some(Message::ShowHint));
+    }
+
+    #[test]
+    fn test_task_key_esc_abandons() {
+        let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_task_keys(key);
+        assert_eq!(msg, Some(Message::AbandonScenario));
+    }
+
+    #[test]
+    fn test_results_key_r_retries() {
+        let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::RetryScenario));
+    }
+
+    #[test]
+    fn test_results_key_m_returns_menu() {
+        let key = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::BackToMenu));
+    }
+
+    #[test]
+    fn test_results_key_q_quits() {
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::QuitApp));
+    }
+
+    #[test]
+    fn test_unknown_key_returns_none() {
+        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_menu_keys(key);
+        assert_eq!(msg, None);
+    }
 }

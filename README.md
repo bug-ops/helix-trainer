@@ -1,177 +1,136 @@
 # Helix Keybindings Trainer
 
-An interactive terminal user interface (TUI) application for learning Helix editor keybindings through practice and immediate feedback.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 
-## Vision
+Interactive terminal trainer for mastering [Helix](https://helix-editor.com/) editor keybindings through hands-on practice.
 
-- **Goal**: Help users master Helix through hands-on practice and instant feedback
-- **Success Metric**: Minimize the number of commands needed to complete tasks
-- **Key Feature**: Shows optimal solutions if the user completes a task suboptimally
+## Features
+
+- 🎮 **Interactive Learning** - Practice Helix commands in real scenarios
+- 📊 **Performance Scoring** - Get rated on efficiency (Perfect/Excellent/Good/Fair/Poor)
+- 💡 **Smart Hints** - Progressive hints when you need help
+- 🎯 **Optimal Solutions** - Learn the most efficient way to solve each task
+- 📴 **100% Offline** - No internet required, all data stored locally
+- 🔒 **Privacy-First** - No telemetry, tracking, or data collection
+
+## Installation
+
+### From Source
+
+```bash
+git clone https://github.com/bug-ops/helix-trainer.git
+cd helix-trainer
+cargo build --release
+./target/release/helix-trainer
+```
+
+### Requirements
+
+- Rust 1.70 or higher
+- Terminal with unicode support
 
 ## Quick Start
 
-### Prerequisites
+```bash
+cargo run --release
+```
 
-- Rust 1.70 or later
-- Helix editor installed and available in PATH
-- Terminal with 256 color support
+**Controls:**
 
-### Installation
+- **Menu**: ↑/↓ or j/k to navigate, Enter to select scenario
+- **Training**: Use Helix commands (h,j,k,l,dd,x,etc.), F1 for hints, Esc to quit
+- **Results**: r to retry, m for menu, q to quit
+
+## Supported Commands
+
+Currently supports 14 core Helix commands:
+
+**Movement**: h, j, k, l, w, b, e, 0, $, gg, G
+**Editing**: x (delete char), dd (delete line), i (insert mode)
+**Undo**: u (undo), Ctrl-r (redo)
+
+## Scenarios
+
+Training scenarios are defined in TOML format:
+
+```toml
+[[scenarios]]
+id = "delete_line_001"
+name = "Delete current line"
+description = "Delete the line where cursor is located"
+
+[scenarios.setup]
+file_content = "line 1\nline 2\nline 3"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "line 1\nline 3"
+cursor_position = [1, 0]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+```
+
+See `scenarios/basic.toml` for examples.
+
+## Development
 
 ```bash
-# Clone the repository
-git clone https://github.com/example/helix-trainer.git
-cd helix-trainer
+# Run tests
+cargo test --lib
 
-# Build the project
-cargo build --release
+# Check code quality
+cargo clippy --all-targets -- -D warnings
 
-# Run the trainer
-cargo run --release
+# Format code
+cargo fmt
+
+# Run with debug logging
+RUST_LOG=debug cargo run
 ```
 
 ## Architecture
 
-The application is organized into four main modules:
+Built with:
 
-### 1. UI Module (`src/ui/`)
+- **TUI**: [ratatui](https://github.com/ratatui-org/ratatui) - Terminal UI framework
+- **Editor**: [helix-core](https://github.com/helix-editor/helix) - Official Helix primitives
+- **Config**: [serde](https://serde.rs/) + [toml](https://github.com/toml-lang/toml) - Scenario format
 
-Terminal user interface components built with ratatui:
+**Implementation Status:**
 
-- Main menu navigation
-- Task presentation screen
-- Results and feedback display
-- Statistics dashboard
-
-### 2. Game Module (`src/game/`)
-
-Core game engine and session management:
-
-- Scenario loading and management
-- User action tracking
-- Score calculation
-- Editor state simulation
-
-### 3. Helix Module (`src/helix/`)
-
-Integration with Helix editor:
-
-- PTY (pseudo-terminal) control
-- Command interception
-- Buffer state synchronization
-
-### 4. Config Module (`src/config/`)
-
-Configuration and scenario management:
-
-- TOML scenario file parsing
-- Application settings
-
-## Development
-
-### Build Commands
-
-```bash
-# Debug build
-cargo build
-
-# Release build (optimized)
-cargo build --release
-
-# Run with logging
-RUST_LOG=debug cargo run
-
-# Run tests
-cargo test
-
-# Check code quality
-cargo clippy
-
-# Format code
-cargo fmt
-```
-
-### Project Structure
-
-```plain
-helix-trainer/
-├── Cargo.toml              # Project manifest
-├── src/
-│   ├── main.rs            # Entry point
-│   ├── lib.rs             # Library root
-│   ├── ui/                # TUI components
-│   ├── game/              # Game engine
-│   ├── helix/             # Helix integration
-│   └── config/            # Configuration
-├── scenarios/             # TOML scenario files
-├── examples/              # Example programs
-└── README.md
-```
-
-## Scenarios
-
-Scenarios are defined in TOML format. Each scenario contains:
-
-- Task description and difficulty level
-- Initial editor state and target state
-- Optimal solution(s)
-- Alternative solutions
-- Hint system
-- Scoring configuration
-
-See `scenarios/basic.toml` for example scenarios.
-
-## Testing
-
-The project follows comprehensive testing practices:
-
-```bash
-# Run all tests
-cargo test
-
-# Run with output
-cargo test -- --nocapture
-
-# Run specific test
-cargo test test_name
-
-# Run integration tests
-cargo test --test '*'
-```
-
-## Dependencies
-
-- **ratatui**: TUI framework
-- **crossterm**: Terminal I/O and event handling
-- **tokio**: Async runtime
-- **serde**: Serialization/deserialization
-- **toml**: TOML file parsing
-- **tracing**: Logging and diagnostics
-- **anyhow**: Error handling
-- **thiserror**: Custom error types
+- ✅ Stage 1: Foundation (TUI, game engine, scoring)
+- ✅ Stage 2: Helix Integration (simulator, commands, visualization)
+- 🔄 Stage 3: Polish (statistics, export, custom scenarios)
 
 ## Contributing
 
-Contributions are welcome! Please ensure:
+Contributions welcome! Please:
 
-- Code compiles without warnings
-- All tests pass
-- Code follows Rust best practices
-- Documentation is up to date
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with tests
+4. Ensure `cargo test` and `cargo clippy` pass
+5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License.
+MIT License - see [LICENSE](LICENSE) for details.
 
-## Development Status
+## Acknowledgments
 
-**Current Phase**: Foundation (MVP)
+- [Helix Editor](https://helix-editor.com/) - For the amazing editor
+- [Ratatui](https://ratatui.rs/) - For the TUI framework
+- Inspired by vim-tutor and other interactive learning tools
 
-- [x] Project initialization
-- [x] Basic module structure
-- [ ] Scenario loading system
-- [ ] Editor state simulation
-- [ ] Scoring system
-- [ ] Main game loop
-- [ ] TUI components
-- [ ] Helix integration
+## Roadmap
+
+- [ ] More scenarios (intermediate, advanced)
+- [ ] Statistics and progress tracking
+- [ ] Custom scenario editor
+- [ ] Export/import progress
+- [ ] Additional Helix commands
+- [ ] Tutorial mode for beginners

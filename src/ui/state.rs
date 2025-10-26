@@ -68,6 +68,9 @@ pub enum Message {
     /// Request to show the next hint
     ShowHint,
 
+    /// Execute a Helix command during gameplay
+    ExecuteCommand(String),
+
     /// Retry the current scenario
     RetryScenario,
 
@@ -277,6 +280,19 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 if let Some(hint) = session.get_hint() {
                     state.current_hint = Some(hint);
                     state.show_hint_panel = true;
+                }
+            }
+            Ok(())
+        }
+
+        Message::ExecuteCommand(command) => {
+            if let Some(session) = &mut state.session {
+                // Execute command through session (which uses simulator)
+                session.record_action(command)?;
+
+                // Check if scenario is complete
+                if session.is_completed() {
+                    state.screen = Screen::Results;
                 }
             }
             Ok(())

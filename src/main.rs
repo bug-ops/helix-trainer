@@ -159,11 +159,49 @@ fn handle_menu_keys(key: KeyEvent) -> Option<Message> {
 
 /// Handle keyboard events on the task screen
 fn handle_task_keys(key: KeyEvent) -> Option<Message> {
+    // Handle special UI keys first
     match key.code {
-        KeyCode::Char('h') => Some(Message::ShowHint),
-        KeyCode::Esc => Some(Message::AbandonScenario),
-        _ => None,
+        KeyCode::F(1) => return Some(Message::ShowHint),
+        KeyCode::Esc => return Some(Message::AbandonScenario),
+        _ => {}
     }
+
+    // Convert key to Helix command string
+    let command = match (key.code, key.modifiers) {
+        // Movement commands
+        (KeyCode::Char('h'), KeyModifiers::NONE) => "h",
+        (KeyCode::Char('j'), KeyModifiers::NONE) => "j",
+        (KeyCode::Char('k'), KeyModifiers::NONE) => "k",
+        (KeyCode::Char('l'), KeyModifiers::NONE) => "l",
+
+        // Word movement
+        (KeyCode::Char('w'), KeyModifiers::NONE) => "w",
+        (KeyCode::Char('b'), KeyModifiers::NONE) => "b",
+        (KeyCode::Char('e'), KeyModifiers::NONE) => "e",
+
+        // Line movement
+        (KeyCode::Char('0'), KeyModifiers::NONE) => "0",
+        (KeyCode::Char('$'), KeyModifiers::NONE) => "$",
+
+        // Deletion commands
+        (KeyCode::Char('x'), KeyModifiers::NONE) => "x",
+        (KeyCode::Char('d'), KeyModifiers::NONE) => "dd",
+
+        // Mode changes
+        (KeyCode::Char('i'), KeyModifiers::NONE) => "i",
+
+        // Undo/Redo
+        (KeyCode::Char('u'), KeyModifiers::NONE) => "u",
+        (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r",
+
+        // Document movement
+        (KeyCode::Char('g'), KeyModifiers::NONE) => "gg",
+        (KeyCode::Char('G'), KeyModifiers::NONE) => "G",
+
+        _ => return None,
+    };
+
+    Some(Message::ExecuteCommand(command.to_string()))
 }
 
 /// Handle keyboard events on the results screen

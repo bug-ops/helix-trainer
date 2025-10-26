@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/example/helix-trainer"
 
 [dependencies]
-ratatui = "0.28"
+ratatui = "0.27"
 crossterm = "0.28"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-util", "time"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -18,6 +18,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 anyhow = "1.0"
 thiserror = "1.0"
 tempfile = "3.8"
+helix-core = { git = "https://github.com/helix-editor/helix", tag = "v0.6.0" }
 
 [dev-dependencies]
 tokio-test = "0.4"

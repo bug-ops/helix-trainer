@@ -35,27 +35,35 @@ cargo run --release
 The application is organized into four main modules:
 
 ### 1. UI Module (`src/ui/`)
+
 Terminal user interface components built with ratatui:
+
 - Main menu navigation
 - Task presentation screen
 - Results and feedback display
 - Statistics dashboard
 
 ### 2. Game Module (`src/game/`)
+
 Core game engine and session management:
+
 - Scenario loading and management
 - User action tracking
 - Score calculation
 - Editor state simulation
 
 ### 3. Helix Module (`src/helix/`)
+
 Integration with Helix editor:
+
 - PTY (pseudo-terminal) control
 - Command interception
 - Buffer state synchronization
 
 ### 4. Config Module (`src/config/`)
+
 Configuration and scenario management:
+
 - TOML scenario file parsing
 - Application settings
 
@@ -85,7 +93,7 @@ cargo fmt
 
 ### Project Structure
 
-```
+```plain
 helix-trainer/
 ├── Cargo.toml              # Project manifest
 ├── src/
@@ -103,6 +111,7 @@ helix-trainer/
 ## Scenarios
 
 Scenarios are defined in TOML format. Each scenario contains:
+
 - Task description and difficulty level
 - Initial editor state and target state
 - Optimal solution(s)
@@ -144,6 +153,7 @@ cargo test --test '*'
 ## Contributing
 
 Contributions are welcome! Please ensure:
+
 - Code compiles without warnings
 - All tests pass
 - Code follows Rust best practices

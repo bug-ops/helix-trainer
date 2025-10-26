@@ -121,6 +121,11 @@ impl HelixSimulator {
         .map_err(|_| UserError::OperationFailed)
     }
 
+    /// Convert simulator state to EditorState (alias for get_state)
+    pub fn to_editor_state(&self) -> Result<EditorState, UserError> {
+        self.get_state()
+    }
+
     /// Get current mode
     pub fn mode(&self) -> Mode {
         self.mode

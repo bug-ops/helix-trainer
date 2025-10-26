@@ -490,7 +490,7 @@ mod tests {
 
         update(&mut state, Message::StartScenario(0)).unwrap();
         if let Some(session) = &mut state.session {
-            session.record_action("test".to_string()).unwrap();
+            session.record_action("l".to_string()).unwrap();
         }
         assert_eq!(state.session.as_ref().unwrap().action_count(), 1);
 

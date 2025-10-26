@@ -32,6 +32,7 @@
 
 use crate::config::Scenario;
 use crate::game::{EditorState, PerformanceRating, Scorer};
+use crate::helix::HelixSimulator;
 use crate::security::{self, SecurityError, UserError};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -174,6 +175,8 @@ pub struct GameSession {
     target_state: EditorState,
     /// Current editor state
     current_state: EditorState,
+    /// Helix editor simulator for command execution
+    simulator: HelixSimulator,
     /// All user actions taken so far
     user_actions: Vec<UserAction>,
     /// When the session started
@@ -231,11 +234,15 @@ impl GameSession {
         // Clone initial state as current state
         let current_state = initial_state.clone();
 
+        // Initialize Helix simulator with initial content
+        let simulator = HelixSimulator::new(scenario.setup.file_content.clone());
+
         Ok(Self {
             scenario,
             initial_state,
             target_state,
             current_state,
+            simulator,
             user_actions: Vec::new(),
             started_at: Instant::now(),
             state: SessionState::Active,
@@ -307,15 +314,16 @@ impl GameSession {
         self.started_at.elapsed()
     }
 
-    /// Record a user action
+    /// Record a user action and execute it through the simulator
     ///
-    /// Validates that the action count doesn't exceed security limits
-    /// and adds the action to the history with current timestamp.
+    /// Validates that the action count doesn't exceed security limits,
+    /// executes the command through the Helix simulator, and synchronizes
+    /// the editor state with the simulator's internal state.
     ///
     /// # Errors
     ///
     /// Returns `SecurityError::TooManyActions` if action count would
-    /// exceed the maximum allowed.
+    /// exceed the maximum allowed, or `UserError` if command execution fails.
     ///
     /// # Examples
     ///
@@ -327,13 +335,26 @@ impl GameSession {
     /// assert_eq!(session.action_count(), 1);
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
-    pub fn record_action(&mut self, command: String) -> Result<(), SecurityError> {
+    pub fn record_action(&mut self, command: String) -> Result<(), UserError> {
         // Validate action count doesn't exceed limits
-        security::arithmetic::validate_action_count(self.user_actions.len() + 1)?;
+        security::arithmetic::validate_action_count(self.user_actions.len() + 1)
+            .map_err(UserError::from)?;
 
+        // Execute command through simulator
+        self.simulator.execute_command(&command)?;
+
+        // Sync current state with simulator
+        self.current_state = self.simulator.to_editor_state()?;
+
+        // Record action in history
         let elapsed = self.elapsed();
         let action = UserAction::new(command, elapsed);
         self.user_actions.push(action);
+
+        // Check if scenario is completed
+        if self.check_completion() {
+            self.state = SessionState::Completed;
+        }
 
         Ok(())
     }
@@ -562,6 +583,8 @@ impl GameSession {
     /// ```
     pub fn reset(&mut self) -> Result<(), SecurityError> {
         self.current_state = self.initial_state.clone();
+        // Reset simulator to initial content
+        self.simulator = HelixSimulator::new(self.scenario.setup.file_content.clone());
         self.user_actions.clear();
         self.started_at = Instant::now();
         self.state = SessionState::Active;
@@ -679,7 +702,7 @@ mod tests {
         let scenario = create_test_scenario();
         let mut session = GameSession::new(scenario).unwrap();
 
-        session.record_action("d".to_string()).unwrap();
+        session.record_action("j".to_string()).unwrap();
         assert_eq!(session.action_count(), 1);
     }
 
@@ -735,16 +758,14 @@ mod tests {
         let scenario = create_test_scenario();
         let mut session = GameSession::new(scenario).unwrap();
 
-        // Record optimal number of actions
-        session.record_action("d".to_string()).unwrap();
-        session.record_action("d".to_string()).unwrap();
+        // Record optimal number of actions (execute dd to delete first line)
+        session.record_action("dd".to_string()).unwrap();
 
-        // Complete the scenario
-        let target = session.target_state().clone();
-        session.update_state(target).unwrap();
+        // The session should automatically mark as completed when state matches
+        assert!(session.is_completed());
 
         let score = session.calculate_score().unwrap();
-        assert_eq!(score, 100); // Perfect score
+        assert_eq!(score, 100); // Perfect score (1 action, optimal is 2, tolerance is 0)
     }
 
     #[test]
@@ -762,11 +783,11 @@ mod tests {
         let scenario = create_test_scenario();
         let mut session = GameSession::new(scenario).unwrap();
 
-        // Complete perfectly
-        session.record_action("d".to_string()).unwrap();
-        session.record_action("d".to_string()).unwrap();
-        let target = session.target_state().clone();
-        session.update_state(target).unwrap();
+        // Complete with dd command
+        session.record_action("dd".to_string()).unwrap();
+
+        // Should be automatically completed
+        assert!(session.is_completed());
 
         let feedback = session.get_feedback().unwrap();
         assert!(feedback.success);
@@ -801,8 +822,8 @@ mod tests {
         let mut session = GameSession::new(scenario).unwrap();
 
         // Record some actions
-        session.record_action("d".to_string()).unwrap();
-        session.record_action("d".to_string()).unwrap();
+        session.record_action("j".to_string()).unwrap();
+        session.record_action("k".to_string()).unwrap();
 
         // Reset
         session.reset().unwrap();

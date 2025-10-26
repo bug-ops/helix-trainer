@@ -31,22 +31,26 @@ pub fn render(frame: &mut Frame, state: &AppState) {
 
 /// Render the main menu screen
 fn render_main_menu(frame: &mut Frame, state: &AppState) {
-    let area = frame.size();
+    let area = frame.area();
 
     // Create layout: title | menu | instructions
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(3),  // Title
-            Constraint::Min(4),     // Menu items
-            Constraint::Length(3),  // Instructions
+            Constraint::Length(3), // Title
+            Constraint::Min(4),    // Menu items
+            Constraint::Length(3), // Instructions
         ])
         .split(area);
 
     // Title
     let title = Paragraph::new("Helix Keybindings Trainer")
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(title, chunks[0]);
@@ -102,7 +106,7 @@ fn render_main_menu(frame: &mut Frame, state: &AppState) {
 
 /// Render the task screen where user plays a scenario
 fn render_task_screen(frame: &mut Frame, state: &AppState) {
-    let area = frame.size();
+    let area = frame.area();
 
     if let Some(session) = &state.session {
         let scenario = session.scenario();
@@ -112,17 +116,21 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(3),    // Title
-                Constraint::Length(4),    // Description
-                Constraint::Min(8),       // Editor view
-                Constraint::Length(3),    // Stats
-                Constraint::Length(3),    // Instructions
+                Constraint::Length(3), // Title
+                Constraint::Length(4), // Description
+                Constraint::Min(8),    // Editor view
+                Constraint::Length(3), // Stats
+                Constraint::Length(3), // Instructions
             ])
             .split(area);
 
         // Title
         let title = Paragraph::new(format!("Scenario: {}", scenario.name))
-            .style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(title, chunks[0]);
@@ -144,7 +152,11 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
         let current_state = session.current_state();
         let current_lines = render_editor_with_cursor(current_state);
         let current = Paragraph::new(current_lines)
-            .block(Block::default().title("Current State (with cursor)").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Current State (with cursor)")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: false });
         frame.render_widget(current, editor_chunks[0]);
 
@@ -152,7 +164,11 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
         let target_state = session.target_state();
         let target_lines = render_editor_with_selection(target_state);
         let target = Paragraph::new(target_lines)
-            .block(Block::default().title("Target State (goal)").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Target State (goal)")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: false });
         frame.render_widget(target, editor_chunks[1]);
 
@@ -162,7 +178,12 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
         let stats_text = if actions <= optimal {
             format!("Actions: {} (optimal: {})", actions, optimal)
         } else {
-            format!("Actions: {} (optimal: {}) - {} extra", actions, optimal, actions - optimal)
+            format!(
+                "Actions: {} (optimal: {}) - {} extra",
+                actions,
+                optimal,
+                actions - optimal
+            )
         };
 
         let stats = Paragraph::new(stats_text)
@@ -178,10 +199,11 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             " [h: Show Hint] "
         };
 
-        let instructions = Paragraph::new(format!("{}| Esc: Abandon | Ctrl-c: Quit", hint_indicator))
-            .style(Style::default().fg(Color::Gray))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
+        let instructions =
+            Paragraph::new(format!("{}| Esc: Abandon | Ctrl-c: Quit", hint_indicator))
+                .style(Style::default().fg(Color::Gray))
+                .alignment(Alignment::Center)
+                .block(Block::default().borders(Borders::ALL));
         frame.render_widget(instructions, chunks[4]);
 
         // Render hint panel if visible
@@ -193,7 +215,7 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
 
 /// Render the results screen showing scenario completion
 fn render_results_screen(frame: &mut Frame, state: &AppState) {
-    let area = frame.size();
+    let area = frame.area();
 
     if let Some(session) = &state.session {
         if let Ok(feedback) = session.get_feedback() {
@@ -202,17 +224,29 @@ fn render_results_screen(frame: &mut Frame, state: &AppState) {
                 .direction(Direction::Vertical)
                 .margin(2)
                 .constraints([
-                    Constraint::Length(3),  // Title
-                    Constraint::Min(10),    // Results
-                    Constraint::Length(3),  // Instructions
+                    Constraint::Length(3), // Title
+                    Constraint::Min(10),   // Results
+                    Constraint::Length(3), // Instructions
                 ])
                 .split(area);
 
             // Title
-            let title_text = if feedback.success { "✓ Completed!" } else { "✗ Not Completed" };
-            let title_color = if feedback.success { Color::Green } else { Color::Red };
+            let title_text = if feedback.success {
+                "✓ Completed!"
+            } else {
+                "✗ Not Completed"
+            };
+            let title_color = if feedback.success {
+                Color::Green
+            } else {
+                Color::Red
+            };
             let title = Paragraph::new(title_text)
-                .style(Style::default().fg(title_color).add_modifier(Modifier::BOLD))
+                .style(
+                    Style::default()
+                        .fg(title_color)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL));
             frame.render_widget(title, chunks[0]);
@@ -221,14 +255,16 @@ fn render_results_screen(frame: &mut Frame, state: &AppState) {
             let mut result_lines = vec![];
 
             // Rating and score
-            result_lines.push(Line::from(vec![
-                Span::styled(
-                    format!("{} {}", feedback.rating.emoji(), feedback.rating.description()),
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
+            result_lines.push(Line::from(vec![Span::styled(
+                format!(
+                    "{} {}",
+                    feedback.rating.emoji(),
+                    feedback.rating.description()
                 ),
-            ]));
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]));
 
             result_lines.push(Line::from(""));
 
@@ -292,7 +328,7 @@ fn render_results_screen(frame: &mut Frame, state: &AppState) {
 
 /// Render a centered hint popup
 fn render_hint_popup(frame: &mut Frame, state: &AppState) {
-    let area = frame.size();
+    let area = frame.area();
 
     // Create a centered popup (centered horizontally and vertically)
     let popup_width = 70.min(area.width.saturating_sub(4));
@@ -357,10 +393,7 @@ fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'stat
                 }
 
                 // Add cursor character with inverse style
-                let cursor_char = line_text
-                    .chars()
-                    .nth(cursor_col)
-                    .unwrap_or(' ');
+                let cursor_char = line_text.chars().nth(cursor_col).unwrap_or(' ');
                 spans.push(Span::styled(
                     cursor_char.to_string(),
                     Style::default()

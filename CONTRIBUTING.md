@@ -68,7 +68,7 @@ git checkout -b fix/bug-description
 ```bash
 # Make your changes
 # Run tests frequently
-cargo test --lib
+cargo nextest run --lib
 
 # Check formatting
 cargo +nightly fmt
@@ -77,7 +77,7 @@ cargo +nightly fmt
 cargo clippy -- -D warnings
 
 # Run security audit
-cargo audit
+cargo deny check
 ```
 
 ### 3. Commit Changes
@@ -146,7 +146,7 @@ src/
 - All user input must be validated
 - Use safe arithmetic (checked operations)
 - No `unsafe` blocks without detailed justification
-- Run `cargo audit` regularly
+- Run `cargo deny check` regularly
 
 ### Comments
 
@@ -166,16 +166,16 @@ let selection = Selection::point(cursor_pos);
 
 ```bash
 # Run all library tests
-cargo test --lib
+cargo nextest run --lib
 
 # Run specific test
-cargo test --lib test_name
+cargo nextest run --lib test_name
 
 # Run tests with output
-cargo test --lib -- --nocapture
+cargo nextest run --lib --nocapture
 
 # Run tests in release mode (faster)
-cargo test --lib --release
+cargo nextest run --lib --release
 ```
 
 ### Test Guidelines
@@ -223,10 +223,10 @@ mod tests {
 
 ### Before Submitting
 
-- [ ] All tests pass: `cargo test --lib`
+- [ ] All tests pass: `cargo nextest run --lib`
 - [ ] Code formatted: `cargo +nightly fmt`
 - [ ] No clippy warnings: `cargo clippy -- -D warnings`
-- [ ] Security audit clean: `cargo audit`
+- [ ] Security audit clean: `cargo deny check`
 - [ ] Documentation updated (if applicable)
 - [ ] CLAUDE.md updated (if architecture changed)
 
@@ -251,10 +251,11 @@ Reviewers will check:
 ### CI Checks
 
 All PRs must pass:
-- **Tests**: All platforms (Linux, macOS, Windows)
+
+- **Tests**: All platforms (Linux, macOS, Windows) using `cargo-nextest`
 - **Formatting**: `cargo +nightly fmt -- --check`
 - **Lints**: `cargo clippy -- -D warnings`
-- **Security**: `cargo audit`
+- **Security**: `cargo deny check` (vulnerabilities + licenses)
 - **Build**: Release build on all platforms
 
 ## Commit Message Guidelines

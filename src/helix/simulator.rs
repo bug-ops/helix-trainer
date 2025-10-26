@@ -90,9 +90,7 @@ impl HelixSimulator {
             "ctrl-r" => self.redo()?,
 
             // Unknown command
-            _ => {
-                return Err(UserError::OperationFailed)
-            }
+            _ => return Err(UserError::OperationFailed),
         }
 
         Ok(())
@@ -138,13 +136,7 @@ impl HelixSimulator {
 
         let slice = self.doc.slice(..);
         let new_selection = self.selection.clone().transform(|range| {
-            movement::move_horizontally(
-                slice,
-                range,
-                Direction::Backward,
-                count,
-                Movement::Move,
-            )
+            movement::move_horizontally(slice, range, Direction::Backward, count, Movement::Move)
         });
 
         self.selection = new_selection;
@@ -156,13 +148,7 @@ impl HelixSimulator {
 
         let slice = self.doc.slice(..);
         let new_selection = self.selection.clone().transform(|range| {
-            movement::move_horizontally(
-                slice,
-                range,
-                Direction::Forward,
-                count,
-                Movement::Move,
-            )
+            movement::move_horizontally(slice, range, Direction::Forward, count, Movement::Move)
         });
 
         self.selection = new_selection;
@@ -174,13 +160,7 @@ impl HelixSimulator {
 
         let slice = self.doc.slice(..);
         let new_selection = self.selection.clone().transform(|range| {
-            movement::move_vertically(
-                slice,
-                range,
-                Direction::Forward,
-                count,
-                Movement::Move,
-            )
+            movement::move_vertically(slice, range, Direction::Forward, count, Movement::Move)
         });
 
         self.selection = new_selection;
@@ -192,13 +172,7 @@ impl HelixSimulator {
 
         let slice = self.doc.slice(..);
         let new_selection = self.selection.clone().transform(|range| {
-            movement::move_vertically(
-                slice,
-                range,
-                Direction::Backward,
-                count,
-                Movement::Move,
-            )
+            movement::move_vertically(slice, range, Direction::Backward, count, Movement::Move)
         });
 
         self.selection = new_selection;
@@ -207,9 +181,10 @@ impl HelixSimulator {
 
     fn move_next_word_start(&mut self, count: usize) -> Result<(), UserError> {
         let slice = self.doc.slice(..);
-        let new_selection = self.selection.clone().transform(|range| {
-            movement::move_next_word_start(slice, range, count)
-        });
+        let new_selection = self
+            .selection
+            .clone()
+            .transform(|range| movement::move_next_word_start(slice, range, count));
 
         self.selection = new_selection;
         Ok(())
@@ -217,9 +192,10 @@ impl HelixSimulator {
 
     fn move_prev_word_start(&mut self, count: usize) -> Result<(), UserError> {
         let slice = self.doc.slice(..);
-        let new_selection = self.selection.clone().transform(|range| {
-            movement::move_prev_word_start(slice, range, count)
-        });
+        let new_selection = self
+            .selection
+            .clone()
+            .transform(|range| movement::move_prev_word_start(slice, range, count));
 
         self.selection = new_selection;
         Ok(())
@@ -227,9 +203,10 @@ impl HelixSimulator {
 
     fn move_next_word_end(&mut self, count: usize) -> Result<(), UserError> {
         let slice = self.doc.slice(..);
-        let new_selection = self.selection.clone().transform(|range| {
-            movement::move_next_word_end(slice, range, count)
-        });
+        let new_selection = self
+            .selection
+            .clone()
+            .transform(|range| movement::move_next_word_end(slice, range, count));
 
         self.selection = new_selection;
         Ok(())
@@ -275,10 +252,7 @@ impl HelixSimulator {
     fn delete_char(&mut self) -> Result<(), UserError> {
         let transaction = Transaction::change_by_selection(&self.doc, &self.selection, |range| {
             let start = range.from();
-            let end = start
-                .saturating_add(1)
-                .min(self.doc.len_chars())
-                .max(start);
+            let end = start.saturating_add(1).min(self.doc.len_chars()).max(start);
             (start, end, None)
         });
 

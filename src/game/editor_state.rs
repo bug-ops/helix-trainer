@@ -283,8 +283,14 @@ impl EditorState {
     ) -> Result<Self, SecurityError> {
         let cursor = CursorPosition::from_array(cursor_position)?;
         let sel = selection.map(|s| Selection {
-            start: CursorPosition { row: s[0], col: s[1] },
-            end: CursorPosition { row: s[2], col: s[3] },
+            start: CursorPosition {
+                row: s[0],
+                col: s[1],
+            },
+            end: CursorPosition {
+                row: s[2],
+                col: s[3],
+            },
         });
         Self::new(file_content.to_string(), cursor, sel)
     }

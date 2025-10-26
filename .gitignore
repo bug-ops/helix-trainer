@@ -1,0 +1,44 @@
+# Rust
+/target/
+Cargo.lock
+*.rlib
+*.rmeta
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Development
+.env
+.env.local
+*.log
+debug/
+tmp/
+
+# Temporary files
+*.tmp
+*.bak

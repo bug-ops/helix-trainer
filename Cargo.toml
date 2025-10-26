@@ -1,0 +1,28 @@
+[package]
+name = "helix-trainer"
+version = "0.1.0"
+edition = "2021"
+authors = ["Helix Trainer Contributors"]
+description = "Interactive trainer for learning Helix editor keybindings"
+license = "MIT"
+repository = "https://github.com/example/helix-trainer"
+
+[dependencies]
+ratatui = "0.28"
+crossterm = "0.28"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-util", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tempfile = "3.8"
+
+[dev-dependencies]
+tokio-test = "0.4"
+proptest = "1.4"
+
+[[bin]]
+name = "helix-trainer"
+path = "src/main.rs"

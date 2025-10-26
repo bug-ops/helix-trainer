@@ -124,12 +124,12 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(chunks[2]);
 
-        // Current state
-        let current_content = session.current_state().content();
-        let current = Paragraph::new(current_content)
-            .block(Block::default().title("Current State").borders(Borders::ALL))
-            .style(Style::default().fg(Color::Cyan))
-            .wrap(Wrap { trim: true });
+        // Current state with cursor highlighting
+        let current_state = session.current_state();
+        let current_lines = render_editor_with_cursor(current_state);
+        let current = Paragraph::new(current_lines)
+            .block(Block::default().title("Current State (with cursor)").borders(Borders::ALL))
+            .wrap(Wrap { trim: false });
         frame.render_widget(current, editor_chunks[0]);
 
         // Target state
@@ -315,6 +315,60 @@ fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 
         frame.render_widget(hint_text, inner);
     }
+}
+
+/// Render editor text with cursor highlighted
+///
+/// Takes EditorState and returns Vec<Line> with the cursor position
+/// highlighted using inverse colors.
+fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'static>> {
+    let content = state.content();
+    let cursor = state.cursor_position();
+    let (cursor_line, cursor_col) = (cursor.row, cursor.col);
+
+    content
+        .lines()
+        .enumerate()
+        .map(|(line_idx, line_text)| {
+            if line_idx == cursor_line {
+                // This line contains the cursor
+                let mut spans = Vec::new();
+
+                // Add text before cursor
+                if cursor_col > 0 {
+                    let before = line_text.chars().take(cursor_col).collect::<String>();
+                    spans.push(Span::styled(before, Style::default().fg(Color::Cyan)));
+                }
+
+                // Add cursor character with inverse style
+                let cursor_char = line_text
+                    .chars()
+                    .nth(cursor_col)
+                    .unwrap_or(' ');
+                spans.push(Span::styled(
+                    cursor_char.to_string(),
+                    Style::default()
+                        .bg(Color::White)
+                        .fg(Color::Black)
+                        .add_modifier(Modifier::BOLD),
+                ));
+
+                // Add text after cursor
+                if cursor_col + 1 < line_text.len() {
+                    let after = line_text.chars().skip(cursor_col + 1).collect::<String>();
+                    spans.push(Span::styled(after, Style::default().fg(Color::Cyan)));
+                }
+
+                Line::from(spans)
+            } else {
+                // Regular line without cursor
+                Line::from(Span::styled(
+                    line_text.to_string(),
+                    Style::default().fg(Color::Cyan),
+                ))
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

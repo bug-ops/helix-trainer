@@ -318,6 +318,7 @@ fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 }
 
 #[cfg(test)]
+#[allow(unused_variables)] // Test backends don't use all variables
 mod tests {
     use super::*;
     use crate::config::{ScoringConfig, Setup, Solution, TargetState};

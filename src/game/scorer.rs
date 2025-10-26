@@ -186,8 +186,8 @@ impl Scorer {
     /// use helix_trainer::game::{Scorer, PerformanceRating};
     ///
     /// assert_eq!(Scorer::get_rating(100, 100), PerformanceRating::Perfect);
-    /// assert_eq!(Scorer::get_rating(85, 100), PerformanceRating::Excellent);
-    /// assert_eq!(Scorer::get_rating(65, 100), PerformanceRating::Good);
+    /// assert_eq!(Scorer::get_rating(95, 100), PerformanceRating::Excellent);
+    /// assert_eq!(Scorer::get_rating(80, 100), PerformanceRating::Good);
     /// assert_eq!(Scorer::get_rating(40, 100), PerformanceRating::Poor);
     /// ```
     pub fn get_rating(score: u32, max_points: u32) -> PerformanceRating {

@@ -177,6 +177,7 @@ fn handle_results_keys(key: KeyEvent) -> Option<Message> {
 }
 
 #[cfg(test)]
+#[allow(unused_variables)] // Test state setup
 mod tests {
     use super::*;
 

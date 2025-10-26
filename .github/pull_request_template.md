@@ -34,15 +34,16 @@ Closes #
 
 ### Test Results
 
-- [ ] All existing tests pass (`cargo test --lib`)
+- [ ] All existing tests pass (`cargo nextest run --lib`)
 - [ ] Added new tests for new functionality
 - [ ] Manual testing completed
 
 ```bash
 # Test commands run
-cargo test --lib
+cargo nextest run --lib
 cargo clippy -- -D warnings
-cargo fmt -- --check
+cargo +nightly fmt -- --check
+cargo deny check
 ```
 
 ### Test Coverage

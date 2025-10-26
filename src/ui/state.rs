@@ -225,7 +225,8 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::MenuDown => {
-            let max_items = AppState::menu_items().len();
+            // Total menu items = scenarios + Quit option
+            let max_items = state.scenarios.len() + 1;
             if state.selected_menu_item < max_items - 1 {
                 state.selected_menu_item += 1;
             }
@@ -233,20 +234,15 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::MenuSelect => {
-            match state.selected_menu_item {
-                0 => {
-                    // Start first scenario
-                    if !state.scenarios.is_empty() {
-                        update(state, Message::StartScenario(0))?;
-                    }
-                }
-                1 => {
-                    // Quit
-                    update(state, Message::QuitApp)?;
-                }
-                _ => {
-                    // Should not happen
-                }
+            let scenario_count = state.scenarios.len();
+            let selected = state.selected_menu_item;
+
+            if selected < scenario_count {
+                // Start selected scenario
+                update(state, Message::StartScenario(selected))?;
+            } else if selected == scenario_count {
+                // Quit option (last item)
+                update(state, Message::QuitApp)?;
             }
             Ok(())
         }
@@ -404,15 +400,22 @@ mod tests {
 
     #[test]
     fn test_menu_navigation_down() {
-        let mut state = AppState::new(vec![]);
+        let scenario1 = create_test_scenario();
+        let scenario2 = create_test_scenario();
+        let mut state = AppState::new(vec![scenario1, scenario2]);
         assert_eq!(state.selected_menu_item, 0);
 
+        // Move down once
         update(&mut state, Message::MenuDown).unwrap();
         assert_eq!(state.selected_menu_item, 1);
+
+        // Move down again
+        update(&mut state, Message::MenuDown).unwrap();
+        assert_eq!(state.selected_menu_item, 2); // Now on Quit
 
         // Can't go past max items
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 1);
+        assert_eq!(state.selected_menu_item, 2);
     }
 
     #[test]
@@ -429,8 +432,11 @@ mod tests {
 
     #[test]
     fn test_menu_select_quit() {
-        let mut state = AppState::new(vec![]);
-        state.selected_menu_item = 1;
+        let scenario1 = create_test_scenario();
+        let scenario2 = create_test_scenario();
+        let mut state = AppState::new(vec![scenario1, scenario2]);
+        // Select Quit option (index = scenario count)
+        state.selected_menu_item = 2;
 
         update(&mut state, Message::MenuSelect).unwrap();
 

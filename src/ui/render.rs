@@ -51,11 +51,12 @@ fn render_main_menu(frame: &mut Frame, state: &AppState) {
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(title, chunks[0]);
 
-    // Menu items
-    let menu_items: Vec<ListItem> = AppState::menu_items()
+    // Menu items - show all scenarios + Quit option
+    let mut menu_items: Vec<ListItem> = state
+        .scenarios
         .iter()
         .enumerate()
-        .map(|(i, &item)| {
+        .map(|(i, scenario)| {
             let selected = i == state.selected_menu_item;
             let style = if selected {
                 Style::default()
@@ -67,9 +68,24 @@ fn render_main_menu(frame: &mut Frame, state: &AppState) {
             };
 
             let prefix = if selected { "> " } else { "  " };
-            ListItem::new(format!("{}{}", prefix, item)).style(style)
+            let display = format!("{}. {}", i + 1, scenario.name);
+            ListItem::new(format!("{}{}", prefix, display)).style(style)
         })
         .collect();
+
+    // Add Quit option at the end
+    let quit_index = state.scenarios.len();
+    let quit_selected = quit_index == state.selected_menu_item;
+    let quit_style = if quit_selected {
+        Style::default()
+            .bg(Color::Blue)
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Red)
+    };
+    let quit_prefix = if quit_selected { "> " } else { "  " };
+    menu_items.push(ListItem::new(format!("{}Quit", quit_prefix)).style(quit_style));
 
     let menu = List::new(menu_items)
         .block(Block::default().title("Main Menu").borders(Borders::ALL))

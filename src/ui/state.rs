@@ -339,6 +339,7 @@ mod tests {
             target: TargetState {
                 file_content: "line 2\n".to_string(),
                 cursor_position: (0, 0),
+                selection: None,
             },
             solution: Solution {
                 commands: vec!["dd".to_string()],

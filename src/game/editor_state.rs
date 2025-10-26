@@ -270,6 +270,25 @@ impl EditorState {
         Self::new(file_content.to_string(), cursor, None)
     }
 
+    /// Create EditorState from target configuration with optional selection
+    ///
+    /// # Arguments
+    /// * `file_content` - The content string
+    /// * `cursor_position` - Array [row, col]
+    /// * `selection` - Optional selection range [start_row, start_col, end_row, end_col]
+    pub fn from_target(
+        file_content: &str,
+        cursor_position: [usize; 2],
+        selection: Option<[usize; 4]>,
+    ) -> Result<Self, SecurityError> {
+        let cursor = CursorPosition::from_array(cursor_position)?;
+        let sel = selection.map(|s| Selection {
+            start: CursorPosition { row: s[0], col: s[1] },
+            end: CursorPosition { row: s[2], col: s[3] },
+        });
+        Self::new(file_content.to_string(), cursor, sel)
+    }
+
     /// Get the file content.
     ///
     /// # Examples

@@ -8,7 +8,7 @@ description = "Delete the current line where the cursor is located. In Helix, 'd
 
 [scenarios.setup]
 file_content = "first line\nsecond line\nthird line"
-cursor_position = [1, 0]
+cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "first line\nthird line"
@@ -18,7 +18,10 @@ cursor_position = [1, 0]
 commands = ["d", "d"]
 description = "Press 'd' twice: first 'd' activates delete mode, second 'd' targets the current line"
 
-hints = ["In Helix (like Vim), 'd' is a modal operator that needs a motion target", "When you press 'd' twice, the second 'd' means 'delete this line'"]
+hints = [
+    "In Helix (like Vim), 'd' is a modal operator that needs a motion target",
+    "When you press 'd' twice, the second 'd' means 'delete this line'",
+]
 
 [[scenarios.alternatives]]
 commands = ["c", "c"]
@@ -29,8 +32,6 @@ description = "Alternative: Use 'cc' (change line)"
 optimal_count = 2
 max_points = 100
 tolerance = 1
-
----
 
 [[scenarios]]
 id = "move_line_up_001"
@@ -56,8 +57,6 @@ optimal_count = 1
 max_points = 100
 tolerance = 0
 
----
-
 [[scenarios]]
 id = "select_word_001"
 name = "Select current word"
@@ -70,12 +69,16 @@ cursor_position = [0, 4]
 [scenarios.target]
 file_content = "The quick brown fox"
 cursor_position = [0, 4]
+selection = [0, 4, 0, 9]  # Select "quick" (from col 4 to col 9)
 
 [scenarios.solution]
 commands = ["e"]
 description = "Press 'e' to select to the end of the current word"
 
-hints = ["In Helix, 'e' extends selection to the end of the word", "After selecting, you can delete with 'd', change with 'c', etc."]
+hints = [
+    "In Helix, 'e' extends selection to the end of the word",
+    "After selecting, you can delete with 'd', change with 'c', etc.",
+]
 
 [scenarios.scoring]
 optimal_count = 1

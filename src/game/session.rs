@@ -221,13 +221,14 @@ impl GameSession {
         )
         .map_err(|_| UserError::ScenarioTooComplex)?;
 
-        // Create target state
-        let target_state = EditorState::from_setup(
+        // Create target state with optional selection
+        let target_state = EditorState::from_target(
             &scenario.target.file_content,
             [
                 scenario.target.cursor_position.0,
                 scenario.target.cursor_position.1,
             ],
+            scenario.target.selection,
         )
         .map_err(|_| UserError::ScenarioTooComplex)?;
 
@@ -664,6 +665,7 @@ mod tests {
             target: TargetState {
                 file_content: "line 2\nline 3\n".to_string(),
                 cursor_position: (0, 0),
+                selection: None,
             },
             solution: Solution {
                 commands: vec!["d".to_string(), "d".to_string()],

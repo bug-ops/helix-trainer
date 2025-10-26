@@ -148,12 +148,12 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .wrap(Wrap { trim: false });
         frame.render_widget(current, editor_chunks[0]);
 
-        // Target state
-        let target_content = session.target_state().content();
-        let target = Paragraph::new(target_content)
-            .block(Block::default().title("Target State").borders(Borders::ALL))
-            .style(Style::default().fg(Color::Yellow))
-            .wrap(Wrap { trim: true });
+        // Target state with selection highlighting (if any)
+        let target_state = session.target_state();
+        let target_lines = render_editor_with_selection(target_state);
+        let target = Paragraph::new(target_lines)
+            .block(Block::default().title("Target State (goal)").borders(Borders::ALL))
+            .wrap(Wrap { trim: false });
         frame.render_widget(target, editor_chunks[1]);
 
         // Stats
@@ -387,6 +387,107 @@ fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'stat
         .collect()
 }
 
+/// Render editor text with selection highlighted
+///
+/// Takes EditorState and returns Vec<Line> with selection range
+/// highlighted using background color and cursor shown if present.
+fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'static>> {
+    let content = state.content();
+    let cursor = state.cursor_position();
+    let (cursor_line, cursor_col) = (cursor.row, cursor.col);
+    let selection = state.selection();
+
+    content
+        .lines()
+        .enumerate()
+        .map(|(line_idx, line_text)| {
+            if let Some(sel) = selection {
+                // Check if this line has selection
+                let sel_start_line = sel.start.row;
+                let sel_end_line = sel.end.row;
+
+                if line_idx >= sel_start_line && line_idx <= sel_end_line {
+                    // This line contains selection
+                    let mut spans = Vec::new();
+
+                    // Determine selection range for this line
+                    let line_start_col = if line_idx == sel_start_line {
+                        sel.start.col
+                    } else {
+                        0
+                    };
+
+                    let line_end_col = if line_idx == sel_end_line {
+                        sel.end.col
+                    } else {
+                        line_text.len()
+                    };
+
+                    // Text before selection
+                    if line_start_col > 0 {
+                        let before = line_text.chars().take(line_start_col).collect::<String>();
+                        spans.push(Span::styled(before, Style::default().fg(Color::Yellow)));
+                    }
+
+                    // Selected text with highlight
+                    let selected = line_text
+                        .chars()
+                        .skip(line_start_col)
+                        .take(line_end_col - line_start_col)
+                        .collect::<String>();
+                    spans.push(Span::styled(
+                        selected,
+                        Style::default()
+                            .bg(Color::Blue)
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD),
+                    ));
+
+                    // Text after selection
+                    if line_end_col < line_text.len() {
+                        let after = line_text.chars().skip(line_end_col).collect::<String>();
+                        spans.push(Span::styled(after, Style::default().fg(Color::Yellow)));
+                    }
+
+                    return Line::from(spans);
+                }
+            }
+
+            // No selection on this line - show with cursor if applicable
+            if line_idx == cursor_line {
+                let mut spans = Vec::new();
+
+                if cursor_col > 0 {
+                    let before = line_text.chars().take(cursor_col).collect::<String>();
+                    spans.push(Span::styled(before, Style::default().fg(Color::Yellow)));
+                }
+
+                let cursor_char = line_text.chars().nth(cursor_col).unwrap_or(' ');
+                spans.push(Span::styled(
+                    cursor_char.to_string(),
+                    Style::default()
+                        .bg(Color::White)
+                        .fg(Color::Black)
+                        .add_modifier(Modifier::BOLD),
+                ));
+
+                if cursor_col + 1 < line_text.len() {
+                    let after = line_text.chars().skip(cursor_col + 1).collect::<String>();
+                    spans.push(Span::styled(after, Style::default().fg(Color::Yellow)));
+                }
+
+                Line::from(spans)
+            } else {
+                // Regular line
+                Line::from(Span::styled(
+                    line_text.to_string(),
+                    Style::default().fg(Color::Yellow),
+                ))
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 #[allow(unused_variables)] // Test backends don't use all variables
 mod tests {
@@ -406,6 +507,7 @@ mod tests {
             target: TargetState {
                 file_content: "line 2\n".to_string(),
                 cursor_position: (0, 0),
+                selection: None,
             },
             solution: Solution {
                 commands: vec!["dd".to_string()],

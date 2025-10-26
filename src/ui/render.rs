@@ -31,7 +31,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
 
 /// Render the main menu screen
 fn render_main_menu(frame: &mut Frame, state: &AppState) {
-    let area = frame.size();
+    let area = frame.area();
 
     // Create layout: title | menu | instructions
     let chunks = Layout::default()
@@ -106,7 +106,7 @@ fn render_main_menu(frame: &mut Frame, state: &AppState) {
 
 /// Render the task screen where user plays a scenario
 fn render_task_screen(frame: &mut Frame, state: &AppState) {
-    let area = frame.size();
+    let area = frame.area();
 
     if let Some(session) = &state.session {
         let scenario = session.scenario();
@@ -215,7 +215,7 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
 
 /// Render the results screen showing scenario completion
 fn render_results_screen(frame: &mut Frame, state: &AppState) {
-    let area = frame.size();
+    let area = frame.area();
 
     if let Some(session) = &state.session {
         if let Ok(feedback) = session.get_feedback() {
@@ -328,7 +328,7 @@ fn render_results_screen(frame: &mut Frame, state: &AppState) {
 
 /// Render a centered hint popup
 fn render_hint_popup(frame: &mut Frame, state: &AppState) {
-    let area = frame.size();
+    let area = frame.area();
 
     // Create a centered popup (centered horizontally and vertically)
     let popup_width = 70.min(area.width.saturating_sub(4));

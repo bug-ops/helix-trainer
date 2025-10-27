@@ -18,7 +18,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 anyhow = "1.0"
 thiserror = "1.0"
 tempfile = "3.8"
-helix-core = { git = "https://github.com/helix-editor/helix", tag = "v0.6.0" }
+helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
 
 [dev-dependencies]
 tokio-test = "0.4"

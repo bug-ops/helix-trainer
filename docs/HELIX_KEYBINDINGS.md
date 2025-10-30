@@ -1,11 +1,12 @@
 # Helix Editor - Complete Keybindings Reference
 
-> Source: https://docs.helix-editor.com/keymap.html
+> Source: <https://docs.helix-editor.com/keymap.html>
 > Generated: 2025-10-30
 
 This document contains a comprehensive reference of all Helix editor keybindings for use in developing training scenarios.
 
 ## Table of Contents
+
 - [Normal Mode](#normal-mode)
 - [Insert Mode](#insert-mode)
 - [Select Mode](#select-mode)
@@ -531,72 +532,12 @@ Access command mode with `:` in normal mode. Some useful commands:
 
 ---
 
-## Notes for Training Scenarios
-
-### Priority Commands for Training
-
-Based on frequency of use, these commands should be prioritized for training scenarios:
-
-**Essential (Beginner):**
-- Movement: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `gg`, `G`
-- Basic editing: `i`, `a`, `o`, `O`, `d`, `c`, `y`, `p`, `u`, `U`
-- Selection: `x`, `%`, `;`
-- Save/quit: `:w`, `:q`, `:wq`
-
-**Intermediate:**
-- Advanced movement: `f`, `t`, `W`, `B`, `E`, `{`, `}`
-- Line operations: `J`, `>`, `<`, `=`
-- Search: `/`, `?`, `n`, `N`, `*`
-- Multi-cursor: `C`, `s`, `S`
-- Text objects: `mi`, `ma` + object
-- Goto mode: `g` + key
-
-**Advanced:**
-- Tree-sitter selections: `Alt-o`, `Alt-i`, `Alt-p`, `Alt-n`
-- Shell integration: `|`, `!`, `$`
-- Macros: `Q`, `q`
-- Registers: `"` + register
-- Window management: `Ctrl-w` + key
-- LSP features: `Space` + key
-- Selection manipulation: `(`, `)`, `Alt-(`, `Alt-)`
-
-### Commands Not Implemented Yet
-
-Compare this list with current implementation in `src/helix/simulator.rs` to identify gaps.
-
-Currently implemented (as of this document):
-- Basic movement: h, j, k, l, w, b, e, 0, $
-- Document movement: gg, G
-- Editing: x, dd, i, u, ctrl-r
-- Line movement: alt-up, alt-down (recently added)
-
-### Command Complexity Categories
-
-**Simple (single key, no state):**
-- Most movement commands
-- Basic editing (r, y, p, d, c)
-- Mode switches (i, a, o, v)
-
-**Medium (requires state or multiple keys):**
-- Find/till: f, t, F, T (need to read next character)
-- Register selection: " (need to read register name)
-- Surround: ms, mr, md (need to read character(s))
-- Text objects: ma, mi (need to read object type)
-
-**Complex (requires significant implementation):**
-- Search: /, ?, n, N (need search state, regex engine)
-- Macros: Q, q (need recording state)
-- Shell integration: |, !, $ (need shell execution)
-- LSP features: all Space mode commands (need LSP client)
-- Tree-sitter: Alt-o, Alt-i, etc. (need tree-sitter integration)
-
----
-
 ## Implementation Checklist
 
 Track which commands have been implemented in the simulator:
 
 ### Movement (Normal Mode)
+
 - [x] h, j, k, l - Basic movement
 - [x] w, b, e - Word movement
 - [ ] W, B, E - WORD movement
@@ -611,10 +552,11 @@ Track which commands have been implemented in the simulator:
 - [ ] Ctrl-s - Save to jumplist
 
 ### Changes (Normal Mode)
+
 - [ ] r - Replace character
 - [ ] R - Replace with yanked
 - [ ] ~, `, Alt-` - Case switching
-- [x] i, a - Insert modes
+- [x] i - Insert mode (only i implemented, a not yet)
 - [ ] I, A - Insert at line bounds
 - [ ] o, O - Open lines
 - [ ] . - Repeat insert
@@ -630,6 +572,7 @@ Track which commands have been implemented in the simulator:
 - [ ] Q, q - Macros
 
 ### Selection (Normal Mode)
+
 - [ ] s, S - Select/split by regex
 - [ ] Alt-s - Split on newlines
 - [ ] &, _ - Align/trim
@@ -642,11 +585,13 @@ Track which commands have been implemented in the simulator:
 - [ ] Alt-o, Alt-i, etc. - Tree-sitter selections
 
 ### Search (Normal Mode)
+
 - [ ] /, ? - Search
 - [ ] n, N - Next/previous match
 - [ ] *, Alt-* - Selection as pattern
 
 ### Special Modes
+
 - [ ] g - Goto mode (none implemented)
 - [ ] m - Match mode (none implemented)
 - [ ] z - View mode (none implemented)
@@ -654,9 +599,17 @@ Track which commands have been implemented in the simulator:
 - [ ] Space - Space mode (none implemented)
 - [ ] v - Select mode (none implemented)
 
-### Line Manipulation
-- [x] alt-up - Move line up
-- [x] alt-down - Move line down
+---
+
+## Implementation Summary
+
+**Implemented:** 14/200+ commands (7%)
+
+- Movement: 11/26
+- Changes: 3/30
+- Selection: 0/18
+- Search: 0/6
+- Special Modes: 0/6
 
 ---
 

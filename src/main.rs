@@ -186,10 +186,18 @@ fn handle_task_keys(key: KeyEvent) -> Option<Message> {
         // Deletion commands
         (KeyCode::Char('x'), KeyModifiers::NONE) => "x",
         (KeyCode::Char('d'), KeyModifiers::NONE) => "dd",
+        (KeyCode::Char('c'), KeyModifiers::NONE) => "c",
+
+        // Yank and paste
+        (KeyCode::Char('y'), KeyModifiers::NONE) => "y",
+        (KeyCode::Char('p'), KeyModifiers::NONE) => "p",
+        (KeyCode::Char('P'), KeyModifiers::SHIFT) => "P",
 
         // Mode changes and editing
         (KeyCode::Char('i'), KeyModifiers::NONE) => "i",
         (KeyCode::Char('a'), KeyModifiers::NONE) => "a",
+        (KeyCode::Char('I'), KeyModifiers::SHIFT) => "I",
+        (KeyCode::Char('A'), KeyModifiers::SHIFT) => "A",
         (KeyCode::Char('o'), KeyModifiers::NONE) => "o",
         (KeyCode::Char('O'), KeyModifiers::SHIFT) => "O",
 

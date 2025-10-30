@@ -38,6 +38,9 @@ pub struct HelixSimulator {
 
     /// Undo history stack storing both transactions and previous document states
     history: Vec<(Transaction, Rope)>,
+
+    /// Clipboard for yank and paste operations
+    clipboard: Option<String>,
 }
 
 impl HelixSimulator {
@@ -48,6 +51,7 @@ impl HelixSimulator {
             selection: Selection::point(0),
             mode: Mode::Normal,
             history: Vec::new(),
+            clipboard: None,
         }
     }
 
@@ -76,12 +80,20 @@ impl HelixSimulator {
             // Deletion commands
             "x" => self.delete_char()?,
             "dd" => self.delete_line()?,
+            "c" => self.change_selection()?,
+
+            // Yank and paste
+            "y" => self.yank()?,
+            "p" => self.paste_after()?,
+            "P" => self.paste_before()?,
 
             // Mode changes and editing
             "i" => {
                 self.mode = Mode::Insert;
             }
             "a" => self.append()?,
+            "I" => self.insert_at_line_start()?,
+            "A" => self.append_at_line_end()?,
             "o" => self.open_below()?,
             "O" => self.open_above()?,
             "Escape" => {
@@ -265,6 +277,35 @@ impl HelixSimulator {
         Ok(())
     }
 
+    fn insert_at_line_start(&mut self) -> Result<(), UserError> {
+        // Move cursor to start of current line and enter insert mode
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+        let line_start = self.doc.line_to_char(current_line);
+        self.selection = Selection::point(line_start);
+        self.mode = Mode::Insert;
+        Ok(())
+    }
+
+    fn append_at_line_end(&mut self) -> Result<(), UserError> {
+        // Move cursor to end of current line and enter insert mode
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+
+        // Find the end of the line (position before newline or end of document)
+        let line_end = if current_line + 1 < self.doc.len_lines() {
+            // Not the last line - go to position before newline
+            self.doc.line_to_char(current_line + 1) - 1
+        } else {
+            // Last line - go to end of document
+            self.doc.len_chars()
+        };
+
+        self.selection = Selection::point(line_end);
+        self.mode = Mode::Insert;
+        Ok(())
+    }
+
     fn open_below(&mut self) -> Result<(), UserError> {
         // Find end of current line
         let head = self.selection.primary().head;
@@ -363,6 +404,89 @@ impl HelixSimulator {
         });
 
         self.apply_transaction(transaction);
+        Ok(())
+    }
+
+    fn change_selection(&mut self) -> Result<(), UserError> {
+        // Change selection: delete current character and enter insert mode
+        // This is similar to delete_char but also enters insert mode
+        let head = self.selection.primary().head;
+
+        // Don't delete if at end of document
+        if head >= self.doc.len_chars() {
+            self.mode = Mode::Insert;
+            return Ok(());
+        }
+
+        // Delete current character (don't delete newlines)
+        let current_char = self.doc.char(head);
+        if current_char != '\n' {
+            let transaction =
+                Transaction::change_by_selection(&self.doc, &self.selection, |range| {
+                    let start = range.from();
+                    let end = start.saturating_add(1).min(self.doc.len_chars()).max(start);
+                    (start, end, None)
+                });
+
+            self.apply_transaction(transaction);
+        }
+
+        // Enter insert mode
+        self.mode = Mode::Insert;
+        Ok(())
+    }
+
+    fn yank(&mut self) -> Result<(), UserError> {
+        // Copy current character to clipboard
+        let head = self.selection.primary().head;
+
+        if head >= self.doc.len_chars() {
+            return Ok(());
+        }
+
+        let current_char = self.doc.char(head);
+        self.clipboard = Some(current_char.to_string());
+        Ok(())
+    }
+
+    fn paste_after(&mut self) -> Result<(), UserError> {
+        // Paste clipboard content after cursor
+        if let Some(text) = self.clipboard.clone() {
+            let head = self.selection.primary().head;
+            let insert_pos = (head + 1).min(self.doc.len_chars());
+            let text_len = text.chars().count();
+
+            let transaction = Transaction::change(
+                &self.doc,
+                [(insert_pos, insert_pos, Some(text.as_str().into()))].into_iter(),
+            );
+
+            self.apply_transaction(transaction);
+
+            // Move cursor to the end of pasted text
+            let new_pos = insert_pos + text_len;
+            self.selection = Selection::point(new_pos.min(self.doc.len_chars()));
+        }
+        Ok(())
+    }
+
+    fn paste_before(&mut self) -> Result<(), UserError> {
+        // Paste clipboard content before cursor
+        if let Some(text) = self.clipboard.clone() {
+            let head = self.selection.primary().head;
+            let text_len = text.chars().count();
+
+            let transaction = Transaction::change(
+                &self.doc,
+                [(head, head, Some(text.as_str().into()))].into_iter(),
+            );
+
+            self.apply_transaction(transaction);
+
+            // Move cursor to the end of pasted text
+            let new_pos = head + text_len;
+            self.selection = Selection::point(new_pos.min(self.doc.len_chars()));
+        }
         Ok(())
     }
 
@@ -675,5 +799,99 @@ mod tests {
         let state = sim.get_state().unwrap();
         assert_eq!(state.content(), "Xello");
         assert_eq!(sim.mode(), Mode::Normal); // Should stay in normal mode
+    }
+
+    #[test]
+    fn test_insert_at_line_start() {
+        let mut sim = HelixSimulator::new("  hello world".to_string());
+
+        // Move cursor to middle of line
+        sim.execute_command("w").unwrap();
+        let state = sim.get_state().unwrap();
+        assert!(state.cursor_position().col > 0);
+
+        // Press 'I' should move to start of line and enter insert mode
+        sim.execute_command("I").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+        assert_eq!(state.cursor_position().col, 0);
+    }
+
+    #[test]
+    fn test_append_at_line_end() {
+        let mut sim = HelixSimulator::new("hello world\nline2".to_string());
+
+        // Cursor at start
+        assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+
+        // Press 'A' should move to end of line and enter insert mode
+        sim.execute_command("A").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+        assert_eq!(state.cursor_position().col, 11); // After "hello world"
+        assert_eq!(state.cursor_position().row, 0); // Still on first line
+    }
+
+    #[test]
+    fn test_change_selection() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Cursor at start
+        assert_eq!(sim.get_state().unwrap().content(), "hello");
+        assert_eq!(sim.mode(), Mode::Normal);
+
+        // Press 'c' should delete 'h' and enter insert mode
+        sim.execute_command("c").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "ello");
+        assert_eq!(sim.mode(), Mode::Insert);
+        assert_eq!(state.cursor_position().col, 0); // Cursor stays at start
+    }
+
+    #[test]
+    fn test_yank_and_paste_after() {
+        let mut sim = HelixSimulator::new("abc".to_string());
+
+        // Yank 'a'
+        sim.execute_command("y").unwrap();
+
+        // Move to 'b'
+        sim.execute_command("l").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().col, 1);
+
+        // Paste after 'b' - should insert 'a' between 'b' and 'c'
+        sim.execute_command("p").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "abac");
+        assert_eq!(state.cursor_position().col, 3); // Cursor after pasted 'a'
+    }
+
+    #[test]
+    fn test_yank_and_paste_before() {
+        let mut sim = HelixSimulator::new("abc".to_string());
+
+        // Move to 'c'
+        sim.execute_command("l").unwrap();
+        sim.execute_command("l").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().col, 2);
+
+        // Yank 'c'
+        sim.execute_command("y").unwrap();
+
+        // Move back to 'a'
+        sim.execute_command("h").unwrap();
+        sim.execute_command("h").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+
+        // Paste before 'a'
+        sim.execute_command("P").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "cabc");
+        assert_eq!(state.cursor_position().col, 1); // Cursor after pasted 'c'
     }
 }

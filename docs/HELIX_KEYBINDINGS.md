@@ -557,17 +557,18 @@ Track which commands have been implemented in the simulator:
 - [ ] R - Replace with yanked
 - [ ] ~, `, Alt-` - Case switching
 - [x] i, a - Insert/append modes
-- [ ] I, A - Insert at line bounds
+- [x] I, A - Insert at line bounds
 - [x] o, O - Open lines
 - [ ] . - Repeat insert
 - [x] u, U - Undo/redo (basic)
 - [ ] Alt-u, Alt-U - History navigation
-- [ ] y, p, P - Yank and paste
+- [x] y, p, P - Yank and paste
 - [ ] " - Register selection
 - [ ] >, <, = - Indent/format
 - [x] d - Delete (only dd implemented)
 - [ ] Alt-d - Delete without yank
-- [ ] c, Alt-c - Change
+- [x] c - Change (basic)
+- [ ] Alt-c - Change without yank
 - [ ] Ctrl-a, Ctrl-x - Number increment/decrement
 - [ ] Q, q - Macros
 
@@ -603,10 +604,10 @@ Track which commands have been implemented in the simulator:
 
 ## Implementation Summary
 
-**Implemented:** 18/200+ commands (9%)
+**Implemented:** 24/200+ commands (12%)
 
 - Movement: 11/26
-- Changes: 7/30
+- Changes: 13/30
 - Selection: 0/18
 - Search: 0/6
 - Special Modes: 0/6

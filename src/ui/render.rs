@@ -142,17 +142,11 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .block(Block::default().title("Task").borders(Borders::ALL));
         frame.render_widget(description, chunks[1]);
 
-        // Editor view - split into main area and key history sidebar
-        let main_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(40), Constraint::Length(15)])
-            .split(chunks[2]);
-
-        // Left side: current and target editors
+        // Editor view - split into current and target
         let editor_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(main_layout[0]);
+            .split(chunks[2]);
 
         // Current state with cursor and diff highlighting
         let current_state = session.current_state();
@@ -178,9 +172,6 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             )
             .wrap(Wrap { trim: false });
         frame.render_widget(target, editor_chunks[1]);
-
-        // Right side: key history panel
-        render_key_history_panel(frame, state, main_layout[1]);
 
         // Stats with mode indicator and progress
         let optimal = scenario.scoring.optimal_count;
@@ -267,6 +258,11 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
         // Render hint panel if visible
         if state.show_hint_panel {
             render_hint_popup(frame, state);
+        }
+
+        // Show key history popup if visible
+        if state.show_key_history {
+            render_key_history_popup(frame, state);
         }
 
         // Show success message if scenario just completed
@@ -606,8 +602,23 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
         .collect()
 }
 
-/// Render key history panel showing last 5 keys pressed
-fn render_key_history_panel(frame: &mut Frame, state: &AppState, area: Rect) {
+/// Render key history popup showing last 5 keys pressed
+fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
+    let area = frame.area();
+
+    // Create popup in bottom right corner
+    let popup_width = 18;
+    let popup_height = 9; // 5 keys + 4 for borders/title
+    let popup_x = area.width.saturating_sub(popup_width + 2);
+    let popup_y = area.height.saturating_sub(popup_height + 2);
+
+    let popup_area = Rect {
+        x: popup_x,
+        y: popup_y,
+        width: popup_width,
+        height: popup_height,
+    };
+
     // Build list of key history (most recent first, highlight the first one)
     let key_items: Vec<Line> = state
         .key_history
@@ -633,12 +644,13 @@ fn render_key_history_panel(frame: &mut Frame, state: &AppState, area: Rect) {
         .alignment(Alignment::Center)
         .block(
             Block::default()
-                .title("Keys")
+                .title("Key History")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
+                .border_style(Style::default().fg(Color::Cyan))
+                .style(Style::default().bg(Color::Black)),
         );
 
-    frame.render_widget(key_history, area);
+    frame.render_widget(key_history, popup_area);
 }
 
 /// Render success popup when scenario is completed

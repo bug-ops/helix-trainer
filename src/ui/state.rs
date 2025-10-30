@@ -110,6 +110,9 @@ pub struct AppState {
     /// Whether to show hint on task screen
     pub show_hint_panel: bool,
 
+    /// Whether to show key history popup
+    pub show_key_history: bool,
+
     /// Last command executed (for display purposes)
     pub last_command: Option<String>,
 
@@ -133,6 +136,7 @@ impl fmt::Debug for AppState {
             .field("running", &self.running)
             .field("current_hint", &self.current_hint.is_some())
             .field("show_hint_panel", &self.show_hint_panel)
+            .field("show_key_history", &self.show_key_history)
             .field("last_command", &self.last_command)
             .field("completion_time", &self.completion_time.is_some())
             .field("key_history", &self.key_history.len())
@@ -167,6 +171,7 @@ impl AppState {
             running: true,
             current_hint: None,
             show_hint_panel: false,
+            show_key_history: false,
             last_command: None,
             completion_time: None,
             key_history: Vec::new(),
@@ -307,6 +312,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.session = Some(session);
                 state.screen = Screen::Task;
                 state.show_hint_panel = false;
+                state.show_key_history = false;
                 state.current_hint = None;
                 state.last_command = None;
                 state.completion_time = None;
@@ -343,6 +349,9 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             // Add key to history for display (format for readability)
             let display_key = format_key_for_display(&command);
             state.add_key_to_history(display_key);
+
+            // Show key history popup after first keypress
+            state.show_key_history = true;
 
             if let Some(session) = &mut state.session {
                 // In Insert mode, execute commands directly
@@ -406,6 +415,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 session.reset()?;
                 state.screen = Screen::Task;
                 state.show_hint_panel = false;
+                state.show_key_history = false;
                 state.current_hint = None;
                 state.last_command = None;
                 state.completion_time = None;

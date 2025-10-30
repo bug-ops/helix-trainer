@@ -229,7 +229,7 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
 
         // Deletion commands
         (KeyCode::Char('x'), KeyModifiers::NONE) => "x",
-        (KeyCode::Char('d'), KeyModifiers::NONE) => "dd",
+        (KeyCode::Char('d'), KeyModifiers::NONE) => "d",
         (KeyCode::Char('c'), KeyModifiers::NONE) => "c",
 
         // Yank and paste
@@ -250,7 +250,7 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r",
 
         // Document movement
-        (KeyCode::Char('g'), KeyModifiers::NONE) => "gg",
+        (KeyCode::Char('g'), KeyModifiers::NONE) => "g",
         (KeyCode::Char('G'), KeyModifiers::NONE) => "G",
 
         _ => return None,

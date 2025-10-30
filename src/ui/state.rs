@@ -118,6 +118,9 @@ pub struct AppState {
 
     /// History of last 5 key presses (most recent first)
     pub key_history: Vec<String>,
+
+    /// Command buffer for accumulating multi-key commands (e.g., "d" waiting for "d")
+    pub command_buffer: String,
 }
 
 impl fmt::Debug for AppState {
@@ -133,6 +136,7 @@ impl fmt::Debug for AppState {
             .field("last_command", &self.last_command)
             .field("completion_time", &self.completion_time.is_some())
             .field("key_history", &self.key_history.len())
+            .field("command_buffer", &self.command_buffer)
             .finish()
     }
 }
@@ -166,6 +170,7 @@ impl AppState {
             last_command: None,
             completion_time: None,
             key_history: Vec::new(),
+            command_buffer: String::new(),
         }
     }
 
@@ -306,6 +311,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.last_command = None;
                 state.completion_time = None;
                 state.clear_key_history();
+                state.command_buffer.clear();
             }
             Ok(())
         }
@@ -339,22 +345,51 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             state.add_key_to_history(display_key);
 
             if let Some(session) = &mut state.session {
-                // Store last command for display (skip special commands and single chars in Insert mode)
-                if !command.starts_with("Arrow") && command != "Backspace" && command != "\n" {
-                    // Only show meaningful commands
-                    if session.is_insert_mode() {
-                        // In insert mode, don't show individual characters
-                        if command == "Escape" {
-                            state.last_command = Some(command.clone());
-                        }
-                    } else {
-                        // In normal mode, show all commands
+                // In Insert mode, execute commands directly
+                if session.is_insert_mode() {
+                    // Store last command for display (skip special commands and single chars)
+                    if command == "Escape" {
                         state.last_command = Some(command.clone());
                     }
-                }
 
-                // Execute command through session (which uses simulator)
-                session.record_action(command)?;
+                    // Execute command through session
+                    session.record_action(command)?;
+                } else {
+                    // Normal mode: handle command buffer for multi-key commands
+                    state.command_buffer.push_str(&command);
+
+                    // Try to match a complete command
+                    let final_command = match state.command_buffer.as_str() {
+                        // Multi-key commands
+                        "dd" => Some("dd"),
+                        "gg" => Some("gg"),
+
+                        // Partial commands - wait for more input
+                        "d" | "g" => None,
+
+                        // Single-key commands (clear buffer and execute)
+                        _ if state.command_buffer.len() == 1 => Some(state.command_buffer.as_str()),
+
+                        // Invalid sequence - clear buffer
+                        _ => {
+                            state.command_buffer.clear();
+                            return Ok(());
+                        }
+                    };
+
+                    if let Some(cmd) = final_command {
+                        // We have a complete command
+                        let cmd_string = cmd.to_string();
+                        state.command_buffer.clear();
+
+                        // Store for display
+                        state.last_command = Some(cmd_string.clone());
+
+                        // Execute command through session
+                        session.record_action(cmd_string)?;
+                    }
+                    // If None, we're waiting for more keys (buffer not cleared)
+                }
 
                 // Check if scenario is complete
                 if session.is_completed() {
@@ -375,6 +410,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.last_command = None;
                 state.completion_time = None;
                 state.clear_key_history();
+                state.command_buffer.clear();
             }
             Ok(())
         }

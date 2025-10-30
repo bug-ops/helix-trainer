@@ -89,6 +89,10 @@ impl HelixSimulator {
             "u" => self.undo()?,
             "ctrl-r" => self.redo()?,
 
+            // Line manipulation
+            "alt-up" => self.move_line_up()?,
+            "alt-down" => self.move_line_down()?,
+
             // Unknown command
             _ => return Err(UserError::OperationFailed),
         }
@@ -244,6 +248,130 @@ impl HelixSimulator {
     fn move_document_end(&mut self) -> Result<(), UserError> {
         let end = self.doc.len_chars();
         self.selection = Selection::point(end);
+        Ok(())
+    }
+
+    fn move_line_up(&mut self) -> Result<(), UserError> {
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+
+        // Can't move up if already at first line
+        if current_line == 0 {
+            return Ok(());
+        }
+
+        // Get current column position to preserve it
+        let line_start = self.doc.line_to_char(current_line);
+        let col = head - line_start;
+
+        // Get line content for current and previous lines
+        let current_line_start = self.doc.line_to_char(current_line);
+        let current_line_end = if current_line + 1 < self.doc.len_lines() {
+            self.doc.line_to_char(current_line + 1)
+        } else {
+            self.doc.len_chars()
+        };
+
+        let prev_line_start = self.doc.line_to_char(current_line - 1);
+        let prev_line_end = current_line_start;
+
+        // Extract line contents (including newlines)
+        let current_line_text = self
+            .doc
+            .slice(current_line_start..current_line_end)
+            .to_string();
+        let prev_line_text = self.doc.slice(prev_line_start..prev_line_end).to_string();
+
+        // Create transaction to swap lines
+        let transaction = Transaction::change(
+            &self.doc,
+            vec![
+                (
+                    prev_line_start,
+                    prev_line_end,
+                    Some(current_line_text.into()),
+                ),
+                (
+                    current_line_start,
+                    current_line_end,
+                    Some(prev_line_text.into()),
+                ),
+            ]
+            .into_iter(),
+        );
+
+        // Apply transaction
+        self.apply_transaction(transaction);
+
+        // Update cursor to follow the line (now one line up)
+        let new_line_start = self.doc.line_to_char(current_line - 1);
+        let new_pos = (new_line_start + col).min(self.doc.len_chars());
+        self.selection = Selection::point(new_pos);
+
+        Ok(())
+    }
+
+    fn move_line_down(&mut self) -> Result<(), UserError> {
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+
+        // Can't move down if already at last line
+        if current_line + 1 >= self.doc.len_lines() {
+            return Ok(());
+        }
+
+        // Get current column position to preserve it
+        let line_start = self.doc.line_to_char(current_line);
+        let col = head - line_start;
+
+        // Get line content for current and next lines
+        let current_line_start = self.doc.line_to_char(current_line);
+        let current_line_end = if current_line + 1 < self.doc.len_lines() {
+            self.doc.line_to_char(current_line + 1)
+        } else {
+            self.doc.len_chars()
+        };
+
+        let next_line_start = current_line_end;
+        let next_line_end = if current_line + 2 < self.doc.len_lines() {
+            self.doc.line_to_char(current_line + 2)
+        } else {
+            self.doc.len_chars()
+        };
+
+        // Extract line contents (including newlines)
+        let current_line_text = self
+            .doc
+            .slice(current_line_start..current_line_end)
+            .to_string();
+        let next_line_text = self.doc.slice(next_line_start..next_line_end).to_string();
+
+        // Create transaction to swap lines
+        let transaction = Transaction::change(
+            &self.doc,
+            vec![
+                (
+                    current_line_start,
+                    current_line_end,
+                    Some(next_line_text.into()),
+                ),
+                (
+                    next_line_start,
+                    next_line_end,
+                    Some(current_line_text.into()),
+                ),
+            ]
+            .into_iter(),
+        );
+
+        // Apply transaction
+        self.apply_transaction(transaction);
+
+        // Update cursor to follow the line (now one line down)
+        let new_line_start = self.doc.line_to_char(current_line + 1);
+        let new_pos = (new_line_start + col).min(self.doc.len_chars());
+        self.selection = Selection::point(new_pos);
+
         Ok(())
     }
 
@@ -522,5 +650,97 @@ mod tests {
         let state = sim.get_state().unwrap();
         // Should have moved to start of a previous word
         assert!(state.cursor_position().col >= 11);
+    }
+
+    #[test]
+    fn test_move_line_up() {
+        let content = "line1\nline2\nline3".to_string();
+        let mut sim = HelixSimulator::new(content);
+
+        // Move cursor to line 1 (second line, 0-indexed)
+        sim.execute_command("j").unwrap();
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.cursor_position().row, 1);
+
+        // Move line up
+        sim.execute_command("alt-up").unwrap();
+        let state = sim.get_state().unwrap();
+
+        // Content should be: line2\nline1\nline3
+        assert_eq!(state.content(), "line2\nline1\nline3");
+        // Cursor should follow the line (now at row 0)
+        assert_eq!(state.cursor_position().row, 0);
+    }
+
+    #[test]
+    fn test_move_line_up_at_first_line() {
+        let content = "line1\nline2\nline3".to_string();
+        let mut sim = HelixSimulator::new(content);
+
+        // Already at first line (row 0)
+        // Moving up should do nothing
+        sim.execute_command("alt-up").unwrap();
+        let state = sim.get_state().unwrap();
+
+        // Content should remain unchanged
+        assert_eq!(state.content(), "line1\nline2\nline3");
+        assert_eq!(state.cursor_position().row, 0);
+    }
+
+    #[test]
+    fn test_move_line_down() {
+        let content = "line1\nline2\nline3".to_string();
+        let mut sim = HelixSimulator::new(content);
+
+        // Already at first line (row 0)
+        // Move line down
+        sim.execute_command("alt-down").unwrap();
+        let state = sim.get_state().unwrap();
+
+        // Content should be: line2\nline1\nline3
+        assert_eq!(state.content(), "line2\nline1\nline3");
+        // Cursor should follow the line (now at row 1)
+        assert_eq!(state.cursor_position().row, 1);
+    }
+
+    #[test]
+    fn test_move_line_down_at_last_line() {
+        let content = "line1\nline2\nline3".to_string();
+        let mut sim = HelixSimulator::new(content);
+
+        // Move to last line (row 2)
+        sim.execute_command("j").unwrap();
+        sim.execute_command("j").unwrap();
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.cursor_position().row, 2);
+
+        // Moving down should do nothing
+        sim.execute_command("alt-down").unwrap();
+        let state = sim.get_state().unwrap();
+
+        // Content should remain unchanged
+        assert_eq!(state.content(), "line1\nline2\nline3");
+        assert_eq!(state.cursor_position().row, 2);
+    }
+
+    #[test]
+    fn test_move_line_preserves_column() {
+        let content = "  line1\n  line2\n  line3".to_string();
+        let mut sim = HelixSimulator::new(content);
+
+        // Move to column 4 on first line
+        sim.execute_command("l").unwrap();
+        sim.execute_command("l").unwrap();
+        sim.execute_command("l").unwrap();
+        sim.execute_command("l").unwrap();
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.cursor_position().col, 4);
+
+        // Move line down
+        sim.execute_command("alt-down").unwrap();
+        let state = sim.get_state().unwrap();
+
+        // Cursor column should be preserved
+        assert_eq!(state.cursor_position().col, 4);
     }
 }

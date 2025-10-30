@@ -894,11 +894,7 @@ mod tests {
         let duration2 = feedback2.duration;
 
         // Durations should be equal (or very close)
-        let diff = if duration2 > duration1 {
-            duration2 - duration1
-        } else {
-            duration1 - duration2
-        };
+        let diff = duration2.abs_diff(duration1);
         assert!(
             diff.as_millis() < 5,
             "Timer should be fixed after completion"

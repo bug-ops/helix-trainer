@@ -112,6 +112,9 @@ pub struct AppState {
 
     /// Last command executed (for display purposes)
     pub last_command: Option<String>,
+
+    /// Time when scenario was completed (for showing success screen before results)
+    pub completion_time: Option<std::time::Instant>,
 }
 
 impl fmt::Debug for AppState {
@@ -125,6 +128,7 @@ impl fmt::Debug for AppState {
             .field("current_hint", &self.current_hint.is_some())
             .field("show_hint_panel", &self.show_hint_panel)
             .field("last_command", &self.last_command)
+            .field("completion_time", &self.completion_time.is_some())
             .finish()
     }
 }
@@ -156,6 +160,7 @@ impl AppState {
             current_hint: None,
             show_hint_panel: false,
             last_command: None,
+            completion_time: None,
         }
     }
 
@@ -260,6 +265,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.show_hint_panel = false;
                 state.current_hint = None;
                 state.last_command = None;
+                state.completion_time = None;
             }
             Ok(())
         }
@@ -308,7 +314,9 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
                 // Check if scenario is complete
                 if session.is_completed() {
-                    state.screen = Screen::Results;
+                    // Mark completion time instead of immediately going to results
+                    // This allows showing the success state before transition
+                    state.completion_time = Some(std::time::Instant::now());
                 }
             }
             Ok(())
@@ -321,6 +329,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.show_hint_panel = false;
                 state.current_hint = None;
                 state.last_command = None;
+                state.completion_time = None;
             }
             Ok(())
         }

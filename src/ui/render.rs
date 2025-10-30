@@ -261,6 +261,11 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
         if state.show_hint_panel {
             render_hint_popup(frame, state);
         }
+
+        // Show success message if scenario just completed
+        if state.completion_time.is_some() {
+            render_success_popup(frame);
+        }
     }
 }
 
@@ -592,6 +597,52 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
             }
         })
         .collect()
+}
+
+/// Render success popup when scenario is completed
+fn render_success_popup(frame: &mut Frame) {
+    let area = frame.area();
+
+    // Create centered popup area
+    let popup_width = 40;
+    let popup_height = 7;
+    let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+    let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+
+    let popup_area = Rect {
+        x: popup_x,
+        y: popup_y,
+        width: popup_width,
+        height: popup_height,
+    };
+
+    // Success message
+    let success_text = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "SUCCESS!",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Scenario completed!",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(""),
+    ];
+
+    let success_paragraph = Paragraph::new(success_text)
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green))
+                .style(Style::default().bg(Color::Black)),
+        );
+
+    frame.render_widget(success_paragraph, popup_area);
 }
 
 #[cfg(test)]

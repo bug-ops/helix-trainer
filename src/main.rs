@@ -112,6 +112,15 @@ fn run_app(
             break;
         }
 
+        // Check if scenario completed and delay elapsed
+        if let Some(completion_time) = state.completion_time {
+            if completion_time.elapsed() >= Duration::from_millis(1500) {
+                tracing::debug!("Success screen delay elapsed, transitioning to results");
+                ui::update(state, Message::CompleteScenario)?;
+                state.completion_time = None;
+            }
+        }
+
         // Handle events with timeout
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {

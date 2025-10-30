@@ -187,8 +187,11 @@ fn handle_task_keys(key: KeyEvent) -> Option<Message> {
         (KeyCode::Char('x'), KeyModifiers::NONE) => "x",
         (KeyCode::Char('d'), KeyModifiers::NONE) => "dd",
 
-        // Mode changes
+        // Mode changes and editing
         (KeyCode::Char('i'), KeyModifiers::NONE) => "i",
+        (KeyCode::Char('a'), KeyModifiers::NONE) => "a",
+        (KeyCode::Char('o'), KeyModifiers::NONE) => "o",
+        (KeyCode::Char('O'), KeyModifiers::SHIFT) => "O",
 
         // Undo/Redo
         (KeyCode::Char('u'), KeyModifiers::NONE) => "u",

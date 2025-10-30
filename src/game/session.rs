@@ -181,6 +181,8 @@ pub struct GameSession {
     user_actions: Vec<UserAction>,
     /// When the session started
     started_at: Instant,
+    /// When the session completed (None if still active/abandoned)
+    completed_at: Option<Instant>,
     /// Current session state (Active, Completed, or Abandoned)
     state: SessionState,
     /// Number of hints shown to user
@@ -246,6 +248,7 @@ impl GameSession {
             simulator,
             user_actions: Vec::new(),
             started_at: Instant::now(),
+            completed_at: None,
             state: SessionState::Active,
             hints_shown: 0,
         })
@@ -355,6 +358,7 @@ impl GameSession {
         // Check if scenario is completed
         if self.check_completion() {
             self.state = SessionState::Completed;
+            self.completed_at = Some(Instant::now());
         }
 
         Ok(())
@@ -387,6 +391,7 @@ impl GameSession {
         // Check if scenario is completed
         if self.check_completion() {
             self.state = SessionState::Completed;
+            self.completed_at = Some(Instant::now());
         }
 
         Ok(())
@@ -532,7 +537,11 @@ impl GameSession {
         let score = if success { self.calculate_score()? } else { 0 };
 
         let rating = Scorer::get_rating(score, max_points);
-        let duration = self.elapsed();
+        let duration = if let Some(completed_at) = self.completed_at {
+            completed_at.duration_since(self.started_at)
+        } else {
+            self.elapsed()
+        };
 
         // Provide hint if user struggled (took >2x optimal actions)
         let hint = if success && actions_taken > optimal_actions * 2 {
@@ -588,6 +597,7 @@ impl GameSession {
         self.simulator = HelixSimulator::new(self.scenario.setup.file_content.clone());
         self.user_actions.clear();
         self.started_at = Instant::now();
+        self.completed_at = None;
         self.state = SessionState::Active;
         self.hints_shown = 0;
         Ok(())
@@ -862,5 +872,36 @@ mod tests {
         let summary = feedback.summary();
         assert!(summary.contains("100/100"));
         assert!(summary.contains("2 actions"));
+    }
+
+    #[test]
+    fn test_timer_fixed_on_completion() {
+        let scenario = create_test_scenario();
+        let mut session = GameSession::new(scenario).unwrap();
+
+        // Complete with dd command
+        session.record_action("dd".to_string()).unwrap();
+
+        // Get feedback immediately after completion
+        let feedback1 = session.get_feedback().unwrap();
+        let duration1 = feedback1.duration;
+
+        // Wait a bit
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Get feedback again - duration should be the same (fixed)
+        let feedback2 = session.get_feedback().unwrap();
+        let duration2 = feedback2.duration;
+
+        // Durations should be equal (or very close)
+        let diff = if duration2 > duration1 {
+            duration2 - duration1
+        } else {
+            duration1 - duration2
+        };
+        assert!(
+            diff.as_millis() < 5,
+            "Timer should be fixed after completion"
+        );
     }
 }

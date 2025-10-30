@@ -34,30 +34,6 @@ max_points = 100
 tolerance = 1
 
 [[scenarios]]
-id = "move_line_up_001"
-name = "Move line up"
-description = "Move the current line up one position using Alt+Up"
-
-[scenarios.setup]
-file_content = "function start() {\n  console.log('Hello');\n  console.log('World');\n}"
-cursor_position = [2, 2]
-
-[scenarios.target]
-file_content = "function start() {\n  console.log('World');\n  console.log('Hello');\n}"
-cursor_position = [1, 2]
-
-[scenarios.solution]
-commands = ["alt-up"]
-description = "Press Alt+Up to move the current line up"
-
-hints = ["Helix has convenient keybindings for moving lines up and down"]
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[[scenarios]]
 id = "select_word_001"
 name = "Select current word"
 description = "Select the word under the cursor"

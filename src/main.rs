@@ -183,10 +183,6 @@ fn handle_task_keys(key: KeyEvent) -> Option<Message> {
         (KeyCode::Char('0'), KeyModifiers::NONE) => "0",
         (KeyCode::Char('$'), KeyModifiers::NONE) => "$",
 
-        // Line manipulation
-        (KeyCode::Up, KeyModifiers::ALT) => "alt-up",
-        (KeyCode::Down, KeyModifiers::ALT) => "alt-down",
-
         // Deletion commands
         (KeyCode::Char('x'), KeyModifiers::NONE) => "x",
         (KeyCode::Char('d'), KeyModifiers::NONE) => "dd",

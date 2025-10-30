@@ -553,12 +553,12 @@ Track which commands have been implemented in the simulator:
 
 ### Changes (Normal Mode)
 
-- [ ] r - Replace character
+- [x] r - Replace character
 - [ ] R - Replace with yanked
 - [ ] ~, `, Alt-` - Case switching
-- [x] i - Insert mode (only i implemented, a not yet)
+- [x] i, a - Insert/append modes
 - [ ] I, A - Insert at line bounds
-- [ ] o, O - Open lines
+- [x] o, O - Open lines
 - [ ] . - Repeat insert
 - [x] u, U - Undo/redo (basic)
 - [ ] Alt-u, Alt-U - History navigation
@@ -603,10 +603,10 @@ Track which commands have been implemented in the simulator:
 
 ## Implementation Summary
 
-**Implemented:** 14/200+ commands (7%)
+**Implemented:** 18/200+ commands (9%)
 
 - Movement: 11/26
-- Changes: 3/30
+- Changes: 7/30
 - Selection: 0/18
 - Search: 0/6
 - Special Modes: 0/6

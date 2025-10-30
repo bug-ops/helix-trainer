@@ -77,12 +77,21 @@ impl HelixSimulator {
             "x" => self.delete_char()?,
             "dd" => self.delete_line()?,
 
-            // Mode changes
+            // Mode changes and editing
             "i" => {
                 self.mode = Mode::Insert;
             }
+            "a" => self.append()?,
+            "o" => self.open_below()?,
+            "O" => self.open_above()?,
             "Escape" => {
                 self.mode = Mode::Normal;
+            }
+
+            // Character operations
+            cmd if cmd.starts_with('r') && cmd.len() == 2 => {
+                let ch = cmd.chars().nth(1).unwrap();
+                self.replace_char(ch)?;
             }
 
             // Undo/Redo
@@ -244,6 +253,87 @@ impl HelixSimulator {
     fn move_document_end(&mut self) -> Result<(), UserError> {
         let end = self.doc.len_chars();
         self.selection = Selection::point(end);
+        Ok(())
+    }
+
+    fn append(&mut self) -> Result<(), UserError> {
+        // Move cursor one position to the right (after current character)
+        let head = self.selection.primary().head;
+        let new_pos = (head + 1).min(self.doc.len_chars());
+        self.selection = Selection::point(new_pos);
+        self.mode = Mode::Insert;
+        Ok(())
+    }
+
+    fn open_below(&mut self) -> Result<(), UserError> {
+        // Find end of current line
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+        let line_end = if current_line + 1 < self.doc.len_lines() {
+            self.doc.line_to_char(current_line + 1) - 1
+        } else {
+            self.doc.len_chars()
+        };
+
+        // Insert newline at end of current line
+        let transaction = Transaction::change(
+            &self.doc,
+            [(line_end, line_end, Some("\n".into()))].into_iter(),
+        );
+
+        self.apply_transaction(transaction);
+
+        // Move cursor to the new empty line
+        let new_line_start = self.doc.line_to_char(current_line + 1);
+        self.selection = Selection::point(new_line_start);
+        self.mode = Mode::Insert;
+
+        Ok(())
+    }
+
+    fn open_above(&mut self) -> Result<(), UserError> {
+        // Find start of current line
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+        let line_start = self.doc.line_to_char(current_line);
+
+        // Insert newline at start of current line
+        let transaction = Transaction::change(
+            &self.doc,
+            [(line_start, line_start, Some("\n".into()))].into_iter(),
+        );
+
+        self.apply_transaction(transaction);
+
+        // Cursor is already at the new empty line (same position)
+        self.selection = Selection::point(line_start);
+        self.mode = Mode::Insert;
+
+        Ok(())
+    }
+
+    fn replace_char(&mut self, ch: char) -> Result<(), UserError> {
+        // Replace character at cursor with the given character
+        let head = self.selection.primary().head;
+
+        // Don't replace if at end of document or on newline
+        if head >= self.doc.len_chars() {
+            return Ok(());
+        }
+
+        let current_char = self.doc.char(head);
+        if current_char == '\n' {
+            return Ok(());
+        }
+
+        // Replace current character
+        let transaction = Transaction::change(
+            &self.doc,
+            [(head, head + 1, Some(ch.to_string().into()))].into_iter(),
+        );
+
+        self.apply_transaction(transaction);
+
         Ok(())
     }
 
@@ -522,5 +612,68 @@ mod tests {
         let state = sim.get_state().unwrap();
         // Should have moved to start of a previous word
         assert!(state.cursor_position().col >= 11);
+    }
+
+    #[test]
+    fn test_append_mode() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Cursor at start (position 0)
+        assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+
+        // Press 'a' should move cursor one position right and enter insert mode
+        sim.execute_command("a").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+        assert_eq!(state.cursor_position().col, 1); // Moved one right
+    }
+
+    #[test]
+    fn test_open_below() {
+        let mut sim = HelixSimulator::new("line1\nline2".to_string());
+
+        // Cursor at start of first line
+        assert_eq!(sim.get_state().unwrap().cursor_position().row, 0);
+
+        // Press 'o' should insert new line below and enter insert mode
+        sim.execute_command("o").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+        assert_eq!(state.content(), "line1\n\nline2");
+        assert_eq!(state.cursor_position().row, 1); // On new empty line
+    }
+
+    #[test]
+    fn test_open_above() {
+        let mut sim = HelixSimulator::new("line1\nline2".to_string());
+
+        // Move to second line
+        sim.execute_command("j").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
+
+        // Press 'O' should insert new line above and enter insert mode
+        sim.execute_command("O").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+        assert_eq!(state.content(), "line1\n\nline2");
+        assert_eq!(state.cursor_position().row, 1); // On new empty line
+    }
+
+    #[test]
+    fn test_replace_char() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Cursor at start
+        assert_eq!(sim.get_state().unwrap().content(), "hello");
+
+        // Press 'r' then 'X' should replace 'h' with 'X'
+        sim.execute_command("rX").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "Xello");
+        assert_eq!(sim.mode(), Mode::Normal); // Should stay in normal mode
     }
 }

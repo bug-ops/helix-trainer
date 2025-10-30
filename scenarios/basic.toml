@@ -60,3 +60,102 @@ hints = [
 optimal_count = 1
 max_points = 100
 tolerance = 0
+
+[[scenarios]]
+id = "append_mode_001"
+name = "Append after word"
+description = "Move to end of word and enter insert mode to append text"
+
+[scenarios.setup]
+file_content = "hello world"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "hello! world"
+cursor_position = [0, 6]
+
+[scenarios.solution]
+commands = ["e", "a"]
+description = "Press 'e' to move to end of word, then 'a' to append"
+
+hints = ["'a' enters insert mode after the cursor position"]
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 1
+
+[[scenarios]]
+id = "open_below_001"
+name = "Insert line below"
+description = "Open a new line below the current line"
+
+[scenarios.setup]
+file_content = "function main() {\n}"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "function main() {\n\n}"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["o"]
+description = "Press 'o' to open a new line below"
+
+hints = ["'o' inserts a new line below and enters insert mode"]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[[scenarios]]
+id = "open_above_001"
+name = "Insert line above"
+description = "Open a new line above the current line"
+
+[scenarios.setup]
+file_content = "line1\nline2\nline3"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "line1\n\nline2\nline3"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["O"]
+description = "Press 'O' (capital o) to open a new line above"
+
+hints = ["'O' inserts a new line above and enters insert mode"]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[[scenarios]]
+id = "replace_char_001"
+name = "Fix typo with replace"
+description = "Replace a single character to fix a typo"
+
+[scenarios.setup]
+file_content = "Hxllo world"
+cursor_position = [0, 1]
+
+[scenarios.target]
+file_content = "Hello world"
+cursor_position = [0, 1]
+
+[scenarios.solution]
+commands = ["re"]
+description = "Press 'r' then 'e' to replace 'x' with 'e'"
+
+hints = [
+    "'r' followed by any character replaces the character under cursor",
+    "Unlike 'i', replace doesn't enter insert mode"
+]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0

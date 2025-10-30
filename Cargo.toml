@@ -16,7 +16,7 @@ toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 tempfile = "3.8"
 helix-core = { git = "https://github.com/helix-editor/helix", tag = "v0.6.0" }
 

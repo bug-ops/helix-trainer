@@ -115,6 +115,9 @@ pub struct AppState {
 
     /// Time when scenario was completed (for showing success screen before results)
     pub completion_time: Option<std::time::Instant>,
+
+    /// History of last 5 key presses (most recent first)
+    pub key_history: Vec<String>,
 }
 
 impl fmt::Debug for AppState {
@@ -129,6 +132,7 @@ impl fmt::Debug for AppState {
             .field("show_hint_panel", &self.show_hint_panel)
             .field("last_command", &self.last_command)
             .field("completion_time", &self.completion_time.is_some())
+            .field("key_history", &self.key_history.len())
             .finish()
     }
 }
@@ -161,6 +165,7 @@ impl AppState {
             show_hint_panel: false,
             last_command: None,
             completion_time: None,
+            key_history: Vec::new(),
         }
     }
 
@@ -187,6 +192,40 @@ impl AppState {
     /// Get a scenario by index
     pub fn get_scenario(&self, index: usize) -> Option<&Scenario> {
         self.scenarios.get(index)
+    }
+
+    /// Add a key to the history (keeps last 5)
+    pub fn add_key_to_history(&mut self, key: String) {
+        // Insert at the beginning (most recent first)
+        self.key_history.insert(0, key);
+
+        // Keep only last 5 keys
+        if self.key_history.len() > 5 {
+            self.key_history.truncate(5);
+        }
+    }
+
+    /// Clear key history
+    pub fn clear_key_history(&mut self) {
+        self.key_history.clear();
+    }
+}
+
+/// Format a key command for display in key history
+///
+/// Converts internal command names to user-friendly display strings
+fn format_key_for_display(command: &str) -> String {
+    match command {
+        "ArrowLeft" => "←".to_string(),
+        "ArrowRight" => "→".to_string(),
+        "ArrowUp" => "↑".to_string(),
+        "ArrowDown" => "↓".to_string(),
+        "Backspace" => "⌫".to_string(),
+        "Escape" => "Esc".to_string(),
+        "\n" => "↵".to_string(),
+        " " => "Space".to_string(),
+        cmd if cmd.len() == 1 => cmd.to_string(),
+        cmd => cmd.to_string(),
     }
 }
 
@@ -266,6 +305,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.current_hint = None;
                 state.last_command = None;
                 state.completion_time = None;
+                state.clear_key_history();
             }
             Ok(())
         }
@@ -294,6 +334,10 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::ExecuteCommand(command) => {
+            // Add key to history for display (format for readability)
+            let display_key = format_key_for_display(&command);
+            state.add_key_to_history(display_key);
+
             if let Some(session) = &mut state.session {
                 // Store last command for display (skip special commands and single chars in Insert mode)
                 if !command.starts_with("Arrow") && command != "Backspace" && command != "\n" {
@@ -330,6 +374,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.current_hint = None;
                 state.last_command = None;
                 state.completion_time = None;
+                state.clear_key_history();
             }
             Ok(())
         }

@@ -142,11 +142,17 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .block(Block::default().title("Task").borders(Borders::ALL));
         frame.render_widget(description, chunks[1]);
 
-        // Editor view - split into current and target
+        // Editor view - split into main area and key history sidebar
+        let main_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(40), Constraint::Length(15)])
+            .split(chunks[2]);
+
+        // Left side: current and target editors
         let editor_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(chunks[2]);
+            .split(main_layout[0]);
 
         // Current state with cursor and diff highlighting
         let current_state = session.current_state();
@@ -172,6 +178,9 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             )
             .wrap(Wrap { trim: false });
         frame.render_widget(target, editor_chunks[1]);
+
+        // Right side: key history panel
+        render_key_history_panel(frame, state, main_layout[1]);
 
         // Stats with mode indicator and progress
         let optimal = scenario.scoring.optimal_count;
@@ -597,6 +606,41 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
             }
         })
         .collect()
+}
+
+/// Render key history panel showing last 5 keys pressed
+fn render_key_history_panel(frame: &mut Frame, state: &AppState, area: Rect) {
+    // Build list of key history (most recent first, highlight the first one)
+    let key_items: Vec<Line> = state
+        .key_history
+        .iter()
+        .enumerate()
+        .map(|(idx, key)| {
+            // First item (most recent) is highlighted in cyan with bold
+            let style = if idx == 0 {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Gray)
+            };
+
+            // Center the key text with padding
+            let padded = format!("  {}  ", key);
+            Line::from(Span::styled(padded, style))
+        })
+        .collect();
+
+    let key_history = Paragraph::new(key_items)
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .title("Keys")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
+
+    frame.render_widget(key_history, area);
 }
 
 /// Render success popup when scenario is completed

@@ -22,7 +22,7 @@ helix-core = { git = "https://github.com/helix-editor/helix", tag = "v0.6.0" }
 
 [dev-dependencies]
 tokio-test = "0.4"
-proptest = "1.4"
+proptest = "1.9"
 
 [[bin]]
 name = "helix-trainer"

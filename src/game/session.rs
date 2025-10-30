@@ -32,7 +32,7 @@
 
 use crate::config::Scenario;
 use crate::game::{EditorState, PerformanceRating, Scorer};
-use crate::helix::HelixSimulator;
+use crate::helix::{HelixSimulator, Mode};
 use crate::security::{self, SecurityError, UserError};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -316,6 +316,11 @@ impl GameSession {
     /// Get elapsed time since session start
     pub fn elapsed(&self) -> Duration {
         self.started_at.elapsed()
+    }
+
+    /// Check if the simulator is in Insert mode
+    pub fn is_insert_mode(&self) -> bool {
+        self.simulator.mode() == Mode::Insert
     }
 
     /// Record a user action and execute it through the simulator

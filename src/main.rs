@@ -141,7 +141,7 @@ fn run_app(
 fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
     match state.screen {
         ui::Screen::MainMenu => handle_menu_keys(key),
-        ui::Screen::Task => handle_task_keys(key),
+        ui::Screen::Task => handle_task_keys(key, state),
         ui::Screen::Results => handle_results_keys(key),
     }
 }
@@ -158,7 +158,7 @@ fn handle_menu_keys(key: KeyEvent) -> Option<Message> {
 }
 
 /// Handle keyboard events on the task screen
-fn handle_task_keys(key: KeyEvent) -> Option<Message> {
+fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Handle special UI keys first
     match key.code {
         KeyCode::F(1) => return Some(Message::ShowHint),
@@ -166,7 +166,42 @@ fn handle_task_keys(key: KeyEvent) -> Option<Message> {
         _ => {}
     }
 
-    // Convert key to Helix command string
+    // Check if we're in Insert mode
+    let in_insert_mode = state
+        .session
+        .as_ref()
+        .map(|session| session.is_insert_mode())
+        .unwrap_or(false);
+
+    // In Insert mode, capture text input
+    if in_insert_mode {
+        match key.code {
+            KeyCode::Char(c) => {
+                return Some(Message::ExecuteCommand(c.to_string()));
+            }
+            KeyCode::Enter => {
+                return Some(Message::ExecuteCommand("\n".to_string()));
+            }
+            KeyCode::Backspace => {
+                return Some(Message::ExecuteCommand("Backspace".to_string()));
+            }
+            KeyCode::Left => {
+                return Some(Message::ExecuteCommand("ArrowLeft".to_string()));
+            }
+            KeyCode::Right => {
+                return Some(Message::ExecuteCommand("ArrowRight".to_string()));
+            }
+            KeyCode::Up => {
+                return Some(Message::ExecuteCommand("ArrowUp".to_string()));
+            }
+            KeyCode::Down => {
+                return Some(Message::ExecuteCommand("ArrowDown".to_string()));
+            }
+            _ => {}
+        }
+    }
+
+    // Convert key to Helix command string (Normal mode)
     let command = match (key.code, key.modifiers) {
         // Movement commands
         (KeyCode::Char('h'), KeyModifiers::NONE) => "h",
@@ -266,7 +301,7 @@ mod tests {
     fn test_task_key_f1_shows_hint() {
         let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         let state = AppState::new(vec![]);
-        let msg = handle_task_keys(key);
+        let msg = handle_task_keys(key, &state);
         assert_eq!(msg, Some(Message::ShowHint));
     }
 
@@ -274,7 +309,7 @@ mod tests {
     fn test_task_key_h_moves_left() {
         let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
         let state = AppState::new(vec![]);
-        let msg = handle_task_keys(key);
+        let msg = handle_task_keys(key, &state);
         assert_eq!(msg, Some(Message::ExecuteCommand("h".to_string())));
     }
 
@@ -282,7 +317,7 @@ mod tests {
     fn test_task_key_esc_abandons() {
         let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let state = AppState::new(vec![]);
-        let msg = handle_task_keys(key);
+        let msg = handle_task_keys(key, &state);
         assert_eq!(msg, Some(Message::AbandonScenario));
     }
 

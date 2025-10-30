@@ -209,9 +209,7 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
         // Create colored mode indicator
         let mode_span = Span::styled(
             format!("Mode: {} ", mode),
-            Style::default()
-                .fg(mode_color)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
         );
 
         // Create colored progress indicator

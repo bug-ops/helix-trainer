@@ -263,11 +263,19 @@ mod tests {
     }
 
     #[test]
-    fn test_task_key_h_shows_hint() {
-        let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+    fn test_task_key_f1_shows_hint() {
+        let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         let state = AppState::new(vec![]);
         let msg = handle_task_keys(key);
         assert_eq!(msg, Some(Message::ShowHint));
+    }
+
+    #[test]
+    fn test_task_key_h_moves_left() {
+        let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+        let state = AppState::new(vec![]);
+        let msg = handle_task_keys(key);
+        assert_eq!(msg, Some(Message::ExecuteCommand("h".to_string())));
     }
 
     #[test]

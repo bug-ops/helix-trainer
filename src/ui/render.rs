@@ -214,18 +214,26 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(stats, chunks[3]);
 
-        // Instructions with hint indicator
+        // Instructions with hint indicator and last command
         let hint_indicator = if state.show_hint_panel && state.current_hint.is_some() {
             " [h: Next Hint] "
         } else {
             " [h: Show Hint] "
         };
 
-        let instructions =
-            Paragraph::new(format!("{}| Esc: Abandon | Ctrl-c: Quit", hint_indicator))
-                .style(Style::default().fg(Color::Gray))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
+        let last_cmd_text = if let Some(cmd) = &state.last_command {
+            format!(" Last: {} |", cmd)
+        } else {
+            String::new()
+        };
+
+        let instructions = Paragraph::new(format!(
+            "{}{}| Esc: Abandon | Ctrl-c: Quit",
+            hint_indicator, last_cmd_text
+        ))
+        .style(Style::default().fg(Color::Gray))
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
         frame.render_widget(instructions, chunks[4]);
 
         // Render hint panel if visible

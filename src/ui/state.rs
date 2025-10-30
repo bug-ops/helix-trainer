@@ -109,6 +109,9 @@ pub struct AppState {
 
     /// Whether to show hint on task screen
     pub show_hint_panel: bool,
+
+    /// Last command executed (for display purposes)
+    pub last_command: Option<String>,
 }
 
 impl fmt::Debug for AppState {
@@ -121,6 +124,7 @@ impl fmt::Debug for AppState {
             .field("running", &self.running)
             .field("current_hint", &self.current_hint.is_some())
             .field("show_hint_panel", &self.show_hint_panel)
+            .field("last_command", &self.last_command)
             .finish()
     }
 }
@@ -151,6 +155,7 @@ impl AppState {
             running: true,
             current_hint: None,
             show_hint_panel: false,
+            last_command: None,
         }
     }
 
@@ -254,6 +259,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.screen = Screen::Task;
                 state.show_hint_panel = false;
                 state.current_hint = None;
+                state.last_command = None;
             }
             Ok(())
         }
@@ -283,6 +289,20 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
         Message::ExecuteCommand(command) => {
             if let Some(session) = &mut state.session {
+                // Store last command for display (skip special commands and single chars in Insert mode)
+                if !command.starts_with("Arrow") && command != "Backspace" && command != "\n" {
+                    // Only show meaningful commands
+                    if session.is_insert_mode() {
+                        // In insert mode, don't show individual characters
+                        if command == "Escape" {
+                            state.last_command = Some(command.clone());
+                        }
+                    } else {
+                        // In normal mode, show all commands
+                        state.last_command = Some(command.clone());
+                    }
+                }
+
                 // Execute command through session (which uses simulator)
                 session.record_action(command)?;
 
@@ -300,6 +320,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.screen = Screen::Task;
                 state.show_hint_panel = false;
                 state.current_hint = None;
+                state.last_command = None;
             }
             Ok(())
         }

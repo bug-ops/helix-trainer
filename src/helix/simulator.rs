@@ -57,9 +57,20 @@ impl HelixSimulator {
 
     /// Execute a Helix command
     pub fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
-        // In Insert mode, most keypresses insert text (except Escape)
-        if self.mode == Mode::Insert && cmd != "Escape" {
-            return self.insert_text(cmd);
+        // In Insert mode, handle special keys and text input
+        if self.mode == Mode::Insert {
+            return match cmd {
+                "Escape" => {
+                    self.mode = Mode::Normal;
+                    Ok(())
+                }
+                "Backspace" => self.backspace(),
+                "ArrowLeft" => self.move_left(1),
+                "ArrowRight" => self.move_right(1),
+                "ArrowUp" => self.move_up(1),
+                "ArrowDown" => self.move_down(1),
+                _ => self.insert_text(cmd),
+            };
         }
 
         match cmd {
@@ -512,6 +523,31 @@ impl HelixSimulator {
         // Move cursor after inserted text
         let new_pos = head + text_len;
         self.selection = Selection::point(new_pos.min(self.doc.len_chars()));
+
+        Ok(())
+    }
+
+    fn backspace(&mut self) -> Result<(), UserError> {
+        // Delete character before cursor (only works in Insert mode)
+        if self.mode != Mode::Insert {
+            return Err(UserError::OperationFailed);
+        }
+
+        let head = self.selection.primary().head;
+
+        // Can't backspace at position 0
+        if head == 0 {
+            return Ok(());
+        }
+
+        // Delete character before cursor
+        let delete_start = head - 1;
+        let transaction = Transaction::change(&self.doc, [(delete_start, head, None)].into_iter());
+
+        self.apply_transaction(transaction);
+
+        // Move cursor back one position
+        self.selection = Selection::point(delete_start);
 
         Ok(())
     }
@@ -988,5 +1024,97 @@ mod tests {
         let state = sim.get_state().unwrap();
         assert_eq!(state.content(), "abc");
         assert_eq!(state.cursor_position().col, 3);
+    }
+
+    #[test]
+    fn test_backspace_in_insert_mode() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Enter insert mode at position 5
+        sim.execute_command("$").unwrap(); // Move to end
+        sim.execute_command("a").unwrap(); // Append
+        assert_eq!(sim.mode(), Mode::Insert);
+
+        // Type some characters
+        sim.execute_command("!").unwrap();
+        sim.execute_command("!").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "hello!!");
+        assert_eq!(state.cursor_position().col, 7);
+
+        // Backspace once
+        sim.execute_command("Backspace").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "hello!");
+        assert_eq!(state.cursor_position().col, 6);
+
+        // Backspace again
+        sim.execute_command("Backspace").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "hello");
+        assert_eq!(state.cursor_position().col, 5);
+    }
+
+    #[test]
+    fn test_backspace_at_start() {
+        let mut sim = HelixSimulator::new("test".to_string());
+
+        // Enter insert mode at start
+        sim.execute_command("i").unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+
+        // Backspace at position 0 should do nothing
+        sim.execute_command("Backspace").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "test");
+        assert_eq!(state.cursor_position().col, 0);
+    }
+
+    #[test]
+    fn test_arrow_keys_in_insert_mode() {
+        let mut sim = HelixSimulator::new("abc\ndef".to_string());
+
+        // Enter insert mode
+        sim.execute_command("i").unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+
+        // Test ArrowRight
+        sim.execute_command("ArrowRight").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().col, 1);
+
+        // Test ArrowLeft
+        sim.execute_command("ArrowLeft").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+
+        // Test ArrowDown
+        sim.execute_command("ArrowDown").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
+
+        // Test ArrowUp
+        sim.execute_command("ArrowUp").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().row, 0);
+
+        // Should still be in Insert mode
+        assert_eq!(sim.mode(), Mode::Insert);
+    }
+
+    #[test]
+    fn test_backspace_only_works_in_insert_mode() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Try backspace in Normal mode - should fail
+        let result = sim.backspace();
+        assert!(result.is_err());
+
+        // Enter Insert mode
+        sim.execute_command("i").unwrap();
+
+        // Now it should work (but do nothing at position 0)
+        let result = sim.backspace();
+        assert!(result.is_ok());
     }
 }

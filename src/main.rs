@@ -183,8 +183,19 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
                 return Some(Message::ExecuteCommand("\n".to_string()));
             }
             KeyCode::Backspace => {
-                // TODO: implement backspace
-                return None;
+                return Some(Message::ExecuteCommand("Backspace".to_string()));
+            }
+            KeyCode::Left => {
+                return Some(Message::ExecuteCommand("ArrowLeft".to_string()));
+            }
+            KeyCode::Right => {
+                return Some(Message::ExecuteCommand("ArrowRight".to_string()));
+            }
+            KeyCode::Up => {
+                return Some(Message::ExecuteCommand("ArrowUp".to_string()));
+            }
+            KeyCode::Down => {
+                return Some(Message::ExecuteCommand("ArrowDown".to_string()));
             }
             _ => {}
         }

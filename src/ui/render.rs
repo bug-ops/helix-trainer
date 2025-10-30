@@ -606,9 +606,9 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
 fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    // Create popup in bottom right corner - tall for large text
+    // Create popup in bottom right corner
     let popup_width = 32;
-    let popup_height = 7; // Height for 3-line characters + borders
+    let popup_height = 5;
     let popup_x = area.width.saturating_sub(popup_width + 2);
     let popup_y = area.height.saturating_sub(popup_height + 2);
 
@@ -619,41 +619,26 @@ fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
         height: popup_height,
     };
 
-    // Build large characters filling the height (3 lines per key)
-    let mut lines = vec![String::new(), String::new(), String::new()];
+    // Build single line with keys separated by spaces
+    let mut key_text = String::new();
 
-    // Add keys from left to right (most recent first)
     for (idx, key) in state.key_history.iter().take(5).enumerate() {
-        let large_key = make_large_char(key);
-
-        // Add spacing between keys
         if idx > 0 {
-            for line in &mut lines {
-                line.push(' ');
-            }
+            key_text.push_str("  ");
         }
-
-        // Append each line of the large character
-        for (line_idx, key_line) in large_key.iter().enumerate() {
-            lines[line_idx].push_str(key_line);
-        }
+        key_text.push_str(key);
     }
 
-    // Create colored lines - most recent (leftmost) is cyan
-    let styled_lines: Vec<Line> = lines
-        .into_iter()
-        .map(|line| {
-            // Most recent characters are on the left - make them cyan/bold
-            Line::from(Span::styled(
-                line,
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ))
-        })
-        .collect();
+    // Create single line with bold styling
+    let key_line = Line::from(Span::styled(
+        key_text,
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
+            .add_modifier(Modifier::UNDERLINED),
+    ));
 
-    let key_history = Paragraph::new(styled_lines)
+    let key_history = Paragraph::new(vec![key_line])
         .alignment(Alignment::Left)
         .block(
             Block::default()
@@ -663,16 +648,6 @@ fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
         );
 
     frame.render_widget(key_history, popup_area);
-}
-
-/// Create a large 3-line representation of a character
-fn make_large_char(key: &str) -> Vec<String> {
-    // Just show the key repeated 3 times vertically for size
-    vec![
-        format!("  {}  ", key),
-        format!("  {}  ", key),
-        format!("  {}  ", key),
-    ]
 }
 
 /// Render success popup when scenario is completed

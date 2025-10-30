@@ -323,6 +323,14 @@ impl GameSession {
         self.simulator.mode() == Mode::Insert
     }
 
+    /// Get current editor mode as string for UI display
+    pub fn mode_name(&self) -> &str {
+        match self.simulator.mode() {
+            Mode::Normal => "NORMAL",
+            Mode::Insert => "INSERT",
+        }
+    }
+
     /// Record a user action and execute it through the simulator
     ///
     /// Validates that the action count doesn't exceed security limits,

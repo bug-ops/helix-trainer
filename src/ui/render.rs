@@ -172,29 +172,44 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .wrap(Wrap { trim: false });
         frame.render_widget(target, editor_chunks[1]);
 
-        // Stats
+        // Stats with mode indicator
         let optimal = scenario.scoring.optimal_count;
         let actions = session.action_count();
         let elapsed = session.elapsed();
         let elapsed_secs = elapsed.as_secs_f32();
+        let mode = session.mode_name();
 
-        let stats_text = if actions <= optimal {
+        // Color code mode: green for Normal, yellow for Insert
+        let mode_color = if mode == "NORMAL" {
+            Color::Green
+        } else {
+            Color::Yellow
+        };
+
+        // Use Line to create colored mode indicator
+        let mode_span = Span::styled(
+            format!("Mode: {} ", mode),
+            Style::default()
+                .fg(mode_color)
+                .add_modifier(Modifier::BOLD),
+        );
+        let rest_of_stats = if actions <= optimal {
             format!(
-                "Actions: {} (optimal: {}) | Time: {:.1}s",
+                "| Actions: {} (optimal: {}) | Time: {:.1}s",
                 actions, optimal, elapsed_secs
             )
         } else {
             format!(
-                "Actions: {} (optimal: {}) - {} extra | Time: {:.1}s",
+                "| Actions: {} (optimal: {}) - {} extra | Time: {:.1}s",
                 actions,
                 optimal,
                 actions - optimal,
                 elapsed_secs
             )
         };
+        let rest_span = Span::styled(rest_of_stats, Style::default().fg(Color::White));
 
-        let stats = Paragraph::new(stats_text)
-            .style(Style::default().fg(Color::White))
+        let stats = Paragraph::new(Line::from(vec![mode_span, rest_span]))
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(stats, chunks[3]);

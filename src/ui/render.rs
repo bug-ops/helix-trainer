@@ -606,9 +606,9 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
 fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    // Create popup in bottom right corner - wider for horizontal layout
-    let popup_width = 50;
-    let popup_height = 5;
+    // Create popup in bottom right corner - tall for large text
+    let popup_width = 32;
+    let popup_height = 7; // Height for 3-line characters + borders
     let popup_x = area.width.saturating_sub(popup_width + 2);
     let popup_y = area.height.saturating_sub(popup_height + 2);
 
@@ -619,53 +619,70 @@ fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
         height: popup_height,
     };
 
-    // Build horizontal line of keys
-    let mut line_spans = Vec::new();
+    // Build large characters filling the height (3 lines per key)
+    let mut lines = vec![String::new(), String::new(), String::new()];
 
-    // Add keys from most recent to oldest, horizontally
+    // Add keys from left to right (most recent first)
     for (idx, key) in state.key_history.iter().take(5).enumerate() {
-        // Most recent key is largest and cyan/bold
-        let (style, text) = if idx == 0 {
-            (
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-                format!(" [{}] ", key),
-            )
-        } else {
-            // Older keys are smaller and gray
-            let color = match idx {
-                1 => Color::White,
-                2 => Color::Gray,
-                _ => Color::DarkGray,
-            };
-            (Style::default().fg(color), format!(" {} ", key))
-        };
+        let large_key = make_large_char(key);
 
-        line_spans.push(Span::styled(text, style));
+        // Add spacing between keys
+        if idx > 0 {
+            for line in &mut lines {
+                line.push(' ');
+            }
+        }
 
-        // Add arrow separator between keys
-        if idx < state.key_history.len().saturating_sub(1) && idx < 4 {
-            line_spans.push(Span::styled(
-                " ← ",
-                Style::default().fg(Color::DarkGray),
-            ));
+        // Append each line of the large character
+        for (line_idx, key_line) in large_key.iter().enumerate() {
+            lines[line_idx].push_str(key_line);
         }
     }
 
-    let key_line = Line::from(line_spans);
+    // Create colored lines - most recent (leftmost) is cyan
+    let styled_lines: Vec<Line> = lines
+        .into_iter()
+        .map(|line| {
+            // Most recent characters are on the left - make them cyan/bold
+            Line::from(Span::styled(
+                line,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ))
+        })
+        .collect();
 
-    let key_history = Paragraph::new(vec![key_line])
-        .alignment(Alignment::Center)
+    let key_history = Paragraph::new(styled_lines)
+        .alignment(Alignment::Left)
         .block(
             Block::default()
-                .title("Key History")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan))
                 .style(Style::default().bg(Color::Black)),
         );
 
     frame.render_widget(key_history, popup_area);
+}
+
+/// Create a large 3-line representation of a character
+fn make_large_char(key: &str) -> Vec<String> {
+    // For single characters, create block text
+    if key.len() == 1 {
+        let ch = key.chars().next().unwrap();
+        vec![
+            format!("███"),
+            format!(" {} ", ch),
+            format!("███"),
+        ]
+    } else {
+        // For multi-char (arrows, etc), wrap in box
+        vec![
+            format!("┌─┐"),
+            format!("│{}│", if key.len() == 1 { format!("{}", key) } else { key.chars().next().unwrap_or(' ').to_string() }),
+            format!("└─┘"),
+        ]
+    }
 }
 
 /// Render success popup when scenario is completed

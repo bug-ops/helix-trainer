@@ -1,5 +1,10 @@
 name: CI
 
+# Minimal permissions for security best practices
+permissions:
+  contents: read
+  # All other permissions are implicitly set to none
+
 on:
   pull_request:
     branches: [main]

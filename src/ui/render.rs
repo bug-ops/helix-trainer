@@ -667,22 +667,12 @@ fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
 
 /// Create a large 3-line representation of a character
 fn make_large_char(key: &str) -> Vec<String> {
-    // For single characters, create block text
-    if key.len() == 1 {
-        let ch = key.chars().next().unwrap();
-        vec![
-            format!("███"),
-            format!(" {} ", ch),
-            format!("███"),
-        ]
-    } else {
-        // For multi-char (arrows, etc), wrap in box
-        vec![
-            format!("┌─┐"),
-            format!("│{}│", if key.len() == 1 { format!("{}", key) } else { key.chars().next().unwrap_or(' ').to_string() }),
-            format!("└─┘"),
-        ]
-    }
+    // Just show the key repeated 3 times vertically for size
+    vec![
+        format!("  {}  ", key),
+        format!("  {}  ", key),
+        format!("  {}  ", key),
+    ]
 }
 
 /// Render success popup when scenario is completed

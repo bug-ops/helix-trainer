@@ -222,6 +222,11 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         (KeyCode::Char('x'), KeyModifiers::NONE) => "x",
         (KeyCode::Char('d'), KeyModifiers::NONE) => "dd",
         (KeyCode::Char('c'), KeyModifiers::NONE) => "c",
+        (KeyCode::Char('J'), KeyModifiers::SHIFT) => "J",
+
+        // Indentation
+        (KeyCode::Char('>'), KeyModifiers::SHIFT) => ">",
+        (KeyCode::Char('<'), KeyModifiers::SHIFT) => "<",
 
         // Yank and paste
         (KeyCode::Char('y'), KeyModifiers::NONE) => "y",

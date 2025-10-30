@@ -97,6 +97,11 @@ impl HelixSimulator {
             "x" => self.delete_char()?,
             "dd" => self.delete_line()?,
             "c" => self.change_selection()?,
+            "J" => self.join_lines()?,
+
+            // Indentation
+            ">" => self.indent_line()?,
+            "<" => self.dedent_line()?,
 
             // Yank and paste
             "y" => self.yank()?,
@@ -420,6 +425,89 @@ impl HelixSimulator {
         });
 
         self.apply_transaction(transaction);
+        Ok(())
+    }
+
+    fn join_lines(&mut self) -> Result<(), UserError> {
+        // Join current line with next line
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+
+        // Can't join if on last line
+        if current_line + 1 >= self.doc.len_lines() {
+            return Ok(());
+        }
+
+        // Find the newline character at the end of current line
+        let line_end = self.doc.line_to_char(current_line + 1) - 1;
+
+        // Replace newline with space
+        let transaction = Transaction::change(
+            &self.doc,
+            [(line_end, line_end + 1, Some(" ".into()))].into_iter(),
+        );
+
+        self.apply_transaction(transaction);
+
+        Ok(())
+    }
+
+    fn indent_line(&mut self) -> Result<(), UserError> {
+        // Add indentation (2 spaces) at the beginning of current line
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+        let line_start = self.doc.line_to_char(current_line);
+
+        // Insert 2 spaces at line start
+        let transaction = Transaction::change(
+            &self.doc,
+            [(line_start, line_start, Some("  ".into()))].into_iter(),
+        );
+
+        self.apply_transaction(transaction);
+
+        // Move cursor to maintain relative position
+        let new_head = head + 2;
+        self.selection = Selection::point(new_head.min(self.doc.len_chars()));
+
+        Ok(())
+    }
+
+    fn dedent_line(&mut self) -> Result<(), UserError> {
+        // Remove indentation (up to 2 spaces) from the beginning of current line
+        let head = self.selection.primary().head;
+        let current_line = self.doc.char_to_line(head);
+        let line_start = self.doc.line_to_char(current_line);
+
+        // Check how many spaces to remove (max 2)
+        let slice = self.doc.slice(..);
+        let mut spaces_to_remove = 0;
+
+        for i in 0..2 {
+            let pos = line_start + i;
+            if pos < self.doc.len_chars() && slice.char(pos) == ' ' {
+                spaces_to_remove += 1;
+            } else {
+                break;
+            }
+        }
+
+        if spaces_to_remove == 0 {
+            return Ok(());
+        }
+
+        // Remove the spaces
+        let transaction = Transaction::change(
+            &self.doc,
+            [(line_start, line_start + spaces_to_remove, None)].into_iter(),
+        );
+
+        self.apply_transaction(transaction);
+
+        // Move cursor to maintain relative position
+        let new_head = head.saturating_sub(spaces_to_remove);
+        self.selection = Selection::point(new_head.min(self.doc.len_chars()));
+
         Ok(())
     }
 
@@ -1116,5 +1204,93 @@ mod tests {
         // Now it should work (but do nothing at position 0)
         let result = sim.backspace();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_join_lines() {
+        let mut sim = HelixSimulator::new("line1\nline2\nline3".to_string());
+
+        // Join first two lines
+        sim.execute_command("J").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "line1 line2\nline3");
+        assert_eq!(state.cursor_position().row, 0);
+    }
+
+    #[test]
+    fn test_join_lines_at_last_line() {
+        let mut sim = HelixSimulator::new("line1\nline2".to_string());
+
+        // Move to last line
+        sim.execute_command("j").unwrap();
+        assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
+
+        // Try to join - should do nothing
+        sim.execute_command("J").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "line1\nline2");
+    }
+
+    #[test]
+    fn test_indent_line() {
+        let mut sim = HelixSimulator::new("hello\nworld".to_string());
+
+        // Indent first line
+        sim.execute_command(">").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "  hello\nworld");
+        // Cursor should move forward by 2
+        assert_eq!(state.cursor_position().col, 2);
+    }
+
+    #[test]
+    fn test_dedent_line() {
+        let mut sim = HelixSimulator::new("  hello\n    world".to_string());
+
+        // Dedent first line (remove 2 spaces)
+        sim.execute_command("<").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "hello\n    world");
+        assert_eq!(state.cursor_position().col, 0);
+    }
+
+    #[test]
+    fn test_dedent_line_with_one_space() {
+        let mut sim = HelixSimulator::new(" hello".to_string());
+
+        // Dedent - should remove only 1 space
+        sim.execute_command("<").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "hello");
+        assert_eq!(state.cursor_position().col, 0);
+    }
+
+    #[test]
+    fn test_dedent_line_no_spaces() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Dedent line with no leading spaces - should do nothing
+        sim.execute_command("<").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "hello");
+    }
+
+    #[test]
+    fn test_multiple_indent() {
+        let mut sim = HelixSimulator::new("code".to_string());
+
+        // Indent twice
+        sim.execute_command(">").unwrap();
+        sim.execute_command(">").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "    code");
+        assert_eq!(state.cursor_position().col, 4);
     }
 }

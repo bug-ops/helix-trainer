@@ -331,6 +331,34 @@ impl GameSession {
         }
     }
 
+    /// Calculate completion progress as percentage (0-100)
+    ///
+    /// Compares current state with target state line by line and returns
+    /// the percentage of lines that match. Used for progress visualization.
+    pub fn completion_progress(&self) -> u8 {
+        let current_content = self.current_state.content();
+        let target_content = self.target_state.content();
+
+        let current_lines: Vec<&str> = current_content.lines().collect();
+        let target_lines: Vec<&str> = target_content.lines().collect();
+
+        // If target has no lines, consider 100% complete
+        if target_lines.is_empty() {
+            return 100;
+        }
+
+        // Count matching lines
+        let matching_lines = current_lines
+            .iter()
+            .zip(target_lines.iter())
+            .filter(|(current, target)| current == target)
+            .count();
+
+        // Calculate percentage (0-100)
+        let percentage = (matching_lines * 100) / target_lines.len().max(1);
+        percentage.min(100) as u8
+    }
+
     /// Record a user action and execute it through the simulator
     ///
     /// Validates that the action count doesn't exceed security limits,

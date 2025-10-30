@@ -173,12 +173,13 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .wrap(Wrap { trim: false });
         frame.render_widget(target, editor_chunks[1]);
 
-        // Stats with mode indicator
+        // Stats with mode indicator and progress
         let optimal = scenario.scoring.optimal_count;
         let actions = session.action_count();
         let elapsed = session.elapsed();
         let elapsed_secs = elapsed.as_secs_f32();
         let mode = session.mode_name();
+        let progress = session.completion_progress();
 
         // Color code mode: green for Normal, yellow for Insert
         let mode_color = if mode == "NORMAL" {
@@ -187,13 +188,32 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             Color::Yellow
         };
 
-        // Use Line to create colored mode indicator
+        // Color code progress: green if 100%, yellow if >50%, red otherwise
+        let progress_color = if progress == 100 {
+            Color::Green
+        } else if progress > 50 {
+            Color::Yellow
+        } else {
+            Color::Red
+        };
+
+        // Create colored mode indicator
         let mode_span = Span::styled(
             format!("Mode: {} ", mode),
             Style::default()
                 .fg(mode_color)
                 .add_modifier(Modifier::BOLD),
         );
+
+        // Create colored progress indicator
+        let progress_span = Span::styled(
+            format!("| Progress: {}% ", progress),
+            Style::default()
+                .fg(progress_color)
+                .add_modifier(Modifier::BOLD),
+        );
+
+        // Create rest of stats
         let rest_of_stats = if actions <= optimal {
             format!(
                 "| Actions: {} (optimal: {}) | Time: {:.1}s",
@@ -210,7 +230,7 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
         };
         let rest_span = Span::styled(rest_of_stats, Style::default().fg(Color::White));
 
-        let stats = Paragraph::new(Line::from(vec![mode_span, rest_span]))
+        let stats = Paragraph::new(Line::from(vec![mode_span, progress_span, rest_span]))
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(stats, chunks[3]);

@@ -606,9 +606,9 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
 fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    // Create popup in bottom right corner
-    let popup_width = 18;
-    let popup_height = 9; // 5 keys + 4 for borders/title
+    // Create popup in bottom right corner - wider for horizontal layout
+    let popup_width = 50;
+    let popup_height = 5;
     let popup_x = area.width.saturating_sub(popup_width + 2);
     let popup_y = area.height.saturating_sub(popup_height + 2);
 
@@ -619,28 +619,43 @@ fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
         height: popup_height,
     };
 
-    // Build list of key history (most recent first, highlight the first one)
-    let key_items: Vec<Line> = state
-        .key_history
-        .iter()
-        .enumerate()
-        .map(|(idx, key)| {
-            // First item (most recent) is highlighted in cyan with bold
-            let style = if idx == 0 {
+    // Build horizontal line of keys
+    let mut line_spans = Vec::new();
+
+    // Add keys from most recent to oldest, horizontally
+    for (idx, key) in state.key_history.iter().take(5).enumerate() {
+        // Most recent key is largest and cyan/bold
+        let (style, text) = if idx == 0 {
+            (
                 Style::default()
                     .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Gray)
+                    .add_modifier(Modifier::BOLD),
+                format!(" [{}] ", key),
+            )
+        } else {
+            // Older keys are smaller and gray
+            let color = match idx {
+                1 => Color::White,
+                2 => Color::Gray,
+                _ => Color::DarkGray,
             };
+            (Style::default().fg(color), format!(" {} ", key))
+        };
 
-            // Center the key text with padding
-            let padded = format!("  {}  ", key);
-            Line::from(Span::styled(padded, style))
-        })
-        .collect();
+        line_spans.push(Span::styled(text, style));
 
-    let key_history = Paragraph::new(key_items)
+        // Add arrow separator between keys
+        if idx < state.key_history.len().saturating_sub(1) && idx < 4 {
+            line_spans.push(Span::styled(
+                " ← ",
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+    }
+
+    let key_line = Line::from(line_spans);
+
+    let key_history = Paragraph::new(vec![key_line])
         .alignment(Alignment::Center)
         .block(
             Block::default()

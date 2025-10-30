@@ -148,9 +148,10 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(chunks[2]);
 
-        // Current state with cursor highlighting
+        // Current state with cursor and diff highlighting
         let current_state = session.current_state();
-        let current_lines = render_editor_with_cursor(current_state);
+        let target_state = session.target_state();
+        let current_lines = render_editor_with_diff(current_state, target_state);
         let current = Paragraph::new(current_lines)
             .block(
                 Block::default()
@@ -399,19 +400,41 @@ fn render_hint_popup(frame: &mut Frame, state: &AppState) {
     }
 }
 
-/// Render editor text with cursor highlighted
+/// Render editor text with cursor and diff highlighting
 ///
-/// Takes EditorState and returns Vec<Line> with the cursor position
-/// highlighted using inverse colors.
-fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'static>> {
-    let content = state.content();
-    let cursor = state.cursor_position();
+/// Compares current state with target state and colors lines:
+/// - Green: lines that match target
+/// - Red: lines that differ from target
+/// - Cursor shown with inverse colors
+fn render_editor_with_diff(
+    current: &crate::game::EditorState,
+    target: &crate::game::EditorState,
+) -> Vec<Line<'static>> {
+    let current_content = current.content();
+    let target_content = target.content();
+    let cursor = current.cursor_position();
     let (cursor_line, cursor_col) = (cursor.row, cursor.col);
 
-    content
-        .lines()
+    let current_lines: Vec<&str> = current_content.lines().collect();
+    let target_lines: Vec<&str> = target_content.lines().collect();
+
+    current_lines
+        .iter()
         .enumerate()
-        .map(|(line_idx, line_text)| {
+        .map(|(line_idx, &line_text)| {
+            // Determine if this line matches target
+            let matches_target = target_lines
+                .get(line_idx)
+                .map(|&target_line| target_line == line_text)
+                .unwrap_or(false);
+
+            // Choose color based on match
+            let line_color = if matches_target {
+                Color::Green
+            } else {
+                Color::Red
+            };
+
             if line_idx == cursor_line {
                 // This line contains the cursor
                 let mut spans = Vec::new();
@@ -419,7 +442,7 @@ fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'stat
                 // Add text before cursor
                 if cursor_col > 0 {
                     let before = line_text.chars().take(cursor_col).collect::<String>();
-                    spans.push(Span::styled(before, Style::default().fg(Color::Cyan)));
+                    spans.push(Span::styled(before, Style::default().fg(line_color)));
                 }
 
                 // Add cursor character with inverse style
@@ -435,7 +458,7 @@ fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'stat
                 // Add text after cursor
                 if cursor_col + 1 < line_text.len() {
                     let after = line_text.chars().skip(cursor_col + 1).collect::<String>();
-                    spans.push(Span::styled(after, Style::default().fg(Color::Cyan)));
+                    spans.push(Span::styled(after, Style::default().fg(line_color)));
                 }
 
                 Line::from(spans)
@@ -443,7 +466,7 @@ fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'stat
                 // Regular line without cursor
                 Line::from(Span::styled(
                     line_text.to_string(),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(line_color),
                 ))
             }
         })

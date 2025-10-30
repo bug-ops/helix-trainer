@@ -57,6 +57,11 @@ impl HelixSimulator {
 
     /// Execute a Helix command
     pub fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
+        // In Insert mode, most keypresses insert text (except Escape)
+        if self.mode == Mode::Insert && cmd != "Escape" {
+            return self.insert_text(cmd);
+        }
+
         match cmd {
             // Movement commands - single character
             "h" => self.move_left(1)?,
@@ -490,6 +495,27 @@ impl HelixSimulator {
         Ok(())
     }
 
+    fn insert_text(&mut self, text: &str) -> Result<(), UserError> {
+        // Insert text at cursor position (only works in Insert mode)
+        if self.mode != Mode::Insert {
+            return Err(UserError::OperationFailed);
+        }
+
+        let head = self.selection.primary().head;
+        let text_len = text.chars().count();
+
+        let transaction =
+            Transaction::change(&self.doc, [(head, head, Some(text.into()))].into_iter());
+
+        self.apply_transaction(transaction);
+
+        // Move cursor after inserted text
+        let new_pos = head + text_len;
+        self.selection = Selection::point(new_pos.min(self.doc.len_chars()));
+
+        Ok(())
+    }
+
     fn undo(&mut self) -> Result<(), UserError> {
         if let Some((_transaction, prev_doc)) = self.history.pop() {
             // Restore the previous document state
@@ -893,5 +919,74 @@ mod tests {
         let state = sim.get_state().unwrap();
         assert_eq!(state.content(), "cabc");
         assert_eq!(state.cursor_position().col, 1); // Cursor after pasted 'c'
+    }
+
+    #[test]
+    fn test_insert_text_in_insert_mode() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Enter insert mode
+        sim.execute_command("i").unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+
+        // Insert a character
+        sim.execute_command("!").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "!hello");
+        assert_eq!(state.cursor_position().col, 1);
+    }
+
+    #[test]
+    fn test_append_at_line_end_and_insert() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Append at line end
+        sim.execute_command("A").unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+
+        let cursor_pos = sim.get_state().unwrap().cursor_position().col;
+        assert_eq!(cursor_pos, 5); // After 'hello'
+
+        // Insert '!'
+        sim.execute_command("!").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "hello!");
+        assert_eq!(state.cursor_position().col, 6);
+    }
+
+    #[test]
+    fn test_insert_text_only_works_in_insert_mode() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+
+        // Try to insert text in Normal mode - should fail
+        let result = sim.insert_text("!");
+        assert!(result.is_err());
+
+        // Enter Insert mode
+        sim.execute_command("i").unwrap();
+
+        // Now it should work
+        let result = sim.insert_text("!");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_insert_multiple_chars() {
+        let mut sim = HelixSimulator::new("".to_string());
+
+        // Enter insert mode
+        sim.execute_command("i").unwrap();
+        assert_eq!(sim.mode(), Mode::Insert);
+
+        // Insert multiple characters
+        sim.execute_command("a").unwrap();
+        sim.execute_command("b").unwrap();
+        sim.execute_command("c").unwrap();
+
+        let state = sim.get_state().unwrap();
+        assert_eq!(state.content(), "abc");
+        assert_eq!(state.cursor_position().col, 3);
     }
 }

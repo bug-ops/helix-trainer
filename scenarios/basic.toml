@@ -75,13 +75,13 @@ file_content = "hello! world"
 cursor_position = [0, 6]
 
 [scenarios.solution]
-commands = ["e", "a"]
-description = "Press 'e' to move to end of word, then 'a' to append"
+commands = ["e", "a", "!", "Escape"]
+description = "Press 'e' to move to end of word, 'a' to append, '!' to insert, Escape to exit insert mode"
 
-hints = ["'a' enters insert mode after the cursor position"]
+hints = ["'a' enters insert mode after the cursor position", "Don't forget to press Escape to exit insert mode"]
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 4
 max_points = 100
 tolerance = 1
 
@@ -174,15 +174,15 @@ file_content = "#  indented text"
 cursor_position = [0, 1]
 
 [scenarios.solution]
-commands = ["I"]
-description = "Press 'I' to move to start of line and enter insert mode"
+commands = ["I", "#", "Escape"]
+description = "Press 'I' to move to start, '#' to insert, Escape to exit"
 
-hints = ["'I' is like 'i' but moves to the start of the line first"]
+hints = ["'I' is like 'i' but moves to the start of the line first", "Don't forget to press Escape to exit insert mode"]
 
 [scenarios.scoring]
-optimal_count = 1
+optimal_count = 3
 max_points = 100
-tolerance = 0
+tolerance = 1
 
 [[scenarios]]
 id = "append_line_end_001"
@@ -198,15 +198,15 @@ file_content = "hello!"
 cursor_position = [0, 6]
 
 [scenarios.solution]
-commands = ["A"]
-description = "Press 'A' to move to end of line and enter insert mode"
+commands = ["A", "!", "Escape"]
+description = "Press 'A' to move to end, '!' to insert, Escape to exit"
 
-hints = ["'A' is like 'a' but moves to the end of the line first"]
+hints = ["'A' is like 'a' but moves to the end of the line first", "Don't forget to press Escape to exit insert mode"]
 
 [scenarios.scoring]
-optimal_count = 1
+optimal_count = 3
 max_points = 100
-tolerance = 0
+tolerance = 1
 
 [[scenarios]]
 id = "change_selection_001"
@@ -222,18 +222,19 @@ file_content = "best"
 cursor_position = [0, 1]
 
 [scenarios.solution]
-commands = ["c"]
-description = "Press 'c' to delete character and enter insert mode"
+commands = ["c", "b", "Escape"]
+description = "Press 'c' to delete and enter insert mode, 'b' to insert, Escape to exit"
 
 hints = [
     "'c' deletes the selection and enters insert mode",
-    "It's like 'x' followed by 'i'"
+    "It's like 'x' followed by 'i'",
+    "Don't forget to press Escape to exit insert mode"
 ]
 
 [scenarios.scoring]
-optimal_count = 1
+optimal_count = 3
 max_points = 100
-tolerance = 0
+tolerance = 1
 
 [[scenarios]]
 id = "yank_paste_001"

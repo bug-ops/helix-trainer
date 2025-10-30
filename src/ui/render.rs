@@ -175,14 +175,21 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
         // Stats
         let optimal = scenario.scoring.optimal_count;
         let actions = session.action_count();
+        let elapsed = session.elapsed();
+        let elapsed_secs = elapsed.as_secs_f32();
+
         let stats_text = if actions <= optimal {
-            format!("Actions: {} (optimal: {})", actions, optimal)
+            format!(
+                "Actions: {} (optimal: {}) | Time: {:.1}s",
+                actions, optimal, elapsed_secs
+            )
         } else {
             format!(
-                "Actions: {} (optimal: {}) - {} extra",
+                "Actions: {} (optimal: {}) - {} extra | Time: {:.1}s",
                 actions,
                 optimal,
-                actions - optimal
+                actions - optimal,
+                elapsed_secs
             )
         };
 

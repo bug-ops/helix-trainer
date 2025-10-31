@@ -1,0 +1,56 @@
+# Yank (Copy) and Paste Operations
+# Scenarios covering clipboard operations
+
+[[scenarios]]
+id = "yank_paste_001"
+name = "Copy and paste character"
+description = "Yank (copy) a character and paste it elsewhere"
+
+[scenarios.setup]
+file_content = "abc"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "abac"
+cursor_position = [0, 3]
+
+[scenarios.solution]
+commands = ["y", "l", "p"]
+description = "Press 'y' to yank 'a', 'l' to move right, 'p' to paste after"
+
+hints = [
+    "'y' yanks (copies) the current selection",
+    "'p' pastes after the cursor",
+]
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1
+
+[[scenarios]]
+id = "paste_before_001"
+name = "Paste before cursor"
+description = "Yank a character and paste it before cursor position"
+
+[scenarios.setup]
+file_content = "xyz"
+cursor_position = [0, 2]
+
+[scenarios.target]
+file_content = "xzyz"
+cursor_position = [0, 1]
+
+[scenarios.solution]
+commands = ["y", "h", "P"]
+description = "Press 'y' to yank 'z', 'h' to move left, 'P' to paste before"
+
+hints = [
+    "'y' yanks the current selection",
+    "'P' (capital P) pastes before the cursor",
+]
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1

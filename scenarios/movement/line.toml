@@ -1,0 +1,56 @@
+# Line Movement Operations
+# Scenarios covering line-level navigation
+
+[[scenarios]]
+id = "line_navigation_001"
+name = "Jump to line end"
+description = "Navigate from line start to line end"
+
+[scenarios.setup]
+file_content = "Start of the line content here"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "Start of the line content here"
+cursor_position = [0, 30]
+
+[scenarios.solution]
+commands = ["$"]
+description = "Press '$' to jump to end of line"
+
+hints = [
+    "'$' jumps to the end of the current line",
+    "'0' jumps to the start of the line",
+]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[[scenarios]]
+id = "line_start_001"
+name = "Jump to line start"
+description = "Navigate from line end to line start"
+
+[scenarios.setup]
+file_content = "This is a line of text"
+cursor_position = [0, 15]
+
+[scenarios.target]
+file_content = "This is a line of text"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["0"]
+description = "Press '0' to jump to start of line"
+
+hints = [
+    "'0' jumps to the start of the current line",
+    "'$' jumps to the end of the line",
+]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0

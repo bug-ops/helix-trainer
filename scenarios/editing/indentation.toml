@@ -1,0 +1,64 @@
+# Indentation Operations
+# Scenarios covering indentation control
+
+[[scenarios]]
+id = "indent_line_001"
+name = "Indent code line"
+description = "Add indentation to a line of code"
+
+[scenarios.setup]
+file_content = """function hello() {
+return 42;
+}"""
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = """function hello() {
+  return 42;
+}"""
+cursor_position = [1, 2]
+
+[scenarios.solution]
+commands = [">"]
+description = "Press '>' to indent the line"
+
+hints = [
+    "'>' adds 2 spaces of indentation at the start of the line",
+    "Use multiple times to add more indentation"
+]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[[scenarios]]
+id = "dedent_line_001"
+name = "Remove indentation"
+description = "Remove indentation from a line"
+
+[scenarios.setup]
+file_content = """function hello() {
+    return 42;
+}"""
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = """function hello() {
+  return 42;
+}"""
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["<"]
+description = "Press '<' to remove indentation"
+
+hints = [
+    "'<' removes up to 2 spaces of indentation from the start of the line",
+    "Use multiple times to remove more indentation"
+]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0

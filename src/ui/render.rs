@@ -491,10 +491,7 @@ fn render_editor_with_diff<'a>(
                 Line::from(spans)
             } else {
                 // Regular line without cursor
-                Line::from(Span::styled(
-                    line_text,
-                    Style::default().fg(line_color),
-                ))
+                Line::from(Span::styled(line_text, Style::default().fg(line_color)))
             }
         })
         .collect()
@@ -610,10 +607,7 @@ fn render_editor_with_selection<'a>(state: &'a crate::game::EditorState) -> Vec<
                 Line::from(spans)
             } else {
                 // Regular line
-                Line::from(Span::styled(
-                    line_text,
-                    Style::default().fg(Color::Yellow),
-                ))
+                Line::from(Span::styled(line_text, Style::default().fg(Color::Yellow)))
             }
         })
         .collect()

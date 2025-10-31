@@ -1,0 +1,625 @@
+//! Tests for HelixSimulator
+
+use super::*;
+
+#[test]
+fn test_create_simulator() {
+    let sim = HelixSimulator::new("hello world".to_string());
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello world");
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_initial_mode() {
+    let sim = HelixSimulator::new("test".to_string());
+    assert_eq!(sim.mode(), Mode::Normal);
+}
+
+#[test]
+fn test_move_right() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    sim.execute_command("l").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 1);
+
+    sim.execute_command("l").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 2);
+}
+
+#[test]
+fn test_move_left() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Move right twice
+    sim.execute_command("l").unwrap();
+    sim.execute_command("l").unwrap();
+
+    // Move left once
+    sim.execute_command("h").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 1);
+}
+
+#[test]
+fn test_word_movement() {
+    let mut sim = HelixSimulator::new("hello world foo".to_string());
+
+    // Move to next word
+    sim.execute_command("w").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 6); // "world"
+
+    // Move to next word again
+    sim.execute_command("w").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 12); // "foo"
+}
+
+#[test]
+fn test_delete_line() {
+    let mut sim = HelixSimulator::new("line 1\nline 2\nline 3\n".to_string());
+
+    sim.execute_command("dd").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 2\nline 3\n");
+}
+
+#[test]
+fn test_delete_char() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    sim.execute_command("x").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "ello");
+}
+
+#[test]
+fn test_delete_char_in_middle() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    sim.execute_command("l").unwrap(); // Move to 'e'
+    sim.execute_command("l").unwrap(); // Move to 'l'
+    sim.execute_command("x").unwrap(); // Delete 'l'
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "helo");
+}
+
+#[test]
+fn test_undo() {
+    let mut sim = HelixSimulator::new("test\n".to_string());
+
+    sim.execute_command("dd").unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "");
+
+    sim.execute_command("u").unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+}
+
+#[test]
+fn test_mode_change() {
+    let mut sim = HelixSimulator::new("test".to_string());
+
+    assert_eq!(sim.mode(), Mode::Normal);
+
+    sim.execute_command("i").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    sim.execute_command("Escape").unwrap();
+    assert_eq!(sim.mode(), Mode::Normal);
+}
+
+#[test]
+fn test_move_line_start() {
+    let mut sim = HelixSimulator::new("hello\nworld\n".to_string());
+
+    // Move to next line
+    sim.execute_command("j").unwrap();
+    // Move to end of line
+    sim.execute_command("$").unwrap();
+    let state = sim.get_state().unwrap();
+    // Cursor at end of "world" - which is position 4 or 5
+    assert!(state.cursor_position().col >= 4);
+
+    // Move to start of line
+    sim.execute_command("0").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_move_down_up() {
+    let mut sim = HelixSimulator::new("line1\nline2\nline3\n".to_string());
+
+    sim.execute_command("j").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1);
+
+    sim.execute_command("j").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 2);
+
+    sim.execute_command("k").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1);
+}
+
+#[test]
+fn test_document_start() {
+    let mut sim = HelixSimulator::new("line1\nline2\nline3\n".to_string());
+
+    // Move somewhere else
+    sim.execute_command("j").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1);
+
+    // Go back to start
+    sim.execute_command("gg").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_unknown_command() {
+    let mut sim = HelixSimulator::new("test".to_string());
+    let result = sim.execute_command("unknown");
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_multiple_line_deletions() {
+    let mut sim = HelixSimulator::new("line1\nline2\nline3\n".to_string());
+
+    sim.execute_command("dd").unwrap();
+    sim.execute_command("dd").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line3\n");
+}
+
+#[test]
+fn test_move_word_boundary() {
+    let mut sim = HelixSimulator::new("  spaced  words  ".to_string());
+
+    sim.execute_command("w").unwrap();
+    let state = sim.get_state().unwrap();
+    // Should move to first non-space character of next word
+    assert!(state.cursor_position().col > 0);
+}
+
+#[test]
+fn test_move_word_end() {
+    let mut sim = HelixSimulator::new("hello world".to_string());
+
+    sim.execute_command("e").unwrap();
+    let state = sim.get_state().unwrap();
+    // Should be at end of "hello"
+    assert!(state.cursor_position().col >= 4 && state.cursor_position().col <= 5);
+}
+
+#[test]
+fn test_move_prev_word() {
+    let mut sim = HelixSimulator::new("hello world foo".to_string());
+
+    // Move to end of document first
+    sim.execute_command("G").unwrap();
+    // Then move to previous word
+    sim.execute_command("b").unwrap();
+
+    let state = sim.get_state().unwrap();
+    // Should have moved to start of a previous word
+    assert!(state.cursor_position().col >= 11);
+}
+
+#[test]
+fn test_append_mode() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Cursor at start (position 0)
+    assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+
+    // Press 'a' should move cursor one position right and enter insert mode
+    sim.execute_command("a").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.cursor_position().col, 1); // Moved one right
+}
+
+#[test]
+fn test_open_below() {
+    let mut sim = HelixSimulator::new("line1\nline2".to_string());
+
+    // Cursor at start of first line
+    assert_eq!(sim.get_state().unwrap().cursor_position().row, 0);
+
+    // Press 'o' should insert new line below and enter insert mode
+    sim.execute_command("o").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.content(), "line1\n\nline2");
+    assert_eq!(state.cursor_position().row, 1); // On new empty line
+}
+
+#[test]
+fn test_open_above() {
+    let mut sim = HelixSimulator::new("line1\nline2".to_string());
+
+    // Move to second line
+    sim.execute_command("j").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
+
+    // Press 'O' should insert new line above and enter insert mode
+    sim.execute_command("O").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.content(), "line1\n\nline2");
+    assert_eq!(state.cursor_position().row, 1); // On new empty line
+}
+
+#[test]
+fn test_replace_char() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Cursor at start
+    assert_eq!(sim.get_state().unwrap().content(), "hello");
+
+    // Press 'r' then 'X' should replace 'h' with 'X'
+    sim.execute_command("rX").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "Xello");
+    assert_eq!(sim.mode(), Mode::Normal); // Should stay in normal mode
+}
+
+#[test]
+fn test_insert_at_line_start() {
+    let mut sim = HelixSimulator::new("  hello world".to_string());
+
+    // Move cursor to middle of line
+    sim.execute_command("w").unwrap();
+    let state = sim.get_state().unwrap();
+    assert!(state.cursor_position().col > 0);
+
+    // Press 'I' should move to start of line and enter insert mode
+    sim.execute_command("I").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_append_at_line_end() {
+    let mut sim = HelixSimulator::new("hello world\nline2".to_string());
+
+    // Cursor at start
+    assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+
+    // Press 'A' should move to end of line and enter insert mode
+    sim.execute_command("A").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.cursor_position().col, 11); // After "hello world"
+    assert_eq!(state.cursor_position().row, 0); // Still on first line
+}
+
+#[test]
+fn test_change_selection() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Cursor at start
+    assert_eq!(sim.get_state().unwrap().content(), "hello");
+    assert_eq!(sim.mode(), Mode::Normal);
+
+    // Press 'c' should delete 'h' and enter insert mode
+    sim.execute_command("c").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "ello");
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.cursor_position().col, 0); // Cursor stays at start
+}
+
+#[test]
+fn test_yank_and_paste_after() {
+    let mut sim = HelixSimulator::new("abc".to_string());
+
+    // Yank 'a'
+    sim.execute_command("y").unwrap();
+
+    // Move to 'b'
+    sim.execute_command("l").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().col, 1);
+
+    // Paste after 'b' - should insert 'a' between 'b' and 'c'
+    sim.execute_command("p").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "abac");
+    assert_eq!(state.cursor_position().col, 3); // Cursor after pasted 'a'
+}
+
+#[test]
+fn test_yank_and_paste_before() {
+    let mut sim = HelixSimulator::new("abc".to_string());
+
+    // Move to 'c'
+    sim.execute_command("l").unwrap();
+    sim.execute_command("l").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().col, 2);
+
+    // Yank 'c'
+    sim.execute_command("y").unwrap();
+
+    // Move back to 'a'
+    sim.execute_command("h").unwrap();
+    sim.execute_command("h").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+
+    // Paste before 'a'
+    sim.execute_command("P").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "cabc");
+    assert_eq!(state.cursor_position().col, 1); // Cursor after pasted 'c'
+}
+
+#[test]
+fn test_insert_text_in_insert_mode() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Enter insert mode
+    sim.execute_command("i").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Insert a character
+    sim.execute_command("!").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "!hello");
+    assert_eq!(state.cursor_position().col, 1);
+}
+
+#[test]
+fn test_append_at_line_end_and_insert() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Append at line end
+    sim.execute_command("A").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    let cursor_pos = sim.get_state().unwrap().cursor_position().col;
+    assert_eq!(cursor_pos, 5); // After 'hello'
+
+    // Insert '!'
+    sim.execute_command("!").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello!");
+    assert_eq!(state.cursor_position().col, 6);
+}
+
+#[test]
+fn test_insert_text_only_works_in_insert_mode() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Try to insert text in Normal mode - should fail
+    let result = sim.insert_text("!");
+    assert!(result.is_err());
+
+    // Enter Insert mode
+    sim.execute_command("i").unwrap();
+
+    // Now it should work
+    let result = sim.insert_text("!");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_insert_multiple_chars() {
+    let mut sim = HelixSimulator::new("".to_string());
+
+    // Enter insert mode
+    sim.execute_command("i").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Insert multiple characters
+    sim.execute_command("a").unwrap();
+    sim.execute_command("b").unwrap();
+    sim.execute_command("c").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "abc");
+    assert_eq!(state.cursor_position().col, 3);
+}
+
+#[test]
+fn test_backspace_in_insert_mode() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Enter insert mode at position 5
+    sim.execute_command("$").unwrap(); // Move to end
+    sim.execute_command("a").unwrap(); // Append
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Type some characters
+    sim.execute_command("!").unwrap();
+    sim.execute_command("!").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello!!");
+    assert_eq!(state.cursor_position().col, 7);
+
+    // Backspace once
+    sim.execute_command("Backspace").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello!");
+    assert_eq!(state.cursor_position().col, 6);
+
+    // Backspace again
+    sim.execute_command("Backspace").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello");
+    assert_eq!(state.cursor_position().col, 5);
+}
+
+#[test]
+fn test_backspace_at_start() {
+    let mut sim = HelixSimulator::new("test".to_string());
+
+    // Enter insert mode at start
+    sim.execute_command("i").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Backspace at position 0 should do nothing
+    sim.execute_command("Backspace").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "test");
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_arrow_keys_in_insert_mode() {
+    let mut sim = HelixSimulator::new("abc\ndef".to_string());
+
+    // Enter insert mode
+    sim.execute_command("i").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Test ArrowRight
+    sim.execute_command("ArrowRight").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().col, 1);
+
+    // Test ArrowLeft
+    sim.execute_command("ArrowLeft").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+
+    // Test ArrowDown
+    sim.execute_command("ArrowDown").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
+
+    // Test ArrowUp
+    sim.execute_command("ArrowUp").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().row, 0);
+
+    // Should still be in Insert mode
+    assert_eq!(sim.mode(), Mode::Insert);
+}
+
+#[test]
+fn test_backspace_only_works_in_insert_mode() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Try backspace in Normal mode - should fail
+    let result = sim.backspace();
+    assert!(result.is_err());
+
+    // Enter Insert mode
+    sim.execute_command("i").unwrap();
+
+    // Now it should work (but do nothing at position 0)
+    let result = sim.backspace();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_join_lines() {
+    let mut sim = HelixSimulator::new("line1\nline2\nline3".to_string());
+
+    // Join first two lines
+    sim.execute_command("J").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line1 line2\nline3");
+    assert_eq!(state.cursor_position().row, 0);
+}
+
+#[test]
+fn test_join_lines_at_last_line() {
+    let mut sim = HelixSimulator::new("line1\nline2".to_string());
+
+    // Move to last line
+    sim.execute_command("j").unwrap();
+    assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
+
+    // Try to join - should do nothing
+    sim.execute_command("J").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line1\nline2");
+}
+
+#[test]
+fn test_indent_line() {
+    let mut sim = HelixSimulator::new("hello\nworld".to_string());
+
+    // Indent first line
+    sim.execute_command(">").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "  hello\nworld");
+    // Cursor should move forward by 2
+    assert_eq!(state.cursor_position().col, 2);
+}
+
+#[test]
+fn test_dedent_line() {
+    let mut sim = HelixSimulator::new("  hello\n    world".to_string());
+
+    // Dedent first line (remove 2 spaces)
+    sim.execute_command("<").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello\n    world");
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_dedent_line_with_one_space() {
+    let mut sim = HelixSimulator::new(" hello".to_string());
+
+    // Dedent - should remove only 1 space
+    sim.execute_command("<").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello");
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_dedent_line_no_spaces() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Dedent line with no leading spaces - should do nothing
+    sim.execute_command("<").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello");
+}
+
+#[test]
+fn test_multiple_indent() {
+    let mut sim = HelixSimulator::new("code".to_string());
+
+    // Indent twice
+    sim.execute_command(">").unwrap();
+    sim.execute_command(">").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "    code");
+    assert_eq!(state.cursor_position().col, 4);
+}

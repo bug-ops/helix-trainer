@@ -251,8 +251,12 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         (KeyCode::Char('o'), KeyModifiers::NONE) => "o",
         (KeyCode::Char('O'), KeyModifiers::SHIFT) => "O",
 
+        // Replace character
+        (KeyCode::Char('r'), KeyModifiers::NONE) => "r",
+
         // Undo/Redo
         (KeyCode::Char('u'), KeyModifiers::NONE) => "u",
+        (KeyCode::Char('U'), KeyModifiers::SHIFT) => "U",
         (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r",
 
         // Document movement

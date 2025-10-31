@@ -1,0 +1,85 @@
+# Basic Replace and Change Operations
+# Scenarios covering character replacement and change operations
+
+[[scenarios]]
+id = "select_word_001"
+name = "Select current word"
+description = "Select the word under the cursor"
+
+[scenarios.setup]
+file_content = "The quick brown fox"
+cursor_position = [0, 4]
+
+[scenarios.target]
+file_content = "The quick brown fox"
+cursor_position = [0, 4]
+selection = [0, 4, 0, 9]             # Select "quick" (from col 4 to col 9)
+
+[scenarios.solution]
+commands = ["e"]
+description = "Press 'e' to select to the end of the current word"
+
+hints = [
+    "In Helix, 'e' extends selection to the end of the word",
+    "After selecting, you can delete with 'd', change with 'c', etc.",
+]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[[scenarios]]
+id = "replace_char_001"
+name = "Fix typo with replace"
+description = "Replace a single character to fix a typo"
+
+[scenarios.setup]
+file_content = "Hxllo world"
+cursor_position = [0, 1]
+
+[scenarios.target]
+file_content = "Hello world"
+cursor_position = [0, 1]
+
+[scenarios.solution]
+commands = ["re"]
+description = "Press 'r' then 'e' to replace 'x' with 'e'"
+
+hints = [
+    "'r' followed by any character replaces the character under cursor",
+    "Unlike 'i', replace doesn't enter insert mode",
+]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[[scenarios]]
+id = "change_selection_001"
+name = "Change character"
+description = "Delete character under cursor and enter insert mode"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "best"
+cursor_position = [0, 1]
+
+[scenarios.solution]
+commands = ["c", "b", "Escape"]
+description = "Press 'c' to delete and enter insert mode, 'b' to insert, Escape to exit"
+
+hints = [
+    "'c' deletes the selection and enters insert mode",
+    "It's like 'x' followed by 'i'",
+    "Don't forget to press Escape to exit insert mode",
+]
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1

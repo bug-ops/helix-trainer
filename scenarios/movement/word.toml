@@ -1,0 +1,30 @@
+# Word Movement Operations
+# Scenarios covering word-level navigation
+
+[[scenarios]]
+id = "word_movement_001"
+name = "Navigate by words"
+description = "Move cursor forward through words to reach the target position"
+
+[scenarios.setup]
+file_content = "The quick brown fox jumps"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "The quick brown fox jumps"
+cursor_position = [0, 16]
+
+[scenarios.solution]
+commands = ["w", "w", "w"]
+description = "Press 'w' three times to move forward by words"
+
+hints = [
+    "'w' moves to the start of the next word",
+    "'b' moves backwards to the start of the previous word",
+    "'e' moves to the end of the current/next word",
+]
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1

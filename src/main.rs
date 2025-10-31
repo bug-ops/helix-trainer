@@ -62,14 +62,14 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting Helix Keybindings Trainer");
 
-    // Load scenarios from default location
+    // Load scenarios from scenarios directory (recursively)
     let loader = ScenarioLoader::new();
-    let scenario_file = loader.load(std::path::Path::new("./scenarios/basic.toml"))?;
+    let scenarios = loader.load_directory(std::path::Path::new("./scenarios"))?;
 
-    tracing::info!("Loaded {} scenarios", scenario_file.len());
+    tracing::info!("Loaded {} scenarios from multiple files", scenarios.len());
 
     // Initialize app state
-    let mut app_state = AppState::new(scenario_file);
+    let mut app_state = AppState::new(scenarios);
 
     // Setup terminal
     enable_raw_mode()?;

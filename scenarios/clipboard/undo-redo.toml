@@ -1,0 +1,33 @@
+# Undo and Redo Operations
+# Scenarios covering history navigation
+
+[[scenarios]]
+id = "undo_redo_001"
+name = "Undo and redo changes"
+description = "Delete a line, undo it, then redo the deletion"
+
+[scenarios.setup]
+file_content = """Keep this
+Delete this
+Keep this too"""
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = """Keep this
+Keep this too"""
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["d", "d", "u", "U"]
+description = "Press 'dd' to delete, 'u' to undo, 'U' to redo"
+
+hints = [
+    "'u' undoes the last change",
+    "'U' redoes the undone change (like Ctrl-R in Vim)",
+    "Practice undo/redo to recover from mistakes",
+]
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 2

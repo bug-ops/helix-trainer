@@ -1,0 +1,34 @@
+# Basic Delete Operations
+# Scenarios covering line deletion and character deletion
+
+[[scenarios]]
+id = "delete_line_001"
+name = "Delete current line"
+description = "Delete the current line where the cursor is located. In Helix, 'd' is the delete operator."
+
+[scenarios.setup]
+file_content = "first line\nsecond line\nthird line"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "first line\nthird line"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["d", "d"]
+description = "Press 'd' twice: first 'd' activates delete mode, second 'd' targets the current line"
+
+hints = [
+    "In Helix (like Vim), 'd' is a modal operator that needs a motion target",
+    "When you press 'd' twice, the second 'd' means 'delete this line'",
+]
+
+[[scenarios.alternatives]]
+commands = ["c", "c"]
+points_multiplier = 0.8
+description = "Alternative: Use 'cc' (change line)"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 1

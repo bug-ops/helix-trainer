@@ -1,0 +1,131 @@
+# Basic Insert Operations
+# Scenarios covering various insert modes and line operations
+
+[[scenarios]]
+id = "append_mode_001"
+name = "Append after word"
+description = "Move to end of word and enter insert mode to append text"
+
+[scenarios.setup]
+file_content = "hello world"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "hello! world"
+cursor_position = [0, 6]
+
+[scenarios.solution]
+commands = ["e", "a", "!", "Escape"]
+description = "Press 'e' to move to end of word, 'a' to append, '!' to insert, Escape to exit insert mode"
+
+hints = [
+    "'a' enters insert mode after the cursor position",
+    "Don't forget to press Escape to exit insert mode",
+]
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 1
+
+[[scenarios]]
+id = "open_below_001"
+name = "Insert line below"
+description = "Open a new line below the current line"
+
+[scenarios.setup]
+file_content = "function main() {\n}"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "function main() {\n\n}"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["o"]
+description = "Press 'o' to open a new line below"
+
+hints = ["'o' inserts a new line below and enters insert mode"]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[[scenarios]]
+id = "open_above_001"
+name = "Insert line above"
+description = "Open a new line above the current line"
+
+[scenarios.setup]
+file_content = "line1\nline2\nline3"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "line1\n\nline2\nline3"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["O"]
+description = "Press 'O' (capital o) to open a new line above"
+
+hints = ["'O' inserts a new line above and enters insert mode"]
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[[scenarios]]
+id = "insert_line_start_001"
+name = "Insert at line start"
+description = "Move to start of line and enter insert mode"
+
+[scenarios.setup]
+file_content = "  indented text"
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = "#  indented text"
+cursor_position = [0, 1]
+
+[scenarios.solution]
+commands = ["I", "#", "Escape"]
+description = "Press 'I' to move to start, '#' to insert, Escape to exit"
+
+hints = [
+    "'I' is like 'i' but moves to the start of the line first",
+    "Don't forget to press Escape to exit insert mode",
+]
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1
+
+[[scenarios]]
+id = "append_line_end_001"
+name = "Append at line end"
+description = "Move to end of line and enter insert mode"
+
+[scenarios.setup]
+file_content = "hello"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "hello!"
+cursor_position = [0, 6]
+
+[scenarios.solution]
+commands = ["A", "!", "Escape"]
+description = "Press 'A' to move to end, '!' to insert, Escape to exit"
+
+hints = [
+    "'A' is like 'a' but moves to the end of the line first",
+    "Don't forget to press Escape to exit insert mode",
+]
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1

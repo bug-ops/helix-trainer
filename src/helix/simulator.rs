@@ -601,7 +601,7 @@ impl HelixSimulator {
 
     fn paste_after(&mut self) -> Result<(), UserError> {
         // Paste clipboard content after cursor
-        if let Some(text) = self.clipboard.clone() {
+        if let Some(text) = &self.clipboard {
             let head = self.selection.primary().head;
             let insert_pos = (head + 1).min(self.doc.len_chars());
             let text_len = text.chars().count();
@@ -622,7 +622,7 @@ impl HelixSimulator {
 
     fn paste_before(&mut self) -> Result<(), UserError> {
         // Paste clipboard content before cursor
-        if let Some(text) = self.clipboard.clone() {
+        if let Some(text) = &self.clipboard {
             let head = self.selection.primary().head;
             let text_len = text.chars().count();
 

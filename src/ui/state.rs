@@ -88,42 +88,62 @@ pub enum Message {
 ///
 /// Note: This doesn't derive Clone because GameSession doesn't implement Clone.
 /// Instead, we implement Debug manually.
+///
+/// # Memory Layout
+///
+/// Fields are ordered for optimal memory layout and cache efficiency:
+/// 1. Large allocations first (Vec, Option<GameSession>)
+/// 2. Frequently accessed fields next (screen, session)
+/// 3. Medium-sized types (Option<String>, String)
+/// 4. Small types last (usize, bool, enum)
 pub struct AppState {
-    /// The screen currently being displayed
-    pub screen: Screen,
-
-    /// Active game session (Some if on Task screen)
-    pub session: Option<GameSession>,
-
     /// All available scenarios
+    /// Size: 24 bytes (Vec) - placed first for alignment
     pub scenarios: Vec<Scenario>,
 
-    /// Index of the currently selected menu item
-    pub selected_menu_item: usize,
-
-    /// Whether the application is running
-    pub running: bool,
+    /// Active game session (Some if on Task screen)
+    /// Size: ~200+ bytes - large type, placed early
+    pub session: Option<GameSession>,
 
     /// The current hint being displayed (if any)
+    /// Size: 24-32 bytes (Option<String>)
     pub current_hint: Option<String>,
 
-    /// Whether to show hint on task screen
-    pub show_hint_panel: bool,
-
-    /// Whether to show key history popup
-    pub show_key_history: bool,
-
     /// Last command executed (for display purposes)
+    /// Size: 24-32 bytes (Option<String>)
     pub last_command: Option<String>,
 
-    /// Time when scenario was completed (for showing success screen before results)
-    pub completion_time: Option<std::time::Instant>,
-
     /// History of last 5 key presses (most recent first)
+    /// Size: 24 bytes (Vec)
     pub key_history: Vec<String>,
 
     /// Command buffer for accumulating multi-key commands (e.g., "d" waiting for "d")
+    /// Size: 24 bytes (String)
     pub command_buffer: String,
+
+    /// Time when scenario was completed (for showing success screen before results)
+    /// Size: 16 bytes (Option<Instant>)
+    pub completion_time: Option<std::time::Instant>,
+
+    /// Index of the currently selected menu item
+    /// Size: 8 bytes (usize)
+    pub selected_menu_item: usize,
+
+    /// The screen currently being displayed
+    /// Size: 1 byte (enum)
+    pub screen: Screen,
+
+    /// Whether the application is running
+    /// Size: 1 byte (bool)
+    pub running: bool,
+
+    /// Whether to show hint on task screen
+    /// Size: 1 byte (bool)
+    pub show_hint_panel: bool,
+
+    /// Whether to show key history popup
+    /// Size: 1 byte (bool)
+    pub show_key_history: bool,
 }
 
 impl fmt::Debug for AppState {
@@ -164,18 +184,18 @@ impl AppState {
     /// ```
     pub fn new(scenarios: Vec<Scenario>) -> Self {
         Self {
-            screen: Screen::MainMenu,
-            session: None,
             scenarios,
-            selected_menu_item: 0,
-            running: true,
+            session: None,
             current_hint: None,
-            show_hint_panel: false,
-            show_key_history: false,
             last_command: None,
-            completion_time: None,
             key_history: Vec::new(),
             command_buffer: String::new(),
+            completion_time: None,
+            selected_menu_item: 0,
+            screen: Screen::MainMenu,
+            running: true,
+            show_hint_panel: false,
+            show_key_history: false,
         }
     }
 

@@ -459,12 +459,19 @@ fn render_editor_with_diff<'a>(
 
                 // Add text before cursor
                 if before_end > 0 {
-                    spans.push(Span::styled(&line_text[..before_end], Style::default().fg(line_color)));
+                    spans.push(Span::styled(
+                        &line_text[..before_end],
+                        Style::default().fg(line_color),
+                    ));
                 }
 
                 // Add cursor character with inverse style
                 let cursor_char = &line_text[char_start..char_end];
-                let cursor_display = if cursor_char.is_empty() { " " } else { cursor_char };
+                let cursor_display = if cursor_char.is_empty() {
+                    " "
+                } else {
+                    cursor_char
+                };
                 spans.push(Span::styled(
                     cursor_display,
                     Style::default()
@@ -475,14 +482,17 @@ fn render_editor_with_diff<'a>(
 
                 // Add text after cursor
                 if after_start < line_text.len() {
-                    spans.push(Span::styled(&line_text[after_start..], Style::default().fg(line_color)));
+                    spans.push(Span::styled(
+                        &line_text[after_start..],
+                        Style::default().fg(line_color),
+                    ));
                 }
 
                 Line::from(spans)
             } else {
                 // Regular line without cursor
                 Line::from(Span::styled(
-                    line_text.to_string(),
+                    line_text,
                     Style::default().fg(line_color),
                 ))
             }
@@ -527,11 +537,15 @@ fn render_editor_with_selection<'a>(state: &'a crate::game::EditorState) -> Vec<
                     };
 
                     // Get byte indices for selection range (zero-allocation)
-                    let (start_byte, end_byte) = char_range_to_bytes(line_text, line_start_col, line_end_col);
+                    let (start_byte, end_byte) =
+                        char_range_to_bytes(line_text, line_start_col, line_end_col);
 
                     // Text before selection
                     if start_byte > 0 {
-                        spans.push(Span::styled(&line_text[..start_byte], Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            &line_text[..start_byte],
+                            Style::default().fg(Color::Yellow),
+                        ));
                     }
 
                     // Selected text with highlight
@@ -547,7 +561,10 @@ fn render_editor_with_selection<'a>(state: &'a crate::game::EditorState) -> Vec<
 
                     // Text after selection
                     if end_byte < line_text.len() {
-                        spans.push(Span::styled(&line_text[end_byte..], Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            &line_text[end_byte..],
+                            Style::default().fg(Color::Yellow),
+                        ));
                     }
 
                     return Line::from(spans);
@@ -563,11 +580,18 @@ fn render_editor_with_selection<'a>(state: &'a crate::game::EditorState) -> Vec<
                     split_at_char_index(line_text, cursor_col);
 
                 if before_end > 0 {
-                    spans.push(Span::styled(&line_text[..before_end], Style::default().fg(Color::Yellow)));
+                    spans.push(Span::styled(
+                        &line_text[..before_end],
+                        Style::default().fg(Color::Yellow),
+                    ));
                 }
 
                 let cursor_char = &line_text[char_start..char_end];
-                let cursor_display = if cursor_char.is_empty() { " " } else { cursor_char };
+                let cursor_display = if cursor_char.is_empty() {
+                    " "
+                } else {
+                    cursor_char
+                };
                 spans.push(Span::styled(
                     cursor_display,
                     Style::default()
@@ -577,14 +601,17 @@ fn render_editor_with_selection<'a>(state: &'a crate::game::EditorState) -> Vec<
                 ));
 
                 if after_start < line_text.len() {
-                    spans.push(Span::styled(&line_text[after_start..], Style::default().fg(Color::Yellow)));
+                    spans.push(Span::styled(
+                        &line_text[after_start..],
+                        Style::default().fg(Color::Yellow),
+                    ));
                 }
 
                 Line::from(spans)
             } else {
                 // Regular line
                 Line::from(Span::styled(
-                    line_text.to_string(),
+                    line_text,
                     Style::default().fg(Color::Yellow),
                 ))
             }
@@ -703,12 +730,14 @@ fn split_at_char_index(s: &str, char_idx: usize) -> (usize, usize, usize, usize)
         .unwrap_or(s.len());
 
     // Find the end byte position of the character (start of next char or end of string)
-    let char_byte_end = char_indices
-        .next()
-        .map(|(idx, _)| idx)
-        .unwrap_or(s.len());
+    let char_byte_end = char_indices.next().map(|(idx, _)| idx).unwrap_or(s.len());
 
-    (char_byte_start, char_byte_start, char_byte_end, char_byte_end)
+    (
+        char_byte_start,
+        char_byte_start,
+        char_byte_end,
+        char_byte_end,
+    )
 }
 
 /// Get byte indices for a character range without allocating

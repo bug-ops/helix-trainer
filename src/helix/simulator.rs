@@ -714,6 +714,21 @@ impl HelixSimulator {
     }
 }
 
+// Implement CommandExecutor trait for HelixSimulator
+impl super::executor::CommandExecutor for HelixSimulator {
+    fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
+        self.execute_command(cmd)
+    }
+
+    fn to_editor_state(&self) -> Result<EditorState, UserError> {
+        self.to_editor_state()
+    }
+
+    fn mode(&self) -> Mode {
+        self.mode()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

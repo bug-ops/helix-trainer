@@ -4,11 +4,11 @@ use super::editor::{render_editor_with_diff, render_editor_with_selection};
 use super::popups::{render_hint_popup, render_key_history_popup, render_success_popup};
 use crate::ui::state::AppState;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
-    Frame,
 };
 
 /// Render the task screen where user plays a scenario

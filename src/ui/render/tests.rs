@@ -39,8 +39,8 @@ fn test_main_menu_items_count() {
 
 #[test]
 fn test_render_does_not_panic_on_empty_state() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -56,8 +56,8 @@ fn test_render_does_not_panic_on_empty_state() {
 
 #[test]
 fn test_render_task_screen_with_session() {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();

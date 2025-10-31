@@ -3,11 +3,11 @@
 use super::helpers::{centered_popup, inner_rect, popup_block};
 use crate::ui::state::AppState;
 use ratatui::{
+    Frame,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
-    Frame,
 };
 use tui_big_text::{BigText, PixelSize};
 

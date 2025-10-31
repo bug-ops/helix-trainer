@@ -2,11 +2,11 @@
 
 use crate::ui::state::AppState;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 /// Render the results screen showing scenario completion

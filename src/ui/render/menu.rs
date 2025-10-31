@@ -2,10 +2,10 @@
 
 use crate::ui::state::AppState;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph},
-    Frame,
 };
 
 /// Render the main menu screen

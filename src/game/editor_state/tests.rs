@@ -49,8 +49,7 @@ fn test_current_line() {
 #[test]
 fn test_set_content_adjusts_cursor() {
     let cursor = CursorPosition::new(2, 5).unwrap();
-    let mut state =
-        EditorState::new("line 1\nline 2\nline 3\n".to_string(), cursor, None).unwrap();
+    let mut state = EditorState::new("line 1\nline 2\nline 3\n".to_string(), cursor, None).unwrap();
 
     // Set content with fewer lines
     state.set_content("only one line\n".to_string()).unwrap();

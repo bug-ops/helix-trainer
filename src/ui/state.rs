@@ -129,6 +129,10 @@ pub struct AppState {
     /// Size: 8 bytes (usize)
     pub selected_menu_item: usize,
 
+    /// Scroll offset for menu list (top visible item index)
+    /// Size: 8 bytes (usize)
+    pub menu_scroll_offset: usize,
+
     /// The screen currently being displayed
     /// Size: 1 byte (enum)
     pub screen: Screen,
@@ -192,6 +196,7 @@ impl AppState {
             command_buffer: String::new(),
             completion_time: None,
             selected_menu_item: 0,
+            menu_scroll_offset: 0,
             screen: Screen::MainMenu,
             running: true,
             show_hint_panel: false,

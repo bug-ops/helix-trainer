@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 /// Render the main menu screen
-pub(super) fn render_main_menu(frame: &mut Frame, state: &AppState) {
+pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     let area = frame.area();
 
     // Create layout: title | menu | instructions
@@ -33,6 +33,23 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &AppState) {
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(title, chunks[0]);
+
+    // Calculate visible area height for menu (excluding borders)
+    let menu_height = chunks[1].height.saturating_sub(2) as usize; // -2 for borders
+    let total_items = state.scenarios.len() + 1; // +1 for Quit option
+
+    // Adjust scroll offset to keep selected item visible
+    if state.selected_menu_item < state.menu_scroll_offset {
+        // Selected item is above visible area - scroll up
+        state.menu_scroll_offset = state.selected_menu_item;
+    } else if state.selected_menu_item >= state.menu_scroll_offset + menu_height {
+        // Selected item is below visible area - scroll down
+        state.menu_scroll_offset = state.selected_menu_item.saturating_sub(menu_height - 1);
+    }
+
+    // Clamp scroll offset to valid range
+    let max_offset = total_items.saturating_sub(menu_height);
+    state.menu_scroll_offset = state.menu_scroll_offset.min(max_offset);
 
     // Menu items - show all scenarios + Quit option
     let mut menu_items: Vec<ListItem> = state
@@ -70,7 +87,14 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &AppState) {
     let quit_prefix = if quit_selected { "> " } else { "  " };
     menu_items.push(ListItem::new(format!("{}Quit", quit_prefix)).style(quit_style));
 
-    let menu = List::new(menu_items)
+    // Apply scroll offset by skipping items
+    let visible_items: Vec<ListItem> = menu_items
+        .into_iter()
+        .skip(state.menu_scroll_offset)
+        .take(menu_height)
+        .collect();
+
+    let menu = List::new(visible_items)
         .block(Block::default().title("Main Menu").borders(Borders::ALL))
         .style(Style::default().fg(Color::White));
     frame.render_widget(menu, chunks[1]);

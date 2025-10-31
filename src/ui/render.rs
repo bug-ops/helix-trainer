@@ -420,10 +420,10 @@ fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 /// - Green: lines that match target
 /// - Red: lines that differ from target
 /// - Cursor shown with inverse colors
-fn render_editor_with_diff(
-    current: &crate::game::EditorState,
+fn render_editor_with_diff<'a>(
+    current: &'a crate::game::EditorState,
     target: &crate::game::EditorState,
-) -> Vec<Line<'static>> {
+) -> Vec<Line<'a>> {
     let current_content = current.content();
     let target_content = target.content();
     let cursor = current.cursor_position();
@@ -453,16 +453,20 @@ fn render_editor_with_diff(
                 // This line contains the cursor
                 let mut spans = Vec::new();
 
+                // Split line at cursor position (zero-allocation)
+                let (before_end, char_start, char_end, after_start) =
+                    split_at_char_index(line_text, cursor_col);
+
                 // Add text before cursor
-                if cursor_col > 0 {
-                    let before = line_text.chars().take(cursor_col).collect::<String>();
-                    spans.push(Span::styled(before, Style::default().fg(line_color)));
+                if before_end > 0 {
+                    spans.push(Span::styled(&line_text[..before_end], Style::default().fg(line_color)));
                 }
 
                 // Add cursor character with inverse style
-                let cursor_char = line_text.chars().nth(cursor_col).unwrap_or(' ');
+                let cursor_char = &line_text[char_start..char_end];
+                let cursor_display = if cursor_char.is_empty() { " " } else { cursor_char };
                 spans.push(Span::styled(
-                    cursor_char.to_string(),
+                    cursor_display,
                     Style::default()
                         .bg(Color::White)
                         .fg(Color::Black)
@@ -470,9 +474,8 @@ fn render_editor_with_diff(
                 ));
 
                 // Add text after cursor
-                if cursor_col + 1 < line_text.len() {
-                    let after = line_text.chars().skip(cursor_col + 1).collect::<String>();
-                    spans.push(Span::styled(after, Style::default().fg(line_color)));
+                if after_start < line_text.len() {
+                    spans.push(Span::styled(&line_text[after_start..], Style::default().fg(line_color)));
                 }
 
                 Line::from(spans)
@@ -491,7 +494,7 @@ fn render_editor_with_diff(
 ///
 /// Takes EditorState and returns Vec<Line> with selection range
 /// highlighted using background color and cursor shown if present.
-fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'static>> {
+fn render_editor_with_selection<'a>(state: &'a crate::game::EditorState) -> Vec<Line<'a>> {
     let content = state.content();
     let cursor = state.cursor_position();
     let (cursor_line, cursor_col) = (cursor.row, cursor.col);
@@ -523,30 +526,28 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
                         line_text.len()
                     };
 
+                    // Get byte indices for selection range (zero-allocation)
+                    let (start_byte, end_byte) = char_range_to_bytes(line_text, line_start_col, line_end_col);
+
                     // Text before selection
-                    if line_start_col > 0 {
-                        let before = line_text.chars().take(line_start_col).collect::<String>();
-                        spans.push(Span::styled(before, Style::default().fg(Color::Yellow)));
+                    if start_byte > 0 {
+                        spans.push(Span::styled(&line_text[..start_byte], Style::default().fg(Color::Yellow)));
                     }
 
                     // Selected text with highlight
-                    let selected = line_text
-                        .chars()
-                        .skip(line_start_col)
-                        .take(line_end_col - line_start_col)
-                        .collect::<String>();
-                    spans.push(Span::styled(
-                        selected,
-                        Style::default()
-                            .bg(Color::Blue)
-                            .fg(Color::White)
-                            .add_modifier(Modifier::BOLD),
-                    ));
+                    if start_byte < end_byte {
+                        spans.push(Span::styled(
+                            &line_text[start_byte..end_byte],
+                            Style::default()
+                                .bg(Color::Blue)
+                                .fg(Color::White)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+                    }
 
                     // Text after selection
-                    if line_end_col < line_text.len() {
-                        let after = line_text.chars().skip(line_end_col).collect::<String>();
-                        spans.push(Span::styled(after, Style::default().fg(Color::Yellow)));
+                    if end_byte < line_text.len() {
+                        spans.push(Span::styled(&line_text[end_byte..], Style::default().fg(Color::Yellow)));
                     }
 
                     return Line::from(spans);
@@ -557,23 +558,26 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
             if line_idx == cursor_line {
                 let mut spans = Vec::new();
 
-                if cursor_col > 0 {
-                    let before = line_text.chars().take(cursor_col).collect::<String>();
-                    spans.push(Span::styled(before, Style::default().fg(Color::Yellow)));
+                // Split line at cursor position (zero-allocation)
+                let (before_end, char_start, char_end, after_start) =
+                    split_at_char_index(line_text, cursor_col);
+
+                if before_end > 0 {
+                    spans.push(Span::styled(&line_text[..before_end], Style::default().fg(Color::Yellow)));
                 }
 
-                let cursor_char = line_text.chars().nth(cursor_col).unwrap_or(' ');
+                let cursor_char = &line_text[char_start..char_end];
+                let cursor_display = if cursor_char.is_empty() { " " } else { cursor_char };
                 spans.push(Span::styled(
-                    cursor_char.to_string(),
+                    cursor_display,
                     Style::default()
                         .bg(Color::White)
                         .fg(Color::Black)
                         .add_modifier(Modifier::BOLD),
                 ));
 
-                if cursor_col + 1 < line_text.len() {
-                    let after = line_text.chars().skip(cursor_col + 1).collect::<String>();
-                    spans.push(Span::styled(after, Style::default().fg(Color::Yellow)));
+                if after_start < line_text.len() {
+                    spans.push(Span::styled(&line_text[after_start..], Style::default().fg(Color::Yellow)));
                 }
 
                 Line::from(spans)
@@ -675,6 +679,64 @@ fn render_success_popup(frame: &mut Frame) {
 // ============================================================================
 // Helper functions for common rendering patterns
 // ============================================================================
+
+/// Split a string at a character index without allocating
+///
+/// Returns byte indices (start, char_byte_pos, end) for efficient slicing.
+/// This avoids collecting chars into new Strings.
+///
+/// # Arguments
+///
+/// * `s` - The string to split
+/// * `char_idx` - Character index (not byte index)
+///
+/// # Returns
+///
+/// Tuple of (before_end_byte, char_start_byte, char_end_byte, after_start_byte)
+fn split_at_char_index(s: &str, char_idx: usize) -> (usize, usize, usize, usize) {
+    let mut char_indices = s.char_indices();
+
+    // Find the byte position of the character at char_idx
+    let char_byte_start = char_indices
+        .nth(char_idx)
+        .map(|(idx, _)| idx)
+        .unwrap_or(s.len());
+
+    // Find the end byte position of the character (start of next char or end of string)
+    let char_byte_end = char_indices
+        .next()
+        .map(|(idx, _)| idx)
+        .unwrap_or(s.len());
+
+    (char_byte_start, char_byte_start, char_byte_end, char_byte_end)
+}
+
+/// Get byte indices for a character range without allocating
+///
+/// Returns (start_byte, end_byte) for a range of characters.
+///
+/// # Arguments
+///
+/// * `s` - The string to analyze
+/// * `start_char` - Starting character index
+/// * `end_char` - Ending character index (exclusive)
+///
+/// # Returns
+///
+/// Tuple of (start_byte_index, end_byte_index)
+fn char_range_to_bytes(s: &str, start_char: usize, end_char: usize) -> (usize, usize) {
+    let mut char_indices = s.char_indices().enumerate();
+
+    let start_byte = char_indices
+        .find_map(|(idx, (byte_pos, _))| (idx == start_char).then_some(byte_pos))
+        .unwrap_or(s.len());
+
+    let end_byte = char_indices
+        .find_map(|(idx, (byte_pos, _))| (idx == end_char).then_some(byte_pos))
+        .unwrap_or(s.len());
+
+    (start_byte, end_byte)
+}
 
 /// Calculate centered popup area with given dimensions
 ///

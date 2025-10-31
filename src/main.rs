@@ -7,18 +7,18 @@ use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use helix_trainer::{
     config::ScenarioLoader,
     ui::{self, AppState, Message},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 /// Initialize secure logging
 fn init_secure_logging() -> Result<()> {
@@ -112,21 +112,30 @@ fn run_app(
             break;
         }
 
-        // Handle events with timeout
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                // Handle global quit shortcut first
-                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                    tracing::debug!("User pressed Ctrl+C");
-                    ui::update(state, Message::QuitApp)?;
-                    continue;
-                }
+        // Check if scenario completed and delay elapsed
+        if let Some(completion_time) = state.completion_time
+            && completion_time.elapsed() >= Duration::from_millis(1500)
+        {
+            tracing::debug!("Success screen delay elapsed, transitioning to results");
+            ui::update(state, Message::CompleteScenario)?;
+            state.completion_time = None;
+        }
 
-                // Dispatch to screen-specific handlers
-                if let Some(msg) = handle_key_event(key, state) {
-                    tracing::debug!("Message: {:?}", msg);
-                    ui::update(state, msg)?;
-                }
+        // Handle events with timeout
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            // Handle global quit shortcut first
+            if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                tracing::debug!("User pressed Ctrl+C");
+                ui::update(state, Message::QuitApp)?;
+                continue;
+            }
+
+            // Dispatch to screen-specific handlers
+            if let Some(msg) = handle_key_event(key, state) {
+                tracing::debug!("Message: {:?}", msg);
+                ui::update(state, msg)?;
             }
         }
     }
@@ -220,7 +229,7 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
 
         // Deletion commands
         (KeyCode::Char('x'), KeyModifiers::NONE) => "x",
-        (KeyCode::Char('d'), KeyModifiers::NONE) => "dd",
+        (KeyCode::Char('d'), KeyModifiers::NONE) => "d",
         (KeyCode::Char('c'), KeyModifiers::NONE) => "c",
         (KeyCode::Char('J'), KeyModifiers::SHIFT) => "J",
 
@@ -246,7 +255,7 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r",
 
         // Document movement
-        (KeyCode::Char('g'), KeyModifiers::NONE) => "gg",
+        (KeyCode::Char('g'), KeyModifiers::NONE) => "g",
         (KeyCode::Char('G'), KeyModifiers::NONE) => "G",
 
         _ => return None,

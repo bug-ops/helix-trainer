@@ -7,8 +7,10 @@
 use crate::game::{CursorPosition, EditorState};
 use crate::security::UserError;
 use helix_core::{
-    movement::{self, Movement},
     Rope, Selection, Transaction,
+    doc_formatter::TextFormat,
+    movement::{self, Movement},
+    text_annotations::TextAnnotations,
 };
 
 /// Editor mode (Normal or Insert)
@@ -177,8 +179,19 @@ impl HelixSimulator {
         use helix_core::movement::Direction;
 
         let slice = self.doc.slice(..);
+        let text_fmt = TextFormat::default();
+        let mut annotations = TextAnnotations::default();
+
         let new_selection = self.selection.clone().transform(|range| {
-            movement::move_horizontally(slice, range, Direction::Backward, count, Movement::Move)
+            movement::move_horizontally(
+                slice,
+                range,
+                Direction::Backward,
+                count,
+                Movement::Move,
+                &text_fmt,
+                &mut annotations,
+            )
         });
 
         self.selection = new_selection;
@@ -189,8 +202,19 @@ impl HelixSimulator {
         use helix_core::movement::Direction;
 
         let slice = self.doc.slice(..);
+        let text_fmt = TextFormat::default();
+        let mut annotations = TextAnnotations::default();
+
         let new_selection = self.selection.clone().transform(|range| {
-            movement::move_horizontally(slice, range, Direction::Forward, count, Movement::Move)
+            movement::move_horizontally(
+                slice,
+                range,
+                Direction::Forward,
+                count,
+                Movement::Move,
+                &text_fmt,
+                &mut annotations,
+            )
         });
 
         self.selection = new_selection;
@@ -201,8 +225,19 @@ impl HelixSimulator {
         use helix_core::movement::Direction;
 
         let slice = self.doc.slice(..);
+        let text_fmt = TextFormat::default();
+        let mut annotations = TextAnnotations::default();
+
         let new_selection = self.selection.clone().transform(|range| {
-            movement::move_vertically(slice, range, Direction::Forward, count, Movement::Move)
+            movement::move_vertically(
+                slice,
+                range,
+                Direction::Forward,
+                count,
+                Movement::Move,
+                &text_fmt,
+                &mut annotations,
+            )
         });
 
         self.selection = new_selection;
@@ -213,8 +248,19 @@ impl HelixSimulator {
         use helix_core::movement::Direction;
 
         let slice = self.doc.slice(..);
+        let text_fmt = TextFormat::default();
+        let mut annotations = TextAnnotations::default();
+
         let new_selection = self.selection.clone().transform(|range| {
-            movement::move_vertically(slice, range, Direction::Backward, count, Movement::Move)
+            movement::move_vertically(
+                slice,
+                range,
+                Direction::Backward,
+                count,
+                Movement::Move,
+                &text_fmt,
+                &mut annotations,
+            )
         });
 
         self.selection = new_selection;

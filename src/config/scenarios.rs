@@ -3,7 +3,7 @@
 //! This module handles loading TOML scenario files with security validations.
 
 use crate::security::limits::*;
-use crate::security::{path_validator, sanitizer, SecurityError, UserError};
+use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};

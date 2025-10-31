@@ -37,4 +37,4 @@ pub mod render;
 pub mod state;
 
 pub use render::render;
-pub use state::{update, AppState, Message, Screen};
+pub use state::{AppState, Message, Screen, update};

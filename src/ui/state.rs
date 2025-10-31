@@ -109,6 +109,21 @@ pub struct AppState {
 
     /// Whether to show hint on task screen
     pub show_hint_panel: bool,
+
+    /// Whether to show key history popup
+    pub show_key_history: bool,
+
+    /// Last command executed (for display purposes)
+    pub last_command: Option<String>,
+
+    /// Time when scenario was completed (for showing success screen before results)
+    pub completion_time: Option<std::time::Instant>,
+
+    /// History of last 5 key presses (most recent first)
+    pub key_history: Vec<String>,
+
+    /// Command buffer for accumulating multi-key commands (e.g., "d" waiting for "d")
+    pub command_buffer: String,
 }
 
 impl fmt::Debug for AppState {
@@ -121,6 +136,11 @@ impl fmt::Debug for AppState {
             .field("running", &self.running)
             .field("current_hint", &self.current_hint.is_some())
             .field("show_hint_panel", &self.show_hint_panel)
+            .field("show_key_history", &self.show_key_history)
+            .field("last_command", &self.last_command)
+            .field("completion_time", &self.completion_time.is_some())
+            .field("key_history", &self.key_history.len())
+            .field("command_buffer", &self.command_buffer)
             .finish()
     }
 }
@@ -151,6 +171,11 @@ impl AppState {
             running: true,
             current_hint: None,
             show_hint_panel: false,
+            show_key_history: false,
+            last_command: None,
+            completion_time: None,
+            key_history: Vec::new(),
+            command_buffer: String::new(),
         }
     }
 
@@ -177,6 +202,40 @@ impl AppState {
     /// Get a scenario by index
     pub fn get_scenario(&self, index: usize) -> Option<&Scenario> {
         self.scenarios.get(index)
+    }
+
+    /// Add a key to the history (keeps last 5)
+    pub fn add_key_to_history(&mut self, key: String) {
+        // Insert at the beginning (most recent first)
+        self.key_history.insert(0, key);
+
+        // Keep only last 5 keys
+        if self.key_history.len() > 5 {
+            self.key_history.truncate(5);
+        }
+    }
+
+    /// Clear key history
+    pub fn clear_key_history(&mut self) {
+        self.key_history.clear();
+    }
+}
+
+/// Format a key command for display in key history
+///
+/// Converts internal command names to user-friendly display strings
+fn format_key_for_display(command: &str) -> String {
+    match command {
+        "ArrowLeft" => "←".to_string(),
+        "ArrowRight" => "→".to_string(),
+        "ArrowUp" => "↑".to_string(),
+        "ArrowDown" => "↓".to_string(),
+        "Backspace" => "⌫".to_string(),
+        "Escape" => "Esc".to_string(),
+        "\n" => "↵".to_string(),
+        " " => "Space".to_string(),
+        cmd if cmd.len() == 1 => cmd.to_string(),
+        cmd => cmd.to_string(),
     }
 }
 
@@ -253,7 +312,12 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.session = Some(session);
                 state.screen = Screen::Task;
                 state.show_hint_panel = false;
+                state.show_key_history = false;
                 state.current_hint = None;
+                state.last_command = None;
+                state.completion_time = None;
+                state.clear_key_history();
+                state.command_buffer.clear();
             }
             Ok(())
         }
@@ -272,23 +336,75 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::ShowHint => {
-            if let Some(session) = &mut state.session {
-                if let Some(hint) = session.get_hint() {
-                    state.current_hint = Some(hint);
-                    state.show_hint_panel = true;
-                }
+            if let Some(session) = &mut state.session
+                && let Some(hint) = session.get_hint()
+            {
+                state.current_hint = Some(hint);
+                state.show_hint_panel = true;
             }
             Ok(())
         }
 
         Message::ExecuteCommand(command) => {
+            // Add key to history for display (format for readability)
+            let display_key = format_key_for_display(&command);
+            state.add_key_to_history(display_key);
+
+            // Show key history popup after first keypress
+            state.show_key_history = true;
+
             if let Some(session) = &mut state.session {
-                // Execute command through session (which uses simulator)
-                session.record_action(command)?;
+                // In Insert mode, execute commands directly
+                if session.is_insert_mode() {
+                    // Store last command for display (skip special commands and single chars)
+                    if command == "Escape" {
+                        state.last_command = Some(command.clone());
+                    }
+
+                    // Execute command through session
+                    session.record_action(command)?;
+                } else {
+                    // Normal mode: handle command buffer for multi-key commands
+                    state.command_buffer.push_str(&command);
+
+                    // Try to match a complete command
+                    let final_command = match state.command_buffer.as_str() {
+                        // Multi-key commands
+                        "dd" => Some("dd"),
+                        "gg" => Some("gg"),
+
+                        // Partial commands - wait for more input
+                        "d" | "g" => None,
+
+                        // Single-key commands (clear buffer and execute)
+                        _ if state.command_buffer.len() == 1 => Some(state.command_buffer.as_str()),
+
+                        // Invalid sequence - clear buffer
+                        _ => {
+                            state.command_buffer.clear();
+                            return Ok(());
+                        }
+                    };
+
+                    if let Some(cmd) = final_command {
+                        // We have a complete command
+                        let cmd_string = cmd.to_string();
+                        state.command_buffer.clear();
+
+                        // Store for display
+                        state.last_command = Some(cmd_string.clone());
+
+                        // Execute command through session
+                        session.record_action(cmd_string)?;
+                    }
+                    // If None, we're waiting for more keys (buffer not cleared)
+                }
 
                 // Check if scenario is complete
                 if session.is_completed() {
-                    state.screen = Screen::Results;
+                    // Mark completion time instead of immediately going to results
+                    // This allows showing the success state before transition
+                    state.completion_time = Some(std::time::Instant::now());
                 }
             }
             Ok(())
@@ -299,7 +415,12 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 session.reset()?;
                 state.screen = Screen::Task;
                 state.show_hint_panel = false;
+                state.show_key_history = false;
                 state.current_hint = None;
+                state.last_command = None;
+                state.completion_time = None;
+                state.clear_key_history();
+                state.command_buffer.clear();
             }
             Ok(())
         }

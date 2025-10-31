@@ -6,12 +6,13 @@
 
 use crate::ui::state::{AppState, Screen};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
+use tui_big_text::{BigText, PixelSize};
 
 /// Main render function dispatches to screen-specific renderers
 ///
@@ -148,9 +149,10 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(chunks[2]);
 
-        // Current state with cursor highlighting
+        // Current state with cursor and diff highlighting
         let current_state = session.current_state();
-        let current_lines = render_editor_with_cursor(current_state);
+        let target_state = session.target_state();
+        let current_lines = render_editor_with_diff(current_state, target_state);
         let current = Paragraph::new(current_lines)
             .block(
                 Block::default()
@@ -172,50 +174,101 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .wrap(Wrap { trim: false });
         frame.render_widget(target, editor_chunks[1]);
 
-        // Stats
+        // Stats with mode indicator and progress
         let optimal = scenario.scoring.optimal_count;
         let actions = session.action_count();
         let elapsed = session.elapsed();
         let elapsed_secs = elapsed.as_secs_f32();
+        let mode = session.mode_name();
+        let progress = session.completion_progress();
 
-        let stats_text = if actions <= optimal {
+        // Color code mode: green for Normal, yellow for Insert
+        let mode_color = if mode == "NORMAL" {
+            Color::Green
+        } else {
+            Color::Yellow
+        };
+
+        // Color code progress: green if 100%, yellow if >50%, red otherwise
+        let progress_color = if progress == 100 {
+            Color::Green
+        } else if progress > 50 {
+            Color::Yellow
+        } else {
+            Color::Red
+        };
+
+        // Create colored mode indicator
+        let mode_span = Span::styled(
+            format!("Mode: {} ", mode),
+            Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+        );
+
+        // Create colored progress indicator
+        let progress_span = Span::styled(
+            format!("| Progress: {}% ", progress),
+            Style::default()
+                .fg(progress_color)
+                .add_modifier(Modifier::BOLD),
+        );
+
+        // Create rest of stats
+        let rest_of_stats = if actions <= optimal {
             format!(
-                "Actions: {} (optimal: {}) | Time: {:.1}s",
+                "| Actions: {} (optimal: {}) | Time: {:.1}s",
                 actions, optimal, elapsed_secs
             )
         } else {
             format!(
-                "Actions: {} (optimal: {}) - {} extra | Time: {:.1}s",
+                "| Actions: {} (optimal: {}) - {} extra | Time: {:.1}s",
                 actions,
                 optimal,
                 actions - optimal,
                 elapsed_secs
             )
         };
+        let rest_span = Span::styled(rest_of_stats, Style::default().fg(Color::White));
 
-        let stats = Paragraph::new(stats_text)
-            .style(Style::default().fg(Color::White))
+        let stats = Paragraph::new(Line::from(vec![mode_span, progress_span, rest_span]))
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(stats, chunks[3]);
 
-        // Instructions with hint indicator
+        // Instructions with hint indicator and last command
         let hint_indicator = if state.show_hint_panel && state.current_hint.is_some() {
             " [h: Next Hint] "
         } else {
             " [h: Show Hint] "
         };
 
-        let instructions =
-            Paragraph::new(format!("{}| Esc: Abandon | Ctrl-c: Quit", hint_indicator))
-                .style(Style::default().fg(Color::Gray))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
+        let last_cmd_text = if let Some(cmd) = &state.last_command {
+            format!(" Last: {} |", cmd)
+        } else {
+            String::new()
+        };
+
+        let instructions = Paragraph::new(format!(
+            "{}{}| Esc: Abandon | Ctrl-c: Quit",
+            hint_indicator, last_cmd_text
+        ))
+        .style(Style::default().fg(Color::Gray))
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
         frame.render_widget(instructions, chunks[4]);
 
         // Render hint panel if visible
         if state.show_hint_panel {
             render_hint_popup(frame, state);
+        }
+
+        // Show key history popup if visible
+        if state.show_key_history {
+            render_key_history_popup(frame, state);
+        }
+
+        // Show success message if scenario just completed
+        if state.completion_time.is_some() {
+            render_success_popup(frame);
         }
     }
 }
@@ -224,112 +277,112 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
 fn render_results_screen(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    if let Some(session) = &state.session {
-        if let Ok(feedback) = session.get_feedback() {
-            // Layout: title | results | instructions
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(2)
-                .constraints([
-                    Constraint::Length(3), // Title
-                    Constraint::Min(10),   // Results
-                    Constraint::Length(3), // Instructions
-                ])
-                .split(area);
+    if let Some(session) = &state.session
+        && let Ok(feedback) = session.get_feedback()
+    {
+        // Layout: title | results | instructions
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(2)
+            .constraints([
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Results
+                Constraint::Length(3), // Instructions
+            ])
+            .split(area);
 
-            // Title
-            let title_text = if feedback.success {
-                "✓ Completed!"
-            } else {
-                "✗ Not Completed"
-            };
-            let title_color = if feedback.success {
-                Color::Green
-            } else {
-                Color::Red
-            };
-            let title = Paragraph::new(title_text)
-                .style(
-                    Style::default()
-                        .fg(title_color)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
-            frame.render_widget(title, chunks[0]);
-
-            // Results content
-            let mut result_lines = vec![];
-
-            // Rating and score
-            result_lines.push(Line::from(vec![Span::styled(
-                format!(
-                    "{} {}",
-                    feedback.rating.emoji(),
-                    feedback.rating.description()
-                ),
+        // Title
+        let title_text = if feedback.success {
+            "✓ Completed!"
+        } else {
+            "✗ Not Completed"
+        };
+        let title_color = if feedback.success {
+            Color::Green
+        } else {
+            Color::Red
+        };
+        let title = Paragraph::new(title_text)
+            .style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(title_color)
                     .add_modifier(Modifier::BOLD),
-            )]));
+            )
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        frame.render_widget(title, chunks[0]);
 
+        // Results content
+        let mut result_lines = vec![];
+
+        // Rating and score
+        result_lines.push(Line::from(vec![Span::styled(
+            format!(
+                "{} {}",
+                feedback.rating.emoji(),
+                feedback.rating.description()
+            ),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )]));
+
+        result_lines.push(Line::from(""));
+
+        // Score
+        result_lines.push(Line::from(vec![
+            Span::raw("Score: "),
+            Span::styled(
+                format!("{}/{}", feedback.score, feedback.max_points),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]));
+
+        // Actions
+        let action_color = if feedback.is_optimal {
+            Color::Green
+        } else {
+            Color::Yellow
+        };
+        result_lines.push(Line::from(vec![
+            Span::raw("Actions: "),
+            Span::styled(
+                format!("{}", feedback.actions_taken),
+                Style::default().fg(action_color),
+            ),
+            Span::raw(format!(" (optimal: {})", feedback.optimal_actions)),
+        ]));
+
+        // Duration
+        result_lines.push(Line::from(vec![
+            Span::raw("Time: "),
+            Span::styled(
+                format!("{:.1}s", feedback.duration.as_secs_f32()),
+                Style::default().fg(Color::Blue),
+            ),
+        ]));
+
+        // Hint if provided
+        if let Some(hint) = &feedback.hint {
             result_lines.push(Line::from(""));
-
-            // Score
             result_lines.push(Line::from(vec![
-                Span::raw("Score: "),
-                Span::styled(
-                    format!("{}/{}", feedback.score, feedback.max_points),
-                    Style::default().fg(Color::Cyan),
-                ),
+                Span::styled("Tip: ", Style::default().fg(Color::Magenta)),
+                Span::raw(hint),
             ]));
-
-            // Actions
-            let action_color = if feedback.is_optimal {
-                Color::Green
-            } else {
-                Color::Yellow
-            };
-            result_lines.push(Line::from(vec![
-                Span::raw("Actions: "),
-                Span::styled(
-                    format!("{}", feedback.actions_taken),
-                    Style::default().fg(action_color),
-                ),
-                Span::raw(format!(" (optimal: {})", feedback.optimal_actions)),
-            ]));
-
-            // Duration
-            result_lines.push(Line::from(vec![
-                Span::raw("Time: "),
-                Span::styled(
-                    format!("{:.1}s", feedback.duration.as_secs_f32()),
-                    Style::default().fg(Color::Blue),
-                ),
-            ]));
-
-            // Hint if provided
-            if let Some(hint) = &feedback.hint {
-                result_lines.push(Line::from(""));
-                result_lines.push(Line::from(vec![
-                    Span::styled("Tip: ", Style::default().fg(Color::Magenta)),
-                    Span::raw(hint),
-                ]));
-            }
-
-            let results = Paragraph::new(result_lines)
-                .block(Block::default().title("Performance").borders(Borders::ALL))
-                .alignment(Alignment::Left)
-                .style(Style::default().fg(Color::White));
-            frame.render_widget(results, chunks[1]);
-
-            // Instructions
-            let instructions = Paragraph::new("[r] Retry  [m] Menu  [q] Quit")
-                .style(Style::default().fg(Color::Gray))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
-            frame.render_widget(instructions, chunks[2]);
         }
+
+        let results = Paragraph::new(result_lines)
+            .block(Block::default().title("Performance").borders(Borders::ALL))
+            .alignment(Alignment::Left)
+            .style(Style::default().fg(Color::White));
+        frame.render_widget(results, chunks[1]);
+
+        // Instructions
+        let instructions = Paragraph::new("[r] Retry  [m] Menu  [q] Quit")
+            .style(Style::default().fg(Color::Gray))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        frame.render_widget(instructions, chunks[2]);
     }
 }
 
@@ -376,19 +429,41 @@ fn render_hint_popup(frame: &mut Frame, state: &AppState) {
     }
 }
 
-/// Render editor text with cursor highlighted
+/// Render editor text with cursor and diff highlighting
 ///
-/// Takes EditorState and returns Vec<Line> with the cursor position
-/// highlighted using inverse colors.
-fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'static>> {
-    let content = state.content();
-    let cursor = state.cursor_position();
+/// Compares current state with target state and colors lines:
+/// - Green: lines that match target
+/// - Red: lines that differ from target
+/// - Cursor shown with inverse colors
+fn render_editor_with_diff(
+    current: &crate::game::EditorState,
+    target: &crate::game::EditorState,
+) -> Vec<Line<'static>> {
+    let current_content = current.content();
+    let target_content = target.content();
+    let cursor = current.cursor_position();
     let (cursor_line, cursor_col) = (cursor.row, cursor.col);
 
-    content
-        .lines()
+    let current_lines: Vec<&str> = current_content.lines().collect();
+    let target_lines: Vec<&str> = target_content.lines().collect();
+
+    current_lines
+        .iter()
         .enumerate()
-        .map(|(line_idx, line_text)| {
+        .map(|(line_idx, &line_text)| {
+            // Determine if this line matches target
+            let matches_target = target_lines
+                .get(line_idx)
+                .map(|&target_line| target_line == line_text)
+                .unwrap_or(false);
+
+            // Choose color based on match
+            let line_color = if matches_target {
+                Color::Green
+            } else {
+                Color::Red
+            };
+
             if line_idx == cursor_line {
                 // This line contains the cursor
                 let mut spans = Vec::new();
@@ -396,7 +471,7 @@ fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'stat
                 // Add text before cursor
                 if cursor_col > 0 {
                     let before = line_text.chars().take(cursor_col).collect::<String>();
-                    spans.push(Span::styled(before, Style::default().fg(Color::Cyan)));
+                    spans.push(Span::styled(before, Style::default().fg(line_color)));
                 }
 
                 // Add cursor character with inverse style
@@ -412,7 +487,7 @@ fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'stat
                 // Add text after cursor
                 if cursor_col + 1 < line_text.len() {
                     let after = line_text.chars().skip(cursor_col + 1).collect::<String>();
-                    spans.push(Span::styled(after, Style::default().fg(Color::Cyan)));
+                    spans.push(Span::styled(after, Style::default().fg(line_color)));
                 }
 
                 Line::from(spans)
@@ -420,7 +495,7 @@ fn render_editor_with_cursor(state: &crate::game::EditorState) -> Vec<Line<'stat
                 // Regular line without cursor
                 Line::from(Span::styled(
                     line_text.to_string(),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(line_color),
                 ))
             }
         })
@@ -528,6 +603,105 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
         .collect()
 }
 
+/// Render key history popup showing last 5 keys pressed with large text
+fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
+    let area = frame.area();
+
+    // Show last 5 keys
+    let max_keys = 5;
+
+    // Build text from recent keys
+    let mut key_text = String::new();
+    for (idx, key) in state.key_history.iter().take(max_keys).enumerate() {
+        if idx > 0 {
+            key_text.push(' ');
+        }
+        key_text.push_str(key);
+    }
+
+    // Calculate required dimensions before consuming key_text
+    // Each character in Full size is approximately 4 cells wide, plus spacing
+    let chars_count = key_text.chars().count();
+    let popup_width = ((chars_count * 5).max(30) as u16).min(area.width.saturating_sub(4));
+    let text_height = 8;
+    let popup_height = text_height + 2; // +2 for borders
+
+    // Create BigText widget with large font and cyan color
+    let big_text = BigText::builder()
+        .pixel_size(PixelSize::Full)
+        .style(Style::default().fg(Color::Cyan))
+        .lines(vec![key_text.into()])
+        .centered()
+        .build();
+
+    // Position in bottom right corner
+    let popup_x = area.width.saturating_sub(popup_width + 2);
+    let popup_y = area.height.saturating_sub(popup_height + 2);
+
+    let popup_area = Rect {
+        x: popup_x,
+        y: popup_y,
+        width: popup_width,
+        height: popup_height,
+    };
+
+    // Render with border
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Black));
+
+    let inner_area = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+    frame.render_widget(big_text, inner_area);
+}
+
+/// Render success popup when scenario is completed
+fn render_success_popup(frame: &mut Frame) {
+    let area = frame.area();
+
+    // Create centered popup area
+    let popup_width = 40;
+    let popup_height = 7;
+    let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+    let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+
+    let popup_area = Rect {
+        x: popup_x,
+        y: popup_y,
+        width: popup_width,
+        height: popup_height,
+    };
+
+    // Success message
+    let success_text = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "SUCCESS!",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Scenario completed!",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(""),
+    ];
+
+    let success_paragraph = Paragraph::new(success_text)
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green))
+                .style(Style::default().bg(Color::Black)),
+        );
+
+    frame.render_widget(success_paragraph, popup_area);
+}
+
 #[cfg(test)]
 #[allow(unused_variables)] // Test backends don't use all variables
 mod tests {
@@ -571,8 +745,8 @@ mod tests {
 
     #[test]
     fn test_render_does_not_panic_on_empty_state() {
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -588,8 +762,8 @@ mod tests {
 
     #[test]
     fn test_render_task_screen_with_session() {
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();

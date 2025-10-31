@@ -94,13 +94,73 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         .take(menu_height)
         .collect();
 
+    // Add scroll indicator to title if list is scrollable
+    let menu_title = if total_items > menu_height {
+        let first_visible = state.menu_scroll_offset + 1;
+        let last_visible = (state.menu_scroll_offset + menu_height).min(total_items);
+        format!(
+            "Main Menu [{}-{}/{}]",
+            first_visible, last_visible, total_items
+        )
+    } else {
+        format!("Main Menu [{}]", total_items)
+    };
+
     let menu = List::new(visible_items)
-        .block(Block::default().title("Main Menu").borders(Borders::ALL))
+        .block(Block::default().title(menu_title).borders(Borders::ALL))
         .style(Style::default().fg(Color::White));
     frame.render_widget(menu, chunks[1]);
 
+    // Draw scrollbar if needed
+    if total_items > menu_height {
+        let scrollbar_area = chunks[1];
+        let scrollbar_height = scrollbar_area.height.saturating_sub(2) as usize; // -2 for borders
+
+        if scrollbar_height > 0 {
+            // Calculate scrollbar position
+            let scrollbar_pos = if total_items > 1 {
+                (state.menu_scroll_offset * scrollbar_height) / (total_items - menu_height).max(1)
+            } else {
+                0
+            };
+
+            // Calculate scrollbar thumb size (proportional to visible items)
+            let thumb_size = ((menu_height * scrollbar_height) / total_items).max(1);
+
+            // Draw scrollbar on the right edge
+            for y in 0..scrollbar_height {
+                let is_thumb = y >= scrollbar_pos && y < scrollbar_pos + thumb_size;
+                let symbol = if is_thumb { "█" } else { "│" };
+                let style = if is_thumb {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+
+                let x = scrollbar_area.x + scrollbar_area.width - 2; // -2 to be inside border
+                let y = scrollbar_area.y + 1 + y as u16; // +1 for top border
+
+                frame.render_widget(
+                    Paragraph::new(symbol).style(style),
+                    ratatui::layout::Rect {
+                        x,
+                        y,
+                        width: 1,
+                        height: 1,
+                    },
+                );
+            }
+        }
+    }
+
     // Instructions
-    let instructions = Paragraph::new("↑/↓: Navigate | Enter: Select | q: Quit")
+    let instructions = if total_items > 9 {
+        Paragraph::new("↑/↓ or j/k: Navigate | 1-9: Quick jump | Enter: Select | q: Quit")
+    } else {
+        Paragraph::new("↑/↓ or j/k: Navigate | Enter: Select | q: Quit")
+    };
+
+    let instructions = instructions
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));

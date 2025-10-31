@@ -14,6 +14,7 @@ use helix_trainer::{
     ui::{self, AppState, Message},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
+use std::borrow::Cow;
 use std::io;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
@@ -186,25 +187,25 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     if in_insert_mode {
         match key.code {
             KeyCode::Char(c) => {
-                return Some(Message::ExecuteCommand(c.to_string()));
+                return Some(Message::ExecuteCommand(Cow::Owned(c.to_string())));
             }
             KeyCode::Enter => {
-                return Some(Message::ExecuteCommand("\n".to_string()));
+                return Some(Message::ExecuteCommand(Cow::Borrowed("\n")));
             }
             KeyCode::Backspace => {
-                return Some(Message::ExecuteCommand("Backspace".to_string()));
+                return Some(Message::ExecuteCommand(Cow::Borrowed("Backspace")));
             }
             KeyCode::Left => {
-                return Some(Message::ExecuteCommand("ArrowLeft".to_string()));
+                return Some(Message::ExecuteCommand(Cow::Borrowed("ArrowLeft")));
             }
             KeyCode::Right => {
-                return Some(Message::ExecuteCommand("ArrowRight".to_string()));
+                return Some(Message::ExecuteCommand(Cow::Borrowed("ArrowRight")));
             }
             KeyCode::Up => {
-                return Some(Message::ExecuteCommand("ArrowUp".to_string()));
+                return Some(Message::ExecuteCommand(Cow::Borrowed("ArrowUp")));
             }
             KeyCode::Down => {
-                return Some(Message::ExecuteCommand("ArrowDown".to_string()));
+                return Some(Message::ExecuteCommand(Cow::Borrowed("ArrowDown")));
             }
             _ => {}
         }
@@ -261,7 +262,7 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         _ => return None,
     };
 
-    Some(Message::ExecuteCommand(command.to_string()))
+    Some(Message::ExecuteCommand(Cow::Borrowed(command)))
 }
 
 /// Handle keyboard events on the results screen
@@ -324,7 +325,7 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
         let state = AppState::new(vec![]);
         let msg = handle_task_keys(key, &state);
-        assert_eq!(msg, Some(Message::ExecuteCommand("h".to_string())));
+        assert_eq!(msg, Some(Message::ExecuteCommand(Cow::Borrowed("h"))));
     }
 
     #[test]

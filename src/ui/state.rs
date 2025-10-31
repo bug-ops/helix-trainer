@@ -69,7 +69,7 @@ pub enum Message {
     ShowHint,
 
     /// Execute a Helix command during gameplay
-    ExecuteCommand(String),
+    ExecuteCommand(std::borrow::Cow<'static, str>),
 
     /// Retry the current scenario
     RetryScenario,
@@ -347,7 +347,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
         Message::ExecuteCommand(command) => {
             // Add key to history for display (format for readability)
-            let display_key = format_key_for_display(&command);
+            let display_key = format_key_for_display(command.as_ref());
             state.add_key_to_history(display_key);
 
             // Show key history popup after first keypress
@@ -357,12 +357,12 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 // In Insert mode, execute commands directly
                 if session.is_insert_mode() {
                     // Store last command for display (skip special commands and single chars)
-                    if command == "Escape" {
-                        state.last_command = Some(command.clone());
+                    if command.as_ref() == "Escape" {
+                        state.last_command = Some(command.to_string());
                     }
 
                     // Execute command through session
-                    session.record_action(command)?;
+                    session.record_action(command.to_string())?;
                 } else {
                     // Normal mode: handle command buffer for multi-key commands
                     state.command_buffer.push_str(&command);

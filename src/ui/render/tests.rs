@@ -45,11 +45,11 @@ fn test_render_does_not_panic_on_empty_state() {
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
 
-    let state = AppState::new(vec![]);
+    let mut state = AppState::new(vec![]);
 
     terminal
         .draw(|f| {
-            super::super::render(f, &state);
+            super::super::render(f, &mut state);
         })
         .unwrap();
 }
@@ -70,7 +70,7 @@ fn test_render_task_screen_with_session() {
 
     terminal
         .draw(|f| {
-            super::super::render(f, &state);
+            super::super::render(f, &mut state);
         })
         .unwrap();
 }

@@ -150,19 +150,29 @@ fn run_app(
 /// application messages based on the current screen.
 fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
     match state.screen {
-        ui::Screen::MainMenu => handle_menu_keys(key),
+        ui::Screen::MainMenu => handle_menu_keys(key, state),
         ui::Screen::Task => handle_task_keys(key, state),
         ui::Screen::Results => handle_results_keys(key),
     }
 }
 
 /// Handle keyboard events on the main menu screen
-fn handle_menu_keys(key: KeyEvent) -> Option<Message> {
+fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     match key.code {
         KeyCode::Char('q') => Some(Message::QuitApp),
         KeyCode::Up | KeyCode::Char('k') => Some(Message::MenuUp),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::MenuDown),
         KeyCode::Enter => Some(Message::MenuSelect),
+        // Quick jump with number keys (1-9)
+        KeyCode::Char(c) if c.is_ascii_digit() => {
+            let digit = c.to_digit(10).unwrap() as usize;
+            if digit >= 1 && digit <= state.scenarios.len() {
+                // Jump to scenario (digit - 1 because scenarios are 0-indexed)
+                Some(Message::StartScenario(digit - 1))
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -251,8 +261,12 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         (KeyCode::Char('o'), KeyModifiers::NONE) => "o",
         (KeyCode::Char('O'), KeyModifiers::SHIFT) => "O",
 
+        // Replace character
+        (KeyCode::Char('r'), KeyModifiers::NONE) => "r",
+
         // Undo/Redo
         (KeyCode::Char('u'), KeyModifiers::NONE) => "u",
+        (KeyCode::Char('U'), KeyModifiers::SHIFT) => "U",
         (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r",
 
         // Document movement
@@ -284,7 +298,7 @@ mod tests {
     fn test_menu_key_q_quits() {
         let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
         let state = AppState::new(vec![]);
-        let msg = handle_menu_keys(key);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::QuitApp));
     }
 
@@ -292,7 +306,7 @@ mod tests {
     fn test_menu_key_j_moves_down() {
         let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
         let state = AppState::new(vec![]);
-        let msg = handle_menu_keys(key);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::MenuDown));
     }
 
@@ -300,7 +314,7 @@ mod tests {
     fn test_menu_key_k_moves_up() {
         let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
         let state = AppState::new(vec![]);
-        let msg = handle_menu_keys(key);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::MenuUp));
     }
 
@@ -308,7 +322,7 @@ mod tests {
     fn test_menu_key_enter_selects() {
         let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         let state = AppState::new(vec![]);
-        let msg = handle_menu_keys(key);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::MenuSelect));
     }
 
@@ -364,7 +378,7 @@ mod tests {
     fn test_unknown_key_returns_none() {
         let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
         let state = AppState::new(vec![]);
-        let msg = handle_menu_keys(key);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, None);
     }
 }

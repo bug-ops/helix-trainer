@@ -1,8 +1,8 @@
 //! Pure rendering functions for the TUI
 //!
 //! This module contains all rendering logic for the terminal user interface.
-//! All functions are pure (no side effects) and take an immutable reference
-//! to the application state.
+//! Rendering functions may update view-related state (like scroll offsets) but
+//! do not modify business logic state.
 
 mod editor;
 mod helpers;
@@ -19,13 +19,14 @@ use ratatui::Frame;
 
 /// Main render function dispatches to screen-specific renderers
 ///
-/// This is the entry point for all rendering. It's pure and has no side effects.
+/// This is the entry point for all rendering. It may update view state like
+/// scroll offsets to keep UI elements visible.
 ///
 /// # Arguments
 ///
 /// * `frame` - The ratatui frame to render to
-/// * `state` - The application state (immutable)
-pub fn render(frame: &mut Frame, state: &AppState) {
+/// * `state` - The application state (mutable for view state updates)
+pub fn render(frame: &mut Frame, state: &mut AppState) {
     match state.screen {
         Screen::MainMenu => menu::render_main_menu(frame, state),
         Screen::Task => task::render_task_screen(frame, state),

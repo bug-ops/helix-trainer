@@ -390,35 +390,20 @@ fn render_results_screen(frame: &mut Frame, state: &AppState) {
 fn render_hint_popup(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    // Create a centered popup (centered horizontally and vertically)
+    // Calculate popup dimensions with constraints
     let popup_width = 70.min(area.width.saturating_sub(4));
     let popup_height = 10.min(area.height.saturating_sub(4));
 
-    let popup_x = (area.width.saturating_sub(popup_width)) / 2;
-    let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+    // Create centered popup area
+    let popup_area = centered_popup(area, popup_width, popup_height);
 
-    let popup_area = Rect {
-        x: popup_x,
-        y: popup_y,
-        width: popup_width,
-        height: popup_height,
-    };
-
-    // Render semi-transparent background (using a block)
-    let background = Block::default()
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::Black).fg(Color::White))
-        .title("Hint");
+    // Render popup background with border
+    let background = popup_block(Some("Hint"), Color::White);
     frame.render_widget(&background, popup_area);
 
     // Render hint text inside popup
     if let Some(hint) = &state.current_hint {
-        let inner = Rect {
-            x: popup_area.x + 1,
-            y: popup_area.y + 1,
-            width: popup_area.width.saturating_sub(2),
-            height: popup_area.height.saturating_sub(2),
-        };
+        let inner = inner_rect(popup_area);
 
         let hint_text = Paragraph::new(hint.as_str())
             .wrap(Wrap { trim: true })
@@ -661,17 +646,7 @@ fn render_success_popup(frame: &mut Frame) {
     let area = frame.area();
 
     // Create centered popup area
-    let popup_width = 40;
-    let popup_height = 7;
-    let popup_x = (area.width.saturating_sub(popup_width)) / 2;
-    let popup_y = (area.height.saturating_sub(popup_height)) / 2;
-
-    let popup_area = Rect {
-        x: popup_x,
-        y: popup_y,
-        width: popup_width,
-        height: popup_height,
-    };
+    let popup_area = centered_popup(area, 40, 7);
 
     // Success message
     let success_text = vec![
@@ -692,14 +667,77 @@ fn render_success_popup(frame: &mut Frame) {
 
     let success_paragraph = Paragraph::new(success_text)
         .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Green))
-                .style(Style::default().bg(Color::Black)),
-        );
+        .block(popup_block(None, Color::Green));
 
     frame.render_widget(success_paragraph, popup_area);
+}
+
+// ============================================================================
+// Helper functions for common rendering patterns
+// ============================================================================
+
+/// Calculate centered popup area with given dimensions
+///
+/// # Arguments
+///
+/// * `parent` - The parent area to center within
+/// * `width` - Desired popup width
+/// * `height` - Desired popup height
+///
+/// # Returns
+///
+/// A Rect centered within the parent area
+fn centered_popup(parent: Rect, width: u16, height: u16) -> Rect {
+    let popup_x = (parent.width.saturating_sub(width)) / 2;
+    let popup_y = (parent.height.saturating_sub(height)) / 2;
+
+    Rect {
+        x: popup_x,
+        y: popup_y,
+        width,
+        height,
+    }
+}
+
+/// Create a standard popup block with borders
+///
+/// # Arguments
+///
+/// * `title` - Optional title for the popup
+/// * `border_color` - Color for the border
+///
+/// # Returns
+///
+/// A Block with standard styling
+fn popup_block(title: Option<&str>, border_color: Color) -> Block<'_> {
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(Color::Black));
+
+    if let Some(t) = title {
+        block = block.title(t);
+    }
+
+    block
+}
+
+/// Calculate the inner area of a rect (excluding borders)
+///
+/// # Arguments
+///
+/// * `outer` - The outer rect with borders
+///
+/// # Returns
+///
+/// The inner rect without borders
+fn inner_rect(outer: Rect) -> Rect {
+    Rect {
+        x: outer.x + 1,
+        y: outer.y + 1,
+        width: outer.width.saturating_sub(2),
+        height: outer.height.saturating_sub(2),
+    }
 }
 
 #[cfg(test)]

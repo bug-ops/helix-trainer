@@ -35,6 +35,7 @@ use crate::game::{EditorState, PerformanceRating, Scorer};
 use crate::helix::{HelixSimulator, Mode};
 use crate::security::{self, SecurityError, UserError};
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 use std::time::{Duration, Instant};
 
 /// Represents a single user action during gameplay
@@ -187,6 +188,10 @@ pub struct GameSession {
     state: SessionState,
     /// Number of hints shown to user
     hints_shown: usize,
+    /// Cached completion progress percentage (0-100)
+    cached_progress: Cell<Option<u8>>,
+    /// Flag indicating if progress cache needs update
+    progress_needs_update: Cell<bool>,
 }
 
 impl GameSession {
@@ -251,6 +256,8 @@ impl GameSession {
             completed_at: None,
             state: SessionState::Active,
             hints_shown: 0,
+            cached_progress: Cell::new(None),
+            progress_needs_update: Cell::new(true),
         })
     }
 
@@ -335,7 +342,24 @@ impl GameSession {
     ///
     /// Compares current state with target state line by line and returns
     /// the percentage of lines that match. Used for progress visualization.
+    ///
+    /// This method uses caching to avoid recalculating progress on every call.
+    /// The cache is invalidated when the editor state changes.
+    ///
+    /// Uses interior mutability (Cell) to allow caching with immutable self.
     pub fn completion_progress(&self) -> u8 {
+        if self.progress_needs_update.get() {
+            self.cached_progress.set(Some(self.calculate_progress()));
+            self.progress_needs_update.set(false);
+        }
+        self.cached_progress.get().unwrap_or(0)
+    }
+
+    /// Calculate completion progress by comparing current and target states
+    ///
+    /// This is a private helper method that performs the actual calculation.
+    /// The public `completion_progress()` method caches this result.
+    fn calculate_progress(&self) -> u8 {
         let current_content = self.current_state.content();
         let target_content = self.target_state.content();
 
@@ -390,6 +414,9 @@ impl GameSession {
 
         // Sync current state with simulator
         self.current_state = self.simulator.to_editor_state()?;
+
+        // Invalidate progress cache since state changed
+        self.progress_needs_update.set(true);
 
         // Record action in history
         let elapsed = self.elapsed();
@@ -641,6 +668,9 @@ impl GameSession {
         self.completed_at = None;
         self.state = SessionState::Active;
         self.hints_shown = 0;
+        // Reset progress cache
+        self.cached_progress.set(None);
+        self.progress_needs_update.set(true);
         Ok(())
     }
 

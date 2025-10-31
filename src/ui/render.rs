@@ -6,12 +6,13 @@
 
 use crate::ui::state::{AppState, Screen};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
+use tui_big_text::{BigText, PixelSize};
 
 /// Main render function dispatches to screen-specific renderers
 ///
@@ -276,112 +277,112 @@ fn render_task_screen(frame: &mut Frame, state: &AppState) {
 fn render_results_screen(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    if let Some(session) = &state.session {
-        if let Ok(feedback) = session.get_feedback() {
-            // Layout: title | results | instructions
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(2)
-                .constraints([
-                    Constraint::Length(3), // Title
-                    Constraint::Min(10),   // Results
-                    Constraint::Length(3), // Instructions
-                ])
-                .split(area);
+    if let Some(session) = &state.session
+        && let Ok(feedback) = session.get_feedback()
+    {
+        // Layout: title | results | instructions
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(2)
+            .constraints([
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Results
+                Constraint::Length(3), // Instructions
+            ])
+            .split(area);
 
-            // Title
-            let title_text = if feedback.success {
-                "✓ Completed!"
-            } else {
-                "✗ Not Completed"
-            };
-            let title_color = if feedback.success {
-                Color::Green
-            } else {
-                Color::Red
-            };
-            let title = Paragraph::new(title_text)
-                .style(
-                    Style::default()
-                        .fg(title_color)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
-            frame.render_widget(title, chunks[0]);
-
-            // Results content
-            let mut result_lines = vec![];
-
-            // Rating and score
-            result_lines.push(Line::from(vec![Span::styled(
-                format!(
-                    "{} {}",
-                    feedback.rating.emoji(),
-                    feedback.rating.description()
-                ),
+        // Title
+        let title_text = if feedback.success {
+            "✓ Completed!"
+        } else {
+            "✗ Not Completed"
+        };
+        let title_color = if feedback.success {
+            Color::Green
+        } else {
+            Color::Red
+        };
+        let title = Paragraph::new(title_text)
+            .style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(title_color)
                     .add_modifier(Modifier::BOLD),
-            )]));
+            )
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        frame.render_widget(title, chunks[0]);
 
+        // Results content
+        let mut result_lines = vec![];
+
+        // Rating and score
+        result_lines.push(Line::from(vec![Span::styled(
+            format!(
+                "{} {}",
+                feedback.rating.emoji(),
+                feedback.rating.description()
+            ),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )]));
+
+        result_lines.push(Line::from(""));
+
+        // Score
+        result_lines.push(Line::from(vec![
+            Span::raw("Score: "),
+            Span::styled(
+                format!("{}/{}", feedback.score, feedback.max_points),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]));
+
+        // Actions
+        let action_color = if feedback.is_optimal {
+            Color::Green
+        } else {
+            Color::Yellow
+        };
+        result_lines.push(Line::from(vec![
+            Span::raw("Actions: "),
+            Span::styled(
+                format!("{}", feedback.actions_taken),
+                Style::default().fg(action_color),
+            ),
+            Span::raw(format!(" (optimal: {})", feedback.optimal_actions)),
+        ]));
+
+        // Duration
+        result_lines.push(Line::from(vec![
+            Span::raw("Time: "),
+            Span::styled(
+                format!("{:.1}s", feedback.duration.as_secs_f32()),
+                Style::default().fg(Color::Blue),
+            ),
+        ]));
+
+        // Hint if provided
+        if let Some(hint) = &feedback.hint {
             result_lines.push(Line::from(""));
-
-            // Score
             result_lines.push(Line::from(vec![
-                Span::raw("Score: "),
-                Span::styled(
-                    format!("{}/{}", feedback.score, feedback.max_points),
-                    Style::default().fg(Color::Cyan),
-                ),
+                Span::styled("Tip: ", Style::default().fg(Color::Magenta)),
+                Span::raw(hint),
             ]));
-
-            // Actions
-            let action_color = if feedback.is_optimal {
-                Color::Green
-            } else {
-                Color::Yellow
-            };
-            result_lines.push(Line::from(vec![
-                Span::raw("Actions: "),
-                Span::styled(
-                    format!("{}", feedback.actions_taken),
-                    Style::default().fg(action_color),
-                ),
-                Span::raw(format!(" (optimal: {})", feedback.optimal_actions)),
-            ]));
-
-            // Duration
-            result_lines.push(Line::from(vec![
-                Span::raw("Time: "),
-                Span::styled(
-                    format!("{:.1}s", feedback.duration.as_secs_f32()),
-                    Style::default().fg(Color::Blue),
-                ),
-            ]));
-
-            // Hint if provided
-            if let Some(hint) = &feedback.hint {
-                result_lines.push(Line::from(""));
-                result_lines.push(Line::from(vec![
-                    Span::styled("Tip: ", Style::default().fg(Color::Magenta)),
-                    Span::raw(hint),
-                ]));
-            }
-
-            let results = Paragraph::new(result_lines)
-                .block(Block::default().title("Performance").borders(Borders::ALL))
-                .alignment(Alignment::Left)
-                .style(Style::default().fg(Color::White));
-            frame.render_widget(results, chunks[1]);
-
-            // Instructions
-            let instructions = Paragraph::new("[r] Retry  [m] Menu  [q] Quit")
-                .style(Style::default().fg(Color::Gray))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
-            frame.render_widget(instructions, chunks[2]);
         }
+
+        let results = Paragraph::new(result_lines)
+            .block(Block::default().title("Performance").borders(Borders::ALL))
+            .alignment(Alignment::Left)
+            .style(Style::default().fg(Color::White));
+        frame.render_widget(results, chunks[1]);
+
+        // Instructions
+        let instructions = Paragraph::new("[r] Retry  [m] Menu  [q] Quit")
+            .style(Style::default().fg(Color::Gray))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        frame.render_widget(instructions, chunks[2]);
     }
 }
 
@@ -602,13 +603,38 @@ fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'s
         .collect()
 }
 
-/// Render key history popup showing last 5 keys pressed
+/// Render key history popup showing last 5 keys pressed with large text
 fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    // Create popup in bottom right corner
-    let popup_width = 32;
-    let popup_height = 5;
+    // Show last 5 keys
+    let max_keys = 5;
+
+    // Build text from recent keys
+    let mut key_text = String::new();
+    for (idx, key) in state.key_history.iter().take(max_keys).enumerate() {
+        if idx > 0 {
+            key_text.push(' ');
+        }
+        key_text.push_str(key);
+    }
+
+    // Calculate required dimensions before consuming key_text
+    // Each character in Full size is approximately 4 cells wide, plus spacing
+    let chars_count = key_text.chars().count();
+    let popup_width = ((chars_count * 5).max(30) as u16).min(area.width.saturating_sub(4));
+    let text_height = 8;
+    let popup_height = text_height + 2; // +2 for borders
+
+    // Create BigText widget with large font and cyan color
+    let big_text = BigText::builder()
+        .pixel_size(PixelSize::Full)
+        .style(Style::default().fg(Color::Cyan))
+        .lines(vec![key_text.into()])
+        .centered()
+        .build();
+
+    // Position in bottom right corner
     let popup_x = area.width.saturating_sub(popup_width + 2);
     let popup_y = area.height.saturating_sub(popup_height + 2);
 
@@ -619,35 +645,15 @@ fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
         height: popup_height,
     };
 
-    // Build single line with keys separated by spaces
-    let mut key_text = String::new();
+    // Render with border
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Black));
 
-    for (idx, key) in state.key_history.iter().take(5).enumerate() {
-        if idx > 0 {
-            key_text.push_str("  ");
-        }
-        key_text.push_str(key);
-    }
-
-    // Create single line with bold styling
-    let key_line = Line::from(Span::styled(
-        key_text,
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-            .add_modifier(Modifier::UNDERLINED),
-    ));
-
-    let key_history = Paragraph::new(vec![key_line])
-        .alignment(Alignment::Left)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
-                .style(Style::default().bg(Color::Black)),
-        );
-
-    frame.render_widget(key_history, popup_area);
+    let inner_area = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+    frame.render_widget(big_text, inner_area);
 }
 
 /// Render success popup when scenario is completed
@@ -739,8 +745,8 @@ mod tests {
 
     #[test]
     fn test_render_does_not_panic_on_empty_state() {
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -756,8 +762,8 @@ mod tests {
 
     #[test]
     fn test_render_task_screen_with_session() {
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();

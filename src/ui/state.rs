@@ -336,11 +336,11 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::ShowHint => {
-            if let Some(session) = &mut state.session {
-                if let Some(hint) = session.get_hint() {
-                    state.current_hint = Some(hint);
-                    state.show_hint_panel = true;
-                }
+            if let Some(session) = &mut state.session
+                && let Some(hint) = session.get_hint()
+            {
+                state.current_hint = Some(hint);
+                state.show_hint_panel = true;
             }
             Ok(())
         }

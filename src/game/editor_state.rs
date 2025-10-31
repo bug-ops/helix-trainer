@@ -223,14 +223,14 @@ impl EditorState {
         }
 
         // Validate column position
-        if let Some(line) = content.lines().nth(cursor_pos.row) {
-            if cursor_pos.col > line.len() {
-                return Err(SecurityError::InvalidInput(format!(
-                    "Cursor col {} exceeds line length {}",
-                    cursor_pos.col,
-                    line.len()
-                )));
-            }
+        if let Some(line) = content.lines().nth(cursor_pos.row)
+            && cursor_pos.col > line.len()
+        {
+            return Err(SecurityError::InvalidInput(format!(
+                "Cursor col {} exceeds line length {}",
+                cursor_pos.col,
+                line.len()
+            )));
         }
 
         // Validate selection if present
@@ -425,10 +425,10 @@ impl EditorState {
         self.clamp_cursor_to_bounds()?;
 
         // Clear selection if it's now invalid
-        if let Some(sel) = self.selection {
-            if Self::validate_selection_bounds(&self.content, &sel).is_err() {
-                self.selection = None;
-            }
+        if let Some(sel) = self.selection
+            && Self::validate_selection_bounds(&self.content, &sel).is_err()
+        {
+            self.selection = None;
         }
 
         Ok(())
@@ -462,14 +462,14 @@ impl EditorState {
             )));
         }
 
-        if let Some(line) = self.line(new_pos.row) {
-            if new_pos.col > line.len() {
-                return Err(SecurityError::InvalidInput(format!(
-                    "Cannot move cursor to col {} (line length is {})",
-                    new_pos.col,
-                    line.len()
-                )));
-            }
+        if let Some(line) = self.line(new_pos.row)
+            && new_pos.col > line.len()
+        {
+            return Err(SecurityError::InvalidInput(format!(
+                "Cannot move cursor to col {} (line length is {})",
+                new_pos.col,
+                line.len()
+            )));
         }
 
         self.cursor_pos = new_pos;
@@ -553,10 +553,10 @@ impl EditorState {
         }
 
         // Clamp column
-        if let Some(line) = self.line(self.cursor_pos.row) {
-            if self.cursor_pos.col > line.len() {
-                self.cursor_pos.col = line.len();
-            }
+        if let Some(line) = self.line(self.cursor_pos.row)
+            && self.cursor_pos.col > line.len()
+        {
+            self.cursor_pos.col = line.len();
         }
 
         // Revalidate after clamping

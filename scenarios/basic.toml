@@ -45,7 +45,7 @@ cursor_position = [0, 4]
 [scenarios.target]
 file_content = "The quick brown fox"
 cursor_position = [0, 4]
-selection = [0, 4, 0, 9]  # Select "quick" (from col 4 to col 9)
+selection = [0, 4, 0, 9]             # Select "quick" (from col 4 to col 9)
 
 [scenarios.solution]
 commands = ["e"]
@@ -78,7 +78,10 @@ cursor_position = [0, 6]
 commands = ["e", "a", "!", "Escape"]
 description = "Press 'e' to move to end of word, 'a' to append, '!' to insert, Escape to exit insert mode"
 
-hints = ["'a' enters insert mode after the cursor position", "Don't forget to press Escape to exit insert mode"]
+hints = [
+    "'a' enters insert mode after the cursor position",
+    "Don't forget to press Escape to exit insert mode",
+]
 
 [scenarios.scoring]
 optimal_count = 4
@@ -152,7 +155,7 @@ description = "Press 'r' then 'e' to replace 'x' with 'e'"
 
 hints = [
     "'r' followed by any character replaces the character under cursor",
-    "Unlike 'i', replace doesn't enter insert mode"
+    "Unlike 'i', replace doesn't enter insert mode",
 ]
 
 [scenarios.scoring]
@@ -177,7 +180,10 @@ cursor_position = [0, 1]
 commands = ["I", "#", "Escape"]
 description = "Press 'I' to move to start, '#' to insert, Escape to exit"
 
-hints = ["'I' is like 'i' but moves to the start of the line first", "Don't forget to press Escape to exit insert mode"]
+hints = [
+    "'I' is like 'i' but moves to the start of the line first",
+    "Don't forget to press Escape to exit insert mode",
+]
 
 [scenarios.scoring]
 optimal_count = 3
@@ -201,7 +207,10 @@ cursor_position = [0, 6]
 commands = ["A", "!", "Escape"]
 description = "Press 'A' to move to end, '!' to insert, Escape to exit"
 
-hints = ["'A' is like 'a' but moves to the end of the line first", "Don't forget to press Escape to exit insert mode"]
+hints = [
+    "'A' is like 'a' but moves to the end of the line first",
+    "Don't forget to press Escape to exit insert mode",
+]
 
 [scenarios.scoring]
 optimal_count = 3
@@ -228,7 +237,7 @@ description = "Press 'c' to delete and enter insert mode, 'b' to insert, Escape 
 hints = [
     "'c' deletes the selection and enters insert mode",
     "It's like 'x' followed by 'i'",
-    "Don't forget to press Escape to exit insert mode"
+    "Don't forget to press Escape to exit insert mode",
 ]
 
 [scenarios.scoring]
@@ -255,7 +264,7 @@ description = "Press 'y' to yank 'a', 'l' to move right, 'p' to paste after"
 
 hints = [
     "'y' yanks (copies) the current selection",
-    "'p' pastes after the cursor"
+    "'p' pastes after the cursor",
 ]
 
 [scenarios.scoring]
@@ -282,7 +291,7 @@ description = "Press 'y' to yank 'z', 'h' to move left, 'P' to paste before"
 
 hints = [
     "'y' yanks the current selection",
-    "'P' (capital P) pastes before the cursor"
+    "'P' (capital P) pastes before the cursor",
 ]
 
 [scenarios.scoring]
@@ -297,8 +306,7 @@ name = "Join two lines"
 description = "Join the current line with the line below"
 
 [scenarios.setup]
-file_content = "Hello
-World"
+file_content = "Hello\nWorld"
 cursor_position = [0, 0]
 
 [scenarios.target]
@@ -311,7 +319,7 @@ description = "Press 'J' to join lines"
 
 hints = [
     "'J' joins the current line with the next line",
-    "A space is automatically added between the joined lines"
+    "A space is automatically added between the joined lines",
 ]
 
 [scenarios.scoring]
@@ -325,23 +333,23 @@ name = "Indent code line"
 description = "Add indentation to a line of code"
 
 [scenarios.setup]
-file_content = "function hello() {
+file_content = """function hello() {
 return 42;
-}"
+}"""
 cursor_position = [1, 0]
 
 [scenarios.target]
-file_content = "function hello() {
+file_content = """function hello() {
   return 42;
-}"
+}"""
 cursor_position = [1, 2]
 
 [scenarios.solution]
 commands = [">"]
-description = "Press '>'" to indent the line"
+description = "Press '>' to indent the line"
 
 hints = [
-    "'>'" adds 2 spaces of indentation at the start of the line",
+    "'>' adds 2 spaces of indentation at the start of the line",
     "Use multiple times to add more indentation"
 ]
 
@@ -356,23 +364,23 @@ name = "Remove indentation"
 description = "Remove indentation from a line"
 
 [scenarios.setup]
-file_content = "function hello() {
+file_content = """function hello() {
     return 42;
-}"
+}"""
 cursor_position = [1, 0]
 
 [scenarios.target]
-file_content = "function hello() {
+file_content = """function hello() {
   return 42;
-}"
+}"""
 cursor_position = [1, 0]
 
 [scenarios.solution]
 commands = ["<"]
-description = "Press '<'" to remove indentation"
+description = "Press '<' to remove indentation"
 
 hints = [
-    "'<'" removes up to 2 spaces of indentation from the start of the line",
+    "'<' removes up to 2 spaces of indentation from the start of the line",
     "Use multiple times to remove more indentation"
 ]
 
@@ -380,4 +388,3 @@ hints = [
 optimal_count = 1
 max_points = 100
 tolerance = 0
-

@@ -16,6 +16,8 @@
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
+pub mod executor;
 pub mod simulator;
 
+pub use executor::CommandExecutor;
 pub use simulator::{HelixSimulator, Mode};

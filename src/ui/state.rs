@@ -69,7 +69,7 @@ pub enum Message {
     ShowHint,
 
     /// Execute a Helix command during gameplay
-    ExecuteCommand(String),
+    ExecuteCommand(std::borrow::Cow<'static, str>),
 
     /// Retry the current scenario
     RetryScenario,
@@ -88,42 +88,62 @@ pub enum Message {
 ///
 /// Note: This doesn't derive Clone because GameSession doesn't implement Clone.
 /// Instead, we implement Debug manually.
+///
+/// # Memory Layout
+///
+/// Fields are ordered for optimal memory layout and cache efficiency:
+/// 1. Large allocations first (Vec, Option<GameSession>)
+/// 2. Frequently accessed fields next (screen, session)
+/// 3. Medium-sized types (Option<String>, String)
+/// 4. Small types last (usize, bool, enum)
 pub struct AppState {
-    /// The screen currently being displayed
-    pub screen: Screen,
-
-    /// Active game session (Some if on Task screen)
-    pub session: Option<GameSession>,
-
     /// All available scenarios
+    /// Size: 24 bytes (Vec) - placed first for alignment
     pub scenarios: Vec<Scenario>,
 
-    /// Index of the currently selected menu item
-    pub selected_menu_item: usize,
-
-    /// Whether the application is running
-    pub running: bool,
+    /// Active game session (Some if on Task screen)
+    /// Size: ~200+ bytes - large type, placed early
+    pub session: Option<GameSession>,
 
     /// The current hint being displayed (if any)
+    /// Size: 24-32 bytes (Option<String>)
     pub current_hint: Option<String>,
 
-    /// Whether to show hint on task screen
-    pub show_hint_panel: bool,
-
-    /// Whether to show key history popup
-    pub show_key_history: bool,
-
     /// Last command executed (for display purposes)
+    /// Size: 24-32 bytes (Option<String>)
     pub last_command: Option<String>,
 
-    /// Time when scenario was completed (for showing success screen before results)
-    pub completion_time: Option<std::time::Instant>,
-
     /// History of last 5 key presses (most recent first)
+    /// Size: 24 bytes (Vec)
     pub key_history: Vec<String>,
 
     /// Command buffer for accumulating multi-key commands (e.g., "d" waiting for "d")
+    /// Size: 24 bytes (String)
     pub command_buffer: String,
+
+    /// Time when scenario was completed (for showing success screen before results)
+    /// Size: 16 bytes (Option<Instant>)
+    pub completion_time: Option<std::time::Instant>,
+
+    /// Index of the currently selected menu item
+    /// Size: 8 bytes (usize)
+    pub selected_menu_item: usize,
+
+    /// The screen currently being displayed
+    /// Size: 1 byte (enum)
+    pub screen: Screen,
+
+    /// Whether the application is running
+    /// Size: 1 byte (bool)
+    pub running: bool,
+
+    /// Whether to show hint on task screen
+    /// Size: 1 byte (bool)
+    pub show_hint_panel: bool,
+
+    /// Whether to show key history popup
+    /// Size: 1 byte (bool)
+    pub show_key_history: bool,
 }
 
 impl fmt::Debug for AppState {
@@ -164,18 +184,18 @@ impl AppState {
     /// ```
     pub fn new(scenarios: Vec<Scenario>) -> Self {
         Self {
-            screen: Screen::MainMenu,
-            session: None,
             scenarios,
-            selected_menu_item: 0,
-            running: true,
+            session: None,
             current_hint: None,
-            show_hint_panel: false,
-            show_key_history: false,
             last_command: None,
-            completion_time: None,
             key_history: Vec::new(),
             command_buffer: String::new(),
+            completion_time: None,
+            selected_menu_item: 0,
+            screen: Screen::MainMenu,
+            running: true,
+            show_hint_panel: false,
+            show_key_history: false,
         }
     }
 
@@ -347,7 +367,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
         Message::ExecuteCommand(command) => {
             // Add key to history for display (format for readability)
-            let display_key = format_key_for_display(&command);
+            let display_key = format_key_for_display(command.as_ref());
             state.add_key_to_history(display_key);
 
             // Show key history popup after first keypress
@@ -357,12 +377,12 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 // In Insert mode, execute commands directly
                 if session.is_insert_mode() {
                     // Store last command for display (skip special commands and single chars)
-                    if command == "Escape" {
-                        state.last_command = Some(command.clone());
+                    if command.as_ref() == "Escape" {
+                        state.last_command = Some(command.to_string());
                     }
 
                     // Execute command through session
-                    session.record_action(command)?;
+                    session.record_action(command.to_string())?;
                 } else {
                     // Normal mode: handle command buffer for multi-key commands
                     state.command_buffer.push_str(&command);

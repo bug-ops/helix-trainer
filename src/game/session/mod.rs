@@ -242,8 +242,8 @@ impl GameSession {
         // Clone initial state as current state
         let current_state = initial_state.clone();
 
-        // Initialize Helix simulator with initial content
-        let simulator = HelixSimulator::new(scenario.setup.file_content.clone());
+        // Initialize Helix simulator from initial state (includes cursor position)
+        let simulator = HelixSimulator::from_editor_state(&initial_state);
 
         Ok(Self {
             scenario,

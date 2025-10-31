@@ -393,8 +393,13 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                         "dd" => Some("dd"),
                         "gg" => Some("gg"),
 
+                        // Replace character command: r + any char
+                        cmd if cmd.starts_with('r') && cmd.len() == 2 => {
+                            Some(state.command_buffer.as_str())
+                        }
+
                         // Partial commands - wait for more input
-                        "d" | "g" => None,
+                        "d" | "g" | "r" => None,
 
                         // Single-key commands (clear buffer and execute)
                         _ if state.command_buffer.len() == 1 => Some(state.command_buffer.as_str()),

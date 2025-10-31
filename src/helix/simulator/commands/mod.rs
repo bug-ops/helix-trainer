@@ -83,7 +83,8 @@ pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(),
 
         // Undo/Redo
         "u" => sim.undo()?,
-        "ctrl-r" => sim.redo()?,
+        "U" => sim.redo()?,
+        "ctrl-r" => sim.redo()?, // Alternative redo binding
 
         // Unknown command
         _ => return Err(UserError::OperationFailed),

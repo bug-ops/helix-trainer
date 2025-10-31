@@ -62,6 +62,45 @@ impl HelixSimulator {
         }
     }
 
+    /// Create a new simulator from an EditorState
+    ///
+    /// Initializes the simulator with the content and cursor position from the EditorState.
+    /// This is useful when starting from a scenario setup.
+    pub fn from_editor_state(state: &EditorState) -> Self {
+        let rope = Rope::from(state.content());
+
+        // Convert (row, col) to absolute char position
+        let cursor = state.cursor_position();
+        let char_pos = if cursor.row == 0 {
+            cursor.col
+        } else {
+            // Find the character position by navigating through lines
+            let mut pos = 0;
+            let lines: Vec<&str> = state.content().lines().collect();
+
+            // Add characters from all previous lines (including newlines)
+            for line_idx in 0..cursor.row {
+                if line_idx < lines.len() {
+                    pos += lines[line_idx].chars().count() + 1; // +1 for newline
+                }
+            }
+            // Add column offset in current line
+            pos + cursor.col
+        };
+
+        // Ensure position is within bounds
+        let max_pos = rope.len_chars().saturating_sub(1);
+        let safe_pos = char_pos.min(max_pos);
+
+        Self {
+            doc: rope,
+            selection: Selection::point(safe_pos),
+            mode: Mode::Normal,
+            history: Vec::new(),
+            clipboard: None,
+        }
+    }
+
     /// Execute a Helix command
     ///
     /// Routes command to appropriate handler based on current mode.

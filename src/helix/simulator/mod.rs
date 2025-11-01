@@ -199,9 +199,19 @@ impl HelixSimulator {
         };
 
         // Set flag to prevent recording during repeat
+        // Use RAII pattern to ensure flag is always reset
         self.is_repeating = true;
+        let result = self.execute_repeat_inner(&action);
+        self.is_repeating = false;
+        result
+    }
 
-        let result = match action {
+    /// Internal repeat execution - allows proper RAII cleanup of is_repeating flag
+    fn execute_repeat_inner(
+        &mut self,
+        action: &crate::helix::repeat::RepeatableAction,
+    ) -> Result<(), UserError> {
+        match action {
             crate::helix::repeat::RepeatableAction::Command {
                 keys,
                 expected_mode,
@@ -212,17 +222,16 @@ impl HelixSimulator {
                     Mode::Insert => crate::helix::repeat::Mode::Insert,
                 };
 
-                if current_mode != expected_mode {
-                    // Mode mismatch - skip silently
-                    self.is_repeating = false;
-                    return Ok(());
+                // If mode doesn't match, this is a no-op (Vim/Helix semantics)
+                // Example: Last action was in normal mode, but we're now in insert mode
+                // User would need to Esc first before repeating
+                if &current_mode != expected_mode {
+                    return Ok(()); // No-op: repeat requires correct mode
                 }
 
                 // Convert all keys to a command string
-                let cmd = key_events_to_cmd(&keys);
-                if !cmd.is_empty() {
-                    self.execute_command(&cmd)?;
-                }
+                let cmd = key_events_to_cmd(keys)?;
+                self.execute_command(&cmd)?;
                 Ok(())
             }
 
@@ -257,12 +266,7 @@ impl HelixSimulator {
                 self.execute_command(CMD_ESCAPE)?;
                 Ok(())
             }
-        };
-
-        // Clear flag after repeat completes
-        self.is_repeating = false;
-
-        result
+        }
     }
 }
 
@@ -270,12 +274,19 @@ impl HelixSimulator {
 ///
 /// This reconstructs the original command from the recorded KeyEvent sequence.
 /// Handles both single-key commands (`x`, `i`, etc.) and multi-key sequences (`dd`, `gg`, `rx`).
-fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> String {
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The key sequence is empty
+/// - The key sequence is unrecognized (unsupported multi-key command)
+/// - The key code is not a known command
+fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> Result<String, UserError> {
     use crate::helix::commands::*;
     use crossterm::event::KeyCode;
 
     if keys.is_empty() {
-        return String::new();
+        return Err(UserError::OperationFailed);
     }
 
     // Handle multi-key sequences
@@ -283,30 +294,30 @@ fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> String {
         && let (KeyCode::Char(ch1), KeyCode::Char(ch2)) = (keys[0].code, keys[1].code)
     {
         // Check for known multi-key commands
-        match (ch1, ch2) {
-            ('d', 'd') => return CMD_DELETE_LINE.to_string(),
-            ('g', 'g') => return CMD_GOTO_FILE_START.to_string(),
-            ('r', _) => return format!("r{}", ch2), // Replace command
-            _ => {}
-        }
+        return match (ch1, ch2) {
+            ('d', 'd') => Ok(CMD_DELETE_LINE.to_string()),
+            ('g', 'g') => Ok(CMD_GOTO_FILE_START.to_string()),
+            ('r', _) => Ok(format!("r{}", ch2)), // Replace command
+            _ => Err(UserError::OperationFailed), // Unknown multi-key sequence
+        };
     }
 
     // Single key command
     if keys.len() == 1 {
-        match keys[0].code {
-            KeyCode::Char(ch) => ch.to_string(),
-            KeyCode::Esc => CMD_ESCAPE.to_string(),
-            KeyCode::Backspace => CMD_BACKSPACE.to_string(),
-            KeyCode::Left => CMD_ARROW_LEFT.to_string(),
-            KeyCode::Right => CMD_ARROW_RIGHT.to_string(),
-            KeyCode::Up => CMD_ARROW_UP.to_string(),
-            KeyCode::Down => CMD_ARROW_DOWN.to_string(),
-            _ => String::new(),
-        }
-    } else {
-        // Unsupported multi-key sequence
-        String::new()
+        return match keys[0].code {
+            KeyCode::Char(ch) => Ok(ch.to_string()),
+            KeyCode::Esc => Ok(CMD_ESCAPE.to_string()),
+            KeyCode::Backspace => Ok(CMD_BACKSPACE.to_string()),
+            KeyCode::Left => Ok(CMD_ARROW_LEFT.to_string()),
+            KeyCode::Right => Ok(CMD_ARROW_RIGHT.to_string()),
+            KeyCode::Up => Ok(CMD_ARROW_UP.to_string()),
+            KeyCode::Down => Ok(CMD_ARROW_DOWN.to_string()),
+            _ => Err(UserError::OperationFailed), // Unknown key code
+        };
     }
+
+    // Unsupported key sequence length (3+ keys)
+    Err(UserError::OperationFailed)
 }
 
 // Implement CommandExecutor trait for HelixSimulator

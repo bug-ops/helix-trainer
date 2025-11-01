@@ -11,6 +11,7 @@ use crossterm::{
 };
 use helix_trainer::{
     config::ScenarioLoader,
+    helix::commands::*,
     ui::{self, AppState, Message},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
@@ -203,19 +204,19 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
                 return Some(Message::ExecuteCommand(Cow::Borrowed("\n")));
             }
             KeyCode::Backspace => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed("Backspace")));
+                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_BACKSPACE)));
             }
             KeyCode::Left => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed("ArrowLeft")));
+                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_ARROW_LEFT)));
             }
             KeyCode::Right => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed("ArrowRight")));
+                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_ARROW_RIGHT)));
             }
             KeyCode::Up => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed("ArrowUp")));
+                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_ARROW_UP)));
             }
             KeyCode::Down => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed("ArrowDown")));
+                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_ARROW_DOWN)));
             }
             _ => {}
         }
@@ -224,57 +225,57 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Convert key to Helix command string (Normal mode)
     let command = match (key.code, key.modifiers) {
         // Movement commands
-        (KeyCode::Char('h'), KeyModifiers::NONE) => "h",
-        (KeyCode::Char('j'), KeyModifiers::NONE) => "j",
-        (KeyCode::Char('k'), KeyModifiers::NONE) => "k",
-        (KeyCode::Char('l'), KeyModifiers::NONE) => "l",
+        (KeyCode::Char('h'), KeyModifiers::NONE) => CMD_MOVE_LEFT,
+        (KeyCode::Char('j'), KeyModifiers::NONE) => CMD_MOVE_DOWN,
+        (KeyCode::Char('k'), KeyModifiers::NONE) => CMD_MOVE_UP,
+        (KeyCode::Char('l'), KeyModifiers::NONE) => CMD_MOVE_RIGHT,
 
         // Word movement
-        (KeyCode::Char('w'), KeyModifiers::NONE) => "w",
-        (KeyCode::Char('b'), KeyModifiers::NONE) => "b",
-        (KeyCode::Char('e'), KeyModifiers::NONE) => "e",
+        (KeyCode::Char('w'), KeyModifiers::NONE) => CMD_MOVE_WORD_FORWARD,
+        (KeyCode::Char('b'), KeyModifiers::NONE) => CMD_MOVE_WORD_BACKWARD,
+        (KeyCode::Char('e'), KeyModifiers::NONE) => CMD_MOVE_WORD_END,
 
         // Line movement
-        (KeyCode::Char('0'), KeyModifiers::NONE) => "0",
-        (KeyCode::Char('$'), KeyModifiers::NONE) => "$",
+        (KeyCode::Char('0'), KeyModifiers::NONE) => CMD_MOVE_LINE_START,
+        (KeyCode::Char('$'), KeyModifiers::NONE) => CMD_MOVE_LINE_END,
 
         // Deletion commands
-        (KeyCode::Char('x'), KeyModifiers::NONE) => "x",
-        (KeyCode::Char('d'), KeyModifiers::NONE) => "d",
-        (KeyCode::Char('c'), KeyModifiers::NONE) => "c",
-        (KeyCode::Char('J'), KeyModifiers::SHIFT) => "J",
+        (KeyCode::Char('x'), KeyModifiers::NONE) => CMD_DELETE_CHAR,
+        (KeyCode::Char('d'), KeyModifiers::NONE) => "d", // Single 'd' for multi-key handling
+        (KeyCode::Char('c'), KeyModifiers::NONE) => CMD_CHANGE,
+        (KeyCode::Char('J'), KeyModifiers::SHIFT) => CMD_JOIN_LINES,
 
         // Indentation
-        (KeyCode::Char('>'), KeyModifiers::SHIFT) => ">",
-        (KeyCode::Char('<'), KeyModifiers::SHIFT) => "<",
+        (KeyCode::Char('>'), KeyModifiers::SHIFT) => CMD_INDENT,
+        (KeyCode::Char('<'), KeyModifiers::SHIFT) => CMD_DEDENT,
 
         // Yank and paste
-        (KeyCode::Char('y'), KeyModifiers::NONE) => "y",
-        (KeyCode::Char('p'), KeyModifiers::NONE) => "p",
-        (KeyCode::Char('P'), KeyModifiers::SHIFT) => "P",
+        (KeyCode::Char('y'), KeyModifiers::NONE) => CMD_YANK,
+        (KeyCode::Char('p'), KeyModifiers::NONE) => CMD_PASTE_AFTER,
+        (KeyCode::Char('P'), KeyModifiers::SHIFT) => CMD_PASTE_BEFORE,
 
         // Mode changes and editing
-        (KeyCode::Char('i'), KeyModifiers::NONE) => "i",
-        (KeyCode::Char('a'), KeyModifiers::NONE) => "a",
-        (KeyCode::Char('I'), KeyModifiers::SHIFT) => "I",
-        (KeyCode::Char('A'), KeyModifiers::SHIFT) => "A",
-        (KeyCode::Char('o'), KeyModifiers::NONE) => "o",
-        (KeyCode::Char('O'), KeyModifiers::SHIFT) => "O",
+        (KeyCode::Char('i'), KeyModifiers::NONE) => CMD_INSERT,
+        (KeyCode::Char('a'), KeyModifiers::NONE) => CMD_APPEND,
+        (KeyCode::Char('I'), KeyModifiers::SHIFT) => CMD_INSERT_LINE_START,
+        (KeyCode::Char('A'), KeyModifiers::SHIFT) => CMD_APPEND_LINE_END,
+        (KeyCode::Char('o'), KeyModifiers::NONE) => CMD_OPEN_BELOW,
+        (KeyCode::Char('O'), KeyModifiers::SHIFT) => CMD_OPEN_ABOVE,
 
         // Replace character
-        (KeyCode::Char('r'), KeyModifiers::NONE) => "r",
+        (KeyCode::Char('r'), KeyModifiers::NONE) => CMD_REPLACE,
 
         // Undo/Redo
-        (KeyCode::Char('u'), KeyModifiers::NONE) => "u",
-        (KeyCode::Char('U'), KeyModifiers::SHIFT) => "U",
-        (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r",
+        (KeyCode::Char('u'), KeyModifiers::NONE) => CMD_UNDO,
+        (KeyCode::Char('U'), KeyModifiers::SHIFT) => CMD_REDO,
+        (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r", // TODO: add constant
 
         // Repeat last action
-        (KeyCode::Char('.'), KeyModifiers::NONE) => ".",
+        (KeyCode::Char('.'), KeyModifiers::NONE) => CMD_REPEAT,
 
         // Document movement
-        (KeyCode::Char('g'), KeyModifiers::NONE) => "g",
-        (KeyCode::Char('G'), KeyModifiers::NONE) => "G",
+        (KeyCode::Char('g'), KeyModifiers::NONE) => "g", // Note: multi-key 'gg' handled elsewhere
+        (KeyCode::Char('G'), KeyModifiers::NONE) => CMD_GOTO_FILE_END,
 
         _ => return None,
     };

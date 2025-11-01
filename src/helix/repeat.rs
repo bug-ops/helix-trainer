@@ -113,6 +113,23 @@ impl RepeatBuffer {
     pub fn insert_recorder(&self) -> &InsertModeRecorder {
         &self.insert_recorder
     }
+
+    /// Record a command action
+    ///
+    /// Stores a command with its key sequence for later replay.
+    pub fn record_command(&mut self, keys: Vec<KeyEvent>, mode: Mode) {
+        self.last_action = Some(RepeatableAction::Command {
+            keys,
+            expected_mode: mode,
+        });
+    }
+
+    /// Set the last action directly
+    ///
+    /// Used primarily for storing insert mode sequences after recording.
+    pub fn set_last_action(&mut self, action: RepeatableAction) {
+        self.last_action = Some(action);
+    }
 }
 
 impl Default for RepeatBuffer {

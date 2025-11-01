@@ -5,6 +5,7 @@ mod editing;
 mod movement;
 
 use super::{HelixSimulator, Mode};
+use crate::helix::commands::*;
 use crate::helix::repeat::is_repeatable_command;
 use crate::security::UserError;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -14,42 +15,58 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 /// This helper converts string commands (like "dd", "x", "gg") back into
 /// the KeyEvent sequence that would have generated them.
 fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
-    match cmd {
-        // Multi-key sequences
-        "dd" => vec![
+    // Multi-key sequences
+    if cmd == CMD_DELETE_LINE {
+        return vec![
             KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
             KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
-        ],
-        "gg" => vec![
+        ];
+    }
+    if cmd == CMD_GOTO_FILE_START {
+        return vec![
             KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
             KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
-        ],
-        // Special keys
-        "Escape" => vec![KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)],
-        "Backspace" => vec![KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)],
-        "ArrowLeft" => vec![KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)],
-        "ArrowRight" => vec![KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)],
-        "ArrowUp" => vec![KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)],
-        "ArrowDown" => vec![KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)],
-        // Replace command (e.g., "rx" -> r + x)
-        cmd if cmd.starts_with('r') && cmd.len() == 2 => {
-            let ch = cmd.chars().nth(1).unwrap();
-            vec![
-                KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
-                KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
-            ]
-        }
-        // Single character commands
-        _ => {
-            if let Some(ch) = cmd.chars().next()
-                && cmd.len() == 1
-            {
-                vec![KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE)]
-            } else {
-                // Unknown or complex command - return empty
-                Vec::new()
-            }
-        }
+        ];
+    }
+
+    // Special keys
+    if cmd == CMD_ESCAPE {
+        return vec![KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)];
+    }
+    if cmd == CMD_BACKSPACE {
+        return vec![KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)];
+    }
+    if cmd == CMD_ARROW_LEFT {
+        return vec![KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)];
+    }
+    if cmd == CMD_ARROW_RIGHT {
+        return vec![KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)];
+    }
+    if cmd == CMD_ARROW_UP {
+        return vec![KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)];
+    }
+    if cmd == CMD_ARROW_DOWN {
+        return vec![KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)];
+    }
+
+    // Replace command (e.g., "rx" -> r + x)
+    if cmd.starts_with('r') && cmd.len() == 2 {
+        let ch = cmd.chars().nth(1).unwrap();
+        return vec![
+            KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
+        ];
+    }
+
+    // Single character commands
+    // Check length first for performance (cheaper than iterator operations)
+    if cmd.len() == 1
+        && let Some(ch) = cmd.chars().next()
+    {
+        vec![KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE)]
+    } else {
+        // Unknown or complex command - return empty
+        Vec::new()
     }
 }
 
@@ -62,144 +79,176 @@ pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(),
     let key_events = cmd_to_key_events(cmd);
 
     // Determine if we should record this command (before execution)
-    // Only record in Normal mode for repeatable commands
+    // Only record in Normal mode for repeatable commands, and NOT during repeat
     let should_record = !key_events.is_empty()
         && sim.mode == Mode::Normal
+        && !sim.is_repeating
         && key_events.iter().all(is_repeatable_command);
 
     // Store mode before execution (for recording)
     let mode_before = sim.mode;
 
     // Check if we're entering insert mode (for insert recording)
-    let entering_insert =
-        sim.mode == Mode::Normal && matches!(cmd, "i" | "a" | "I" | "A" | "o" | "O" | "c");
+    // Don't start recording if we're repeating
+    let entering_insert = !sim.is_repeating
+        && sim.mode == Mode::Normal
+        && (cmd == CMD_INSERT
+            || cmd == CMD_APPEND
+            || cmd == CMD_INSERT_LINE_START
+            || cmd == CMD_APPEND_LINE_END
+            || cmd == CMD_OPEN_BELOW
+            || cmd == CMD_OPEN_ABOVE
+            || cmd == CMD_CHANGE);
 
     // In Insert mode, handle special keys and text input
     if sim.mode == Mode::Insert {
-        let result = match cmd {
-            "Escape" => {
-                // Finish insert mode recording before exiting
+        let result = if cmd == CMD_ESCAPE {
+            // Finish insert mode recording before exiting (unless repeating)
+            if !sim.is_repeating {
                 let action = sim.repeat_buffer.insert_recorder_mut().finish();
                 sim.repeat_buffer.set_last_action(action);
-                sim.mode = Mode::Normal;
-                Ok(())
             }
-            "Backspace" => {
-                // Record backspace as deleted character (not implemented in recorder yet)
-                sim.backspace()
+            sim.mode = Mode::Normal;
+            Ok(())
+        } else if cmd == CMD_BACKSPACE {
+            // Record backspace as deleted character (not implemented in recorder yet)
+            sim.backspace()
+        } else if cmd == CMD_ARROW_LEFT {
+            let result = movement::move_left(sim, 1);
+            if result.is_ok() && !sim.is_repeating {
+                sim.repeat_buffer
+                    .insert_recorder_mut()
+                    .record_movement(crate::helix::repeat::Movement::Left);
             }
-            "ArrowLeft" => {
-                let result = movement::move_left(sim, 1);
-                if result.is_ok() {
-                    sim.repeat_buffer
-                        .insert_recorder_mut()
-                        .record_movement(crate::helix::repeat::Movement::Left);
+            result
+        } else if cmd == CMD_ARROW_RIGHT {
+            let result = movement::move_right(sim, 1);
+            if result.is_ok() && !sim.is_repeating {
+                sim.repeat_buffer
+                    .insert_recorder_mut()
+                    .record_movement(crate::helix::repeat::Movement::Right);
+            }
+            result
+        } else if cmd == CMD_ARROW_UP {
+            let result = movement::move_up(sim, 1);
+            if result.is_ok() && !sim.is_repeating {
+                sim.repeat_buffer
+                    .insert_recorder_mut()
+                    .record_movement(crate::helix::repeat::Movement::Up);
+            }
+            result
+        } else if cmd == CMD_ARROW_DOWN {
+            let result = movement::move_down(sim, 1);
+            if result.is_ok() && !sim.is_repeating {
+                sim.repeat_buffer
+                    .insert_recorder_mut()
+                    .record_movement(crate::helix::repeat::Movement::Down);
+            }
+            result
+        } else {
+            let result = sim.insert_text(cmd);
+            if result.is_ok() && !sim.is_repeating {
+                // Record each character
+                for ch in cmd.chars() {
+                    sim.repeat_buffer.insert_recorder_mut().record_char(ch);
                 }
-                result
             }
-            "ArrowRight" => {
-                let result = movement::move_right(sim, 1);
-                if result.is_ok() {
-                    sim.repeat_buffer
-                        .insert_recorder_mut()
-                        .record_movement(crate::helix::repeat::Movement::Right);
-                }
-                result
-            }
-            "ArrowUp" => {
-                let result = movement::move_up(sim, 1);
-                if result.is_ok() {
-                    sim.repeat_buffer
-                        .insert_recorder_mut()
-                        .record_movement(crate::helix::repeat::Movement::Up);
-                }
-                result
-            }
-            "ArrowDown" => {
-                let result = movement::move_down(sim, 1);
-                if result.is_ok() {
-                    sim.repeat_buffer
-                        .insert_recorder_mut()
-                        .record_movement(crate::helix::repeat::Movement::Down);
-                }
-                result
-            }
-            _ => {
-                let result = sim.insert_text(cmd);
-                if result.is_ok() {
-                    // Record each character
-                    for ch in cmd.chars() {
-                        sim.repeat_buffer.insert_recorder_mut().record_char(ch);
-                    }
-                }
-                result
-            }
+            result
         };
         return result;
     }
 
     // Execute the command in Normal mode
-    match cmd {
-        // Movement commands - single character
-        "h" => movement::move_left(sim, 1)?,
-        "l" => movement::move_right(sim, 1)?,
-        "j" => movement::move_down(sim, 1)?,
-        "k" => movement::move_up(sim, 1)?,
-
-        // Word movement
-        "w" => movement::move_next_word_start(sim, 1)?,
-        "b" => movement::move_prev_word_start(sim, 1)?,
-        "e" => movement::move_next_word_end(sim, 1)?,
-
-        // Line movement
-        "0" => movement::move_line_start(sim)?,
-        "$" => movement::move_line_end(sim)?,
-
-        // Document movement
-        "gg" => movement::move_document_start(sim)?,
-        "G" => movement::move_document_end(sim)?,
-
-        // Deletion commands
-        "x" => editing::delete_char(sim)?,
-        "dd" => editing::delete_line(sim)?,
-        "c" => sim.change_selection()?,
-        "J" => editing::join_lines(sim)?,
-
-        // Indentation
-        ">" => editing::indent_line(sim)?,
-        "<" => editing::dedent_line(sim)?,
-
-        // Yank and paste
-        "y" => clipboard::yank(sim)?,
-        "p" => clipboard::paste_after(sim)?,
-        "P" => clipboard::paste_before(sim)?,
-
-        // Mode changes and editing
-        "i" => {
-            sim.mode = Mode::Insert;
-        }
-        "a" => sim.append()?,
-        "I" => sim.insert_at_line_start()?,
-        "A" => sim.append_at_line_end()?,
-        "o" => sim.open_below()?,
-        "O" => sim.open_above()?,
-        "Escape" => {
-            sim.mode = Mode::Normal;
-        }
-
-        // Character operations
-        cmd if cmd.starts_with('r') && cmd.len() == 2 => {
-            let ch = cmd.chars().nth(1).unwrap();
-            sim.replace_char(ch)?;
-        }
-
-        // Undo/Redo
-        "u" => sim.undo()?,
-        "U" => sim.redo()?,
-        "ctrl-r" => sim.redo()?, // Alternative redo binding
-
+    // Movement commands - single character
+    if cmd == CMD_MOVE_LEFT {
+        movement::move_left(sim, 1)?;
+    } else if cmd == CMD_MOVE_RIGHT {
+        movement::move_right(sim, 1)?;
+    } else if cmd == CMD_MOVE_DOWN {
+        movement::move_down(sim, 1)?;
+    } else if cmd == CMD_MOVE_UP {
+        movement::move_up(sim, 1)?;
+    }
+    // Word movement
+    else if cmd == CMD_MOVE_WORD_FORWARD {
+        movement::move_next_word_start(sim, 1)?;
+    } else if cmd == CMD_MOVE_WORD_BACKWARD {
+        movement::move_prev_word_start(sim, 1)?;
+    } else if cmd == CMD_MOVE_WORD_END {
+        movement::move_next_word_end(sim, 1)?;
+    }
+    // Line movement
+    else if cmd == CMD_MOVE_LINE_START {
+        movement::move_line_start(sim)?;
+    } else if cmd == CMD_MOVE_LINE_END {
+        movement::move_line_end(sim)?;
+    }
+    // Document movement
+    else if cmd == CMD_GOTO_FILE_START {
+        movement::move_document_start(sim)?;
+    } else if cmd == CMD_GOTO_FILE_END {
+        movement::move_document_end(sim)?;
+    }
+    // Deletion commands
+    else if cmd == CMD_DELETE_CHAR {
+        editing::delete_char(sim)?;
+    } else if cmd == CMD_DELETE_LINE {
+        editing::delete_line(sim)?;
+    } else if cmd == CMD_CHANGE {
+        sim.change_selection()?;
+    } else if cmd == CMD_JOIN_LINES {
+        editing::join_lines(sim)?;
+    }
+    // Indentation
+    else if cmd == CMD_INDENT {
+        editing::indent_line(sim)?;
+    } else if cmd == CMD_DEDENT {
+        editing::dedent_line(sim)?;
+    }
+    // Yank and paste
+    else if cmd == CMD_YANK {
+        clipboard::yank(sim)?;
+    } else if cmd == CMD_PASTE_AFTER {
+        clipboard::paste_after(sim)?;
+    } else if cmd == CMD_PASTE_BEFORE {
+        clipboard::paste_before(sim)?;
+    }
+    // Mode changes and editing
+    else if cmd == CMD_INSERT {
+        sim.mode = Mode::Insert;
+    } else if cmd == CMD_APPEND {
+        sim.append()?;
+    } else if cmd == CMD_INSERT_LINE_START {
+        sim.insert_at_line_start()?;
+    } else if cmd == CMD_APPEND_LINE_END {
+        sim.append_at_line_end()?;
+    } else if cmd == CMD_OPEN_BELOW {
+        sim.open_below()?;
+    } else if cmd == CMD_OPEN_ABOVE {
+        sim.open_above()?;
+    } else if cmd == CMD_ESCAPE {
+        sim.mode = Mode::Normal;
+    }
+    // Character operations - replace command (e.g., "rx")
+    else if cmd.starts_with('r') && cmd.len() == 2 {
+        let ch = cmd.chars().nth(1).unwrap();
+        sim.replace_char(ch)?;
+    }
+    // Repeat last action
+    else if cmd == CMD_REPEAT {
+        return sim.execute_repeat();
+    }
+    // Undo/Redo
+    else if cmd == CMD_UNDO {
+        sim.undo()?;
+    } else if cmd == CMD_REDO {
+        sim.redo()?;
+    } else if cmd == "ctrl-r" {
+        // Alternative redo binding
+        sim.redo()?;
+    } else {
         // Unknown command
-        _ => return Err(UserError::OperationFailed),
+        return Err(UserError::OperationFailed);
     }
 
     // If command succeeded and should be recorded, record it

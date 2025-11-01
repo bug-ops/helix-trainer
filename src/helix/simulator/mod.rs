@@ -30,6 +30,40 @@ pub enum Mode {
     Insert,
 }
 
+/// RAII guard for repeat flag that ensures cleanup even on panic
+///
+/// This guard sets the is_repeating flag to true on construction
+/// and resets it to false on drop, guaranteeing cleanup in all cases.
+/// Uses raw pointer to work around borrow checker limitations.
+struct RepeatGuard {
+    flag: *mut bool,
+}
+
+impl RepeatGuard {
+    /// Creates a new guard. Sets flag to true immediately.
+    ///
+    /// # Safety
+    /// The flag pointer must remain valid for the lifetime of the guard.
+    /// This is guaranteed when used within execute_repeat since the guard
+    /// doesn't outlive the method scope.
+    unsafe fn new(flag: *mut bool) -> Self {
+        // SAFETY: Caller guarantees flag pointer is valid
+        unsafe {
+            *flag = true;
+        }
+        Self { flag }
+    }
+}
+
+impl Drop for RepeatGuard {
+    fn drop(&mut self) {
+        // SAFETY: flag pointer is guaranteed valid by constructor contract
+        unsafe {
+            *self.flag = false;
+        }
+    }
+}
+
 /// Helix editor simulator using helix-core text primitives
 ///
 /// Provides a faithful simulation of Helix editor operations with proper
@@ -52,6 +86,9 @@ pub struct HelixSimulator {
 
     /// Repeat buffer for recording and replaying actions
     pub(super) repeat_buffer: RepeatBuffer,
+
+    /// Flag to prevent recording during repeat execution
+    pub(super) is_repeating: bool,
 }
 
 impl HelixSimulator {
@@ -64,6 +101,7 @@ impl HelixSimulator {
             history: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
+            is_repeating: false,
         }
     }
 
@@ -104,6 +142,7 @@ impl HelixSimulator {
             history: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
+            is_repeating: false,
         }
     }
 
@@ -161,6 +200,158 @@ impl HelixSimulator {
         self.history.push((transaction.clone(), prev_doc));
         transaction.apply(&mut self.doc);
     }
+
+    /// Execute the repeat (`.`) command
+    ///
+    /// Replays the last recorded action. If no action has been recorded,
+    /// this is a no-op. The repeat command itself is never recorded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The replayed command execution fails
+    /// - Mode validation fails (though we skip silently for mode mismatches)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let mut sim = HelixSimulator::new("hello".to_string());
+    ///
+    /// // Delete a character
+    /// sim.execute_command("x").unwrap();
+    /// assert_eq!(sim.text(), "ello");
+    ///
+    /// // Repeat the delete
+    /// sim.execute_command(".").unwrap();
+    /// assert_eq!(sim.text(), "llo");
+    /// ```
+    pub(super) fn execute_repeat(&mut self) -> Result<(), UserError> {
+        // Get the last action (if any)
+        let action = match self.repeat_buffer.last_action() {
+            Some(action) => action.clone(), // Clone to avoid borrow issues
+            None => return Ok(()),          // No action to repeat - no-op
+        };
+
+        // Use RAII guard to ensure flag is reset even on panic
+        // SAFETY: The guard doesn't outlive this method scope, so the pointer
+        // to is_repeating remains valid for the entire lifetime of the guard
+        let _guard = unsafe { RepeatGuard::new(&mut self.is_repeating as *mut bool) };
+
+        self.execute_repeat_inner(&action)
+    }
+
+    /// Internal repeat execution - allows proper RAII cleanup of is_repeating flag
+    fn execute_repeat_inner(
+        &mut self,
+        action: &crate::helix::repeat::RepeatableAction,
+    ) -> Result<(), UserError> {
+        match action {
+            crate::helix::repeat::RepeatableAction::Command {
+                keys,
+                expected_mode,
+            } => {
+                // Validate mode
+                let current_mode = match self.mode {
+                    Mode::Normal => crate::helix::repeat::Mode::Normal,
+                    Mode::Insert => crate::helix::repeat::Mode::Insert,
+                };
+
+                // If mode doesn't match, this is a no-op (Vim/Helix semantics)
+                // Example: Last action was in normal mode, but we're now in insert mode
+                // User would need to Esc first before repeating
+                if &current_mode != expected_mode {
+                    return Ok(()); // No-op: repeat requires correct mode
+                }
+
+                // Convert all keys to a command string
+                let cmd = key_events_to_cmd(keys)?;
+                self.execute_command(&cmd)?;
+                Ok(())
+            }
+
+            crate::helix::repeat::RepeatableAction::InsertSequence { text, movements } => {
+                use crate::helix::commands::*;
+
+                // Enter insert mode
+                self.execute_command(CMD_INSERT)?;
+
+                // Insert text character by character
+                for ch in text.chars() {
+                    self.execute_command(&ch.to_string())?;
+                }
+
+                // Apply movements
+                for movement in movements {
+                    match movement {
+                        crate::helix::repeat::Movement::Left => {
+                            self.execute_command(CMD_ARROW_LEFT)?
+                        }
+                        crate::helix::repeat::Movement::Right => {
+                            self.execute_command(CMD_ARROW_RIGHT)?
+                        }
+                        crate::helix::repeat::Movement::Up => self.execute_command(CMD_ARROW_UP)?,
+                        crate::helix::repeat::Movement::Down => {
+                            self.execute_command(CMD_ARROW_DOWN)?
+                        }
+                    }
+                }
+
+                // Exit insert mode
+                self.execute_command(CMD_ESCAPE)?;
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Convert a sequence of KeyEvents back to a command string
+///
+/// This reconstructs the original command from the recorded KeyEvent sequence.
+/// Handles both single-key commands (`x`, `i`, etc.) and multi-key sequences (`dd`, `gg`, `rx`).
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The key sequence is empty
+/// - The key sequence is unrecognized (unsupported multi-key command)
+/// - The key code is not a known command
+fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> Result<String, UserError> {
+    use crate::helix::commands::*;
+    use crossterm::event::KeyCode;
+
+    if keys.is_empty() {
+        return Err(UserError::OperationFailed);
+    }
+
+    // Handle multi-key sequences
+    if keys.len() == 2
+        && let (KeyCode::Char(ch1), KeyCode::Char(ch2)) = (keys[0].code, keys[1].code)
+    {
+        // Check for known multi-key commands
+        return match (ch1, ch2) {
+            ('d', 'd') => Ok(CMD_DELETE_LINE.to_string()),
+            ('g', 'g') => Ok(CMD_GOTO_FILE_START.to_string()),
+            ('r', _) => Ok(format!("r{}", ch2)), // Replace command
+            _ => Err(UserError::OperationFailed), // Unknown multi-key sequence
+        };
+    }
+
+    // Single key command
+    if keys.len() == 1 {
+        return match keys[0].code {
+            KeyCode::Char(ch) => Ok(ch.to_string()),
+            KeyCode::Esc => Ok(CMD_ESCAPE.to_string()),
+            KeyCode::Backspace => Ok(CMD_BACKSPACE.to_string()),
+            KeyCode::Left => Ok(CMD_ARROW_LEFT.to_string()),
+            KeyCode::Right => Ok(CMD_ARROW_RIGHT.to_string()),
+            KeyCode::Up => Ok(CMD_ARROW_UP.to_string()),
+            KeyCode::Down => Ok(CMD_ARROW_DOWN.to_string()),
+            _ => Err(UserError::OperationFailed), // Unknown key code
+        };
+    }
+
+    // Unsupported key sequence length (3+ keys)
+    Err(UserError::OperationFailed)
 }
 
 // Implement CommandExecutor trait for HelixSimulator

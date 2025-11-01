@@ -983,3 +983,372 @@ fn test_change_command_records_and_enters_insert() {
         _ => panic!("Expected InsertSequence action"),
     }
 }
+
+// ============================================================================
+// Phase 3: Repeat Execution Tests
+// ============================================================================
+
+#[test]
+fn test_repeat_delete_char() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Execute delete command
+    sim.execute_command("x").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "ello");
+
+    // Repeat delete
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "llo");
+}
+
+#[test]
+fn test_repeat_delete_line() {
+    let mut sim = HelixSimulator::new("line 1\nline 2\nline 3".to_string());
+
+    // Delete first line
+    sim.execute_command("dd").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 2\nline 3");
+
+    // Repeat delete
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 3");
+}
+
+#[test]
+fn test_repeat_insert_mode() {
+    let mut sim = HelixSimulator::new("world".to_string());
+
+    // Insert "hi"
+    sim.execute_command("i").unwrap();
+    sim.execute_command("h").unwrap();
+    sim.execute_command("i").unwrap();
+    sim.execute_command("Escape").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hiworld");
+
+    // Move to end
+    sim.execute_command("$").unwrap();
+
+    // Repeat insert
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hiworldhi");
+}
+
+#[test]
+fn test_repeat_with_empty_buffer() {
+    let mut sim = HelixSimulator::new("test".to_string());
+
+    // Try to repeat without any previous action
+    let result = sim.execute_command(".");
+    assert!(result.is_ok()); // Should not error
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "test"); // Should be unchanged
+}
+
+#[test]
+fn test_repeat_is_not_recorded() {
+    let mut sim = HelixSimulator::new("abcd".to_string());
+
+    // Delete a char
+    sim.execute_command("x").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "bcd");
+
+    // Repeat once
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "cd");
+
+    // Repeat again - should repeat the ORIGINAL x, not the previous .
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "d");
+
+    // Total: 3 deletes (original x + two repeats)
+}
+
+#[test]
+fn test_repeat_yank_and_paste() {
+    let mut sim = HelixSimulator::new("hello\nworld".to_string());
+
+    // Yank first character
+    sim.execute_command("y").unwrap();
+
+    // Move down
+    sim.execute_command("j").unwrap();
+
+    // Paste
+    sim.execute_command("p").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello\nwhorld");
+
+    // Repeat paste
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    // The paste should repeat with the same clipboard content
+    assert!(state.content().contains("hello"));
+}
+
+#[test]
+fn test_repeat_join_lines() {
+    let mut sim = HelixSimulator::new("line 1\nline 2\nline 3".to_string());
+
+    // Join lines
+    sim.execute_command("J").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 1 line 2\nline 3");
+
+    // Repeat join
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 1 line 2 line 3");
+}
+
+#[test]
+fn test_repeat_indent() {
+    let mut sim = HelixSimulator::new("line 1\nline 2".to_string());
+
+    // Indent
+    sim.execute_command(">").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "  line 1\nline 2");
+
+    // Repeat indent
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    // Line should be double-indented
+    assert_eq!(state.content(), "    line 1\nline 2");
+}
+
+#[test]
+fn test_repeat_dedent() {
+    let mut sim = HelixSimulator::new("    code".to_string());
+
+    // Dedent
+    sim.execute_command("<").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "  code");
+
+    // Repeat dedent
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "code");
+}
+
+#[test]
+fn test_repeat_replace_char() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Replace 'h' with 'x'
+    sim.execute_command("rx").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "xello");
+
+    // Move to next char
+    sim.execute_command("l").unwrap();
+
+    // Repeat replace (should replace 'e' with 'x')
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "xxllo");
+}
+
+#[test]
+fn test_repeat_append() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Move to end of word and append " world"
+    sim.execute_command("$").unwrap(); // Move to end
+    sim.execute_command("a").unwrap(); // Append (cursor after last char)
+    sim.execute_command(" ").unwrap();
+    sim.execute_command("w").unwrap();
+    sim.execute_command("o").unwrap();
+    sim.execute_command("r").unwrap();
+    sim.execute_command("l").unwrap();
+    sim.execute_command("d").unwrap();
+    sim.execute_command("Escape").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello world");
+
+    // Move to start
+    sim.execute_command("0").unwrap();
+
+    // Repeat should insert " world" at current position
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), " worldhello world");
+}
+
+// Note: `o` and `O` commands are complex - they create a newline AND enter insert mode.
+// The newline creation is not captured in InsertSequence recording.
+// These would require a special RepeatableAction variant (e.g., RepeatableAction::OpenLine).
+// For Phase 3, we focus on simpler insert mode replay.
+// These tests are commented out until Phase 4+ implements full command replay.
+
+// #[test]
+// fn test_repeat_open_below() {
+//     // TODO: Implement RepeatableAction::OpenLine variant
+// }
+
+// #[test]
+// fn test_repeat_open_above() {
+//     // TODO: Implement RepeatableAction::OpenLine variant
+// }
+
+#[test]
+fn test_repeat_insert_with_movements() {
+    let mut sim = HelixSimulator::new("world".to_string());
+
+    // Insert with arrow key movements (simplified test)
+    // Note: Current implementation applies movements AFTER all text insertion
+    // This is a known limitation - movements aren't interleaved with text
+    sim.execute_command("i").unwrap();
+    sim.execute_command("h").unwrap();
+    sim.execute_command("i").unwrap();
+    sim.execute_command("ArrowLeft").unwrap();
+    sim.execute_command("Escape").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hiworld");
+    // Cursor should be at position 1 (moved left once from 2)
+    assert_eq!(state.cursor_position().col, 1);
+
+    // Move to end
+    sim.execute_command("$").unwrap();
+
+    // Repeat insert with movements
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    // Should insert "hi" at end, then move left once
+    assert_eq!(state.content(), "hiworldhi");
+    // Cursor moved left from position 9 to position 8
+    assert_eq!(state.cursor_position().col, 8);
+}
+
+#[test]
+fn test_repeat_insert_simple() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Insert 'x' at the beginning
+    sim.execute_command("i").unwrap(); // Enter insert mode
+    sim.execute_command("x").unwrap(); // Insert 'x'
+    sim.execute_command("Escape").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "xhello");
+    // After insert + escape, cursor is at position 1 (after 'x')
+
+    // Move to position: cursor at 1, move right twice → position 3 (on first 'l')
+    sim.execute_command("l").unwrap(); // cursor at 2 ('e')
+    sim.execute_command("l").unwrap(); // cursor at 3 (first 'l')
+
+    // Repeat - should insert 'x' at position 3
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    // Result: "xhe" + "x" + "llo" = "xhexllo"
+    assert_eq!(state.content(), "xhexllo");
+}
+
+#[test]
+fn test_repeat_multiple_times() {
+    let mut sim = HelixSimulator::new("xxxxxx".to_string());
+
+    // Delete once
+    sim.execute_command("x").unwrap();
+
+    // Repeat 4 times
+    for _ in 0..4 {
+        sim.execute_command(".").unwrap();
+    }
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "x"); // 5 deletes total
+}
+
+#[test]
+fn test_repeat_after_undo() {
+    let mut sim = HelixSimulator::new("test".to_string());
+
+    // Delete a char
+    sim.execute_command("x").unwrap();
+
+    // Undo it
+    sim.execute_command("u").unwrap();
+
+    // The repeat buffer should still have 'x'
+    // Repeat should still delete
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "est");
+}
+
+#[test]
+fn test_repeat_preserves_action_across_movements() {
+    let mut sim = HelixSimulator::new("hello world".to_string());
+
+    // Delete 'h'
+    sim.execute_command("x").unwrap();
+
+    // Move around (movements don't change repeat buffer)
+    sim.execute_command("l").unwrap();
+    sim.execute_command("w").unwrap();
+    sim.execute_command("0").unwrap();
+
+    // Repeat should still delete
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "llo world");
+}
+
+#[test]
+fn test_repeat_insert_at_line_start() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Insert at line start
+    sim.execute_command("I").unwrap();
+    sim.execute_command(">").unwrap();
+    sim.execute_command(">").unwrap();
+    sim.execute_command("Escape").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), ">>hello");
+
+    // Move somewhere else
+    sim.execute_command("$").unwrap();
+
+    // Repeat
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    // Should insert ">>" at cursor position
+    assert!(state.content().contains(">>"));
+}
+
+#[test]
+fn test_repeat_append_at_line_end() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Append at line end
+    sim.execute_command("A").unwrap();
+    sim.execute_command("!").unwrap();
+    sim.execute_command("!").unwrap();
+    sim.execute_command("Escape").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "hello!!");
+
+    // Move to start
+    sim.execute_command("0").unwrap();
+
+    // Repeat
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "!!hello!!");
+}

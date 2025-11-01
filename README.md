@@ -94,7 +94,7 @@ cargo run --release
 
 ## 📖 Scenarios
 
-Currently includes **14 training scenarios**:
+Currently includes **20 training scenarios**:
 
 - Line deletion
 - Word selection
@@ -103,7 +103,7 @@ Currently includes **14 training scenarios**:
 - Text replacement
 - Clipboard operations (yank/paste)
 
-Training scenarios are defined in TOML format. See [scenarios/basic.toml](scenarios/basic.toml) for examples.
+Training scenarios are defined in TOML format. See [scenarios/](scenarios/) directory for examples organized by category.
 
 ### Example Scenario
 
@@ -212,7 +212,11 @@ src/
     └── arithmetic.rs    # Safe arithmetic operations
 
 scenarios/
-└── basic.toml           # 14 training scenarios
+├── basic/               # Basic editing scenarios
+├── movement/            # Movement command scenarios
+├── editing/             # Advanced editing scenarios
+└── clipboard/           # Clipboard & undo/redo scenarios
+                         # Total: 20 training scenarios
 
 .github/
 ├── workflows/           # CI/CD pipelines
@@ -223,7 +227,7 @@ scenarios/
 
 - ✅ **Stage 1**: Foundation (TUI, modules, tests) - 100%
 - ✅ **Stage 2**: Helix Integration (30+ commands, simulator) - 100%
-- 🟢 **Phase A**: Essential commands & scenarios - 90%
+- ✅ **Phase A**: Essential commands & scenarios - 100%
 - 🔄 **Phase B**: Progress tracking & statistics - 0%
 - 📋 **Phase C**: Advanced features - 0%
 
@@ -233,7 +237,7 @@ scenarios/
 - **Test Count**: 153 (all passing ✅)
 - **Test Coverage**: 100% for core modules
 - **Commands**: 30+ implemented
-- **Scenarios**: 14 training scenarios
+- **Scenarios**: 20 training scenarios
 - **CI Platforms**: Linux, macOS, Windows
 
 ## 🤝 Contributing
@@ -276,16 +280,16 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🗺️ Roadmap
 
-### Phase A (Current - 90% Complete)
+### Phase A (Complete - 100%)
 
-- [x] Core movement commands
-- [x] Essential editing commands
-- [x] Clipboard operations
-- [x] Undo/redo support
+- [x] Core movement commands (11)
+- [x] Essential editing commands (17)
+- [x] Clipboard operations (3)
+- [x] Undo/redo support (2)
 - [x] Insert mode enhancements
 - [x] Beautiful UI with large key display
-- [ ] 6 more training scenarios
-- [ ] Repeat (.) command
+- [x] 20 training scenarios across 4 categories
+- [ ] Repeat (.) command (moved to Phase B)
 
 ### Phase B (Planned)
 

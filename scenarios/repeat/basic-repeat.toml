@@ -1,0 +1,147 @@
+# Repeat Command Scenarios
+# Scenarios demonstrating the '.' (repeat) command for replaying last action
+
+[[scenarios]]
+id = "repeat_delete_char_001"
+name = "Repeat character deletion"
+description = "Delete a character, then repeat the deletion with the '.' command"
+
+[scenarios.setup]
+file_content = "hello world"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "llo world"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["x", "."]
+description = "Press 'x' to delete 'h', then '.' to repeat and delete 'e'"
+
+hints = [
+    "The '.' command repeats the last editing action",
+    "First delete one character with 'x'",
+    "Then press '.' to repeat the deletion",
+]
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+
+[[scenarios]]
+id = "repeat_delete_line_001"
+name = "Repeat line deletion"
+description = "Delete a line, then repeat to delete another line"
+
+[scenarios.setup]
+file_content = "line 1\nline 2\nline 3\nline 4"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "line 3\nline 4"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["d", "d", "."]
+description = "Press 'dd' to delete first line, then '.' to delete second line"
+
+hints = [
+    "Use 'dd' to delete the entire current line",
+    "The '.' command will repeat the last 'dd' operation",
+    "Two deletes with just three keystrokes!",
+]
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1
+
+
+[[scenarios]]
+id = "repeat_insert_001"
+name = "Repeat text insertion"
+description = "Insert text, then repeat the insertion at another location"
+
+[scenarios.setup]
+file_content = "TODO:\nFIX:\nNOTE:"
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = "TODO: Update docs\nFIX: Update docs\nNOTE:"
+cursor_position = [1, 17]
+
+[scenarios.solution]
+commands = ["i", " ", "U", "p", "d", "a", "t", "e", " ", "d", "o", "c", "s", "Escape", "j", "0", "$", "."]
+description = "Insert ' Update docs' after TODO:, move to FIX: line end, repeat insertion with '.'"
+
+hints = [
+    "The repeat command works with insert mode sequences",
+    "Enter insert mode, type your text, press Escape",
+    "Navigate to the next location and press '.' to repeat",
+]
+
+[scenarios.scoring]
+optimal_count = 18
+max_points = 100
+tolerance = 5
+
+
+[[scenarios]]
+id = "repeat_indent_001"
+name = "Repeat indentation"
+description = "Indent a line, then repeat to indent additional lines"
+
+[scenarios.setup]
+file_content = "def foo():\nprint('hello')\nprint('world')\nreturn"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "def foo():\n    print('hello')\n    print('world')\nreturn"
+cursor_position = [2, 4]
+
+[scenarios.solution]
+commands = [">", "j", "."]
+description = "Indent line 2 with '>', move down with 'j', repeat indentation with '.'"
+
+hints = [
+    "The '>' command indents the current line",
+    "After indenting, the '.' command will repeat the indentation",
+    "Navigate between lines with 'j' (down)",
+]
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 2
+
+
+[[scenarios]]
+id = "repeat_replace_001"
+name = "Repeat character replacement"
+description = "Replace a character, then repeat the replacement elsewhere"
+
+[scenarios.setup]
+file_content = "foo-bar-baz"
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = "foo_bar_baz"
+cursor_position = [0, 7]
+
+[scenarios.solution]
+commands = ["r", "_", "l", "l", "l", "l", "."]
+description = "Replace '-' with '_' using 'r_', move to next '-' with 'llll', repeat with '.'"
+
+hints = [
+    "The 'r' command replaces a single character",
+    "Format: 'r' followed by the new character (e.g., 'r_')",
+    "Use 'l' to move right to the next '-'",
+    "Press '.' to repeat the replacement",
+]
+
+[scenarios.scoring]
+optimal_count = 7
+max_points = 100
+tolerance = 3

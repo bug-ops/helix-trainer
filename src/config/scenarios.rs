@@ -127,14 +127,13 @@ impl ScenarioLoader {
 
         if let Ok(entries) = fs::read_dir(scenarios_path) {
             for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_dir() {
-                        if let Some(name) = entry.file_name().to_str() {
-                            // Validate locale code: 2-letter ISO code
-                            if name.len() == 2 && name.chars().all(|c| c.is_ascii_lowercase()) {
-                                locales.push(name.to_string());
-                            }
-                        }
+                if let Ok(file_type) = entry.file_type()
+                    && file_type.is_dir()
+                    && let Some(name) = entry.file_name().to_str()
+                {
+                    // Validate locale code: 2-letter ISO code
+                    if name.len() == 2 && name.chars().all(|c| c.is_ascii_lowercase()) {
+                        locales.push(name.to_string());
                     }
                 }
             }

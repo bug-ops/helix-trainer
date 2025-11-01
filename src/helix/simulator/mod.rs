@@ -52,6 +52,9 @@ pub struct HelixSimulator {
 
     /// Repeat buffer for recording and replaying actions
     pub(super) repeat_buffer: RepeatBuffer,
+
+    /// Flag to prevent recording during repeat execution
+    pub(super) is_repeating: bool,
 }
 
 impl HelixSimulator {
@@ -64,6 +67,7 @@ impl HelixSimulator {
             history: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
+            is_repeating: false,
         }
     }
 
@@ -104,6 +108,7 @@ impl HelixSimulator {
             history: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
+            is_repeating: false,
         }
     }
 
@@ -160,6 +165,146 @@ impl HelixSimulator {
         let prev_doc = self.doc.clone();
         self.history.push((transaction.clone(), prev_doc));
         transaction.apply(&mut self.doc);
+    }
+
+    /// Execute the repeat (`.`) command
+    ///
+    /// Replays the last recorded action. If no action has been recorded,
+    /// this is a no-op. The repeat command itself is never recorded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The replayed command execution fails
+    /// - Mode validation fails (though we skip silently for mode mismatches)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let mut sim = HelixSimulator::new("hello".to_string());
+    ///
+    /// // Delete a character
+    /// sim.execute_command("x").unwrap();
+    /// assert_eq!(sim.text(), "ello");
+    ///
+    /// // Repeat the delete
+    /// sim.execute_command(".").unwrap();
+    /// assert_eq!(sim.text(), "llo");
+    /// ```
+    pub(super) fn execute_repeat(&mut self) -> Result<(), UserError> {
+        // Get the last action (if any)
+        let action = match self.repeat_buffer.last_action() {
+            Some(action) => action.clone(), // Clone to avoid borrow issues
+            None => return Ok(()),          // No action to repeat - no-op
+        };
+
+        // Set flag to prevent recording during repeat
+        self.is_repeating = true;
+
+        let result = match action {
+            crate::helix::repeat::RepeatableAction::Command {
+                keys,
+                expected_mode,
+            } => {
+                // Validate mode
+                let current_mode = match self.mode {
+                    Mode::Normal => crate::helix::repeat::Mode::Normal,
+                    Mode::Insert => crate::helix::repeat::Mode::Insert,
+                };
+
+                if current_mode != expected_mode {
+                    // Mode mismatch - skip silently
+                    return Ok(());
+                }
+
+                // Convert all keys to a command string
+                let cmd = key_events_to_cmd(&keys);
+                if !cmd.is_empty() {
+                    self.execute_command(&cmd)?;
+                }
+                Ok(())
+            }
+
+            crate::helix::repeat::RepeatableAction::InsertSequence { text, movements } => {
+                use crate::helix::commands::*;
+
+                // Enter insert mode
+                self.execute_command(CMD_INSERT)?;
+
+                // Insert text character by character
+                for ch in text.chars() {
+                    self.insert_text(&ch.to_string())?;
+                }
+
+                // Apply movements
+                for movement in movements {
+                    match movement {
+                        crate::helix::repeat::Movement::Left => {
+                            self.execute_command(CMD_ARROW_LEFT)?
+                        }
+                        crate::helix::repeat::Movement::Right => {
+                            self.execute_command(CMD_ARROW_RIGHT)?
+                        }
+                        crate::helix::repeat::Movement::Up => self.execute_command(CMD_ARROW_UP)?,
+                        crate::helix::repeat::Movement::Down => {
+                            self.execute_command(CMD_ARROW_DOWN)?
+                        }
+                    }
+                }
+
+                // Exit insert mode
+                self.execute_command(CMD_ESCAPE)?;
+                Ok(())
+            }
+        };
+
+        // Clear flag after repeat completes
+        self.is_repeating = false;
+
+        result
+    }
+}
+
+/// Convert a sequence of KeyEvents back to a command string
+///
+/// This reconstructs the original command from the recorded KeyEvent sequence.
+/// Handles both single-key commands (`x`, `i`, etc.) and multi-key sequences (`dd`, `gg`, `rx`).
+fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> String {
+    use crate::helix::commands::*;
+    use crossterm::event::KeyCode;
+
+    if keys.is_empty() {
+        return String::new();
+    }
+
+    // Handle multi-key sequences
+    if keys.len() == 2
+        && let (KeyCode::Char(ch1), KeyCode::Char(ch2)) = (keys[0].code, keys[1].code)
+    {
+        // Check for known multi-key commands
+        match (ch1, ch2) {
+            ('d', 'd') => return CMD_DELETE_LINE.to_string(),
+            ('g', 'g') => return CMD_GOTO_FILE_START.to_string(),
+            ('r', _) => return format!("r{}", ch2), // Replace command
+            _ => {}
+        }
+    }
+
+    // Single key command
+    if keys.len() == 1 {
+        match keys[0].code {
+            KeyCode::Char(ch) => ch.to_string(),
+            KeyCode::Esc => CMD_ESCAPE.to_string(),
+            KeyCode::Backspace => CMD_BACKSPACE.to_string(),
+            KeyCode::Left => CMD_ARROW_LEFT.to_string(),
+            KeyCode::Right => CMD_ARROW_RIGHT.to_string(),
+            KeyCode::Up => CMD_ARROW_UP.to_string(),
+            KeyCode::Down => CMD_ARROW_DOWN.to_string(),
+            _ => String::new(),
+        }
+    } else {
+        // Unsupported multi-key sequence
+        String::new()
     }
 }
 

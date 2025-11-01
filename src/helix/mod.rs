@@ -16,10 +16,12 @@
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
+pub mod commands;
 pub mod executor;
 pub mod repeat;
 pub mod simulator;
 
+pub use commands::*;
 pub use executor::CommandExecutor;
 pub use repeat::{Movement, RepeatBuffer, RepeatableAction, is_repeatable_command};
 pub use simulator::{HelixSimulator, Mode};

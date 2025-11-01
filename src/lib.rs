@@ -14,6 +14,10 @@
 //! - `ui`: Terminal user interface components built with ratatui
 //! - `security`: Security utilities, validation, and error handling
 
+// Initialize rust-i18n with compile-time codegen
+// Translations are loaded from locales/ directory at compile time
+rust_i18n::i18n!("locales", fallback = "en");
+
 pub mod config;
 pub mod game;
 pub mod helix;

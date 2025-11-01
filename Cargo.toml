@@ -26,6 +26,7 @@ thiserror = "2.0"
 tempfile = "3.8"
 helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
 tui-big-text = "0.7"
+rust-i18n = "3"
 
 [dev-dependencies]
 tokio-test = "0.4"

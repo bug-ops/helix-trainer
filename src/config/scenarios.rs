@@ -100,6 +100,8 @@ pub struct ScenarioLoader {
 
 impl ScenarioLoader {
     /// Create a new scenario loader with default allowed paths
+    ///
+    /// Allows loading from both the base scenarios directory and language-specific subdirectories.
     pub fn new() -> Self {
         Self {
             allowed_base_paths: vec![
@@ -107,6 +109,43 @@ impl ScenarioLoader {
                 PathBuf::from("/usr/share/helix-trainer/scenarios"),
             ],
         }
+    }
+
+    /// Detect available locales by scanning the scenarios directory
+    ///
+    /// Returns a list of locale codes (e.g., ["en", "ru"]) found as subdirectories
+    /// in the scenarios directory.
+    pub fn available_locales() -> Vec<String> {
+        let scenarios_path = Path::new("./scenarios");
+
+        if !scenarios_path.exists() || !scenarios_path.is_dir() {
+            tracing::warn!("Scenarios directory not found");
+            return vec!["en".to_string()]; // Fallback to English
+        }
+
+        let mut locales = Vec::new();
+
+        if let Ok(entries) = fs::read_dir(scenarios_path) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type()
+                    && file_type.is_dir()
+                    && let Some(name) = entry.file_name().to_str()
+                {
+                    // Validate locale code: 2-letter ISO code
+                    if name.len() == 2 && name.chars().all(|c| c.is_ascii_lowercase()) {
+                        locales.push(name.to_string());
+                    }
+                }
+            }
+        }
+
+        // Always ensure English is available as fallback
+        if locales.is_empty() {
+            locales.push("en".to_string());
+        }
+
+        locales.sort();
+        locales
     }
 
     /// Create a loader with custom allowed paths for testing

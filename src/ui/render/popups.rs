@@ -9,6 +9,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
+use rust_i18n::t;
 use tui_big_text::{BigText, PixelSize};
 
 /// Render a centered hint popup
@@ -23,7 +24,8 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
     let popup_area = centered_popup(area, popup_width, popup_height);
 
     // Render popup background with border
-    let background = popup_block(Some("Hint"), Color::White);
+    let hint_title = t!("hint.title").to_string();
+    let background = popup_block(Some(&hint_title), Color::White);
     frame.render_widget(&background, popup_area);
 
     // Render hint text inside popup
@@ -103,14 +105,14 @@ pub(super) fn render_success_popup(frame: &mut Frame) {
     let success_text = vec![
         Line::from(""),
         Line::from(Span::styled(
-            "SUCCESS!",
+            t!("success.title").to_string(),
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(Span::styled(
-            "Scenario completed!",
+            t!("success.message").to_string(),
             Style::default().fg(Color::White),
         )),
         Line::from(""),

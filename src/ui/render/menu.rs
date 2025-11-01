@@ -7,6 +7,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
+use rust_i18n::t;
 
 /// Render the main menu screen
 pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
@@ -24,7 +25,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         .split(area);
 
     // Title
-    let title = Paragraph::new("Helix Keybindings Trainer")
+    let title = Paragraph::new(t!("menu.title").to_string())
         .style(
             Style::default()
                 .fg(Color::Cyan)
@@ -85,7 +86,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         Style::default().fg(Color::Red)
     };
     let quit_prefix = if quit_selected { "> " } else { "  " };
-    menu_items.push(ListItem::new(format!("{}Quit", quit_prefix)).style(quit_style));
+    menu_items.push(ListItem::new(format!("{}{}", quit_prefix, t!("menu.quit"))).style(quit_style));
 
     // Apply scroll offset by skipping items
     let visible_items: Vec<ListItem> = menu_items
@@ -98,12 +99,15 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     let menu_title = if total_items > menu_height {
         let first_visible = state.menu_scroll_offset + 1;
         let last_visible = (state.menu_scroll_offset + menu_height).min(total_items);
-        format!(
-            "Main Menu [{}-{}/{}]",
-            first_visible, last_visible, total_items
+        t!(
+            "menu.main_menu_with_scroll",
+            first = first_visible,
+            last = last_visible,
+            total = total_items
         )
+        .to_string()
     } else {
-        format!("Main Menu [{}]", total_items)
+        t!("menu.main_menu_total", total = total_items).to_string()
     };
 
     let menu = List::new(visible_items)
@@ -155,9 +159,9 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Instructions
     let instructions = if total_items > 9 {
-        Paragraph::new("↑/↓ or j/k: Navigate | 1-9: Quick jump | Enter: Select | q: Quit")
+        Paragraph::new(t!("menu.instructions_with_numbers").to_string())
     } else {
-        Paragraph::new("↑/↓ or j/k: Navigate | Enter: Select | q: Quit")
+        Paragraph::new(t!("menu.instructions").to_string())
     };
 
     let instructions = instructions

@@ -1,0 +1,65 @@
+# English translations for Helix Keybindings Trainer
+
+[menu]
+title = "Helix Keybindings Trainer"
+main_menu = "Main Menu"
+main_menu_with_scroll = "Main Menu [%{first}-%{last}/%{total}]"
+main_menu_total = "Main Menu [%{total}]"
+quit = "Quit"
+instructions = "↑/↓ or j/k: Navigate | Enter: Select | q: Quit"
+instructions_with_numbers = "↑/↓ or j/k: Navigate | 1-9: Quick jump | Enter: Select | q: Quit"
+
+[task]
+title = "Task"
+mode_normal = "NORMAL"
+mode_insert = "INSERT"
+hint_key = "Press F1 for hint"
+abandon_key = "Press Esc to abandon"
+actions = "Actions"
+optimal = "optimal"
+
+[results]
+title = "Performance"
+completed = "Scenario Completed!"
+abandoned = "Scenario Abandoned"
+your_actions = "Your actions"
+optimal_actions = "Optimal"
+score = "Score"
+performance = "Performance"
+hints_title = "Hints"
+instructions = "(r) Retry | (m) Main Menu | (q) Quit"
+
+# Performance ratings
+rating_perfect = "Perfect"
+rating_excellent = "Excellent"
+rating_good = "Good"
+rating_fair = "Fair"
+rating_poor = "Poor"
+
+[success]
+title = "SUCCESS!"
+message = "Great job! You completed the scenario."
+
+[hint]
+title = "Hint"
+no_hints = "No hints available for this scenario."
+
+[editor]
+current_state = "Current State"
+target_state = "Target State"
+line_number = "%{num}"
+
+[error]
+scenario_not_found = "Scenario not found"
+invalid_scenario_index = "Invalid scenario index: %{index}"
+command_failed = "Command execution failed"
+state_update_failed = "Failed to update state"
+
+[ui]
+loading = "Loading..."
+please_wait = "Please wait..."
+
+[scoring]
+points = "%{points} points"
+multiplier = "×%{mult}"
+penalty = "-%{points} points"

@@ -1,6 +1,6 @@
 //! Results screen rendering
 
-use crate::ui::state::AppState;
+use crate::{game::PerformanceRating, ui::state::AppState};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout},
@@ -8,6 +8,18 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
+use rust_i18n::t;
+
+/// Get localized description for performance rating
+fn rating_description(rating: &PerformanceRating) -> String {
+    match rating {
+        PerformanceRating::Perfect => t!("results.rating_perfect").to_string(),
+        PerformanceRating::Excellent => t!("results.rating_excellent").to_string(),
+        PerformanceRating::Good => t!("results.rating_good").to_string(),
+        PerformanceRating::Fair => t!("results.rating_fair").to_string(),
+        PerformanceRating::Poor => t!("results.rating_poor").to_string(),
+    }
+}
 
 /// Render the results screen showing scenario completion
 pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
@@ -29,9 +41,9 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
 
         // Title
         let title_text = if feedback.success {
-            "✓ Completed!"
+            t!("results.completed").to_string()
         } else {
-            "✗ Not Completed"
+            t!("results.abandoned").to_string()
         };
         let title_color = if feedback.success {
             Color::Green
@@ -56,7 +68,7 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
             format!(
                 "{} {}",
                 feedback.rating.emoji(),
-                feedback.rating.description()
+                rating_description(&feedback.rating)
             ),
             Style::default()
                 .fg(Color::Yellow)
@@ -67,7 +79,7 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
 
         // Score
         result_lines.push(Line::from(vec![
-            Span::raw("Score: "),
+            Span::raw(format!("{}: ", t!("results.score"))),
             Span::styled(
                 format!("{}/{}", feedback.score, feedback.max_points),
                 Style::default().fg(Color::Cyan),
@@ -81,12 +93,16 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
             Color::Yellow
         };
         result_lines.push(Line::from(vec![
-            Span::raw("Actions: "),
+            Span::raw(format!("{}: ", t!("results.your_actions"))),
             Span::styled(
                 format!("{}", feedback.actions_taken),
                 Style::default().fg(action_color),
             ),
-            Span::raw(format!(" (optimal: {})", feedback.optimal_actions)),
+            Span::raw(format!(
+                " ({}: {})",
+                t!("results.optimal_actions"),
+                feedback.optimal_actions
+            )),
         ]));
 
         // Duration
@@ -108,13 +124,17 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
         }
 
         let results = Paragraph::new(result_lines)
-            .block(Block::default().title("Performance").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title(t!("results.performance").to_string())
+                    .borders(Borders::ALL),
+            )
             .alignment(Alignment::Left)
             .style(Style::default().fg(Color::White));
         frame.render_widget(results, chunks[1]);
 
         // Instructions
-        let instructions = Paragraph::new("[r] Retry  [m] Menu  [q] Quit")
+        let instructions = Paragraph::new(t!("results.instructions").to_string())
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));

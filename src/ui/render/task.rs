@@ -10,6 +10,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
+use rust_i18n::t;
 
 /// Render the task screen where user plays a scenario
 pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
@@ -46,7 +47,11 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         let description = Paragraph::new(scenario.description.as_str())
             .wrap(Wrap { trim: true })
             .style(Style::default().fg(Color::White))
-            .block(Block::default().title("Task").borders(Borders::ALL));
+            .block(
+                Block::default()
+                    .title(t!("task.title").to_string())
+                    .borders(Borders::ALL),
+            );
         frame.render_widget(description, chunks[1]);
 
         // Editor view - split into current and target
@@ -62,7 +67,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         let current = Paragraph::new(current_lines)
             .block(
                 Block::default()
-                    .title("Current State (with cursor)")
+                    .title(t!("editor.current_state").to_string())
                     .borders(Borders::ALL),
             )
             .wrap(Wrap { trim: false });
@@ -74,7 +79,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         let target = Paragraph::new(target_lines)
             .block(
                 Block::default()
-                    .title("Target State (goal)")
+                    .title(t!("editor.target_state").to_string())
                     .borders(Borders::ALL),
             )
             .wrap(Wrap { trim: false });
@@ -104,9 +109,16 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             Color::Red
         };
 
+        // Translate mode name for display
+        let mode_display = if mode == "NORMAL" {
+            t!("task.mode_normal")
+        } else {
+            t!("task.mode_insert")
+        };
+
         // Create colored mode indicator
         let mode_span = Span::styled(
-            format!("Mode: {} ", mode),
+            format!("Mode: {} ", mode_display),
             Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
         );
 
@@ -121,13 +133,19 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         // Create rest of stats
         let rest_of_stats = if actions <= optimal {
             format!(
-                "| Actions: {} (optimal: {}) | Time: {:.1}s",
-                actions, optimal, elapsed_secs
+                "| {}: {} ({}: {}) | Time: {:.1}s",
+                t!("task.actions"),
+                actions,
+                t!("task.optimal"),
+                optimal,
+                elapsed_secs
             )
         } else {
             format!(
-                "| Actions: {} (optimal: {}) - {} extra | Time: {:.1}s",
+                "| {}: {} ({}: {}) - {} extra | Time: {:.1}s",
+                t!("task.actions"),
                 actions,
+                t!("task.optimal"),
                 optimal,
                 actions - optimal,
                 elapsed_secs

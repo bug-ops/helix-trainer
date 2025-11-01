@@ -214,6 +214,7 @@ impl HelixSimulator {
 
                 if current_mode != expected_mode {
                     // Mode mismatch - skip silently
+                    self.is_repeating = false;
                     return Ok(());
                 }
 
@@ -233,7 +234,7 @@ impl HelixSimulator {
 
                 // Insert text character by character
                 for ch in text.chars() {
-                    self.insert_text(&ch.to_string())?;
+                    self.execute_command(&ch.to_string())?;
                 }
 
                 // Apply movements

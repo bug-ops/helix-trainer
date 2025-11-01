@@ -114,7 +114,7 @@ pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(),
             sim.backspace()
         } else if cmd == CMD_ARROW_LEFT {
             let result = movement::move_left(sim, 1);
-            if result.is_ok() {
+            if result.is_ok() && !sim.is_repeating {
                 sim.repeat_buffer
                     .insert_recorder_mut()
                     .record_movement(crate::helix::repeat::Movement::Left);
@@ -122,7 +122,7 @@ pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(),
             result
         } else if cmd == CMD_ARROW_RIGHT {
             let result = movement::move_right(sim, 1);
-            if result.is_ok() {
+            if result.is_ok() && !sim.is_repeating {
                 sim.repeat_buffer
                     .insert_recorder_mut()
                     .record_movement(crate::helix::repeat::Movement::Right);
@@ -130,7 +130,7 @@ pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(),
             result
         } else if cmd == CMD_ARROW_UP {
             let result = movement::move_up(sim, 1);
-            if result.is_ok() {
+            if result.is_ok() && !sim.is_repeating {
                 sim.repeat_buffer
                     .insert_recorder_mut()
                     .record_movement(crate::helix::repeat::Movement::Up);
@@ -138,7 +138,7 @@ pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(),
             result
         } else if cmd == CMD_ARROW_DOWN {
             let result = movement::move_down(sim, 1);
-            if result.is_ok() {
+            if result.is_ok() && !sim.is_repeating {
                 sim.repeat_buffer
                     .insert_recorder_mut()
                     .record_movement(crate::helix::repeat::Movement::Down);
@@ -146,7 +146,7 @@ pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(),
             result
         } else {
             let result = sim.insert_text(cmd);
-            if result.is_ok() {
+            if result.is_ok() && !sim.is_repeating {
                 // Record each character
                 for ch in cmd.chars() {
                     sim.repeat_buffer.insert_recorder_mut().record_char(ch);

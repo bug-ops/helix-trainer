@@ -19,6 +19,11 @@ use helix_core::{Rope, Selection, Transaction};
 // Re-export Mode for convenience
 pub use Mode::*;
 
+/// Maximum recursion depth for repeat command to prevent infinite loops
+/// This allows for reasonable chaining (e.g., recording a repeat within a macro)
+/// while preventing stack overflow from accidental infinite recursion
+const MAX_REPEAT_DEPTH: usize = 100;
+
 /// Editor mode (Normal or Insert)
 ///
 /// Controls which operations are available and how input is interpreted.
@@ -28,40 +33,6 @@ pub enum Mode {
     Normal,
     /// Insert mode: insert characters
     Insert,
-}
-
-/// RAII guard for repeat flag that ensures cleanup even on panic
-///
-/// This guard sets the is_repeating flag to true on construction
-/// and resets it to false on drop, guaranteeing cleanup in all cases.
-/// Uses raw pointer to work around borrow checker limitations.
-struct RepeatGuard {
-    flag: *mut bool,
-}
-
-impl RepeatGuard {
-    /// Creates a new guard. Sets flag to true immediately.
-    ///
-    /// # Safety
-    /// The flag pointer must remain valid for the lifetime of the guard.
-    /// This is guaranteed when used within execute_repeat since the guard
-    /// doesn't outlive the method scope.
-    unsafe fn new(flag: *mut bool) -> Self {
-        // SAFETY: Caller guarantees flag pointer is valid
-        unsafe {
-            *flag = true;
-        }
-        Self { flag }
-    }
-}
-
-impl Drop for RepeatGuard {
-    fn drop(&mut self) {
-        // SAFETY: flag pointer is guaranteed valid by constructor contract
-        unsafe {
-            *self.flag = false;
-        }
-    }
 }
 
 /// Helix editor simulator using helix-core text primitives
@@ -89,6 +60,9 @@ pub struct HelixSimulator {
 
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
+
+    /// Current recursion depth for repeat command (protects against infinite loops)
+    pub(super) repeat_depth: usize,
 }
 
 impl HelixSimulator {
@@ -102,6 +76,7 @@ impl HelixSimulator {
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
+            repeat_depth: 0,
         }
     }
 
@@ -143,6 +118,7 @@ impl HelixSimulator {
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
+            repeat_depth: 0,
         }
     }
 
@@ -226,18 +202,32 @@ impl HelixSimulator {
     /// assert_eq!(sim.text(), "llo");
     /// ```
     pub(super) fn execute_repeat(&mut self) -> Result<(), UserError> {
+        // Check recursion depth to prevent infinite loops
+        if self.repeat_depth >= MAX_REPEAT_DEPTH {
+            // Silently ignore repeat at max depth (Vim/Helix semantics)
+            // This prevents stack overflow while allowing reasonable chaining
+            return Ok(());
+        }
+
         // Get the last action (if any)
         let action = match self.repeat_buffer.last_action() {
             Some(action) => action.clone(), // Clone to avoid borrow issues
             None => return Ok(()),          // No action to repeat - no-op
         };
 
-        // Use RAII guard to ensure flag is reset even on panic
-        // SAFETY: The guard doesn't outlive this method scope, so the pointer
-        // to is_repeating remains valid for the entire lifetime of the guard
-        let _guard = unsafe { RepeatGuard::new(&mut self.is_repeating as *mut bool) };
+        // Set repeating flag and increment depth
+        self.is_repeating = true;
+        self.repeat_depth += 1;
 
-        self.execute_repeat_inner(&action)
+        // Execute and ensure flag/depth are reset regardless of outcome
+        // Note: Not panic-safe, but acceptable since panics are not expected
+        // in command execution and would indicate a bug that needs fixing
+        let result = self.execute_repeat_inner(&action);
+
+        self.is_repeating = false;
+        self.repeat_depth -= 1;
+
+        result
     }
 
     /// Internal repeat execution - allows proper RAII cleanup of is_repeating flag

@@ -100,6 +100,8 @@ pub struct ScenarioLoader {
 
 impl ScenarioLoader {
     /// Create a new scenario loader with default allowed paths
+    ///
+    /// Allows loading from both the base scenarios directory and language-specific subdirectories.
     pub fn new() -> Self {
         Self {
             allowed_base_paths: vec![

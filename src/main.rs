@@ -63,11 +63,22 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting Helix Keybindings Trainer");
 
-    // Load scenarios from scenarios directory (recursively)
-    let loader = ScenarioLoader::new();
-    let scenarios = loader.load_directory(std::path::Path::new("./scenarios"))?;
+    // Load scenarios from language-specific directory (recursively)
+    // Use current locale from rust-i18n
+    let current_locale = rust_i18n::locale();
+    let locale_str: &str = current_locale.as_ref();
+    let scenarios_path = format!("./scenarios/{}", locale_str);
 
-    tracing::info!("Loaded {} scenarios from multiple files", scenarios.len());
+    tracing::info!("Loading scenarios for locale: {}", locale_str);
+
+    let loader = ScenarioLoader::new();
+    let scenarios = loader.load_directory(std::path::Path::new(&scenarios_path))?;
+
+    tracing::info!(
+        "Loaded {} scenarios from {} locale",
+        scenarios.len(),
+        locale_str
+    );
 
     // Initialize app state
     let mut app_state = AppState::new(scenarios);

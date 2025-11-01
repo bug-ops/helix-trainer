@@ -623,3 +623,363 @@ fn test_multiple_indent() {
     assert_eq!(state.content(), "    code");
     assert_eq!(state.cursor_position().col, 4);
 }
+
+// ============================================================================
+// Phase 2: Repeat Buffer Integration Tests
+// ============================================================================
+
+#[test]
+fn test_repeat_buffer_records_delete_char() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Execute delete command
+    sim.execute_command("x").unwrap();
+
+    // Verify command was recorded
+    let buffer = sim.repeat_buffer();
+    assert!(!buffer.is_empty());
+
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::Command {
+            keys,
+            expected_mode,
+        }) => {
+            assert_eq!(keys.len(), 1);
+            assert_eq!(*expected_mode, crate::helix::repeat::Mode::Normal);
+        }
+        _ => panic!("Expected Command action"),
+    }
+}
+
+#[test]
+fn test_repeat_buffer_records_delete_line() {
+    let mut sim = HelixSimulator::new("line 1\nline 2".to_string());
+
+    // Execute dd command
+    sim.execute_command("dd").unwrap();
+
+    // Verify dd was recorded
+    let buffer = sim.repeat_buffer();
+    assert!(!buffer.is_empty());
+
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::Command {
+            keys,
+            expected_mode,
+        }) => {
+            assert_eq!(keys.len(), 2); // Both 'd' keys
+            assert_eq!(*expected_mode, crate::helix::repeat::Mode::Normal);
+        }
+        _ => panic!("Expected Command action with 2 keys"),
+    }
+}
+
+#[test]
+fn test_repeat_buffer_does_not_record_movement() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Execute movement command
+    sim.execute_command("h").unwrap();
+
+    // Verify command was NOT recorded (movement is not repeatable)
+    let buffer = sim.repeat_buffer();
+    assert!(buffer.is_empty());
+}
+
+#[test]
+fn test_repeat_buffer_does_not_record_undo() {
+    let mut sim = HelixSimulator::new("test".to_string());
+
+    // Do something first
+    sim.execute_command("x").unwrap();
+
+    // Undo it
+    sim.execute_command("u").unwrap();
+
+    // The buffer should still have 'x', not 'u'
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::Command { keys, .. }) => {
+            assert_eq!(keys.len(), 1);
+            // Should still be 'x', not 'u'
+        }
+        _ => panic!("Expected Command action"),
+    }
+}
+
+#[test]
+fn test_repeat_buffer_records_yank() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Execute yank command
+    sim.execute_command("y").unwrap();
+
+    // Verify yank was recorded
+    let buffer = sim.repeat_buffer();
+    assert!(!buffer.is_empty());
+}
+
+#[test]
+fn test_repeat_buffer_records_paste() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Yank first
+    sim.execute_command("y").unwrap();
+
+    // Then paste
+    sim.execute_command("p").unwrap();
+
+    // Verify paste was recorded (last action)
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::Command { keys, .. }) => {
+            assert_eq!(keys.len(), 1);
+        }
+        _ => panic!("Expected Command action"),
+    }
+}
+
+#[test]
+fn test_repeat_buffer_records_join_lines() {
+    let mut sim = HelixSimulator::new("line 1\nline 2".to_string());
+
+    // Execute join command
+    sim.execute_command("J").unwrap();
+
+    // Verify join was recorded
+    let buffer = sim.repeat_buffer();
+    assert!(!buffer.is_empty());
+}
+
+#[test]
+fn test_repeat_buffer_records_indent() {
+    let mut sim = HelixSimulator::new("code".to_string());
+
+    // Execute indent command
+    sim.execute_command(">").unwrap();
+
+    // Verify indent was recorded
+    let buffer = sim.repeat_buffer();
+    assert!(!buffer.is_empty());
+}
+
+#[test]
+fn test_repeat_buffer_records_replace_char() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Execute replace command (r + x)
+    sim.execute_command("rx").unwrap();
+
+    // Verify replace was recorded
+    let buffer = sim.repeat_buffer();
+    assert!(!buffer.is_empty());
+
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::Command { keys, .. }) => {
+            assert_eq!(keys.len(), 2); // 'r' and 'x'
+        }
+        _ => panic!("Expected Command action"),
+    }
+}
+
+#[test]
+fn test_insert_mode_recording_simple() {
+    let mut sim = HelixSimulator::new("world".to_string());
+
+    // Enter insert mode
+    sim.execute_command("i").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Verify recording started
+    assert!(sim.repeat_buffer().insert_recorder().is_recording());
+
+    // Type text
+    sim.execute_command("h").unwrap();
+    sim.execute_command("i").unwrap();
+
+    // Exit insert mode
+    sim.execute_command("Escape").unwrap();
+    assert_eq!(sim.mode(), Mode::Normal);
+
+    // Verify insert sequence was recorded
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, movements }) => {
+            assert_eq!(text, "hi");
+            assert!(movements.is_empty());
+        }
+        _ => panic!("Expected InsertSequence action"),
+    }
+
+    // Verify recording stopped
+    assert!(!buffer.insert_recorder().is_recording());
+}
+
+#[test]
+fn test_insert_mode_recording_with_movements() {
+    let mut sim = HelixSimulator::new("test".to_string());
+
+    // Enter insert mode
+    sim.execute_command("i").unwrap();
+
+    // Type text with movements
+    sim.execute_command("h").unwrap();
+    sim.execute_command("i").unwrap();
+    sim.execute_command("ArrowLeft").unwrap();
+    sim.execute_command("ArrowLeft").unwrap();
+    sim.execute_command("!").unwrap();
+
+    // Exit insert mode
+    sim.execute_command("Escape").unwrap();
+
+    // Verify insert sequence with movements was recorded
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, movements }) => {
+            assert_eq!(text, "hi!");
+            assert_eq!(movements.len(), 2);
+            assert_eq!(movements[0], crate::helix::repeat::Movement::Left);
+            assert_eq!(movements[1], crate::helix::repeat::Movement::Left);
+        }
+        _ => panic!("Expected InsertSequence action"),
+    }
+}
+
+#[test]
+fn test_insert_mode_recording_append() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Enter insert mode via append
+    sim.execute_command("a").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Type text
+    sim.execute_command(" ").unwrap();
+    sim.execute_command("w").unwrap();
+    sim.execute_command("o").unwrap();
+    sim.execute_command("r").unwrap();
+    sim.execute_command("l").unwrap();
+    sim.execute_command("d").unwrap();
+
+    // Exit insert mode
+    sim.execute_command("Escape").unwrap();
+
+    // Verify recording
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, .. }) => {
+            assert_eq!(text, " world");
+        }
+        _ => panic!("Expected InsertSequence action"),
+    }
+}
+
+#[test]
+fn test_insert_mode_recording_open_below() {
+    let mut sim = HelixSimulator::new("line 1".to_string());
+
+    // Enter insert mode via open below
+    sim.execute_command("o").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Type text
+    sim.execute_command("n").unwrap();
+    sim.execute_command("e").unwrap();
+    sim.execute_command("w").unwrap();
+
+    // Exit insert mode
+    sim.execute_command("Escape").unwrap();
+
+    // Verify recording
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, .. }) => {
+            assert_eq!(text, "new");
+        }
+        _ => panic!("Expected InsertSequence action"),
+    }
+}
+
+#[test]
+fn test_insert_mode_empty_recording() {
+    let mut sim = HelixSimulator::new("test".to_string());
+
+    // Enter and immediately exit insert mode
+    sim.execute_command("i").unwrap();
+    sim.execute_command("Escape").unwrap();
+
+    // Verify empty insert sequence was recorded
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, movements }) => {
+            assert!(text.is_empty());
+            assert!(movements.is_empty());
+        }
+        _ => panic!("Expected InsertSequence action"),
+    }
+}
+
+#[test]
+fn test_normal_command_overwrites_previous() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Execute first command
+    sim.execute_command("x").unwrap();
+
+    // Execute second command
+    sim.execute_command("x").unwrap();
+
+    // Verify only last command is recorded
+    let buffer = sim.repeat_buffer();
+    assert!(!buffer.is_empty());
+    // Should have only one action (the second 'x')
+}
+
+#[test]
+fn test_insert_mode_overwrites_normal_command() {
+    let mut sim = HelixSimulator::new("test".to_string());
+
+    // Execute normal command first
+    sim.execute_command("x").unwrap();
+
+    // Enter insert mode
+    sim.execute_command("i").unwrap();
+    sim.execute_command("a").unwrap();
+    sim.execute_command("Escape").unwrap();
+
+    // Verify insert sequence overwrote the delete command
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, .. }) => {
+            assert_eq!(text, "a");
+        }
+        _ => panic!("Expected InsertSequence action, not Command"),
+    }
+}
+
+#[test]
+fn test_change_command_records_and_enters_insert() {
+    let mut sim = HelixSimulator::new("hello".to_string());
+
+    // Execute change command
+    sim.execute_command("c").unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+
+    // Verify recording started
+    assert!(sim.repeat_buffer().insert_recorder().is_recording());
+
+    // Type replacement text
+    sim.execute_command("x").unwrap();
+
+    // Exit insert mode
+    sim.execute_command("Escape").unwrap();
+
+    // Verify insert sequence was recorded
+    let buffer = sim.repeat_buffer();
+    match buffer.last_action() {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, .. }) => {
+            assert_eq!(text, "x");
+        }
+        _ => panic!("Expected InsertSequence action"),
+    }
+}

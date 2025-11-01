@@ -12,6 +12,7 @@ mod undo;
 mod tests;
 
 use crate::game::{CursorPosition, EditorState};
+use crate::helix::repeat::RepeatBuffer;
 use crate::security::UserError;
 use helix_core::{Rope, Selection, Transaction};
 
@@ -48,6 +49,9 @@ pub struct HelixSimulator {
 
     /// Clipboard for yank and paste operations
     pub(super) clipboard: Option<String>,
+
+    /// Repeat buffer for recording and replaying actions
+    pub(super) repeat_buffer: RepeatBuffer,
 }
 
 impl HelixSimulator {
@@ -59,6 +63,7 @@ impl HelixSimulator {
             mode: Mode::Normal,
             history: Vec::new(),
             clipboard: None,
+            repeat_buffer: RepeatBuffer::new(),
         }
     }
 
@@ -98,6 +103,7 @@ impl HelixSimulator {
             mode: Mode::Normal,
             history: Vec::new(),
             clipboard: None,
+            repeat_buffer: RepeatBuffer::new(),
         }
     }
 
@@ -139,6 +145,13 @@ impl HelixSimulator {
     /// Get current mode
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    /// Get a reference to the repeat buffer
+    ///
+    /// Allows inspection of the last recorded action for debugging or testing.
+    pub fn repeat_buffer(&self) -> &RepeatBuffer {
+        &self.repeat_buffer
     }
 
     /// Apply transaction and save history

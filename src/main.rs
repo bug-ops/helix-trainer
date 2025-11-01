@@ -269,6 +269,9 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         (KeyCode::Char('U'), KeyModifiers::SHIFT) => "U",
         (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r",
 
+        // Repeat last action
+        (KeyCode::Char('.'), KeyModifiers::NONE) => ".",
+
         // Document movement
         (KeyCode::Char('g'), KeyModifiers::NONE) => "g",
         (KeyCode::Char('G'), KeyModifiers::NONE) => "G",

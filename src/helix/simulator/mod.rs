@@ -30,6 +30,40 @@ pub enum Mode {
     Insert,
 }
 
+/// RAII guard for repeat flag that ensures cleanup even on panic
+///
+/// This guard sets the is_repeating flag to true on construction
+/// and resets it to false on drop, guaranteeing cleanup in all cases.
+/// Uses raw pointer to work around borrow checker limitations.
+struct RepeatGuard {
+    flag: *mut bool,
+}
+
+impl RepeatGuard {
+    /// Creates a new guard. Sets flag to true immediately.
+    ///
+    /// # Safety
+    /// The flag pointer must remain valid for the lifetime of the guard.
+    /// This is guaranteed when used within execute_repeat since the guard
+    /// doesn't outlive the method scope.
+    unsafe fn new(flag: *mut bool) -> Self {
+        // SAFETY: Caller guarantees flag pointer is valid
+        unsafe {
+            *flag = true;
+        }
+        Self { flag }
+    }
+}
+
+impl Drop for RepeatGuard {
+    fn drop(&mut self) {
+        // SAFETY: flag pointer is guaranteed valid by constructor contract
+        unsafe {
+            *self.flag = false;
+        }
+    }
+}
+
 /// Helix editor simulator using helix-core text primitives
 ///
 /// Provides a faithful simulation of Helix editor operations with proper
@@ -198,12 +232,12 @@ impl HelixSimulator {
             None => return Ok(()),          // No action to repeat - no-op
         };
 
-        // Set flag to prevent recording during repeat
-        // Use RAII pattern to ensure flag is always reset
-        self.is_repeating = true;
-        let result = self.execute_repeat_inner(&action);
-        self.is_repeating = false;
-        result
+        // Use RAII guard to ensure flag is reset even on panic
+        // SAFETY: The guard doesn't outlive this method scope, so the pointer
+        // to is_repeating remains valid for the entire lifetime of the guard
+        let _guard = unsafe { RepeatGuard::new(&mut self.is_repeating as *mut bool) };
+
+        self.execute_repeat_inner(&action)
     }
 
     /// Internal repeat execution - allows proper RAII cleanup of is_repeating flag

@@ -59,8 +59,9 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
     }
 
     // Single character commands
-    if let Some(ch) = cmd.chars().next()
-        && cmd.len() == 1
+    // Check length first for performance (cheaper than iterator operations)
+    if cmd.len() == 1
+        && let Some(ch) = cmd.chars().next()
     {
         vec![KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE)]
     } else {

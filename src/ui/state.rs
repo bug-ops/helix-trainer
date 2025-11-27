@@ -24,9 +24,10 @@ use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::{PerformanceTracker, Scheduler};
 use crate::security::UserError;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::fmt;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// The current screen being displayed in the UI
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +98,13 @@ pub enum Message {
 
     /// Award XP to the user
     AwardXP { amount: u64 },
+
+    /// Update quest progress based on gameplay
+    UpdateQuestProgress {
+        command: Option<String>,
+        scenario_completed: bool,
+        duration: Duration,
+    },
 }
 
 /// Main application state
@@ -197,6 +205,10 @@ pub struct AppState {
     /// Session start time for tracking playtime
     /// Size: 16 bytes (Instant)
     pub session_start_time: Instant,
+
+    /// Unique commands used today for exploration quests
+    /// Size: 24+ bytes (HashSet)
+    pub commands_used_today: HashSet<String>,
 }
 
 impl fmt::Debug for AppState {
@@ -271,6 +283,7 @@ impl AppState {
             scenarios_completed_today: 0,
             last_save_time: None,
             session_start_time: Instant::now(),
+            commands_used_today: HashSet::new(),
         }
     }
 
@@ -455,15 +468,31 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::CompleteScenario => {
-            // Calculate and award XP
-            // TODO: Iteration 2 - Update quest progress (commands used, scenario completed, time invested)
-            // TODO: Iteration 3 - Store XP breakdown for results display
-            // TODO: Iteration 5 - Check for new achievements and queue notifications
-            if let Some(session) = &state.session {
+            // Update quest progress BEFORE awarding XP
+            // Extract data we need first to avoid borrow issues
+            let (duration, feedback) = if let Some(session) = &state.session {
+                let duration = session.elapsed();
                 let feedback = session
                     .get_feedback()
                     .map_err(|_| UserError::OperationFailed)?;
+                (duration, feedback)
+            } else {
+                state.screen = Screen::Results;
+                return Ok(());
+            };
 
+            // Update quest progress
+            update(
+                state,
+                Message::UpdateQuestProgress {
+                    command: None,
+                    scenario_completed: true,
+                    duration,
+                },
+            )?;
+
+            // Calculate and award XP
+            {
                 // Calculate XP based on performance
                 let is_first_today = state.scenarios_completed_today == 0;
                 let is_perfect = feedback.score == feedback.max_points;
@@ -474,33 +503,33 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 );
 
                 // Award XP and update profile
-                {
-                    let mut profile = state.profile.borrow_mut();
-                    let leveled_up = profile.add_xp(xp);
+                let mut profile = state.profile.borrow_mut();
+                let leveled_up = profile.add_xp(xp);
 
-                    // Update counters
-                    profile.scenarios_completed += 1;
-                    if is_perfect {
-                        profile.perfect_scenarios += 1;
-                    }
-
-                    // Save immediately if leveled up
-                    if leveled_up {
-                        drop(profile); // Release borrow
-                        state
-                            .save_profile_immediate()
-                            .map_err(|_| UserError::OperationFailed)?;
-                    }
+                // Update counters
+                profile.scenarios_completed += 1;
+                if is_perfect {
+                    profile.perfect_scenarios += 1;
                 }
 
-                // Update daily counter
-                state.scenarios_completed_today += 1;
-
-                // Debounced save for normal completion
-                state
-                    .save_profile_debounced()
-                    .map_err(|_| UserError::OperationFailed)?;
+                // Save immediately if leveled up
+                if leveled_up {
+                    drop(profile); // Release borrow
+                    state
+                        .save_profile_immediate()
+                        .map_err(|_| UserError::OperationFailed)?;
+                } else {
+                    drop(profile); // Release borrow
+                }
             }
+
+            // Update daily counter
+            state.scenarios_completed_today += 1;
+
+            // Debounced save for normal completion
+            state
+                .save_profile_debounced()
+                .map_err(|_| UserError::OperationFailed)?;
 
             state.screen = Screen::Results;
             Ok(())
@@ -531,6 +560,9 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
             // Show key history popup after first keypress
             state.show_key_history = true;
+
+            // Track command for quest progress (only execute once per complete command)
+            let mut executed_command: Option<String> = None;
 
             if let Some(session) = &mut state.session {
                 // In Insert mode, execute commands directly
@@ -578,19 +610,37 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                         // Store for display
                         state.last_command = Some(cmd_string.clone());
 
+                        // Track for quest progress
+                        executed_command = Some(cmd_string.clone());
+
                         // Execute command through session
                         session.record_action(cmd_string)?;
                     }
                     // If None, we're waiting for more keys (buffer not cleared)
                 }
-
-                // Check if scenario is complete
-                if session.is_completed() {
-                    // Mark completion time instead of immediately going to results
-                    // This allows showing the success state before transition
-                    state.completion_time = Some(std::time::Instant::now());
-                }
             }
+
+            // Update quest progress for executed command (after releasing session borrow)
+            if let Some(cmd) = executed_command {
+                update(
+                    state,
+                    Message::UpdateQuestProgress {
+                        command: Some(cmd),
+                        scenario_completed: false,
+                        duration: Duration::from_secs(0),
+                    },
+                )?;
+            }
+
+            // Check if scenario is complete
+            if let Some(session) = &state.session
+                && session.is_completed()
+            {
+                // Mark completion time instead of immediately going to results
+                // This allows showing the success state before transition
+                state.completion_time = Some(std::time::Instant::now());
+            }
+
             Ok(())
         }
 
@@ -645,6 +695,79 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                     .save_profile_immediate()
                     .map_err(|_| UserError::OperationFailed)?;
             }
+            Ok(())
+        }
+
+        Message::UpdateQuestProgress {
+            command,
+            scenario_completed,
+            duration,
+        } => {
+            use crate::gamification::QuestTracker;
+
+            // Track which quests were already completed before this update
+            let was_completed: Vec<bool> = {
+                let profile = state.profile.borrow();
+                profile.daily_quests.iter().map(|q| q.completed).collect()
+            };
+
+            // Update command practice quests and exploration quests
+            if let Some(cmd) = &command {
+                // Track for exploration quests
+                state.commands_used_today.insert(cmd.clone());
+
+                // Update command progress in quests
+                let mut profile = state.profile.borrow_mut();
+                QuestTracker::update_command_progress(&mut profile.daily_quests, cmd);
+            }
+
+            // Update scenario completion quests and speed run quests
+            if scenario_completed {
+                let scenario_id = state
+                    .session
+                    .as_ref()
+                    .map(|s| s.scenario().id.clone())
+                    .unwrap_or_default();
+
+                let mut profile = state.profile.borrow_mut();
+                QuestTracker::update_scenario_progress(
+                    &mut profile.daily_quests,
+                    &scenario_id,
+                    duration,
+                );
+            }
+
+            // Update time invested quests
+            let minutes = duration.as_secs() / 60;
+            if minutes > 0 {
+                let mut profile = state.profile.borrow_mut();
+                QuestTracker::update_time_progress(&mut profile.daily_quests, minutes as u32);
+            }
+
+            // Check for newly completed quests and award bonus XP
+            let newly_completed_xp: Vec<u32> = {
+                let profile = state.profile.borrow();
+                profile
+                    .daily_quests
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, quest)| {
+                        if !was_completed[idx] && quest.completed {
+                            Some(quest.xp_reward)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            };
+
+            // Award XP for newly completed quests
+            if !newly_completed_xp.is_empty() {
+                let total_bonus_xp: u64 = newly_completed_xp.iter().map(|xp| *xp as u64).sum();
+                let mut profile = state.profile.borrow_mut();
+                profile.add_xp(total_bonus_xp);
+            }
+
             Ok(())
         }
     }
@@ -913,5 +1036,300 @@ mod tests {
         assert!(state.get_scenario(0).is_some());
         assert!(state.get_scenario(1).is_some());
         assert!(state.get_scenario(999).is_none());
+    }
+
+    // Quest tracking tests
+    #[test]
+    fn test_quest_progress_command_practice() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Add a CommandPractice quest to profile
+        {
+            let mut profile = state.profile.borrow_mut();
+            profile.daily_quests.push(Quest::new(
+                "test_dd".to_string(),
+                QuestType::CommandPractice {
+                    command: "dd".to_string(),
+                    target: 3,
+                    current: 0,
+                },
+                "Delete 3 lines".to_string(),
+                QuestDifficulty::Easy,
+            ));
+        }
+
+        // Execute "dd" command twice
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("dd".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("dd".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Quest should not be completed yet (2/3)
+        {
+            let profile = state.profile.borrow();
+            assert!(!profile.daily_quests[0].is_completed());
+        }
+
+        // Execute once more
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("dd".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Quest should now be completed and bonus XP awarded
+        {
+            let profile = state.profile.borrow();
+            assert!(profile.daily_quests[0].is_completed());
+            // XP should be at least the quest reward
+            assert!(profile.total_xp >= 25); // Easy CommandPractice = 25 XP
+        }
+    }
+
+    #[test]
+    fn test_quest_progress_scenario_completion() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Add a ScenarioCompletion quest to profile
+        {
+            let mut profile = state.profile.borrow_mut();
+            profile.daily_quests.push(Quest::new(
+                "test_scenario".to_string(),
+                QuestType::ScenarioCompletion {
+                    target: 2,
+                    current: 0,
+                },
+                "Complete 2 scenarios".to_string(),
+                QuestDifficulty::Medium,
+            ));
+        }
+
+        // Start and "complete" a scenario
+        update(&mut state, Message::StartScenario(0)).unwrap();
+
+        // Simulate scenario completion
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: None,
+                scenario_completed: true,
+                duration: Duration::from_secs(5),
+            },
+        )
+        .unwrap();
+
+        // Quest should not be completed yet (1/2)
+        {
+            let profile = state.profile.borrow();
+            assert!(!profile.daily_quests[0].is_completed());
+        }
+
+        // Complete another scenario
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: None,
+                scenario_completed: true,
+                duration: Duration::from_secs(5),
+            },
+        )
+        .unwrap();
+
+        // Quest should now be completed
+        {
+            let profile = state.profile.borrow();
+            assert!(profile.daily_quests[0].is_completed());
+            // XP should include quest reward
+            assert!(profile.total_xp >= 75); // Medium ScenarioCompletion = 75 XP
+        }
+    }
+
+    #[test]
+    fn test_quest_completion_awards_bonus_xp() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        let initial_xp = {
+            let profile = state.profile.borrow();
+            profile.total_xp
+        };
+
+        // Add a quest
+        {
+            let mut profile = state.profile.borrow_mut();
+            profile.daily_quests.push(Quest::new(
+                "test_quest".to_string(),
+                QuestType::CommandPractice {
+                    command: "x".to_string(),
+                    target: 1,
+                    current: 0,
+                },
+                "Delete 1 character".to_string(),
+                QuestDifficulty::Easy,
+            ));
+        }
+
+        // Complete the quest
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("x".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Check that XP was awarded
+        {
+            let profile = state.profile.borrow();
+            assert_eq!(profile.total_xp, initial_xp + 25); // Easy CommandPractice = 25 XP
+            assert!(profile.daily_quests[0].is_completed());
+        }
+    }
+
+    #[test]
+    fn test_exploration_quest_tracking() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+        use std::collections::HashSet;
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        let initial_xp = {
+            let profile = state.profile.borrow();
+            profile.total_xp
+        };
+
+        // Add an Exploration quest
+        {
+            let mut profile = state.profile.borrow_mut();
+            profile.daily_quests.push(Quest::new(
+                "test_exploration".to_string(),
+                QuestType::Exploration {
+                    target_commands: 3,
+                    commands_used: HashSet::new(),
+                },
+                "Use 3 different commands".to_string(),
+                QuestDifficulty::Hard,
+            ));
+        }
+
+        // Execute different commands
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("dd".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("yy".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Not completed yet (2/3)
+        {
+            let profile = state.profile.borrow();
+            assert!(!profile.daily_quests[0].is_completed());
+        }
+
+        // Execute third unique command
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("p".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Should be completed now and bonus XP awarded
+        {
+            let profile = state.profile.borrow();
+            assert!(profile.daily_quests[0].is_completed());
+            assert_eq!(profile.total_xp, initial_xp + 160); // Hard Exploration = 160 XP
+        }
+    }
+
+    #[test]
+    fn test_commands_used_today_tracking() {
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        assert_eq!(state.commands_used_today.len(), 0);
+
+        // Execute some commands
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("dd".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("yy".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Same command again (should not duplicate)
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("dd".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Should have 2 unique commands
+        assert_eq!(state.commands_used_today.len(), 2);
+        assert!(state.commands_used_today.contains("dd"));
+        assert!(state.commands_used_today.contains("yy"));
     }
 }

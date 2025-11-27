@@ -219,14 +219,17 @@ fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
         ui::Screen::MainMenu => handle_menu_keys(key, state),
         ui::Screen::Task => handle_task_keys(key, state),
         ui::Screen::Results => handle_results_keys(key),
-        ui::Screen::Profile | ui::Screen::Statistics => handle_profile_stats_keys(key),
+        ui::Screen::Profile | ui::Screen::Statistics => handle_profile_stats_keys(key, state),
     }
 }
 
 /// Handle keyboard events on profile and statistics screens
-fn handle_profile_stats_keys(key: KeyEvent) -> Option<Message> {
+fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     match key.code {
-        KeyCode::Esc | KeyCode::Char('q') => Some(Message::BackToMenu),
+        KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
+        KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Char('s') if state.screen == ui::Screen::Profile => Some(Message::ShowStatistics),
+        KeyCode::Char('p') if state.screen == ui::Screen::Statistics => Some(Message::ShowProfile),
         _ => None,
     }
 }
@@ -240,7 +243,10 @@ fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         KeyCode::Enter => Some(Message::MenuSelect),
         // Quick jump with number keys (1-9)
         KeyCode::Char(c) if c.is_ascii_digit() => {
-            let digit = c.to_digit(10).unwrap() as usize;
+            let digit = c
+                .to_digit(10)
+                .expect("char is validated as ascii_digit by guard condition")
+                as usize;
             if digit >= 1 && digit <= state.scenarios.len() {
                 // Jump to scenario (digit - 1 because scenarios are 0-indexed)
                 Some(Message::StartScenario(digit - 1))
@@ -363,6 +369,7 @@ fn handle_results_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Char('q') => Some(Message::QuitApp),
         KeyCode::Char('r') => Some(Message::RetryScenario),
         KeyCode::Char('m') => Some(Message::BackToMenu),
+        KeyCode::Char('p') => Some(Message::ShowProfile),
         _ => None,
     }
 }

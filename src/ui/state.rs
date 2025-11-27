@@ -20,8 +20,13 @@
 
 use crate::config::Scenario;
 use crate::game::GameSession;
+use crate::gamification::{ProfileStorage, UserProfile};
+use crate::learning::{PerformanceTracker, Scheduler};
 use crate::security::UserError;
+use std::cell::RefCell;
 use std::fmt;
+use std::rc::Rc;
+use std::time::Instant;
 
 /// The current screen being displayed in the UI
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +37,10 @@ pub enum Screen {
     Task,
     /// Results screen after scenario completion
     Results,
+    /// Profile screen showing level, achievements, stats
+    Profile,
+    /// Statistics screen showing command mastery and analytics
+    Statistics,
 }
 
 /// Messages that trigger state updates
@@ -79,6 +88,15 @@ pub enum Message {
 
     /// Return to main menu
     BackToMenu,
+
+    /// Navigate to profile screen
+    ShowProfile,
+
+    /// Navigate to statistics screen
+    ShowStatistics,
+
+    /// Award XP to the user
+    AwardXP { amount: u64 },
 }
 
 /// Main application state
@@ -148,6 +166,37 @@ pub struct AppState {
     /// Whether to show key history popup
     /// Size: 1 byte (bool)
     pub show_key_history: bool,
+
+    // NEW: Gamification fields
+    /// User profile with XP, level, achievements, quests
+    /// Size: 8 bytes (Rc pointer)
+    pub profile: Rc<RefCell<UserProfile>>,
+
+    /// Profile storage for saving/loading
+    /// Size: ~24 bytes (PathBuf inside)
+    pub profile_storage: ProfileStorage,
+
+    // NEW: Learning fields
+    /// Performance tracker for spaced repetition
+    /// Size: 8 bytes (Rc pointer)
+    pub performance_tracker: Rc<RefCell<PerformanceTracker>>,
+
+    /// Scheduler for review sessions
+    /// Size: 8 bytes (Rc pointer)
+    pub scheduler: Scheduler,
+
+    // NEW: UI state for progression
+    /// Number of scenarios completed today (for first-today bonus)
+    /// Size: 8 bytes (usize)
+    pub scenarios_completed_today: usize,
+
+    /// Last save time for debounced saves
+    /// Size: 16 bytes (Option<Instant>)
+    pub last_save_time: Option<Instant>,
+
+    /// Session start time for tracking playtime
+    /// Size: 16 bytes (Instant)
+    pub session_start_time: Instant,
 }
 
 impl fmt::Debug for AppState {
@@ -165,6 +214,10 @@ impl fmt::Debug for AppState {
             .field("completion_time", &self.completion_time.is_some())
             .field("key_history", &self.key_history.len())
             .field("command_buffer", &self.command_buffer)
+            .field("profile", &"<Rc<RefCell<UserProfile>>>")
+            .field("performance_tracker", &"<Rc<RefCell<PerformanceTracker>>>")
+            .field("scenarios_completed_today", &self.scenarios_completed_today)
+            .field("last_save_time", &self.last_save_time.is_some())
             .finish()
     }
 }
@@ -175,6 +228,10 @@ impl AppState {
     /// # Arguments
     ///
     /// * `scenarios` - The list of available scenarios to play
+    /// * `profile` - User profile with XP, level, achievements
+    /// * `profile_storage` - Storage for saving/loading profile
+    /// * `performance_tracker` - Tracker for command performance and spaced repetition
+    /// * `scheduler` - Scheduler for review sessions
     ///
     /// # Examples
     ///
@@ -183,10 +240,16 @@ impl AppState {
     /// use helix_trainer::config::Scenario;
     ///
     /// let scenarios = vec![/* ... */];
-    /// let state = AppState::new(scenarios);
+    /// let state = AppState::new(scenarios, profile, storage, tracker, scheduler);
     /// assert_eq!(state.screen, Screen::MainMenu);
     /// ```
-    pub fn new(scenarios: Vec<Scenario>) -> Self {
+    pub fn new(
+        scenarios: Vec<Scenario>,
+        profile: Rc<RefCell<UserProfile>>,
+        profile_storage: ProfileStorage,
+        performance_tracker: Rc<RefCell<PerformanceTracker>>,
+        scheduler: Scheduler,
+    ) -> Self {
         Self {
             scenarios,
             session: None,
@@ -201,6 +264,13 @@ impl AppState {
             running: true,
             show_hint_panel: false,
             show_key_history: false,
+            profile,
+            profile_storage,
+            performance_tracker,
+            scheduler,
+            scenarios_completed_today: 0,
+            last_save_time: None,
+            session_start_time: Instant::now(),
         }
     }
 
@@ -215,6 +285,7 @@ impl AppState {
     }
 
     /// Get the menu items for the main menu
+    // TODO: Iteration 4 - Add "View Profile" and "Statistics" menu items
     pub fn menu_items() -> Vec<&'static str> {
         vec!["Start Training", "Quit"]
     }
@@ -243,6 +314,42 @@ impl AppState {
     /// Clear key history
     pub fn clear_key_history(&mut self) {
         self.key_history.clear();
+    }
+
+    /// Save profile with debouncing (only if enough time has passed)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if save operation fails
+    // NOTE: Debounce saves to reduce I/O overhead (5-second delay)
+    // OPTIMIZE: Performance audit suggested this optimization (50-80% I/O reduction)
+    pub fn save_profile_debounced(&mut self) -> Result<(), crate::gamification::GamificationError> {
+        let now = Instant::now();
+
+        // Debounce: only save if 5+ seconds since last save
+        if let Some(last_save) = self.last_save_time
+            && now.duration_since(last_save) < std::time::Duration::from_secs(5)
+        {
+            return Ok(());
+        }
+
+        let profile = self.profile.borrow();
+        self.profile_storage.save(&profile)?;
+        self.last_save_time = Some(now);
+
+        Ok(())
+    }
+
+    /// Force immediate save (for level-up, achievements, exit)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if save operation fails
+    pub fn save_profile_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
+        let profile = self.profile.borrow();
+        self.profile_storage.save(&profile)?;
+        self.last_save_time = Some(Instant::now());
+        Ok(())
     }
 }
 
@@ -348,6 +455,53 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::CompleteScenario => {
+            // Calculate and award XP
+            // TODO: Iteration 2 - Update quest progress (commands used, scenario completed, time invested)
+            // TODO: Iteration 3 - Store XP breakdown for results display
+            // TODO: Iteration 5 - Check for new achievements and queue notifications
+            if let Some(session) = &state.session {
+                let feedback = session
+                    .get_feedback()
+                    .map_err(|_| UserError::OperationFailed)?;
+
+                // Calculate XP based on performance
+                let is_first_today = state.scenarios_completed_today == 0;
+                let is_perfect = feedback.score == feedback.max_points;
+                let xp = crate::gamification::XPCalculator::scenario_xp(
+                    feedback.score,
+                    is_perfect,
+                    is_first_today,
+                );
+
+                // Award XP and update profile
+                {
+                    let mut profile = state.profile.borrow_mut();
+                    let leveled_up = profile.add_xp(xp);
+
+                    // Update counters
+                    profile.scenarios_completed += 1;
+                    if is_perfect {
+                        profile.perfect_scenarios += 1;
+                    }
+
+                    // Save immediately if leveled up
+                    if leveled_up {
+                        drop(profile); // Release borrow
+                        state
+                            .save_profile_immediate()
+                            .map_err(|_| UserError::OperationFailed)?;
+                    }
+                }
+
+                // Update daily counter
+                state.scenarios_completed_today += 1;
+
+                // Debounced save for normal completion
+                state
+                    .save_profile_debounced()
+                    .map_err(|_| UserError::OperationFailed)?;
+            }
+
             state.screen = Screen::Results;
             Ok(())
         }
@@ -470,6 +624,29 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             state.current_hint = None;
             Ok(())
         }
+
+        Message::ShowProfile => {
+            state.screen = Screen::Profile;
+            Ok(())
+        }
+
+        Message::ShowStatistics => {
+            state.screen = Screen::Statistics;
+            Ok(())
+        }
+
+        Message::AwardXP { amount } => {
+            let mut profile = state.profile.borrow_mut();
+            let leveled_up = profile.add_xp(amount);
+
+            if leveled_up {
+                drop(profile); // Release borrow before save
+                state
+                    .save_profile_immediate()
+                    .map_err(|_| UserError::OperationFailed)?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -477,6 +654,10 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 mod tests {
     use super::*;
     use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+    use crate::gamification::{ProfileStorage, UserProfile};
+    use crate::learning::{PerformanceTracker, Scheduler};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     fn create_test_scenario() -> Scenario {
         Scenario {
@@ -506,9 +687,17 @@ mod tests {
         }
     }
 
+    fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
+        let profile = Rc::new(RefCell::new(UserProfile::new()));
+        let storage = ProfileStorage::new();
+        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+        let scheduler = Scheduler::new(tracker.clone());
+        AppState::new(scenarios, profile, storage, tracker, scheduler)
+    }
+
     #[test]
     fn test_new_state() {
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state(vec![]);
         assert_eq!(state.screen, Screen::MainMenu);
         assert_eq!(state.selected_menu_item, 0);
         assert!(state.running);
@@ -518,7 +707,7 @@ mod tests {
 
     #[test]
     fn test_quit_app_message() {
-        let mut state = AppState::new(vec![]);
+        let mut state = create_test_app_state(vec![]);
         assert!(state.running);
 
         update(&mut state, Message::QuitApp).unwrap();
@@ -527,7 +716,7 @@ mod tests {
 
     #[test]
     fn test_navigate_to_screen() {
-        let mut state = AppState::new(vec![]);
+        let mut state = create_test_app_state(vec![]);
         assert_eq!(state.screen, Screen::MainMenu);
 
         update(&mut state, Message::NavigateTo(Screen::Task)).unwrap();
@@ -539,7 +728,7 @@ mod tests {
 
     #[test]
     fn test_menu_navigation_up() {
-        let mut state = AppState::new(vec![]);
+        let mut state = create_test_app_state(vec![]);
         state.selected_menu_item = 1;
 
         update(&mut state, Message::MenuUp).unwrap();
@@ -554,7 +743,7 @@ mod tests {
     fn test_menu_navigation_down() {
         let scenario1 = create_test_scenario();
         let scenario2 = create_test_scenario();
-        let mut state = AppState::new(vec![scenario1, scenario2]);
+        let mut state = create_test_app_state(vec![scenario1, scenario2]);
         assert_eq!(state.selected_menu_item, 0);
 
         // Move down once
@@ -573,7 +762,7 @@ mod tests {
     #[test]
     fn test_menu_select_start_training() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
         state.selected_menu_item = 0;
 
         update(&mut state, Message::MenuSelect).unwrap();
@@ -586,7 +775,7 @@ mod tests {
     fn test_menu_select_quit() {
         let scenario1 = create_test_scenario();
         let scenario2 = create_test_scenario();
-        let mut state = AppState::new(vec![scenario1, scenario2]);
+        let mut state = create_test_app_state(vec![scenario1, scenario2]);
         // Select Quit option (index = scenario count)
         state.selected_menu_item = 2;
 
@@ -598,7 +787,7 @@ mod tests {
     #[test]
     fn test_start_scenario() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
 
@@ -609,7 +798,7 @@ mod tests {
     #[test]
     fn test_start_invalid_scenario_index() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(999)).unwrap();
 
@@ -620,7 +809,7 @@ mod tests {
     #[test]
     fn test_complete_scenario_navigates_to_results() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
         assert_eq!(state.screen, Screen::Task);
@@ -632,7 +821,7 @@ mod tests {
     #[test]
     fn test_abandon_scenario_navigates_to_results() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
         let session = state.session.as_ref().unwrap();
@@ -647,7 +836,7 @@ mod tests {
     #[test]
     fn test_show_hint() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
         assert!(!state.show_hint_panel);
@@ -660,7 +849,7 @@ mod tests {
     #[test]
     fn test_retry_scenario_resets_state() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
         if let Some(session) = &mut state.session {
@@ -676,7 +865,7 @@ mod tests {
     #[test]
     fn test_next_scenario_clears_session() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
         assert!(state.session.is_some());
@@ -689,7 +878,7 @@ mod tests {
     #[test]
     fn test_back_to_menu_clears_session() {
         let scenario = create_test_scenario();
-        let mut state = AppState::new(vec![scenario]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
         assert!(state.session.is_some());
@@ -710,7 +899,7 @@ mod tests {
     #[test]
     fn test_scenario_count() {
         let scenarios = vec![create_test_scenario(), create_test_scenario()];
-        let state = AppState::new(scenarios);
+        let state = create_test_app_state(scenarios);
         assert_eq!(state.scenario_count(), 2);
     }
 
@@ -719,7 +908,7 @@ mod tests {
         let scenario = create_test_scenario();
         let mut scenarios = vec![scenario.clone()];
         scenarios.push(scenario);
-        let state = AppState::new(scenarios);
+        let state = create_test_app_state(scenarios);
 
         assert!(state.get_scenario(0).is_some());
         assert!(state.get_scenario(1).is_some());

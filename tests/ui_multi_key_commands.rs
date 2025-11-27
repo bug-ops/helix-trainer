@@ -4,8 +4,21 @@
 //! like 'dd', 'gg', 'r<char>' through the command buffer mechanism.
 
 use helix_trainer::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
+use helix_trainer::gamification::{ProfileStorage, UserProfile};
+use helix_trainer::learning::{PerformanceTracker, Scheduler};
 use helix_trainer::ui::{AppState, Message, update};
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+/// Helper to create AppState for testing
+fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
+    let profile = Rc::new(RefCell::new(UserProfile::new()));
+    let storage = ProfileStorage::new();
+    let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+    let scheduler = Scheduler::new(tracker.clone());
+    AppState::new(scenarios, profile, storage, tracker, scheduler)
+}
 
 /// Helper to create a simple test scenario
 fn create_test_scenario(
@@ -53,7 +66,7 @@ fn test_replace_command_multi_key() {
         (0, 1),
     );
 
-    let mut state = AppState::new(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario.clone()]);
 
     // Start the scenario
     update(&mut state, Message::StartScenario(0)).unwrap();
@@ -95,7 +108,7 @@ fn test_dd_command_multi_key() {
         (1, 0),
     );
 
-    let mut state = AppState::new(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
     // First 'd' - stored in buffer
@@ -126,7 +139,7 @@ fn test_gg_command_multi_key() {
         (0, 0), // cursor at start
     );
 
-    let mut state = AppState::new(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
     // First 'g'
@@ -148,7 +161,7 @@ fn test_replace_command_valid_sequence() {
     // Test that 'rr' is valid - replace character with 'r'
     let scenario = create_test_scenario("test", "rest", (0, 0), "rest", (0, 0));
 
-    let mut state = AppState::new(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
     // Press 'r'
@@ -178,7 +191,7 @@ fn test_single_key_command_immediate_execution() {
         (0, 1), // moved right
     );
 
-    let mut state = AppState::new(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
     // Press 'l' (move right) - should execute immediately
@@ -198,7 +211,7 @@ fn test_replace_with_special_chars() {
     // Test replacing with various characters
     let scenario = create_test_scenario("test_special", "x", (0, 0), "!", (0, 0));
 
-    let mut state = AppState::new(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
     // Replace with '!'
@@ -216,7 +229,7 @@ fn test_undo_integration() {
     let scenario =
         create_test_scenario("test_undo", "line1\nline2", (0, 0), "line1\nline2", (0, 0));
 
-    let mut state = AppState::new(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
     // Delete line: dd

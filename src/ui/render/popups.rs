@@ -1,4 +1,6 @@
 //! Popup rendering (hints, success, key history)
+// TODO: Iteration 5 - Add notification system (level-up, achievement unlock, quest complete, streak milestone)
+// TODO: Iteration 5 - Add notification queue with auto-dismiss after 3 seconds
 
 use super::helpers::{centered_popup, inner_rect, popup_block};
 use crate::ui::state::AppState;

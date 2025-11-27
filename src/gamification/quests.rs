@@ -239,7 +239,7 @@ impl QuestGenerator {
             ("x", 5, "Delete 5 characters"),
         ];
 
-        let choice = rng.gen_range(0..quest_types.len());
+        let choice = rng.random_range(0..quest_types.len());
         let (cmd, target, desc) = quest_types[choice];
 
         let id = format!("quest_easy_{}", index);
@@ -267,7 +267,7 @@ impl QuestGenerator {
             (3, "Practice for 5 minutes"),
         ];
 
-        let choice = rng.gen_range(0..quest_types.len());
+        let choice = rng.random_range(0..quest_types.len());
         let (variant, desc) = quest_types[choice];
 
         let id = format!("quest_medium_{}", index);
@@ -309,7 +309,7 @@ impl QuestGenerator {
             (2, "Practice for 15 minutes"),
         ];
 
-        let choice = rng.gen_range(0..quest_types.len());
+        let choice = rng.random_range(0..quest_types.len());
         let (variant, desc) = quest_types[choice];
 
         let id = format!("quest_hard_{}", index);

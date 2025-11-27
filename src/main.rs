@@ -243,7 +243,10 @@ fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         KeyCode::Enter => Some(Message::MenuSelect),
         // Quick jump with number keys (1-9)
         KeyCode::Char(c) if c.is_ascii_digit() => {
-            let digit = c.to_digit(10).unwrap() as usize;
+            let digit = c
+                .to_digit(10)
+                .expect("char is validated as ascii_digit by guard condition")
+                as usize;
             if digit >= 1 && digit <= state.scenarios.len() {
                 // Jump to scenario (digit - 1 because scenarios are 0-indexed)
                 Some(Message::StartScenario(digit - 1))

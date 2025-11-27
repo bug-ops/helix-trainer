@@ -97,7 +97,7 @@ impl UserProfile {
     /// ```
     pub fn add_xp(&mut self, xp: u64) -> bool {
         let old_level = self.level;
-        self.total_xp += xp;
+        self.total_xp = self.total_xp.saturating_add(xp);
         self.level = XPCalculator::level_from_xp(self.total_xp);
         self.level > old_level
     }

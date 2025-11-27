@@ -20,14 +20,32 @@
 
 use crate::config::Scenario;
 use crate::game::GameSession;
-use crate::gamification::{ProfileStorage, UserProfile};
+use crate::gamification::{ProfileStorage, QuestType, UserProfile};
 use crate::learning::{PerformanceTracker, Scheduler};
 use crate::security::UserError;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+
+/// Breakdown of XP earned from a scenario
+#[derive(Debug, Clone)]
+pub struct XPBreakdown {
+    pub base_xp: u64,
+    pub perfect_bonus: u64,
+    pub first_today_bonus: u64,
+    pub quest_bonuses: Vec<(String, u64)>, // (quest description, bonus xp)
+    pub total_xp: u64,
+}
+
+/// Quest progress change (before → after)
+#[derive(Debug, Clone)]
+pub struct QuestProgressChange {
+    pub quest_description: String,
+    pub old_progress: u32,
+    pub new_progress: u32,
+}
 
 /// The current screen being displayed in the UI
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -209,6 +227,18 @@ pub struct AppState {
     /// Unique commands used today for exploration quests
     /// Size: 24+ bytes (HashSet)
     pub commands_used_today: HashSet<String>,
+
+    /// XP breakdown from last scenario (for results display)
+    /// Size: ~40+ bytes (Option<XPBreakdown>)
+    pub xp_breakdown: Option<XPBreakdown>,
+
+    /// Quest progress changes during last scenario
+    /// Size: 24 bytes (Vec)
+    pub quest_progress_changes: Vec<QuestProgressChange>,
+
+    /// Previously completed quest IDs (to detect new completions)
+    /// Size: 24+ bytes (HashSet)
+    pub previously_completed_quests: HashSet<String>,
 }
 
 impl fmt::Debug for AppState {
@@ -284,6 +314,9 @@ impl AppState {
             last_save_time: None,
             session_start_time: Instant::now(),
             commands_used_today: HashSet::new(),
+            xp_breakdown: None,
+            quest_progress_changes: Vec::new(),
+            previously_completed_quests: HashSet::new(),
         }
     }
 
@@ -491,20 +524,61 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 },
             )?;
 
-            // Calculate and award XP
-            {
-                // Calculate XP based on performance
-                let is_first_today = state.scenarios_completed_today == 0;
-                let is_perfect = feedback.score == feedback.max_points;
-                let xp = crate::gamification::XPCalculator::scenario_xp(
-                    feedback.score,
-                    is_perfect,
-                    is_first_today,
-                );
+            // Calculate XP breakdown
+            let is_first_today = state.scenarios_completed_today == 0;
+            let is_perfect = feedback.score == feedback.max_points;
 
-                // Award XP and update profile
+            // Base XP from score (50 XP per 100 points)
+            let base_xp = (feedback.score as u64 * 50) / 100;
+
+            // Perfect bonus (+20%)
+            let perfect_bonus = if is_perfect { base_xp / 5 } else { 0 };
+
+            // First today bonus (+10 XP)
+            let first_today_bonus = if is_first_today { 10 } else { 0 };
+
+            // Quest bonuses (collect newly completed quests)
+            let mut quest_bonuses = Vec::new();
+            let newly_completed_quest_ids: Vec<String> = {
+                let profile = state.profile.borrow();
+                profile
+                    .daily_quests
+                    .iter()
+                    .filter(|q| q.completed && !state.previously_completed_quests.contains(&q.id))
+                    .map(|q| q.id.clone())
+                    .collect()
+            };
+
+            // Collect bonuses and mark as processed
+            for quest_id in newly_completed_quest_ids {
+                let profile = state.profile.borrow();
+                if let Some(quest) = profile.daily_quests.iter().find(|q| q.id == quest_id) {
+                    let description = format_quest_description(&quest.quest_type);
+                    let xp = quest.xp_reward as u64;
+                    drop(profile);
+                    quest_bonuses.push((description, xp));
+                    state.previously_completed_quests.insert(quest_id);
+                }
+            }
+
+            let total_xp = base_xp
+                + perfect_bonus
+                + first_today_bonus
+                + quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
+
+            // Store breakdown for results display
+            state.xp_breakdown = Some(XPBreakdown {
+                base_xp,
+                perfect_bonus,
+                first_today_bonus,
+                quest_bonuses,
+                total_xp,
+            });
+
+            // Award XP to profile
+            {
                 let mut profile = state.profile.borrow_mut();
-                let leveled_up = profile.add_xp(xp);
+                let leveled_up = profile.add_xp(total_xp);
 
                 // Update counters
                 profile.scenarios_completed += 1;
@@ -512,25 +586,18 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                     profile.perfect_scenarios += 1;
                 }
 
-                // Save immediately if leveled up
                 if leveled_up {
-                    drop(profile); // Release borrow
+                    drop(profile);
                     state
                         .save_profile_immediate()
                         .map_err(|_| UserError::OperationFailed)?;
-                } else {
-                    drop(profile); // Release borrow
                 }
             }
 
-            // Update daily counter
             state.scenarios_completed_today += 1;
-
-            // Debounced save for normal completion
             state
                 .save_profile_debounced()
                 .map_err(|_| UserError::OperationFailed)?;
-
             state.screen = Screen::Results;
             Ok(())
         }
@@ -705,6 +772,19 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         } => {
             use crate::gamification::QuestTracker;
 
+            // Clear previous progress changes
+            state.quest_progress_changes.clear();
+
+            // Snapshot progress BEFORE updates
+            let progress_before: HashMap<String, u32> = {
+                let profile = state.profile.borrow();
+                profile
+                    .daily_quests
+                    .iter()
+                    .map(|q| (q.id.clone(), get_quest_current_progress(&q.quest_type)))
+                    .collect()
+            };
+
             // Track which quests were already completed before this update
             let was_completed: Vec<bool> = {
                 let profile = state.profile.borrow();
@@ -744,6 +824,23 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 QuestTracker::update_time_progress(&mut profile.daily_quests, minutes as u32);
             }
 
+            // Detect progress changes AFTER updates
+            {
+                let profile = state.profile.borrow();
+                for quest in &profile.daily_quests {
+                    let old = progress_before.get(&quest.id).copied().unwrap_or(0);
+                    let new = get_quest_current_progress(&quest.quest_type);
+
+                    if new > old {
+                        state.quest_progress_changes.push(QuestProgressChange {
+                            quest_description: format_quest_description(&quest.quest_type),
+                            old_progress: old,
+                            new_progress: new,
+                        });
+                    }
+                }
+            }
+
             // Check for newly completed quests and award bonus XP
             let newly_completed_xp: Vec<u32> = {
                 let profile = state.profile.borrow();
@@ -773,6 +870,36 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
     }
 }
 
+/// Format quest type as readable description
+fn format_quest_description(quest_type: &QuestType) -> String {
+    use QuestType::*;
+    match quest_type {
+        CommandPractice {
+            command, target, ..
+        } => format!("Use '{}' {} times", command, target),
+        ScenarioCompletion { target, .. } => format!("Complete {} scenarios", target),
+        SpeedRun { scenario_id, .. } => format!("Speed run: {}", scenario_id),
+        TimeInvested { target_minutes, .. } => format!("Practice {} min", target_minutes),
+        Exploration {
+            target_commands, ..
+        } => format!("Try {} commands", target_commands),
+    }
+}
+
+/// Get current progress value from quest type
+fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
+    use QuestType::*;
+    match quest_type {
+        CommandPractice { current, .. } => *current,
+        ScenarioCompletion { current, .. } => *current,
+        TimeInvested {
+            current_minutes, ..
+        } => *current_minutes,
+        Exploration { commands_used, .. } => commands_used.len() as u32,
+        SpeedRun { .. } => 0, // Single-attempt quest
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -788,17 +915,17 @@ mod tests {
             name: "Test Scenario".to_string(),
             description: "A test scenario for UI testing".to_string(),
             setup: Setup {
-                file_content: "line 1\n".to_string(),
+                file_content: "line 1\nline 2\nline 3\n".to_string(),
                 cursor_position: (0, 0),
             },
             target: TargetState {
-                file_content: "line 2\n".to_string(),
+                file_content: "line 2\nline 3\n".to_string(),
                 cursor_position: (0, 0),
                 selection: None,
             },
             solution: Solution {
                 commands: vec!["dd".to_string()],
-                description: "Delete line".to_string(),
+                description: "Delete first line".to_string(),
             },
             alternatives: vec![],
             hints: vec!["Use dd to delete a line".to_string()],
@@ -1331,5 +1458,253 @@ mod tests {
         assert_eq!(state.commands_used_today.len(), 2);
         assert!(state.commands_used_today.contains("dd"));
         assert!(state.commands_used_today.contains("yy"));
+    }
+
+    // XP Breakdown tests
+    #[test]
+    fn test_xp_breakdown_base_only() {
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Complete a scenario with non-perfect score (not first today to avoid bonus)
+        state.scenarios_completed_today = 1; // Not first today
+        update(&mut state, Message::StartScenario(0)).unwrap();
+
+        // Execute non-optimal solution to get points but not perfect
+        if let Some(session) = &mut state.session {
+            session.record_action("l".to_string()).unwrap(); // Extra move
+            session.record_action("h".to_string()).unwrap(); // Extra move
+            session.record_action("dd".to_string()).unwrap(); // Correct solution
+        }
+
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        // Check XP breakdown
+        assert!(state.xp_breakdown.is_some());
+        let xp = state.xp_breakdown.as_ref().unwrap();
+
+        // Should have base XP (score > 0 because scenario is completed)
+        // Perfect bonus should be 0 because we used extra moves
+        assert!(xp.base_xp > 0, "Base XP should be > 0, got {}", xp.base_xp);
+        assert_eq!(xp.perfect_bonus, 0);
+        assert_eq!(xp.first_today_bonus, 0);
+        assert_eq!(xp.quest_bonuses.len(), 0);
+        assert_eq!(xp.total_xp, xp.base_xp);
+    }
+
+    #[test]
+    fn test_xp_breakdown_with_perfect_bonus() {
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.scenarios_completed_today = 1; // Not first today
+        update(&mut state, Message::StartScenario(0)).unwrap();
+
+        // Execute perfect solution
+        if let Some(session) = &mut state.session {
+            session.record_action("dd".to_string()).unwrap();
+        }
+
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        assert!(state.xp_breakdown.is_some());
+        let xp = state.xp_breakdown.as_ref().unwrap();
+
+        // Should have perfect bonus (20% of base)
+        assert!(xp.perfect_bonus > 0);
+        assert_eq!(xp.perfect_bonus, xp.base_xp / 5);
+        assert_eq!(xp.first_today_bonus, 0);
+    }
+
+    #[test]
+    fn test_xp_breakdown_with_first_today_bonus() {
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // First scenario today
+        assert_eq!(state.scenarios_completed_today, 0);
+
+        update(&mut state, Message::StartScenario(0)).unwrap();
+
+        if let Some(session) = &mut state.session {
+            session.record_action("dd".to_string()).unwrap();
+        }
+
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        assert!(state.xp_breakdown.is_some());
+        let xp = state.xp_breakdown.as_ref().unwrap();
+
+        // Should have first today bonus
+        assert_eq!(xp.first_today_bonus, 10);
+    }
+
+    #[test]
+    fn test_xp_breakdown_with_quest_completion() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Add a quest that will be completed
+        {
+            let mut profile = state.profile.borrow_mut();
+            profile.daily_quests.push(Quest::new(
+                "test_quest".to_string(),
+                QuestType::CommandPractice {
+                    command: "dd".to_string(),
+                    target: 1,
+                    current: 0,
+                },
+                "Delete 1 line".to_string(),
+                QuestDifficulty::Easy,
+            ));
+        }
+
+        update(&mut state, Message::StartScenario(0)).unwrap();
+
+        // Execute command to complete quest through message
+        update(
+            &mut state,
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed("dd")),
+        )
+        .unwrap();
+
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        assert!(state.xp_breakdown.is_some());
+        let xp = state.xp_breakdown.as_ref().unwrap();
+
+        // Should have quest bonus
+        assert_eq!(xp.quest_bonuses.len(), 1);
+        let (desc, bonus) = &xp.quest_bonuses[0];
+        assert!(desc.contains("dd"));
+        assert_eq!(*bonus, 25); // Easy quest = 25 XP
+    }
+
+    #[test]
+    fn test_quest_progress_changes_tracking() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Add a quest
+        {
+            let mut profile = state.profile.borrow_mut();
+            profile.daily_quests.push(Quest::new(
+                "test_quest".to_string(),
+                QuestType::CommandPractice {
+                    command: "dd".to_string(),
+                    target: 3,
+                    current: 0,
+                },
+                "Delete 3 lines".to_string(),
+                QuestDifficulty::Easy,
+            ));
+        }
+
+        // Execute command to trigger progress
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some("dd".to_string()),
+                scenario_completed: false,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Check that progress changes were recorded
+        assert_eq!(state.quest_progress_changes.len(), 1);
+        let change = &state.quest_progress_changes[0];
+        assert_eq!(change.old_progress, 0);
+        assert_eq!(change.new_progress, 1);
+        assert!(change.quest_description.contains("dd"));
+    }
+
+    #[test]
+    fn test_previously_completed_quests_tracking() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        // Add a quest that will be completed on first scenario
+        {
+            let mut profile = state.profile.borrow_mut();
+            profile.daily_quests.push(Quest::new(
+                "test_quest".to_string(),
+                QuestType::CommandPractice {
+                    command: "dd".to_string(),
+                    target: 1,
+                    current: 0,
+                },
+                "Delete 1 line".to_string(),
+                QuestDifficulty::Easy,
+            ));
+        }
+
+        // First scenario completion
+        update(&mut state, Message::StartScenario(0)).unwrap();
+
+        // Execute command through message to trigger quest progress tracking
+        update(
+            &mut state,
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed("dd")),
+        )
+        .unwrap();
+
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        // Debug: Check if quest is actually completed
+        {
+            let profile = state.profile.borrow();
+            let quest = &profile.daily_quests[0];
+            assert!(
+                quest.is_completed(),
+                "Quest should be completed after scenario"
+            );
+        }
+
+        // Quest should be marked as previously completed after first scenario
+        assert!(
+            !state.previously_completed_quests.is_empty(),
+            "previously_completed_quests should not be empty, found {} items",
+            state.previously_completed_quests.len()
+        );
+        assert!(
+            state.previously_completed_quests.contains("test_quest"),
+            "Quest 'test_quest' should be marked as previously completed. Found: {:?}",
+            state.previously_completed_quests
+        );
+
+        // First breakdown should have quest bonus
+        let first_xp = state.xp_breakdown.as_ref().unwrap();
+        assert_eq!(
+            first_xp.quest_bonuses.len(),
+            1,
+            "First completion should award quest bonus"
+        );
+
+        // Second scenario - quest already completed, should not award bonus again
+        state.scenarios.push(scenario); // Add another scenario
+        update(&mut state, Message::StartScenario(1)).unwrap();
+
+        // Execute command through message
+        update(
+            &mut state,
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed("dd")),
+        )
+        .unwrap();
+
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        let second_xp = state.xp_breakdown.as_ref().unwrap();
+        assert_eq!(
+            second_xp.quest_bonuses.len(),
+            0,
+            "Second completion should not award quest bonus again"
+        );
     }
 }

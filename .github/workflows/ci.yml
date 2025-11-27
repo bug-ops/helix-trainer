@@ -111,14 +111,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
-
-      - name: Run security audit
-        run: cargo deny check
+      - name: Security audit with cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
 
   build:
     name: Build

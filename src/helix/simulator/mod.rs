@@ -190,16 +190,18 @@ impl HelixSimulator {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
+    /// use helix_trainer::helix::HelixSimulator;
+    ///
     /// let mut sim = HelixSimulator::new("hello".to_string());
     ///
     /// // Delete a character
     /// sim.execute_command("x").unwrap();
-    /// assert_eq!(sim.text(), "ello");
+    /// assert_eq!(sim.get_state().unwrap().content(), "ello");
     ///
     /// // Repeat the delete
     /// sim.execute_command(".").unwrap();
-    /// assert_eq!(sim.text(), "llo");
+    /// assert_eq!(sim.get_state().unwrap().content(), "llo");
     /// ```
     pub(super) fn execute_repeat(&mut self) -> Result<(), UserError> {
         // Check recursion depth to prevent infinite loops

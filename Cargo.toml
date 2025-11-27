@@ -2,6 +2,7 @@
 name = "helix-trainer"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 authors = ["Andrei G <andrei.g@my.com>"]
 description = "Interactive trainer for learning Helix editor keybindings"
 license = "MIT"
@@ -10,26 +11,18 @@ repository = "https://github.com/bug-ops/helix-trainer"
 [dependencies]
 ratatui = "0.29"
 crossterm = "0.29"
-tokio = { version = "1", features = [
-    "rt-multi-thread",
-    "macros",
-    "sync",
-    "io-util",
-    "time",
-] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 anyhow = "1.0"
 thiserror = "2.0"
-tempfile = "3.8"
 helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
 tui-big-text = "0.7"
 rust-i18n = "3"
 
 [dev-dependencies]
-tokio-test = "0.4"
+tempfile = "3.8"
 proptest = "1.9"
 
 [[bin]]

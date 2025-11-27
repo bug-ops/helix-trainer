@@ -14,7 +14,6 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     let area = frame.area();
 
     // Create layout: header | title | menu | quests | instructions
-    // TODO: Iteration 2 - Add quest panel between menu and instructions
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
@@ -22,6 +21,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
             Constraint::Length(1), // Header with level/XP/streak
             Constraint::Length(3), // Title
             Constraint::Min(4),    // Menu items
+            Constraint::Length(6), // Quest panel
             Constraint::Length(3), // Instructions
         ])
         .split(area);
@@ -118,11 +118,14 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     let menu = List::new(visible_items)
         .block(Block::default().title(menu_title).borders(Borders::ALL))
         .style(Style::default().fg(Color::White));
-    frame.render_widget(menu, chunks[2]); // Updated index from 1 to 2
+    frame.render_widget(menu, chunks[2]);
+
+    // Render quest panel
+    render_quest_panel(frame, chunks[3], state);
 
     // Draw scrollbar if needed
     if total_items > menu_height {
-        let scrollbar_area = chunks[2]; // Updated index from 1 to 2
+        let scrollbar_area = chunks[2];
         let scrollbar_height = scrollbar_area.height.saturating_sub(2) as usize; // -2 for borders
 
         if scrollbar_height > 0 {
@@ -173,7 +176,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(instructions, chunks[3]); // Updated index from 2 to 3
+    frame.render_widget(instructions, chunks[4]); // Updated index to 4 (after quest panel)
 }
 
 /// Render the profile header showing level, XP, and streak
@@ -197,4 +200,58 @@ fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: 
         .alignment(Alignment::Center);
 
     frame.render_widget(header, area);
+}
+
+/// Render the quest panel showing daily quests
+fn render_quest_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
+    let profile = state.profile.borrow();
+    let quests = &profile.daily_quests;
+
+    let completed_count = quests.iter().filter(|q| q.is_completed()).count();
+    let title = format!(" Daily Quests ({}/{}) ", completed_count, quests.len());
+
+    // Build quest lines
+    let quest_lines: Vec<String> = quests
+        .iter()
+        .map(|quest| {
+            let icon = if quest.is_completed() { "✓" } else { "⏺" };
+            let progress_str = format_quest_progress(&quest.quest_type);
+
+            // Format: "✓ Delete 3 lines (3/3)    +25 XP"
+            format!(
+                " {} {}{}    +{} XP",
+                icon, quest.description, progress_str, quest.xp_reward
+            )
+        })
+        .collect();
+
+    let quest_text = quest_lines.join("\n");
+
+    // Use colors: green for completed, yellow for in-progress
+    let panel = Paragraph::new(quest_text)
+        .style(Style::default().fg(Color::White))
+        .block(Block::default().title(title).borders(Borders::ALL));
+
+    frame.render_widget(panel, area);
+}
+
+/// Format quest progress string based on quest type
+fn format_quest_progress(quest_type: &crate::gamification::QuestType) -> String {
+    use crate::gamification::QuestType;
+
+    match quest_type {
+        QuestType::CommandPractice {
+            current, target, ..
+        } => format!(" ({}/{})", current, target),
+        QuestType::ScenarioCompletion { current, target } => format!(" ({}/{})", current, target),
+        QuestType::TimeInvested {
+            current_minutes,
+            target_minutes,
+        } => format!(" ({}/{})", current_minutes, target_minutes),
+        QuestType::Exploration {
+            commands_used,
+            target_commands,
+        } => format!(" ({}/{})", commands_used.len(), target_commands),
+        QuestType::SpeedRun { .. } => String::new(), // No progress display for speed runs
+    }
 }

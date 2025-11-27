@@ -49,8 +49,7 @@ fn init_secure_logging() -> Result<()> {
 }
 
 /// Main entry point
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     // Warn if running debug build
     #[cfg(debug_assertions)]
     {

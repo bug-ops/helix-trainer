@@ -1,4 +1,6 @@
 //! Results screen rendering
+// TODO: Iteration 3 - Add XP breakdown panel showing base XP, bonuses (perfect, first today, quest completion)
+// TODO: Iteration 3 - Show quest progress updates (e.g., "Delete lines: 2 → 3")
 
 use crate::{game::PerformanceRating, ui::state::AppState};
 use ratatui::{

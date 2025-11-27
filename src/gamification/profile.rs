@@ -299,7 +299,7 @@ impl XPCalculator {
     /// use helix_trainer::gamification::XPCalculator;
     ///
     /// // Perfect score on first scenario today
-    /// assert_eq!(XPCalculator::scenario_xp(100, true, true), 32); // 20 * 1.2 + 10 = 34
+    /// assert_eq!(XPCalculator::scenario_xp(100, true, true), 34); // 20 * 1.2 + 10 = 34
     ///
     /// // Normal score
     /// assert_eq!(XPCalculator::scenario_xp(85, false, false), 17);

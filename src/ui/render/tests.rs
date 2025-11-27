@@ -1,7 +1,11 @@
 //! Tests for rendering functions
 
 use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+use crate::gamification::{ProfileStorage, UserProfile};
+use crate::learning::{PerformanceTracker, Scheduler};
 use crate::ui::state::AppState;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn create_test_scenario() -> crate::config::Scenario {
     crate::config::Scenario {
@@ -31,6 +35,14 @@ fn create_test_scenario() -> crate::config::Scenario {
     }
 }
 
+fn create_test_app_state(scenarios: Vec<crate::config::Scenario>) -> AppState {
+    let profile = Rc::new(RefCell::new(UserProfile::new()));
+    let storage = ProfileStorage::new();
+    let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+    let scheduler = Scheduler::new(tracker.clone());
+    AppState::new(scenarios, profile, storage, tracker, scheduler)
+}
+
 #[test]
 fn test_main_menu_items_count() {
     let items = AppState::menu_items();
@@ -45,7 +57,7 @@ fn test_render_does_not_panic_on_empty_state() {
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
 
-    let mut state = AppState::new(vec![]);
+    let mut state = create_test_app_state(vec![]);
 
     terminal
         .draw(|f| {
@@ -63,7 +75,7 @@ fn test_render_task_screen_with_session() {
     let mut terminal = Terminal::new(backend).unwrap();
 
     let scenario = create_test_scenario();
-    let mut state = AppState::new(vec![scenario]);
+    let mut state = create_test_app_state(vec![scenario]);
 
     // Create a session
     crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();

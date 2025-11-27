@@ -13,18 +13,23 @@ use rust_i18n::t;
 pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     let area = frame.area();
 
-    // Create layout: title | menu | instructions
+    // Create layout: header | title | menu | quests | instructions
+    // TODO: Iteration 2 - Add quest panel between menu and instructions
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
+            Constraint::Length(1), // Header with level/XP/streak
             Constraint::Length(3), // Title
             Constraint::Min(4),    // Menu items
             Constraint::Length(3), // Instructions
         ])
         .split(area);
 
-    // Title
+    // NEW: Render profile header
+    render_profile_header(frame, chunks[0], state);
+
+    // Title (updated index from 0 to 1)
     let title = Paragraph::new(t!("menu.title").to_string())
         .style(
             Style::default()
@@ -33,10 +38,10 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(title, chunks[0]);
+    frame.render_widget(title, chunks[1]);
 
     // Calculate visible area height for menu (excluding borders)
-    let menu_height = chunks[1].height.saturating_sub(2) as usize; // -2 for borders
+    let menu_height = chunks[2].height.saturating_sub(2) as usize; // -2 for borders (updated index)
     let total_items = state.scenarios.len() + 1; // +1 for Quit option
 
     // Adjust scroll offset to keep selected item visible
@@ -113,11 +118,11 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     let menu = List::new(visible_items)
         .block(Block::default().title(menu_title).borders(Borders::ALL))
         .style(Style::default().fg(Color::White));
-    frame.render_widget(menu, chunks[1]);
+    frame.render_widget(menu, chunks[2]); // Updated index from 1 to 2
 
     // Draw scrollbar if needed
     if total_items > menu_height {
-        let scrollbar_area = chunks[1];
+        let scrollbar_area = chunks[2]; // Updated index from 1 to 2
         let scrollbar_height = scrollbar_area.height.saturating_sub(2) as usize; // -2 for borders
 
         if scrollbar_height > 0 {
@@ -168,5 +173,28 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(instructions, chunks[2]);
+    frame.render_widget(instructions, chunks[3]); // Updated index from 2 to 3
+}
+
+/// Render the profile header showing level, XP, and streak
+fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
+    let profile = state.profile.borrow();
+
+    let next_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level + 1);
+    let progress_pct = (profile.xp_progress() * 100.0) as u8;
+
+    let header_text = format!(
+        "Level {} ⭐  🔥 {} days   XP: {}/{} ({}%)",
+        profile.level, profile.current_streak, profile.total_xp, next_level_xp, progress_pct
+    );
+
+    let header = Paragraph::new(header_text)
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .alignment(Alignment::Center);
+
+    frame.render_widget(header, area);
 }

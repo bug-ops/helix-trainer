@@ -11,12 +11,16 @@ use crossterm::{
 };
 use helix_trainer::{
     config::ScenarioLoader,
+    gamification::{ProfileStorage, QuestGenerator, StreakManager},
     helix::commands::*,
+    learning::{PerformanceTracker, Scheduler},
     ui::{self, AppState, Message},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
@@ -79,8 +83,44 @@ fn main() -> Result<()> {
         locale_str
     );
 
+    // Initialize profile system
+    let profile_storage = ProfileStorage::new();
+    let mut profile = profile_storage.load().unwrap_or_else(|e| {
+        tracing::warn!("Failed to load profile: {}, creating new", e);
+        helix_trainer::gamification::UserProfile::new()
+    });
+
+    // Check if we need to refresh daily quests
+    let now = chrono::Utc::now();
+    if should_refresh_quests(&profile, now) {
+        tracing::info!("Refreshing daily quests for new day");
+        let tracker = PerformanceTracker::new();
+        profile.reset_daily_quests();
+        profile.daily_quests = QuestGenerator::generate_quests(&profile, &tracker);
+    }
+
+    // Update streak (checks last activity)
+    let streak_change = StreakManager::update_streak(&mut profile);
+    tracing::debug!("Streak status: {:?}", streak_change);
+
+    // Create shared references
+    let profile_rc = Rc::new(RefCell::new(profile));
+
+    // Initialize performance tracker
+    let tracker = PerformanceTracker::new();
+    let tracker_rc = Rc::new(RefCell::new(tracker));
+
+    // Create scheduler
+    let scheduler = Scheduler::new(tracker_rc.clone());
+
     // Initialize app state
-    let mut app_state = AppState::new(scenarios);
+    let mut app_state = AppState::new(
+        scenarios,
+        profile_rc.clone(),
+        profile_storage,
+        tracker_rc,
+        scheduler,
+    );
 
     // Setup terminal
     enable_raw_mode()?;
@@ -94,6 +134,13 @@ fn main() -> Result<()> {
     // Run the main event loop
     let result = run_app(&mut terminal, &mut app_state);
 
+    // Save profile before exit
+    if let Err(e) = app_state.save_profile_immediate() {
+        tracing::error!("Failed to save profile on exit: {}", e);
+    } else {
+        tracing::info!("Profile saved successfully");
+    }
+
     // Restore terminal
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -102,6 +149,14 @@ fn main() -> Result<()> {
     tracing::info!("Exiting Helix Keybindings Trainer");
 
     result
+}
+
+/// Check if daily quests should be refreshed
+fn should_refresh_quests(
+    profile: &helix_trainer::gamification::UserProfile,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    now.date_naive() != profile.last_quest_refresh.date_naive()
 }
 
 /// Main application event loop
@@ -164,6 +219,15 @@ fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
         ui::Screen::MainMenu => handle_menu_keys(key, state),
         ui::Screen::Task => handle_task_keys(key, state),
         ui::Screen::Results => handle_results_keys(key),
+        ui::Screen::Profile | ui::Screen::Statistics => handle_profile_stats_keys(key),
+    }
+}
+
+/// Handle keyboard events on profile and statistics screens
+fn handle_profile_stats_keys(key: KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => Some(Message::BackToMenu),
+        _ => None,
     }
 }
 
@@ -308,10 +372,22 @@ fn handle_results_keys(key: KeyEvent) -> Option<Message> {
 mod tests {
     use super::*;
 
+    fn create_test_app_state() -> AppState {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let profile = Rc::new(RefCell::new(helix_trainer::gamification::UserProfile::new()));
+        let storage = helix_trainer::gamification::ProfileStorage::new();
+        let tracker = Rc::new(RefCell::new(
+            helix_trainer::learning::PerformanceTracker::new(),
+        ));
+        let scheduler = helix_trainer::learning::Scheduler::new(tracker.clone());
+        AppState::new(vec![], profile, storage, tracker, scheduler)
+    }
+
     #[test]
     fn test_menu_key_q_quits() {
         let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::QuitApp));
     }
@@ -319,7 +395,7 @@ mod tests {
     #[test]
     fn test_menu_key_j_moves_down() {
         let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::MenuDown));
     }
@@ -327,7 +403,7 @@ mod tests {
     #[test]
     fn test_menu_key_k_moves_up() {
         let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::MenuUp));
     }
@@ -335,7 +411,7 @@ mod tests {
     #[test]
     fn test_menu_key_enter_selects() {
         let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::MenuSelect));
     }
@@ -343,7 +419,7 @@ mod tests {
     #[test]
     fn test_task_key_f1_shows_hint() {
         let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
         assert_eq!(msg, Some(Message::ShowHint));
     }
@@ -351,7 +427,7 @@ mod tests {
     #[test]
     fn test_task_key_h_moves_left() {
         let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
         assert_eq!(msg, Some(Message::ExecuteCommand(Cow::Borrowed("h"))));
     }
@@ -359,7 +435,7 @@ mod tests {
     #[test]
     fn test_task_key_esc_abandons() {
         let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
         assert_eq!(msg, Some(Message::AbandonScenario));
     }
@@ -367,7 +443,7 @@ mod tests {
     #[test]
     fn test_results_key_r_retries() {
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_results_keys(key);
         assert_eq!(msg, Some(Message::RetryScenario));
     }
@@ -375,7 +451,7 @@ mod tests {
     #[test]
     fn test_results_key_m_returns_menu() {
         let key = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_results_keys(key);
         assert_eq!(msg, Some(Message::BackToMenu));
     }
@@ -383,7 +459,7 @@ mod tests {
     #[test]
     fn test_results_key_q_quits() {
         let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_results_keys(key);
         assert_eq!(msg, Some(Message::QuitApp));
     }
@@ -391,7 +467,7 @@ mod tests {
     #[test]
     fn test_unknown_key_returns_none() {
         let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
-        let state = AppState::new(vec![]);
+        let state = create_test_app_state();
         let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, None);
     }

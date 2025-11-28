@@ -315,7 +315,7 @@ impl XPCalculator {
     pub fn scenario_xp(score: u32, multiplier: f64) -> u64 {
         // Base XP: 50 per 100 points
         let base_xp = (score as u64 * 50) / 100;
-        (base_xp as f64 * multiplier) as u64
+        (base_xp as f64 * multiplier).round() as u64
     }
 }
 

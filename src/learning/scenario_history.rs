@@ -3,11 +3,31 @@
 //! Prevents XP farming by tracking scenario mastery and scaling rewards.
 //! Implements a three-tier mastery system: Learning → Proficient → Mastered
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Maximum recursion depth for repeat command protection
 const MAX_REPEAT_DEPTH: u32 = 100;
+
+/// Maximum number of scenarios to track in history (prevents unbounded growth)
+/// Current application has ~20 scenarios, this allows room for 500x growth
+const MAX_SCENARIOS_TRACKED: usize = 10_000;
+
+/// Maximum length for scenario IDs (defense in depth)
+const MAX_SCENARIO_ID_LENGTH: usize = 100;
+
+/// Validate scenario ID format (alphanumeric, underscores, hyphens only)
+///
+/// Defense in depth - scenario IDs are already validated at TOML load time,
+/// but this provides an additional safety check at the storage boundary.
+fn is_valid_scenario_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_SCENARIO_ID_LENGTH
+        && id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+}
 
 /// Mastery level for a scenario based on performance history
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,7 +89,7 @@ pub struct ScenarioCompletion {
 
     // Today's session tracking (reset at midnight)
     pub attempts_today: u32,
-    pub last_attempt_date: String, // YYYY-MM-DD format
+    pub last_attempt_date: NaiveDate,
 }
 
 impl ScenarioCompletion {
@@ -96,7 +116,7 @@ impl ScenarioCompletion {
             last_attempt: now,
             mastery_level: ScenarioMastery::Learning,
             attempts_today: 0,
-            last_attempt_date: now.format("%Y-%m-%d").to_string(),
+            last_attempt_date: now.date_naive(),
         };
 
         // Record the first attempt
@@ -183,7 +203,7 @@ impl ScenarioCompletion {
 
     /// Reset daily attempt counter if new day
     fn check_and_reset_daily(&mut self) {
-        let today = Utc::now().format("%Y-%m-%d").to_string();
+        let today = Utc::now().date_naive();
         if today != self.last_attempt_date {
             self.attempts_today = 0;
             self.last_attempt_date = today;
@@ -233,6 +253,20 @@ impl ScenarioHistory {
     /// assert_eq!(xp, 50); // First attempt, full XP
     /// ```
     pub fn record_completion(&mut self, scenario_id: &str, score: u32, base_xp: u64) -> u64 {
+        // Validate scenario ID format (defense in depth)
+        if !is_valid_scenario_id(scenario_id) {
+            return 0;
+        }
+
+        // Check if we're at the limit and this is a new scenario
+        if !self.completions.contains_key(scenario_id)
+            && self.completions.len() >= MAX_SCENARIOS_TRACKED
+        {
+            // At capacity - silently ignore new scenarios (defense in depth)
+            // In practice, this should never happen with ~20 scenarios
+            return 0;
+        }
+
         // Calculate multiplier BEFORE recording (to get current state)
         let multiplier = self
             .completions
@@ -518,5 +552,67 @@ mod tests {
         assert_eq!(stats.learning, 0);
         assert_eq!(stats.proficient, 0);
         assert_eq!(stats.mastered, 0);
+    }
+
+    #[test]
+    fn test_bounded_hashmap_respects_limit() {
+        let mut history = ScenarioHistory::new();
+
+        // Fill to just below limit
+        for i in 0..MAX_SCENARIOS_TRACKED {
+            history.record_completion(&format!("scenario_{}", i), 100, 50);
+        }
+
+        assert_eq!(history.completions.len(), MAX_SCENARIOS_TRACKED);
+
+        // Try to add one more - should be rejected
+        let xp = history.record_completion("overflow_scenario", 100, 50);
+        assert_eq!(xp, 0); // Returns 0 when at capacity
+        assert_eq!(history.completions.len(), MAX_SCENARIOS_TRACKED); // No growth
+
+        // Existing scenarios should still update
+        let xp2 = history.record_completion("scenario_0", 100, 50);
+        assert!(xp2 > 0); // Still gets XP for existing scenario
+    }
+
+    #[test]
+    fn test_scenario_id_validation() {
+        let mut history = ScenarioHistory::new();
+
+        // Valid IDs
+        assert!(history.record_completion("valid_scenario_001", 100, 50) > 0);
+        assert!(history.record_completion("test-scenario-2", 100, 50) > 0);
+        assert!(history.record_completion("a1b2c3", 100, 50) > 0);
+
+        // Invalid IDs - should be rejected
+        assert_eq!(history.record_completion("", 100, 50), 0); // Empty
+        assert_eq!(history.record_completion("../../../etc/passwd", 100, 50), 0); // Path traversal
+        assert_eq!(history.record_completion("drop table;", 100, 50), 0); // SQL injection attempt
+        assert_eq!(history.record_completion(&"x".repeat(101), 100, 50), 0); // Too long
+
+        // Only valid IDs should be stored
+        assert_eq!(history.completions.len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    #[test]
+    fn test_is_valid_scenario_id_accepts_valid() {
+        assert!(is_valid_scenario_id("delete_line_001"));
+        assert!(is_valid_scenario_id("test-scenario"));
+        assert!(is_valid_scenario_id("a1b2c3"));
+        assert!(is_valid_scenario_id("Movement123"));
+    }
+
+    #[test]
+    fn test_is_valid_scenario_id_rejects_invalid() {
+        assert!(!is_valid_scenario_id("")); // Empty
+        assert!(!is_valid_scenario_id("../../etc/passwd")); // Path traversal
+        assert!(!is_valid_scenario_id("drop table;")); // Special chars
+        assert!(!is_valid_scenario_id("test scenario")); // Space
+        assert!(!is_valid_scenario_id(&"x".repeat(101))); // Too long
     }
 }

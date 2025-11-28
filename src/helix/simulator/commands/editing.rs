@@ -113,8 +113,14 @@ pub(super) fn dedent_line(sim: &mut HelixSimulator) -> Result<(), UserError> {
     sim.apply_transaction(transaction);
 
     // Move cursor to maintain relative position
-    let new_head = head.saturating_sub(spaces_to_remove);
-    sim.selection = Selection::point(new_head.min(sim.doc.len_chars()));
+    // If cursor is within the removed spaces, keep it at line start
+    // Otherwise, shift it left by the number of removed spaces
+    let new_head = if head <= line_start + spaces_to_remove {
+        line_start
+    } else {
+        head - spaces_to_remove
+    };
+    sim.selection = Selection::point(new_head);
 
     Ok(())
 }

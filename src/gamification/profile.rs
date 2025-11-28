@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use super::{AchievementId, Quest};
+use crate::learning::ScenarioHistory;
 
 /// User profile with progression, streaks, and achievements
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +48,10 @@ pub struct UserProfile {
 
     /// Total commands executed
     pub commands_executed: u32,
+
+    /// Scenario completion history and mastery tracking
+    #[serde(default)]
+    pub scenario_history: ScenarioHistory,
 }
 
 impl UserProfile {
@@ -78,6 +83,7 @@ impl UserProfile {
             scenarios_completed: 0,
             perfect_scenarios: 0,
             commands_executed: 0,
+            scenario_history: ScenarioHistory::new(),
         }
     }
 
@@ -290,27 +296,26 @@ impl XPCalculator {
     /// # Arguments
     ///
     /// * `score` - Score (0-100)
-    /// * `is_perfect` - If execution was perfect (100 score)
-    /// * `is_first_today` - If this is first completion today
+    /// * `multiplier` - Mastery-based XP multiplier (0.0-1.0)
     ///
     /// # Examples
     ///
     /// ```
     /// use helix_trainer::gamification::XPCalculator;
     ///
-    /// // Perfect score on first scenario today
-    /// assert_eq!(XPCalculator::scenario_xp(100, true, true), 34); // 20 * 1.2 + 10 = 34
+    /// // Perfect score with full multiplier
+    /// assert_eq!(XPCalculator::scenario_xp(100, 1.0), 50); // 100 * 50 / 100 = 50
     ///
     /// // Normal score
-    /// assert_eq!(XPCalculator::scenario_xp(85, false, false), 17);
+    /// assert_eq!(XPCalculator::scenario_xp(85, 1.0), 42); // 85 * 50 / 100 = 42
+    ///
+    /// // Mastered scenario (20% XP)
+    /// assert_eq!(XPCalculator::scenario_xp(100, 0.2), 10); // 50 * 0.2 = 10
     /// ```
-    pub fn scenario_xp(score: u32, is_perfect: bool, is_first_today: bool) -> u64 {
-        let base_xp = 20u64;
-        let score_multiplier = (score as f64) / 100.0;
-        let perfect_bonus = if is_perfect { 1.2 } else { 1.0 };
-        let first_bonus = if is_first_today { 10 } else { 0 };
-
-        ((base_xp as f64 * score_multiplier * perfect_bonus) as u64) + first_bonus
+    pub fn scenario_xp(score: u32, multiplier: f64) -> u64 {
+        // Base XP: 50 per 100 points
+        let base_xp = (score as u64 * 50) / 100;
+        (base_xp as f64 * multiplier).round() as u64
     }
 }
 
@@ -403,20 +408,24 @@ mod tests {
 
     #[test]
     fn test_scenario_xp_calculation() {
-        // Perfect score, first today
-        let xp = XPCalculator::scenario_xp(100, true, true);
-        assert_eq!(xp, 34); // (20 * 1.0 * 1.2) + 10 = 24 + 10 = 34
+        // Perfect score, full multiplier
+        let xp = XPCalculator::scenario_xp(100, 1.0);
+        assert_eq!(xp, 50); // 100 * 50 / 100 = 50
 
-        // Perfect score, not first
-        let xp = XPCalculator::scenario_xp(100, true, false);
-        assert_eq!(xp, 24); // 20 * 1.0 * 1.2 = 24
+        // Normal score
+        let xp = XPCalculator::scenario_xp(85, 1.0);
+        assert_eq!(xp, 42); // 85 * 50 / 100 = 42
 
         // 50% score
-        let xp = XPCalculator::scenario_xp(50, false, false);
-        assert_eq!(xp, 10); // 20 * 0.5 * 1.0 = 10
+        let xp = XPCalculator::scenario_xp(50, 1.0);
+        assert_eq!(xp, 25); // 50 * 50 / 100 = 25
+
+        // Mastered scenario (20% multiplier)
+        let xp = XPCalculator::scenario_xp(100, 0.2);
+        assert_eq!(xp, 10); // 50 * 0.2 = 10
 
         // Zero score
-        let xp = XPCalculator::scenario_xp(0, false, false);
+        let xp = XPCalculator::scenario_xp(0, 1.0);
         assert_eq!(xp, 0);
     }
 

@@ -196,6 +196,24 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
             ]));
         }
 
+        // Mastery scaling
+        if xp.mastery_multiplier < 1.0 {
+            let mastery_text = if let Some((mastery, _)) = &state.scenario_mastery {
+                format!("  {} {}: ", mastery.emoji(), mastery.display_name())
+            } else {
+                "  Mastery: ".to_string()
+            };
+
+            let reduction_pct = ((1.0 - xp.mastery_multiplier) * 100.0) as u32;
+            lines.push(Line::from(vec![
+                Span::raw(mastery_text),
+                Span::styled(
+                    format!("-{}%", reduction_pct),
+                    Style::default().fg(Color::Red),
+                ),
+            ]));
+        }
+
         // Quest bonuses
         for (desc, bonus_xp) in &xp.quest_bonuses {
             lines.push(Line::from(vec![

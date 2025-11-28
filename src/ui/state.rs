@@ -21,7 +21,7 @@
 use crate::config::Scenario;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, QuestType, UserProfile};
-use crate::learning::{PerformanceTracker, Scheduler};
+use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
 use crate::security::UserError;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -35,6 +35,7 @@ pub struct XPBreakdown {
     pub base_xp: u64,
     pub perfect_bonus: u64,
     pub first_today_bonus: u64,
+    pub mastery_multiplier: f64,           // Mastery-based XP scaling
     pub quest_bonuses: Vec<(String, u64)>, // (quest description, bonus xp)
     pub total_xp: u64,
 }
@@ -239,6 +240,10 @@ pub struct AppState {
     /// Previously completed quest IDs (to detect new completions)
     /// Size: 24+ bytes (HashSet)
     pub previously_completed_quests: HashSet<String>,
+
+    /// Scenario mastery info for last completion (for results display)
+    /// Size: 16 bytes (Option<(enum, f64)>)
+    pub scenario_mastery: Option<(ScenarioMastery, f64)>,
 }
 
 impl fmt::Debug for AppState {
@@ -317,6 +322,7 @@ impl AppState {
             xp_breakdown: None,
             quest_progress_changes: Vec::new(),
             previously_completed_quests: HashSet::new(),
+            scenario_mastery: None,
         }
     }
 
@@ -503,12 +509,13 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::CompleteScenario => {
             // Update quest progress BEFORE awarding XP
             // Extract data we need first to avoid borrow issues
-            let (duration, feedback) = if let Some(session) = &state.session {
+            let (duration, feedback, scenario_id) = if let Some(session) = &state.session {
                 let duration = session.elapsed();
                 let feedback = session
                     .get_feedback()
                     .map_err(|_| UserError::OperationFailed)?;
-                (duration, feedback)
+                let scenario_id = session.scenario().id.clone();
+                (duration, feedback, scenario_id)
             } else {
                 state.screen = Screen::Results;
                 return Ok(());
@@ -524,18 +531,40 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 },
             )?;
 
-            // Calculate XP breakdown
-            let is_first_today = state.scenarios_completed_today == 0;
+            // Calculate base XP (before mastery scaling)
+            let score = feedback.score;
             let is_perfect = feedback.score == feedback.max_points;
+            let is_first_today = state.scenarios_completed_today == 0;
 
             // Base XP from score (50 XP per 100 points)
-            let base_xp = (feedback.score as u64 * 50) / 100;
+            let base_xp = (score as u64 * 50) / 100;
 
             // Perfect bonus (+20%)
             let perfect_bonus = if is_perfect { base_xp / 5 } else { 0 };
 
             // First today bonus (+10 XP)
             let first_today_bonus = if is_first_today { 10 } else { 0 };
+
+            let total_base_xp = base_xp + perfect_bonus + first_today_bonus;
+
+            // Apply mastery scaling and record completion
+            let (actual_xp, mastery_level, mastery_multiplier) = {
+                let mut profile = state.profile.borrow_mut();
+                let actual_xp =
+                    profile
+                        .scenario_history
+                        .record_completion(&scenario_id, score, total_base_xp);
+
+                // Get mastery info for UI display
+                let completion = profile.scenario_history.get(&scenario_id).unwrap();
+                let mastery_level = completion.mastery_level;
+                let mastery_multiplier = completion.xp_multiplier();
+
+                (actual_xp, mastery_level, mastery_multiplier)
+            };
+
+            // Store mastery info for results display
+            state.scenario_mastery = Some((mastery_level, mastery_multiplier));
 
             // Quest bonuses (collect newly completed quests)
             let mut quest_bonuses = Vec::new();
@@ -561,16 +590,15 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 }
             }
 
-            let total_xp = base_xp
-                + perfect_bonus
-                + first_today_bonus
-                + quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
+            let quest_xp = quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
+            let total_xp = actual_xp + quest_xp;
 
             // Store breakdown for results display
             state.xp_breakdown = Some(XPBreakdown {
                 base_xp,
                 perfect_bonus,
                 first_today_bonus,
+                mastery_multiplier,
                 quest_bonuses,
                 total_xp,
             });

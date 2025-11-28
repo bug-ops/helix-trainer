@@ -1,0 +1,323 @@
+name: Release
+
+# Trigger only on version tags (v*.*.*)
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# Minimal permissions needed for releases
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+# Cancel previous release workflows if a new tag is pushed
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Step 1: Validate that the tag version matches Cargo.toml
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Extract version from tag
+        id: extract
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
+          echo "Tag version: $TAG_VERSION"
+
+      - name: Extract version from Cargo.toml
+        id: cargo
+        run: |
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "cargo_version=$CARGO_VERSION" >> $GITHUB_OUTPUT
+          echo "Cargo.toml version: $CARGO_VERSION"
+
+      - name: Validate version match
+        run: |
+          TAG_VERSION="${{ steps.extract.outputs.version }}"
+          CARGO_VERSION="${{ steps.cargo.outputs.cargo_version }}"
+
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "ERROR: Version mismatch!"
+            echo "  Git tag: v$TAG_VERSION"
+            echo "  Cargo.toml: $CARGO_VERSION"
+            echo ""
+            echo "Please update Cargo.toml version to match the tag, or use the correct tag."
+            exit 1
+          fi
+
+          echo "Version validation passed: $TAG_VERSION"
+
+      - name: Validate CHANGELOG.md entry exists
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+          if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "WARNING: No CHANGELOG.md entry found for version $VERSION"
+            echo "Please add a changelog entry before creating the release."
+            exit 1
+          fi
+          echo "CHANGELOG.md entry found for version $VERSION"
+
+  # Step 2: Build release binaries for all platforms
+  build:
+    name: Build ${{ matrix.target }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 (GNU)
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+
+          # Linux x86_64 (musl - static linking)
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+
+          # macOS x86_64 (Intel)
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+
+          # macOS ARM64 (Apple Silicon)
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+
+          # Windows x86_64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+
+          # Windows ARM64
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+
+          # Linux ARM64 (aarch64)
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+            use_cross: true
+
+          # Linux ARM64 (musl - static linking)
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+            use_cross: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Install musl tools for Linux musl builds
+      - name: Install musl tools (Linux musl only)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      # Install cross for ARM builds
+      - name: Install cross (for ARM targets)
+        if: matrix.use_cross == true
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build release binary (with cross)
+        if: matrix.use_cross == true
+        run: cross build --release --target ${{ matrix.target }} --locked --verbose
+
+      - name: Build release binary (native)
+        if: matrix.use_cross != true
+        run: cargo build --release --target ${{ matrix.target }} --locked --verbose
+
+      - name: Create archive directory
+        shell: bash
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          TARGET="${{ matrix.target }}"
+          ARCHIVE_DIR="helix-trainer-v${VERSION}-${TARGET}"
+          mkdir -p "$ARCHIVE_DIR"
+          echo "ARCHIVE_DIR=$ARCHIVE_DIR" >> $GITHUB_ENV
+
+      - name: Copy binary to archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cp "target/${{ matrix.target }}/release/helix-trainer" "$ARCHIVE_DIR/"
+          chmod +x "$ARCHIVE_DIR/helix-trainer"
+
+      - name: Copy binary to archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Copy-Item "target/${{ matrix.target }}/release/helix-trainer.exe" "$env:ARCHIVE_DIR/"
+
+      - name: Copy additional files
+        shell: bash
+        run: |
+          cp README.md "$ARCHIVE_DIR/"
+          cp LICENSE "$ARCHIVE_DIR/"
+          cp CHANGELOG.md "$ARCHIVE_DIR/"
+
+      - name: Create tar.gz archive (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          tar -czf "${ARCHIVE_DIR}.tar.gz" "$ARCHIVE_DIR"
+          echo "ARCHIVE_FILE=${ARCHIVE_DIR}.tar.gz" >> $GITHUB_ENV
+
+      - name: Create zip archive (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $archiveFile = "$env:ARCHIVE_DIR.zip"
+          Compress-Archive -Path "$env:ARCHIVE_DIR" -DestinationPath $archiveFile
+          echo "ARCHIVE_FILE=$archiveFile" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Generate SHA256 checksum (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          shasum -a 256 "$ARCHIVE_FILE" > "$ARCHIVE_FILE.sha256"
+          cat "$ARCHIVE_FILE.sha256"
+
+      - name: Generate SHA256 checksum (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "$env:ARCHIVE_FILE" -Algorithm SHA256).Hash.ToLower()
+          $filename = Split-Path "$env:ARCHIVE_FILE" -Leaf
+          "$hash  $filename" | Out-File -FilePath "$env:ARCHIVE_FILE.sha256" -Encoding ascii
+          Get-Content "$env:ARCHIVE_FILE.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            ${{ env.ARCHIVE_FILE }}
+            ${{ env.ARCHIVE_FILE }}.sha256
+          retention-days: 7
+
+  # Step 3: Create GitHub Release and upload all artifacts
+  release:
+    name: Create GitHub Release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          ls -lh artifacts/
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          echo "Extracting changelog for version $VERSION"
+
+          # Extract section between ## [VERSION] and next ## or end of file
+          awk "/## \[$VERSION\]/,/## \[.*\]/{if (/## \[.*\]/ && !/## \[$VERSION\]/) exit; print}" CHANGELOG.md | \
+            sed '/^## \[/d' | \
+            sed '/^$/N;/^\n$/D' > release-notes.md
+
+          # If empty, use a default message
+          if [ ! -s release-notes.md ]; then
+            echo "Release version $VERSION" > release-notes.md
+            echo "" >> release-notes.md
+            echo "See CHANGELOG.md for full details." >> release-notes.md
+          fi
+
+          echo "Release notes:"
+          cat release-notes.md
+
+      - name: Determine if prerelease
+        id: prerelease
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          if [[ "$VERSION" =~ (alpha|beta|rc) ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "This is a pre-release version"
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "This is a stable release"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ needs.validate.outputs.version }}"
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ steps.prerelease.outputs.prerelease }}
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/*.sha256
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo "Release v${{ needs.validate.outputs.version }} created successfully!"
+          echo ""
+          echo "Artifacts uploaded:"
+          ls -lh artifacts/
+          echo ""
+          echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.validate.outputs.version }}"
+
+  # Optional: Publish to crates.io (commented out - enable when ready)
+  # publish-crates:
+  #   name: Publish to crates.io
+  #   needs: [validate, release]
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 15
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v6
+  #
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+  #
+  #     - name: Publish to crates.io
+  #       run: cargo publish --token ${{ secrets.CARGO_TOKEN }}
+  #       env:
+  #         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}

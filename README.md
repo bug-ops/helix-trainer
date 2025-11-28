@@ -81,6 +81,51 @@ Not pointless gamification. Real motivation to practice daily.
 
 ### Installation
 
+#### Option 1: Download Pre-built Binaries (Recommended)
+
+Download the latest release for your platform from the [Releases page](https://github.com/bug-ops/helix-trainer/releases):
+
+```bash
+# Linux x86_64 (GNU)
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.1.0-x86_64-unknown-linux-gnu
+./helix-trainer
+
+# Linux ARM64 (aarch64)
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.0-aarch64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.1.0-aarch64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.1.0-aarch64-unknown-linux-gnu
+./helix-trainer
+
+# macOS (Apple Silicon M1/M2/M3)
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.0-aarch64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.1.0-aarch64-apple-darwin.tar.gz
+cd helix-trainer-v0.1.0-aarch64-apple-darwin
+./helix-trainer
+
+# macOS (Intel)
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.0-x86_64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.1.0-x86_64-apple-darwin.tar.gz
+cd helix-trainer-v0.1.0-x86_64-apple-darwin
+./helix-trainer
+
+# Windows x86_64
+# Download helix-trainer-v0.1.0-x86_64-pc-windows-msvc.zip from the Releases page
+# Extract and run helix-trainer.exe
+
+# Windows ARM64
+# Download helix-trainer-v0.1.0-aarch64-pc-windows-msvc.zip from the Releases page
+# Extract and run helix-trainer.exe
+```
+
+**Verify checksums** (optional but recommended):
+```bash
+sha256sum -c helix-trainer-*.sha256
+```
+
+#### Option 2: Build from Source
+
 ```bash
 git clone https://github.com/bug-ops/helix-trainer.git
 cd helix-trainer
@@ -88,7 +133,7 @@ cargo build --release
 ./target/release/helix-trainer
 ```
 
-**Requirements**: Rust 1.90+ (2024 edition), terminal with Unicode support
+**Requirements**: Rust 1.85+ (2024 edition), terminal with Unicode support
 
 ### First Run
 
@@ -300,8 +345,56 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ---
 
+## Releases
+
+### Download Latest Release
+
+**Latest version**: [v0.1.0](https://github.com/bug-ops/helix-trainer/releases/latest) (Phase 1 - Smart Learning & Gamification)
+
+**Supported Platforms**:
+- Linux x86_64 (GNU and musl)
+- Linux ARM64 (aarch64 GNU and musl)
+- macOS x86_64 (Intel)
+- macOS ARM64 (Apple Silicon M1/M2/M3)
+- Windows x86_64
+- Windows ARM64
+
+Each release includes:
+- Pre-built binary
+- README and documentation
+- LICENSE file
+- CHANGELOG with release notes
+- SHA256 checksums for verification
+
+**Release Schedule**: We follow semantic versioning (MAJOR.MINOR.PATCH)
+- Major releases: Breaking changes or major new features
+- Minor releases: New features, backward compatible
+- Patch releases: Bug fixes and improvements
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release history.
+
+### Creating a Release (Maintainers)
+
+Releases are automated via GitHub Actions:
+
+1. Update version in `Cargo.toml`
+2. Update `CHANGELOG.md` with release notes
+3. Commit changes: `git commit -m "chore: prepare v0.2.0 release"`
+4. Create and push tag: `git tag v0.2.0 && git push origin v0.2.0`
+5. GitHub Actions will automatically:
+   - Validate version consistency
+   - Build binaries for all platforms
+   - Generate SHA256 checksums
+   - Create GitHub release
+   - Upload all artifacts
+
+**Workflow**: `.github/workflows/release.yml`
+
+---
+
 ## Documentation
 
+- [CHANGELOG.md](CHANGELOG.md) - Release history and version notes
 - [CLAUDE.md](CLAUDE.md) - Project overview, tech stack, development workflow
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [SECURITY.md](SECURITY.md) - Security policy

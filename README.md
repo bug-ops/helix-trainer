@@ -1,25 +1,65 @@
 # Helix Trainer
 
+[![CI Status](https://github.com/bug-ops/helix-trainer/actions/workflows/ci.yml/badge.svg)](https://github.com/bug-ops/helix-trainer/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.90+-orange.svg)](https://www.rust-lang.org)
-[![Edition](https://img.shields.io/badge/edition-2024-blue)](https://doc.rust-lang.org/edition-guide/rust-2024/index.html)
 
-**The only tool that trains REAL development workflows in Helix, not just commands.**
+**Stop learning Helix commands in isolation. Start practicing real development workflows.**
 
-Learn Helix the way you'll actually use it: LSP interactions, git operations, multi-file navigation, and real codebase scenarios. Powered by cutting-edge FSRS algorithm for scientifically-optimized learning.
+Traditional tutorials teach you `dd` and `w` on synthetic text files. Then you open a real codebase and... freeze. Where's the failing test? How do I navigate between files? What was that LSP command?
+
+**Helix Trainer bridges this gap.** Train the workflows you'll actually use: debugging sessions, refactoring across files, git operations—powered by the FSRS algorithm for 20-30% faster mastery than traditional practice.
+
+> 🎬 **Demo GIF coming soon** — Training session with daily quests and XP progression
 
 ---
 
-## Why This Exists
+**Quick Links**:
+[📥 Download](#releases) ·
+[🚀 Quick Start](#quick-start) ·
+[✨ Features](#-features) ·
+[📖 Documentation](#documentation) ·
+[🐛 Issues](https://github.com/bug-ops/helix-trainer/issues) ·
+[🤝 Contributing](#-contributing)
+
+---
+
+## 📋 Table of Contents
+
+- [Features](#-features)
+- [Quick Start](#quick-start)
+- [Current Status](#current-status)
+- [Feature Showcase](#feature-showcase)
+- [Commands Supported](#-commands-supported-31)
+- [Roadmap](#-roadmap-vision-to-reality)
+- [Technology](#-technology)
+- [Contributing](#-contributing)
+- [Releases](#releases)
+- [Documentation](#documentation)
+- [Why You Should Try This](#why-you-should-try-this)
+- [Success Metrics](#-success-metrics-phase-1-goals)
+- [FAQ](#-faq)
+- [Get Involved](#get-involved)
+
+---
+
+## 📖 Why This Project Exists & What Makes It Different
+
+<details>
+<summary>Click to expand</summary>
+
+### Why This Exists
 
 **Traditional editor tutorials teach commands. Real development requires workflows.**
 
 Every vim/Helix tutorial:
+
 - Teaches `dd` (delete line) in isolation
 - Shows `w` (next word) on synthetic text
 - Stops at "congratulations, you know the basics!"
 
 **Real development**:
+
 - Navigate to failing test → jump to implementation → fix bug → stage changes → commit
 - Refactor function across 3 files using LSP go-to-definition
 - Debug by jumping between error logs and source code
@@ -28,9 +68,9 @@ Every vim/Helix tutorial:
 
 ---
 
-## What Makes This Different
+### What Makes This Different
 
-### 1. Scientifically-Optimized Learning (FSRS Algorithm)
+#### 1. Scientifically-Optimized Learning (FSRS Algorithm)
 
 Uses the same state-of-the-art spaced repetition algorithm as Anki 23.10+:
 
@@ -41,7 +81,7 @@ Uses the same state-of-the-art spaced repetition algorithm as Anki 23.10+:
 
 No more random practice. The system learns which commands YOU struggle with and reviews them before you forget.
 
-### 2. Real Workflow Training (Coming Soon)
+#### 2. Real Workflow Training (Coming Soon)
 
 **Phase 2 roadmap**: The only tool training full development loops:
 
@@ -57,7 +97,7 @@ Scenario: "CI Failed - Fix the Bug"
 
 This is what makes you productive. Commands are just building blocks.
 
-### 3. Gamification That Works
+#### 3. Gamification That Works
 
 Duolingo-proven mechanics (launching Phase 1):
 
@@ -68,12 +108,27 @@ Duolingo-proven mechanics (launching Phase 1):
 
 Not pointless gamification. Real motivation to practice daily.
 
-### 4. 100% Offline, Privacy-First
+#### 4. 100% Offline, Privacy-First
 
 - No cloud services, no internet required
 - All data stored locally (`~/.config/helix-trainer/`)
 - No telemetry, tracking, or data collection
 - Your learning data stays on your machine
+
+</details>
+
+---
+
+## ✨ Features
+
+- 🧠 **Smart Learning (FSRS Algorithm)**: 20-30% fewer reviews than traditional spaced repetition—scientifically proven
+- 🎯 **Daily Quests**: Duolingo-style challenges to build daily practice habits
+- 📊 **Progress Tracking**: XP system, levels, achievements, and streak tracking
+- 🔒 **100% Offline & Private**: No cloud, no tracking, no telemetry—all data stays local
+- ⚡ **Real Helix Accuracy**: Uses actual `helix-core` library (same code as Helix editor)
+- 🎮 **31 Commands Supported**: Movement, editing, clipboard, undo/redo, repeat
+- 🏆 **Gamification That Works**: Proven mechanics from learning apps (Duolingo, Anki)
+- 📚 **20 Training Scenarios**: From basics to intermediate workflows
 
 ---
 
@@ -120,6 +175,7 @@ cd helix-trainer-v0.1.0-x86_64-apple-darwin
 ```
 
 **Verify checksums** (optional but recommended):
+
 ```bash
 sha256sum -c helix-trainer-*.sha256
 ```
@@ -138,10 +194,40 @@ cargo build --release
 ### First Run
 
 ```bash
-cargo run --release
+helix-trainer
 ```
 
-The interactive menu will guide you through scenarios and track your progress.
+**Example training session**:
+
+```
+╔══════════════════════════════════════════════════════════╗
+║                    HELIX TRAINER                         ║
+╚══════════════════════════════════════════════════════════╝
+
+📅 Daily Quest: Practice Mode
+Complete 3 scenarios today
+
+Progress: ██░░░ 2/3 scenarios
+
+───────────────────────────────────────────────────────────
+
+📝 Scenario: Delete a Line
+Goal: Remove line 2 from the file
+
+File content:
+  1 │ line 1
+  2 │ line 2        ← Remove this
+  3 │ line 3
+
+Your command: dd
+
+✅ Perfect! Optimal solution
++50 XP  |  Level 3: 450/500 XP  |  Quest: 2/3 ✅
+
+[R] Next   [M] Menu   [Q] Quit
+```
+
+The interactive menu guides you through scenarios and tracks your progress automatically.
 
 ---
 
@@ -164,12 +250,14 @@ The basics work beautifully:
 Building the game-changing features:
 
 **Spaced Repetition System** (2-3 weeks):
+
 - FSRS algorithm integration (`fsrs` crate)
 - Performance tracking per command
 - Intelligent review scheduling
 - Analytics dashboard
 
 **Daily Quests & Gamification** (3-4 weeks):
+
 - Duolingo-style daily challenges
 - Streak counter with loss aversion
 - XP/level progression system
@@ -230,7 +318,10 @@ The flagship feature that makes Helix Trainer unique:
 ╚══════════════════════════════════════════════════════════╝
 ```
 
-### Commands Supported (31)
+### 🎮 Commands Supported (31)
+
+<details>
+<summary>Click to expand</summary>
 
 | Category | Commands |
 |----------|----------|
@@ -243,9 +334,14 @@ The flagship feature that makes Helix Trainer unique:
 
 All commands work exactly like real Helix (powered by `helix-core` library).
 
+</details>
+
 ---
 
-## Roadmap: Vision to Reality
+## 🗺️ Roadmap: Vision to Reality
+
+<details>
+<summary>Click to expand</summary>
 
 ### The Strategy
 
@@ -256,24 +352,32 @@ All commands work exactly like real Helix (powered by `helix-core` library).
 ### Three-Phase Plan
 
 **Phase 1: Build Habits (3 months)** - NOW
+
 - Spaced repetition (FSRS algorithm)
 - Daily quests + streak tracking
 - Achievement system
 - **Goal**: Daily active users, habit formation
 
 **Phase 2: Own a Category (6 months)** - NEXT
+
 - Workflow Simulator (FLAGSHIP FEATURE)
 - Scenario marketplace (community contributions)
 - **Goal**: "The only tool for real-world Helix training"
 
 **Phase 3: Network Effects (ongoing)** - FUTURE
+
 - Multiplayer/ghost race modes
 - Code archaeology (mine OSS commits for scenarios)
 - **Goal**: Viral growth through social features
 
+</details>
+
 ---
 
-## Technology
+## ⚙️ Technology
+
+<details>
+<summary>Click to expand</summary>
 
 ### Modern Rust Stack
 
@@ -286,6 +390,7 @@ All commands work exactly like real Helix (powered by `helix-core` library).
 | **Large Text** | [tui-big-text](https://crates.io/crates/tui-big-text) 0.7 | Key history display |
 
 **Quality standards**:
+
 - Rust 2024 edition (latest stable)
 - 164 tests, all passing
 - Zero clippy warnings policy
@@ -299,49 +404,27 @@ All commands work exactly like real Helix (powered by `helix-core` library).
 - **Test Time**: ~0.12s (cargo-nextest)
 - **Binary Size**: ~3MB (release mode)
 
+</details>
+
 ---
 
-## Contributing
+## 🤝 Contributing
 
-We follow a strict PR-based workflow. All changes go through:
+We welcome contributions! Please see **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
 
-1. Feature branch from `main`
-2. Full check pipeline (format, tests, clippy, build)
-3. Pull request with CI checks
-4. Code review
-5. Merge only when green
+- Development setup and workflow
+- Code standards and quality checks
+- Pull request process
+- Testing requirements
 
-### Pre-Commit Checks
-
-**Always run before pushing:**
+**Quick start for contributors**:
 
 ```bash
-# 1. Format (requires nightly)
-cargo +nightly fmt
-
-# 2. Tests (fast parallel runner)
-cargo nextest run
-
-# 3. Lints (zero warnings policy)
-cargo clippy --all-targets --all-features -- -D warnings
-
-# 4. Build verification
-cargo build --release
+# Run all quality checks before committing
+cargo +nightly fmt && cargo nextest run && cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-With sccache configured, rebuilds are 5x faster (~10s vs ~54s).
-
-### Quick Guidelines
-
-- Fork the repository
-- Create feature branch (`git checkout -b feature/amazing-feature`)
-- Make changes and add tests
-- Run full check pipeline
-- Commit with conventional commits (`feat:`, `fix:`, `docs:`)
-- Push and create Pull Request
-- Wait for CI checks to pass
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+With `sccache` configured, rebuilds are 5x faster (~10s incremental).
 
 ---
 
@@ -352,6 +435,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 **Latest version**: [v0.1.0](https://github.com/bug-ops/helix-trainer/releases/latest) (Phase 1 - Smart Learning & Gamification)
 
 **Supported Platforms**:
+
 - Linux x86_64 (GNU and musl)
 - Linux ARM64 (aarch64 GNU and musl)
 - macOS x86_64 (Intel)
@@ -360,6 +444,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - Windows ARM64
 
 Each release includes:
+
 - Pre-built binary
 - README and documentation
 - LICENSE file
@@ -367,6 +452,7 @@ Each release includes:
 - SHA256 checksums for verification
 
 **Release Schedule**: We follow semantic versioning (MAJOR.MINOR.PATCH)
+
 - Major releases: Breaking changes or major new features
 - Minor releases: New features, backward compatible
 - Patch releases: Bug fixes and improvements
@@ -395,7 +481,6 @@ Releases are automated via GitHub Actions:
 ## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md) - Release history and version notes
-- [CLAUDE.md](CLAUDE.md) - Project overview, tech stack, development workflow
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [SECURITY.md](SECURITY.md) - Security policy
 
@@ -426,7 +511,10 @@ Releases are automated via GitHub Actions:
 
 ---
 
-## Success Metrics (Phase 1 Goals)
+## 📊 Success Metrics (Phase 1 Goals)
+
+<details>
+<summary>Click to expand</summary>
 
 We're tracking:
 
@@ -438,9 +526,14 @@ We're tracking:
 
 These are research-backed targets, not arbitrary KPIs.
 
+</details>
+
 ---
 
-## FAQ
+## ❓ FAQ
+
+<details>
+<summary>Click to expand</summary>
 
 **Q: Why not just use `:tutor` in Helix?**
 A: `:tutor` is great for one-time learning. Helix Trainer adds spaced repetition, gamification, progress tracking, and (Phase 2) workflow training. Complementary, not competitive.
@@ -459,6 +552,8 @@ A: Helix-specific. Many commands overlap with Vim, but Helix has different selec
 
 **Q: How is this different from Vim Adventures?**
 A: Vim Adventures is a fun game with synthetic scenarios. Helix Trainer focuses on real development workflows with scientific learning optimization. Different audiences.
+
+</details>
 
 ---
 

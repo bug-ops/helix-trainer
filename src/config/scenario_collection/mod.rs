@@ -94,7 +94,8 @@ impl ScenarioCollection {
     pub fn apply_filter(&mut self, filter: &ScenarioFilter, profile: Option<&UserProfile>) {
         self.active_filter = filter.clone();
 
-        self.filtered_indices = self.scenarios
+        self.filtered_indices = self
+            .scenarios
             .iter()
             .enumerate()
             .filter(|(_, scenario)| self.matches_filter(scenario, filter, profile))
@@ -108,9 +109,8 @@ impl ScenarioCollection {
 
         match mode {
             SortMode::ByName => {
-                self.filtered_indices.sort_by(|&a, &b| {
-                    self.scenarios[a].name.cmp(&self.scenarios[b].name)
-                });
+                self.filtered_indices
+                    .sort_by(|&a, &b| self.scenarios[a].name.cmp(&self.scenarios[b].name));
             }
 
             SortMode::ByDifficulty => {
@@ -209,7 +209,8 @@ impl ScenarioCollection {
 
     /// Get all unique categories present in the collection
     pub fn get_categories(&self) -> Vec<ScenarioCategory> {
-        let mut categories: Vec<ScenarioCategory> = self.scenarios
+        let mut categories: Vec<ScenarioCategory> = self
+            .scenarios
             .iter()
             .filter_map(|s| s.metadata.as_ref())
             .filter_map(|m| m.category)
@@ -223,7 +224,8 @@ impl ScenarioCollection {
 
     /// Get all unique difficulties present in the collection
     pub fn get_difficulties(&self) -> Vec<Difficulty> {
-        let mut difficulties: Vec<Difficulty> = self.scenarios
+        let mut difficulties: Vec<Difficulty> = self
+            .scenarios
             .iter()
             .filter_map(|s| s.metadata.as_ref())
             .filter_map(|m| m.difficulty)
@@ -244,27 +246,21 @@ impl ScenarioCollection {
     ) -> bool {
         // Check category filter
         if let Some(ref categories) = filter.categories {
-            let scenario_category = scenario
-                .metadata
-                .as_ref()
-                .and_then(|m| m.category);
+            let scenario_category = scenario.metadata.as_ref().and_then(|m| m.category);
 
             match scenario_category {
-                Some(cat) if categories.contains(&cat) => {}, // Pass
+                Some(cat) if categories.contains(&cat) => {} // Pass
                 _ => return false, // Scenario has no category or wrong category
             }
         }
 
         // Check difficulty filter
         if let Some(ref difficulties) = filter.difficulties {
-            let scenario_difficulty = scenario
-                .metadata
-                .as_ref()
-                .and_then(|m| m.difficulty);
+            let scenario_difficulty = scenario.metadata.as_ref().and_then(|m| m.difficulty);
 
             match scenario_difficulty {
-                Some(diff) if difficulties.contains(&diff) => {}, // Pass
-                _ => return false, // Wrong difficulty
+                Some(diff) if difficulties.contains(&diff) => {} // Pass
+                _ => return false,                               // Wrong difficulty
             }
         }
 

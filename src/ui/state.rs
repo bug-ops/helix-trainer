@@ -152,9 +152,9 @@ pub enum Message {
 /// # Memory Layout
 ///
 /// Fields are ordered for optimal memory layout and cache efficiency:
-/// 1. Large allocations first (Vec, Option<GameSession>)
+/// 1. Large allocations first (Vec, `Option<GameSession>`)
 /// 2. Frequently accessed fields next (screen, session)
-/// 3. Medium-sized types (Option<String>, String)
+/// 3. Medium-sized types (`Option<String>`, String)
 /// 4. Small types last (usize, bool, enum)
 pub struct AppState {
     /// All available scenarios with filtering and sorting
@@ -166,11 +166,11 @@ pub struct AppState {
     pub session: Option<GameSession>,
 
     /// The current hint being displayed (if any)
-    /// Size: 24-32 bytes (Option<String>)
+    /// Size: 24-32 bytes (`Option<String>`)
     pub current_hint: Option<String>,
 
     /// Last command executed (for display purposes)
-    /// Size: 24-32 bytes (Option<String>)
+    /// Size: 24-32 bytes (`Option<String>`)
     pub last_command: Option<String>,
 
     /// History of last 5 key presses (most recent first)
@@ -182,7 +182,7 @@ pub struct AppState {
     pub command_buffer: String,
 
     /// Time when scenario was completed (for showing success screen before results)
-    /// Size: 16 bytes (Option<Instant>)
+    /// Size: 16 bytes (`Option<Instant>`)
     pub completion_time: Option<std::time::Instant>,
 
     /// Index of the currently selected menu item
@@ -233,11 +233,11 @@ pub struct AppState {
     pub scenarios_completed_today: usize,
 
     /// Last save time for debounced saves
-    /// Size: 16 bytes (Option<Instant>)
+    /// Size: 16 bytes (`Option<Instant>`)
     pub last_save_time: Option<Instant>,
 
     /// Session start time for tracking playtime
-    /// Size: 16 bytes (Instant)
+    /// Size: 16 bytes (`Instant`)
     pub session_start_time: Instant,
 
     /// Unique commands used today for exploration quests
@@ -245,7 +245,7 @@ pub struct AppState {
     pub commands_used_today: HashSet<String>,
 
     /// XP breakdown from last scenario (for results display)
-    /// Size: ~40+ bytes (Option<XPBreakdown>)
+    /// Size: ~40+ bytes (`Option<XPBreakdown>`)
     pub xp_breakdown: Option<XPBreakdown>,
 
     /// Quest progress changes during last scenario
@@ -266,7 +266,10 @@ impl fmt::Debug for AppState {
         f.debug_struct("AppState")
             .field("screen", &self.screen)
             .field("session", &"<GameSession>")
-            .field("scenario_collection", &self.scenario_collection.total_count())
+            .field(
+                "scenario_collection",
+                &self.scenario_collection.total_count(),
+            )
             .field("selected_menu_item", &self.selected_menu_item)
             .field("running", &self.running)
             .field("current_hint", &self.current_hint.is_some())
@@ -507,7 +510,11 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::StartScenario(index) => {
-            if let Some(scenario) = state.scenario_collection.get_filtered_by_index(index).cloned() {
+            if let Some(scenario) = state
+                .scenario_collection
+                .get_filtered_by_index(index)
+                .cloned()
+            {
                 let session = GameSession::new(scenario)?;
                 state.session = Some(session);
                 state.screen = Screen::Task;
@@ -1771,7 +1778,12 @@ mod tests {
 
         // Second scenario - quest already completed, should not award bonus again
         // Rebuild the collection to include the new scenario
-        let mut scenarios = state.scenario_collection.get_filtered().iter().map(|s| (*s).clone()).collect::<Vec<_>>();
+        let mut scenarios = state
+            .scenario_collection
+            .get_filtered()
+            .iter()
+            .map(|s| (*s).clone())
+            .collect::<Vec<_>>();
         scenarios.push(scenario);
         state.scenario_collection = crate::config::ScenarioCollection::new(scenarios);
         update(&mut state, Message::StartScenario(1)).unwrap();

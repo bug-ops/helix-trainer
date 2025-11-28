@@ -76,7 +76,9 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
             };
 
             // Get difficulty indicator
-            let difficulty_indicator = scenario.metadata.as_ref()
+            let difficulty_indicator = scenario
+                .metadata
+                .as_ref()
                 .and_then(|m| m.difficulty)
                 .map(|d| match d {
                     crate::config::Difficulty::Beginner => "🟢",

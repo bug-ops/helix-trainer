@@ -57,7 +57,7 @@ pub enum ScenarioCategory {
     Selection,
     TextObjects,
     Advanced,
-    Multi,  // Multiple categories
+    Multi, // Multiple categories
     Other,
 }
 

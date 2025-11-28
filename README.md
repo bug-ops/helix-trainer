@@ -9,6 +9,9 @@
 
 Stop learning commands in isolation. Train real development workflows with FSRS-powered spaced repetition (20-30% faster mastery), daily quests, XP progression, and anti-farming mechanics that ensure genuine skill development.
 
+> [!IMPORTANT]
+> **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in `~/.config/helix-trainer/`
+
 <!-- Demo GIF/screenshot will go here -->
 > 🎬 **Demo GIF coming soon** — Watch training in action with mastery tracking, daily quests, and real-time feedback
 
@@ -29,6 +32,9 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 
 ## 📦 Installation
 
+> [!NOTE]
+> **Requirements**: Terminal with Unicode support. No additional dependencies needed for pre-built binaries.
+
 ### Pre-built Binaries (Recommended)
 
 Download for your platform from [**Releases**](https://github.com/bug-ops/helix-trainer/releases/latest):
@@ -38,15 +44,15 @@ Download for your platform from [**Releases**](https://github.com/bug-ops/helix-
 
 ```bash
 # GNU libc (most distributions)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.1.1-x86_64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.3-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.1.3-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.1.3-x86_64-unknown-linux-gnu
 ./helix-trainer
 
 # musl (Alpine Linux, static binary)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-x86_64-unknown-linux-musl.tar.gz
-tar -xzf helix-trainer-v0.1.1-x86_64-unknown-linux-musl.tar.gz
-cd helix-trainer-v0.1.1-x86_64-unknown-linux-musl
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.3-x86_64-unknown-linux-musl.tar.gz
+tar -xzf helix-trainer-v0.1.3-x86_64-unknown-linux-musl.tar.gz
+cd helix-trainer-v0.1.3-x86_64-unknown-linux-musl
 ./helix-trainer
 ```
 </details>
@@ -56,15 +62,15 @@ cd helix-trainer-v0.1.1-x86_64-unknown-linux-musl
 
 ```bash
 # GNU libc
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-aarch64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.1.1-aarch64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.1.1-aarch64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.3-aarch64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.1.3-aarch64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.1.3-aarch64-unknown-linux-gnu
 ./helix-trainer
 
 # musl
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-aarch64-unknown-linux-musl.tar.gz
-tar -xzf helix-trainer-v0.1.1-aarch64-unknown-linux-musl.tar.gz
-cd helix-trainer-v0.1.1-aarch64-unknown-linux-musl
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.3-aarch64-unknown-linux-musl.tar.gz
+tar -xzf helix-trainer-v0.1.3-aarch64-unknown-linux-musl.tar.gz
+cd helix-trainer-v0.1.3-aarch64-unknown-linux-musl
 ./helix-trainer
 ```
 </details>
@@ -74,15 +80,15 @@ cd helix-trainer-v0.1.1-aarch64-unknown-linux-musl
 
 ```bash
 # Apple Silicon (M1/M2/M3/M4)
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-aarch64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.1.1-aarch64-apple-darwin.tar.gz
-cd helix-trainer-v0.1.1-aarch64-apple-darwin
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.3-aarch64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.1.3-aarch64-apple-darwin.tar.gz
+cd helix-trainer-v0.1.3-aarch64-apple-darwin
 ./helix-trainer
 
 # Intel
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-x86_64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.1.1-x86_64-apple-darwin.tar.gz
-cd helix-trainer-v0.1.1-x86_64-apple-darwin
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.3-x86_64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.1.3-x86_64-apple-darwin.tar.gz
+cd helix-trainer-v0.1.3-x86_64-apple-darwin
 ./helix-trainer
 ```
 </details>
@@ -91,18 +97,22 @@ cd helix-trainer-v0.1.1-x86_64-apple-darwin
 <summary><b>Windows</b></summary>
 
 Download from [Releases page](https://github.com/bug-ops/helix-trainer/releases/latest):
-- **x86_64**: `helix-trainer-v0.1.1-x86_64-pc-windows-msvc.zip`
-- **ARM64**: `helix-trainer-v0.1.1-aarch64-pc-windows-msvc.zip`
+- **x86_64**: `helix-trainer-v0.1.3-x86_64-pc-windows-msvc.zip`
+- **ARM64**: `helix-trainer-v0.1.3-aarch64-pc-windows-msvc.zip`
 
 Extract and run `helix-trainer.exe`
 </details>
 
-**Verify checksums** (optional but recommended):
-```bash
-sha256sum -c helix-trainer-*.sha256
-```
+> [!TIP]
+> **Security**: Verify checksums after download to ensure binary integrity:
+> ```bash
+> sha256sum -c helix-trainer-*.sha256
+> ```
 
 ### Build from Source
+
+> [!WARNING]
+> **Requires Rust 1.85+** (2024 edition). Install via [rustup.rs](https://rustup.rs/)
 
 ```bash
 git clone https://github.com/bug-ops/helix-trainer.git
@@ -111,8 +121,6 @@ cargo build --release
 ./target/release/helix-trainer
 ```
 
-**Requirements**: Rust 1.85+ (2024 edition), terminal with Unicode support
-
 ---
 
 ## 🚀 Quick Start
@@ -120,6 +128,9 @@ cargo build --release
 ```bash
 helix-trainer
 ```
+
+> [!TIP]
+> **First time?** Start with Daily Quests! The system intelligently selects scenarios based on your current skill level and schedules reviews using FSRS spaced repetition.
 
 The interactive TUI will guide you through:
 
@@ -177,6 +188,9 @@ Most Helix/Vim tutorials:
 
 **Helix Trainer bridges this gap** through:
 
+> [!IMPORTANT]
+> **The Key Differentiator**: Phase 2 will introduce full workflow simulation with mock LSP and git state. No other editor trainer does this. We're building the foundation (habits, engagement) before the flagship feature.
+
 ### 1. Scientifically-Optimized Learning (FSRS)
 
 - **20-30% fewer reviews** than traditional spaced repetition
@@ -212,13 +226,17 @@ Duolingo-proven mechanics:
 
 ## 📊 Current Status
 
-### ✅ Phase 1: Smart Learning & Gamification (COMPLETE - v0.1.1)
+> [!NOTE]
+> **Active Development**: Phase 1 is complete and stable. The project is production-ready for basic training with all core features functional.
+
+### ✅ Phase 1: Smart Learning & Gamification (COMPLETE - v0.1.3)
 
 - FSRS spaced repetition system
 - Daily quest system
 - XP/leveling with scenario mastery
 - Profile & statistics tracking
 - Anti-farming protection
+- Repeat command (`.`) for efficient workflows
 - 164 passing tests, zero clippy warnings
 
 ### 🔄 Phase 2: Workflow Simulator (Planned - 6+ months)
@@ -262,6 +280,9 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 - Code standards and quality checks
 - Pull request process
 - Testing requirements
+
+> [!CAUTION]
+> **Zero-Tolerance Quality Standards**: All PRs must pass clippy (with `-D warnings`), tests, and formatting checks. CI enforces these automatically.
 
 **Quick contributor setup**:
 
@@ -331,6 +352,9 @@ Helix-specific. Many commands overlap with Vim, but Helix uses a different selec
 
 ## 🌟 Roadmap
 
+> [!NOTE]
+> **Transparent Development**: We prioritize stability over speed. Phase 2's 6-month timeline ensures Phase 1 is battle-tested before adding complexity.
+
 | Phase | Status | Timeline | Focus |
 |-------|--------|----------|-------|
 | **Phase A** | ✅ Complete | — | Foundation (30+ commands, 20 scenarios, TUI) |
@@ -374,9 +398,9 @@ Licensed under MIT — see [LICENSE](LICENSE) for details.
 
 ```bash
 # Download and run
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.1.1-x86_64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.3-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.1.3-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.1.3-x86_64-unknown-linux-gnu
 ./helix-trainer
 ```
 

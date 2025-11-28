@@ -50,8 +50,20 @@ fn create_scenario(
 #[test]
 fn test_collection_creation() {
     let scenarios = vec![
-        create_scenario("001", "First", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Second", Some(ScenarioCategory::Editing), Some(Difficulty::Intermediate), vec!["d"]),
+        create_scenario(
+            "001",
+            "First",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Second",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Intermediate),
+            vec!["d"],
+        ),
     ];
 
     let collection = ScenarioCollection::new(scenarios);
@@ -63,9 +75,27 @@ fn test_collection_creation() {
 #[test]
 fn test_filter_by_category() {
     let scenarios = vec![
-        create_scenario("001", "Movement1", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Editing1", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["d"]),
-        create_scenario("003", "Movement2", Some(ScenarioCategory::Movement), Some(Difficulty::Intermediate), vec!["w"]),
+        create_scenario(
+            "001",
+            "Movement1",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Editing1",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d"],
+        ),
+        create_scenario(
+            "003",
+            "Movement2",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Intermediate),
+            vec!["w"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -86,9 +116,27 @@ fn test_filter_by_category() {
 #[test]
 fn test_filter_by_difficulty() {
     let scenarios = vec![
-        create_scenario("001", "Easy1", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Hard1", Some(ScenarioCategory::Editing), Some(Difficulty::Advanced), vec!["d"]),
-        create_scenario("003", "Easy2", Some(ScenarioCategory::Clipboard), Some(Difficulty::Beginner), vec!["y"]),
+        create_scenario(
+            "001",
+            "Easy1",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Hard1",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Advanced),
+            vec!["d"],
+        ),
+        create_scenario(
+            "003",
+            "Easy2",
+            Some(ScenarioCategory::Clipboard),
+            Some(Difficulty::Beginner),
+            vec!["y"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -106,9 +154,27 @@ fn test_filter_by_difficulty() {
 #[test]
 fn test_filter_by_command() {
     let scenarios = vec![
-        create_scenario("001", "Delete", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["d", "x"]),
-        create_scenario("002", "Movement", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h", "j"]),
-        create_scenario("003", "Mixed", Some(ScenarioCategory::Editing), Some(Difficulty::Intermediate), vec!["d", "w"]),
+        create_scenario(
+            "001",
+            "Delete",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d", "x"],
+        ),
+        create_scenario(
+            "002",
+            "Movement",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h", "j"],
+        ),
+        create_scenario(
+            "003",
+            "Mixed",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Intermediate),
+            vec!["d", "w"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -129,9 +195,27 @@ fn test_filter_by_command() {
 #[test]
 fn test_filter_multiple_criteria() {
     let scenarios = vec![
-        create_scenario("001", "Easy Movement", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Hard Movement", Some(ScenarioCategory::Movement), Some(Difficulty::Advanced), vec!["w"]),
-        create_scenario("003", "Easy Editing", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["d"]),
+        create_scenario(
+            "001",
+            "Easy Movement",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Hard Movement",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Advanced),
+            vec!["w"],
+        ),
+        create_scenario(
+            "003",
+            "Easy Editing",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -151,9 +235,27 @@ fn test_filter_multiple_criteria() {
 #[test]
 fn test_sort_by_name() {
     let scenarios = vec![
-        create_scenario("001", "Zebra", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Apple", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["d"]),
-        create_scenario("003", "Middle", Some(ScenarioCategory::Clipboard), Some(Difficulty::Beginner), vec!["y"]),
+        create_scenario(
+            "001",
+            "Zebra",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Apple",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d"],
+        ),
+        create_scenario(
+            "003",
+            "Middle",
+            Some(ScenarioCategory::Clipboard),
+            Some(Difficulty::Beginner),
+            vec!["y"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -168,9 +270,27 @@ fn test_sort_by_name() {
 #[test]
 fn test_sort_by_difficulty() {
     let scenarios = vec![
-        create_scenario("001", "Advanced", Some(ScenarioCategory::Movement), Some(Difficulty::Advanced), vec!["h"]),
-        create_scenario("002", "Beginner", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["d"]),
-        create_scenario("003", "Intermediate", Some(ScenarioCategory::Clipboard), Some(Difficulty::Intermediate), vec!["y"]),
+        create_scenario(
+            "001",
+            "Advanced",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Advanced),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Beginner",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d"],
+        ),
+        create_scenario(
+            "003",
+            "Intermediate",
+            Some(ScenarioCategory::Clipboard),
+            Some(Difficulty::Intermediate),
+            vec!["y"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -185,9 +305,27 @@ fn test_sort_by_difficulty() {
 #[test]
 fn test_sort_by_category() {
     let scenarios = vec![
-        create_scenario("001", "Clipboard", Some(ScenarioCategory::Clipboard), Some(Difficulty::Beginner), vec!["y"]),
-        create_scenario("002", "Movement", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("003", "Editing", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["d"]),
+        create_scenario(
+            "001",
+            "Clipboard",
+            Some(ScenarioCategory::Clipboard),
+            Some(Difficulty::Beginner),
+            vec!["y"],
+        ),
+        create_scenario(
+            "002",
+            "Movement",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "003",
+            "Editing",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -203,10 +341,34 @@ fn test_sort_by_category() {
 #[test]
 fn test_sort_by_category_then_difficulty() {
     let scenarios = vec![
-        create_scenario("001", "Movement Advanced", Some(ScenarioCategory::Movement), Some(Difficulty::Advanced), vec!["w"]),
-        create_scenario("002", "Editing Beginner", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["x"]),
-        create_scenario("003", "Movement Beginner", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("004", "Editing Advanced", Some(ScenarioCategory::Editing), Some(Difficulty::Advanced), vec!["c"]),
+        create_scenario(
+            "001",
+            "Movement Advanced",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Advanced),
+            vec!["w"],
+        ),
+        create_scenario(
+            "002",
+            "Editing Beginner",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["x"],
+        ),
+        create_scenario(
+            "003",
+            "Movement Beginner",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "004",
+            "Editing Advanced",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Advanced),
+            vec!["c"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -223,8 +385,20 @@ fn test_sort_by_category_then_difficulty() {
 #[test]
 fn test_reset_filter() {
     let scenarios = vec![
-        create_scenario("001", "First", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Second", Some(ScenarioCategory::Editing), Some(Difficulty::Intermediate), vec!["d"]),
+        create_scenario(
+            "001",
+            "First",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Second",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Intermediate),
+            vec!["d"],
+        ),
     ];
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -245,9 +419,27 @@ fn test_reset_filter() {
 #[test]
 fn test_get_categories() {
     let scenarios = vec![
-        create_scenario("001", "First", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Second", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["d"]),
-        create_scenario("003", "Third", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["w"]),
+        create_scenario(
+            "001",
+            "First",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Second",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d"],
+        ),
+        create_scenario(
+            "003",
+            "Third",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["w"],
+        ),
     ];
 
     let collection = ScenarioCollection::new(scenarios);
@@ -261,9 +453,27 @@ fn test_get_categories() {
 #[test]
 fn test_get_difficulties() {
     let scenarios = vec![
-        create_scenario("001", "Easy", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Medium", Some(ScenarioCategory::Editing), Some(Difficulty::Intermediate), vec!["d"]),
-        create_scenario("003", "Hard", Some(ScenarioCategory::Clipboard), Some(Difficulty::Advanced), vec!["y"]),
+        create_scenario(
+            "001",
+            "Easy",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Medium",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Intermediate),
+            vec!["d"],
+        ),
+        create_scenario(
+            "003",
+            "Hard",
+            Some(ScenarioCategory::Clipboard),
+            Some(Difficulty::Advanced),
+            vec!["y"],
+        ),
     ];
 
     let collection = ScenarioCollection::new(scenarios);
@@ -278,8 +488,20 @@ fn test_get_difficulties() {
 #[test]
 fn test_get_filtered_by_index() {
     let scenarios = vec![
-        create_scenario("001", "First", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-        create_scenario("002", "Second", Some(ScenarioCategory::Editing), Some(Difficulty::Beginner), vec!["d"]),
+        create_scenario(
+            "001",
+            "First",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "Second",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d"],
+        ),
     ];
 
     let collection = ScenarioCollection::new(scenarios);
@@ -291,9 +513,13 @@ fn test_get_filtered_by_index() {
 
 #[test]
 fn test_filter_empty_result() {
-    let scenarios = vec![
-        create_scenario("001", "Movement", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-    ];
+    let scenarios = vec![create_scenario(
+        "001",
+        "Movement",
+        Some(ScenarioCategory::Movement),
+        Some(Difficulty::Beginner),
+        vec!["h"],
+    )];
 
     let mut collection = ScenarioCollection::new(scenarios);
 
@@ -340,7 +566,13 @@ fn test_scenarios_without_metadata() {
 
     let scenarios = vec![
         scenario_no_meta,
-        create_scenario("001", "With Metadata", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
+        create_scenario(
+            "001",
+            "With Metadata",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
     ];
 
     let collection = ScenarioCollection::new(scenarios);
@@ -360,9 +592,13 @@ fn test_scenarios_without_metadata() {
 
 #[test]
 fn test_active_filter_and_sort() {
-    let scenarios = vec![
-        create_scenario("001", "First", Some(ScenarioCategory::Movement), Some(Difficulty::Beginner), vec!["h"]),
-    ];
+    let scenarios = vec![create_scenario(
+        "001",
+        "First",
+        Some(ScenarioCategory::Movement),
+        Some(Difficulty::Beginner),
+        vec!["h"],
+    )];
 
     let mut collection = ScenarioCollection::new(scenarios);
 

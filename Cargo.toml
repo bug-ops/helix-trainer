@@ -40,3 +40,7 @@ path = "src/main.rs"
 [[bench]]
 name = "xp_scaling"
 harness = false
+
+[[bench]]
+name = "filtering_sorting"
+harness = false

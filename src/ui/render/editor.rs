@@ -91,7 +91,7 @@ pub(super) fn render_editor_with_diff<'a>(
 
 /// Render editor text with selection highlighted
 ///
-/// Takes EditorState and returns Vec<Line> with selection range
+/// Takes EditorState and returns `Vec<Line>` with selection range
 /// highlighted using background color and cursor shown if present.
 pub(super) fn render_editor_with_selection<'a>(
     state: &'a crate::game::EditorState,

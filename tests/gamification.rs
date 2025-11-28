@@ -349,17 +349,21 @@ fn test_all_achievement_metadata() {
 
 #[test]
 fn test_scenario_xp_calculation() {
-    // Perfect score, first today
-    let xp = XPCalculator::scenario_xp(100, true, true);
-    assert_eq!(xp, 34); // (20 * 1.0 * 1.2) + 10 = 34
+    // Perfect score with full multiplier
+    let xp = XPCalculator::scenario_xp(100, 1.0);
+    assert_eq!(xp, 50); // 100 * 50 / 100 = 50
 
-    // Perfect score, not first
-    let xp = XPCalculator::scenario_xp(100, true, false);
-    assert_eq!(xp, 24); // 20 * 1.0 * 1.2 = 24
+    // Normal score
+    let xp = XPCalculator::scenario_xp(85, 1.0);
+    assert_eq!(xp, 42); // 85 * 50 / 100 = 42
 
     // 50% score
-    let xp = XPCalculator::scenario_xp(50, false, false);
-    assert_eq!(xp, 10); // 20 * 0.5 * 1.0 = 10
+    let xp = XPCalculator::scenario_xp(50, 1.0);
+    assert_eq!(xp, 25); // 50 * 50 / 100 = 25
+
+    // Mastered scenario (20% multiplier)
+    let xp = XPCalculator::scenario_xp(100, 0.2);
+    assert_eq!(xp, 10); // 50 * 0.2 = 10
 }
 
 #[test]

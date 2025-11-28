@@ -17,7 +17,7 @@ cursor_position = [0, 4]
 
 [scenarios.target]
 file_content = "The quick brown fox"
-cursor_position = [0, 8]             # Move to end of "quick"
+cursor_position = [0, 9]             # Move to after "quick" (space)
 
 [scenarios.solution]
 commands = ["e"]

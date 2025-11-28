@@ -11,7 +11,7 @@ use walkdir::WalkDir;
 #[test]
 fn test_all_scenarios_load_successfully() {
     let scenarios_dir = Path::new("scenarios");
-    
+
     if !scenarios_dir.exists() {
         panic!("Scenarios directory not found: {:?}", scenarios_dir);
     }
@@ -63,13 +63,16 @@ fn test_all_scenarios_load_successfully() {
     println!("Validation Summary:");
     println!("  Total scenarios validated: {}", total_scenarios);
     println!("  Failed files: {}", failed_files.len());
-    
+
     if !failed_files.is_empty() {
         println!("\nFailed files:");
         for (path, error) in &failed_files {
             println!("  - {}: {}", path.display(), error);
         }
-        panic!("Scenario validation failed! {} file(s) have errors", failed_files.len());
+        panic!(
+            "Scenario validation failed! {} file(s) have errors",
+            failed_files.len()
+        );
     }
 
     println!("\n✓ All scenarios validated successfully!");
@@ -78,7 +81,7 @@ fn test_all_scenarios_load_successfully() {
 #[test]
 fn test_all_scenarios_execute_solution() {
     let scenarios_dir = Path::new("scenarios");
-    
+
     if !scenarios_dir.exists() {
         panic!("Scenarios directory not found: {:?}", scenarios_dir);
     }
@@ -98,7 +101,7 @@ fn test_all_scenarios_execute_solution() {
         if let Ok(scenarios) = loader.load(path) {
             for scenario in scenarios {
                 total_scenarios += 1;
-                
+
                 // Create game session
                 let mut session = match GameSession::new(scenario.clone()) {
                     Ok(s) => s,
@@ -127,9 +130,11 @@ fn test_all_scenarios_execute_solution() {
                     failed_scenarios.push((
                         scenario.id.clone(),
                         format!(
-                            "Solution did not complete scenario. Current state:\n  Content: '{}'\n  Target: '{}'",
+                            "Solution did not complete scenario. Current state:\n  Content: '{}'\n  Cursor: {:?}\n  Target content: '{}'\n  Target cursor: {:?}",
                             session.current_state().content(),
-                            session.target_state().content()
+                            session.current_state().cursor_position(),
+                            session.target_state().content(),
+                            session.target_state().cursor_position()
                         ),
                     ));
                 }
@@ -141,13 +146,16 @@ fn test_all_scenarios_execute_solution() {
     println!("Execution Summary:");
     println!("  Total scenarios tested: {}", total_scenarios);
     println!("  Failed scenarios: {}", failed_scenarios.len());
-    
+
     if !failed_scenarios.is_empty() {
         println!("\nFailed scenarios:");
         for (id, error) in &failed_scenarios {
             println!("  - {}: {}", id, error);
         }
-        panic!("Scenario execution failed! {} scenario(s) have errors", failed_scenarios.len());
+        panic!(
+            "Scenario execution failed! {} scenario(s) have errors",
+            failed_scenarios.len()
+        );
     }
 
     println!("\n✓ All scenario solutions execute successfully!");

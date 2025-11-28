@@ -1367,7 +1367,11 @@ fn test_paste_before_cursor_scenario() {
     sim.execute_command("l").unwrap();
 
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().col, 2, "Should be at position 2 ('z')");
+    assert_eq!(
+        state.cursor_position().col,
+        2,
+        "Should be at position 2 ('z')"
+    );
 
     // Yank 'z'
     sim.execute_command("y").unwrap();
@@ -1382,7 +1386,11 @@ fn test_paste_before_cursor_scenario() {
     sim.execute_command("h").unwrap();
 
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().col, 1, "Should be at position 1 ('y')");
+    assert_eq!(
+        state.cursor_position().col,
+        1,
+        "Should be at position 1 ('y')"
+    );
 
     // Paste before
     sim.execute_command("P").unwrap();
@@ -1391,5 +1399,9 @@ fn test_paste_before_cursor_scenario() {
     assert_eq!(state.content(), "xzyz", "Content should be 'xzyz'");
     // After paste_before, cursor moves to end of pasted text
     // Pasted at position 1, length 1, so cursor should be at 1+1=2
-    assert_eq!(state.cursor_position().col, 2, "Cursor should be at position 2 (after pasted 'z')");
+    assert_eq!(
+        state.cursor_position().col,
+        2,
+        "Cursor should be at position 2 (after pasted 'z')"
+    );
 }

@@ -132,6 +132,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Configure sccache
+        shell: bash
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+
       # Install musl tools for Linux musl builds
       - name: Install musl tools (Linux musl only)
         if: matrix.target == 'x86_64-unknown-linux-musl'
@@ -158,6 +167,10 @@ jobs:
       - name: Build release binary (native)
         if: matrix.use_cross != true
         run: cargo build --release --target ${{ matrix.target }} --locked --verbose
+
+      - name: Show sccache statistics
+        shell: bash
+        run: sccache --show-stats
 
       - name: Create archive directory
         shell: bash

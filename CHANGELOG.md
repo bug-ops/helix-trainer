@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2025-11-28
+
+### Added
+
+- Scenario mastery tracking system to prevent XP farming
+  - Three-tier mastery levels: Learning → Proficient → Mastered
+  - Graduated XP scaling: 100% → 50% → 20%
+  - Session spam protection (same-day repeat penalties: 100% → 70% → 30%)
+  - Prevents farming by reducing XP for mastered scenarios by 80%
+  - New module: `src/learning/scenario_history.rs` (600+ lines)
+  - 23 comprehensive tests for mastery tracking
+
+- Bounded scenario tracking (MAX_SCENARIOS_TRACKED = 10,000)
+  - Prevents unbounded memory growth
+  - Defense in depth against DoS attacks
+
+- Scenario ID validation at storage boundary
+  - Validates alphanumeric + underscore + hyphen only
+  - MAX_SCENARIO_ID_LENGTH = 100 characters
+  - Blocks path traversal and injection attempts
+
+- Performance benchmarks and profiling
+  - Criterion benchmarks: `benches/xp_scaling.rs`
+  - DHAT memory profiling: `examples/memory_profile.rs`
+
+### Changed
+
+- Replaced `String` dates with `chrono::NaiveDate` for type safety
+- Consistent `.round()` usage in XP calculations (prevents truncation)
+- Mastery level displayed in results screen with emoji indicators
+
+### Fixed
+
+- Floating-point precision issues in XP calculations
+- Potential memory exhaustion from unbounded HashMap growth
+
+### Performance
+
+- XP calculation overhead: 260-460 ns (2000x under 1ms budget)
+- Memory per scenario: ~288 bytes
+- Profile serialization: ~40 µs for 100 scenarios
+
+### Security
+
+- Added MAX_SCENARIOS_TRACKED limit (defense in depth)
+- Added scenario ID validation (alphanumeric + `_` + `-` only)
+- Type-safe date handling with NaiveDate
+- All arithmetic uses saturating operations
+
 ## [0.1.0] - 2025-11-28
 
 ### Added

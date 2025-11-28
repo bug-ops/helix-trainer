@@ -509,3 +509,40 @@ fn test_path_traversal_attack_rejected() {
         "Should reject path outside allowed directories"
     );
 }
+
+#[test]
+fn test_repeat_insert_scenario_loads_correctly() {
+    use std::path::Path;
+    use crate::game::GameSession;
+
+    let loader = ScenarioLoader::new();
+    let path = Path::new("scenarios/en/repeat/basic-repeat.toml");
+
+    // Load scenarios from file
+    let scenarios = loader.load(path)
+        .expect("Should load repeat scenarios");
+
+    assert!(!scenarios.is_empty(), "Should have scenarios");
+
+    // Find repeat_insert_001 scenario
+    let scenario = scenarios.iter()
+        .find(|s| s.id == "repeat_insert_001")
+        .expect("Should find repeat_insert_001");
+
+    // Verify cursor positions are within bounds
+    assert_eq!(scenario.setup.cursor_position, (0, 5));
+    assert_eq!(scenario.target.cursor_position, (1, 16),
+        "Target cursor should be at column 16, not 17");
+
+    // Verify content
+    assert_eq!(scenario.setup.file_content, "TODO:\nFIX:\nNOTE:");
+    assert_eq!(scenario.target.file_content, "TODO: Update docs\nFIX: Update docs\nNOTE:");
+
+    // Try to create a game session - this validates all constraints
+    let session_result = GameSession::new(scenario.clone());
+    assert!(
+        session_result.is_ok(),
+        "Should create game session successfully: {:?}",
+        session_result.err()
+    );
+}

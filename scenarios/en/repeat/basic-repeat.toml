@@ -88,7 +88,7 @@ cursor_position = [0, 5]
 
 [scenarios.target]
 file_content = "TODO: Update docs\nFIX: Update docs\nNOTE:"
-cursor_position = [1, 17]
+cursor_position = [1, 16]
 
 [scenarios.solution]
 commands = ["i", " ", "U", "p", "d", "a", "t", "e", " ", "d", "o", "c", "s", "Escape", "j", "0", "$", "."]

@@ -28,3 +28,10 @@ description = "Press 'w' three times to move forward by words"
 optimal_count = 3
 max_points = 100
 tolerance = 1
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "navigation"]
+commands_taught = ["w"]
+estimated_time_seconds = 20

@@ -28,6 +28,13 @@ optimal_count = 4
 max_points = 100
 tolerance = 1
 
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["insert", "append", "word"]
+commands_taught = ["e", "a"]
+estimated_time_seconds = 25
+
 [[scenarios]]
 id = "open_below_001"
 name = "Insert line below"
@@ -54,6 +61,13 @@ optimal_count = 1
 max_points = 100
 tolerance = 0
 
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["insert", "line", "open"]
+commands_taught = ["o"]
+estimated_time_seconds = 15
+
 [[scenarios]]
 id = "open_above_001"
 name = "Insert line above"
@@ -79,6 +93,13 @@ hints = ["'O' inserts a new line above and enters insert mode"]
 optimal_count = 1
 max_points = 100
 tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["insert", "line", "open"]
+commands_taught = ["O"]
+estimated_time_seconds = 15
 
 [[scenarios]]
 id = "insert_line_start_001"
@@ -107,6 +128,13 @@ optimal_count = 3
 max_points = 100
 tolerance = 1
 
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["insert", "line-start"]
+commands_taught = ["I"]
+estimated_time_seconds = 20
+
 [[scenarios]]
 id = "append_line_end_001"
 name = "Append at line end"
@@ -133,3 +161,10 @@ description = "Press 'A' to move to end, '!' to insert, Escape to exit"
 optimal_count = 3
 max_points = 100
 tolerance = 1
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["insert", "line-end", "append"]
+commands_taught = ["A"]
+estimated_time_seconds = 20

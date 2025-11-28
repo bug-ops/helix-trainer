@@ -247,7 +247,7 @@ fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
                 .to_digit(10)
                 .expect("char is validated as ascii_digit by guard condition")
                 as usize;
-            if digit >= 1 && digit <= state.scenarios.len() {
+            if digit >= 1 && digit <= state.scenario_collection.count() {
                 // Jump to scenario (digit - 1 because scenarios are 0-indexed)
                 Some(Message::StartScenario(digit - 1))
             } else {

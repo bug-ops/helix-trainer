@@ -27,3 +27,9 @@ description = "Press 'J' to join lines"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["join", "lines"]
+commands_taught = ["J"]
+estimated_time_seconds = 20

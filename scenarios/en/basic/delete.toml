@@ -32,3 +32,10 @@ description = "Alternative: Use 'cc' (change line)"
 optimal_count = 2
 max_points = 100
 tolerance = 1
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "line", "basic"]
+commands_taught = ["dd"]
+estimated_time_seconds = 20

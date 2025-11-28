@@ -36,6 +36,13 @@ optimal_count = 2
 max_points = 100
 tolerance = 1
 
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["document", "navigation"]
+commands_taught = ["gg"]
+estimated_time_seconds = 20
+
 [[scenarios]]
 id = "document_end_001"
 name = "Jump to document end"
@@ -70,3 +77,9 @@ description = "Press 'G' to jump to document end"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["document", "navigation"]
+commands_taught = ["G"]
+estimated_time_seconds = 20

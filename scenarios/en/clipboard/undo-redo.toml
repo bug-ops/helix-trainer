@@ -31,3 +31,9 @@ description = "Press 'dd' to delete, 'u' to undo, 'U' to redo"
 optimal_count = 4
 max_points = 100
 tolerance = 2
+[scenarios.metadata]
+category = "clipboard"
+difficulty = "beginner"
+tags = ["undo", "redo"]
+commands_taught = ["u", "U"]
+estimated_time_seconds = 25

@@ -18,7 +18,7 @@
 //! - State transitions are testable and reproducible
 //! - UI rendering is pure (no side effects)
 
-use crate::config::Scenario;
+use crate::config::{Difficulty, Scenario, ScenarioCategory, ScenarioCollection, SortMode};
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, QuestType, UserProfile};
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
@@ -124,6 +124,21 @@ pub enum Message {
         scenario_completed: bool,
         duration: Duration,
     },
+
+    /// Set sort mode for scenario list
+    SetSortMode(SortMode),
+
+    /// Toggle category filter (add/remove from active filters)
+    ToggleCategoryFilter(ScenarioCategory),
+
+    /// Toggle difficulty filter (add/remove from active filters)
+    ToggleDifficultyFilter(Difficulty),
+
+    /// Toggle completed scenarios filter
+    ToggleCompletedFilter,
+
+    /// Reset all filters to default
+    ResetFilters,
 }
 
 /// Main application state
@@ -142,9 +157,9 @@ pub enum Message {
 /// 3. Medium-sized types (Option<String>, String)
 /// 4. Small types last (usize, bool, enum)
 pub struct AppState {
-    /// All available scenarios
-    /// Size: 24 bytes (Vec) - placed first for alignment
-    pub scenarios: Vec<Scenario>,
+    /// All available scenarios with filtering and sorting
+    /// Size: ~48 bytes (struct with Vec fields)
+    pub scenario_collection: ScenarioCollection,
 
     /// Active game session (Some if on Task screen)
     /// Size: ~200+ bytes - large type, placed early
@@ -251,7 +266,7 @@ impl fmt::Debug for AppState {
         f.debug_struct("AppState")
             .field("screen", &self.screen)
             .field("session", &"<GameSession>")
-            .field("scenarios", &self.scenarios.len())
+            .field("scenario_collection", &self.scenario_collection.total_count())
             .field("selected_menu_item", &self.selected_menu_item)
             .field("running", &self.running)
             .field("current_hint", &self.current_hint.is_some())
@@ -297,8 +312,9 @@ impl AppState {
         performance_tracker: Rc<RefCell<PerformanceTracker>>,
         scheduler: Scheduler,
     ) -> Self {
+        let scenario_collection = ScenarioCollection::new(scenarios);
         Self {
-            scenarios,
+            scenario_collection,
             session: None,
             current_hint: None,
             last_command: None,
@@ -342,14 +358,14 @@ impl AppState {
         vec!["Start Training", "Quit"]
     }
 
-    /// Get the number of available scenarios
+    /// Get the number of available scenarios (filtered count)
     pub fn scenario_count(&self) -> usize {
-        self.scenarios.len()
+        self.scenario_collection.count()
     }
 
-    /// Get a scenario by index
+    /// Get a scenario by filtered index
     pub fn get_scenario(&self, index: usize) -> Option<&Scenario> {
-        self.scenarios.get(index)
+        self.scenario_collection.get_filtered_by_index(index)
     }
 
     /// Add a key to the history (keeps last 5)
@@ -468,8 +484,8 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::MenuDown => {
-            // Total menu items = scenarios + Quit option
-            let max_items = state.scenarios.len() + 1;
+            // Total menu items = filtered scenarios + Quit option
+            let max_items = state.scenario_collection.count() + 1;
             if state.selected_menu_item < max_items - 1 {
                 state.selected_menu_item += 1;
             }
@@ -477,7 +493,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::MenuSelect => {
-            let scenario_count = state.scenarios.len();
+            let scenario_count = state.scenario_collection.count();
             let selected = state.selected_menu_item;
 
             if selected < scenario_count {
@@ -491,7 +507,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::StartScenario(index) => {
-            if let Some(scenario) = state.scenarios.get(index).cloned() {
+            if let Some(scenario) = state.scenario_collection.get_filtered_by_index(index).cloned() {
                 let session = GameSession::new(scenario)?;
                 state.session = Some(session);
                 state.screen = Screen::Task;
@@ -903,6 +919,35 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
             Ok(())
         }
+
+        Message::SetSortMode(mode) => {
+            let profile = state.profile.borrow();
+            state.scenario_collection.sort(mode, Some(&profile));
+            Ok(())
+        }
+
+        Message::ToggleCategoryFilter(_category) => {
+            // TODO: Implement category filtering in future iteration
+            // For now, this is a placeholder
+            Ok(())
+        }
+
+        Message::ToggleDifficultyFilter(_difficulty) => {
+            // TODO: Implement difficulty filtering in future iteration
+            // For now, this is a placeholder
+            Ok(())
+        }
+
+        Message::ToggleCompletedFilter => {
+            // TODO: Implement completion filtering in future iteration
+            // For now, this is a placeholder
+            Ok(())
+        }
+
+        Message::ResetFilters => {
+            state.scenario_collection.reset_filter();
+            Ok(())
+        }
     }
 }
 
@@ -1187,7 +1232,7 @@ mod tests {
     fn test_scenario_count() {
         let scenarios = vec![create_test_scenario(), create_test_scenario()];
         let state = create_test_app_state(scenarios);
-        assert_eq!(state.scenario_count(), 2);
+        assert_eq!(state.scenario_count(), 2); // Filtered count
     }
 
     #[test]
@@ -1725,7 +1770,10 @@ mod tests {
         );
 
         // Second scenario - quest already completed, should not award bonus again
-        state.scenarios.push(scenario); // Add another scenario
+        // Rebuild the collection to include the new scenario
+        let mut scenarios = state.scenario_collection.get_filtered().iter().map(|s| (*s).clone()).collect::<Vec<_>>();
+        scenarios.push(scenario);
+        state.scenario_collection = crate::config::ScenarioCollection::new(scenarios);
         update(&mut state, Message::StartScenario(1)).unwrap();
 
         // Execute command through message

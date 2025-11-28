@@ -29,6 +29,12 @@ optimal_count = 2
 max_points = 100
 tolerance = 0
 
+[scenarios.metadata]
+category = "advanced"
+difficulty = "intermediate"
+tags = ["repeat", "delete"]
+commands_taught = ["."]
+estimated_time_seconds = 25
 
 [[scenarios]]
 id = "repeat_delete_line_001"
@@ -58,6 +64,12 @@ optimal_count = 3
 max_points = 100
 tolerance = 1
 
+[scenarios.metadata]
+category = "advanced"
+difficulty = "intermediate"
+tags = ["repeat", "delete", "line"]
+commands_taught = ["."]
+estimated_time_seconds = 30
 
 [[scenarios]]
 id = "repeat_insert_001"
@@ -86,6 +98,12 @@ description = "Insert ' Update docs' after TODO:, move to FIX: line end, repeat 
 optimal_count = 18
 max_points = 100
 tolerance = 5
+[scenarios.metadata]
+category = "advanced"
+difficulty = "intermediate"
+tags = ["repeat", "insert"]
+commands_taught = ["."]
+estimated_time_seconds = 30
 
 
 [[scenarios]]
@@ -116,6 +134,12 @@ optimal_count = 3
 max_points = 100
 tolerance = 2
 
+[scenarios.metadata]
+category = "advanced"
+difficulty = "intermediate"
+tags = ["repeat", "indent"]
+commands_taught = ["."]
+estimated_time_seconds = 35
 
 [[scenarios]]
 id = "repeat_replace_001"
@@ -145,3 +169,9 @@ description = "Replace '-' with '_' using 'r_', move to next '-' with 'llll', re
 optimal_count = 7
 max_points = 100
 tolerance = 3
+[scenarios.metadata]
+category = "advanced"
+difficulty = "intermediate"
+tags = ["repeat", "replace"]
+commands_taught = ["."]
+estimated_time_seconds = 30

@@ -7,8 +7,8 @@ name = "Indent code line"
 description = "Add indentation to a line of code"
 
 hints = [
-    "'>' adds 2 spaces of indentation at the start of the line",
-    "Use multiple times to add more indentation"
+  "'>' adds 2 spaces of indentation at the start of the line",
+  "Use multiple times to add more indentation",
 ]
 
 [scenarios.setup]
@@ -31,6 +31,12 @@ description = "Press '>' to indent the line"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["indent"]
+commands_taught = [">"]
+estimated_time_seconds = 20
 
 [[scenarios]]
 id = "dedent_line_001"
@@ -38,8 +44,8 @@ name = "Remove indentation"
 description = "Remove indentation from a line"
 
 hints = [
-    "'<' removes up to 2 spaces of indentation from the start of the line",
-    "Use multiple times to remove more indentation"
+  "'<' removes up to 2 spaces of indentation from the start of the line",
+  "Use multiple times to remove more indentation",
 ]
 
 [scenarios.setup]
@@ -62,3 +68,9 @@ description = "Press '<' to remove indentation"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["dedent", "indent"]
+commands_taught = ["<"]
+estimated_time_seconds = 20

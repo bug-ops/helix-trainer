@@ -28,6 +28,13 @@ optimal_count = 1
 max_points = 100
 tolerance = 0
 
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "navigation"]
+commands_taught = ["$"]
+estimated_time_seconds = 15
+
 [[scenarios]]
 id = "line_start_001"
 name = "Jump to line start"
@@ -54,3 +61,9 @@ description = "Press '0' to jump to start of line"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "navigation"]
+commands_taught = ["0"]
+estimated_time_seconds = 15

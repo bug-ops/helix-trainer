@@ -70,8 +70,10 @@ fn test_filter_by_category() {
 
     let mut collection = ScenarioCollection::new(scenarios);
 
-    let mut filter = ScenarioFilter::default();
-    filter.categories = Some([ScenarioCategory::Movement].iter().copied().collect());
+    let filter = ScenarioFilter {
+        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        ..Default::default()
+    };
 
     collection.apply_filter(&filter, None);
 
@@ -91,8 +93,10 @@ fn test_filter_by_difficulty() {
 
     let mut collection = ScenarioCollection::new(scenarios);
 
-    let mut filter = ScenarioFilter::default();
-    filter.difficulties = Some([Difficulty::Beginner].iter().copied().collect());
+    let filter = ScenarioFilter {
+        difficulties: Some([Difficulty::Beginner].iter().copied().collect()),
+        ..Default::default()
+    };
 
     collection.apply_filter(&filter, None);
 
@@ -109,8 +113,10 @@ fn test_filter_by_command() {
 
     let mut collection = ScenarioCollection::new(scenarios);
 
-    let mut filter = ScenarioFilter::default();
-    filter.commands = Some(["d".to_string()].iter().cloned().collect());
+    let filter = ScenarioFilter {
+        commands: Some(["d".to_string()].iter().cloned().collect()),
+        ..Default::default()
+    };
 
     collection.apply_filter(&filter, None);
 
@@ -130,9 +136,11 @@ fn test_filter_multiple_criteria() {
 
     let mut collection = ScenarioCollection::new(scenarios);
 
-    let mut filter = ScenarioFilter::default();
-    filter.categories = Some([ScenarioCategory::Movement].iter().copied().collect());
-    filter.difficulties = Some([Difficulty::Beginner].iter().copied().collect());
+    let filter = ScenarioFilter {
+        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        difficulties: Some([Difficulty::Beginner].iter().copied().collect()),
+        ..Default::default()
+    };
 
     collection.apply_filter(&filter, None);
 
@@ -222,8 +230,10 @@ fn test_reset_filter() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     // Apply filter
-    let mut filter = ScenarioFilter::default();
-    filter.categories = Some([ScenarioCategory::Movement].iter().copied().collect());
+    let filter = ScenarioFilter {
+        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        ..Default::default()
+    };
     collection.apply_filter(&filter, None);
     assert_eq!(collection.count(), 1);
 
@@ -287,8 +297,10 @@ fn test_filter_empty_result() {
 
     let mut collection = ScenarioCollection::new(scenarios);
 
-    let mut filter = ScenarioFilter::default();
-    filter.categories = Some([ScenarioCategory::Editing].iter().copied().collect());
+    let filter = ScenarioFilter {
+        categories: Some([ScenarioCategory::Editing].iter().copied().collect()),
+        ..Default::default()
+    };
 
     collection.apply_filter(&filter, None);
 
@@ -334,8 +346,10 @@ fn test_scenarios_without_metadata() {
     let collection = ScenarioCollection::new(scenarios);
 
     // Filtering by category should exclude scenario without metadata
-    let mut filter = ScenarioFilter::default();
-    filter.categories = Some([ScenarioCategory::Movement].iter().copied().collect());
+    let filter = ScenarioFilter {
+        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        ..Default::default()
+    };
 
     let mut filtered_collection = collection.clone();
     filtered_collection.apply_filter(&filter, None);
@@ -356,8 +370,10 @@ fn test_active_filter_and_sort() {
     assert_eq!(collection.active_sort(), SortMode::ByCategoryThenDifficulty);
 
     // Apply filter and sort
-    let mut filter = ScenarioFilter::default();
-    filter.categories = Some([ScenarioCategory::Movement].iter().copied().collect());
+    let filter = ScenarioFilter {
+        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        ..Default::default()
+    };
     collection.apply_filter(&filter, None);
     collection.sort(SortMode::ByName, None);
 

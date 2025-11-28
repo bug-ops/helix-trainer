@@ -326,8 +326,8 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         (KeyCode::Char('J'), KeyModifiers::SHIFT) => CMD_JOIN_LINES,
 
         // Indentation
-        (KeyCode::Char('>'), KeyModifiers::SHIFT) => CMD_INDENT,
-        (KeyCode::Char('<'), KeyModifiers::SHIFT) => CMD_DEDENT,
+        (KeyCode::Char('>'), KeyModifiers::NONE) => CMD_INDENT,
+        (KeyCode::Char('<'), KeyModifiers::NONE) => CMD_DEDENT,
 
         // Yank and paste
         (KeyCode::Char('y'), KeyModifiers::NONE) => CMD_YANK,

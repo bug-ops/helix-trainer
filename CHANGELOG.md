@@ -7,9 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-11-28
+
 ### Fixed
 
-- Hint key conflict: `h` was shown in UI but conflicts with Helix left movement. Now using `?` as primary hint key (F1 still works as alternative)
+- **Hint system completely non-functional**: Hints were stored in wrong TOML section and never loaded
+  - Moved `hints` arrays from `[scenarios.solution]` to `[[scenarios]]` level in all 11 scenario files
+  - Fixed 24 scenarios containing 55 total hints
+  - Hints now properly deserialize and display when requested
+- **Hint key conflict**: UI showed `[h: Show Hint]` but `h` is Helix left movement command
+  - Added `?` as primary hint key (intuitive, no conflicts)
+  - Kept `F1` as alternative for accessibility
+  - Handles both `Char('?')` and `Char('/')` + `SHIFT` for cross-platform support
+  - Updated UI to show `[?: Hint | F1]`
+
+### Added
+
+- **Hint toggle behavior**: Press `?` to open hint, press again to close (improved UX)
+- **Cross-platform hint key support**: Properly handles different keyboard layouts and modifier keys
 
 ## [0.1.2] - 2025-11-28
 

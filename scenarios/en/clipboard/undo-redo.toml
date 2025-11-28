@@ -24,7 +24,7 @@ Keep this too"""
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["d", "d", "u", "U"]
+commands = ["dd", "u", "U"]
 description = "Press 'dd' to delete, 'u' to undo, 'U' to redo"
 
 [scenarios.scoring]

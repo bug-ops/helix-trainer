@@ -28,7 +28,7 @@ Line 5"""
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["g", "g"]
+commands = ["gg"]
 description = "Press 'gg' to jump to document start"
 
 [scenarios.scoring]
@@ -67,7 +67,7 @@ Second line
 Third line
 Fourth line
 Last line"""
-cursor_position = [4, 0]
+cursor_position = [4, 9]
 
 [scenarios.solution]
 commands = ["G"]

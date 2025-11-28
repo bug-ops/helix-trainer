@@ -56,7 +56,7 @@ file_content = "line 3\nline 4"
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["d", "d", "."]
+commands = ["dd", "."]
 description = "Press 'dd' to delete first line, then '.' to delete second line"
 
 [scenarios.scoring]
@@ -122,8 +122,8 @@ file_content = "def foo():\nprint('hello')\nprint('world')\nreturn"
 cursor_position = [1, 0]
 
 [scenarios.target]
-file_content = "def foo():\n    print('hello')\n    print('world')\nreturn"
-cursor_position = [2, 4]
+file_content = "def foo():\n  print('hello')\n  print('world')\nreturn"
+cursor_position = [2, 2]
 
 [scenarios.solution]
 commands = [">", "j", "."]
@@ -162,7 +162,7 @@ file_content = "foo_bar_baz"
 cursor_position = [0, 7]
 
 [scenarios.solution]
-commands = ["r", "_", "l", "l", "l", "l", "."]
+commands = ["r_", "l", "l", "l", "l", "."]
 description = "Replace '-' with '_' using 'r_', move to next '-' with 'llll', repeat with '.'"
 
 [scenarios.scoring]

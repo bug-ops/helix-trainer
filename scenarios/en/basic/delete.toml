@@ -13,14 +13,14 @@ hints = [
 
 [scenarios.setup]
 file_content = "first line\nsecond line\nthird line"
-cursor_position = [0, 0]
+cursor_position = [1, 0]
 
 [scenarios.target]
 file_content = "first line\nthird line"
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["d", "d"]
+commands = ["dd"]
 description = "Press 'd' twice: first 'd' activates delete mode, second 'd' targets the current line"
 
 [[scenarios.alternatives]]

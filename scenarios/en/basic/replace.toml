@@ -17,8 +17,7 @@ cursor_position = [0, 4]
 
 [scenarios.target]
 file_content = "The quick brown fox"
-cursor_position = [0, 4]
-selection = [0, 4, 0, 9]             # Select "quick" (from col 4 to col 9)
+cursor_position = [0, 8]             # Move to end of "quick"
 
 [scenarios.solution]
 commands = ["e"]

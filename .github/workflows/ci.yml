@@ -38,8 +38,6 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: "v0.10.2"
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -83,8 +81,6 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: "v0.10.2"
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
@@ -121,8 +117,6 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: "v0.10.2"
 
       - name: Build release
         run: cargo build --release --verbose

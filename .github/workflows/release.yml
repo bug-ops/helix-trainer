@@ -138,8 +138,6 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: "v0.10.2"
 
       # Install musl tools for Linux musl builds
       - name: Install musl tools (Linux musl only)

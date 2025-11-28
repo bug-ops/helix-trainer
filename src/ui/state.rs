@@ -970,6 +970,7 @@ mod tests {
                 max_points: 100,
                 tolerance: 0,
             },
+            metadata: None,
         }
     }
 

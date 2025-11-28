@@ -32,6 +32,7 @@ fn create_test_scenario() -> crate::config::Scenario {
             max_points: 100,
             tolerance: 0,
         },
+        metadata: None,
     }
 }
 

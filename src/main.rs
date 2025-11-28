@@ -261,10 +261,19 @@ fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
 /// Handle keyboard events on the task screen
 fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Handle special UI keys first
-    match key.code {
-        KeyCode::F(1) => return Some(Message::ShowHint),
-        KeyCode::Char('?') => return Some(Message::ShowHint),
-        KeyCode::Esc => return Some(Message::AbandonScenario),
+    match (key.code, key.modifiers) {
+        // F1 always shows hint
+        (KeyCode::F(1), _) => return Some(Message::ShowHint),
+        // '?' key (might come as Char('?') or Char('/') with SHIFT depending on platform)
+        (KeyCode::Char('?'), _)
+            if !key.modifiers.contains(KeyModifiers::CONTROL)
+                && !key.modifiers.contains(KeyModifiers::ALT) =>
+        {
+            return Some(Message::ShowHint);
+        }
+        (KeyCode::Char('/'), KeyModifiers::SHIFT) => return Some(Message::ShowHint),
+        // Esc abandons scenario
+        (KeyCode::Esc, _) => return Some(Message::AbandonScenario),
         _ => {}
     }
 

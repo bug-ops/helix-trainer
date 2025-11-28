@@ -6,6 +6,11 @@ id = "document_navigation_001"
 name = "Jump to document start"
 description = "Navigate to the beginning of the document"
 
+hints = [
+    "'gg' jumps to the first line of the document",
+    "'G' jumps to the last line of the document",
+]
+
 [scenarios.setup]
 file_content = """Line 1
 Line 2
@@ -26,11 +31,6 @@ cursor_position = [0, 0]
 commands = ["g", "g"]
 description = "Press 'gg' to jump to document start"
 
-hints = [
-    "'gg' jumps to the first line of the document",
-    "'G' jumps to the last line of the document",
-]
-
 [scenarios.scoring]
 optimal_count = 2
 max_points = 100
@@ -40,6 +40,11 @@ tolerance = 1
 id = "document_end_001"
 name = "Jump to document end"
 description = "Navigate to the end of the document"
+
+hints = [
+    "'G' jumps to the last line of the document",
+    "'gg' jumps to the first line",
+]
 
 [scenarios.setup]
 file_content = """First line
@@ -60,11 +65,6 @@ cursor_position = [4, 0]
 [scenarios.solution]
 commands = ["G"]
 description = "Press 'G' to jump to document end"
-
-hints = [
-    "'G' jumps to the last line of the document",
-    "'gg' jumps to the first line",
-]
 
 [scenarios.scoring]
 optimal_count = 1

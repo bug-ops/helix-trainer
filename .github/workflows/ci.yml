@@ -14,6 +14,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0  # Disable incremental compilation for better sccache performance
 
 jobs:
   test:
@@ -40,12 +41,6 @@ jobs:
         run: |
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: test-${{ matrix.os }}
-          save-if: ${{ github.event_name == 'push' }}
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -93,12 +88,6 @@ jobs:
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
 
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: clippy
-          save-if: ${{ github.event_name == 'push' }}
-
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -137,12 +126,6 @@ jobs:
         run: |
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
           echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: build-${{ matrix.os }}
-          save-if: ${{ github.event_name == 'push' }}
 
       - name: Build release
         run: cargo build --release --verbose

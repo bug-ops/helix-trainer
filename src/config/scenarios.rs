@@ -14,6 +14,62 @@ pub struct ScenariosFile {
     pub scenarios: Vec<Scenario>,
 }
 
+/// Scenario metadata for filtering, sorting, and quest generation
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct ScenarioMetadata {
+    /// Scenario category (e.g., movement, editing, clipboard)
+    #[serde(default)]
+    pub category: Option<ScenarioCategory>,
+
+    /// Difficulty level (beginner, intermediate, advanced)
+    #[serde(default)]
+    pub difficulty: Option<Difficulty>,
+
+    /// Tags for flexible filtering (e.g., ["delete", "motion", "word"])
+    #[serde(default)]
+    pub tags: Vec<String>,
+
+    /// Commands taught in this scenario (e.g., ["d", "w"])
+    #[serde(default)]
+    pub commands_taught: Vec<String>,
+
+    /// Prerequisite scenario IDs that should be completed first
+    #[serde(default)]
+    pub prerequisites: Vec<String>,
+
+    /// Estimated time to complete scenario in seconds
+    #[serde(default)]
+    pub estimated_time_seconds: Option<u32>,
+
+    /// Locale/language code (e.g., "en", "ru")
+    #[serde(default)]
+    pub locale: Option<String>,
+}
+
+/// Scenario category for organization and filtering
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum ScenarioCategory {
+    Movement,
+    Editing,
+    Clipboard,
+    Search,
+    Selection,
+    TextObjects,
+    Advanced,
+    Multi, // Multiple categories
+    Other,
+}
+
+/// Difficulty level for progressive learning
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum Difficulty {
+    Beginner,
+    Intermediate,
+    Advanced,
+}
+
 /// Scenario definition
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -34,6 +90,10 @@ pub struct Scenario {
     pub hints: Vec<String>,
 
     pub scoring: ScoringConfig,
+
+    /// Metadata for filtering, sorting, and quest generation (optional for backward compatibility)
+    #[serde(default)]
+    pub metadata: Option<ScenarioMetadata>,
 }
 
 /// Initial editor setup

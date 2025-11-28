@@ -27,6 +27,12 @@ description = "Press 'y' to yank 'a', 'l' to move right, 'p' to paste after"
 optimal_count = 3
 max_points = 100
 tolerance = 1
+[scenarios.metadata]
+category = "clipboard"
+difficulty = "beginner"
+tags = ["yank", "paste", "copy"]
+commands_taught = ["y", "p"]
+estimated_time_seconds = 30
 
 [[scenarios]]
 id = "paste_before_001"
@@ -44,7 +50,7 @@ cursor_position = [0, 2]
 
 [scenarios.target]
 file_content = "xzyz"
-cursor_position = [0, 1]
+cursor_position = [0, 2]
 
 [scenarios.solution]
 commands = ["y", "h", "P"]
@@ -54,3 +60,9 @@ description = "Press 'y' to yank 'z', 'h' to move left, 'P' to paste before"
 optimal_count = 3
 max_points = 100
 tolerance = 1
+[scenarios.metadata]
+category = "clipboard"
+difficulty = "beginner"
+tags = ["paste"]
+commands_taught = ["P"]
+estimated_time_seconds = 25

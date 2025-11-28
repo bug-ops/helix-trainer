@@ -13,14 +13,14 @@ hints = [
 
 [scenarios.setup]
 file_content = "first line\nsecond line\nthird line"
-cursor_position = [0, 0]
+cursor_position = [1, 0]
 
 [scenarios.target]
 file_content = "first line\nthird line"
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["d", "d"]
+commands = ["dd"]
 description = "Press 'd' twice: first 'd' activates delete mode, second 'd' targets the current line"
 
 [[scenarios.alternatives]]
@@ -32,3 +32,10 @@ description = "Alternative: Use 'cc' (change line)"
 optimal_count = 2
 max_points = 100
 tolerance = 1
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "line", "basic"]
+commands_taught = ["dd"]
+estimated_time_seconds = 20

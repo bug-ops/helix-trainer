@@ -280,6 +280,10 @@ pub fn is_repeatable_command(key: &KeyEvent) -> bool {
             // Hint key alternative
             '?' => false,
 
+            // All other printable characters are repeatable
+            // (they can be used as arguments to 'r' command, or in insert mode)
+            _ if ch.is_ascii_graphic() || ch == ' ' => true,
+
             // Everything else is not repeatable
             _ => false,
         },
@@ -541,12 +545,20 @@ mod tests {
     }
 
     #[test]
-    fn test_is_repeatable_unknown_commands() {
-        // Random characters should not be repeatable
-        assert!(!is_repeatable_command(&make_key('q')));
-        assert!(!is_repeatable_command(&make_key('z')));
-        assert!(!is_repeatable_command(&make_key('1')));
-        assert!(!is_repeatable_command(&make_key('!')));
+    fn test_is_repeatable_printable_characters() {
+        // Printable ASCII characters ARE repeatable (used with 'r' command or in insert mode)
+        assert!(is_repeatable_command(&make_key('q')));
+        assert!(is_repeatable_command(&make_key('z')));
+        assert!(is_repeatable_command(&make_key('1')));
+        assert!(is_repeatable_command(&make_key('!')));
+        assert!(is_repeatable_command(&make_key('_')));
+        assert!(is_repeatable_command(&make_key(' ')));
+
+        // But special non-printable keys are not
+        assert!(!is_repeatable_command(&KeyEvent::new(
+            KeyCode::Tab,
+            KeyModifiers::NONE
+        )));
     }
 
     #[test]

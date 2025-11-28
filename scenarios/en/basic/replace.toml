@@ -17,8 +17,7 @@ cursor_position = [0, 4]
 
 [scenarios.target]
 file_content = "The quick brown fox"
-cursor_position = [0, 4]
-selection = [0, 4, 0, 9]             # Select "quick" (from col 4 to col 9)
+cursor_position = [0, 9]             # Move to after "quick" (space)
 
 [scenarios.solution]
 commands = ["e"]
@@ -28,6 +27,13 @@ description = "Press 'e' to select to the end of the current word"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["selection", "word"]
+commands_taught = ["e"]
+estimated_time_seconds = 15
 
 [[scenarios]]
 id = "replace_char_001"
@@ -56,6 +62,13 @@ optimal_count = 1
 max_points = 100
 tolerance = 0
 
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["replace", "typo"]
+commands_taught = ["r"]
+estimated_time_seconds = 15
+
 [[scenarios]]
 id = "change_selection_001"
 name = "Change character"
@@ -83,3 +96,10 @@ description = "Press 'c' to delete and enter insert mode, 'b' to insert, Escape 
 optimal_count = 3
 max_points = 100
 tolerance = 1
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["change", "replace"]
+commands_taught = ["c"]
+estimated_time_seconds = 20

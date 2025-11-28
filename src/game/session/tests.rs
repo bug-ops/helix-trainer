@@ -28,6 +28,7 @@ fn create_test_scenario() -> Scenario {
             max_points: 100,
             tolerance: 0,
         },
+        metadata: None,
     }
 }
 

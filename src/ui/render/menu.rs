@@ -42,7 +42,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Calculate visible area height for menu (excluding borders)
     let menu_height = chunks[2].height.saturating_sub(2) as usize; // -2 for borders (updated index)
-    let total_items = state.scenarios.len() + 1; // +1 for Quit option
+    let total_items = state.scenario_collection.count() + 1; // +1 for Quit option
 
     // Adjust scroll offset to keep selected item visible
     if state.selected_menu_item < state.menu_scroll_offset {
@@ -57,9 +57,11 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     let max_offset = total_items.saturating_sub(menu_height);
     state.menu_scroll_offset = state.menu_scroll_offset.min(max_offset);
 
-    // Menu items - show all scenarios + Quit option
-    let mut menu_items: Vec<ListItem> = state
-        .scenarios
+    // Menu items - show filtered scenarios + Quit option with indicators
+    let filtered_scenarios = state.scenario_collection.get_filtered();
+    let profile = state.profile.borrow();
+
+    let mut menu_items: Vec<ListItem> = filtered_scenarios
         .iter()
         .enumerate()
         .map(|(i, scenario)| {
@@ -73,14 +75,39 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
                 Style::default().fg(Color::White)
             };
 
+            // Get difficulty indicator
+            let difficulty_indicator = scenario
+                .metadata
+                .as_ref()
+                .and_then(|m| m.difficulty)
+                .map(|d| match d {
+                    crate::config::Difficulty::Beginner => "🟢",
+                    crate::config::Difficulty::Intermediate => "🟡",
+                    crate::config::Difficulty::Advanced => "🔴",
+                })
+                .unwrap_or("  ");
+
+            // Get completion status
+            let completion_indicator = if profile.scenario_history.get(&scenario.id).is_some() {
+                "✅"
+            } else {
+                "  "
+            };
+
             let prefix = if selected { "> " } else { "  " };
-            let display = format!("{}. {}", i + 1, scenario.name);
+            let display = format!(
+                "{}. {} {} {}",
+                i + 1,
+                difficulty_indicator,
+                scenario.name,
+                completion_indicator
+            );
             ListItem::new(format!("{}{}", prefix, display)).style(style)
         })
         .collect();
 
     // Add Quit option at the end
-    let quit_index = state.scenarios.len();
+    let quit_index = state.scenario_collection.count();
     let quit_selected = quit_index == state.selected_menu_item;
     let quit_style = if quit_selected {
         Style::default()

@@ -255,17 +255,17 @@ jobs:
           # Extract section between ## [VERSION] and next ## or end of file
           awk "/## \[$VERSION\]/,/## \[.*\]/{if (/## \[.*\]/ && !/## \[$VERSION\]/) exit; print}" CHANGELOG.md | \
             sed '/^## \[/d' | \
-            sed '/^$/N;/^\n$/D' > release-notes.md
+            sed '/^$/N;/^\n$/D' > changelog-content.md
 
           # If empty, use a default message
-          if [ ! -s release-notes.md ]; then
-            echo "Release version $VERSION" > release-notes.md
-            echo "" >> release-notes.md
-            echo "See CHANGELOG.md for full details." >> release-notes.md
+          if [ ! -s changelog-content.md ]; then
+            echo "Release version $VERSION" > changelog-content.md
+            echo "" >> changelog-content.md
+            echo "See CHANGELOG.md for full details." >> changelog-content.md
           fi
 
-          echo "Release notes:"
-          cat release-notes.md
+          echo "Changelog content:"
+          cat changelog-content.md
 
       - name: Determine if prerelease
         id: prerelease
@@ -279,6 +279,16 @@ jobs:
             echo "This is a stable release"
           fi
 
+      - name: Generate combined release notes
+        run: |
+          # Start with CHANGELOG content
+          cat changelog-content.md > release-notes.md
+
+          # Add separator
+          echo "" >> release-notes.md
+          echo "---" >> release-notes.md
+          echo "" >> release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -291,7 +301,8 @@ jobs:
             artifacts/*.zip
             artifacts/*.sha256
           fail_on_unmatched_files: true
-          generate_release_notes: false
+          generate_release_notes: true
+          append_body: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

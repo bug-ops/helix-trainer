@@ -13,6 +13,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0  # Disable incremental compilation for better sccache performance
 
 # Cancel previous release workflows if a new tag is pushed
 concurrency:
@@ -153,12 +154,6 @@ jobs:
         if: matrix.use_cross == true
         run: |
           cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: release-${{ matrix.target }}
-          save-if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
 
       - name: Build release binary (with cross)
         if: matrix.use_cross == true

@@ -238,6 +238,8 @@ fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message>
 fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     match key.code {
         KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Char('p') => Some(Message::ShowProfile),
+        KeyCode::Char('s') => Some(Message::ShowStatistics),
         KeyCode::Up | KeyCode::Char('k') => Some(Message::MenuUp),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::MenuDown),
         KeyCode::Enter => Some(Message::MenuSelect),

@@ -487,8 +487,8 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::MenuDown => {
-            // Total menu items = filtered scenarios + Quit option
-            let max_items = state.scenario_collection.count() + 1;
+            // Total menu items = filtered scenarios + Profile + Statistics + Quit
+            let max_items = state.scenario_collection.count() + 3;
             if state.selected_menu_item < max_items - 1 {
                 state.selected_menu_item += 1;
             }
@@ -500,10 +500,16 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             let selected = state.selected_menu_item;
 
             if selected < scenario_count {
-                // Start selected scenario
+                // Start selected scenario (0..scenario_count-1)
                 update(state, Message::StartScenario(selected))?;
             } else if selected == scenario_count {
-                // Quit option (last item)
+                // View Profile (index = scenario_count)
+                update(state, Message::ShowProfile)?;
+            } else if selected == scenario_count + 1 {
+                // Statistics (index = scenario_count + 1)
+                update(state, Message::ShowStatistics)?;
+            } else if selected == scenario_count + 2 {
+                // Quit (index = scenario_count + 2)
                 update(state, Message::QuitApp)?;
             }
             Ok(())
@@ -1089,13 +1095,21 @@ mod tests {
         update(&mut state, Message::MenuDown).unwrap();
         assert_eq!(state.selected_menu_item, 1);
 
-        // Move down again
+        // Move down to Profile
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 2); // Now on Quit
+        assert_eq!(state.selected_menu_item, 2); // Profile
+
+        // Move down to Statistics
+        update(&mut state, Message::MenuDown).unwrap();
+        assert_eq!(state.selected_menu_item, 3); // Statistics
+
+        // Move down to Quit
+        update(&mut state, Message::MenuDown).unwrap();
+        assert_eq!(state.selected_menu_item, 4); // Quit
 
         // Can't go past max items
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 2);
+        assert_eq!(state.selected_menu_item, 4);
     }
 
     #[test]
@@ -1115,11 +1129,53 @@ mod tests {
         let scenario1 = create_test_scenario();
         let scenario2 = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario1, scenario2]);
-        // Select Quit option (index = scenario count)
-        state.selected_menu_item = 2;
+        // Select Quit option (index = scenario_count + 2)
+        state.selected_menu_item = 4; // 2 scenarios + Profile + Statistics + Quit = index 4
 
         update(&mut state, Message::MenuSelect).unwrap();
 
+        assert!(!state.running);
+    }
+
+    #[test]
+    fn test_menu_select_profile() {
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+        state.selected_menu_item = 1; // Profile is at index 1 (after 1 scenario)
+
+        update(&mut state, Message::MenuSelect).unwrap();
+        assert_eq!(state.screen, Screen::Profile);
+    }
+
+    #[test]
+    fn test_menu_select_statistics() {
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+        state.selected_menu_item = 2; // Statistics is at index 2
+
+        update(&mut state, Message::MenuSelect).unwrap();
+        assert_eq!(state.screen, Screen::Statistics);
+    }
+
+    #[test]
+    fn test_menu_with_zero_scenarios() {
+        // Edge case: no scenarios loaded
+        let mut state = create_test_app_state(vec![]);
+
+        // Profile should be at index 0
+        update(&mut state, Message::MenuSelect).unwrap();
+        assert_eq!(state.screen, Screen::Profile);
+
+        // Statistics at index 1
+        state.selected_menu_item = 1;
+        state.screen = Screen::MainMenu;
+        update(&mut state, Message::MenuSelect).unwrap();
+        assert_eq!(state.screen, Screen::Statistics);
+
+        // Quit at index 2
+        state.selected_menu_item = 2;
+        state.running = true;
+        update(&mut state, Message::MenuSelect).unwrap();
         assert!(!state.running);
     }
 

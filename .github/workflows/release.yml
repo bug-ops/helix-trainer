@@ -257,11 +257,11 @@ jobs:
             sed '/^## \[/d' | \
             sed '/^$/N;/^\n$/D' > changelog-content.md
 
-          # If empty, use a default message
+          # If empty, use a default message with clickable link
           if [ ! -s changelog-content.md ]; then
             echo "Release version $VERSION" > changelog-content.md
             echo "" >> changelog-content.md
-            echo "See CHANGELOG.md for full details." >> changelog-content.md
+            echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/v$VERSION/CHANGELOG.md#${VERSION//./}) for full details." >> changelog-content.md
           fi
 
           echo "Changelog content:"

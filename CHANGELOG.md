@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2025-11-28
+
+### Added
+
+**Phase B: Profile & Statistics Menu Integration**
+
+- Main menu integration for Profile and Statistics screens
+  - Added "View Profile (p)" menu item with keyboard shortcut
+  - Added "Statistics (s)" menu item with keyboard shortcut
+  - Profile and Statistics now accessible from main menu with arrow navigation
+  - Visual separator grouping system options (Profile, Statistics, Quit)
+  - Keyboard hints displayed in menu items
+
+- Enhanced navigation
+  - Press 'p' for instant Profile screen access (1-keypress shortcut)
+  - Press 's' for instant Statistics screen access (1-keypress shortcut)
+  - Arrow keys / j/k navigation through all menu items
+  - Number keys (1-9) still work for scenario shortcuts
+
+### Changed
+
+- Menu structure: Scenarios → Separator → Profile → Statistics → Quit
+- Updated menu navigation logic to support +3 items (Profile, Statistics, Quit)
+- Quit option moved to bottom after Profile and Statistics
+
+### Fixed
+
+- Profile and Statistics screens now discoverable (previously only accessible from results screen)
+- Menu scrolling works correctly with new items
+
 ## [0.1.4] - 2025-11-28
 
 ### Added

@@ -78,6 +78,9 @@ jobs:
     needs: validate
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -135,12 +138,8 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Configure sccache
-        shell: bash
-        run: |
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        with:
+          version: "v0.10.2"
 
       # Install musl tools for Linux musl builds
       - name: Install musl tools (Linux musl only)

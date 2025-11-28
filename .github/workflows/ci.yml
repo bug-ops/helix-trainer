@@ -45,7 +45,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.os }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' }}
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -97,7 +97,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: clippy
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' }}
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
@@ -142,7 +142,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: build-${{ matrix.os }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' }}
 
       - name: Build release
         run: cargo build --release --verbose

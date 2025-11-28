@@ -7,15 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Windows ARM64 support (aarch64-pc-windows-msvc)
-- Linux ARM64 support (aarch64-unknown-linux-gnu, aarch64-unknown-linux-musl)
-- Cross-compilation support for ARM targets using `cross`
-
-### Changed
-- Release workflow now builds for 9 platforms (was 5)
-
-## [0.1.0] - 2025-01-XX
+## [0.1.0] - 2025-11-28
 
 ### Added
 
@@ -115,6 +107,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - sccache integration for fast incremental builds
   - Cargo cache optimization
   - 5x faster rebuilds (10s vs 54s)
+
+- Release automation
+  - Cross-platform binary builds (9 platforms)
+  - Linux x86_64 (GNU and musl)
+  - Linux ARM64 (aarch64 GNU and musl)
+  - macOS x86_64 (Intel)
+  - macOS ARM64 (Apple Silicon M1/M2/M3)
+  - Windows x86_64
+  - Windows ARM64
+  - Automatic GitHub releases on tags
+  - Changelog generation and extraction
+  - SHA256 checksums for all binaries
+
+- Documentation improvements
+  - Problem-solution framing in README
+  - Quick Links navigation section
+  - Consolidated Features section
+  - Code examples with real output
+  - CONTRIBUTING.md extraction
+  - CI status badge
+  - Visual TUI example
 
 ### Changed
 

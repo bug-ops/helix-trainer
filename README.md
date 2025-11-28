@@ -10,7 +10,8 @@ Traditional tutorials teach you `dd` and `w` on synthetic text files. Then you o
 
 **Helix Trainer bridges this gap.** Train the workflows you'll actually use: debugging sessions, refactoring across files, git operations—powered by the FSRS algorithm for 20-30% faster mastery than traditional practice.
 
-> 🎬 **Demo GIF coming soon** — Training session with daily quests and XP progression
+<!-- Demo GIF placeholder - add animated demo here -->
+> 🎬 **Demo coming soon** — See training in action with daily quests, XP progression, and real-time feedback
 
 ---
 
@@ -197,37 +198,11 @@ cargo build --release
 helix-trainer
 ```
 
-**Example training session**:
-
-```
-╔══════════════════════════════════════════════════════════╗
-║                    HELIX TRAINER                         ║
-╚══════════════════════════════════════════════════════════╝
-
-📅 Daily Quest: Practice Mode
-Complete 3 scenarios today
-
-Progress: ██░░░ 2/3 scenarios
-
-───────────────────────────────────────────────────────────
-
-📝 Scenario: Delete a Line
-Goal: Remove line 2 from the file
-
-File content:
-  1 │ line 1
-  2 │ line 2        ← Remove this
-  3 │ line 3
-
-Your command: dd
-
-✅ Perfect! Optimal solution
-+50 XP  |  Level 3: 450/500 XP  |  Quest: 2/3 ✅
-
-[R] Next   [M] Menu   [Q] Quit
-```
-
-The interactive menu guides you through scenarios and tracks your progress automatically.
+The interactive menu will guide you through:
+- Daily quests and challenges
+- Training scenarios with instant feedback
+- Progress tracking (XP, levels, streaks)
+- Performance analytics and statistics
 
 ---
 
@@ -280,43 +255,14 @@ The flagship feature that makes Helix Trainer unique:
 
 ## Feature Showcase
 
-### Beautiful Interactive UI
+### Beautiful Interactive TUI
 
-```
-╔══════════════════════════════════════════════════════════╗
-║ Delete current line                      [Scenario 3/20] ║
-╠══════════════════════════════════════════════════════════╣
-║                                                          ║
-║  line 1                                                  ║
-║  line 2  ← cursor here                                   ║
-║  line 3                                                  ║
-║                                                          ║
-║  Key History (Last 5):  [ d ] [ d ]                      ║
-║                                                          ║
-║  [ESC] Abandon   [F1] Hint                               ║
-╚══════════════════════════════════════════════════════════╝
-```
-
-**Success popup** → **Results with diff highlighting** → **Performance rating**
-
-### Smart Performance Scoring
-
-```
-╔══════════════════════════════════════════════════════════╗
-║ Results                                                  ║
-╠══════════════════════════════════════════════════════════╣
-║  Performance: PERFECT! (100/100)                         ║
-║  Actions: 1 / 1 optimal                                  ║
-║  Time: 1.2s                                              ║
-║                                                          ║
-║  Diff:                                                   ║
-║  + line 1     (green - correct)                          ║
-║  - line 2     (red - deleted as intended)                ║
-║  + line 3                                                ║
-║                                                          ║
-║  [R] Retry   [M] Menu   [Q] Quit                         ║
-╚══════════════════════════════════════════════════════════╝
-```
+- **Scenario view**: File editor with syntax highlighting and cursor visualization
+- **Key history display**: See your last 5 keypresses in large text
+- **Success animations**: Visual feedback on completion
+- **Results screen**: Diff highlighting, performance ratings, XP breakdown
+- **Profile & statistics**: Track your progress, levels, and quest completion
+- **Daily quests sidebar**: Always visible progress indicators
 
 ### 🎮 Commands Supported (31)
 

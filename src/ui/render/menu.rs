@@ -42,7 +42,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Calculate visible area height for menu (excluding borders)
     let menu_height = chunks[2].height.saturating_sub(2) as usize; // -2 for borders (updated index)
-    let total_items = state.scenario_collection.count() + 1; // +1 for Quit option
+    let total_items = state.scenario_collection.count() + 3; // +3 for Profile, Statistics, Quit
 
     // Adjust scroll offset to keep selected item visible
     if state.selected_menu_item < state.menu_scroll_offset {
@@ -106,8 +106,42 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         })
         .collect();
 
+    let scenario_count = state.scenario_collection.count();
+
+    // Add separator line
+    menu_items.push(ListItem::new("─".repeat(30)).style(Style::default().fg(Color::DarkGray)));
+
+    // Add View Profile option
+    let profile_index = scenario_count;
+    let profile_selected = profile_index == state.selected_menu_item;
+    let profile_style = if profile_selected {
+        Style::default()
+            .bg(Color::Blue)
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Cyan)
+    };
+    let profile_prefix = if profile_selected { "> " } else { "  " };
+    menu_items
+        .push(ListItem::new(format!("{}View Profile (p)", profile_prefix)).style(profile_style));
+
+    // Add Statistics option
+    let stats_index = scenario_count + 1;
+    let stats_selected = stats_index == state.selected_menu_item;
+    let stats_style = if stats_selected {
+        Style::default()
+            .bg(Color::Blue)
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Cyan)
+    };
+    let stats_prefix = if stats_selected { "> " } else { "  " };
+    menu_items.push(ListItem::new(format!("{}Statistics (s)", stats_prefix)).style(stats_style));
+
     // Add Quit option at the end
-    let quit_index = state.scenario_collection.count();
+    let quit_index = scenario_count + 2;
     let quit_selected = quit_index == state.selected_menu_item;
     let quit_style = if quit_selected {
         Style::default()

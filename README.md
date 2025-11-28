@@ -1,187 +1,108 @@
 # Helix Trainer
 
-[![CI Status](https://github.com/bug-ops/helix-trainer/actions/workflows/ci.yml/badge.svg)](https://github.com/bug-ops/helix-trainer/actions)
+[![CI Status](https://img.shields.io/github/actions/workflow/status/bug-ops/helix-trainer/ci.yml?branch=main)](https://github.com/bug-ops/helix-trainer/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.90+-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
+[![Release](https://img.shields.io/github/v/release/bug-ops/helix-trainer)](https://github.com/bug-ops/helix-trainer/releases/latest)
 
-**Stop learning Helix commands in isolation. Start practicing real development workflows.**
+**Master Helix editor keybindings through scientifically-optimized spaced repetition and gamified training.**
 
-Traditional tutorials teach you `dd` and `w` on synthetic text files. Then you open a real codebase and... freeze. Where's the failing test? How do I navigate between files? What was that LSP command?
+Stop learning commands in isolation. Train real development workflows with FSRS-powered spaced repetition (20-30% faster mastery), daily quests, XP progression, and anti-farming mechanics that ensure genuine skill development.
 
-**Helix Trainer bridges this gap.** Train the workflows you'll actually use: debugging sessions, refactoring across files, git operations—powered by the FSRS algorithm for 20-30% faster mastery than traditional practice.
-
-<!-- Demo GIF placeholder - add animated demo here -->
-> 🎬 **Demo coming soon** — See training in action with daily quests, XP progression, and real-time feedback
-
----
-
-**Quick Links**:
-[📥 Download](#releases) ·
-[🚀 Quick Start](#quick-start) ·
-[✨ Features](#-features) ·
-[📖 Documentation](#documentation) ·
-[🐛 Issues](https://github.com/bug-ops/helix-trainer/issues) ·
-[🤝 Contributing](#-contributing)
-
----
-
-## 📋 Table of Contents
-
-- [Features](#-features)
-- [Quick Start](#quick-start)
-- [Current Status](#current-status)
-- [Feature Showcase](#feature-showcase)
-- [Commands Supported](#-commands-supported-31)
-- [Roadmap](#-roadmap-vision-to-reality)
-- [Technology](#-technology)
-- [Contributing](#-contributing)
-- [Releases](#releases)
-- [Documentation](#documentation)
-- [Why You Should Try This](#why-you-should-try-this)
-- [Success Metrics](#-success-metrics-phase-1-goals)
-- [FAQ](#-faq)
-- [Get Involved](#get-involved)
-
----
-
-## 📖 Why This Project Exists & What Makes It Different
-
-<details>
-<summary>Click to expand</summary>
-
-### Why This Exists
-
-**Traditional editor tutorials teach commands. Real development requires workflows.**
-
-Every vim/Helix tutorial:
-
-- Teaches `dd` (delete line) in isolation
-- Shows `w` (next word) on synthetic text
-- Stops at "congratulations, you know the basics!"
-
-**Real development**:
-
-- Navigate to failing test → jump to implementation → fix bug → stage changes → commit
-- Refactor function across 3 files using LSP go-to-definition
-- Debug by jumping between error logs and source code
-
-**Helix Trainer bridges this gap.** No other tool does.
-
----
-
-### What Makes This Different
-
-#### 1. Scientifically-Optimized Learning (FSRS Algorithm)
-
-Uses the same state-of-the-art spaced repetition algorithm as Anki 23.10+:
-
-- **20-30% fewer reviews** than traditional methods (research-proven)
-- **99.6% better accuracy** than older algorithms (tested on 350M+ reviews)
-- **Identifies YOUR weaknesses** and schedules smart practice
-- **Machine learning-based** - trained on real user data, not guesswork
-
-No more random practice. The system learns which commands YOU struggle with and reviews them before you forget.
-
-#### 2. Real Workflow Training (Coming Soon)
-
-**Phase 2 roadmap**: The only tool training full development loops:
-
-```
-Scenario: "CI Failed - Fix the Bug"
-├─ Navigate to test file (LSP file picker)
-├─ Jump to failing assertion (diagnostics)
-├─ Go to definition (LSP)
-├─ Fix the bug (editing)
-├─ Stage changes (git)
-└─ Commit with message
-```
-
-This is what makes you productive. Commands are just building blocks.
-
-#### 3. Gamification That Works
-
-Duolingo-proven mechanics (launching Phase 1):
-
-- **Daily quests**: Fresh challenges every day
-- **Streak tracking**: Don't break the chain
-- **XP & levels**: Measurable progress
-- **Achievements**: Unlock badges as you master skills
-
-Not pointless gamification. Real motivation to practice daily.
-
-#### 4. 100% Offline, Privacy-First
-
-- No cloud services, no internet required
-- All data stored locally (`~/.config/helix-trainer/`)
-- No telemetry, tracking, or data collection
-- Your learning data stays on your machine
-
-</details>
+<!-- Demo GIF/screenshot will go here -->
+> 🎬 **Demo GIF coming soon** — Watch training in action with mastery tracking, daily quests, and real-time feedback
 
 ---
 
 ## ✨ Features
 
-- 🧠 **Smart Learning (FSRS Algorithm)**: 20-30% fewer reviews than traditional spaced repetition—scientifically proven
-- 🎯 **Daily Quests**: Duolingo-style challenges to build daily practice habits
-- 📊 **Progress Tracking**: XP system, levels, achievements, and streak tracking
-- 🔒 **100% Offline & Private**: No cloud, no tracking, no telemetry—all data stays local
-- ⚡ **Real Helix Accuracy**: Uses actual `helix-core` library (same code as Helix editor)
-- 🎮 **31 Commands Supported**: Movement, editing, clipboard, undo/redo, repeat
-- 🏆 **Gamification That Works**: Proven mechanics from learning apps (Duolingo, Anki)
-- 📚 **20 Training Scenarios**: From basics to intermediate workflows
+- 🧠 **FSRS Spaced Repetition** — 20-30% fewer reviews than traditional methods (research-proven)
+- 🎯 **Daily Quest System** — Duolingo-style challenges with streak tracking
+- 📊 **Scenario Mastery** — Three-tier progression (Learning → Proficient → Mastered) with graduated XP scaling
+- 🛡️ **Anti-Farming Protection** — Session penalties prevent XP exploitation
+- ⚡ **Real Helix Accuracy** — Uses official `helix-core` library (v25.07.1)
+- 🎮 **31 Commands** — Movement, editing, clipboard, undo/redo, repeat
+- 🔒 **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
+- 📚 **20 Training Scenarios** — From basics to intermediate workflows
 
 ---
 
-## Quick Start
+## 📦 Installation
 
-### Installation
+### Pre-built Binaries (Recommended)
 
-#### Option 1: Download Pre-built Binaries (Recommended)
+Download for your platform from [**Releases**](https://github.com/bug-ops/helix-trainer/releases/latest):
 
-Download the latest release for your platform from the [Releases page](https://github.com/bug-ops/helix-trainer/releases):
+<details>
+<summary><b>Linux (x86_64)</b></summary>
 
 ```bash
-# Linux x86_64 (GNU)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.1.0-x86_64-unknown-linux-gnu
+# GNU libc (most distributions)
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.1.1-x86_64-unknown-linux-gnu
 ./helix-trainer
 
-# Linux ARM64 (aarch64)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.0-aarch64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.1.0-aarch64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.1.0-aarch64-unknown-linux-gnu
+# musl (Alpine Linux, static binary)
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-x86_64-unknown-linux-musl.tar.gz
+tar -xzf helix-trainer-v0.1.1-x86_64-unknown-linux-musl.tar.gz
+cd helix-trainer-v0.1.1-x86_64-unknown-linux-musl
 ./helix-trainer
-
-# macOS (Apple Silicon M1/M2/M3)
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.0-aarch64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.1.0-aarch64-apple-darwin.tar.gz
-cd helix-trainer-v0.1.0-aarch64-apple-darwin
-./helix-trainer
-
-# macOS (Intel)
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.0-x86_64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.1.0-x86_64-apple-darwin.tar.gz
-cd helix-trainer-v0.1.0-x86_64-apple-darwin
-./helix-trainer
-
-# Windows x86_64
-# Download helix-trainer-v0.1.0-x86_64-pc-windows-msvc.zip from the Releases page
-# Extract and run helix-trainer.exe
-
-# Windows ARM64
-# Download helix-trainer-v0.1.0-aarch64-pc-windows-msvc.zip from the Releases page
-# Extract and run helix-trainer.exe
 ```
+</details>
+
+<details>
+<summary><b>Linux (ARM64/aarch64)</b></summary>
+
+```bash
+# GNU libc
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-aarch64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.1.1-aarch64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.1.1-aarch64-unknown-linux-gnu
+./helix-trainer
+
+# musl
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-aarch64-unknown-linux-musl.tar.gz
+tar -xzf helix-trainer-v0.1.1-aarch64-unknown-linux-musl.tar.gz
+cd helix-trainer-v0.1.1-aarch64-unknown-linux-musl
+./helix-trainer
+```
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
+
+```bash
+# Apple Silicon (M1/M2/M3/M4)
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-aarch64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.1.1-aarch64-apple-darwin.tar.gz
+cd helix-trainer-v0.1.1-aarch64-apple-darwin
+./helix-trainer
+
+# Intel
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-x86_64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.1.1-x86_64-apple-darwin.tar.gz
+cd helix-trainer-v0.1.1-x86_64-apple-darwin
+./helix-trainer
+```
+</details>
+
+<details>
+<summary><b>Windows</b></summary>
+
+Download from [Releases page](https://github.com/bug-ops/helix-trainer/releases/latest):
+- **x86_64**: `helix-trainer-v0.1.1-x86_64-pc-windows-msvc.zip`
+- **ARM64**: `helix-trainer-v0.1.1-aarch64-pc-windows-msvc.zip`
+
+Extract and run `helix-trainer.exe`
+</details>
 
 **Verify checksums** (optional but recommended):
-
 ```bash
 sha256sum -c helix-trainer-*.sha256
 ```
 
-#### Option 2: Build from Source
+### Build from Source
 
 ```bash
 git clone https://github.com/bug-ops/helix-trainer.git
@@ -192,82 +113,40 @@ cargo build --release
 
 **Requirements**: Rust 1.85+ (2024 edition), terminal with Unicode support
 
-### First Run
+---
+
+## 🚀 Quick Start
 
 ```bash
 helix-trainer
 ```
 
-The interactive menu will guide you through:
-- Daily quests and challenges
-- Training scenarios with instant feedback
-- Progress tracking (XP, levels, streaks)
-- Performance analytics and statistics
+The interactive TUI will guide you through:
+
+1. **Daily Quests** — Fresh challenges every day (Practice, Learning, Review)
+2. **Training Scenarios** — 20 scenarios with instant feedback
+3. **Progress Tracking** — XP, levels, streaks, mastery progression
+4. **Performance Analytics** — Review calendar, mastery stats
+
+### Example Training Session
+
+```
+Main Menu
+├─ Daily Quests (3 active)
+│  ├─ ✅ Practice: Complete 3 scenarios
+│  ├─ ⏳ Learning: Try 2 new scenarios
+│  └─ 🔄 Review: 5 cards due
+├─ Training Scenarios (20 available)
+│  ├─ Basic Movement (Mastered - 20% XP)
+│  ├─ Word Navigation (Proficient - 50% XP)
+│  └─ Delete Line (Learning - 100% XP)
+├─ Profile (Level 5, 842 XP)
+└─ Statistics
+```
 
 ---
 
-## Current Status
-
-### Phase A: Foundation (100% Complete)
-
-The basics work beautifully:
-
-- **30+ commands**: Movement, editing, clipboard, undo/redo, repeat (.)
-- **20 training scenarios**: From basic to intermediate
-- **Beautiful TUI**: Large key display, success animations, diff highlighting
-- **Real Helix engine**: Uses official `helix-core` library (100% accuracy guarantee)
-- **164 tests**: All passing, zero clippy warnings
-
-**Try it now** - the core experience is polished and ready.
-
-### Phase 1: Smart Learning (In Development)
-
-Building the game-changing features:
-
-**Spaced Repetition System** (2-3 weeks):
-
-- FSRS algorithm integration (`fsrs` crate)
-- Performance tracking per command
-- Intelligent review scheduling
-- Analytics dashboard
-
-**Daily Quests & Gamification** (3-4 weeks):
-
-- Duolingo-style daily challenges
-- Streak counter with loss aversion
-- XP/level progression system
-- Achievement unlocks
-
-**Status**: Architecture complete, ready for implementation
-
-### Phase 2: Workflow Simulator (6+ months)
-
-The flagship feature that makes Helix Trainer unique:
-
-- Mock LSP server for realistic scenarios
-- Git repository state simulation
-- Multi-file navigation training
-- Real development workflow scenarios
-
-**Why this matters**: Bridges the tutorial → productivity gap that nobody else solves.
-
----
-
-## Feature Showcase
-
-### Beautiful Interactive TUI
-
-- **Scenario view**: File editor with syntax highlighting and cursor visualization
-- **Key history display**: See your last 5 keypresses in large text
-- **Success animations**: Visual feedback on completion
-- **Results screen**: Diff highlighting, performance ratings, XP breakdown
-- **Profile & statistics**: Track your progress, levels, and quest completion
-- **Daily quests sidebar**: Always visible progress indicators
-
-### 🎮 Commands Supported (31)
-
-<details>
-<summary>Click to expand</summary>
+## 📚 Commands Supported
 
 | Category | Commands |
 |----------|----------|
@@ -278,276 +157,227 @@ The flagship feature that makes Helix Trainer unique:
 | **Repeat** | `.` (repeat last action) |
 | **Insert Mode** | Text input, Backspace, arrow keys, Esc |
 
-All commands work exactly like real Helix (powered by `helix-core` library).
-
-</details>
+All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
 ---
 
-## 🗺️ Roadmap: Vision to Reality
+## 🎓 Why This Project Exists
 
-<details>
-<summary>Click to expand</summary>
+**Traditional editor tutorials teach commands. Real development requires workflows.**
 
-### The Strategy
+Most Helix/Vim tutorials:
+- Teach `dd` (delete line) in isolation ❌
+- Show `w` (next word) on synthetic text ❌
+- Stop at "congratulations, you know the basics!" ❌
 
-**SKIP**: Browser/WASM version (distribution doesn't solve differentiation)
-**FOCUS**: Unique learning mechanics that nobody else has
-**GOAL**: Become the professional-grade editor training tool
+**Real development requires:**
+- Navigate to failing test → jump to implementation → fix bug → stage changes → commit ✅
+- Refactor function across 3 files using LSP ✅
+- Debug by jumping between error logs and source code ✅
 
-### Three-Phase Plan
+**Helix Trainer bridges this gap** through:
 
-**Phase 1: Build Habits (3 months)** - NOW
+### 1. Scientifically-Optimized Learning (FSRS)
 
-- Spaced repetition (FSRS algorithm)
-- Daily quests + streak tracking
-- Achievement system
-- **Goal**: Daily active users, habit formation
+- **20-30% fewer reviews** than traditional spaced repetition
+- **99.6% better accuracy** than older algorithms (tested on 350M+ reviews)
+- **Identifies YOUR weaknesses** and schedules smart practice
+- Same algorithm as Anki 23.10+ (research-proven)
 
-**Phase 2: Own a Category (6 months)** - NEXT
+### 2. Scenario Mastery System
 
-- Workflow Simulator (FLAGSHIP FEATURE)
-- Scenario marketplace (community contributions)
-- **Goal**: "The only tool for real-world Helix training"
+Prevents XP farming while ensuring genuine skill development:
 
-**Phase 3: Network Effects (ongoing)** - FUTURE
+- **Three-tier progression**: Learning (100% XP) → Proficient (50% XP) → Mastered (20% XP)
+- **Session spam protection**: Same-day penalties (100% → 70% → 30%)
+- **Bounded tracking**: 10,000 scenario limit with validation
+- **Performance benchmarks**: <1ms XP calculations, ~288 bytes per scenario
 
-- Multiplayer/ghost race modes
-- Code archaeology (mine OSS commits for scenarios)
-- **Goal**: Viral growth through social features
+### 3. Gamification That Works
 
-</details>
+Duolingo-proven mechanics:
+- **Daily quests** with fresh challenges
+- **Streak tracking** with loss aversion
+- **XP & levels** (exponential scaling)
+- **Achievements** for milestones
+
+### 4. 100% Offline & Privacy-First
+
+- No cloud services, no internet required
+- All data stored locally (`~/.config/helix-trainer/`)
+- No telemetry, tracking, or data collection
+- Your learning stays on your machine
 
 ---
 
-## ⚙️ Technology
+## 📊 Current Status
 
-<details>
-<summary>Click to expand</summary>
+### ✅ Phase 1: Smart Learning & Gamification (COMPLETE - v0.1.1)
 
-### Modern Rust Stack
+- FSRS spaced repetition system
+- Daily quest system
+- XP/leveling with scenario mastery
+- Profile & statistics tracking
+- Anti-farming protection
+- 164 passing tests, zero clippy warnings
 
-| Component | Library | Why |
-|-----------|---------|-----|
-| **TUI Framework** | [ratatui](https://ratatui.rs/) 0.29 | Industry-standard terminal UI |
-| **Terminal I/O** | [crossterm](https://github.com/crossterm-rs/crossterm) 0.29 | Cross-platform support |
-| **Editor Core** | [helix-core](https://github.com/helix-editor/helix) 25.07.1 | 100% accuracy guarantee |
-| **Spaced Repetition** | [fsrs](https://crates.io/crates/fsrs) 5.2+ | State-of-the-art ML algorithm |
-| **Large Text** | [tui-big-text](https://crates.io/crates/tui-big-text) 0.7 | Key history display |
+### 🔄 Phase 2: Workflow Simulator (Planned - 6+ months)
 
-**Quality standards**:
+The flagship feature that makes Helix Trainer unique:
 
-- Rust 2024 edition (latest stable)
-- 164 tests, all passing
-- Zero clippy warnings policy
-- CI/CD on Linux, macOS, Windows
+- Mock LSP server for realistic scenarios
+- Git repository state simulation
+- Multi-file navigation training
+- Real development workflow scenarios (CI debugging, refactoring, etc.)
 
-### Project Metrics
+**Why this matters**: Bridges the tutorial → productivity gap that nobody else solves.
 
-- **Lines of Code**: ~6,842 (Rust)
-- **Test Coverage**: 100% for core modules
-- **Build Time**: ~1.5-2s (incremental, with sccache)
-- **Test Time**: ~0.12s (cargo-nextest)
+---
+
+## ⚙️ Technology Stack
+
+| Component | Library | Version |
+|-----------|---------|---------|
+| **TUI Framework** | [ratatui](https://ratatui.rs/) | 0.29 |
+| **Terminal I/O** | [crossterm](https://github.com/crossterm-rs/crossterm) | 0.29 |
+| **Editor Core** | [helix-core](https://github.com/helix-editor/helix) | 25.07.1 |
+| **Spaced Repetition** | [fsrs](https://crates.io/crates/fsrs) | 5.2 |
+| **Large Text** | [tui-big-text](https://crates.io/crates/tui-big-text) | 0.7 |
+
+**Project Metrics**:
+- **Language**: Rust 2024 Edition
+- **MSRV**: 1.85
+- **Lines of Code**: ~5,759
+- **Tests**: 164 (all passing)
 - **Binary Size**: ~3MB (release mode)
-
-</details>
+- **Build Time**: ~1.5-2s (incremental, with sccache)
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 - Development setup and workflow
 - Code standards and quality checks
 - Pull request process
 - Testing requirements
 
-**Quick start for contributors**:
+**Quick contributor setup**:
 
 ```bash
-# Run all quality checks before committing
-cargo +nightly fmt && cargo nextest run && cargo clippy --all-targets --all-features -- -D warnings
+# Clone repository
+git clone https://github.com/bug-ops/helix-trainer.git
+cd helix-trainer
+
+# Run quality checks before committing
+cargo +nightly fmt
+cargo nextest run
+cargo clippy --all-targets --all-features -- -D warnings
+cargo build --release
 ```
 
 With `sccache` configured, rebuilds are 5x faster (~10s incremental).
 
 ---
 
-## Releases
+## 📄 Documentation
 
-### Download Latest Release
-
-**Latest version**: [v0.1.0](https://github.com/bug-ops/helix-trainer/releases/latest) (Phase 1 - Smart Learning & Gamification)
-
-**Supported Platforms**:
-
-- Linux x86_64 (GNU and musl)
-- Linux ARM64 (aarch64 GNU and musl)
-- macOS x86_64 (Intel)
-- macOS ARM64 (Apple Silicon M1/M2/M3)
-- Windows x86_64
-- Windows ARM64
-
-Each release includes:
-
-- Pre-built binary
-- README and documentation
-- LICENSE file
-- CHANGELOG with release notes
-- SHA256 checksums for verification
-
-**Release Schedule**: We follow semantic versioning (MAJOR.MINOR.PATCH)
-
-- Major releases: Breaking changes or major new features
-- Minor releases: New features, backward compatible
-- Patch releases: Bug fixes and improvements
-
-See [CHANGELOG.md](CHANGELOG.md) for detailed release history.
-
-### Creating a Release (Maintainers)
-
-Releases are automated via GitHub Actions:
-
-1. Update version in `Cargo.toml`
-2. Update `CHANGELOG.md` with release notes
-3. Commit changes: `git commit -m "chore: prepare v0.2.0 release"`
-4. Create and push tag: `git tag v0.2.0 && git push origin v0.2.0`
-5. GitHub Actions will automatically:
-   - Validate version consistency
-   - Build binaries for all platforms
-   - Generate SHA256 checksums
-   - Create GitHub release
-   - Upload all artifacts
-
-**Workflow**: `.github/workflows/release.yml`
-
----
-
-## Documentation
-
-- [CHANGELOG.md](CHANGELOG.md) - Release history and version notes
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
-- [SECURITY.md](SECURITY.md) - Security policy
-
----
-
-## Why You Should Try This
-
-### For Beginners
-
-- Learn Helix without frustration
-- Scientifically-optimized practice (FSRS)
-- Immediate feedback on mistakes
-- Clear path from zero to proficient
-
-### For Intermediate Users
-
-- Identify your weak commands
-- Practice until muscle memory
-- Track measurable progress
-- Prepare for real workflows (Phase 2)
-
-### For Helix Community
-
-- 100% accurate (uses real `helix-core`)
-- Open source, local-first
-- Contributes to Helix adoption
-- Feedback loop improves Helix itself
-
----
-
-## 📊 Success Metrics (Phase 1 Goals)
-
-<details>
-<summary>Click to expand</summary>
-
-We're tracking:
-
-- **80%+ users** practice recommended scenarios (spaced repetition)
-- **70%+ users** complete 1+ quest per day
-- **Average streak**: > 7 days
-- **D7 retention**: > 40%
-- **Review efficiency**: 20-30% fewer reviews vs random practice
-
-These are research-backed targets, not arbitrary KPIs.
-
-</details>
+- [CHANGELOG.md](CHANGELOG.md) — Release history and version notes
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Contribution guidelines
+- [SECURITY.md](SECURITY.md) — Security policy
 
 ---
 
 ## ❓ FAQ
 
 <details>
-<summary>Click to expand</summary>
+<summary><b>Why not just use <code>:tutor</code> in Helix?</b></summary>
 
-**Q: Why not just use `:tutor` in Helix?**
-A: `:tutor` is great for one-time learning. Helix Trainer adds spaced repetition, gamification, progress tracking, and (Phase 2) workflow training. Complementary, not competitive.
+`:tutor` is excellent for one-time learning. Helix Trainer adds:
+- Spaced repetition for long-term retention
+- Gamification for daily habit formation
+- Progress tracking and analytics
+- (Phase 2) Full workflow training
 
-**Q: Why FSRS instead of traditional spaced repetition?**
-A: FSRS is 20-30% more efficient (research-proven on 350M+ reviews). Same algorithm Anki switched to in 23.10+. We use the best available science.
+They're complementary tools, not competitors.
+</details>
 
-**Q: When is Phase 2 (Workflow Simulator)?**
-A: After Phase 1 completes (~3 months). We're building the foundation first (habits, engagement) before the flagship feature.
+<details>
+<summary><b>Why FSRS instead of traditional spaced repetition?</b></summary>
 
-**Q: Can I use this offline?**
-A: Yes, 100% offline. No internet required, all data local, no telemetry.
+FSRS is 20-30% more efficient (research-proven on 350M+ reviews). It's the same algorithm Anki switched to in v23.10+. We use the best available learning science.
+</details>
 
-**Q: Is this only for Helix, or can I learn Vim/Neovim?**
-A: Helix-specific. Many commands overlap with Vim, but Helix has different selection-first model. For pure Vim, try OpenVim or VimGenius.
+<details>
+<summary><b>Can I use this offline?</b></summary>
 
-**Q: How is this different from Vim Adventures?**
-A: Vim Adventures is a fun game with synthetic scenarios. Helix Trainer focuses on real development workflows with scientific learning optimization. Different audiences.
+Yes, 100% offline. No internet required, all data local, zero telemetry.
+</details>
 
+<details>
+<summary><b>When is Phase 2 (Workflow Simulator)?</b></summary>
+
+After Phase 1 stabilizes (~3 months). We're building the foundation (habits, engagement) before the flagship feature.
+</details>
+
+<details>
+<summary><b>Is this only for Helix, or can I learn Vim/Neovim?</b></summary>
+
+Helix-specific. Many commands overlap with Vim, but Helix uses a different selection-first model. For Vim, try OpenVim or VimGenius.
 </details>
 
 ---
 
-## Acknowledgments
+## 🌟 Roadmap
 
-- [Helix Editor](https://helix-editor.com/) - For the amazing modal editor
-- [Ratatui](https://ratatui.rs/) - For the excellent TUI framework
-- [FSRS Research Team](https://github.com/open-spaced-repetition) - For the algorithm
-- [Anki](https://apps.ankiweb.net/) - Inspiration for spaced repetition
+| Phase | Status | Timeline | Focus |
+|-------|--------|----------|-------|
+| **Phase A** | ✅ Complete | — | Foundation (30+ commands, 20 scenarios, TUI) |
+| **Phase 1** | ✅ Complete | — | Smart learning (FSRS, quests, mastery) |
+| **Phase 2** | 📋 Planned | 6 months | Workflow simulator (LSP, git, multi-file) |
+| **Phase 3** | 💡 Future | TBD | Network effects (multiplayer, scenarios marketplace) |
+
+---
+
+## 📈 Success Metrics
+
+We're tracking:
+- **80%+ users** practice recommended scenarios (spaced repetition)
+- **70%+ users** complete 1+ quest per day
+- **Average streak**: >7 days
+- **D7 retention**: >40%
+- **Review efficiency**: 20-30% fewer reviews vs random practice
+
+Research-backed targets, not arbitrary KPIs.
+
+---
+
+## 🙏 Acknowledgments
+
+- [Helix Editor](https://helix-editor.com/) — For the amazing modal editor
+- [Ratatui](https://ratatui.rs/) — For the excellent TUI framework
+- [FSRS Research Team](https://github.com/open-spaced-repetition) — For the algorithm
+- [Anki](https://apps.ankiweb.net/) — Inspiration for spaced repetition
 
 Inspired by vim-tutor, OpenVim, and decades of learning science research.
 
 ---
 
-## Get Involved
+## 📝 License
 
-**Found a bug?** [Open an issue](https://github.com/bug-ops/helix-trainer/issues)
-
-**Have a scenario idea?** Use the "Scenario Request" template
-
-**Want to contribute?** Read [CONTRIBUTING.md](CONTRIBUTING.md) and start with "good first issue" label
-
-**Questions?** Open a GitHub discussion
+Licensed under MIT — see [LICENSE](LICENSE) for details.
 
 ---
 
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-## Project Status
-
-**Current Branch**: `feat/phase1-spaced-repetition`
-**Latest Release**: Phase A (foundation) complete
-**Next Milestone**: Phase 1 (spaced repetition + gamification)
-
-**Follow development**: Watch this repo, check [`.local/plans/INDEX.md`](.local/plans/INDEX.md) for detailed roadmap
-
----
-
-**Ready to master Helix? Clone and run it now.**
+## 🚀 Get Started Now
 
 ```bash
-git clone https://github.com/bug-ops/helix-trainer.git
-cd helix-trainer
-cargo run --release
+# Download and run
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.1.1-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.1.1-x86_64-unknown-linux-gnu
+./helix-trainer
 ```
 
-The journey from beginner to proficient starts with one practice session.
+The journey from beginner to proficient starts with one practice session. ⌨️

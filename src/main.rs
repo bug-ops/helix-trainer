@@ -220,6 +220,7 @@ fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
         ui::Screen::Task => handle_task_keys(key, state),
         ui::Screen::Results => handle_results_keys(key),
         ui::Screen::Profile | ui::Screen::Statistics => handle_profile_stats_keys(key, state),
+        ui::Screen::Review => handle_review_keys(key),
     }
 }
 
@@ -238,6 +239,7 @@ fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message>
 fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     match key.code {
         KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Char('r') => Some(Message::StartReviewSession),
         KeyCode::Char('p') => Some(Message::ShowProfile),
         KeyCode::Char('s') => Some(Message::ShowStatistics),
         KeyCode::Up | KeyCode::Char('k') => Some(Message::MenuUp),
@@ -382,6 +384,17 @@ fn handle_results_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Char('r') => Some(Message::RetryScenario),
         KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('p') => Some(Message::ShowProfile),
+        _ => None,
+    }
+}
+
+/// Handle keyboard events on the review session screen
+fn handle_review_keys(key: KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Char('s') => Some(Message::CompleteReviewCommand { success: true }),
+        KeyCode::Char('f') => Some(Message::CompleteReviewCommand { success: false }),
+        KeyCode::Esc => Some(Message::AbandonReviewSession),
+        KeyCode::Char('q') => Some(Message::QuitApp),
         _ => None,
     }
 }

@@ -10,6 +10,7 @@ mod menu;
 mod popups;
 mod profile;
 mod results;
+mod review;
 mod statistics;
 mod task;
 
@@ -35,5 +36,6 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         Screen::Results => results::render_results_screen(frame, state),
         Screen::Profile => profile::render_profile_screen(frame, state),
         Screen::Statistics => statistics::render_statistics_screen(frame, state),
+        Screen::Review => review::render_review_screen(frame, state),
     }
 }

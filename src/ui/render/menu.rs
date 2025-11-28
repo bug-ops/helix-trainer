@@ -111,8 +111,38 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     // Add separator line
     menu_items.push(ListItem::new("─".repeat(30)).style(Style::default().fg(Color::DarkGray)));
 
+    // Add Review Commands option
+    let review_index = scenario_count;
+    let review_selected = review_index == state.selected_menu_item;
+    let due_count = state.scheduler.get_due_reviews().len();
+    let review_style = if review_selected {
+        Style::default()
+            .bg(Color::Blue)
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD)
+    } else if due_count > 0 {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Gray)
+    };
+    let review_prefix = if review_selected { "> " } else { "  " };
+    menu_items.push(
+        ListItem::new(format!(
+            "{}Review Commands (r){}",
+            review_prefix,
+            if due_count > 0 {
+                format!(" [{}]", due_count)
+            } else {
+                String::new()
+            }
+        ))
+        .style(review_style),
+    );
+
     // Add View Profile option
-    let profile_index = scenario_count;
+    let profile_index = scenario_count + 1;
     let profile_selected = profile_index == state.selected_menu_item;
     let profile_style = if profile_selected {
         Style::default()
@@ -127,7 +157,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         .push(ListItem::new(format!("{}View Profile (p)", profile_prefix)).style(profile_style));
 
     // Add Statistics option
-    let stats_index = scenario_count + 1;
+    let stats_index = scenario_count + 2;
     let stats_selected = stats_index == state.selected_menu_item;
     let stats_style = if stats_selected {
         Style::default()
@@ -141,7 +171,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     menu_items.push(ListItem::new(format!("{}Statistics (s)", stats_prefix)).style(stats_style));
 
     // Add Quit option at the end
-    let quit_index = scenario_count + 2;
+    let quit_index = scenario_count + 3;
     let quit_selected = quit_index == state.selected_menu_item;
     let quit_style = if quit_selected {
         Style::default()

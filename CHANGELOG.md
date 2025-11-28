@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Hint key conflict: `h` was shown in UI but conflicts with Helix left movement. Now using `?` as primary hint key (F1 still works as alternative)
+
 ## [0.1.2] - 2025-11-28
 
 ### Fixed

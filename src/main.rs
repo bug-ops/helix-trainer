@@ -263,6 +263,7 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Handle special UI keys first
     match key.code {
         KeyCode::F(1) => return Some(Message::ShowHint),
+        KeyCode::Char('?') => return Some(Message::ShowHint),
         KeyCode::Esc => return Some(Message::AbandonScenario),
         _ => {}
     }
@@ -426,6 +427,14 @@ mod tests {
     #[test]
     fn test_task_key_f1_shows_hint() {
         let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
+        let state = create_test_app_state();
+        let msg = handle_task_keys(key, &state);
+        assert_eq!(msg, Some(Message::ShowHint));
+    }
+
+    #[test]
+    fn test_task_key_question_shows_hint() {
+        let key = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
         assert_eq!(msg, Some(Message::ShowHint));

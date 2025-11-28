@@ -277,6 +277,9 @@ pub fn is_repeatable_command(key: &KeyEvent) -> bool {
             'p' | 'P' => true, // paste
             '>' | '<' => true, // indent/dedent
 
+            // Hint key alternative
+            '?' => false,
+
             // Everything else is not repeatable
             _ => false,
         },
@@ -526,9 +529,11 @@ mod tests {
         assert!(!is_repeatable_command(&make_key('u'))); // undo
         assert!(!is_repeatable_command(&make_key('U'))); // redo
 
-        // Function keys
+        // Hint keys
         let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
-        assert!(!is_repeatable_command(&f1)); // hint
+        assert!(!is_repeatable_command(&f1)); // hint (F1)
+        let question = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
+        assert!(!is_repeatable_command(&question)); // hint (?)
 
         // Esc key
         let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);

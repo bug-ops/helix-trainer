@@ -6,6 +6,11 @@ id = "join_lines_001"
 name = "Join two lines"
 description = "Join the current line with the line below"
 
+hints = [
+    "'J' joins the current line with the next line",
+    "A space is automatically added between the joined lines",
+]
+
 [scenarios.setup]
 file_content = "Hello\nWorld"
 cursor_position = [0, 0]
@@ -17,11 +22,6 @@ cursor_position = [0, 0]
 [scenarios.solution]
 commands = ["J"]
 description = "Press 'J' to join lines"
-
-hints = [
-    "'J' joins the current line with the next line",
-    "A space is automatically added between the joined lines",
-]
 
 [scenarios.scoring]
 optimal_count = 1

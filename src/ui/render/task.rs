@@ -160,9 +160,9 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
 
         // Instructions with hint indicator and last command
         let hint_indicator = if state.show_hint_panel && state.current_hint.is_some() {
-            " [h: Next Hint] "
+            " [?: Next Hint] "
         } else {
-            " [h: Show Hint] "
+            " [?: Hint | F1] "
         };
 
         let last_cmd_text = if let Some(cmd) = &state.last_command {

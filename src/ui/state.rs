@@ -639,10 +639,18 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         Message::ShowHint => {
+            // If hint panel is already visible, close it (toggle behavior)
+            if state.show_hint_panel {
+                state.show_hint_panel = false;
+                state.current_hint = None;
+                return Ok(());
+            }
+
+            // Otherwise, try to show next hint
             if let Some(session) = &mut state.session
                 && let Some(hint) = session.get_hint()
             {
-                state.current_hint = Some(hint);
+                state.current_hint = Some(hint.clone());
                 state.show_hint_panel = true;
             }
             Ok(())

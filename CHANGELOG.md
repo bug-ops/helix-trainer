@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-11-28
+
+### Added
+
+**Phase 1.5: Scenario Metadata & Filtering System**
+
+- Rich scenario metadata system
+  - `ScenarioMetadata` with category, difficulty, tags, and taught commands
+  - 25 scenarios fully categorized: Movement (5), Editing (11), Clipboard (3), Advanced (6)
+  - Difficulty levels: Beginner (20), Intermediate (5)
+  - Each scenario tagged with taught commands and practice focus areas
+
+- Flexible filtering and sorting system
+  - `ScenarioCollection` with six sort modes (alphabetical, difficulty, category, completion, recent, random)
+  - Filter by category (Movement, Editing, Clipboard, Advanced)
+  - Filter by difficulty (Beginner, Intermediate, Advanced)
+  - Filter by taught commands (e.g., show all scenarios teaching 'w' or 'dd')
+  - Filter by completion status (completed vs. uncompleted)
+  - Chainable filters for complex queries
+  - 100% backward compatible with existing scenarios (metadata optional)
+
+- Enhanced UI indicators
+  - Difficulty badges: 🟢 Beginner / 🟡 Intermediate / 🔴 Advanced
+  - Completion status: ✅ for completed scenarios
+  - Visual feedback in scenario menu
+
+- Automated scenario validation tests
+  - `test_all_scenarios_load_successfully`: validates all 25 scenarios load without errors
+  - `test_all_scenarios_execute_solution`: executes solution commands and verifies target state
+  - Catches cursor position errors, invalid command formats, and other issues
+  - Runs during CI to prevent scenario regressions
+
+- Performance benchmarks
+  - Criterion benchmarks in `benches/filtering_sorting.rs`
+  - <1ms filtering/sorting for collections of 1000 scenarios
+  - Memory-efficient metadata storage
+
+### Changed
+
+- Integrated `ScenarioCollection` into `AppState` (replacing raw `Vec<Scenario>`)
+- Menu now displays difficulty and completion indicators for each scenario
+- Updated all 25 scenarios with complete metadata (category, difficulty, tags, taught commands)
+
+### Fixed
+
+- Corrected cursor positions in multiple scenarios:
+  - `repeat_insert_001`: Fixed target cursor [1, 17] → [1, 16]
+  - `paste_before_001`: Fixed target cursor [0, 1] → [0, 2]
+  - `delete_line_001`: Start cursor on line 1 instead of line 0
+  - `document_end_001`: Cursor at [4, 9] (end of document)
+  - `select_word_001`: Cursor at [0, 9] (after word end)
+  - `repeat_indent_001`: Cursor [2, 2] → [2, 4] (after second indent)
+
+- Fixed command format in scenarios:
+  - Changed multi-key commands from arrays to strings (e.g., `["d", "d"]` → `["dd"]`)
+  - Applies to: `dd`, `gg`, `r_`, and other multi-key sequences
+
+- Fixed repeat command repeatability:
+  - Made all printable ASCII characters and space repeatable in `is_repeatable_command()`
+  - Allows replace commands like `r_` to work with repeat (`.`)
+
+- Fixed indentation in `repeat_indent_001`:
+  - Changed from 4-space to 2-space indentation to match simulator behavior
+
+- Fixed append mode behavior in `append_mode_001`:
+  - Adjusted target content to match actual `e` command behavior (cursor after word, not on last char)
+
+### Performance
+
+- Filtering 1000 scenarios: ~50-200 µs (well under 1ms budget)
+- Sorting 1000 scenarios: ~100-400 µs depending on sort mode
+- Zero overhead for scenarios without metadata (backward compatible)
+
+### Security
+
+- Added `walkdir = "2.5"` dev-dependency for safe directory traversal in tests
+- All scenario validation tests run with bounds checking
+
+### Tests
+
+- Added 16 comprehensive unit tests for `ScenarioCollection`
+- Added 2 integration tests for scenario validation
+- Total test count: 392 (all passing)
+- Zero clippy warnings
+
 ## [0.1.3] - 2025-11-28
 
 ### Fixed
@@ -240,7 +325,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/bug-ops/helix-trainer/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/bug-ops/helix-trainer/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/bug-ops/helix-trainer/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/bug-ops/helix-trainer/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bug-ops/helix-trainer/releases/tag/v0.1.0

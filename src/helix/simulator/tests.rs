@@ -1352,3 +1352,44 @@ fn test_repeat_append_at_line_end() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "!!hello!!");
 }
+
+#[test]
+fn test_paste_before_cursor_scenario() {
+    // Scenario: "Paste before cursor"
+    // Setup: "xyz" with cursor at [0, 2] (on 'z')
+    // Commands: y, h, P
+    // Target: "xzyz" with cursor at [0, 1]
+
+    let mut sim = HelixSimulator::new("xyz".to_string());
+
+    // Move to position 2 ('z')
+    sim.execute_command("l").unwrap();
+    sim.execute_command("l").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 2, "Should be at position 2 ('z')");
+
+    // Yank 'z'
+    sim.execute_command("y").unwrap();
+
+    // Check what was yanked
+    let state = sim.get_state().unwrap();
+    println!("After yank:");
+    println!("  Clipboard: {:?}", sim.clipboard);
+    println!("  Cursor position: {:?}", state.cursor_position());
+
+    // Move left to 'y'
+    sim.execute_command("h").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 1, "Should be at position 1 ('y')");
+
+    // Paste before
+    sim.execute_command("P").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "xzyz", "Content should be 'xzyz'");
+    // After paste_before, cursor moves to end of pasted text
+    // Pasted at position 1, length 1, so cursor should be at 1+1=2
+    assert_eq!(state.cursor_position().col, 2, "Cursor should be at position 2 (after pasted 'z')");
+}

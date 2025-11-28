@@ -50,7 +50,7 @@ cursor_position = [0, 2]
 
 [scenarios.target]
 file_content = "xzyz"
-cursor_position = [0, 1]
+cursor_position = [0, 2]
 
 [scenarios.solution]
 commands = ["y", "h", "P"]

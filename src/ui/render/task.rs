@@ -2,7 +2,7 @@
 
 use super::editor::{render_editor_with_diff, render_editor_with_selection};
 use super::popups::{render_hint_popup, render_key_history_popup, render_success_popup};
-use crate::ui::state::AppState;
+use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout},
@@ -14,9 +14,15 @@ use rust_i18n::t;
 
 /// Render the task screen where user plays a scenario
 pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
+    // Extract TaskData from TypedScreen::Task
+    let TypedScreen::Task(task_data) = &state.screen else {
+        return; // Wrong screen type
+    };
+
     let area = frame.area();
 
-    if let Some(session) = &state.game.session {
+    {
+        let session = &task_data.session;
         let scenario = session.scenario();
 
         // Layout: title | description | editor view | stats | instructions
@@ -159,13 +165,13 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         frame.render_widget(stats, chunks[3]);
 
         // Instructions with hint indicator and last command
-        let hint_indicator = if state.ui.show_hint_panel && state.ui.current_hint.is_some() {
+        let hint_indicator = if task_data.show_hint_panel && task_data.current_hint.is_some() {
             " [?: Next Hint] "
         } else {
             " [?: Hint | F1] "
         };
 
-        let last_cmd_text = if let Some(cmd) = &state.ui.last_command {
+        let last_cmd_text = if let Some(cmd) = &task_data.last_command {
             format!(" Last: {} |", cmd)
         } else {
             String::new()
@@ -181,7 +187,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         frame.render_widget(instructions, chunks[4]);
 
         // Render hint panel if visible
-        if state.ui.show_hint_panel {
+        if task_data.show_hint_panel {
             render_hint_popup(frame, state);
         }
 

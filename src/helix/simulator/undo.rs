@@ -1,10 +1,10 @@
 //! Undo and redo operations
 
-use super::HelixSimulator;
+use super::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::Selection;
 
-impl HelixSimulator {
+impl<M: EditorMode> HelixSimulator<M> {
     /// Undo the last operation
     pub(super) fn undo(&mut self) -> Result<(), UserError> {
         if let Some((_transaction, prev_doc)) = self.history.pop() {

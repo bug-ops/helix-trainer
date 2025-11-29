@@ -25,9 +25,8 @@ fn rating_description(rating: &PerformanceRating) -> String {
 pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    if let Some(session) = &state.game.session
-        && let Ok(feedback) = session.get_feedback()
-    {
+    // Get feedback from UI state (set when session completed/abandoned)
+    if let Some(feedback) = &state.ui.last_feedback {
         // Layout: title | horizontal(results | xp & quests) | instructions
         let chunks = Layout::default()
             .direction(Direction::Vertical)

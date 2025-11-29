@@ -9,4 +9,7 @@ pub mod session;
 
 pub use editor_state::{CursorPosition, EditorState, Selection};
 pub use scorer::{PerformanceRating, Scorer};
-pub use session::{Feedback, GameSession, SessionState, UserAction};
+pub use session::{
+    Abandoned, Active, Completed, Feedback, GameSession, SessionAfterAction, SessionState,
+    UserAction,
+};

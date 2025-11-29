@@ -4,7 +4,7 @@ mod clipboard;
 mod editing;
 mod movement;
 
-use super::{HelixSimulator, Mode};
+use super::{AnyModeSimulator, HelixSimulator, InsertMode, Mode, NormalMode};
 use crate::helix::commands::*;
 use crate::helix::repeat::is_repeatable_command;
 use crate::security::UserError;
@@ -83,21 +83,23 @@ fn is_insert_command(cmd: &str) -> bool {
         || cmd == CMD_CHANGE
 }
 
-/// Execute a command in Insert mode
+/// Execute a command in Insert mode (internal)
 ///
 /// Handles text input, special keys (Escape, Backspace), and arrow key navigation.
 /// Records actions in the insert mode recorder unless we're currently repeating.
-fn execute_insert_mode_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(), UserError> {
+fn execute_insert_mode_command_internal(
+    sim: &mut HelixSimulator<InsertMode>,
+    cmd: &str,
+) -> Result<(), UserError> {
     if cmd == CMD_ESCAPE {
         // Finish insert mode recording before exiting (unless repeating)
         if !sim.is_repeating {
             let action = sim.repeat_buffer.insert_recorder_mut().finish();
             sim.repeat_buffer.set_last_action(action);
         }
-        sim.mode = Mode::Normal;
+        // Mode transition handled by caller
         Ok(())
     } else if cmd == CMD_BACKSPACE {
-        // Record backspace as deleted character (not implemented in recorder yet)
         sim.backspace()
     } else if cmd == CMD_ARROW_LEFT {
         let result = movement::move_left(sim, 1);
@@ -144,11 +146,14 @@ fn execute_insert_mode_command(sim: &mut HelixSimulator, cmd: &str) -> Result<()
     }
 }
 
-/// Execute a command in Normal mode
+/// Execute a command in Normal mode (internal, public for repeat functionality)
 ///
 /// Routes commands to appropriate handlers (movement, editing, clipboard, etc.).
-/// Returns an error for unknown commands.
-fn execute_normal_mode_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(), UserError> {
+/// Returns an error for unknown commands. Does NOT handle mode transitions.
+pub(super) fn execute_normal_mode_command_internal(
+    sim: &mut HelixSimulator<NormalMode>,
+    cmd: &str,
+) -> Result<(), UserError> {
     // Movement commands - single character
     if cmd == CMD_MOVE_LEFT {
         movement::move_left(sim, 1)?;
@@ -203,9 +208,9 @@ fn execute_normal_mode_command(sim: &mut HelixSimulator, cmd: &str) -> Result<()
     } else if cmd == CMD_PASTE_BEFORE {
         clipboard::paste_before(sim)?;
     }
-    // Mode changes and editing
+    // Mode changes and editing (these prepare for mode transition but don't execute it)
     else if cmd == CMD_INSERT {
-        sim.mode = Mode::Insert;
+        // Mode transition handled by caller
     } else if cmd == CMD_APPEND {
         sim.append()?;
     } else if cmd == CMD_INSERT_LINE_START {
@@ -217,16 +222,18 @@ fn execute_normal_mode_command(sim: &mut HelixSimulator, cmd: &str) -> Result<()
     } else if cmd == CMD_OPEN_ABOVE {
         sim.open_above()?;
     } else if cmd == CMD_ESCAPE {
-        sim.mode = Mode::Normal;
+        // No-op in normal mode
     }
     // Character operations - replace command (e.g., "rx")
     else if cmd.starts_with('r') && cmd.len() == 2 {
         let ch = cmd.chars().nth(1).unwrap();
         sim.replace_char(ch)?;
     }
-    // Repeat last action
+    // Repeat last action - this shouldn't reach here but handle gracefully
     else if cmd == CMD_REPEAT {
-        return sim.execute_repeat();
+        // Repeat is handled specially by execute_command_any_mode
+        // If we reach here, something is wrong but don't error
+        return Ok(());
     }
     // Undo/Redo
     else if cmd == CMD_UNDO {
@@ -244,36 +251,28 @@ fn execute_normal_mode_command(sim: &mut HelixSimulator, cmd: &str) -> Result<()
     Ok(())
 }
 
-/// Record command in repeat buffer if needed
+/// Record command in repeat buffer if needed (Normal mode)
 ///
 /// Records normal mode commands if:
 /// - Command has valid key events
-/// - We're in Normal mode
 /// - We're not currently repeating
 /// - All keys are repeatable
 ///
 /// Also starts insert mode recording if entering insert mode.
-fn record_command_if_needed(
-    sim: &mut HelixSimulator,
+fn record_command_if_needed_normal(
+    sim: &mut HelixSimulator<NormalMode>,
     key_events: &[KeyEvent],
     mode_before: Mode,
     entering_insert: bool,
 ) {
     // Determine if we should record this command
-    // Only record in Normal mode for repeatable commands, and NOT during repeat
-    let should_record = !key_events.is_empty()
-        && mode_before == Mode::Normal
-        && !sim.is_repeating
-        && key_events.iter().all(is_repeatable_command);
+    // Only record for repeatable commands, and NOT during repeat
+    let should_record =
+        !key_events.is_empty() && !sim.is_repeating && key_events.iter().all(is_repeatable_command);
 
     if should_record {
-        // Convert Mode from simulator to repeat module
-        let repeat_mode = match mode_before {
-            Mode::Normal => crate::helix::repeat::Mode::Normal,
-            Mode::Insert => crate::helix::repeat::Mode::Insert,
-        };
         sim.repeat_buffer
-            .record_command(key_events.to_vec(), repeat_mode);
+            .record_command(key_events.to_vec(), mode_before);
     }
 
     // If we just entered insert mode, start recording
@@ -282,38 +281,75 @@ fn record_command_if_needed(
     }
 }
 
-/// Execute a Helix command
+/// Execute a Helix command on AnyModeSimulator (main entry point)
 ///
 /// Routes commands to appropriate handlers based on mode and command type.
-/// If the command is repeatable, it will be recorded in the repeat buffer.
-///
-/// This is the main entry point for command execution. It orchestrates:
-/// 1. Command parsing and key event conversion
-/// 2. Mode-specific execution (Insert vs Normal)
-/// 3. Repeat buffer recording
-pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(), UserError> {
-    // Convert command to KeyEvents for potential recording
-    let key_events = cmd_to_key_events(cmd);
-
-    // Store state before execution (for recording)
-    let mode_before = sim.mode;
-
-    // Check if we're entering insert mode (for insert recording)
-    // Don't start recording if we're repeating
-    let entering_insert =
-        !sim.is_repeating && mode_before == Mode::Normal && is_insert_command(cmd);
-
-    // Execute command based on current mode
-    let result = if sim.mode == Mode::Insert {
-        execute_insert_mode_command(sim, cmd)
-    } else {
-        execute_normal_mode_command(sim, cmd)
-    };
-
-    // Record command if execution succeeded
-    if result.is_ok() {
-        record_command_if_needed(sim, &key_events, mode_before, entering_insert);
+/// Handles mode transitions and repeat buffer recording.
+pub(super) fn execute_command_any_mode(
+    sim: &mut AnyModeSimulator,
+    cmd: &str,
+) -> Result<(), UserError> {
+    // Handle repeat command specially at the wrapper level
+    if cmd == CMD_REPEAT {
+        return sim.execute_repeat();
     }
 
+    // For commands that might trigger mode transitions, we need to use take/replace
+    // Take the current simulator out, process it, and put back the result
+    let placeholder = AnyModeSimulator::Normal(HelixSimulator::new(String::new()));
+    let old_sim = std::mem::replace(sim, placeholder);
+
+    let (result, new_sim) = match old_sim {
+        AnyModeSimulator::Normal(mut normal_sim) => {
+            // Execute in normal mode
+            let key_events = cmd_to_key_events(cmd);
+
+            // Determine if this is an insert command
+            let is_insert_cmd = is_insert_command(cmd);
+
+            // Only start recording if NOT repeating
+            let should_start_recording = !normal_sim.is_repeating && is_insert_cmd;
+
+            let result = execute_normal_mode_command_internal(&mut normal_sim, cmd);
+
+            if result.is_ok() {
+                record_command_if_needed_normal(
+                    &mut normal_sim,
+                    &key_events,
+                    Mode::Normal,
+                    should_start_recording,
+                );
+
+                // Transition to insert mode if this is an insert command
+                // (even during repeat - we need to actually enter insert mode)
+                if is_insert_cmd {
+                    (
+                        result,
+                        AnyModeSimulator::Insert(normal_sim.enter_insert_mode()),
+                    )
+                } else {
+                    (result, AnyModeSimulator::Normal(normal_sim))
+                }
+            } else {
+                (result, AnyModeSimulator::Normal(normal_sim))
+            }
+        }
+        AnyModeSimulator::Insert(mut insert_sim) => {
+            let exiting = cmd == CMD_ESCAPE;
+            let result = execute_insert_mode_command_internal(&mut insert_sim, cmd);
+
+            if result.is_ok() && exiting {
+                (
+                    result,
+                    AnyModeSimulator::Normal(insert_sim.exit_insert_mode()),
+                )
+            } else {
+                (result, AnyModeSimulator::Insert(insert_sim))
+            }
+        }
+    };
+
+    // Put the new simulator back
+    *sim = new_sim;
     result
 }

@@ -3,14 +3,16 @@
 //! Handles menu navigation and selection
 
 use crate::security::UserError;
-use crate::ui::state::{AppState, Message, update};
+use crate::ui::state::{AppState, Message, TypedScreen, update};
 
 /// Handle MenuUp message
 ///
 /// Moves menu selection up (with bounds checking)
 pub fn handle_menu_up(state: &mut AppState) -> Result<(), UserError> {
-    if state.ui.selected_menu_item > 0 {
-        state.ui.selected_menu_item -= 1;
+    if let TypedScreen::Menu(menu_data) = &mut state.screen {
+        if menu_data.selected_item > 0 {
+            menu_data.selected_item -= 1;
+        }
     }
     Ok(())
 }
@@ -19,10 +21,12 @@ pub fn handle_menu_up(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Moves menu selection down (with bounds checking)
 pub fn handle_menu_down(state: &mut AppState) -> Result<(), UserError> {
-    // Total menu items = filtered scenarios + Review + Profile + Statistics + Quit
-    let max_items = state.game.scenario_collection.count() + 4;
-    if state.ui.selected_menu_item < max_items - 1 {
-        state.ui.selected_menu_item += 1;
+    if let TypedScreen::Menu(menu_data) = &mut state.screen {
+        // Total menu items = filtered scenarios + Review + Profile + Statistics + Quit
+        let max_items = state.game.scenario_collection.count() + 4;
+        if menu_data.selected_item < max_items - 1 {
+            menu_data.selected_item += 1;
+        }
     }
     Ok(())
 }
@@ -31,8 +35,14 @@ pub fn handle_menu_down(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Executes action based on currently selected menu item
 pub fn handle_menu_select(state: &mut AppState) -> Result<(), UserError> {
+    let selected = if let TypedScreen::Menu(menu_data) = &state.screen {
+        menu_data.selected_item
+    } else {
+        // Not on menu screen, nothing to do
+        return Ok(());
+    };
+
     let scenario_count = state.game.scenario_collection.count();
-    let selected = state.ui.selected_menu_item;
 
     if selected < scenario_count {
         // Start selected scenario (0..scenario_count-1)

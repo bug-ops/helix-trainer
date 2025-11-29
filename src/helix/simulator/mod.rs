@@ -3,9 +3,15 @@
 //! This module provides a HelixSimulator that uses the helix-core library
 //! for text editing operations. It ensures unicode-correct handling of
 //! graphemes, supports multi-cursor operations, and maintains undo history.
+//!
+//! # Type-Safe Modes
+//!
+//! The simulator uses the typestate pattern to enforce mode-specific operations
+//! at compile time. See the `mode` module for details.
 
 mod commands;
 mod insert_mode;
+mod mode;
 mod undo;
 
 #[cfg(test)]
@@ -15,8 +21,12 @@ use crate::game::{CursorPosition, EditorState};
 use crate::helix::repeat::RepeatBuffer;
 use crate::security::UserError;
 use helix_core::{Rope, Selection, Transaction};
+use std::marker::PhantomData;
 
-// Re-export Mode for convenience
+// Re-export mode typestate markers
+pub use mode::{EditorMode, InsertMode, NormalMode};
+
+// Re-export old Mode enum for backward compatibility during migration
 pub use Mode::*;
 
 /// Maximum recursion depth for repeat command to prevent infinite loops
@@ -39,15 +49,21 @@ pub enum Mode {
 ///
 /// Provides a faithful simulation of Helix editor operations with proper
 /// unicode handling, undo/redo support, and multi-cursor awareness.
-pub struct HelixSimulator {
+///
+/// # Generic Parameter
+///
+/// The `M` type parameter represents the editor mode using the typestate pattern:
+/// - `HelixSimulator<NormalMode>` - Normal mode (default)
+/// - `HelixSimulator<InsertMode>` - Insert mode
+///
+/// Mode-specific methods are only available in the appropriate mode,
+/// enforced at compile time.
+pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Text buffer (using Rope for efficient edits)
     pub(super) doc: Rope,
 
     /// Current selection(s) with head and anchor positions
     pub(super) selection: Selection,
-
-    /// Editor mode (Normal or Insert)
-    pub(super) mode: Mode,
 
     /// Undo history stack storing both transactions and previous document states
     pub(super) history: Vec<(Transaction, Rope)>,
@@ -63,24 +79,79 @@ pub struct HelixSimulator {
 
     /// Current recursion depth for repeat command (protects against infinite loops)
     pub(super) repeat_depth: usize,
+
+    /// Phantom data for typestate mode marker (zero-cost)
+    _mode: PhantomData<M>,
 }
 
-impl HelixSimulator {
-    /// Create a new simulator with initial content
+// Methods available in ALL modes
+impl<M: EditorMode> HelixSimulator<M> {
+    /// Get current editor mode name
+    pub fn mode_name(&self) -> &'static str {
+        M::name()
+    }
+
+    /// Get current editor state
+    pub fn get_state(&self) -> Result<EditorState, UserError> {
+        let mut head = self.selection.primary().head;
+
+        // Clamp cursor to valid bounds (sometimes helix-core can put it past end)
+        let max_pos = self.doc.len_chars();
+        if head > max_pos {
+            head = max_pos;
+        }
+
+        // Convert head position to (line, col)
+        let line = self.doc.char_to_line(head);
+        let line_start = self.doc.line_to_char(line);
+        let col = head - line_start;
+
+        EditorState::new(
+            self.doc.to_string(),
+            CursorPosition::new(line, col).map_err(|_| UserError::OperationFailed)?,
+            None,
+        )
+        .map_err(|_| UserError::OperationFailed)
+    }
+
+    /// Convert simulator state to EditorState (alias for get_state)
+    pub fn to_editor_state(&self) -> Result<EditorState, UserError> {
+        self.get_state()
+    }
+
+    /// Get a reference to the repeat buffer
+    ///
+    /// Allows inspection of the last recorded action for debugging or testing.
+    pub fn repeat_buffer(&self) -> &RepeatBuffer {
+        &self.repeat_buffer
+    }
+
+    /// Apply transaction and save history
+    pub(super) fn apply_transaction(&mut self, transaction: Transaction) {
+        // Save previous state before applying transaction
+        let prev_doc = self.doc.clone();
+        self.history.push((transaction.clone(), prev_doc));
+        transaction.apply(&mut self.doc);
+    }
+}
+
+// Methods ONLY available in NormalMode
+impl HelixSimulator<NormalMode> {
+    /// Create a new simulator with initial content (starts in Normal mode)
     pub fn new(content: String) -> Self {
         Self {
             doc: Rope::from(content.as_str()),
             selection: Selection::point(0),
-            mode: Mode::Normal,
             history: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
             repeat_depth: 0,
+            _mode: PhantomData,
         }
     }
 
-    /// Create a new simulator from an EditorState
+    /// Create a new simulator from an EditorState (starts in Normal mode)
     ///
     /// Initializes the simulator with the content and cursor position from the EditorState.
     /// This is useful when starting from a scenario setup.
@@ -113,186 +184,205 @@ impl HelixSimulator {
         Self {
             doc: rope,
             selection: Selection::point(safe_pos),
-            mode: Mode::Normal,
             history: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
             repeat_depth: 0,
+            _mode: PhantomData,
         }
     }
 
-    /// Execute a Helix command
-    ///
-    /// Routes command to appropriate handler based on current mode.
+    /// Transition to Insert mode
+    pub fn enter_insert_mode(self) -> HelixSimulator<InsertMode> {
+        HelixSimulator {
+            doc: self.doc,
+            selection: self.selection,
+            history: self.history,
+            clipboard: self.clipboard,
+            repeat_buffer: self.repeat_buffer,
+            is_repeating: self.is_repeating,
+            repeat_depth: self.repeat_depth,
+            _mode: PhantomData,
+        }
+    }
+}
+
+// Methods ONLY available in InsertMode
+impl HelixSimulator<InsertMode> {
+    /// Transition to Normal mode
+    pub fn exit_insert_mode(self) -> HelixSimulator<NormalMode> {
+        HelixSimulator {
+            doc: self.doc,
+            selection: self.selection,
+            history: self.history,
+            clipboard: self.clipboard,
+            repeat_buffer: self.repeat_buffer,
+            is_repeating: self.is_repeating,
+            repeat_depth: self.repeat_depth,
+            _mode: PhantomData,
+        }
+    }
+}
+
+/// Runtime mode-switching wrapper for HelixSimulator
+///
+/// This enum allows dynamic mode switching while maintaining the compile-time
+/// safety of the typed simulators internally. Use this when you need to store
+/// a simulator that can change modes at runtime (e.g., in GameSession).
+pub enum AnyModeSimulator {
+    /// Simulator in Normal mode
+    Normal(HelixSimulator<NormalMode>),
+    /// Simulator in Insert mode
+    Insert(HelixSimulator<InsertMode>),
+}
+
+impl AnyModeSimulator {
+    /// Create a new simulator in Normal mode
+    pub fn new(content: String) -> Self {
+        Self::Normal(HelixSimulator::new(content))
+    }
+
+    /// Create from an EditorState in Normal mode
+    pub fn from_editor_state(state: &EditorState) -> Self {
+        Self::Normal(HelixSimulator::from_editor_state(state))
+    }
+
+    /// Check if currently in Insert mode
+    pub fn is_insert_mode(&self) -> bool {
+        matches!(self, Self::Insert(_))
+    }
+
+    /// Get current mode as enum
+    pub fn mode(&self) -> Mode {
+        match self {
+            Self::Normal(_) => Mode::Normal,
+            Self::Insert(_) => Mode::Insert,
+        }
+    }
+
+    /// Get current mode name
+    pub fn mode_name(&self) -> &'static str {
+        match self {
+            Self::Normal(_) => NormalMode::name(),
+            Self::Insert(_) => InsertMode::name(),
+        }
+    }
+
+    /// Execute a command, handling mode transitions
     pub fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
-        commands::execute_command(self, cmd)
+        commands::execute_command_any_mode(self, cmd)
     }
 
     /// Get current editor state
-    pub fn get_state(&self) -> Result<EditorState, UserError> {
-        let mut head = self.selection.primary().head;
-
-        // Clamp cursor to valid bounds (sometimes helix-core can put it past end)
-        let max_pos = self.doc.len_chars();
-        if head > max_pos {
-            head = max_pos;
-        }
-
-        // Convert head position to (line, col)
-        let line = self.doc.char_to_line(head);
-        let line_start = self.doc.line_to_char(line);
-        let col = head - line_start;
-
-        EditorState::new(
-            self.doc.to_string(),
-            CursorPosition::new(line, col).map_err(|_| UserError::OperationFailed)?,
-            None,
-        )
-        .map_err(|_| UserError::OperationFailed)
-    }
-
-    /// Convert simulator state to EditorState (alias for get_state)
     pub fn to_editor_state(&self) -> Result<EditorState, UserError> {
-        self.get_state()
+        match self {
+            Self::Normal(sim) => sim.to_editor_state(),
+            Self::Insert(sim) => sim.to_editor_state(),
+        }
     }
 
-    /// Get current mode
-    pub fn mode(&self) -> Mode {
-        self.mode
+    /// Get current editor state (alias for to_editor_state)
+    pub fn get_state(&self) -> Result<EditorState, UserError> {
+        self.to_editor_state()
     }
 
-    /// Get a reference to the repeat buffer
-    ///
-    /// Allows inspection of the last recorded action for debugging or testing.
+    /// Get reference to repeat buffer
     pub fn repeat_buffer(&self) -> &RepeatBuffer {
-        &self.repeat_buffer
+        match self {
+            Self::Normal(sim) => sim.repeat_buffer(),
+            Self::Insert(sim) => sim.repeat_buffer(),
+        }
     }
+}
 
-    /// Apply transaction and save history
-    pub(super) fn apply_transaction(&mut self, transaction: Transaction) {
-        // Save previous state before applying transaction
-        let prev_doc = self.doc.clone();
-        self.history.push((transaction.clone(), prev_doc));
-        transaction.apply(&mut self.doc);
-    }
-
+// Repeat command implementation for AnyModeSimulator
+impl AnyModeSimulator {
     /// Execute the repeat (`.`) command
     ///
     /// Replays the last recorded action. If no action has been recorded,
     /// this is a no-op. The repeat command itself is never recorded.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The replayed command execution fails
-    /// - Mode validation fails (though we skip silently for mode mismatches)
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::helix::HelixSimulator;
-    ///
-    /// let mut sim = HelixSimulator::new("hello".to_string());
-    ///
-    /// // Delete a character
-    /// sim.execute_command("x").unwrap();
-    /// assert_eq!(sim.get_state().unwrap().content(), "ello");
-    ///
-    /// // Repeat the delete
-    /// sim.execute_command(".").unwrap();
-    /// assert_eq!(sim.get_state().unwrap().content(), "llo");
-    /// ```
     pub(super) fn execute_repeat(&mut self) -> Result<(), UserError> {
-        // Check recursion depth to prevent infinite loops
-        if self.repeat_depth >= MAX_REPEAT_DEPTH {
-            // Silently ignore repeat at max depth (Vim/Helix semantics)
-            // This prevents stack overflow while allowing reasonable chaining
-            return Ok(());
-        }
+        self.execute_repeat_impl()
+    }
 
+    /// Execute repeat (internal implementation with depth/state tracking)
+    fn execute_repeat_impl(&mut self) -> Result<(), UserError> {
         // Get the last action (if any)
-        let action = match self.repeat_buffer.last_action() {
-            Some(action) => action.clone(), // Clone to avoid borrow issues
-            None => return Ok(()),          // No action to repeat - no-op
+        let action = match self {
+            Self::Normal(sim) => {
+                // Check recursion depth
+                if sim.repeat_depth >= MAX_REPEAT_DEPTH {
+                    return Ok(());
+                }
+                sim.repeat_buffer.last_action().cloned()
+            }
+            Self::Insert(_) => return Ok(()), // Can't repeat in insert mode
+        };
+
+        let action = match action {
+            Some(a) => a,
+            None => return Ok(()),
         };
 
         // Set repeating flag and increment depth
-        self.is_repeating = true;
-        self.repeat_depth += 1;
+        if let Self::Normal(sim) = self {
+            sim.is_repeating = true;
+            sim.repeat_depth += 1;
+        }
 
-        // Execute and ensure flag/depth are reset regardless of outcome
-        // Note: Not panic-safe, but acceptable since panics are not expected
-        // in command execution and would indicate a bug that needs fixing
-        let result = self.execute_repeat_inner(&action);
-
-        self.is_repeating = false;
-        self.repeat_depth -= 1;
-
-        result
-    }
-
-    /// Internal repeat execution - allows proper RAII cleanup of is_repeating flag
-    fn execute_repeat_inner(
-        &mut self,
-        action: &crate::helix::repeat::RepeatableAction,
-    ) -> Result<(), UserError> {
-        match action {
+        // Execute action
+        let result = match &action {
             crate::helix::repeat::RepeatableAction::Command {
                 keys,
                 expected_mode,
             } => {
                 // Validate mode
-                let current_mode = match self.mode {
-                    Mode::Normal => crate::helix::repeat::Mode::Normal,
-                    Mode::Insert => crate::helix::repeat::Mode::Insert,
-                };
-
-                // If mode doesn't match, this is a no-op (Vim/Helix semantics)
-                // Example: Last action was in normal mode, but we're now in insert mode
-                // User would need to Esc first before repeating
-                if &current_mode != expected_mode {
-                    return Ok(()); // No-op: repeat requires correct mode
+                if expected_mode != &Mode::Normal {
+                    Ok(()) // No-op: requires Normal mode
+                } else {
+                    // Convert keys to command string
+                    let cmd = key_events_to_cmd(keys)?;
+                    // Execute through wrapper to handle mode transitions
+                    commands::execute_command_any_mode(self, &cmd)
                 }
-
-                // Convert all keys to a command string
-                let cmd = key_events_to_cmd(keys)?;
-                self.execute_command(&cmd)?;
-                Ok(())
             }
-
             crate::helix::repeat::RepeatableAction::InsertSequence { text, movements } => {
+                // Execute insert sequence through wrapper
                 use crate::helix::commands::*;
 
                 // Enter insert mode
-                self.execute_command(CMD_INSERT)?;
+                commands::execute_command_any_mode(self, CMD_INSERT)?;
 
                 // Insert text character by character
                 for ch in text.chars() {
-                    self.execute_command(&ch.to_string())?;
+                    commands::execute_command_any_mode(self, &ch.to_string())?;
                 }
 
                 // Apply movements
                 for movement in movements {
-                    match movement {
-                        crate::helix::repeat::Movement::Left => {
-                            self.execute_command(CMD_ARROW_LEFT)?
-                        }
-                        crate::helix::repeat::Movement::Right => {
-                            self.execute_command(CMD_ARROW_RIGHT)?
-                        }
-                        crate::helix::repeat::Movement::Up => self.execute_command(CMD_ARROW_UP)?,
-                        crate::helix::repeat::Movement::Down => {
-                            self.execute_command(CMD_ARROW_DOWN)?
-                        }
-                    }
+                    let cmd = match movement {
+                        crate::helix::repeat::Movement::Left => CMD_ARROW_LEFT,
+                        crate::helix::repeat::Movement::Right => CMD_ARROW_RIGHT,
+                        crate::helix::repeat::Movement::Up => CMD_ARROW_UP,
+                        crate::helix::repeat::Movement::Down => CMD_ARROW_DOWN,
+                    };
+                    commands::execute_command_any_mode(self, cmd)?;
                 }
 
                 // Exit insert mode
-                self.execute_command(CMD_ESCAPE)?;
+                commands::execute_command_any_mode(self, CMD_ESCAPE)?;
                 Ok(())
             }
+        };
+
+        // Reset repeating flag and depth
+        if let Self::Normal(sim) = self {
+            sim.is_repeating = false;
+            sim.repeat_depth -= 1;
         }
+
+        result
     }
 }
 
@@ -346,8 +436,8 @@ fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> Result<String, User
     Err(UserError::OperationFailed)
 }
 
-// Implement CommandExecutor trait for HelixSimulator
-impl super::executor::CommandExecutor for HelixSimulator {
+// Implement CommandExecutor trait for AnyModeSimulator
+impl super::executor::CommandExecutor for AnyModeSimulator {
     fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
         self.execute_command(cmd)
     }

@@ -3,7 +3,7 @@
 // TODO: Iteration 5 - Add notification queue with auto-dismiss after 3 seconds
 
 use super::helpers::{centered_popup, inner_rect, popup_block};
-use crate::ui::state::AppState;
+use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
     layout::{Alignment, Rect},
@@ -16,6 +16,11 @@ use tui_big_text::{BigText, PixelSize};
 
 /// Render a centered hint popup
 pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
+    // Only render if we're on Task screen
+    let TypedScreen::Task(task_data) = &state.screen else {
+        return;
+    };
+
     let area = frame.area();
 
     // Calculate popup dimensions with constraints
@@ -31,7 +36,7 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
     frame.render_widget(&background, popup_area);
 
     // Render hint text inside popup
-    if let Some(hint) = &state.ui.current_hint {
+    if let Some(hint) = &task_data.current_hint {
         let inner = inner_rect(popup_area);
 
         let hint_text = Paragraph::new(hint.as_str())
@@ -45,6 +50,11 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 
 /// Render key history popup showing last 5 keys pressed with large text
 pub(super) fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
+    // Only render if we're on Task screen
+    let TypedScreen::Task(task_data) = &state.screen else {
+        return;
+    };
+
     let area = frame.area();
 
     // Show last 5 keys
@@ -52,7 +62,7 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
 
     // Build text from recent keys
     let mut key_text = String::new();
-    for (idx, key) in state.ui.key_history.iter().take(max_keys).enumerate() {
+    for (idx, key) in task_data.key_history.iter().take(max_keys).enumerate() {
         if idx > 0 {
             key_text.push(' ');
         }

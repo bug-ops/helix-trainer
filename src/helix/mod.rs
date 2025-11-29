@@ -24,4 +24,4 @@ pub mod simulator;
 pub use commands::*;
 pub use executor::CommandExecutor;
 pub use repeat::{Movement, RepeatBuffer, RepeatableAction, is_repeatable_command};
-pub use simulator::{HelixSimulator, Mode};
+pub use simulator::{AnyModeSimulator, EditorMode, HelixSimulator, InsertMode, Mode, NormalMode};

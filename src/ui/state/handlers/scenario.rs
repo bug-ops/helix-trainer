@@ -4,7 +4,9 @@
 
 use crate::game::GameSession;
 use crate::security::UserError;
-use crate::ui::state::{AppState, Message, Screen, XPBreakdown, update};
+use crate::ui::state::{
+    AppState, MenuData, Message, ResultsData, TaskData, TypedScreen, XPBreakdown, update,
+};
 
 /// Handle StartScenario message
 ///
@@ -17,15 +19,16 @@ pub fn handle_start_scenario(state: &mut AppState, index: usize) -> Result<(), U
         .cloned()
     {
         let session = GameSession::new(scenario)?;
-        state.game.session = Some(session);
-        state.ui.screen = Screen::Task;
-        state.ui.show_hint_panel = false;
+        // Create TaskData with the new session
+        let task_data = TaskData::new(session);
+
+        // Transition to Task screen with data
+        state.screen = TypedScreen::Task(task_data);
         state.ui.show_key_history = false;
-        state.ui.current_hint = None;
-        state.ui.last_command = None;
         state.ui.completion_time = None;
-        state.clear_key_history();
-        state.ui.command_buffer.clear();
+
+        // Clear old session from game state
+        state.game.session = None;
     }
     Ok(())
 }
@@ -34,19 +37,29 @@ pub fn handle_start_scenario(state: &mut AppState, index: usize) -> Result<(), U
 ///
 /// Processes scenario completion: awards XP, updates quests, records FSRS data
 pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
-    // Update quest progress BEFORE awarding XP
-    // Extract data we need first to avoid borrow issues
-    let (duration, feedback, scenario_id) = if let Some(session) = &state.game.session {
-        let duration = session.elapsed();
-        let feedback = session
-            .get_feedback()
-            .map_err(|_| UserError::OperationFailed)?;
-        let scenario_id = session.scenario().id.clone();
-        (duration, feedback, scenario_id)
+    // Get feedback and completed session from temporary storage
+    let (feedback, completed_session) = if let Some(ref feedback) = state.ui.last_feedback {
+        // Extract completed session from pending storage
+        let session = state.game.pending_completed_session.take();
+        (feedback.clone(), session)
     } else {
-        state.ui.screen = Screen::Results;
+        // No feedback available, transition to results anyway with placeholder
+        let results_data = if let Some(session) = state.game.pending_completed_session.take() {
+            let feedback = session.feedback().map_err(|_| UserError::OperationFailed)?;
+            ResultsData::from_completed(session, feedback)
+                .map_err(|_| UserError::OperationFailed)?
+        } else {
+            // No session either, just go to menu
+            state.screen = TypedScreen::Menu(MenuData::default());
+            return Ok(());
+        };
+        state.screen = TypedScreen::Results(results_data);
         return Ok(());
     };
+
+    // Extract data from feedback
+    let scenario_id = feedback.scenario_id.clone();
+    let duration = feedback.duration;
 
     // Update quest progress
     update(
@@ -154,21 +167,36 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
         .save_profile_debounced()
         .map_err(|_| UserError::OperationFailed)?;
 
-    // Record commands in FSRS scheduler for spaced repetition
-    if let Some(session) = &state.game.session {
-        let commands: Vec<String> = session
-            .actions()
-            .iter()
-            .map(|action| action.command.clone())
-            .collect();
+    // Record commands in FSRS scheduler for spaced repetition (from feedback)
+    let commands: Vec<String> = feedback
+        .user_actions
+        .iter()
+        .map(|action| action.command.clone())
+        .collect();
 
-        state
-            .progress
-            .scheduler
-            .record_scenario_commands(&commands, duration, score > 0);
-    }
+    state
+        .progress
+        .scheduler
+        .record_scenario_commands(&commands, duration, feedback.score > 0);
 
-    state.ui.screen = Screen::Results;
+    // Create ResultsData with completed session and transition to Results screen
+    let Some(session) = completed_session else {
+        // No completed session available - go back to menu
+        // This shouldn't happen in normal flow, but handle gracefully
+        state.screen = TypedScreen::Menu(MenuData::default());
+        state.ui.clear_temp_results();
+        return Ok(());
+    };
+
+    let mut results_data = ResultsData::from_completed(session, feedback.clone())
+        .map_err(|_| UserError::OperationFailed)?;
+    // Populate with XP breakdown and quest changes
+    results_data.xp_breakdown = state.ui.xp_breakdown.clone();
+    results_data.quest_changes = state.ui.quest_progress_changes.clone();
+    results_data.scenario_mastery = state.ui.scenario_mastery;
+
+    state.screen = TypedScreen::Results(results_data);
+    state.ui.clear_temp_results();
     Ok(())
 }
 
@@ -176,10 +204,21 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Marks the session as abandoned and shows results
 pub fn handle_abandon_scenario(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(session) = &mut state.game.session {
-        session.abandon();
+    // Extract session from Task screen
+    if let TypedScreen::Task(task_data) = std::mem::replace(
+        &mut state.screen,
+        TypedScreen::Menu(MenuData::default()), // Temporary placeholder
+    ) {
+        // Take ownership and transition to abandoned state
+        let abandoned = task_data.session.abandon();
+        let feedback = abandoned.feedback();
+
+        // Create ResultsData from abandoned session
+        let results_data = ResultsData::from_abandoned(abandoned, feedback);
+
+        // Transition to Results screen
+        state.screen = TypedScreen::Results(results_data);
     }
-    state.ui.screen = Screen::Results;
     Ok(())
 }
 
@@ -187,16 +226,27 @@ pub fn handle_abandon_scenario(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Resets the current scenario to initial state
 pub fn handle_retry_scenario(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(session) = &mut state.game.session {
-        session.reset()?;
-        state.ui.screen = Screen::Task;
-        state.ui.show_hint_panel = false;
+    // Get scenario from results screen and create new session
+    if let TypedScreen::Results(results_data) =
+        std::mem::replace(&mut state.screen, TypedScreen::Menu(MenuData::default()))
+    {
+        // Extract scenario from the session
+        let scenario = match results_data.session {
+            crate::ui::state::CompletedOrAbandoned::Completed(session) => {
+                session.scenario().clone()
+            }
+            crate::ui::state::CompletedOrAbandoned::Abandoned(session) => {
+                session.scenario().clone()
+            }
+        };
+
+        // Create new session with same scenario
+        let new_session = GameSession::new(scenario)?;
+        let task_data = TaskData::new(new_session);
+
+        state.screen = TypedScreen::Task(task_data);
         state.ui.show_key_history = false;
-        state.ui.current_hint = None;
-        state.ui.last_command = None;
         state.ui.completion_time = None;
-        state.clear_key_history();
-        state.ui.command_buffer.clear();
     }
     Ok(())
 }
@@ -205,9 +255,8 @@ pub fn handle_retry_scenario(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Completes the current scenario flow and returns to menu
 pub fn handle_next_scenario(state: &mut AppState) -> Result<(), UserError> {
-    state.ui.screen = Screen::MainMenu;
+    // Preserve menu state if possible
+    state.screen = TypedScreen::Menu(MenuData::default());
     state.game.session = None;
-    state.ui.show_hint_panel = false;
-    state.ui.current_hint = None;
     Ok(())
 }

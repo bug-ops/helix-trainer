@@ -12,51 +12,38 @@ use std::collections::HashSet;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use super::{QuestProgressChange, ReviewSessionState, Screen, XPBreakdown};
+use super::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 
 /// UI rendering and display state
+///
+/// NOTE: After Phase 3 refactoring, most screen-specific data has been moved
+/// into TypedScreen variants. This struct now only contains global UI state
+/// that persists across screen transitions.
 #[derive(Debug)]
 pub struct UIState {
-    /// The current screen being displayed
-    pub screen: Screen,
-
     /// Whether the application is running
     pub running: bool,
 
-    /// Index of selected menu item
-    pub selected_menu_item: usize,
-
-    /// Scroll offset for menu list (top visible item index)
-    pub menu_scroll_offset: usize,
-
-    /// Current hint being displayed
-    pub current_hint: Option<String>,
-
-    /// Last command executed (for display)
-    pub last_command: Option<String>,
-
-    /// History of last 5 keypresses (most recent first)
-    pub key_history: Vec<String>,
-
-    /// Command buffer for multi-key commands (e.g., "d" waiting for "d")
-    pub command_buffer: String,
-
-    /// Whether to show hint panel
-    pub show_hint_panel: bool,
-
-    /// Whether to show key history popup
+    /// Whether to show key history popup (global setting)
     pub show_key_history: bool,
 
     /// Time when scenario was completed (for success animation)
     pub completion_time: Option<Instant>,
 
-    /// XP breakdown from last scenario (for results display)
+    /// TEMPORARY (Phase 3): Feedback storage for transition to results screen
+    /// Will be moved into TypedScreen::Results in future refactoring
+    pub last_feedback: Option<crate::game::Feedback>,
+
+    /// TEMPORARY (Phase 3): XP breakdown for results display
+    /// Will be moved into ResultsData in future refactoring
     pub xp_breakdown: Option<XPBreakdown>,
 
-    /// Quest progress changes during last scenario
+    /// TEMPORARY (Phase 3): Quest progress changes
+    /// Will be moved into ResultsData in future refactoring
     pub quest_progress_changes: Vec<QuestProgressChange>,
 
-    /// Scenario mastery info (for results display)
+    /// TEMPORARY (Phase 3): Scenario mastery info
+    /// Will be moved into ResultsData in future refactoring
     pub scenario_mastery: Option<(ScenarioMastery, f64)>,
 }
 
@@ -64,44 +51,22 @@ impl UIState {
     /// Create new UIState with default values
     pub fn new() -> Self {
         Self {
-            screen: Screen::MainMenu,
             running: true,
-            selected_menu_item: 0,
-            menu_scroll_offset: 0,
-            current_hint: None,
-            last_command: None,
-            key_history: Vec::with_capacity(5),
-            command_buffer: String::new(),
-            show_hint_panel: false,
             show_key_history: true,
             completion_time: None,
+            last_feedback: None,
             xp_breakdown: None,
             quest_progress_changes: Vec::new(),
             scenario_mastery: None,
         }
     }
 
-    /// Clear results-related state
-    pub fn clear_results(&mut self) {
+    /// Clear temporary results data (Phase 3 compatibility)
+    pub fn clear_temp_results(&mut self) {
+        self.last_feedback = None;
         self.xp_breakdown = None;
         self.quest_progress_changes.clear();
         self.scenario_mastery = None;
-    }
-
-    /// Add a key to the history (keeps last 5)
-    pub fn add_key_to_history(&mut self, key: String) {
-        // Insert at the beginning (most recent first)
-        self.key_history.insert(0, key);
-
-        // Keep only last 5 keys
-        if self.key_history.len() > 5 {
-            self.key_history.truncate(5);
-        }
-    }
-
-    /// Clear key history
-    pub fn clear_key_history(&mut self) {
-        self.key_history.clear();
     }
 }
 
@@ -116,11 +81,16 @@ pub struct GameState {
     /// All available scenarios with filtering and sorting
     pub scenario_collection: ScenarioCollection,
 
-    /// Active game session (Some if playing)
-    pub session: Option<GameSession>,
+    /// DEPRECATED: Kept for backward compatibility during Phase 3 migration
+    /// Will be removed in Phase 4. Session is now stored in TypedScreen::Task.
+    pub session: Option<GameSession<crate::game::session::Active>>,
 
     /// Active review session (Some if reviewing)
     pub review_session: Option<ReviewSessionState>,
+
+    /// Temporary storage for completed session (Phase 3 migration)
+    /// Used to pass session from gameplay handler to CompleteScenario handler
+    pub pending_completed_session: Option<GameSession<crate::game::session::Completed>>,
 }
 
 impl GameState {
@@ -130,6 +100,7 @@ impl GameState {
             scenario_collection: ScenarioCollection::new(scenarios),
             session: None,
             review_session: None,
+            pending_completed_session: None,
         }
     }
 
@@ -150,6 +121,7 @@ impl Default for GameState {
             scenario_collection: ScenarioCollection::new(vec![]),
             session: None,
             review_session: None,
+            pending_completed_session: None,
         }
     }
 }
@@ -291,75 +263,9 @@ mod tests {
     #[test]
     fn test_ui_state_new() {
         let ui = UIState::new();
-        assert_eq!(ui.screen, Screen::MainMenu);
         assert!(ui.running);
-        assert_eq!(ui.selected_menu_item, 0);
-        assert!(ui.key_history.is_empty());
-    }
-
-    #[test]
-    fn test_ui_state_clear_results() {
-        let mut ui = UIState::new();
-        ui.xp_breakdown = Some(XPBreakdown {
-            base_xp: 100,
-            perfect_bonus: 20,
-            first_today_bonus: 10,
-            mastery_multiplier: 1.0,
-            quest_bonuses: vec![],
-            total_xp: 130,
-        });
-        ui.quest_progress_changes.push(QuestProgressChange {
-            quest_description: "test".to_string(),
-            old_progress: 0,
-            new_progress: 1,
-        });
-
-        ui.clear_results();
-
-        assert!(ui.xp_breakdown.is_none());
-        assert!(ui.quest_progress_changes.is_empty());
-    }
-
-    #[test]
-    fn test_ui_state_add_key_to_history() {
-        let mut ui = UIState::new();
-        assert!(ui.key_history.is_empty());
-
-        ui.add_key_to_history("j".to_string());
-        assert_eq!(ui.key_history.len(), 1);
-        assert_eq!(ui.key_history[0], "j");
-
-        ui.add_key_to_history("k".to_string());
-        assert_eq!(ui.key_history.len(), 2);
-        // Most recent first
-        assert_eq!(ui.key_history[0], "k");
-        assert_eq!(ui.key_history[1], "j");
-    }
-
-    #[test]
-    fn test_ui_state_key_history_max_5() {
-        let mut ui = UIState::new();
-
-        for i in 0..7 {
-            ui.add_key_to_history(format!("key{}", i));
-        }
-
-        // Should only keep last 5
-        assert_eq!(ui.key_history.len(), 5);
-        // Most recent (key6) should be first
-        assert_eq!(ui.key_history[0], "key6");
-        assert_eq!(ui.key_history[4], "key2");
-    }
-
-    #[test]
-    fn test_ui_state_clear_key_history() {
-        let mut ui = UIState::new();
-        ui.add_key_to_history("j".to_string());
-        ui.add_key_to_history("k".to_string());
-        assert_eq!(ui.key_history.len(), 2);
-
-        ui.clear_key_history();
-        assert!(ui.key_history.is_empty());
+        assert!(ui.show_key_history);
+        assert!(ui.completion_time.is_none());
     }
 
     #[test]

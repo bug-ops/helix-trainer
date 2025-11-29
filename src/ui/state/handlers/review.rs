@@ -3,7 +3,7 @@
 //! Handles spaced repetition review sessions
 
 use crate::security::UserError;
-use crate::ui::state::{AppState, Message, ReviewResult, ReviewSessionState, Screen, update};
+use crate::ui::state::{AppState, Message, ReviewResult, ReviewSessionState, TypedScreen, update};
 use std::time::Instant;
 
 /// Handle StartReviewSession message
@@ -18,15 +18,16 @@ pub fn handle_start_review_session(state: &mut AppState) -> Result<(), UserError
         return Ok(());
     }
 
-    state.game.review_session = Some(ReviewSessionState {
+    let review_session = ReviewSessionState {
         due_commands: due_commands.clone(),
         current_index: 0,
         current_command: due_commands.first().cloned(),
         session_started_at: Instant::now(),
         completed_reviews: Vec::new(),
-    });
+    };
 
-    state.ui.screen = Screen::Review;
+    state.game.review_session = Some(review_session.clone());
+    state.screen = TypedScreen::Review(crate::ui::state::ReviewData::new(review_session));
     Ok(())
 }
 
@@ -95,7 +96,7 @@ pub fn handle_next_review_command(state: &mut AppState) -> Result<(), UserError>
             }
 
             // Return to menu
-            state.ui.screen = Screen::MainMenu;
+            state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
             state.game.review_session = None;
         } else {
             // Move to next command
@@ -110,6 +111,6 @@ pub fn handle_next_review_command(state: &mut AppState) -> Result<(), UserError>
 /// Cancels the current review session
 pub fn handle_abandon_review_session(state: &mut AppState) -> Result<(), UserError> {
     state.game.review_session = None;
-    state.ui.screen = Screen::MainMenu;
+    state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
     Ok(())
 }

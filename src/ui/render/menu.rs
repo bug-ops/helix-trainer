@@ -1,6 +1,6 @@
 //! Main menu rendering
 
-use crate::ui::state::AppState;
+use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout},
@@ -11,6 +11,11 @@ use rust_i18n::t;
 
 /// Render the main menu screen
 pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
+    // Extract MenuData from TypedScreen::Menu (early check)
+    if !matches!(state.screen, TypedScreen::Menu(_)) {
+        return; // Wrong screen type
+    };
+
     let area = frame.area();
 
     // Create layout: header | title | menu | quests | instructions
@@ -44,18 +49,27 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     let menu_height = chunks[2].height.saturating_sub(2) as usize; // -2 for borders (updated index)
     let total_items = state.game.scenario_collection.count() + 3; // +3 for Profile, Statistics, Quit
 
+    // Now get mutable access to menu_data for adjusting scroll
+    let TypedScreen::Menu(menu_data) = &mut state.screen else {
+        unreachable!("Already checked above")
+    };
+
     // Adjust scroll offset to keep selected item visible
-    if state.ui.selected_menu_item < state.ui.menu_scroll_offset {
+    if menu_data.selected_item < menu_data.scroll_offset {
         // Selected item is above visible area - scroll up
-        state.ui.menu_scroll_offset = state.ui.selected_menu_item;
-    } else if state.ui.selected_menu_item >= state.ui.menu_scroll_offset + menu_height {
+        menu_data.scroll_offset = menu_data.selected_item;
+    } else if menu_data.selected_item >= menu_data.scroll_offset + menu_height {
         // Selected item is below visible area - scroll down
-        state.ui.menu_scroll_offset = state.ui.selected_menu_item.saturating_sub(menu_height - 1);
+        menu_data.scroll_offset = menu_data.selected_item.saturating_sub(menu_height - 1);
     }
 
     // Clamp scroll offset to valid range
     let max_offset = total_items.saturating_sub(menu_height);
-    state.ui.menu_scroll_offset = state.ui.menu_scroll_offset.min(max_offset);
+    menu_data.scroll_offset = menu_data.scroll_offset.min(max_offset);
+
+    // Get copies of the values we need (to release the borrow)
+    let selected_item = menu_data.selected_item;
+    let scroll_offset = menu_data.scroll_offset;
 
     // Menu items - show filtered scenarios + Quit option with indicators
     let filtered_scenarios = state.game.scenario_collection.get_filtered();
@@ -65,7 +79,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         .iter()
         .enumerate()
         .map(|(i, scenario)| {
-            let selected = i == state.ui.selected_menu_item;
+            let selected = i == selected_item;
             let style = if selected {
                 Style::default()
                     .bg(Color::Blue)
@@ -113,7 +127,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Add Review Commands option
     let review_index = scenario_count;
-    let review_selected = review_index == state.ui.selected_menu_item;
+    let review_selected = review_index == selected_item;
     let due_count = state.progress.scheduler.get_due_reviews().len();
     let review_style = if review_selected {
         Style::default()
@@ -143,7 +157,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Add View Profile option
     let profile_index = scenario_count + 1;
-    let profile_selected = profile_index == state.ui.selected_menu_item;
+    let profile_selected = profile_index == selected_item;
     let profile_style = if profile_selected {
         Style::default()
             .bg(Color::Blue)
@@ -158,7 +172,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Add Statistics option
     let stats_index = scenario_count + 2;
-    let stats_selected = stats_index == state.ui.selected_menu_item;
+    let stats_selected = stats_index == selected_item;
     let stats_style = if stats_selected {
         Style::default()
             .bg(Color::Blue)
@@ -172,7 +186,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Add Quit option at the end
     let quit_index = scenario_count + 3;
-    let quit_selected = quit_index == state.ui.selected_menu_item;
+    let quit_selected = quit_index == selected_item;
     let quit_style = if quit_selected {
         Style::default()
             .bg(Color::Blue)
@@ -187,14 +201,14 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     // Apply scroll offset by skipping items
     let visible_items: Vec<ListItem> = menu_items
         .into_iter()
-        .skip(state.ui.menu_scroll_offset)
+        .skip(scroll_offset)
         .take(menu_height)
         .collect();
 
     // Add scroll indicator to title if list is scrollable
     let menu_title = if total_items > menu_height {
-        let first_visible = state.ui.menu_scroll_offset + 1;
-        let last_visible = (state.ui.menu_scroll_offset + menu_height).min(total_items);
+        let first_visible = scroll_offset + 1;
+        let last_visible = (scroll_offset + menu_height).min(total_items);
         t!(
             "menu.main_menu_with_scroll",
             first = first_visible,
@@ -222,8 +236,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         if scrollbar_height > 0 {
             // Calculate scrollbar position
             let scrollbar_pos = if total_items > 1 {
-                (state.ui.menu_scroll_offset * scrollbar_height)
-                    / (total_items - menu_height).max(1)
+                (scroll_offset * scrollbar_height) / (total_items - menu_height).max(1)
             } else {
                 0
             };

@@ -17,6 +17,9 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
+// Re-export Mode from simulator to avoid duplication
+pub use super::simulator::Mode;
+
 /// Maximum length of insert mode text recording (security limit)
 const MAX_INSERT_TEXT_LENGTH: usize = 1000;
 
@@ -60,15 +63,6 @@ pub enum RepeatableAction {
         text: String,
         movements: Vec<Movement>,
     },
-}
-
-/// Editor mode (copied from simulator for public API)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    /// Normal mode (default)
-    Normal,
-    /// Insert mode
-    Insert,
 }
 
 /// Stores the last repeatable action

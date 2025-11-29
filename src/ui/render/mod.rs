@@ -17,7 +17,7 @@ mod task;
 #[cfg(test)]
 mod tests;
 
-use crate::ui::state::{AppState, Screen};
+use crate::ui::state::AppState;
 use ratatui::Frame;
 
 /// Main render function dispatches to screen-specific renderers
@@ -30,12 +30,15 @@ use ratatui::Frame;
 /// * `frame` - The ratatui frame to render to
 /// * `state` - The application state (mutable for view state updates)
 pub fn render(frame: &mut Frame, state: &mut AppState) {
-    match state.ui.screen {
-        Screen::MainMenu => menu::render_main_menu(frame, state),
-        Screen::Task => task::render_task_screen(frame, state),
-        Screen::Results => results::render_results_screen(frame, state),
-        Screen::Profile => profile::render_profile_screen(frame, state),
-        Screen::Statistics => statistics::render_statistics_screen(frame, state),
-        Screen::Review => review::render_review_screen(frame, state),
+    // Use TypedScreen pattern for type-safe dispatch
+    match &state.screen {
+        crate::ui::state::TypedScreen::Menu(_) => menu::render_main_menu(frame, state),
+        crate::ui::state::TypedScreen::Task(_) => task::render_task_screen(frame, state),
+        crate::ui::state::TypedScreen::Results(_) => results::render_results_screen(frame, state),
+        crate::ui::state::TypedScreen::Profile(_) => profile::render_profile_screen(frame, state),
+        crate::ui::state::TypedScreen::Statistics(_) => {
+            statistics::render_statistics_screen(frame, state)
+        }
+        crate::ui::state::TypedScreen::Review(_) => review::render_review_screen(frame, state),
     }
 }

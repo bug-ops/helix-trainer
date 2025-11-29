@@ -14,7 +14,7 @@ use helix_trainer::{
     gamification::{ProfileStorage, QuestGenerator, StreakManager},
     helix::commands::*,
     learning::PerformanceTracker,
-    ui::{self, AppState, Message},
+    ui::{self, AppState, Message, state::TypedScreen},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::borrow::Cow;
@@ -200,12 +200,14 @@ fn run_app(
 /// This function is responsible for converting keyboard input into
 /// application messages based on the current screen.
 fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
-    match state.ui.screen {
-        ui::Screen::MainMenu => handle_menu_keys(key, state),
-        ui::Screen::Task => handle_task_keys(key, state),
-        ui::Screen::Results => handle_results_keys(key),
-        ui::Screen::Profile | ui::Screen::Statistics => handle_profile_stats_keys(key, state),
-        ui::Screen::Review => handle_review_keys(key),
+    match &state.screen {
+        TypedScreen::Menu(_) => handle_menu_keys(key, state),
+        TypedScreen::Task(_) => handle_task_keys(key, state),
+        TypedScreen::Results(_) => handle_results_keys(key),
+        TypedScreen::Profile(_) | TypedScreen::Statistics(_) => {
+            handle_profile_stats_keys(key, state)
+        }
+        TypedScreen::Review(_) => handle_review_keys(key),
     }
 }
 
@@ -214,10 +216,10 @@ fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message>
     match key.code {
         KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('q') => Some(Message::QuitApp),
-        KeyCode::Char('s') if state.ui.screen == ui::Screen::Profile => {
+        KeyCode::Char('s') if matches!(state.screen, TypedScreen::Profile(_)) => {
             Some(Message::ShowStatistics)
         }
-        KeyCode::Char('p') if state.ui.screen == ui::Screen::Statistics => {
+        KeyCode::Char('p') if matches!(state.screen, TypedScreen::Statistics(_)) => {
             Some(Message::ShowProfile)
         }
         _ => None,
@@ -347,10 +349,11 @@ fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
 
 /// Check if current game session is in Insert mode
 fn is_in_insert_mode(state: &AppState) -> bool {
-    state
-        .session()
-        .map(|session| session.is_insert_mode())
-        .unwrap_or(false)
+    if let TypedScreen::Task(task_data) = &state.screen {
+        task_data.session.is_insert_mode()
+    } else {
+        false
+    }
 }
 
 fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {

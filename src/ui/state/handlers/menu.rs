@@ -1,0 +1,54 @@
+//! Menu interaction message handlers
+//!
+//! Handles menu navigation and selection
+
+use crate::security::UserError;
+use crate::ui::state::{AppState, Message, update};
+
+/// Handle MenuUp message
+///
+/// Moves menu selection up (with bounds checking)
+pub fn handle_menu_up(state: &mut AppState) -> Result<(), UserError> {
+    if state.selected_menu_item > 0 {
+        state.selected_menu_item -= 1;
+    }
+    Ok(())
+}
+
+/// Handle MenuDown message
+///
+/// Moves menu selection down (with bounds checking)
+pub fn handle_menu_down(state: &mut AppState) -> Result<(), UserError> {
+    // Total menu items = filtered scenarios + Review + Profile + Statistics + Quit
+    let max_items = state.scenario_collection.count() + 4;
+    if state.selected_menu_item < max_items - 1 {
+        state.selected_menu_item += 1;
+    }
+    Ok(())
+}
+
+/// Handle MenuSelect message
+///
+/// Executes action based on currently selected menu item
+pub fn handle_menu_select(state: &mut AppState) -> Result<(), UserError> {
+    let scenario_count = state.scenario_collection.count();
+    let selected = state.selected_menu_item;
+
+    if selected < scenario_count {
+        // Start selected scenario (0..scenario_count-1)
+        update(state, Message::StartScenario(selected))?;
+    } else if selected == scenario_count {
+        // Review Commands (index = scenario_count)
+        update(state, Message::StartReviewSession)?;
+    } else if selected == scenario_count + 1 {
+        // View Profile (index = scenario_count + 1)
+        update(state, Message::ShowProfile)?;
+    } else if selected == scenario_count + 2 {
+        // Statistics (index = scenario_count + 2)
+        update(state, Message::ShowStatistics)?;
+    } else if selected == scenario_count + 3 {
+        // Quit (index = scenario_count + 3)
+        update(state, Message::QuitApp)?;
+    }
+    Ok(())
+}

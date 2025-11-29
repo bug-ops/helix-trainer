@@ -127,8 +127,10 @@ fn test_all_scenarios_execute_solution() {
                                     Ok(result) => {
                                         session_or_completed = Some(result);
                                         // If completed, stop
-                                        if matches!(session_or_completed, Some(SessionAfterAction::Completed(_)))
-                                        {
+                                        if matches!(
+                                            session_or_completed,
+                                            Some(SessionAfterAction::Completed(_))
+                                        ) {
                                             break;
                                         }
                                     }

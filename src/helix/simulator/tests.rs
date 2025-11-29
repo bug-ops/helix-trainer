@@ -500,20 +500,20 @@ fn test_arrow_keys_in_insert_mode() {
     sim.execute_command("i").unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
-    // Test ArrowRight
-    sim.execute_command("ArrowRight").unwrap();
+    // Test Right arrow
+    sim.execute_command("Right").unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 1);
 
-    // Test ArrowLeft
-    sim.execute_command("ArrowLeft").unwrap();
+    // Test Left arrow
+    sim.execute_command("Left").unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
 
-    // Test ArrowDown
-    sim.execute_command("ArrowDown").unwrap();
+    // Test Down arrow
+    sim.execute_command("Down").unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
 
-    // Test ArrowUp
-    sim.execute_command("ArrowUp").unwrap();
+    // Test Up arrow
+    sim.execute_command("Up").unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().row, 0);
 
     // Should still be in Insert mode
@@ -825,8 +825,8 @@ fn test_insert_mode_recording_with_movements() {
     // Type text with movements
     sim.execute_command("h").unwrap();
     sim.execute_command("i").unwrap();
-    sim.execute_command("ArrowLeft").unwrap();
-    sim.execute_command("ArrowLeft").unwrap();
+    sim.execute_command("Left").unwrap();
+    sim.execute_command("Left").unwrap();
     sim.execute_command("!").unwrap();
 
     // Exit insert mode
@@ -1213,7 +1213,7 @@ fn test_repeat_insert_with_movements() {
     sim.execute_command("i").unwrap();
     sim.execute_command("h").unwrap();
     sim.execute_command("i").unwrap();
-    sim.execute_command("ArrowLeft").unwrap();
+    sim.execute_command("Left").unwrap();
     sim.execute_command("Escape").unwrap();
 
     let state = sim.get_state().unwrap();

@@ -3,13 +3,13 @@
 //! Handles profile screen navigation and XP awards
 
 use crate::security::UserError;
-use crate::ui::state::{AppState, Screen};
+use crate::ui::state::{AppState, ProfileData, StatisticsData, TypedScreen};
 
 /// Handle ShowProfile message
 ///
 /// Navigates to the profile screen
 pub fn handle_show_profile(state: &mut AppState) -> Result<(), UserError> {
-    state.ui.screen = Screen::Profile;
+    state.screen = TypedScreen::Profile(ProfileData::default());
     Ok(())
 }
 
@@ -17,7 +17,7 @@ pub fn handle_show_profile(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Navigates to the statistics screen
 pub fn handle_show_statistics(state: &mut AppState) -> Result<(), UserError> {
-    state.ui.screen = Screen::Statistics;
+    state.screen = TypedScreen::Statistics(StatisticsData::default());
     Ok(())
 }
 

@@ -25,8 +25,9 @@ fn rating_description(rating: &PerformanceRating) -> String {
 pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    // Get feedback from UI state (set when session completed/abandoned)
-    if let Some(feedback) = &state.ui.last_feedback {
+    // Get feedback from ResultsData (guaranteed to exist via TypedScreen)
+    if let crate::ui::state::TypedScreen::Results(results_data) = &state.screen {
+        let feedback = &results_data.feedback;
         // Layout: title | horizontal(results | xp & quests) | instructions
         let chunks = Layout::default()
             .direction(Direction::Vertical)

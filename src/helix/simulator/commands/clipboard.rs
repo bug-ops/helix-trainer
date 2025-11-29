@@ -1,11 +1,11 @@
 //! Clipboard operations (yank, paste)
 
-use crate::helix::simulator::HelixSimulator;
+use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
 /// Yank (copy) current character to clipboard
-pub(super) fn yank(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Copy current character to clipboard
     let head = sim.selection.primary().head;
 
@@ -19,7 +19,7 @@ pub(super) fn yank(sim: &mut HelixSimulator) -> Result<(), UserError> {
 }
 
 /// Paste clipboard content after cursor
-pub(super) fn paste_after(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Paste clipboard content after cursor
     if let Some(text) = &sim.clipboard {
         let head = sim.selection.primary().head;
@@ -41,7 +41,7 @@ pub(super) fn paste_after(sim: &mut HelixSimulator) -> Result<(), UserError> {
 }
 
 /// Paste clipboard content before cursor
-pub(super) fn paste_before(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Paste clipboard content before cursor
     if let Some(text) = &sim.clipboard {
         let head = sim.selection.primary().head;

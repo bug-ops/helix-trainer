@@ -32,7 +32,7 @@
 
 use crate::config::Scenario;
 use crate::game::{EditorState, PerformanceRating, Scorer};
-use crate::helix::{HelixSimulator, Mode};
+use crate::helix::{AnyModeSimulator, Mode};
 use crate::security::{self, SecurityError, UserError};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
@@ -198,7 +198,7 @@ pub struct GameSession<State: SessionState = Active> {
     /// Current editor state
     current_state: EditorState,
     /// Helix editor simulator for command execution
-    simulator: HelixSimulator,
+    simulator: AnyModeSimulator,
     /// All user actions taken so far
     user_actions: Vec<UserAction>,
     /// When the session started
@@ -428,7 +428,7 @@ impl GameSession<Active> {
         let current_state = initial_state.clone();
 
         // Initialize Helix simulator from initial state (includes cursor position)
-        let simulator = HelixSimulator::from_editor_state(&initial_state);
+        let simulator = AnyModeSimulator::from_editor_state(&initial_state);
 
         Ok(Self {
             scenario,
@@ -643,7 +643,7 @@ impl GameSession<Active> {
     pub fn reset(&mut self) -> Result<(), SecurityError> {
         self.current_state = self.initial_state.clone();
         // Reset simulator to initial content
-        self.simulator = HelixSimulator::new(self.scenario.setup.file_content.clone());
+        self.simulator = AnyModeSimulator::new(self.scenario.setup.file_content.clone());
         self.user_actions.clear();
         self.started_at = Instant::now();
         self.completed_at = None;

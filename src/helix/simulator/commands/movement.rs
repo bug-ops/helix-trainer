@@ -1,6 +1,6 @@
 //! Movement commands
 
-use crate::helix::simulator::HelixSimulator;
+use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{
     Selection,
@@ -9,8 +9,11 @@ use helix_core::{
     text_annotations::TextAnnotations,
 };
 
-/// Move left by count characters
-pub(super) fn move_left(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
+/// Move left by count characters (works in any mode)
+pub(super) fn move_left<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -34,7 +37,10 @@ pub(super) fn move_left(sim: &mut HelixSimulator, count: usize) -> Result<(), Us
 }
 
 /// Move right by count characters
-pub(super) fn move_right(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
+pub(super) fn move_right<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -58,7 +64,10 @@ pub(super) fn move_right(sim: &mut HelixSimulator, count: usize) -> Result<(), U
 }
 
 /// Move down by count lines
-pub(super) fn move_down(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
+pub(super) fn move_down<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -82,7 +91,10 @@ pub(super) fn move_down(sim: &mut HelixSimulator, count: usize) -> Result<(), Us
 }
 
 /// Move up by count lines
-pub(super) fn move_up(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
+pub(super) fn move_up<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -136,7 +148,10 @@ pub(super) fn move_prev_word_start(
 }
 
 /// Move to end of next word
-pub(super) fn move_next_word_end(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
+pub(super) fn move_next_word_end<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -148,7 +163,7 @@ pub(super) fn move_next_word_end(sim: &mut HelixSimulator, count: usize) -> Resu
 }
 
 /// Move to start of current line
-pub(super) fn move_line_start(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn move_line_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
@@ -158,7 +173,7 @@ pub(super) fn move_line_start(sim: &mut HelixSimulator) -> Result<(), UserError>
 }
 
 /// Move to end of current line
-pub(super) fn move_line_end(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn move_line_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
 
@@ -174,13 +189,17 @@ pub(super) fn move_line_end(sim: &mut HelixSimulator) -> Result<(), UserError> {
 }
 
 /// Move to start of document
-pub(super) fn move_document_start(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn move_document_start<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
     sim.selection = Selection::point(0);
     Ok(())
 }
 
 /// Move to end of document
-pub(super) fn move_document_end(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn move_document_end<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
     let end = sim.doc.len_chars();
     sim.selection = Selection::point(end);
     Ok(())

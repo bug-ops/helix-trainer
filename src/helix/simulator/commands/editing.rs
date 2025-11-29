@@ -1,11 +1,11 @@
 //! Editing commands (delete, join, indent, dedent)
 
-use crate::helix::simulator::HelixSimulator;
+use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
 /// Delete character at cursor
-pub(super) fn delete_char(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn delete_char<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = start.saturating_add(1).min(sim.doc.len_chars()).max(start);
@@ -17,7 +17,7 @@ pub(super) fn delete_char(sim: &mut HelixSimulator) -> Result<(), UserError> {
 }
 
 /// Delete current line
-pub(super) fn delete_line(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn delete_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let line = sim.doc.char_to_line(range.head);
         let start = sim.doc.line_to_char(line);
@@ -34,7 +34,7 @@ pub(super) fn delete_line(sim: &mut HelixSimulator) -> Result<(), UserError> {
 }
 
 /// Join current line with next line
-pub(super) fn join_lines(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Join current line with next line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
@@ -59,7 +59,7 @@ pub(super) fn join_lines(sim: &mut HelixSimulator) -> Result<(), UserError> {
 }
 
 /// Indent current line (add 2 spaces)
-pub(super) fn indent_line(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Add indentation (2 spaces) at the beginning of current line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
@@ -81,7 +81,7 @@ pub(super) fn indent_line(sim: &mut HelixSimulator) -> Result<(), UserError> {
 }
 
 /// Dedent current line (remove up to 2 spaces)
-pub(super) fn dedent_line(sim: &mut HelixSimulator) -> Result<(), UserError> {
+pub(super) fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Remove indentation (up to 2 spaces) from the beginning of current line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);

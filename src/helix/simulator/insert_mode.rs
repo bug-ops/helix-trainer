@@ -1,34 +1,33 @@
 //! Insert mode operations
 
-use super::{HelixSimulator, Mode};
+use super::{HelixSimulator, InsertMode, NormalMode};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
-impl HelixSimulator {
-    /// Append: move cursor one position right and enter insert mode
+// Operations that prepare for entering insert mode (Normal mode methods)
+impl HelixSimulator<NormalMode> {
+    /// Append: move cursor one position right (prepare for insert mode)
     pub(super) fn append(&mut self) -> Result<(), UserError> {
         // Move cursor one position to the right (after current character)
         let head = self.selection.primary().head;
         let new_pos = (head + 1).min(self.doc.len_chars());
         self.selection = Selection::point(new_pos);
-        self.mode = Mode::Insert;
         Ok(())
     }
 
-    /// Insert at line start: move to beginning of line and enter insert mode
+    /// Insert at line start: move to beginning of line (prepare for insert mode)
     pub(super) fn insert_at_line_start(&mut self) -> Result<(), UserError> {
-        // Move cursor to start of current line and enter insert mode
+        // Move cursor to start of current line
         let head = self.selection.primary().head;
         let current_line = self.doc.char_to_line(head);
         let line_start = self.doc.line_to_char(current_line);
         self.selection = Selection::point(line_start);
-        self.mode = Mode::Insert;
         Ok(())
     }
 
-    /// Append at line end: move to end of line and enter insert mode
+    /// Append at line end: move to end of line (prepare for insert mode)
     pub(super) fn append_at_line_end(&mut self) -> Result<(), UserError> {
-        // Move cursor to end of current line and enter insert mode
+        // Move cursor to end of current line
         let head = self.selection.primary().head;
         let current_line = self.doc.char_to_line(head);
 
@@ -42,11 +41,10 @@ impl HelixSimulator {
         };
 
         self.selection = Selection::point(line_end);
-        self.mode = Mode::Insert;
         Ok(())
     }
 
-    /// Open below: insert new line below current line and enter insert mode
+    /// Open below: insert new line below current line (prepare for insert mode)
     pub(super) fn open_below(&mut self) -> Result<(), UserError> {
         // Find end of current line
         let head = self.selection.primary().head;
@@ -68,12 +66,11 @@ impl HelixSimulator {
         // Move cursor to the new empty line
         let new_line_start = self.doc.line_to_char(current_line + 1);
         self.selection = Selection::point(new_line_start);
-        self.mode = Mode::Insert;
 
         Ok(())
     }
 
-    /// Open above: insert new line above current line and enter insert mode
+    /// Open above: insert new line above current line (prepare for insert mode)
     pub(super) fn open_above(&mut self) -> Result<(), UserError> {
         // Find start of current line
         let head = self.selection.primary().head;
@@ -90,7 +87,6 @@ impl HelixSimulator {
 
         // Cursor is already at the new empty line (same position)
         self.selection = Selection::point(line_start);
-        self.mode = Mode::Insert;
 
         Ok(())
     }
@@ -121,15 +117,13 @@ impl HelixSimulator {
         Ok(())
     }
 
-    /// Change selection: delete current character and enter insert mode
+    /// Change selection: delete current character (prepare for insert mode)
     pub(super) fn change_selection(&mut self) -> Result<(), UserError> {
-        // Change selection: delete current character and enter insert mode
-        // This is similar to delete_char but also enters insert mode
+        // Delete current character (similar to delete_char)
         let head = self.selection.primary().head;
 
         // Don't delete if at end of document
         if head >= self.doc.len_chars() {
-            self.mode = Mode::Insert;
             return Ok(());
         }
 
@@ -146,18 +140,14 @@ impl HelixSimulator {
             self.apply_transaction(transaction);
         }
 
-        // Enter insert mode
-        self.mode = Mode::Insert;
         Ok(())
     }
+}
 
-    /// Insert text at cursor position (only works in Insert mode)
+// Operations only available in Insert mode
+impl HelixSimulator<InsertMode> {
+    /// Insert text at cursor position
     pub(super) fn insert_text(&mut self, text: &str) -> Result<(), UserError> {
-        // Insert text at cursor position (only works in Insert mode)
-        if self.mode != Mode::Insert {
-            return Err(UserError::OperationFailed);
-        }
-
         let head = self.selection.primary().head;
         let text_len = text.chars().count();
 
@@ -173,13 +163,8 @@ impl HelixSimulator {
         Ok(())
     }
 
-    /// Delete character before cursor (only works in Insert mode)
+    /// Delete character before cursor (backspace)
     pub(super) fn backspace(&mut self) -> Result<(), UserError> {
-        // Delete character before cursor (only works in Insert mode)
-        if self.mode != Mode::Insert {
-            return Err(UserError::OperationFailed);
-        }
-
         let head = self.selection.primary().head;
 
         // Can't backspace at position 0

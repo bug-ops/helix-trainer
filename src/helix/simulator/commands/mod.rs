@@ -70,95 +70,85 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
     }
 }
 
-/// Execute a Helix command
+/// Check if a command is an insert mode entry command
 ///
-/// Routes commands to appropriate handlers based on mode and command type.
-/// If the command is repeatable, it will be recorded in the repeat buffer.
-pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(), UserError> {
-    // Convert command to KeyEvents for potential recording
-    let key_events = cmd_to_key_events(cmd);
+/// Returns true for commands that transition from Normal to Insert mode.
+fn is_insert_command(cmd: &str) -> bool {
+    cmd == CMD_INSERT
+        || cmd == CMD_APPEND
+        || cmd == CMD_INSERT_LINE_START
+        || cmd == CMD_APPEND_LINE_END
+        || cmd == CMD_OPEN_BELOW
+        || cmd == CMD_OPEN_ABOVE
+        || cmd == CMD_CHANGE
+}
 
-    // Determine if we should record this command (before execution)
-    // Only record in Normal mode for repeatable commands, and NOT during repeat
-    let should_record = !key_events.is_empty()
-        && sim.mode == Mode::Normal
-        && !sim.is_repeating
-        && key_events.iter().all(is_repeatable_command);
-
-    // Store mode before execution (for recording)
-    let mode_before = sim.mode;
-
-    // Check if we're entering insert mode (for insert recording)
-    // Don't start recording if we're repeating
-    let entering_insert = !sim.is_repeating
-        && sim.mode == Mode::Normal
-        && (cmd == CMD_INSERT
-            || cmd == CMD_APPEND
-            || cmd == CMD_INSERT_LINE_START
-            || cmd == CMD_APPEND_LINE_END
-            || cmd == CMD_OPEN_BELOW
-            || cmd == CMD_OPEN_ABOVE
-            || cmd == CMD_CHANGE);
-
-    // In Insert mode, handle special keys and text input
-    if sim.mode == Mode::Insert {
-        let result = if cmd == CMD_ESCAPE {
-            // Finish insert mode recording before exiting (unless repeating)
-            if !sim.is_repeating {
-                let action = sim.repeat_buffer.insert_recorder_mut().finish();
-                sim.repeat_buffer.set_last_action(action);
+/// Execute a command in Insert mode
+///
+/// Handles text input, special keys (Escape, Backspace), and arrow key navigation.
+/// Records actions in the insert mode recorder unless we're currently repeating.
+fn execute_insert_mode_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(), UserError> {
+    if cmd == CMD_ESCAPE {
+        // Finish insert mode recording before exiting (unless repeating)
+        if !sim.is_repeating {
+            let action = sim.repeat_buffer.insert_recorder_mut().finish();
+            sim.repeat_buffer.set_last_action(action);
+        }
+        sim.mode = Mode::Normal;
+        Ok(())
+    } else if cmd == CMD_BACKSPACE {
+        // Record backspace as deleted character (not implemented in recorder yet)
+        sim.backspace()
+    } else if cmd == CMD_ARROW_LEFT {
+        let result = movement::move_left(sim, 1);
+        if result.is_ok() && !sim.is_repeating {
+            sim.repeat_buffer
+                .insert_recorder_mut()
+                .record_movement(crate::helix::repeat::Movement::Left);
+        }
+        result
+    } else if cmd == CMD_ARROW_RIGHT {
+        let result = movement::move_right(sim, 1);
+        if result.is_ok() && !sim.is_repeating {
+            sim.repeat_buffer
+                .insert_recorder_mut()
+                .record_movement(crate::helix::repeat::Movement::Right);
+        }
+        result
+    } else if cmd == CMD_ARROW_UP {
+        let result = movement::move_up(sim, 1);
+        if result.is_ok() && !sim.is_repeating {
+            sim.repeat_buffer
+                .insert_recorder_mut()
+                .record_movement(crate::helix::repeat::Movement::Up);
+        }
+        result
+    } else if cmd == CMD_ARROW_DOWN {
+        let result = movement::move_down(sim, 1);
+        if result.is_ok() && !sim.is_repeating {
+            sim.repeat_buffer
+                .insert_recorder_mut()
+                .record_movement(crate::helix::repeat::Movement::Down);
+        }
+        result
+    } else {
+        // Regular text input
+        let result = sim.insert_text(cmd);
+        if result.is_ok() && !sim.is_repeating {
+            // Record each character
+            for ch in cmd.chars() {
+                sim.repeat_buffer.insert_recorder_mut().record_char(ch);
             }
-            sim.mode = Mode::Normal;
-            Ok(())
-        } else if cmd == CMD_BACKSPACE {
-            // Record backspace as deleted character (not implemented in recorder yet)
-            sim.backspace()
-        } else if cmd == CMD_ARROW_LEFT {
-            let result = movement::move_left(sim, 1);
-            if result.is_ok() && !sim.is_repeating {
-                sim.repeat_buffer
-                    .insert_recorder_mut()
-                    .record_movement(crate::helix::repeat::Movement::Left);
-            }
-            result
-        } else if cmd == CMD_ARROW_RIGHT {
-            let result = movement::move_right(sim, 1);
-            if result.is_ok() && !sim.is_repeating {
-                sim.repeat_buffer
-                    .insert_recorder_mut()
-                    .record_movement(crate::helix::repeat::Movement::Right);
-            }
-            result
-        } else if cmd == CMD_ARROW_UP {
-            let result = movement::move_up(sim, 1);
-            if result.is_ok() && !sim.is_repeating {
-                sim.repeat_buffer
-                    .insert_recorder_mut()
-                    .record_movement(crate::helix::repeat::Movement::Up);
-            }
-            result
-        } else if cmd == CMD_ARROW_DOWN {
-            let result = movement::move_down(sim, 1);
-            if result.is_ok() && !sim.is_repeating {
-                sim.repeat_buffer
-                    .insert_recorder_mut()
-                    .record_movement(crate::helix::repeat::Movement::Down);
-            }
-            result
-        } else {
-            let result = sim.insert_text(cmd);
-            if result.is_ok() && !sim.is_repeating {
-                // Record each character
-                for ch in cmd.chars() {
-                    sim.repeat_buffer.insert_recorder_mut().record_char(ch);
-                }
-            }
-            result
-        };
-        return result;
+        }
+        result
     }
+}
 
-    // Execute the command in Normal mode
+/// Execute a command in Normal mode
+///
+/// Routes commands to appropriate handlers (movement, editing, clipboard, etc.).
+/// Returns an error for unknown commands.
+fn execute_normal_mode_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(), UserError> {
     // Movement commands - single character
     if cmd == CMD_MOVE_LEFT {
         movement::move_left(sim, 1)?;
@@ -251,20 +241,79 @@ pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(),
         return Err(UserError::OperationFailed);
     }
 
-    // If command succeeded and should be recorded, record it
+    Ok(())
+}
+
+/// Record command in repeat buffer if needed
+///
+/// Records normal mode commands if:
+/// - Command has valid key events
+/// - We're in Normal mode
+/// - We're not currently repeating
+/// - All keys are repeatable
+///
+/// Also starts insert mode recording if entering insert mode.
+fn record_command_if_needed(
+    sim: &mut HelixSimulator,
+    key_events: &[KeyEvent],
+    mode_before: Mode,
+    entering_insert: bool,
+) {
+    // Determine if we should record this command
+    // Only record in Normal mode for repeatable commands, and NOT during repeat
+    let should_record = !key_events.is_empty()
+        && mode_before == Mode::Normal
+        && !sim.is_repeating
+        && key_events.iter().all(is_repeatable_command);
+
     if should_record {
         // Convert Mode from simulator to repeat module
         let repeat_mode = match mode_before {
             Mode::Normal => crate::helix::repeat::Mode::Normal,
             Mode::Insert => crate::helix::repeat::Mode::Insert,
         };
-        sim.repeat_buffer.record_command(key_events, repeat_mode);
+        sim.repeat_buffer
+            .record_command(key_events.to_vec(), repeat_mode);
     }
 
     // If we just entered insert mode, start recording
     if entering_insert {
         sim.repeat_buffer.insert_recorder_mut().start();
     }
+}
 
-    Ok(())
+/// Execute a Helix command
+///
+/// Routes commands to appropriate handlers based on mode and command type.
+/// If the command is repeatable, it will be recorded in the repeat buffer.
+///
+/// This is the main entry point for command execution. It orchestrates:
+/// 1. Command parsing and key event conversion
+/// 2. Mode-specific execution (Insert vs Normal)
+/// 3. Repeat buffer recording
+pub(super) fn execute_command(sim: &mut HelixSimulator, cmd: &str) -> Result<(), UserError> {
+    // Convert command to KeyEvents for potential recording
+    let key_events = cmd_to_key_events(cmd);
+
+    // Store state before execution (for recording)
+    let mode_before = sim.mode;
+
+    // Check if we're entering insert mode (for insert recording)
+    // Don't start recording if we're repeating
+    let entering_insert =
+        !sim.is_repeating && mode_before == Mode::Normal && is_insert_command(cmd);
+
+    // Execute command based on current mode
+    let result = if sim.mode == Mode::Insert {
+        execute_insert_mode_command(sim, cmd)
+    } else {
+        execute_normal_mode_command(sim, cmd)
+    };
+
+    // Record command if execution succeeded
+    if result.is_ok() {
+        record_command_if_needed(sim, &key_events, mode_before, entering_insert);
+    }
+
+    result
 }

@@ -237,21 +237,15 @@ impl HelixSimulator {
         &mut self,
         action: &crate::helix::repeat::RepeatableAction,
     ) -> Result<(), UserError> {
+        use crate::helix::repeat::{Movement, RepeatableAction};
+
         match action {
-            crate::helix::repeat::RepeatableAction::Command {
+            RepeatableAction::Command {
                 keys,
                 expected_mode,
             } => {
-                // Validate mode
-                let current_mode = match self.mode {
-                    Mode::Normal => crate::helix::repeat::Mode::Normal,
-                    Mode::Insert => crate::helix::repeat::Mode::Insert,
-                };
-
-                // If mode doesn't match, this is a no-op (Vim/Helix semantics)
-                // Example: Last action was in normal mode, but we're now in insert mode
-                // User would need to Esc first before repeating
-                if &current_mode != expected_mode {
+                // Validate mode (Mode types are now the same, no conversion needed)
+                if &self.mode != expected_mode {
                     return Ok(()); // No-op: repeat requires correct mode
                 }
 
@@ -261,7 +255,7 @@ impl HelixSimulator {
                 Ok(())
             }
 
-            crate::helix::repeat::RepeatableAction::InsertSequence { text, movements } => {
+            RepeatableAction::InsertSequence { text, movements } => {
                 use crate::helix::commands::*;
 
                 // Enter insert mode
@@ -275,16 +269,10 @@ impl HelixSimulator {
                 // Apply movements
                 for movement in movements {
                     match movement {
-                        crate::helix::repeat::Movement::Left => {
-                            self.execute_command(CMD_ARROW_LEFT)?
-                        }
-                        crate::helix::repeat::Movement::Right => {
-                            self.execute_command(CMD_ARROW_RIGHT)?
-                        }
-                        crate::helix::repeat::Movement::Up => self.execute_command(CMD_ARROW_UP)?,
-                        crate::helix::repeat::Movement::Down => {
-                            self.execute_command(CMD_ARROW_DOWN)?
-                        }
+                        Movement::Left => self.execute_command(CMD_ARROW_LEFT)?,
+                        Movement::Right => self.execute_command(CMD_ARROW_RIGHT)?,
+                        Movement::Up => self.execute_command(CMD_ARROW_UP)?,
+                        Movement::Down => self.execute_command(CMD_ARROW_DOWN)?,
                     }
                 }
 

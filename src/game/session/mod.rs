@@ -729,5 +729,8 @@ impl GameSession {
     }
 }
 
+/// Typestate pattern markers for compile-time state machine enforcement
+pub mod typestate;
+
 #[cfg(test)]
 mod tests;

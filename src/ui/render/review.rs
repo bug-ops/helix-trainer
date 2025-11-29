@@ -1,5 +1,6 @@
 //! Review session screen rendering
 
+use crate::helix::commands::CMD_ESCAPE;
 use crate::ui::state::{AppState, ReviewSessionState};
 use ratatui::{
     Frame,
@@ -199,7 +200,7 @@ fn render_instructions(frame: &mut Frame, area: Rect) {
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ),
         Span::raw(" = Failed  |  "),
-        Span::styled("Esc", Style::default().fg(Color::Gray)),
+        Span::styled(CMD_ESCAPE, Style::default().fg(Color::Gray)),
         Span::raw(" = Abandon"),
     ]);
 

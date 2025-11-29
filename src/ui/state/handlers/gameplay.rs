@@ -2,6 +2,7 @@
 //!
 //! Handles command execution and hint display
 
+use crate::helix::commands::*;
 use crate::security::UserError;
 use crate::ui::state::{AppState, Message, TypedScreen, update};
 use std::time::Duration;
@@ -11,12 +12,12 @@ use std::time::Duration;
 /// Converts internal command names to user-friendly display strings
 fn format_key_for_display(command: &str) -> String {
     match command {
-        "Left" => "←".to_string(),
-        "Right" => "→".to_string(),
-        "Up" => "↑".to_string(),
-        "Down" => "↓".to_string(),
-        "Backspace" => "⌫".to_string(),
-        "Escape" => "Esc".to_string(),
+        CMD_ARROW_LEFT => "←".to_string(),
+        CMD_ARROW_RIGHT => "→".to_string(),
+        CMD_ARROW_UP => "↑".to_string(),
+        CMD_ARROW_DOWN => "↓".to_string(),
+        CMD_BACKSPACE => "⌫".to_string(),
+        CMD_ESCAPE => "Esc".to_string(),
         "\n" => "↵".to_string(),
         " " => "Space".to_string(),
         cmd if cmd.len() == 1 => cmd.to_string(),
@@ -89,7 +90,7 @@ pub fn handle_execute_command(
     // In Insert mode, execute commands directly
     if session.is_insert_mode() {
         // Store last command for display (skip special commands and single chars)
-        if command.as_ref() == "Escape" {
+        if command.as_ref() == CMD_ESCAPE {
             task_data.last_command = Some(command.to_string());
         }
 
@@ -119,8 +120,8 @@ pub fn handle_execute_command(
         // Try to match a complete command
         let final_command = match task_data.command_buffer.as_str() {
             // Multi-key commands
-            "dd" => Some("dd"),
-            "gg" => Some("gg"),
+            CMD_DELETE_LINE => Some(CMD_DELETE_LINE),
+            CMD_GOTO_FILE_START => Some(CMD_GOTO_FILE_START),
 
             // Replace character command: r + any char
             cmd if cmd.starts_with('r') && cmd.len() == 2 => {
@@ -128,7 +129,7 @@ pub fn handle_execute_command(
             }
 
             // Partial commands - wait for more input
-            "d" | "g" | "r" => None,
+            "d" | "g" | CMD_REPLACE => None,
 
             // Single-key commands (clear buffer and execute)
             _ if task_data.command_buffer.len() == 1 => Some(task_data.command_buffer.as_str()),

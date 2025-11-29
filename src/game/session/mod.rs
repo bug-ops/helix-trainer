@@ -464,9 +464,10 @@ impl GameSession<Active> {
     ///
     /// ```ignore
     /// use helix_trainer::game::{GameSession, SessionAfterAction};
+    /// use helix_trainer::helix::commands::CMD_DELETE_LINE;
     ///
     /// let session = GameSession::new(scenario)?;
-    /// match session.record_action("dd".to_string())? {
+    /// match session.record_action(CMD_DELETE_LINE.to_string())? {
     ///     SessionAfterAction::StillActive(session) => {
     ///         // Continue playing
     ///     }

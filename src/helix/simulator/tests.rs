@@ -1,6 +1,7 @@
 //! Tests for HelixSimulator
 
 use super::*;
+use crate::helix::commands::*;
 
 #[test]
 fn test_create_simulator() {
@@ -21,11 +22,11 @@ fn test_initial_mode() {
 fn test_move_right() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().col, 1);
 
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().col, 2);
 }
@@ -35,11 +36,11 @@ fn test_move_left() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Move right twice
-    sim.execute_command("l").unwrap();
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
 
     // Move left once
-    sim.execute_command("h").unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().col, 1);
 }
@@ -49,12 +50,12 @@ fn test_word_movement() {
     let mut sim = AnyModeSimulator::new("hello world foo".to_string());
 
     // Move to next word
-    sim.execute_command("w").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().col, 6); // "world"
 
     // Move to next word again
-    sim.execute_command("w").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().col, 12); // "foo"
 }
@@ -63,7 +64,7 @@ fn test_word_movement() {
 fn test_delete_line() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\n".to_string());
 
-    sim.execute_command("dd").unwrap();
+    sim.execute_command(CMD_DELETE_LINE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line 2\nline 3\n");
@@ -73,7 +74,7 @@ fn test_delete_line() {
 fn test_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "ello");
@@ -83,9 +84,9 @@ fn test_delete_char() {
 fn test_delete_char_in_middle() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
-    sim.execute_command("l").unwrap(); // Move to 'e'
-    sim.execute_command("l").unwrap(); // Move to 'l'
-    sim.execute_command("x").unwrap(); // Delete 'l'
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // Move to 'e'
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // Move to 'l'
+    sim.execute_command(CMD_DELETE_CHAR).unwrap(); // Delete 'l'
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "helo");
@@ -95,10 +96,10 @@ fn test_delete_char_in_middle() {
 fn test_undo() {
     let mut sim = AnyModeSimulator::new("test\n".to_string());
 
-    sim.execute_command("dd").unwrap();
+    sim.execute_command(CMD_DELETE_LINE).unwrap();
     assert_eq!(sim.get_state().unwrap().content(), "");
 
-    sim.execute_command("u").unwrap();
+    sim.execute_command(CMD_UNDO).unwrap();
     assert_eq!(sim.get_state().unwrap().content(), "test\n");
 }
 
@@ -108,10 +109,10 @@ fn test_mode_change() {
 
     assert_eq!(sim.mode(), Mode::Normal);
 
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
     assert_eq!(sim.mode(), Mode::Normal);
 }
 
@@ -120,15 +121,15 @@ fn test_move_line_start() {
     let mut sim = AnyModeSimulator::new("hello\nworld\n".to_string());
 
     // Move to next line
-    sim.execute_command("j").unwrap();
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
     // Move to end of line
-    sim.execute_command("$").unwrap();
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
     let state = sim.get_state().unwrap();
     // Cursor at end of "world" - which is position 4 or 5
     assert!(state.cursor_position().col >= 4);
 
     // Move to start of line
-    sim.execute_command("0").unwrap();
+    sim.execute_command(CMD_MOVE_LINE_START).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().col, 0);
 }
@@ -137,15 +138,15 @@ fn test_move_line_start() {
 fn test_move_down_up() {
     let mut sim = AnyModeSimulator::new("line1\nline2\nline3\n".to_string());
 
-    sim.execute_command("j").unwrap();
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().row, 1);
 
-    sim.execute_command("j").unwrap();
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().row, 2);
 
-    sim.execute_command("k").unwrap();
+    sim.execute_command(CMD_MOVE_UP).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().row, 1);
 }
@@ -155,12 +156,12 @@ fn test_document_start() {
     let mut sim = AnyModeSimulator::new("line1\nline2\nline3\n".to_string());
 
     // Move somewhere else
-    sim.execute_command("j").unwrap();
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().row, 1);
 
     // Go back to start
-    sim.execute_command("gg").unwrap();
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().row, 0);
     assert_eq!(state.cursor_position().col, 0);
@@ -177,8 +178,8 @@ fn test_unknown_command() {
 fn test_multiple_line_deletions() {
     let mut sim = AnyModeSimulator::new("line1\nline2\nline3\n".to_string());
 
-    sim.execute_command("dd").unwrap();
-    sim.execute_command("dd").unwrap();
+    sim.execute_command(CMD_DELETE_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_LINE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line3\n");
@@ -188,7 +189,7 @@ fn test_multiple_line_deletions() {
 fn test_move_word_boundary() {
     let mut sim = AnyModeSimulator::new("  spaced  words  ".to_string());
 
-    sim.execute_command("w").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.get_state().unwrap();
     // Should move to first non-space character of next word
     assert!(state.cursor_position().col > 0);
@@ -198,7 +199,7 @@ fn test_move_word_boundary() {
 fn test_move_word_end() {
     let mut sim = AnyModeSimulator::new("hello world".to_string());
 
-    sim.execute_command("e").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_END).unwrap();
     let state = sim.get_state().unwrap();
     // Should be at end of "hello"
     assert!(state.cursor_position().col >= 4 && state.cursor_position().col <= 5);
@@ -209,9 +210,9 @@ fn test_move_prev_word() {
     let mut sim = AnyModeSimulator::new("hello world foo".to_string());
 
     // Move to end of document first
-    sim.execute_command("G").unwrap();
+    sim.execute_command(CMD_GOTO_FILE_END).unwrap();
     // Then move to previous word
-    sim.execute_command("b").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_BACKWARD).unwrap();
 
     let state = sim.get_state().unwrap();
     // Should have moved to start of a previous word
@@ -226,7 +227,7 @@ fn test_append_mode() {
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
 
     // Press 'a' should move cursor one position right and enter insert mode
-    sim.execute_command("a").unwrap();
+    sim.execute_command(CMD_APPEND).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
@@ -241,7 +242,7 @@ fn test_open_below() {
     assert_eq!(sim.get_state().unwrap().cursor_position().row, 0);
 
     // Press 'o' should insert new line below and enter insert mode
-    sim.execute_command("o").unwrap();
+    sim.execute_command(CMD_OPEN_BELOW).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
@@ -254,11 +255,11 @@ fn test_open_above() {
     let mut sim = AnyModeSimulator::new("line1\nline2".to_string());
 
     // Move to second line
-    sim.execute_command("j").unwrap();
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
 
     // Press 'O' should insert new line above and enter insert mode
-    sim.execute_command("O").unwrap();
+    sim.execute_command(CMD_OPEN_ABOVE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
@@ -286,12 +287,12 @@ fn test_insert_at_line_start() {
     let mut sim = AnyModeSimulator::new("  hello world".to_string());
 
     // Move cursor to middle of line
-    sim.execute_command("w").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.get_state().unwrap();
     assert!(state.cursor_position().col > 0);
 
     // Press 'I' should move to start of line and enter insert mode
-    sim.execute_command("I").unwrap();
+    sim.execute_command(CMD_INSERT_LINE_START).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
@@ -306,7 +307,7 @@ fn test_append_at_line_end() {
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
 
     // Press 'A' should move to end of line and enter insert mode
-    sim.execute_command("A").unwrap();
+    sim.execute_command(CMD_APPEND_LINE_END).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
@@ -323,7 +324,7 @@ fn test_change_selection() {
     assert_eq!(sim.mode(), Mode::Normal);
 
     // Press 'c' should delete 'h' and enter insert mode
-    sim.execute_command("c").unwrap();
+    sim.execute_command(CMD_CHANGE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "ello");
@@ -336,14 +337,14 @@ fn test_yank_and_paste_after() {
     let mut sim = AnyModeSimulator::new("abc".to_string());
 
     // Yank 'a'
-    sim.execute_command("y").unwrap();
+    sim.execute_command(CMD_YANK).unwrap();
 
     // Move to 'b'
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 1);
 
     // Paste after 'b' - should insert 'a' between 'b' and 'c'
-    sim.execute_command("p").unwrap();
+    sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "abac");
@@ -355,20 +356,20 @@ fn test_yank_and_paste_before() {
     let mut sim = AnyModeSimulator::new("abc".to_string());
 
     // Move to 'c'
-    sim.execute_command("l").unwrap();
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 2);
 
     // Yank 'c'
-    sim.execute_command("y").unwrap();
+    sim.execute_command(CMD_YANK).unwrap();
 
     // Move back to 'a'
-    sim.execute_command("h").unwrap();
-    sim.execute_command("h").unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
 
     // Paste before 'a'
-    sim.execute_command("P").unwrap();
+    sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "cabc");
@@ -380,7 +381,7 @@ fn test_insert_text_in_insert_mode() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Enter insert mode
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Insert a character
@@ -396,7 +397,7 @@ fn test_append_at_line_end_and_insert() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Append at line end
-    sim.execute_command("A").unwrap();
+    sim.execute_command(CMD_APPEND_LINE_END).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     let cursor_pos = sim.get_state().unwrap().cursor_position().col;
@@ -415,7 +416,7 @@ fn test_insert_text_works_in_insert_mode() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Enter Insert mode
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
 
     // Insert text should work via execute_command
     let result = sim.execute_command("!");
@@ -430,13 +431,13 @@ fn test_insert_multiple_chars() {
     let mut sim = AnyModeSimulator::new("".to_string());
 
     // Enter insert mode
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Insert multiple characters
-    sim.execute_command("a").unwrap();
-    sim.execute_command("b").unwrap();
-    sim.execute_command("c").unwrap();
+    sim.execute_command(CMD_APPEND).unwrap();
+    sim.execute_command(CMD_MOVE_WORD_BACKWARD).unwrap();
+    sim.execute_command(CMD_CHANGE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "abc");
@@ -448,8 +449,8 @@ fn test_backspace_in_insert_mode() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Enter insert mode at position 5
-    sim.execute_command("$").unwrap(); // Move to end
-    sim.execute_command("a").unwrap(); // Append
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap(); // Move to end
+    sim.execute_command(CMD_APPEND).unwrap(); // Append
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Type some characters
@@ -461,14 +462,14 @@ fn test_backspace_in_insert_mode() {
     assert_eq!(state.cursor_position().col, 7);
 
     // Backspace once
-    sim.execute_command("Backspace").unwrap();
+    sim.execute_command(CMD_BACKSPACE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello!");
     assert_eq!(state.cursor_position().col, 6);
 
     // Backspace again
-    sim.execute_command("Backspace").unwrap();
+    sim.execute_command(CMD_BACKSPACE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello");
@@ -480,11 +481,11 @@ fn test_backspace_at_start() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Enter insert mode at start
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Backspace at position 0 should do nothing
-    sim.execute_command("Backspace").unwrap();
+    sim.execute_command(CMD_BACKSPACE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "test");
@@ -496,23 +497,23 @@ fn test_arrow_keys_in_insert_mode() {
     let mut sim = AnyModeSimulator::new("abc\ndef".to_string());
 
     // Enter insert mode
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Test Right arrow
-    sim.execute_command("Right").unwrap();
+    sim.execute_command(CMD_ARROW_RIGHT).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 1);
 
     // Test Left arrow
-    sim.execute_command("Left").unwrap();
+    sim.execute_command(CMD_ARROW_LEFT).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
 
     // Test Down arrow
-    sim.execute_command("Down").unwrap();
+    sim.execute_command(CMD_ARROW_DOWN).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
 
     // Test Up arrow
-    sim.execute_command("Up").unwrap();
+    sim.execute_command(CMD_ARROW_UP).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().row, 0);
 
     // Should still be in Insert mode
@@ -524,13 +525,13 @@ fn test_backspace_works_in_insert_mode() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Enter Insert mode
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
 
     // Move right first to have something to delete
-    sim.execute_command("→").unwrap(); // Arrow right
+    sim.execute_command(CMD_ARROW_RIGHT).unwrap(); // Arrow right
 
     // Backspace should work in Insert mode
-    let result = sim.execute_command("Backspace");
+    let result = sim.execute_command(CMD_BACKSPACE);
     assert!(result.is_ok());
 }
 
@@ -539,7 +540,7 @@ fn test_join_lines() {
     let mut sim = AnyModeSimulator::new("line1\nline2\nline3".to_string());
 
     // Join first two lines
-    sim.execute_command("J").unwrap();
+    sim.execute_command(CMD_JOIN_LINES).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line1 line2\nline3");
@@ -551,11 +552,11 @@ fn test_join_lines_at_last_line() {
     let mut sim = AnyModeSimulator::new("line1\nline2".to_string());
 
     // Move to last line
-    sim.execute_command("j").unwrap();
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
     assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
 
     // Try to join - should do nothing
-    sim.execute_command("J").unwrap();
+    sim.execute_command(CMD_JOIN_LINES).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line1\nline2");
@@ -566,7 +567,7 @@ fn test_indent_line() {
     let mut sim = AnyModeSimulator::new("hello\nworld".to_string());
 
     // Indent first line
-    sim.execute_command(">").unwrap();
+    sim.execute_command(CMD_INDENT).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "  hello\nworld");
@@ -579,7 +580,7 @@ fn test_dedent_line() {
     let mut sim = AnyModeSimulator::new("  hello\n    world".to_string());
 
     // Dedent first line (remove 2 spaces)
-    sim.execute_command("<").unwrap();
+    sim.execute_command(CMD_DEDENT).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello\n    world");
@@ -591,7 +592,7 @@ fn test_dedent_line_with_one_space() {
     let mut sim = AnyModeSimulator::new(" hello".to_string());
 
     // Dedent - should remove only 1 space
-    sim.execute_command("<").unwrap();
+    sim.execute_command(CMD_DEDENT).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello");
@@ -603,7 +604,7 @@ fn test_dedent_line_no_spaces() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Dedent line with no leading spaces - should do nothing
-    sim.execute_command("<").unwrap();
+    sim.execute_command(CMD_DEDENT).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello");
@@ -614,8 +615,8 @@ fn test_multiple_indent() {
     let mut sim = AnyModeSimulator::new("code".to_string());
 
     // Indent twice
-    sim.execute_command(">").unwrap();
-    sim.execute_command(">").unwrap();
+    sim.execute_command(CMD_INDENT).unwrap();
+    sim.execute_command(CMD_INDENT).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "    code");
@@ -631,7 +632,7 @@ fn test_repeat_buffer_records_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute delete command
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Verify command was recorded
     let buffer = sim.repeat_buffer();
@@ -654,7 +655,7 @@ fn test_repeat_buffer_records_delete_line() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2".to_string());
 
     // Execute dd command
-    sim.execute_command("dd").unwrap();
+    sim.execute_command(CMD_DELETE_LINE).unwrap();
 
     // Verify dd was recorded
     let buffer = sim.repeat_buffer();
@@ -677,7 +678,7 @@ fn test_repeat_buffer_does_not_record_movement() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute movement command
-    sim.execute_command("h").unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
 
     // Verify command was NOT recorded (movement is not repeatable)
     let buffer = sim.repeat_buffer();
@@ -689,10 +690,10 @@ fn test_repeat_buffer_does_not_record_undo() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Do something first
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Undo it
-    sim.execute_command("u").unwrap();
+    sim.execute_command(CMD_UNDO).unwrap();
 
     // The buffer should still have 'x', not 'u'
     let buffer = sim.repeat_buffer();
@@ -710,7 +711,7 @@ fn test_repeat_buffer_records_yank() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute yank command
-    sim.execute_command("y").unwrap();
+    sim.execute_command(CMD_YANK).unwrap();
 
     // Verify yank was recorded
     let buffer = sim.repeat_buffer();
@@ -722,10 +723,10 @@ fn test_repeat_buffer_records_paste() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Yank first
-    sim.execute_command("y").unwrap();
+    sim.execute_command(CMD_YANK).unwrap();
 
     // Then paste
-    sim.execute_command("p").unwrap();
+    sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
     // Verify paste was recorded (last action)
     let buffer = sim.repeat_buffer();
@@ -742,7 +743,7 @@ fn test_repeat_buffer_records_join_lines() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2".to_string());
 
     // Execute join command
-    sim.execute_command("J").unwrap();
+    sim.execute_command(CMD_JOIN_LINES).unwrap();
 
     // Verify join was recorded
     let buffer = sim.repeat_buffer();
@@ -754,7 +755,7 @@ fn test_repeat_buffer_records_indent() {
     let mut sim = AnyModeSimulator::new("code".to_string());
 
     // Execute indent command
-    sim.execute_command(">").unwrap();
+    sim.execute_command(CMD_INDENT).unwrap();
 
     // Verify indent was recorded
     let buffer = sim.repeat_buffer();
@@ -785,18 +786,18 @@ fn test_insert_mode_recording_simple() {
     let mut sim = AnyModeSimulator::new("world".to_string());
 
     // Enter insert mode
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Verify recording started
     assert!(sim.repeat_buffer().insert_recorder().is_recording());
 
     // Type text
-    sim.execute_command("h").unwrap();
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
 
     // Exit insert mode
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
     assert_eq!(sim.mode(), Mode::Normal);
 
     // Verify insert sequence was recorded
@@ -818,17 +819,17 @@ fn test_insert_mode_recording_with_movements() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Enter insert mode
-    sim.execute_command("i").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
 
     // Type text with movements
-    sim.execute_command("h").unwrap();
-    sim.execute_command("i").unwrap();
-    sim.execute_command("Left").unwrap();
-    sim.execute_command("Left").unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command(CMD_ARROW_LEFT).unwrap();
+    sim.execute_command(CMD_ARROW_LEFT).unwrap();
     sim.execute_command("!").unwrap();
 
     // Exit insert mode
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     // Verify insert sequence with movements was recorded
     let buffer = sim.repeat_buffer();
@@ -848,19 +849,19 @@ fn test_insert_mode_recording_append() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Enter insert mode via append
-    sim.execute_command("a").unwrap();
+    sim.execute_command(CMD_APPEND).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Type text
     sim.execute_command(" ").unwrap();
-    sim.execute_command("w").unwrap();
-    sim.execute_command("o").unwrap();
-    sim.execute_command("r").unwrap();
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
+    sim.execute_command(CMD_OPEN_BELOW).unwrap();
+    sim.execute_command(CMD_REPLACE).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command("d").unwrap();
 
     // Exit insert mode
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     // Verify recording
     let buffer = sim.repeat_buffer();
@@ -877,16 +878,16 @@ fn test_insert_mode_recording_open_below() {
     let mut sim = AnyModeSimulator::new("line 1".to_string());
 
     // Enter insert mode via open below
-    sim.execute_command("o").unwrap();
+    sim.execute_command(CMD_OPEN_BELOW).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Type text
     sim.execute_command("n").unwrap();
-    sim.execute_command("e").unwrap();
-    sim.execute_command("w").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_END).unwrap();
+    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
 
     // Exit insert mode
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     // Verify recording
     let buffer = sim.repeat_buffer();
@@ -903,8 +904,8 @@ fn test_insert_mode_empty_recording() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Enter and immediately exit insert mode
-    sim.execute_command("i").unwrap();
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     // Verify empty insert sequence was recorded
     let buffer = sim.repeat_buffer();
@@ -922,10 +923,10 @@ fn test_normal_command_overwrites_previous() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute first command
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Execute second command
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Verify only last command is recorded
     let buffer = sim.repeat_buffer();
@@ -938,12 +939,12 @@ fn test_insert_mode_overwrites_normal_command() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Execute normal command first
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Enter insert mode
-    sim.execute_command("i").unwrap();
-    sim.execute_command("a").unwrap();
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command(CMD_APPEND).unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     // Verify insert sequence overwrote the delete command
     let buffer = sim.repeat_buffer();
@@ -960,17 +961,17 @@ fn test_change_command_records_and_enters_insert() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute change command
-    sim.execute_command("c").unwrap();
+    sim.execute_command(CMD_CHANGE).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
     // Verify recording started
     assert!(sim.repeat_buffer().insert_recorder().is_recording());
 
     // Type replacement text
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Exit insert mode
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     // Verify insert sequence was recorded
     let buffer = sim.repeat_buffer();
@@ -991,7 +992,7 @@ fn test_repeat_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute delete command
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "ello");
 
@@ -1006,7 +1007,7 @@ fn test_repeat_delete_line() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3".to_string());
 
     // Delete first line
-    sim.execute_command("dd").unwrap();
+    sim.execute_command(CMD_DELETE_LINE).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line 2\nline 3");
 
@@ -1021,16 +1022,16 @@ fn test_repeat_insert_mode() {
     let mut sim = AnyModeSimulator::new("world".to_string());
 
     // Insert "hi"
-    sim.execute_command("i").unwrap();
-    sim.execute_command("h").unwrap();
-    sim.execute_command("i").unwrap();
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hiworld");
 
     // Move to end
-    sim.execute_command("$").unwrap();
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
 
     // Repeat insert
     sim.execute_command(".").unwrap();
@@ -1055,7 +1056,7 @@ fn test_repeat_is_not_recorded() {
     let mut sim = AnyModeSimulator::new("abcd".to_string());
 
     // Delete a char
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "bcd");
 
@@ -1077,13 +1078,13 @@ fn test_repeat_yank_and_paste() {
     let mut sim = AnyModeSimulator::new("hello\nworld".to_string());
 
     // Yank first character
-    sim.execute_command("y").unwrap();
+    sim.execute_command(CMD_YANK).unwrap();
 
     // Move down
-    sim.execute_command("j").unwrap();
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
 
     // Paste
-    sim.execute_command("p").unwrap();
+    sim.execute_command(CMD_PASTE_AFTER).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello\nwhorld");
 
@@ -1099,7 +1100,7 @@ fn test_repeat_join_lines() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3".to_string());
 
     // Join lines
-    sim.execute_command("J").unwrap();
+    sim.execute_command(CMD_JOIN_LINES).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line 1 line 2\nline 3");
 
@@ -1114,7 +1115,7 @@ fn test_repeat_indent() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2".to_string());
 
     // Indent
-    sim.execute_command(">").unwrap();
+    sim.execute_command(CMD_INDENT).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "  line 1\nline 2");
 
@@ -1130,7 +1131,7 @@ fn test_repeat_dedent() {
     let mut sim = AnyModeSimulator::new("    code".to_string());
 
     // Dedent
-    sim.execute_command("<").unwrap();
+    sim.execute_command(CMD_DEDENT).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "  code");
 
@@ -1150,7 +1151,7 @@ fn test_repeat_replace_char() {
     assert_eq!(state.content(), "xello");
 
     // Move to next char
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
 
     // Repeat replace (should replace 'e' with 'x')
     sim.execute_command(".").unwrap();
@@ -1166,21 +1167,21 @@ fn test_repeat_append() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Move to end of word and append " world"
-    sim.execute_command("$").unwrap(); // Move to end
-    sim.execute_command("a").unwrap(); // Append (cursor after last char)
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap(); // Move to end
+    sim.execute_command(CMD_APPEND).unwrap(); // Append (cursor after last char)
     sim.execute_command(" ").unwrap();
-    sim.execute_command("w").unwrap();
-    sim.execute_command("o").unwrap();
-    sim.execute_command("r").unwrap();
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
+    sim.execute_command(CMD_OPEN_BELOW).unwrap();
+    sim.execute_command(CMD_REPLACE).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command("d").unwrap();
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello world");
 
     // Move to start
-    sim.execute_command("0").unwrap();
+    sim.execute_command(CMD_MOVE_LINE_START).unwrap();
 
     // Repeat should insert " world" at current position
     sim.execute_command(".").unwrap();
@@ -1211,11 +1212,11 @@ fn test_repeat_insert_with_movements() {
     // Insert with arrow key movements (simplified test)
     // Note: Current implementation applies movements AFTER all text insertion
     // This is a known limitation - movements aren't interleaved with text
-    sim.execute_command("i").unwrap();
-    sim.execute_command("h").unwrap();
-    sim.execute_command("i").unwrap();
-    sim.execute_command("Left").unwrap();
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command(CMD_ARROW_LEFT).unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hiworld");
@@ -1223,7 +1224,7 @@ fn test_repeat_insert_with_movements() {
     assert_eq!(state.cursor_position().col, 1);
 
     // Move to end
-    sim.execute_command("$").unwrap();
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
 
     // Repeat insert with movements
     sim.execute_command(".").unwrap();
@@ -1239,17 +1240,17 @@ fn test_repeat_insert_simple() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Insert 'x' at the beginning
-    sim.execute_command("i").unwrap(); // Enter insert mode
-    sim.execute_command("x").unwrap(); // Insert 'x'
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_INSERT).unwrap(); // Enter insert mode
+    sim.execute_command(CMD_DELETE_CHAR).unwrap(); // Insert 'x'
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "xhello");
     // After insert + escape, cursor is at position 1 (after 'x')
 
     // Move to position: cursor at 1, move right twice → position 3 (on first 'l')
-    sim.execute_command("l").unwrap(); // cursor at 2 ('e')
-    sim.execute_command("l").unwrap(); // cursor at 3 (first 'l')
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // cursor at 2 ('e')
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // cursor at 3 (first 'l')
 
     // Repeat - should insert 'x' at position 3
     sim.execute_command(".").unwrap();
@@ -1263,7 +1264,7 @@ fn test_repeat_multiple_times() {
     let mut sim = AnyModeSimulator::new("xxxxxx".to_string());
 
     // Delete once
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Repeat 4 times
     for _ in 0..4 {
@@ -1279,10 +1280,10 @@ fn test_repeat_after_undo() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Delete a char
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Undo it
-    sim.execute_command("u").unwrap();
+    sim.execute_command(CMD_UNDO).unwrap();
 
     // The repeat buffer should still have 'x'
     // Repeat should still delete
@@ -1296,12 +1297,12 @@ fn test_repeat_preserves_action_across_movements() {
     let mut sim = AnyModeSimulator::new("hello world".to_string());
 
     // Delete 'h'
-    sim.execute_command("x").unwrap();
+    sim.execute_command(CMD_DELETE_CHAR).unwrap();
 
     // Move around (movements don't change repeat buffer)
-    sim.execute_command("l").unwrap();
-    sim.execute_command("w").unwrap();
-    sim.execute_command("0").unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
+    sim.execute_command(CMD_MOVE_LINE_START).unwrap();
 
     // Repeat should still delete
     sim.execute_command(".").unwrap();
@@ -1314,16 +1315,16 @@ fn test_repeat_insert_at_line_start() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Insert at line start
-    sim.execute_command("I").unwrap();
-    sim.execute_command(">").unwrap();
-    sim.execute_command(">").unwrap();
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_INSERT_LINE_START).unwrap();
+    sim.execute_command(CMD_INDENT).unwrap();
+    sim.execute_command(CMD_INDENT).unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), ">>hello");
 
     // Move somewhere else
-    sim.execute_command("$").unwrap();
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
 
     // Repeat
     sim.execute_command(".").unwrap();
@@ -1340,16 +1341,16 @@ fn test_repeat_append_at_line_end() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Append at line end
-    sim.execute_command("A").unwrap();
+    sim.execute_command(CMD_APPEND_LINE_END).unwrap();
     sim.execute_command("!").unwrap();
     sim.execute_command("!").unwrap();
-    sim.execute_command("Escape").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello!!");
 
     // Move to start
-    sim.execute_command("0").unwrap();
+    sim.execute_command(CMD_MOVE_LINE_START).unwrap();
 
     // Repeat
     sim.execute_command(".").unwrap();
@@ -1367,8 +1368,8 @@ fn test_paste_before_cursor_scenario() {
     let mut sim = AnyModeSimulator::new("xyz".to_string());
 
     // Move to position 2 ('z')
-    sim.execute_command("l").unwrap();
-    sim.execute_command("l").unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(
@@ -1378,7 +1379,7 @@ fn test_paste_before_cursor_scenario() {
     );
 
     // Yank 'z'
-    sim.execute_command("y").unwrap();
+    sim.execute_command(CMD_YANK).unwrap();
 
     // Check what was yanked
     let state = sim.get_state().unwrap();
@@ -1386,7 +1387,7 @@ fn test_paste_before_cursor_scenario() {
     println!("  Cursor position: {:?}", state.cursor_position());
 
     // Move left to 'y'
-    sim.execute_command("h").unwrap();
+    sim.execute_command(CMD_MOVE_LEFT).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(
@@ -1396,7 +1397,7 @@ fn test_paste_before_cursor_scenario() {
     );
 
     // Paste before
-    sim.execute_command("P").unwrap();
+    sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "xzyz", "Content should be 'xzyz'");

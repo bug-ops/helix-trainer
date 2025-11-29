@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-11-29
+
+### Fixed
+
+**Esc Key Conflict** (#41)
+- Fixed critical conflict where Esc key was used for both abandoning scenarios and exiting Helix insert mode
+- Changed scenario abandonment from Esc to Ctrl+Q
+- Now users can properly use Esc to exit insert mode (native Helix behavior)
+- Updated UI instructions to show Ctrl-Q instead of Esc
+
+**FSRS Command Tracking** (#40)
+- Fixed Review Session being non-functional due to missing command tracking
+- Commands from completed scenarios now properly recorded in FSRS scheduler
+- First reviews are immediately available (not delayed until next day)
+- Review Commands menu now shows badge [N] when reviews are due
+
+### Changed
+
+**Major Code Quality Improvements** (#41)
+- Refactored 6 complex functions into 20+ focused, maintainable functions
+- Improved code readability and testability throughout codebase
+
+**execute_command** (src/helix/simulator/commands/mod.rs):
+- Split 193-line function into 4 focused functions (26+9+56+95+28 lines)
+- Separated Insert mode and Normal mode logic
+- Isolated repeat command recording
+- Reduced cyclomatic complexity significantly
+
+**handle_task_keys** (src/main.rs):
+- Split 112-line function into 5 focused functions
+- Clear separation: special keys, Insert mode input, Normal mode mapping
+- Better maintainability for keyboard handling
+
+**Configuration & Learning**:
+- visit_toml_files: Functional style, no side effects (38 lines)
+- update_fsrs_state: Separated FSRS calculation from state mutation (3 functions)
+- generate_quests: Data-driven design with QuestDistribution struct
+- validate_scenario: DRY principle with reusable validators
+
+**State Handlers** (from v0.2.0, documented):
+- Modularized state.rs into focused handler modules
+- 8 handler modules: navigation, menu, scenario, gameplay, profile, quests, review, filters
+- Reduced main state file from 2,084 to 1,486 lines
+
+### Performance
+
+**CI/CD Improvements**:
+- Added cargo registry caching (crates.io index, .crate files, git deps)
+- Combined with sccache: full build cache (registry + compilation)
+- Dependency downloads: ~10-30s faster on cache hits
+- Fixed sccache configuration for 88-100% cache hit rate
+
+### Quality
+
+- All 352 tests passing
+- Zero clippy warnings
+- Code formatted with rustfmt nightly
+- Single Responsibility Principle applied throughout
+- Improved testability and maintainability
+
 ## [0.2.0] - 2025-11-28
 
 ### 🎉 Phase 1 COMPLETE - Smart Learning System

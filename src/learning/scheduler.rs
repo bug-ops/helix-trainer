@@ -47,6 +47,40 @@ impl Scheduler {
         Self { tracker }
     }
 
+    /// Record commands used in a completed scenario
+    ///
+    /// This method records each unique command from the scenario into the FSRS
+    /// performance tracker, which enables spaced repetition reviews.
+    ///
+    /// # Arguments
+    /// * `commands` - List of commands used in the scenario
+    /// * `total_duration` - Total time taken to complete the scenario
+    /// * `success` - Whether the scenario was completed successfully
+    pub fn record_scenario_commands(
+        &self,
+        commands: &[String],
+        total_duration: std::time::Duration,
+        success: bool,
+    ) {
+        if commands.is_empty() {
+            return;
+        }
+
+        // Calculate average time per command (rough estimate for FSRS)
+        let avg_duration = total_duration / commands.len() as u32;
+
+        // Optimal time is slightly less than avg (assume user could be 20% faster)
+        let optimal_time = avg_duration.mul_f32(0.8);
+
+        // Record each unique command
+        let mut tracker = self.tracker.borrow_mut();
+        let unique_commands: std::collections::HashSet<_> = commands.iter().collect();
+
+        for command in unique_commands {
+            tracker.record_attempt(command, avg_duration, success, optimal_time);
+        }
+    }
+
     /// Get commands that are due for review now
     pub fn get_due_reviews(&self) -> Vec<String> {
         let now = Utc::now();

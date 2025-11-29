@@ -20,14 +20,17 @@
 
 use crate::config::{Difficulty, Scenario, ScenarioCategory, ScenarioCollection, SortMode};
 use crate::game::GameSession;
-use crate::gamification::{ProfileStorage, QuestType, UserProfile};
+use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
 use crate::security::UserError;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+
+// Message handlers in separate modules
+mod handlers;
 
 /// Breakdown of XP earned from a scenario
 #[derive(Debug, Clone)]
@@ -461,24 +464,6 @@ impl AppState {
     }
 }
 
-/// Format a key command for display in key history
-///
-/// Converts internal command names to user-friendly display strings
-fn format_key_for_display(command: &str) -> String {
-    match command {
-        "ArrowLeft" => "←".to_string(),
-        "ArrowRight" => "→".to_string(),
-        "ArrowUp" => "↑".to_string(),
-        "ArrowDown" => "↓".to_string(),
-        "Backspace" => "⌫".to_string(),
-        "Escape" => "Esc".to_string(),
-        "\n" => "↵".to_string(),
-        " " => "Space".to_string(),
-        cmd if cmd.len() == 1 => cmd.to_string(),
-        cmd => cmd.to_string(),
-    }
-}
-
 /// Pure update function for state transitions
 ///
 /// This function is the heart of the Elm Architecture pattern.
@@ -506,625 +491,57 @@ fn format_key_for_display(command: &str) -> String {
 /// ```
 pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
     match msg {
-        Message::QuitApp => {
-            state.running = false;
-            Ok(())
-        }
+        // Navigation messages
+        Message::QuitApp => handlers::handle_quit_app(state),
+        Message::NavigateTo(screen) => handlers::handle_navigate_to(state, screen),
+        Message::BackToMenu => handlers::handle_back_to_menu(state),
 
-        Message::NavigateTo(screen) => {
-            state.screen = screen;
-            Ok(())
-        }
+        // Menu messages
+        Message::MenuUp => handlers::handle_menu_up(state),
+        Message::MenuDown => handlers::handle_menu_down(state),
+        Message::MenuSelect => handlers::handle_menu_select(state),
 
-        Message::MenuUp => {
-            if state.selected_menu_item > 0 {
-                state.selected_menu_item -= 1;
-            }
-            Ok(())
-        }
+        // Scenario lifecycle messages
+        Message::StartScenario(index) => handlers::handle_start_scenario(state, index),
+        Message::CompleteScenario => handlers::handle_complete_scenario(state),
+        Message::AbandonScenario => handlers::handle_abandon_scenario(state),
+        Message::RetryScenario => handlers::handle_retry_scenario(state),
+        Message::NextScenario => handlers::handle_next_scenario(state),
 
-        Message::MenuDown => {
-            // Total menu items = filtered scenarios + Review + Profile + Statistics + Quit
-            let max_items = state.scenario_collection.count() + 4;
-            if state.selected_menu_item < max_items - 1 {
-                state.selected_menu_item += 1;
-            }
-            Ok(())
-        }
+        // Gameplay messages
+        Message::ShowHint => handlers::handle_show_hint(state),
+        Message::ExecuteCommand(command) => handlers::handle_execute_command(state, command),
 
-        Message::MenuSelect => {
-            let scenario_count = state.scenario_collection.count();
-            let selected = state.selected_menu_item;
+        // Profile messages
+        Message::ShowProfile => handlers::handle_show_profile(state),
+        Message::ShowStatistics => handlers::handle_show_statistics(state),
+        Message::AwardXP { amount } => handlers::handle_award_xp(state, amount),
 
-            if selected < scenario_count {
-                // Start selected scenario (0..scenario_count-1)
-                update(state, Message::StartScenario(selected))?;
-            } else if selected == scenario_count {
-                // Review Commands (index = scenario_count)
-                update(state, Message::StartReviewSession)?;
-            } else if selected == scenario_count + 1 {
-                // View Profile (index = scenario_count + 1)
-                update(state, Message::ShowProfile)?;
-            } else if selected == scenario_count + 2 {
-                // Statistics (index = scenario_count + 2)
-                update(state, Message::ShowStatistics)?;
-            } else if selected == scenario_count + 3 {
-                // Quit (index = scenario_count + 3)
-                update(state, Message::QuitApp)?;
-            }
-            Ok(())
-        }
-
-        Message::StartScenario(index) => {
-            if let Some(scenario) = state
-                .scenario_collection
-                .get_filtered_by_index(index)
-                .cloned()
-            {
-                let session = GameSession::new(scenario)?;
-                state.session = Some(session);
-                state.screen = Screen::Task;
-                state.show_hint_panel = false;
-                state.show_key_history = false;
-                state.current_hint = None;
-                state.last_command = None;
-                state.completion_time = None;
-                state.clear_key_history();
-                state.command_buffer.clear();
-            }
-            Ok(())
-        }
-
-        Message::CompleteScenario => {
-            // Update quest progress BEFORE awarding XP
-            // Extract data we need first to avoid borrow issues
-            let (duration, feedback, scenario_id) = if let Some(session) = &state.session {
-                let duration = session.elapsed();
-                let feedback = session
-                    .get_feedback()
-                    .map_err(|_| UserError::OperationFailed)?;
-                let scenario_id = session.scenario().id.clone();
-                (duration, feedback, scenario_id)
-            } else {
-                state.screen = Screen::Results;
-                return Ok(());
-            };
-
-            // Update quest progress
-            update(
-                state,
-                Message::UpdateQuestProgress {
-                    command: None,
-                    scenario_completed: true,
-                    duration,
-                },
-            )?;
-
-            // Calculate base XP (before mastery scaling)
-            let score = feedback.score;
-            let is_perfect = feedback.score == feedback.max_points;
-            let is_first_today = state.scenarios_completed_today == 0;
-
-            // Base XP from score (50 XP per 100 points)
-            let base_xp = (score as u64 * 50) / 100;
-
-            // Perfect bonus (+20%)
-            let perfect_bonus = if is_perfect { base_xp / 5 } else { 0 };
-
-            // First today bonus (+10 XP)
-            let first_today_bonus = if is_first_today { 10 } else { 0 };
-
-            let total_base_xp = base_xp + perfect_bonus + first_today_bonus;
-
-            // Apply mastery scaling and record completion
-            let (actual_xp, mastery_level, mastery_multiplier) = {
-                let mut profile = state.profile.borrow_mut();
-                let actual_xp =
-                    profile
-                        .scenario_history
-                        .record_completion(&scenario_id, score, total_base_xp);
-
-                // Get mastery info for UI display
-                let completion = profile.scenario_history.get(&scenario_id).unwrap();
-                let mastery_level = completion.mastery_level;
-                let mastery_multiplier = completion.xp_multiplier();
-
-                (actual_xp, mastery_level, mastery_multiplier)
-            };
-
-            // Store mastery info for results display
-            state.scenario_mastery = Some((mastery_level, mastery_multiplier));
-
-            // Quest bonuses (collect newly completed quests)
-            let mut quest_bonuses = Vec::new();
-            let newly_completed_quest_ids: Vec<String> = {
-                let profile = state.profile.borrow();
-                profile
-                    .daily_quests
-                    .iter()
-                    .filter(|q| q.completed && !state.previously_completed_quests.contains(&q.id))
-                    .map(|q| q.id.clone())
-                    .collect()
-            };
-
-            // Collect bonuses and mark as processed
-            for quest_id in newly_completed_quest_ids {
-                let profile = state.profile.borrow();
-                if let Some(quest) = profile.daily_quests.iter().find(|q| q.id == quest_id) {
-                    let description = format_quest_description(&quest.quest_type);
-                    let xp = quest.xp_reward as u64;
-                    drop(profile);
-                    quest_bonuses.push((description, xp));
-                    state.previously_completed_quests.insert(quest_id);
-                }
-            }
-
-            let quest_xp = quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
-            let total_xp = actual_xp + quest_xp;
-
-            // Store breakdown for results display
-            state.xp_breakdown = Some(XPBreakdown {
-                base_xp,
-                perfect_bonus,
-                first_today_bonus,
-                mastery_multiplier,
-                quest_bonuses,
-                total_xp,
-            });
-
-            // Award XP to profile
-            {
-                let mut profile = state.profile.borrow_mut();
-                let leveled_up = profile.add_xp(total_xp);
-
-                // Update counters
-                profile.scenarios_completed += 1;
-                if is_perfect {
-                    profile.perfect_scenarios += 1;
-                }
-
-                if leveled_up {
-                    drop(profile);
-                    state
-                        .save_profile_immediate()
-                        .map_err(|_| UserError::OperationFailed)?;
-                }
-            }
-
-            state.scenarios_completed_today += 1;
-            state
-                .save_profile_debounced()
-                .map_err(|_| UserError::OperationFailed)?;
-            state.screen = Screen::Results;
-            Ok(())
-        }
-
-        Message::AbandonScenario => {
-            if let Some(session) = &mut state.session {
-                session.abandon();
-            }
-            state.screen = Screen::Results;
-            Ok(())
-        }
-
-        Message::ShowHint => {
-            // If hint panel is already visible, close it (toggle behavior)
-            if state.show_hint_panel {
-                state.show_hint_panel = false;
-                state.current_hint = None;
-                return Ok(());
-            }
-
-            // Otherwise, try to show next hint
-            if let Some(session) = &mut state.session
-                && let Some(hint) = session.get_hint()
-            {
-                state.current_hint = Some(hint.clone());
-                state.show_hint_panel = true;
-            }
-            Ok(())
-        }
-
-        Message::ExecuteCommand(command) => {
-            // Add key to history for display (format for readability)
-            let display_key = format_key_for_display(command.as_ref());
-            state.add_key_to_history(display_key);
-
-            // Show key history popup after first keypress
-            state.show_key_history = true;
-
-            // Track command for quest progress (only execute once per complete command)
-            let mut executed_command: Option<String> = None;
-
-            if let Some(session) = &mut state.session {
-                // In Insert mode, execute commands directly
-                if session.is_insert_mode() {
-                    // Store last command for display (skip special commands and single chars)
-                    if command.as_ref() == "Escape" {
-                        state.last_command = Some(command.to_string());
-                    }
-
-                    // Execute command through session
-                    session.record_action(command.to_string())?;
-                } else {
-                    // Normal mode: handle command buffer for multi-key commands
-                    state.command_buffer.push_str(&command);
-
-                    // Try to match a complete command
-                    let final_command = match state.command_buffer.as_str() {
-                        // Multi-key commands
-                        "dd" => Some("dd"),
-                        "gg" => Some("gg"),
-
-                        // Replace character command: r + any char
-                        cmd if cmd.starts_with('r') && cmd.len() == 2 => {
-                            Some(state.command_buffer.as_str())
-                        }
-
-                        // Partial commands - wait for more input
-                        "d" | "g" | "r" => None,
-
-                        // Single-key commands (clear buffer and execute)
-                        _ if state.command_buffer.len() == 1 => Some(state.command_buffer.as_str()),
-
-                        // Invalid sequence - clear buffer
-                        _ => {
-                            state.command_buffer.clear();
-                            return Ok(());
-                        }
-                    };
-
-                    if let Some(cmd) = final_command {
-                        // We have a complete command
-                        let cmd_string = cmd.to_string();
-                        state.command_buffer.clear();
-
-                        // Store for display
-                        state.last_command = Some(cmd_string.clone());
-
-                        // Track for quest progress
-                        executed_command = Some(cmd_string.clone());
-
-                        // Execute command through session
-                        session.record_action(cmd_string)?;
-                    }
-                    // If None, we're waiting for more keys (buffer not cleared)
-                }
-            }
-
-            // Update quest progress for executed command (after releasing session borrow)
-            if let Some(cmd) = executed_command {
-                update(
-                    state,
-                    Message::UpdateQuestProgress {
-                        command: Some(cmd),
-                        scenario_completed: false,
-                        duration: Duration::from_secs(0),
-                    },
-                )?;
-            }
-
-            // Check if scenario is complete
-            if let Some(session) = &state.session
-                && session.is_completed()
-            {
-                // Mark completion time instead of immediately going to results
-                // This allows showing the success state before transition
-                state.completion_time = Some(std::time::Instant::now());
-            }
-
-            Ok(())
-        }
-
-        Message::RetryScenario => {
-            if let Some(session) = &mut state.session {
-                session.reset()?;
-                state.screen = Screen::Task;
-                state.show_hint_panel = false;
-                state.show_key_history = false;
-                state.current_hint = None;
-                state.last_command = None;
-                state.completion_time = None;
-                state.clear_key_history();
-                state.command_buffer.clear();
-            }
-            Ok(())
-        }
-
-        Message::NextScenario => {
-            state.screen = Screen::MainMenu;
-            state.session = None;
-            state.show_hint_panel = false;
-            state.current_hint = None;
-            Ok(())
-        }
-
-        Message::BackToMenu => {
-            state.screen = Screen::MainMenu;
-            state.session = None;
-            state.show_hint_panel = false;
-            state.current_hint = None;
-            Ok(())
-        }
-
-        Message::ShowProfile => {
-            state.screen = Screen::Profile;
-            Ok(())
-        }
-
-        Message::ShowStatistics => {
-            state.screen = Screen::Statistics;
-            Ok(())
-        }
-
-        Message::AwardXP { amount } => {
-            let mut profile = state.profile.borrow_mut();
-            let leveled_up = profile.add_xp(amount);
-
-            if leveled_up {
-                drop(profile); // Release borrow before save
-                state
-                    .save_profile_immediate()
-                    .map_err(|_| UserError::OperationFailed)?;
-            }
-            Ok(())
-        }
-
+        // Quest messages
         Message::UpdateQuestProgress {
             command,
             scenario_completed,
             duration,
-        } => {
-            use crate::gamification::QuestTracker;
+        } => handlers::handle_update_quest_progress(state, command, scenario_completed, duration),
 
-            // Clear previous progress changes
-            state.quest_progress_changes.clear();
-
-            // Snapshot progress BEFORE updates
-            let progress_before: HashMap<String, u32> = {
-                let profile = state.profile.borrow();
-                profile
-                    .daily_quests
-                    .iter()
-                    .map(|q| (q.id.clone(), get_quest_current_progress(&q.quest_type)))
-                    .collect()
-            };
-
-            // Track which quests were already completed before this update
-            let was_completed: Vec<bool> = {
-                let profile = state.profile.borrow();
-                profile.daily_quests.iter().map(|q| q.completed).collect()
-            };
-
-            // Update command practice quests and exploration quests
-            if let Some(cmd) = &command {
-                // Track for exploration quests
-                state.commands_used_today.insert(cmd.clone());
-
-                // Update command progress in quests
-                let mut profile = state.profile.borrow_mut();
-                QuestTracker::update_command_progress(&mut profile.daily_quests, cmd);
-            }
-
-            // Update scenario completion quests and speed run quests
-            if scenario_completed {
-                let scenario_id = state
-                    .session
-                    .as_ref()
-                    .map(|s| s.scenario().id.clone())
-                    .unwrap_or_default();
-
-                let mut profile = state.profile.borrow_mut();
-                QuestTracker::update_scenario_progress(
-                    &mut profile.daily_quests,
-                    &scenario_id,
-                    duration,
-                );
-            }
-
-            // Update time invested quests
-            let minutes = duration.as_secs() / 60;
-            if minutes > 0 {
-                let mut profile = state.profile.borrow_mut();
-                QuestTracker::update_time_progress(&mut profile.daily_quests, minutes as u32);
-            }
-
-            // Detect progress changes AFTER updates
-            {
-                let profile = state.profile.borrow();
-                for quest in &profile.daily_quests {
-                    let old = progress_before.get(&quest.id).copied().unwrap_or(0);
-                    let new = get_quest_current_progress(&quest.quest_type);
-
-                    if new > old {
-                        state.quest_progress_changes.push(QuestProgressChange {
-                            quest_description: format_quest_description(&quest.quest_type),
-                            old_progress: old,
-                            new_progress: new,
-                        });
-                    }
-                }
-            }
-
-            // Check for newly completed quests and award bonus XP
-            let newly_completed_xp: Vec<u32> = {
-                let profile = state.profile.borrow();
-                profile
-                    .daily_quests
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(idx, quest)| {
-                        if !was_completed[idx] && quest.completed {
-                            Some(quest.xp_reward)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            };
-
-            // Award XP for newly completed quests
-            if !newly_completed_xp.is_empty() {
-                let total_bonus_xp: u64 = newly_completed_xp.iter().map(|xp| *xp as u64).sum();
-                let mut profile = state.profile.borrow_mut();
-                profile.add_xp(total_bonus_xp);
-            }
-
-            Ok(())
+        // Filter messages
+        Message::SetSortMode(mode) => handlers::handle_set_sort_mode(state, mode),
+        Message::ToggleCategoryFilter(category) => {
+            handlers::handle_toggle_category_filter(state, category)
         }
-
-        Message::SetSortMode(mode) => {
-            let profile = state.profile.borrow();
-            state.scenario_collection.sort(mode, Some(&profile));
-            Ok(())
+        Message::ToggleDifficultyFilter(difficulty) => {
+            handlers::handle_toggle_difficulty_filter(state, difficulty)
         }
+        Message::ToggleCompletedFilter => handlers::handle_toggle_completed_filter(state),
+        Message::ResetFilters => handlers::handle_reset_filters(state),
 
-        Message::ToggleCategoryFilter(_category) => {
-            // TODO: Implement category filtering in future iteration
-            // For now, this is a placeholder
-            Ok(())
-        }
-
-        Message::ToggleDifficultyFilter(_difficulty) => {
-            // TODO: Implement difficulty filtering in future iteration
-            // For now, this is a placeholder
-            Ok(())
-        }
-
-        Message::ToggleCompletedFilter => {
-            // TODO: Implement completion filtering in future iteration
-            // For now, this is a placeholder
-            Ok(())
-        }
-
-        Message::ResetFilters => {
-            state.scenario_collection.reset_filter();
-            Ok(())
-        }
-
-        Message::StartReviewSession => {
-            // Get due commands from scheduler
-            let due_commands = state.scheduler.get_due_reviews();
-
-            if due_commands.is_empty() {
-                // No reviews due, stay on menu
-                return Ok(());
-            }
-
-            state.review_session = Some(ReviewSessionState {
-                due_commands: due_commands.clone(),
-                current_index: 0,
-                current_command: due_commands.first().cloned(),
-                session_started_at: Instant::now(),
-                completed_reviews: Vec::new(),
-            });
-
-            state.screen = Screen::Review;
-            Ok(())
-        }
-
-        Message::NextReviewCommand => {
-            if let Some(session) = &mut state.review_session {
-                session.current_index += 1;
-
-                if session.current_index >= session.due_commands.len() {
-                    // Session complete - show summary and award XP
-                    let completed = session.completed_reviews.len();
-                    let success_count = session
-                        .completed_reviews
-                        .iter()
-                        .filter(|r| r.success)
-                        .count();
-                    let success_rate = if completed > 0 {
-                        success_count as f64 / completed as f64
-                    } else {
-                        0.0
-                    };
-
-                    // Award XP for review session
-                    let xp = (completed as u64 * 10) + (success_rate * 20.0) as u64;
-                    {
-                        let mut profile = state.profile.borrow_mut();
-                        profile.add_xp(xp);
-                    }
-
-                    // Return to menu
-                    state.screen = Screen::MainMenu;
-                    state.review_session = None;
-                } else {
-                    // Move to next command
-                    session.current_command =
-                        session.due_commands.get(session.current_index).cloned();
-                }
-            }
-            Ok(())
-        }
-
+        // Review session messages
+        Message::StartReviewSession => handlers::handle_start_review_session(state),
         Message::CompleteReviewCommand { success } => {
-            if let Some(session) = &mut state.review_session {
-                if let Some(command) = &session.current_command {
-                    let duration = session.session_started_at.elapsed();
-
-                    // Record result
-                    session.completed_reviews.push(ReviewResult {
-                        command: command.clone(),
-                        success,
-                        duration,
-                    });
-
-                    // Update performance tracker
-                    {
-                        let mut tracker = state.performance_tracker.borrow_mut();
-                        tracker.record_attempt(
-                            command,
-                            duration,
-                            success,
-                            Duration::from_secs(3), // Optimal time
-                        );
-                    }
-
-                    // Move to next
-                    update(state, Message::NextReviewCommand)?;
-                }
-            }
-            Ok(())
+            handlers::handle_complete_review_command(state, success)
         }
-
-        Message::AbandonReviewSession => {
-            state.review_session = None;
-            state.screen = Screen::MainMenu;
-            Ok(())
-        }
-    }
-}
-
-/// Format quest type as readable description
-fn format_quest_description(quest_type: &QuestType) -> String {
-    use QuestType::*;
-    match quest_type {
-        CommandPractice {
-            command, target, ..
-        } => format!("Use '{}' {} times", command, target),
-        ScenarioCompletion { target, .. } => format!("Complete {} scenarios", target),
-        SpeedRun { scenario_id, .. } => format!("Speed run: {}", scenario_id),
-        TimeInvested { target_minutes, .. } => format!("Practice {} min", target_minutes),
-        Exploration {
-            target_commands, ..
-        } => format!("Try {} commands", target_commands),
-    }
-}
-
-/// Get current progress value from quest type
-fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
-    use QuestType::*;
-    match quest_type {
-        CommandPractice { current, .. } => *current,
-        ScenarioCompletion { current, .. } => *current,
-        TimeInvested {
-            current_minutes, ..
-        } => *current_minutes,
-        Exploration { commands_used, .. } => commands_used.len() as u32,
-        SpeedRun { .. } => 0, // Single-attempt quest
+        Message::NextReviewCommand => handlers::handle_next_review_command(state),
+        Message::AbandonReviewSession => handlers::handle_abandon_review_session(state),
     }
 }
 

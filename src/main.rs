@@ -276,8 +276,8 @@ fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
             return Some(Message::ShowHint);
         }
         (KeyCode::Char('/'), KeyModifiers::SHIFT) => return Some(Message::ShowHint),
-        // Esc abandons scenario
-        (KeyCode::Esc, _) => return Some(Message::AbandonScenario),
+        // Ctrl+Q abandons scenario (Esc is needed for Helix insert mode exit)
+        (KeyCode::Char('q'), KeyModifiers::CONTROL) => return Some(Message::AbandonScenario),
         _ => {}
     }
 

@@ -56,6 +56,14 @@ jobs:
       - name: Run tests
         run: cargo nextest run --lib --verbose
 
+      - name: Run doc tests
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo test --doc --verbose
+
+      - name: Check benchmarks compile
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo bench --no-run
+
       - name: Show sccache statistics
         shell: bash
         run: sccache --show-stats

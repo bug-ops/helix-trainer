@@ -169,7 +169,7 @@ impl ScenarioCompletion {
     /// use helix_trainer::learning::ScenarioCompletion;
     ///
     /// let completion = ScenarioCompletion::new("test".to_string(), 50, 25);
-    /// assert_eq!(completion.xp_multiplier(), 1.0); // First attempt, learning
+    /// assert_eq!(completion.xp_multiplier(), 0.7); // Second attempt today (after construction)
     /// ```
     pub fn xp_multiplier(&self) -> f64 {
         // Base multiplier from mastery

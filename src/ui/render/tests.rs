@@ -42,12 +42,6 @@ fn create_test_app_state(scenarios: Vec<crate::config::Scenario>) -> AppState {
 }
 
 #[test]
-fn test_main_menu_items_count() {
-    let items = AppState::menu_items();
-    assert_eq!(items.len(), 2);
-}
-
-#[test]
 fn test_render_does_not_panic_on_empty_state() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;

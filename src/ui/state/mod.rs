@@ -255,12 +255,6 @@ impl AppState {
         self.game.session.as_mut()
     }
 
-    /// Get the menu items for the main menu
-    // TODO: Iteration 4 - Add "View Profile" and "Statistics" menu items
-    pub fn menu_items() -> Vec<&'static str> {
-        vec!["Start Training", "Quit"]
-    }
-
     /// Get the number of available scenarios (filtered count)
     pub fn scenario_count(&self) -> usize {
         self.game.scenario_collection.count()
@@ -273,18 +267,12 @@ impl AppState {
 
     /// Add a key to the history (keeps last 5)
     pub fn add_key_to_history(&mut self, key: String) {
-        // Insert at the beginning (most recent first)
-        self.ui.key_history.insert(0, key);
-
-        // Keep only last 5 keys
-        if self.ui.key_history.len() > 5 {
-            self.ui.key_history.truncate(5);
-        }
+        self.ui.add_key_to_history(key);
     }
 
     /// Clear key history
     pub fn clear_key_history(&mut self) {
-        self.ui.key_history.clear();
+        self.ui.clear_key_history();
     }
 
     /// Save profile with debouncing (only if enough time has passed)
@@ -699,14 +687,6 @@ mod tests {
         update(&mut state, Message::BackToMenu).unwrap();
         assert_eq!(state.ui.screen, Screen::MainMenu);
         assert!(state.game.session.is_none());
-    }
-
-    #[test]
-    fn test_menu_items() {
-        let items = AppState::menu_items();
-        assert_eq!(items.len(), 2);
-        assert_eq!(items[0], "Start Training");
-        assert_eq!(items[1], "Quit");
     }
 
     #[test]

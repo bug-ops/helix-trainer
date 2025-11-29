@@ -87,6 +87,22 @@ impl UIState {
         self.quest_progress_changes.clear();
         self.scenario_mastery = None;
     }
+
+    /// Add a key to the history (keeps last 5)
+    pub fn add_key_to_history(&mut self, key: String) {
+        // Insert at the beginning (most recent first)
+        self.key_history.insert(0, key);
+
+        // Keep only last 5 keys
+        if self.key_history.len() > 5 {
+            self.key_history.truncate(5);
+        }
+    }
+
+    /// Clear key history
+    pub fn clear_key_history(&mut self) {
+        self.key_history.clear();
+    }
 }
 
 impl Default for UIState {
@@ -125,6 +141,16 @@ impl GameState {
     /// Check if in review session
     pub fn is_reviewing(&self) -> bool {
         self.review_session.is_some()
+    }
+}
+
+impl Default for GameState {
+    fn default() -> Self {
+        Self {
+            scenario_collection: ScenarioCollection::new(vec![]),
+            session: None,
+            review_session: None,
+        }
     }
 }
 
@@ -295,6 +321,48 @@ mod tests {
     }
 
     #[test]
+    fn test_ui_state_add_key_to_history() {
+        let mut ui = UIState::new();
+        assert!(ui.key_history.is_empty());
+
+        ui.add_key_to_history("j".to_string());
+        assert_eq!(ui.key_history.len(), 1);
+        assert_eq!(ui.key_history[0], "j");
+
+        ui.add_key_to_history("k".to_string());
+        assert_eq!(ui.key_history.len(), 2);
+        // Most recent first
+        assert_eq!(ui.key_history[0], "k");
+        assert_eq!(ui.key_history[1], "j");
+    }
+
+    #[test]
+    fn test_ui_state_key_history_max_5() {
+        let mut ui = UIState::new();
+
+        for i in 0..7 {
+            ui.add_key_to_history(format!("key{}", i));
+        }
+
+        // Should only keep last 5
+        assert_eq!(ui.key_history.len(), 5);
+        // Most recent (key6) should be first
+        assert_eq!(ui.key_history[0], "key6");
+        assert_eq!(ui.key_history[4], "key2");
+    }
+
+    #[test]
+    fn test_ui_state_clear_key_history() {
+        let mut ui = UIState::new();
+        ui.add_key_to_history("j".to_string());
+        ui.add_key_to_history("k".to_string());
+        assert_eq!(ui.key_history.len(), 2);
+
+        ui.clear_key_history();
+        assert!(ui.key_history.is_empty());
+    }
+
+    #[test]
     fn test_config_state_default() {
         let config = ConfigState::default();
         assert_eq!(config.sort_mode, SortMode::ByName);
@@ -327,5 +395,77 @@ mod tests {
 
         config.category_filters.insert(ScenarioCategory::Movement);
         assert!(config.has_active_filters());
+    }
+
+    #[test]
+    fn test_game_state_default() {
+        let game = GameState::default();
+        assert_eq!(game.scenario_collection.count(), 0);
+        assert!(game.session.is_none());
+        assert!(game.review_session.is_none());
+    }
+
+    #[test]
+    fn test_game_state_is_playing() {
+        let game = GameState::default();
+        assert!(!game.is_playing());
+        // Note: Testing with actual session requires GameSession setup
+    }
+
+    #[test]
+    fn test_game_state_is_reviewing() {
+        let game = GameState::default();
+        assert!(!game.is_reviewing());
+        // Note: Testing with actual review session requires ReviewSessionState setup
+    }
+
+    #[test]
+    fn test_progress_state_should_save_initially_true() {
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+
+        let progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::new(),
+        );
+
+        // Should save immediately when no previous save
+        assert!(progress.should_save());
+    }
+
+    #[test]
+    fn test_progress_state_mark_saved_updates_time() {
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::new(),
+        );
+
+        assert!(progress.last_save_time.is_none());
+        progress.mark_saved();
+        assert!(progress.last_save_time.is_some());
+    }
+
+    #[test]
+    fn test_progress_state_debounce_prevents_immediate_resave() {
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::new(),
+        );
+
+        // First save should be allowed
+        assert!(progress.should_save());
+        progress.mark_saved();
+
+        // Immediate second save should be blocked (within 5 second window)
+        assert!(!progress.should_save());
     }
 }

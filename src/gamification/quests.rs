@@ -165,6 +165,63 @@ impl Quest {
     }
 }
 
+/// Quest distribution configuration by difficulty
+struct QuestDistribution {
+    easy: usize,
+    medium: usize,
+    hard: usize,
+    exploration: usize,
+}
+
+impl QuestDistribution {
+    /// Get quest distribution for a given level
+    fn for_level(level: u32) -> Self {
+        match level {
+            1..=5 => Self {
+                easy: 2,
+                medium: 1,
+                hard: 0,
+                exploration: 0,
+            },
+            6..=15 => Self {
+                easy: 1,
+                medium: 2,
+                hard: 1,
+                exploration: 0,
+            },
+            _ => Self {
+                easy: 0,
+                medium: 1,
+                hard: 2,
+                exploration: 1,
+            },
+        }
+    }
+
+    /// Generate quests according to this distribution
+    fn generate_quests(&self, rng: &mut StdRng, tracker: &PerformanceTracker) -> Vec<Quest> {
+        let mut quests = Vec::new();
+
+        for i in 0..self.easy {
+            quests.push(QuestGenerator::generate_easy_quest(rng, i, tracker));
+        }
+
+        for i in 0..self.medium {
+            quests.push(QuestGenerator::generate_medium_quest(rng, i, tracker));
+        }
+
+        for i in 0..self.hard {
+            quests.push(QuestGenerator::generate_hard_quest(rng, i));
+        }
+
+        for i in 0..self.exploration {
+            quests.push(QuestGenerator::generate_exploration_quest(rng, i));
+        }
+
+        quests
+    }
+}
+
 /// Generates daily quests based on user level
 pub struct QuestGenerator;
 
@@ -191,36 +248,8 @@ impl QuestGenerator {
     /// ```
     pub fn generate_quests(profile: &UserProfile, tracker: &PerformanceTracker) -> Vec<Quest> {
         let mut rng = Self::create_rng();
-        let mut quests = Vec::new();
-
-        // Determine quest mix based on level
-        let (easy, medium, hard, exploration) = match profile.level {
-            1..=5 => (2, 1, 0, 0),
-            6..=15 => (1, 2, 1, 0),
-            _ => (0, 1, 2, 1),
-        };
-
-        // Generate easy quests
-        for i in 0..easy {
-            quests.push(Self::generate_easy_quest(&mut rng, i, tracker));
-        }
-
-        // Generate medium quests
-        for i in 0..medium {
-            quests.push(Self::generate_medium_quest(&mut rng, i, tracker));
-        }
-
-        // Generate hard quests
-        for i in 0..hard {
-            quests.push(Self::generate_hard_quest(&mut rng, i));
-        }
-
-        // Generate exploration quests
-        for i in 0..exploration {
-            quests.push(Self::generate_exploration_quest(&mut rng, i));
-        }
-
-        quests
+        let distribution = QuestDistribution::for_level(profile.level);
+        distribution.generate_quests(&mut rng, tracker)
     }
 
     fn create_rng() -> StdRng {

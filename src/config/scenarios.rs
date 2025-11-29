@@ -239,11 +239,8 @@ impl ScenarioLoader {
             "Loading scenarios from directory"
         );
 
-        let mut all_scenarios = Vec::new();
-        let mut file_count = 0;
-
         // Recursively walk directory and collect all .toml files
-        self.visit_toml_files(&canonical, &mut all_scenarios, &mut file_count)?;
+        let (all_scenarios, file_count) = self.visit_toml_files(&canonical)?;
 
         if all_scenarios.is_empty() {
             tracing::warn!("No scenario files found in directory");
@@ -260,16 +257,16 @@ impl ScenarioLoader {
     }
 
     /// Recursively visit all .toml files in a directory
-    fn visit_toml_files(
-        &self,
-        dir: &Path,
-        scenarios: &mut Vec<Scenario>,
-        file_count: &mut usize,
-    ) -> Result<(), UserError> {
+    ///
+    /// Returns tuple of (scenarios, file_count)
+    fn visit_toml_files(&self, dir: &Path) -> Result<(Vec<Scenario>, usize), UserError> {
         let entries = fs::read_dir(dir).map_err(|e| {
             tracing::error!("Failed to read directory: {}", e);
             UserError::ScenarioLoadError
         })?;
+
+        let mut scenarios = Vec::new();
+        let mut file_count = 0;
 
         for entry in entries {
             let entry = entry.map_err(|e| {
@@ -281,27 +278,26 @@ impl ScenarioLoader {
 
             if path.is_dir() {
                 // Recursively visit subdirectories
-                self.visit_toml_files(&path, scenarios, file_count)?;
+                let (sub_scenarios, sub_count) = self.visit_toml_files(&path)?;
+                scenarios.extend(sub_scenarios);
+                file_count += sub_count;
             } else if path.extension().and_then(|s| s.to_str()) == Some("toml") {
                 // Load scenarios from this file
-                match self.load(&path) {
-                    Ok(mut file_scenarios) => {
-                        *file_count += 1;
-                        scenarios.append(&mut file_scenarios);
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            file = %sanitizer::sanitize_path_for_logging(&path),
-                            "Failed to load scenario file: {:?}",
-                            e
-                        );
-                        return Err(e);
-                    }
-                }
+                let file_scenarios = self.load(&path).map_err(|e| {
+                    tracing::error!(
+                        file = %sanitizer::sanitize_path_for_logging(&path),
+                        "Failed to load scenario file: {:?}",
+                        e
+                    );
+                    e
+                })?;
+
+                file_count += 1;
+                scenarios.extend(file_scenarios);
             }
         }
 
-        Ok(())
+        Ok((scenarios, file_count))
     }
 
     /// Load scenarios from a TOML file with comprehensive security validations
@@ -361,33 +357,43 @@ impl ScenarioLoader {
     }
 
     /// Validate a single scenario for security and correctness
-    fn validate_scenario(&self, scenario: &Scenario) -> Result<(), SecurityError> {
-        // Validate setup content size
-        if scenario.setup.file_content.len() > MAX_FILE_CONTENT_LENGTH {
-            return Err(SecurityError::ContentTooLarge {
+    /// Validate content size is within limits
+    fn validate_content_size(&self, content: &str) -> Result<(), SecurityError> {
+        if content.len() > MAX_FILE_CONTENT_LENGTH {
+            Err(SecurityError::ContentTooLarge {
                 max: MAX_FILE_CONTENT_LENGTH,
-                actual: scenario.setup.file_content.len(),
-            });
+                actual: content.len(),
+            })
+        } else {
+            Ok(())
         }
+    }
 
-        // Validate target content size
-        if scenario.target.file_content.len() > MAX_FILE_CONTENT_LENGTH {
-            return Err(SecurityError::ContentTooLarge {
-                max: MAX_FILE_CONTENT_LENGTH,
-                actual: scenario.target.file_content.len(),
-            });
+    /// Validate command sequence length
+    fn validate_command_sequence(&self, commands: &[String]) -> Result<(), SecurityError> {
+        if commands.len() > MAX_COMMAND_SEQUENCE_LENGTH {
+            Err(SecurityError::CommandSequenceTooLong {
+                max: MAX_COMMAND_SEQUENCE_LENGTH,
+            })
+        } else {
+            Ok(())
         }
+    }
+
+    fn validate_scenario(&self, scenario: &Scenario) -> Result<(), SecurityError> {
+        // Validate content sizes
+        self.validate_content_size(&scenario.setup.file_content)?;
+        self.validate_content_size(&scenario.target.file_content)?;
 
         // Validate cursor positions
         self.validate_cursor_position(scenario.setup.cursor_position)?;
         self.validate_cursor_position(scenario.target.cursor_position)?;
 
-        // Validate hints count
+        // Validate collection sizes
         if scenario.hints.len() > MAX_HINTS {
             return Err(SecurityError::TooManyHints { max: MAX_HINTS });
         }
 
-        // Validate alternatives count
         if scenario.alternatives.len() > MAX_ALTERNATIVES {
             return Err(SecurityError::TooManyAlternatives {
                 max: MAX_ALTERNATIVES,
@@ -399,20 +405,10 @@ impl ScenarioLoader {
             return Err(SecurityError::InvalidScoringConfig);
         }
 
-        // Validate command sequences within bounds
-        if scenario.solution.commands.len() > MAX_COMMAND_SEQUENCE_LENGTH {
-            return Err(SecurityError::CommandSequenceTooLong {
-                max: MAX_COMMAND_SEQUENCE_LENGTH,
-            });
-        }
-
-        // Validate alternative command sequences
+        // Validate command sequences
+        self.validate_command_sequence(&scenario.solution.commands)?;
         for alt in &scenario.alternatives {
-            if alt.commands.len() > MAX_COMMAND_SEQUENCE_LENGTH {
-                return Err(SecurityError::CommandSequenceTooLong {
-                    max: MAX_COMMAND_SEQUENCE_LENGTH,
-                });
-            }
+            self.validate_command_sequence(&alt.commands)?;
         }
 
         Ok(())

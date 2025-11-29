@@ -223,6 +223,36 @@ impl PerformanceTracker {
         }
     }
 
+    /// Calculate next FSRS state based on rating
+    fn calculate_next_fsrs_state(
+        &self,
+        memory_state: Option<MemoryState>,
+        elapsed_days: u32,
+        rating_index: usize,
+    ) -> fsrs::ItemState {
+        let next_states = self
+            .fsrs
+            .next_states(memory_state, DEFAULT_DESIRED_RETENTION, elapsed_days)
+            .unwrap();
+
+        match rating_index {
+            0 => next_states.again,
+            1 => next_states.hard,
+            2 => next_states.good,
+            3 => next_states.easy,
+            _ => unreachable!("rating_index must be 0-3"),
+        }
+    }
+
+    /// Calculate elapsed days since last review
+    fn elapsed_days_since_review(perf: &CommandPerformance) -> u32 {
+        if perf.reps == 0 {
+            0
+        } else {
+            (Utc::now() - perf.last_review).num_days().max(0) as u32
+        }
+    }
+
     fn update_fsrs_state(
         &mut self,
         command: &str,
@@ -235,30 +265,12 @@ impl PerformanceTracker {
         // Convert performance to FSRS rating (0-3 index for again/hard/good/easy)
         let rating_index = Self::calculate_rating_index(duration, success, optimal_time);
 
-        // Get current memory state
+        // Get current memory state and elapsed time
         let memory_state = perf.memory_state();
+        let elapsed_days = Self::elapsed_days_since_review(perf);
 
-        // Calculate elapsed days since last review
-        let elapsed_days = if perf.reps == 0 {
-            0
-        } else {
-            (Utc::now() - perf.last_review).num_days().max(0) as u32
-        };
-
-        // Get next states from FSRS
-        let next_states = self
-            .fsrs
-            .next_states(memory_state, DEFAULT_DESIRED_RETENTION, elapsed_days)
-            .unwrap();
-
-        // Select the appropriate next state based on rating
-        let next_state = match rating_index {
-            0 => next_states.again,
-            1 => next_states.hard,
-            2 => next_states.good,
-            3 => next_states.easy,
-            _ => unreachable!(),
-        };
+        // Calculate next state from FSRS
+        let next_state = self.calculate_next_fsrs_state(memory_state, elapsed_days, rating_index);
 
         // Update performance with new FSRS state
         let perf = self.stats.get_mut(command).unwrap();

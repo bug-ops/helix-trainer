@@ -42,30 +42,30 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Calculate visible area height for menu (excluding borders)
     let menu_height = chunks[2].height.saturating_sub(2) as usize; // -2 for borders (updated index)
-    let total_items = state.scenario_collection.count() + 3; // +3 for Profile, Statistics, Quit
+    let total_items = state.game.scenario_collection.count() + 3; // +3 for Profile, Statistics, Quit
 
     // Adjust scroll offset to keep selected item visible
-    if state.selected_menu_item < state.menu_scroll_offset {
+    if state.ui.selected_menu_item < state.ui.menu_scroll_offset {
         // Selected item is above visible area - scroll up
-        state.menu_scroll_offset = state.selected_menu_item;
-    } else if state.selected_menu_item >= state.menu_scroll_offset + menu_height {
+        state.ui.menu_scroll_offset = state.ui.selected_menu_item;
+    } else if state.ui.selected_menu_item >= state.ui.menu_scroll_offset + menu_height {
         // Selected item is below visible area - scroll down
-        state.menu_scroll_offset = state.selected_menu_item.saturating_sub(menu_height - 1);
+        state.ui.menu_scroll_offset = state.ui.selected_menu_item.saturating_sub(menu_height - 1);
     }
 
     // Clamp scroll offset to valid range
     let max_offset = total_items.saturating_sub(menu_height);
-    state.menu_scroll_offset = state.menu_scroll_offset.min(max_offset);
+    state.ui.menu_scroll_offset = state.ui.menu_scroll_offset.min(max_offset);
 
     // Menu items - show filtered scenarios + Quit option with indicators
-    let filtered_scenarios = state.scenario_collection.get_filtered();
-    let profile = state.profile.borrow();
+    let filtered_scenarios = state.game.scenario_collection.get_filtered();
+    let profile = state.progress.profile.borrow();
 
     let mut menu_items: Vec<ListItem> = filtered_scenarios
         .iter()
         .enumerate()
         .map(|(i, scenario)| {
-            let selected = i == state.selected_menu_item;
+            let selected = i == state.ui.selected_menu_item;
             let style = if selected {
                 Style::default()
                     .bg(Color::Blue)
@@ -106,15 +106,15 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         })
         .collect();
 
-    let scenario_count = state.scenario_collection.count();
+    let scenario_count = state.game.scenario_collection.count();
 
     // Add separator line
     menu_items.push(ListItem::new("─".repeat(30)).style(Style::default().fg(Color::DarkGray)));
 
     // Add Review Commands option
     let review_index = scenario_count;
-    let review_selected = review_index == state.selected_menu_item;
-    let due_count = state.scheduler.get_due_reviews().len();
+    let review_selected = review_index == state.ui.selected_menu_item;
+    let due_count = state.progress.scheduler.get_due_reviews().len();
     let review_style = if review_selected {
         Style::default()
             .bg(Color::Blue)
@@ -143,7 +143,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Add View Profile option
     let profile_index = scenario_count + 1;
-    let profile_selected = profile_index == state.selected_menu_item;
+    let profile_selected = profile_index == state.ui.selected_menu_item;
     let profile_style = if profile_selected {
         Style::default()
             .bg(Color::Blue)
@@ -158,7 +158,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Add Statistics option
     let stats_index = scenario_count + 2;
-    let stats_selected = stats_index == state.selected_menu_item;
+    let stats_selected = stats_index == state.ui.selected_menu_item;
     let stats_style = if stats_selected {
         Style::default()
             .bg(Color::Blue)
@@ -172,7 +172,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Add Quit option at the end
     let quit_index = scenario_count + 3;
-    let quit_selected = quit_index == state.selected_menu_item;
+    let quit_selected = quit_index == state.ui.selected_menu_item;
     let quit_style = if quit_selected {
         Style::default()
             .bg(Color::Blue)
@@ -187,14 +187,14 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     // Apply scroll offset by skipping items
     let visible_items: Vec<ListItem> = menu_items
         .into_iter()
-        .skip(state.menu_scroll_offset)
+        .skip(state.ui.menu_scroll_offset)
         .take(menu_height)
         .collect();
 
     // Add scroll indicator to title if list is scrollable
     let menu_title = if total_items > menu_height {
-        let first_visible = state.menu_scroll_offset + 1;
-        let last_visible = (state.menu_scroll_offset + menu_height).min(total_items);
+        let first_visible = state.ui.menu_scroll_offset + 1;
+        let last_visible = (state.ui.menu_scroll_offset + menu_height).min(total_items);
         t!(
             "menu.main_menu_with_scroll",
             first = first_visible,
@@ -222,7 +222,8 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         if scrollbar_height > 0 {
             // Calculate scrollbar position
             let scrollbar_pos = if total_items > 1 {
-                (state.menu_scroll_offset * scrollbar_height) / (total_items - menu_height).max(1)
+                (state.ui.menu_scroll_offset * scrollbar_height)
+                    / (total_items - menu_height).max(1)
             } else {
                 0
             };
@@ -272,7 +273,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
 /// Render the profile header showing level, XP, and streak
 fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
-    let profile = state.profile.borrow();
+    let profile = state.progress.profile.borrow();
 
     let next_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level + 1);
     let progress_pct = (profile.xp_progress() * 100.0) as u8;
@@ -295,7 +296,7 @@ fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: 
 
 /// Render the quest panel showing daily quests
 fn render_quest_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
-    let profile = state.profile.borrow();
+    let profile = state.progress.profile.borrow();
     let quests = &profile.daily_quests;
 
     let completed_count = quests.iter().filter(|q| q.is_completed()).count();

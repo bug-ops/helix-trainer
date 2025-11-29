@@ -55,7 +55,7 @@ fn render_statistics_content(frame: &mut Frame, state: &AppState, area: ratatui:
 
     // Get profile data with scoped borrow
     let (scenarios_completed, perfect_scenarios) = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         (profile.scenarios_completed, profile.perfect_scenarios)
     };
 
@@ -154,7 +154,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
 
     // Get quest data
     let completed_today = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.daily_quests.iter().filter(|q| q.completed).count()
     };
 
@@ -168,7 +168,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
 
     // Streak information
     let (current_streak, longest_streak) = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         (profile.current_streak, profile.longest_streak)
     };
 
@@ -201,7 +201,7 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
 
     // Calculate average score (placeholder - should be tracked properly)
     let (scenarios_completed, perfect_scenarios) = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         (profile.scenarios_completed, profile.perfect_scenarios)
     };
 
@@ -220,7 +220,7 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
     ]));
 
     // Session time
-    let session_duration = state.session_start_time.elapsed();
+    let session_duration = state.progress.session_start_time.elapsed();
     let minutes = session_duration.as_secs() / 60;
     let hours = minutes / 60;
     let remaining_minutes = minutes % 60;

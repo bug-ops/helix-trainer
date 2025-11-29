@@ -11,7 +11,7 @@ use ratatui::{
 
 /// Render the review session screen
 pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState) {
-    let Some(session) = &state.review_session else {
+    let Some(session) = &state.game.review_session else {
         return;
     };
 
@@ -89,7 +89,7 @@ fn render_review_content(
 
 /// Render command information panel
 fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command: &str) {
-    let tracker = state.performance_tracker.borrow();
+    let tracker = state.progress.performance_tracker.borrow();
     let perf = tracker.get_performance(command);
 
     let mastery_text = if let Some(p) = perf {

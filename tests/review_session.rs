@@ -8,27 +8,24 @@
 //! 5. Boundary tests - 0 reviews, 1 review, many reviews
 
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
-use helix_trainer::learning::{PerformanceTracker, Scheduler};
+use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::ui::state::{AppState, Message, Screen};
 use helix_trainer::ui::update;
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::time::Duration;
 
 /// Helper: Create test app state with optional due reviews
 fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
-    let profile = Rc::new(RefCell::new(UserProfile::new()));
+    let profile = UserProfile::new();
     let storage = ProfileStorage::new();
-    let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+    let mut tracker = PerformanceTracker::new();
 
     // Record attempts to create due reviews
     // Note: We need to record failures or multiple attempts to make reviews due sooner
     if due_count > 0 {
-        let mut tracker_mut = tracker.borrow_mut();
         for i in 0..due_count {
             let command = format!("cmd_{}", i);
             // Record failed attempts to make reviews due immediately
-            tracker_mut.record_attempt(
+            tracker.record_attempt(
                 &command,
                 Duration::from_secs(5),
                 false,
@@ -37,8 +34,7 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
         }
     }
 
-    let scheduler = Scheduler::new(tracker.clone());
-    AppState::new(vec![], profile, storage, tracker, scheduler)
+    AppState::new(vec![], profile, storage, tracker)
 }
 
 // ============================================================================
@@ -48,17 +44,17 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
 #[test]
 fn test_start_review_session_with_due_reviews() {
     let mut state = create_test_app_state_with_reviews(5);
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 
     // Start review session
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Should transition to Review screen and create session state
-    assert_eq!(state.screen, Screen::Review);
-    assert!(state.review_session.is_some());
+    assert_eq!(state.ui.screen, Screen::Review);
+    assert!(state.game.review_session.is_some());
 
-    let session = state.review_session.as_ref().unwrap();
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.due_commands.len(), 5);
     assert_eq!(session.current_index, 0);
     assert!(session.current_command.is_some());
@@ -68,14 +64,14 @@ fn test_start_review_session_with_due_reviews() {
 #[test]
 fn test_start_review_session_with_zero_due_reviews() {
     let mut state = create_test_app_state_with_reviews(0);
-    assert_eq!(state.screen, Screen::MainMenu);
+    assert_eq!(state.ui.screen, Screen::MainMenu);
 
     // Try to start review session with no due reviews
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Should stay on MainMenu (no reviews available)
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 }
 
 #[test]
@@ -84,8 +80,8 @@ fn test_start_review_session_with_one_review_boundary() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    assert_eq!(state.screen, Screen::Review);
-    let session = state.review_session.as_ref().unwrap();
+    assert_eq!(state.ui.screen, Screen::Review);
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.due_commands.len(), 1);
     assert_eq!(session.current_index, 0);
 }
@@ -96,8 +92,8 @@ fn test_start_review_session_with_many_reviews_stress_test() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    assert_eq!(state.screen, Screen::Review);
-    let session = state.review_session.as_ref().unwrap();
+    assert_eq!(state.ui.screen, Screen::Review);
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.due_commands.len(), 100);
     assert_eq!(session.current_index, 0);
 }
@@ -108,13 +104,13 @@ fn test_abandon_review_session_mid_way() {
 
     // Start session
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert_eq!(state.screen, Screen::Review);
+    assert_eq!(state.ui.screen, Screen::Review);
 
     // Complete 2 reviews
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
-    let session = state.review_session.as_ref().unwrap();
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.completed_reviews.len(), 2);
     assert_eq!(session.current_index, 2);
 
@@ -122,15 +118,15 @@ fn test_abandon_review_session_mid_way() {
     update(&mut state, Message::AbandonReviewSession).unwrap();
 
     // Should return to menu and clear session
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 }
 
 #[test]
 fn test_complete_all_reviews_successfully() {
     let mut state = create_test_app_state_with_reviews(3);
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -143,12 +139,12 @@ fn test_complete_all_reviews_successfully() {
     }
 
     // Should return to menu and award XP
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 
     // Verify XP was awarded
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
     assert!(final_xp > initial_xp, "XP should be awarded");
@@ -163,7 +159,7 @@ fn test_complete_review_idempotency() {
     // Complete first review
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
-    let session = state.review_session.as_ref().unwrap();
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.completed_reviews.len(), 1);
     assert_eq!(session.current_index, 1);
 
@@ -173,7 +169,7 @@ fn test_complete_review_idempotency() {
 
     // Should have advanced to next or completed session
     // (Either at end of session or at next command)
-    let session_state = state.review_session.as_ref();
+    let session_state = state.game.review_session.as_ref();
     if let Some(session) = session_state {
         assert_eq!(session.completed_reviews.len(), 2);
     }
@@ -189,13 +185,13 @@ fn test_complete_review_command_success() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    let session_before = state.review_session.as_ref().unwrap();
+    let session_before = state.game.review_session.as_ref().unwrap();
     let command = session_before.current_command.clone().unwrap();
 
     // Complete review as success
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
-    let session_after = state.review_session.as_ref().unwrap();
+    let session_after = state.game.review_session.as_ref().unwrap();
 
     // Should have recorded result
     assert_eq!(session_after.completed_reviews.len(), 1);
@@ -213,7 +209,7 @@ fn test_complete_review_command_failure() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    let session_before = state.review_session.as_ref().unwrap();
+    let session_before = state.game.review_session.as_ref().unwrap();
     let command = session_before.current_command.clone().unwrap();
 
     // Complete review as failure
@@ -223,7 +219,7 @@ fn test_complete_review_command_failure() {
     )
     .unwrap();
 
-    let session_after = state.review_session.as_ref().unwrap();
+    let session_after = state.game.review_session.as_ref().unwrap();
 
     // Should have recorded result
     assert_eq!(session_after.completed_reviews.len(), 1);
@@ -242,12 +238,12 @@ fn test_next_review_command_advances() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Manually trigger NextReviewCommand (normally called by CompleteReviewCommand)
-    let session = state.review_session.as_ref().unwrap();
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.current_index, 0);
 
     update(&mut state, Message::NextReviewCommand).unwrap();
 
-    let session = state.review_session.as_ref().unwrap();
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.current_index, 1);
 }
 
@@ -261,8 +257,8 @@ fn test_next_review_command_ends_session() {
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     // Session should end and return to menu
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 }
 
 #[test]
@@ -272,12 +268,12 @@ fn test_performance_tracker_updated() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     let command = {
-        let session = state.review_session.as_ref().unwrap();
+        let session = state.game.review_session.as_ref().unwrap();
         session.current_command.clone().unwrap()
     };
 
     let attempts_before = {
-        let tracker = state.performance_tracker.borrow();
+        let tracker = state.progress.performance_tracker.borrow();
         tracker
             .get_performance(&command)
             .map(|p| p.attempts)
@@ -289,7 +285,7 @@ fn test_performance_tracker_updated() {
 
     // Performance tracker should have recorded the attempt
     let attempts_after = {
-        let tracker = state.performance_tracker.borrow();
+        let tracker = state.progress.performance_tracker.borrow();
         tracker
             .get_performance(&command)
             .map(|p| p.attempts)
@@ -312,15 +308,15 @@ fn test_state_transition_review_to_next_to_review() {
 
     // MainMenu → Review
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert_eq!(state.screen, Screen::Review);
+    assert_eq!(state.ui.screen, Screen::Review);
 
     // Review → Next → Still Review
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
-    assert_eq!(state.screen, Screen::Review);
+    assert_eq!(state.ui.screen, Screen::Review);
 
     // Review → Complete → MainMenu
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
-    assert_eq!(state.screen, Screen::MainMenu);
+    assert_eq!(state.ui.screen, Screen::MainMenu);
 }
 
 #[test]
@@ -329,11 +325,11 @@ fn test_state_transition_review_to_abandon_to_menu() {
 
     // MainMenu → Review
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert_eq!(state.screen, Screen::Review);
+    assert_eq!(state.ui.screen, Screen::Review);
 
     // Review → Abandon → MainMenu
     update(&mut state, Message::AbandonReviewSession).unwrap();
-    assert_eq!(state.screen, Screen::MainMenu);
+    assert_eq!(state.ui.screen, Screen::MainMenu);
 }
 
 #[test]
@@ -342,7 +338,7 @@ fn test_state_transition_menu_to_review_no_due() {
 
     // MainMenu → (Try Review) → Stay on MainMenu
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert_eq!(state.screen, Screen::MainMenu);
+    assert_eq!(state.ui.screen, Screen::MainMenu);
 }
 
 // ============================================================================
@@ -354,7 +350,7 @@ fn test_xp_calculation_base_only() {
     let mut state = create_test_app_state_with_reviews(1);
 
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -362,7 +358,7 @@ fn test_xp_calculation_base_only() {
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -379,7 +375,7 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
     let mut state = create_test_app_state_with_reviews(5);
 
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -391,7 +387,7 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
     }
 
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -408,7 +404,7 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
     let mut state = create_test_app_state_with_reviews(5);
 
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -424,7 +420,7 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
     }
 
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -441,7 +437,7 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
     let mut state = create_test_app_state_with_reviews(4);
 
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -462,7 +458,7 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
     .unwrap();
 
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -479,7 +475,7 @@ fn test_xp_calculation_always_positive() {
     let mut state = create_test_app_state_with_reviews(1);
 
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -491,7 +487,7 @@ fn test_xp_calculation_always_positive() {
     .unwrap();
 
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -510,17 +506,17 @@ fn test_complete_flow_all_successful() {
     let mut state = create_test_app_state_with_reviews(5);
 
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
     // Start review session
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert_eq!(state.screen, Screen::Review);
+    assert_eq!(state.ui.screen, Screen::Review);
 
     // Complete all 5 reviews successfully
     for i in 0..5 {
-        let session = state.review_session.as_ref().unwrap();
+        let session = state.game.review_session.as_ref().unwrap();
         assert_eq!(session.current_index, i);
         assert!(session.current_command.is_some());
 
@@ -528,12 +524,12 @@ fn test_complete_flow_all_successful() {
     }
 
     // Session should end
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 
     // XP should be awarded
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
     assert_eq!(final_xp - initial_xp, 70); // 5*10 + 20 bonus
@@ -544,7 +540,7 @@ fn test_complete_flow_all_failed() {
     let mut state = create_test_app_state_with_reviews(3);
 
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -560,11 +556,11 @@ fn test_complete_flow_all_failed() {
     }
 
     // Session should still end and award base XP
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
     assert_eq!(final_xp - initial_xp, 30); // 3*10 + 0 bonus
@@ -575,7 +571,7 @@ fn test_complete_flow_abandoned_after_partial() {
     let mut state = create_test_app_state_with_reviews(5);
 
     let initial_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -589,11 +585,11 @@ fn test_complete_flow_abandoned_after_partial() {
     update(&mut state, Message::AbandonReviewSession).unwrap();
 
     // Should return to menu without awarding XP (session incomplete)
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 
     let final_xp = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.total_xp
     };
 
@@ -609,8 +605,8 @@ fn test_complete_flow_zero_reviews() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Should stay on menu
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 }
 
 // ============================================================================
@@ -623,7 +619,7 @@ fn test_boundary_single_review() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    let session = state.review_session.as_ref().unwrap();
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.due_commands.len(), 1);
     assert_eq!(session.current_index, 0);
 
@@ -631,8 +627,8 @@ fn test_boundary_single_review() {
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     // Should immediately end session
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 }
 
 #[test]
@@ -641,7 +637,7 @@ fn test_boundary_large_review_count() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    let session = state.review_session.as_ref().unwrap();
+    let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.due_commands.len(), 100);
 
     // Complete all 100 reviews
@@ -650,8 +646,8 @@ fn test_boundary_large_review_count() {
     }
 
     // Should handle large count gracefully
-    assert_eq!(state.screen, Screen::MainMenu);
-    assert!(state.review_session.is_none());
+    assert_eq!(state.ui.screen, Screen::MainMenu);
+    assert!(state.game.review_session.is_none());
 }
 
 // ============================================================================
@@ -683,7 +679,7 @@ fn test_review_results_accumulate() {
     // Complete reviews with mixed results
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
     {
-        let session = state.review_session.as_ref().unwrap();
+        let session = state.game.review_session.as_ref().unwrap();
         assert_eq!(session.completed_reviews.len(), 1);
         assert!(session.completed_reviews[0].success);
     }
@@ -694,7 +690,7 @@ fn test_review_results_accumulate() {
     )
     .unwrap();
     {
-        let session = state.review_session.as_ref().unwrap();
+        let session = state.game.review_session.as_ref().unwrap();
         assert_eq!(session.completed_reviews.len(), 2);
         assert!(!session.completed_reviews[1].success);
     }
@@ -702,7 +698,7 @@ fn test_review_results_accumulate() {
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     // Session complete after 3 reviews
-    assert!(state.review_session.is_none());
+    assert!(state.game.review_session.is_none());
 }
 
 // ============================================================================
@@ -716,7 +712,7 @@ fn test_session_progress_increments_correctly() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     for i in 0..5 {
-        let session = state.review_session.as_ref().unwrap();
+        let session = state.game.review_session.as_ref().unwrap();
         assert_eq!(session.current_index, i);
         assert_eq!(session.completed_reviews.len(), i);
 
@@ -724,7 +720,7 @@ fn test_session_progress_increments_correctly() {
     }
 
     // Session complete
-    assert!(state.review_session.is_none());
+    assert!(state.game.review_session.is_none());
 }
 
 #[test]
@@ -738,5 +734,5 @@ fn test_session_progress_never_exceeds_due_count() {
     }
 
     // Session should end exactly at due_count
-    assert!(state.review_session.is_none());
+    assert!(state.game.review_session.is_none());
 }

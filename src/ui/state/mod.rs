@@ -390,6 +390,7 @@ mod tests {
     use super::*;
     use crate::config::{ScoringConfig, Setup, Solution, TargetState};
     use crate::gamification::{ProfileStorage, UserProfile};
+    use crate::helix::commands::{CMD_DELETE_LINE, CMD_MOVE_LEFT, CMD_MOVE_RIGHT};
     use crate::learning::PerformanceTracker;
 
     fn create_test_scenario() -> Scenario {
@@ -1107,17 +1108,17 @@ mod tests {
         if let TypedScreen::Task(task_data) = old_screen {
             let mut current = task_data.session;
             // Extra move
-            current = match current.record_action("l".to_string()).unwrap() {
+            current = match current.record_action(CMD_MOVE_RIGHT.to_string()).unwrap() {
                 SessionAfterAction::StillActive(s) => s,
                 SessionAfterAction::Completed(_) => panic!("Should not complete on 'l'"),
             };
             // Extra move
-            current = match current.record_action("h".to_string()).unwrap() {
+            current = match current.record_action(CMD_MOVE_LEFT.to_string()).unwrap() {
                 SessionAfterAction::StillActive(s) => s,
                 SessionAfterAction::Completed(_) => panic!("Should not complete on 'h'"),
             };
             // Correct solution - should complete
-            match current.record_action("dd".to_string()).unwrap() {
+            match current.record_action(CMD_DELETE_LINE.to_string()).unwrap() {
                 SessionAfterAction::Completed(completed) => {
                     let feedback = completed.feedback().unwrap();
                     state.ui.last_feedback = Some(feedback);
@@ -1161,7 +1162,11 @@ mod tests {
         let old_screen = std::mem::replace(&mut state.screen, placeholder);
 
         if let TypedScreen::Task(task_data) = old_screen {
-            match task_data.session.record_action("dd".to_string()).unwrap() {
+            match task_data
+                .session
+                .record_action(CMD_DELETE_LINE.to_string())
+                .unwrap()
+            {
                 SessionAfterAction::Completed(completed) => {
                     let feedback = completed.feedback().unwrap();
                     state.ui.last_feedback = Some(feedback);
@@ -1205,7 +1210,11 @@ mod tests {
         let old_screen = std::mem::replace(&mut state.screen, placeholder);
 
         if let TypedScreen::Task(task_data) = old_screen {
-            match task_data.session.record_action("dd".to_string()).unwrap() {
+            match task_data
+                .session
+                .record_action(CMD_DELETE_LINE.to_string())
+                .unwrap()
+            {
                 SessionAfterAction::Completed(completed) => {
                     let feedback = completed.feedback().unwrap();
                     state.ui.last_feedback = Some(feedback);

@@ -455,10 +455,14 @@ mod tests {
 
     #[test]
     fn test_task_key_h_moves_left() {
+        use helix_trainer::helix::commands::CMD_MOVE_LEFT;
         let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
-        assert_eq!(msg, Some(Message::ExecuteCommand(Cow::Borrowed("h"))));
+        assert_eq!(
+            msg,
+            Some(Message::ExecuteCommand(Cow::Borrowed(CMD_MOVE_LEFT)))
+        );
     }
 
     #[test]

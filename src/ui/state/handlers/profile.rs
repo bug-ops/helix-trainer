@@ -9,7 +9,7 @@ use crate::ui::state::{AppState, Screen};
 ///
 /// Navigates to the profile screen
 pub fn handle_show_profile(state: &mut AppState) -> Result<(), UserError> {
-    state.screen = Screen::Profile;
+    state.ui.screen = Screen::Profile;
     Ok(())
 }
 
@@ -17,7 +17,7 @@ pub fn handle_show_profile(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Navigates to the statistics screen
 pub fn handle_show_statistics(state: &mut AppState) -> Result<(), UserError> {
-    state.screen = Screen::Statistics;
+    state.ui.screen = Screen::Statistics;
     Ok(())
 }
 
@@ -25,7 +25,7 @@ pub fn handle_show_statistics(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Awards XP to the user profile and saves if level up occurs
 pub fn handle_award_xp(state: &mut AppState, amount: u64) -> Result<(), UserError> {
-    let mut profile = state.profile.borrow_mut();
+    let mut profile = state.progress.profile.borrow_mut();
     let leveled_up = profile.add_xp(amount);
 
     if leveled_up {

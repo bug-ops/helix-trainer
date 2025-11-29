@@ -10,8 +10,8 @@ use crate::ui::state::AppState;
 ///
 /// Changes the sort order of scenarios
 pub fn handle_set_sort_mode(state: &mut AppState, mode: SortMode) -> Result<(), UserError> {
-    let profile = state.profile.borrow();
-    state.scenario_collection.sort(mode, Some(&profile));
+    let profile = state.progress.profile.borrow();
+    state.game.scenario_collection.sort(mode, Some(&profile));
     Ok(())
 }
 
@@ -52,6 +52,6 @@ pub fn handle_toggle_completed_filter(_state: &mut AppState) -> Result<(), UserE
 ///
 /// Resets all filters to default
 pub fn handle_reset_filters(state: &mut AppState) -> Result<(), UserError> {
-    state.scenario_collection.reset_filter();
+    state.game.scenario_collection.reset_filter();
     Ok(())
 }

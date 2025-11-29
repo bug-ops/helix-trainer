@@ -18,19 +18,19 @@
 //! - State transitions are testable and reproducible
 //! - UI rendering is pure (no side effects)
 
-use crate::config::{Difficulty, Scenario, ScenarioCategory, ScenarioCollection, SortMode};
-use crate::game::GameSession;
+use crate::config::{Difficulty, Scenario, ScenarioCategory, SortMode};
 use crate::gamification::{ProfileStorage, UserProfile};
-use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
+use crate::learning::PerformanceTracker;
 use crate::security::UserError;
-use std::cell::RefCell;
-use std::collections::HashSet;
 use std::fmt;
-use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 // Message handlers in separate modules
 mod handlers;
+
+// Sub-structures for organizing AppState
+mod substates;
+pub use substates::{ConfigState, GameState, ProgressState, UIState};
 
 /// Breakdown of XP earned from a scenario
 #[derive(Debug, Clone)]
@@ -181,147 +181,32 @@ pub enum Message {
 /// Contains all the data needed to render the UI and handle user interactions.
 /// This is the single source of truth for the application.
 ///
-/// Note: This doesn't derive Clone because GameSession doesn't implement Clone.
-/// Instead, we implement Debug manually.
-///
-/// # Memory Layout
-///
-/// Fields are ordered for optimal memory layout and cache efficiency:
-/// 1. Large allocations first (Vec, `Option<GameSession>`)
-/// 2. Frequently accessed fields next (screen, session)
-/// 3. Medium-sized types (`Option<String>`, String)
-/// 4. Small types last (usize, bool, enum)
+/// After Phase 1.5 refactoring, the state is organized into 4 focused sub-structures:
+/// - `ui`: UI rendering state (screen, hints, display options)
+/// - `game`: Active game state (session, scenarios, review)
+/// - `progress`: User progress (profile, learning, achievements)
+/// - `config`: Application configuration (filters, settings)
 pub struct AppState {
-    /// All available scenarios with filtering and sorting
-    /// Size: ~48 bytes (struct with Vec fields)
-    pub scenario_collection: ScenarioCollection,
+    /// UI rendering and display state
+    pub ui: UIState,
 
-    /// Active game session (Some if on Task screen)
-    /// Size: ~200+ bytes - large type, placed early
-    pub session: Option<GameSession>,
+    /// Active game state (session, scenarios)
+    pub game: GameState,
 
-    /// The current hint being displayed (if any)
-    /// Size: 24-32 bytes (`Option<String>`)
-    pub current_hint: Option<String>,
+    /// User progress (profile, learning, achievements)
+    pub progress: ProgressState,
 
-    /// Last command executed (for display purposes)
-    /// Size: 24-32 bytes (`Option<String>`)
-    pub last_command: Option<String>,
-
-    /// History of last 5 key presses (most recent first)
-    /// Size: 24 bytes (Vec)
-    pub key_history: Vec<String>,
-
-    /// Command buffer for accumulating multi-key commands (e.g., "d" waiting for "d")
-    /// Size: 24 bytes (String)
-    pub command_buffer: String,
-
-    /// Time when scenario was completed (for showing success screen before results)
-    /// Size: 16 bytes (`Option<Instant>`)
-    pub completion_time: Option<std::time::Instant>,
-
-    /// Index of the currently selected menu item
-    /// Size: 8 bytes (usize)
-    pub selected_menu_item: usize,
-
-    /// Scroll offset for menu list (top visible item index)
-    /// Size: 8 bytes (usize)
-    pub menu_scroll_offset: usize,
-
-    /// The screen currently being displayed
-    /// Size: 1 byte (enum)
-    pub screen: Screen,
-
-    /// Whether the application is running
-    /// Size: 1 byte (bool)
-    pub running: bool,
-
-    /// Whether to show hint on task screen
-    /// Size: 1 byte (bool)
-    pub show_hint_panel: bool,
-
-    /// Whether to show key history popup
-    /// Size: 1 byte (bool)
-    pub show_key_history: bool,
-
-    // NEW: Gamification fields
-    /// User profile with XP, level, achievements, quests
-    /// Size: 8 bytes (Rc pointer)
-    pub profile: Rc<RefCell<UserProfile>>,
-
-    /// Profile storage for saving/loading
-    /// Size: ~24 bytes (PathBuf inside)
-    pub profile_storage: ProfileStorage,
-
-    // NEW: Learning fields
-    /// Performance tracker for spaced repetition
-    /// Size: 8 bytes (Rc pointer)
-    pub performance_tracker: Rc<RefCell<PerformanceTracker>>,
-
-    /// Scheduler for review sessions
-    /// Size: 8 bytes (Rc pointer)
-    pub scheduler: Scheduler,
-
-    // NEW: UI state for progression
-    /// Number of scenarios completed today (for first-today bonus)
-    /// Size: 8 bytes (usize)
-    pub scenarios_completed_today: usize,
-
-    /// Last save time for debounced saves
-    /// Size: 16 bytes (`Option<Instant>`)
-    pub last_save_time: Option<Instant>,
-
-    /// Session start time for tracking playtime
-    /// Size: 16 bytes (`Instant`)
-    pub session_start_time: Instant,
-
-    /// Unique commands used today for exploration quests
-    /// Size: 24+ bytes (HashSet)
-    pub commands_used_today: HashSet<String>,
-
-    /// XP breakdown from last scenario (for results display)
-    /// Size: ~40+ bytes (`Option<XPBreakdown>`)
-    pub xp_breakdown: Option<XPBreakdown>,
-
-    /// Quest progress changes during last scenario
-    /// Size: 24 bytes (Vec)
-    pub quest_progress_changes: Vec<QuestProgressChange>,
-
-    /// Previously completed quest IDs (to detect new completions)
-    /// Size: 24+ bytes (HashSet)
-    pub previously_completed_quests: HashSet<String>,
-
-    /// Scenario mastery info for last completion (for results display)
-    /// Size: 16 bytes (Option<(enum, f64)>)
-    pub scenario_mastery: Option<(ScenarioMastery, f64)>,
-
-    /// Active review session (Some if on Review screen)
-    /// Size: ~80+ bytes (Option<ReviewSessionState>)
-    pub review_session: Option<ReviewSessionState>,
+    /// Application configuration (filters, settings)
+    pub config: ConfigState,
 }
 
 impl fmt::Debug for AppState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AppState")
-            .field("screen", &self.screen)
-            .field("session", &"<GameSession>")
-            .field(
-                "scenario_collection",
-                &self.scenario_collection.total_count(),
-            )
-            .field("selected_menu_item", &self.selected_menu_item)
-            .field("running", &self.running)
-            .field("current_hint", &self.current_hint.is_some())
-            .field("show_hint_panel", &self.show_hint_panel)
-            .field("show_key_history", &self.show_key_history)
-            .field("last_command", &self.last_command)
-            .field("completion_time", &self.completion_time.is_some())
-            .field("key_history", &self.key_history.len())
-            .field("command_buffer", &self.command_buffer)
-            .field("profile", &"<Rc<RefCell<UserProfile>>>")
-            .field("performance_tracker", &"<Rc<RefCell<PerformanceTracker>>>")
-            .field("scenarios_completed_today", &self.scenarios_completed_today)
-            .field("last_save_time", &self.last_save_time.is_some())
+            .field("ui", &self.ui)
+            .field("game", &self.game)
+            .field("progress", &self.progress)
+            .field("config", &self.config)
             .finish()
     }
 }
@@ -335,7 +220,6 @@ impl AppState {
     /// * `profile` - User profile with XP, level, achievements
     /// * `profile_storage` - Storage for saving/loading profile
     /// * `performance_tracker` - Tracker for command performance and spaced repetition
-    /// * `scheduler` - Scheduler for review sessions
     ///
     /// # Examples
     ///
@@ -344,55 +228,31 @@ impl AppState {
     /// use helix_trainer::config::Scenario;
     ///
     /// let scenarios = vec![/* ... */];
-    /// let state = AppState::new(scenarios, profile, storage, tracker, scheduler);
-    /// assert_eq!(state.screen, Screen::MainMenu);
+    /// let state = AppState::new(scenarios, profile, storage, tracker);
+    /// assert_eq!(state.ui.screen, Screen::MainMenu);
     /// ```
     pub fn new(
         scenarios: Vec<Scenario>,
-        profile: Rc<RefCell<UserProfile>>,
+        profile: UserProfile,
         profile_storage: ProfileStorage,
-        performance_tracker: Rc<RefCell<PerformanceTracker>>,
-        scheduler: Scheduler,
+        performance_tracker: PerformanceTracker,
     ) -> Self {
-        let scenario_collection = ScenarioCollection::new(scenarios);
         Self {
-            scenario_collection,
-            session: None,
-            current_hint: None,
-            last_command: None,
-            key_history: Vec::new(),
-            command_buffer: String::new(),
-            completion_time: None,
-            selected_menu_item: 0,
-            menu_scroll_offset: 0,
-            screen: Screen::MainMenu,
-            running: true,
-            show_hint_panel: false,
-            show_key_history: false,
-            profile,
-            profile_storage,
-            performance_tracker,
-            scheduler,
-            scenarios_completed_today: 0,
-            last_save_time: None,
-            session_start_time: Instant::now(),
-            commands_used_today: HashSet::new(),
-            xp_breakdown: None,
-            quest_progress_changes: Vec::new(),
-            previously_completed_quests: HashSet::new(),
-            scenario_mastery: None,
-            review_session: None,
+            ui: UIState::new(),
+            game: GameState::new(scenarios),
+            progress: ProgressState::new(profile, performance_tracker, profile_storage),
+            config: ConfigState::default(),
         }
     }
 
     /// Get reference to the current session
-    pub fn session(&self) -> Option<&GameSession> {
-        self.session.as_ref()
+    pub fn session(&self) -> Option<&crate::game::GameSession> {
+        self.game.session.as_ref()
     }
 
     /// Get mutable reference to the current session
-    pub fn session_mut(&mut self) -> Option<&mut GameSession> {
-        self.session.as_mut()
+    pub fn session_mut(&mut self) -> Option<&mut crate::game::GameSession> {
+        self.game.session.as_mut()
     }
 
     /// Get the menu items for the main menu
@@ -403,28 +263,28 @@ impl AppState {
 
     /// Get the number of available scenarios (filtered count)
     pub fn scenario_count(&self) -> usize {
-        self.scenario_collection.count()
+        self.game.scenario_collection.count()
     }
 
     /// Get a scenario by filtered index
     pub fn get_scenario(&self, index: usize) -> Option<&Scenario> {
-        self.scenario_collection.get_filtered_by_index(index)
+        self.game.scenario_collection.get_filtered_by_index(index)
     }
 
     /// Add a key to the history (keeps last 5)
     pub fn add_key_to_history(&mut self, key: String) {
         // Insert at the beginning (most recent first)
-        self.key_history.insert(0, key);
+        self.ui.key_history.insert(0, key);
 
         // Keep only last 5 keys
-        if self.key_history.len() > 5 {
-            self.key_history.truncate(5);
+        if self.ui.key_history.len() > 5 {
+            self.ui.key_history.truncate(5);
         }
     }
 
     /// Clear key history
     pub fn clear_key_history(&mut self) {
-        self.key_history.clear();
+        self.ui.key_history.clear();
     }
 
     /// Save profile with debouncing (only if enough time has passed)
@@ -435,18 +295,15 @@ impl AppState {
     // NOTE: Debounce saves to reduce I/O overhead (5-second delay)
     // OPTIMIZE: Performance audit suggested this optimization (50-80% I/O reduction)
     pub fn save_profile_debounced(&mut self) -> Result<(), crate::gamification::GamificationError> {
-        let now = Instant::now();
-
-        // Debounce: only save if 5+ seconds since last save
-        if let Some(last_save) = self.last_save_time
-            && now.duration_since(last_save) < std::time::Duration::from_secs(5)
-        {
+        if !self.progress.should_save() {
             return Ok(());
         }
 
-        let profile = self.profile.borrow();
-        self.profile_storage.save(&profile)?;
-        self.last_save_time = Some(now);
+        {
+            let profile = self.progress.profile.borrow();
+            self.progress.storage.save(&profile)?;
+        }
+        self.progress.mark_saved();
 
         Ok(())
     }
@@ -457,9 +314,11 @@ impl AppState {
     ///
     /// Returns error if save operation fails
     pub fn save_profile_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
-        let profile = self.profile.borrow();
-        self.profile_storage.save(&profile)?;
-        self.last_save_time = Some(Instant::now());
+        {
+            let profile = self.progress.profile.borrow();
+            self.progress.storage.save(&profile)?;
+        }
+        self.progress.mark_saved();
         Ok(())
     }
 }
@@ -486,7 +345,7 @@ impl AppState {
 ///
 /// let mut state = AppState::new(vec![]);
 /// update(&mut state, Message::QuitApp)?;
-/// assert!(!state.running);
+/// assert!(!state.ui.running);
 /// # Ok::<(), helix_trainer::security::UserError>(())
 /// ```
 pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
@@ -550,9 +409,7 @@ mod tests {
     use super::*;
     use crate::config::{ScoringConfig, Setup, Solution, TargetState};
     use crate::gamification::{ProfileStorage, UserProfile};
-    use crate::learning::{PerformanceTracker, Scheduler};
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use crate::learning::PerformanceTracker;
 
     fn create_test_scenario() -> Scenario {
         Scenario {
@@ -584,55 +441,54 @@ mod tests {
     }
 
     fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
-        let profile = Rc::new(RefCell::new(UserProfile::new()));
+        let profile = UserProfile::new();
         let storage = ProfileStorage::new();
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let scheduler = Scheduler::new(tracker.clone());
-        AppState::new(scenarios, profile, storage, tracker, scheduler)
+        let tracker = PerformanceTracker::new();
+        AppState::new(scenarios, profile, storage, tracker)
     }
 
     #[test]
     fn test_new_state() {
         let state = create_test_app_state(vec![]);
-        assert_eq!(state.screen, Screen::MainMenu);
-        assert_eq!(state.selected_menu_item, 0);
-        assert!(state.running);
-        assert!(state.session.is_none());
-        assert!(!state.show_hint_panel);
+        assert_eq!(state.ui.screen, Screen::MainMenu);
+        assert_eq!(state.ui.selected_menu_item, 0);
+        assert!(state.ui.running);
+        assert!(state.game.session.is_none());
+        assert!(!state.ui.show_hint_panel);
     }
 
     #[test]
     fn test_quit_app_message() {
         let mut state = create_test_app_state(vec![]);
-        assert!(state.running);
+        assert!(state.ui.running);
 
         update(&mut state, Message::QuitApp).unwrap();
-        assert!(!state.running);
+        assert!(!state.ui.running);
     }
 
     #[test]
     fn test_navigate_to_screen() {
         let mut state = create_test_app_state(vec![]);
-        assert_eq!(state.screen, Screen::MainMenu);
+        assert_eq!(state.ui.screen, Screen::MainMenu);
 
         update(&mut state, Message::NavigateTo(Screen::Task)).unwrap();
-        assert_eq!(state.screen, Screen::Task);
+        assert_eq!(state.ui.screen, Screen::Task);
 
         update(&mut state, Message::NavigateTo(Screen::Results)).unwrap();
-        assert_eq!(state.screen, Screen::Results);
+        assert_eq!(state.ui.screen, Screen::Results);
     }
 
     #[test]
     fn test_menu_navigation_up() {
         let mut state = create_test_app_state(vec![]);
-        state.selected_menu_item = 1;
+        state.ui.selected_menu_item = 1;
 
         update(&mut state, Message::MenuUp).unwrap();
-        assert_eq!(state.selected_menu_item, 0);
+        assert_eq!(state.ui.selected_menu_item, 0);
 
         // Can't go below 0
         update(&mut state, Message::MenuUp).unwrap();
-        assert_eq!(state.selected_menu_item, 0);
+        assert_eq!(state.ui.selected_menu_item, 0);
     }
 
     #[test]
@@ -640,43 +496,43 @@ mod tests {
         let scenario1 = create_test_scenario();
         let scenario2 = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario1, scenario2]);
-        assert_eq!(state.selected_menu_item, 0);
+        assert_eq!(state.ui.selected_menu_item, 0);
 
         // Move down once
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 1);
+        assert_eq!(state.ui.selected_menu_item, 1);
 
         // Move down to Review
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 2); // Review
+        assert_eq!(state.ui.selected_menu_item, 2); // Review
 
         // Move down to Profile
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 3); // Profile
+        assert_eq!(state.ui.selected_menu_item, 3); // Profile
 
         // Move down to Statistics
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 4); // Statistics
+        assert_eq!(state.ui.selected_menu_item, 4); // Statistics
 
         // Move down to Quit
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 5); // Quit
+        assert_eq!(state.ui.selected_menu_item, 5); // Quit
 
         // Can't go past max items
         update(&mut state, Message::MenuDown).unwrap();
-        assert_eq!(state.selected_menu_item, 5);
+        assert_eq!(state.ui.selected_menu_item, 5);
     }
 
     #[test]
     fn test_menu_select_start_training() {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
-        state.selected_menu_item = 0;
+        state.ui.selected_menu_item = 0;
 
         update(&mut state, Message::MenuSelect).unwrap();
 
-        assert_eq!(state.screen, Screen::Task);
-        assert!(state.session.is_some());
+        assert_eq!(state.ui.screen, Screen::Task);
+        assert!(state.game.session.is_some());
     }
 
     #[test]
@@ -685,31 +541,31 @@ mod tests {
         let scenario2 = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario1, scenario2]);
         // Select Quit option (index = scenario_count + 3)
-        state.selected_menu_item = 5; // 2 scenarios + Review + Profile + Statistics + Quit = index 5
+        state.ui.selected_menu_item = 5; // 2 scenarios + Review + Profile + Statistics + Quit = index 5
 
         update(&mut state, Message::MenuSelect).unwrap();
 
-        assert!(!state.running);
+        assert!(!state.ui.running);
     }
 
     #[test]
     fn test_menu_select_profile() {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
-        state.selected_menu_item = 2; // Profile is at index 2 (after 1 scenario + Review)
+        state.ui.selected_menu_item = 2; // Profile is at index 2 (after 1 scenario + Review)
 
         update(&mut state, Message::MenuSelect).unwrap();
-        assert_eq!(state.screen, Screen::Profile);
+        assert_eq!(state.ui.screen, Screen::Profile);
     }
 
     #[test]
     fn test_menu_select_statistics() {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
-        state.selected_menu_item = 3; // Statistics is at index 3 (after 1 scenario + Review + Profile)
+        state.ui.selected_menu_item = 3; // Statistics is at index 3 (after 1 scenario + Review + Profile)
 
         update(&mut state, Message::MenuSelect).unwrap();
-        assert_eq!(state.screen, Screen::Statistics);
+        assert_eq!(state.ui.screen, Screen::Statistics);
     }
 
     #[test]
@@ -720,25 +576,25 @@ mod tests {
         // Review should be at index 0 (no scenarios)
         update(&mut state, Message::MenuSelect).unwrap();
         // Should stay on MainMenu if no reviews are due
-        assert_eq!(state.screen, Screen::MainMenu);
+        assert_eq!(state.ui.screen, Screen::MainMenu);
 
         // Profile at index 1
-        state.selected_menu_item = 1;
+        state.ui.selected_menu_item = 1;
         update(&mut state, Message::MenuSelect).unwrap();
-        assert_eq!(state.screen, Screen::Profile);
+        assert_eq!(state.ui.screen, Screen::Profile);
 
         // Statistics at index 2
-        state.selected_menu_item = 2;
-        state.screen = Screen::MainMenu;
+        state.ui.selected_menu_item = 2;
+        state.ui.screen = Screen::MainMenu;
         update(&mut state, Message::MenuSelect).unwrap();
-        assert_eq!(state.screen, Screen::Statistics);
+        assert_eq!(state.ui.screen, Screen::Statistics);
 
         // Quit at index 3
-        state.selected_menu_item = 3;
-        state.screen = Screen::MainMenu;
-        state.running = true;
+        state.ui.selected_menu_item = 3;
+        state.ui.screen = Screen::MainMenu;
+        state.ui.running = true;
         update(&mut state, Message::MenuSelect).unwrap();
-        assert!(!state.running);
+        assert!(!state.ui.running);
     }
 
     #[test]
@@ -748,8 +604,8 @@ mod tests {
 
         update(&mut state, Message::StartScenario(0)).unwrap();
 
-        assert!(state.session.is_some());
-        assert_eq!(state.screen, Screen::Task);
+        assert!(state.game.session.is_some());
+        assert_eq!(state.ui.screen, Screen::Task);
     }
 
     #[test]
@@ -760,7 +616,7 @@ mod tests {
         update(&mut state, Message::StartScenario(999)).unwrap();
 
         // Should still have None session
-        assert!(state.session.is_none());
+        assert!(state.game.session.is_none());
     }
 
     #[test]
@@ -769,10 +625,10 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
-        assert_eq!(state.screen, Screen::Task);
+        assert_eq!(state.ui.screen, Screen::Task);
 
         update(&mut state, Message::CompleteScenario).unwrap();
-        assert_eq!(state.screen, Screen::Results);
+        assert_eq!(state.ui.screen, Screen::Results);
     }
 
     #[test]
@@ -781,12 +637,12 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
-        let session = state.session.as_ref().unwrap();
+        let session = state.game.session.as_ref().unwrap();
         assert!(session.is_active());
 
         update(&mut state, Message::AbandonScenario).unwrap();
-        assert_eq!(state.screen, Screen::Results);
-        let session = state.session.as_ref().unwrap();
+        assert_eq!(state.ui.screen, Screen::Results);
+        let session = state.game.session.as_ref().unwrap();
         assert!(!session.is_active());
     }
 
@@ -796,11 +652,11 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
-        assert!(!state.show_hint_panel);
+        assert!(!state.ui.show_hint_panel);
 
         update(&mut state, Message::ShowHint).unwrap();
-        assert!(state.show_hint_panel);
-        assert!(state.current_hint.is_some());
+        assert!(state.ui.show_hint_panel);
+        assert!(state.ui.current_hint.is_some());
     }
 
     #[test]
@@ -809,14 +665,14 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
-        if let Some(session) = &mut state.session {
+        if let Some(session) = &mut state.game.session {
             session.record_action("l".to_string()).unwrap();
         }
-        assert_eq!(state.session.as_ref().unwrap().action_count(), 1);
+        assert_eq!(state.game.session.as_ref().unwrap().action_count(), 1);
 
         update(&mut state, Message::RetryScenario).unwrap();
-        assert_eq!(state.screen, Screen::Task);
-        assert_eq!(state.session.as_ref().unwrap().action_count(), 0);
+        assert_eq!(state.ui.screen, Screen::Task);
+        assert_eq!(state.game.session.as_ref().unwrap().action_count(), 0);
     }
 
     #[test]
@@ -825,11 +681,11 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
-        assert!(state.session.is_some());
+        assert!(state.game.session.is_some());
 
         update(&mut state, Message::NextScenario).unwrap();
-        assert_eq!(state.screen, Screen::MainMenu);
-        assert!(state.session.is_none());
+        assert_eq!(state.ui.screen, Screen::MainMenu);
+        assert!(state.game.session.is_none());
     }
 
     #[test]
@@ -838,11 +694,11 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
-        assert!(state.session.is_some());
+        assert!(state.game.session.is_some());
 
         update(&mut state, Message::BackToMenu).unwrap();
-        assert_eq!(state.screen, Screen::MainMenu);
-        assert!(state.session.is_none());
+        assert_eq!(state.ui.screen, Screen::MainMenu);
+        assert!(state.game.session.is_none());
     }
 
     #[test]
@@ -882,7 +738,7 @@ mod tests {
 
         // Add a CommandPractice quest to profile
         {
-            let mut profile = state.profile.borrow_mut();
+            let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_dd".to_string(),
                 QuestType::CommandPractice {
@@ -918,7 +774,7 @@ mod tests {
 
         // Quest should not be completed yet (2/3)
         {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             assert!(!profile.daily_quests[0].is_completed());
         }
 
@@ -935,7 +791,7 @@ mod tests {
 
         // Quest should now be completed and bonus XP awarded
         {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             assert!(profile.daily_quests[0].is_completed());
             // XP should be at least the quest reward
             assert!(profile.total_xp >= 25); // Easy CommandPractice = 25 XP
@@ -951,7 +807,7 @@ mod tests {
 
         // Add a ScenarioCompletion quest to profile
         {
-            let mut profile = state.profile.borrow_mut();
+            let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_scenario".to_string(),
                 QuestType::ScenarioCompletion {
@@ -979,7 +835,7 @@ mod tests {
 
         // Quest should not be completed yet (1/2)
         {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             assert!(!profile.daily_quests[0].is_completed());
         }
 
@@ -996,7 +852,7 @@ mod tests {
 
         // Quest should now be completed
         {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             assert!(profile.daily_quests[0].is_completed());
             // XP should include quest reward
             assert!(profile.total_xp >= 75); // Medium ScenarioCompletion = 75 XP
@@ -1011,13 +867,13 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         let initial_xp = {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             profile.total_xp
         };
 
         // Add a quest
         {
-            let mut profile = state.profile.borrow_mut();
+            let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
@@ -1043,7 +899,7 @@ mod tests {
 
         // Check that XP was awarded
         {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             assert_eq!(profile.total_xp, initial_xp + 25); // Easy CommandPractice = 25 XP
             assert!(profile.daily_quests[0].is_completed());
         }
@@ -1058,13 +914,13 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         let initial_xp = {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             profile.total_xp
         };
 
         // Add an Exploration quest
         {
-            let mut profile = state.profile.borrow_mut();
+            let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_exploration".to_string(),
                 QuestType::Exploration {
@@ -1099,7 +955,7 @@ mod tests {
 
         // Not completed yet (2/3)
         {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             assert!(!profile.daily_quests[0].is_completed());
         }
 
@@ -1116,7 +972,7 @@ mod tests {
 
         // Should be completed now and bonus XP awarded
         {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             assert!(profile.daily_quests[0].is_completed());
             assert_eq!(profile.total_xp, initial_xp + 160); // Hard Exploration = 160 XP
         }
@@ -1127,7 +983,7 @@ mod tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        assert_eq!(state.commands_used_today.len(), 0);
+        assert_eq!(state.progress.commands_used_today.len(), 0);
 
         // Execute some commands
         update(
@@ -1162,9 +1018,9 @@ mod tests {
         .unwrap();
 
         // Should have 2 unique commands
-        assert_eq!(state.commands_used_today.len(), 2);
-        assert!(state.commands_used_today.contains("dd"));
-        assert!(state.commands_used_today.contains("yy"));
+        assert_eq!(state.progress.commands_used_today.len(), 2);
+        assert!(state.progress.commands_used_today.contains("dd"));
+        assert!(state.progress.commands_used_today.contains("yy"));
     }
 
     // XP Breakdown tests
@@ -1174,11 +1030,11 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Complete a scenario with non-perfect score (not first today to avoid bonus)
-        state.scenarios_completed_today = 1; // Not first today
+        state.progress.scenarios_completed_today = 1; // Not first today
         update(&mut state, Message::StartScenario(0)).unwrap();
 
         // Execute non-optimal solution to get points but not perfect
-        if let Some(session) = &mut state.session {
+        if let Some(session) = &mut state.game.session {
             session.record_action("l".to_string()).unwrap(); // Extra move
             session.record_action("h".to_string()).unwrap(); // Extra move
             session.record_action("dd".to_string()).unwrap(); // Correct solution
@@ -1187,8 +1043,8 @@ mod tests {
         update(&mut state, Message::CompleteScenario).unwrap();
 
         // Check XP breakdown
-        assert!(state.xp_breakdown.is_some());
-        let xp = state.xp_breakdown.as_ref().unwrap();
+        assert!(state.ui.xp_breakdown.is_some());
+        let xp = state.ui.xp_breakdown.as_ref().unwrap();
 
         // Should have base XP (score > 0 because scenario is completed)
         // Perfect bonus should be 0 because we used extra moves
@@ -1204,18 +1060,18 @@ mod tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        state.scenarios_completed_today = 1; // Not first today
+        state.progress.scenarios_completed_today = 1; // Not first today
         update(&mut state, Message::StartScenario(0)).unwrap();
 
         // Execute perfect solution
-        if let Some(session) = &mut state.session {
+        if let Some(session) = &mut state.game.session {
             session.record_action("dd".to_string()).unwrap();
         }
 
         update(&mut state, Message::CompleteScenario).unwrap();
 
-        assert!(state.xp_breakdown.is_some());
-        let xp = state.xp_breakdown.as_ref().unwrap();
+        assert!(state.ui.xp_breakdown.is_some());
+        let xp = state.ui.xp_breakdown.as_ref().unwrap();
 
         // Should have perfect bonus (20% of base)
         assert!(xp.perfect_bonus > 0);
@@ -1229,18 +1085,18 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // First scenario today
-        assert_eq!(state.scenarios_completed_today, 0);
+        assert_eq!(state.progress.scenarios_completed_today, 0);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
 
-        if let Some(session) = &mut state.session {
+        if let Some(session) = &mut state.game.session {
             session.record_action("dd".to_string()).unwrap();
         }
 
         update(&mut state, Message::CompleteScenario).unwrap();
 
-        assert!(state.xp_breakdown.is_some());
-        let xp = state.xp_breakdown.as_ref().unwrap();
+        assert!(state.ui.xp_breakdown.is_some());
+        let xp = state.ui.xp_breakdown.as_ref().unwrap();
 
         // Should have first today bonus
         assert_eq!(xp.first_today_bonus, 10);
@@ -1255,7 +1111,7 @@ mod tests {
 
         // Add a quest that will be completed
         {
-            let mut profile = state.profile.borrow_mut();
+            let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
@@ -1279,8 +1135,8 @@ mod tests {
 
         update(&mut state, Message::CompleteScenario).unwrap();
 
-        assert!(state.xp_breakdown.is_some());
-        let xp = state.xp_breakdown.as_ref().unwrap();
+        assert!(state.ui.xp_breakdown.is_some());
+        let xp = state.ui.xp_breakdown.as_ref().unwrap();
 
         // Should have quest bonus
         assert_eq!(xp.quest_bonuses.len(), 1);
@@ -1298,7 +1154,7 @@ mod tests {
 
         // Add a quest
         {
-            let mut profile = state.profile.borrow_mut();
+            let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
@@ -1323,8 +1179,8 @@ mod tests {
         .unwrap();
 
         // Check that progress changes were recorded
-        assert_eq!(state.quest_progress_changes.len(), 1);
-        let change = &state.quest_progress_changes[0];
+        assert_eq!(state.ui.quest_progress_changes.len(), 1);
+        let change = &state.ui.quest_progress_changes[0];
         assert_eq!(change.old_progress, 0);
         assert_eq!(change.new_progress, 1);
         assert!(change.quest_description.contains("dd"));
@@ -1339,7 +1195,7 @@ mod tests {
 
         // Add a quest that will be completed on first scenario
         {
-            let mut profile = state.profile.borrow_mut();
+            let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
@@ -1366,7 +1222,7 @@ mod tests {
 
         // Debug: Check if quest is actually completed
         {
-            let profile = state.profile.borrow();
+            let profile = state.progress.profile.borrow();
             let quest = &profile.daily_quests[0];
             assert!(
                 quest.is_completed(),
@@ -1376,18 +1232,21 @@ mod tests {
 
         // Quest should be marked as previously completed after first scenario
         assert!(
-            !state.previously_completed_quests.is_empty(),
+            !state.progress.previously_completed_quests.is_empty(),
             "previously_completed_quests should not be empty, found {} items",
-            state.previously_completed_quests.len()
+            state.progress.previously_completed_quests.len()
         );
         assert!(
-            state.previously_completed_quests.contains("test_quest"),
+            state
+                .progress
+                .previously_completed_quests
+                .contains("test_quest"),
             "Quest 'test_quest' should be marked as previously completed. Found: {:?}",
-            state.previously_completed_quests
+            state.progress.previously_completed_quests
         );
 
         // First breakdown should have quest bonus
-        let first_xp = state.xp_breakdown.as_ref().unwrap();
+        let first_xp = state.ui.xp_breakdown.as_ref().unwrap();
         assert_eq!(
             first_xp.quest_bonuses.len(),
             1,
@@ -1397,13 +1256,14 @@ mod tests {
         // Second scenario - quest already completed, should not award bonus again
         // Rebuild the collection to include the new scenario
         let mut scenarios = state
+            .game
             .scenario_collection
             .get_filtered()
             .iter()
             .map(|s| (*s).clone())
             .collect::<Vec<_>>();
         scenarios.push(scenario);
-        state.scenario_collection = crate::config::ScenarioCollection::new(scenarios);
+        state.game.scenario_collection = crate::config::ScenarioCollection::new(scenarios);
         update(&mut state, Message::StartScenario(1)).unwrap();
 
         // Execute command through message
@@ -1415,7 +1275,7 @@ mod tests {
 
         update(&mut state, Message::CompleteScenario).unwrap();
 
-        let second_xp = state.xp_breakdown.as_ref().unwrap();
+        let second_xp = state.ui.xp_breakdown.as_ref().unwrap();
         assert_eq!(
             second_xp.quest_bonuses.len(),
             0,
@@ -1438,7 +1298,7 @@ mod tests {
 
         // Even with recorded attempts, FSRS may not schedule reviews immediately
         {
-            let mut tracker = state.performance_tracker.borrow_mut();
+            let mut tracker = state.progress.performance_tracker.borrow_mut();
             tracker.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
         }
 
@@ -1446,10 +1306,10 @@ mod tests {
 
         // May or may not have reviews due - depends on FSRS algorithm
         // If no reviews due, should stay on menu
-        if state.review_session.is_none() {
-            assert_eq!(state.screen, Screen::MainMenu);
+        if state.game.review_session.is_none() {
+            assert_eq!(state.ui.screen, Screen::MainMenu);
         } else {
-            assert_eq!(state.screen, Screen::Review);
+            assert_eq!(state.ui.screen, Screen::Review);
         }
     }
 
@@ -1460,7 +1320,7 @@ mod tests {
         let state = create_test_app_state(vec![scenario]);
 
         // Test AbandonReviewSession message handler
-        assert_eq!(state.screen, Screen::MainMenu);
+        assert_eq!(state.ui.screen, Screen::MainMenu);
 
         // The actual review session behavior depends on FSRS scheduling
         // This test verifies the message handlers are correctly wired
@@ -1472,13 +1332,13 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Don't add any reviews to tracker
-        assert_eq!(state.screen, Screen::MainMenu);
+        assert_eq!(state.ui.screen, Screen::MainMenu);
 
         update(&mut state, Message::StartReviewSession).unwrap();
 
         // Should stay on MainMenu when no reviews are due
-        assert_eq!(state.screen, Screen::MainMenu);
-        assert!(state.review_session.is_none());
+        assert_eq!(state.ui.screen, Screen::MainMenu);
+        assert!(state.game.review_session.is_none());
     }
 
     // XP calculation tests moved to integration tests in tests/review_session.rs

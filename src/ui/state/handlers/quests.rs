@@ -32,11 +32,11 @@ pub fn handle_update_quest_progress(
     duration: Duration,
 ) -> Result<(), UserError> {
     // Clear previous progress changes
-    state.quest_progress_changes.clear();
+    state.ui.quest_progress_changes.clear();
 
     // Snapshot progress BEFORE updates
     let progress_before: HashMap<String, u32> = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile
             .daily_quests
             .iter()
@@ -46,48 +46,49 @@ pub fn handle_update_quest_progress(
 
     // Track which quests were already completed before this update
     let was_completed: Vec<bool> = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile.daily_quests.iter().map(|q| q.completed).collect()
     };
 
     // Update command practice quests and exploration quests
     if let Some(cmd) = &command {
         // Track for exploration quests
-        state.commands_used_today.insert(cmd.clone());
+        state.progress.commands_used_today.insert(cmd.clone());
 
         // Update command progress in quests
-        let mut profile = state.profile.borrow_mut();
+        let mut profile = state.progress.profile.borrow_mut();
         QuestTracker::update_command_progress(&mut profile.daily_quests, cmd);
     }
 
     // Update scenario completion quests and speed run quests
     if scenario_completed {
         let scenario_id = state
+            .game
             .session
             .as_ref()
             .map(|s| s.scenario().id.clone())
             .unwrap_or_default();
 
-        let mut profile = state.profile.borrow_mut();
+        let mut profile = state.progress.profile.borrow_mut();
         QuestTracker::update_scenario_progress(&mut profile.daily_quests, &scenario_id, duration);
     }
 
     // Update time invested quests
     let minutes = duration.as_secs() / 60;
     if minutes > 0 {
-        let mut profile = state.profile.borrow_mut();
+        let mut profile = state.progress.profile.borrow_mut();
         QuestTracker::update_time_progress(&mut profile.daily_quests, minutes as u32);
     }
 
     // Detect progress changes AFTER updates
     {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         for quest in &profile.daily_quests {
             let old = progress_before.get(&quest.id).copied().unwrap_or(0);
             let new = get_quest_current_progress(&quest.quest_type);
 
             if new > old {
-                state.quest_progress_changes.push(QuestProgressChange {
+                state.ui.quest_progress_changes.push(QuestProgressChange {
                     quest_description: super::format_quest_description(&quest.quest_type),
                     old_progress: old,
                     new_progress: new,
@@ -98,7 +99,7 @@ pub fn handle_update_quest_progress(
 
     // Check for newly completed quests and award bonus XP
     let newly_completed_xp: Vec<u32> = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile
             .daily_quests
             .iter()
@@ -116,7 +117,7 @@ pub fn handle_update_quest_progress(
     // Award XP for newly completed quests
     if !newly_completed_xp.is_empty() {
         let total_bonus_xp: u64 = newly_completed_xp.iter().map(|xp| *xp as u64).sum();
-        let mut profile = state.profile.borrow_mut();
+        let mut profile = state.progress.profile.borrow_mut();
         profile.add_xp(total_bonus_xp);
     }
 

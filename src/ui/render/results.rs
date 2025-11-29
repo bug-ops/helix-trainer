@@ -25,7 +25,7 @@ fn rating_description(rating: &PerformanceRating) -> String {
 pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    if let Some(session) = &state.session
+    if let Some(session) = &state.game.session
         && let Ok(feedback) = session.get_feedback()
     {
         // Layout: title | horizontal(results | xp & quests) | instructions
@@ -156,7 +156,7 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
     let mut lines = vec![];
 
     // XP Breakdown section
-    if let Some(xp) = &state.xp_breakdown {
+    if let Some(xp) = &state.ui.xp_breakdown {
         lines.push(Line::from(vec![Span::styled(
             "XP Earned",
             Style::default()
@@ -198,7 +198,7 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
 
         // Mastery scaling
         if xp.mastery_multiplier < 1.0 {
-            let mastery_text = if let Some((mastery, _)) = &state.scenario_mastery {
+            let mastery_text = if let Some((mastery, _)) = &state.ui.scenario_mastery {
                 format!("  {} {}: ", mastery.emoji(), mastery.display_name())
             } else {
                 "  Mastery: ".to_string()
@@ -241,7 +241,7 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
     }
 
     // Quest progress changes
-    if !state.quest_progress_changes.is_empty() {
+    if !state.ui.quest_progress_changes.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(""));
         lines.push(Line::from(vec![Span::styled(
@@ -252,7 +252,7 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
         )]));
         lines.push(Line::from(""));
 
-        for change in &state.quest_progress_changes {
+        for change in &state.ui.quest_progress_changes {
             lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(
@@ -279,7 +279,7 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
     lines.push(Line::from(""));
     lines.push(Line::from(""));
     let (level, total_xp, xp_for_next) = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         let current_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level);
         let xp_in_level = profile.total_xp - current_level_xp;
         (profile.level, xp_in_level, profile.xp_for_next_level())

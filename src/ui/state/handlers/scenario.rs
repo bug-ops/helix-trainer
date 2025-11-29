@@ -11,20 +11,21 @@ use crate::ui::state::{AppState, Message, Screen, XPBreakdown, update};
 /// Initializes a new game session with the selected scenario
 pub fn handle_start_scenario(state: &mut AppState, index: usize) -> Result<(), UserError> {
     if let Some(scenario) = state
+        .game
         .scenario_collection
         .get_filtered_by_index(index)
         .cloned()
     {
         let session = GameSession::new(scenario)?;
-        state.session = Some(session);
-        state.screen = Screen::Task;
-        state.show_hint_panel = false;
-        state.show_key_history = false;
-        state.current_hint = None;
-        state.last_command = None;
-        state.completion_time = None;
+        state.game.session = Some(session);
+        state.ui.screen = Screen::Task;
+        state.ui.show_hint_panel = false;
+        state.ui.show_key_history = false;
+        state.ui.current_hint = None;
+        state.ui.last_command = None;
+        state.ui.completion_time = None;
         state.clear_key_history();
-        state.command_buffer.clear();
+        state.ui.command_buffer.clear();
     }
     Ok(())
 }
@@ -35,7 +36,7 @@ pub fn handle_start_scenario(state: &mut AppState, index: usize) -> Result<(), U
 pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
     // Update quest progress BEFORE awarding XP
     // Extract data we need first to avoid borrow issues
-    let (duration, feedback, scenario_id) = if let Some(session) = &state.session {
+    let (duration, feedback, scenario_id) = if let Some(session) = &state.game.session {
         let duration = session.elapsed();
         let feedback = session
             .get_feedback()
@@ -43,7 +44,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
         let scenario_id = session.scenario().id.clone();
         (duration, feedback, scenario_id)
     } else {
-        state.screen = Screen::Results;
+        state.ui.screen = Screen::Results;
         return Ok(());
     };
 
@@ -60,7 +61,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
     // Calculate base XP (before mastery scaling)
     let score = feedback.score;
     let is_perfect = feedback.score == feedback.max_points;
-    let is_first_today = state.scenarios_completed_today == 0;
+    let is_first_today = state.progress.scenarios_completed_today == 0;
 
     // Base XP from score (50 XP per 100 points)
     let base_xp = (score as u64 * 50) / 100;
@@ -75,7 +76,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
 
     // Apply mastery scaling and record completion
     let (actual_xp, mastery_level, mastery_multiplier) = {
-        let mut profile = state.profile.borrow_mut();
+        let mut profile = state.progress.profile.borrow_mut();
         let actual_xp =
             profile
                 .scenario_history
@@ -90,29 +91,29 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
     };
 
     // Store mastery info for results display
-    state.scenario_mastery = Some((mastery_level, mastery_multiplier));
+    state.ui.scenario_mastery = Some((mastery_level, mastery_multiplier));
 
     // Quest bonuses (collect newly completed quests)
     let mut quest_bonuses = Vec::new();
     let newly_completed_quest_ids: Vec<String> = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         profile
             .daily_quests
             .iter()
-            .filter(|q| q.completed && !state.previously_completed_quests.contains(&q.id))
+            .filter(|q| q.completed && !state.progress.previously_completed_quests.contains(&q.id))
             .map(|q| q.id.clone())
             .collect()
     };
 
     // Collect bonuses and mark as processed
     for quest_id in newly_completed_quest_ids {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         if let Some(quest) = profile.daily_quests.iter().find(|q| q.id == quest_id) {
             let description = super::format_quest_description(&quest.quest_type);
             let xp = quest.xp_reward as u64;
             drop(profile);
             quest_bonuses.push((description, xp));
-            state.previously_completed_quests.insert(quest_id);
+            state.progress.previously_completed_quests.insert(quest_id);
         }
     }
 
@@ -120,7 +121,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
     let total_xp = actual_xp + quest_xp;
 
     // Store breakdown for results display
-    state.xp_breakdown = Some(XPBreakdown {
+    state.ui.xp_breakdown = Some(XPBreakdown {
         base_xp,
         perfect_bonus,
         first_today_bonus,
@@ -131,7 +132,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
 
     // Award XP to profile
     {
-        let mut profile = state.profile.borrow_mut();
+        let mut profile = state.progress.profile.borrow_mut();
         let leveled_up = profile.add_xp(total_xp);
 
         // Update counters
@@ -148,13 +149,13 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
         }
     }
 
-    state.scenarios_completed_today += 1;
+    state.progress.scenarios_completed_today += 1;
     state
         .save_profile_debounced()
         .map_err(|_| UserError::OperationFailed)?;
 
     // Record commands in FSRS scheduler for spaced repetition
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         let commands: Vec<String> = session
             .actions()
             .iter()
@@ -162,11 +163,12 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
             .collect();
 
         state
+            .progress
             .scheduler
             .record_scenario_commands(&commands, duration, score > 0);
     }
 
-    state.screen = Screen::Results;
+    state.ui.screen = Screen::Results;
     Ok(())
 }
 
@@ -174,10 +176,10 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Marks the session as abandoned and shows results
 pub fn handle_abandon_scenario(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(session) = &mut state.session {
+    if let Some(session) = &mut state.game.session {
         session.abandon();
     }
-    state.screen = Screen::Results;
+    state.ui.screen = Screen::Results;
     Ok(())
 }
 
@@ -185,16 +187,16 @@ pub fn handle_abandon_scenario(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Resets the current scenario to initial state
 pub fn handle_retry_scenario(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(session) = &mut state.session {
+    if let Some(session) = &mut state.game.session {
         session.reset()?;
-        state.screen = Screen::Task;
-        state.show_hint_panel = false;
-        state.show_key_history = false;
-        state.current_hint = None;
-        state.last_command = None;
-        state.completion_time = None;
+        state.ui.screen = Screen::Task;
+        state.ui.show_hint_panel = false;
+        state.ui.show_key_history = false;
+        state.ui.current_hint = None;
+        state.ui.last_command = None;
+        state.ui.completion_time = None;
         state.clear_key_history();
-        state.command_buffer.clear();
+        state.ui.command_buffer.clear();
     }
     Ok(())
 }
@@ -203,9 +205,9 @@ pub fn handle_retry_scenario(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Completes the current scenario flow and returns to menu
 pub fn handle_next_scenario(state: &mut AppState) -> Result<(), UserError> {
-    state.screen = Screen::MainMenu;
-    state.session = None;
-    state.show_hint_panel = false;
-    state.current_hint = None;
+    state.ui.screen = Screen::MainMenu;
+    state.game.session = None;
+    state.ui.show_hint_panel = false;
+    state.ui.current_hint = None;
     Ok(())
 }

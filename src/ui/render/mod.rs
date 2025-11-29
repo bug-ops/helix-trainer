@@ -30,7 +30,7 @@ use ratatui::Frame;
 /// * `frame` - The ratatui frame to render to
 /// * `state` - The application state (mutable for view state updates)
 pub fn render(frame: &mut Frame, state: &mut AppState) {
-    match state.screen {
+    match state.ui.screen {
         Screen::MainMenu => menu::render_main_menu(frame, state),
         Screen::Task => task::render_task_screen(frame, state),
         Screen::Results => results::render_results_screen(frame, state),

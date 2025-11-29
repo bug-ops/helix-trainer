@@ -29,18 +29,18 @@ fn format_key_for_display(command: &str) -> String {
 /// Toggles hint panel visibility and fetches next hint
 pub fn handle_show_hint(state: &mut AppState) -> Result<(), UserError> {
     // If hint panel is already visible, close it (toggle behavior)
-    if state.show_hint_panel {
-        state.show_hint_panel = false;
-        state.current_hint = None;
+    if state.ui.show_hint_panel {
+        state.ui.show_hint_panel = false;
+        state.ui.current_hint = None;
         return Ok(());
     }
 
     // Otherwise, try to show next hint
-    if let Some(session) = &mut state.session
+    if let Some(session) = &mut state.game.session
         && let Some(hint) = session.get_hint()
     {
-        state.current_hint = Some(hint.clone());
-        state.show_hint_panel = true;
+        state.ui.current_hint = Some(hint.clone());
+        state.ui.show_hint_panel = true;
     }
     Ok(())
 }
@@ -57,45 +57,45 @@ pub fn handle_execute_command(
     state.add_key_to_history(display_key);
 
     // Show key history popup after first keypress
-    state.show_key_history = true;
+    state.ui.show_key_history = true;
 
     // Track command for quest progress (only execute once per complete command)
     let mut executed_command: Option<String> = None;
 
-    if let Some(session) = &mut state.session {
+    if let Some(session) = &mut state.game.session {
         // In Insert mode, execute commands directly
         if session.is_insert_mode() {
             // Store last command for display (skip special commands and single chars)
             if command.as_ref() == "Escape" {
-                state.last_command = Some(command.to_string());
+                state.ui.last_command = Some(command.to_string());
             }
 
             // Execute command through session
             session.record_action(command.to_string())?;
         } else {
             // Normal mode: handle command buffer for multi-key commands
-            state.command_buffer.push_str(&command);
+            state.ui.command_buffer.push_str(&command);
 
             // Try to match a complete command
-            let final_command = match state.command_buffer.as_str() {
+            let final_command = match state.ui.command_buffer.as_str() {
                 // Multi-key commands
                 "dd" => Some("dd"),
                 "gg" => Some("gg"),
 
                 // Replace character command: r + any char
                 cmd if cmd.starts_with('r') && cmd.len() == 2 => {
-                    Some(state.command_buffer.as_str())
+                    Some(state.ui.command_buffer.as_str())
                 }
 
                 // Partial commands - wait for more input
                 "d" | "g" | "r" => None,
 
                 // Single-key commands (clear buffer and execute)
-                _ if state.command_buffer.len() == 1 => Some(state.command_buffer.as_str()),
+                _ if state.ui.command_buffer.len() == 1 => Some(state.ui.command_buffer.as_str()),
 
                 // Invalid sequence - clear buffer
                 _ => {
-                    state.command_buffer.clear();
+                    state.ui.command_buffer.clear();
                     return Ok(());
                 }
             };
@@ -103,10 +103,10 @@ pub fn handle_execute_command(
             if let Some(cmd) = final_command {
                 // We have a complete command
                 let cmd_string = cmd.to_string();
-                state.command_buffer.clear();
+                state.ui.command_buffer.clear();
 
                 // Store for display
-                state.last_command = Some(cmd_string.clone());
+                state.ui.last_command = Some(cmd_string.clone());
 
                 // Track for quest progress
                 executed_command = Some(cmd_string.clone());
@@ -131,12 +131,12 @@ pub fn handle_execute_command(
     }
 
     // Check if scenario is complete
-    if let Some(session) = &state.session
+    if let Some(session) = &state.game.session
         && session.is_completed()
     {
         // Mark completion time instead of immediately going to results
         // This allows showing the success state before transition
-        state.completion_time = Some(std::time::Instant::now());
+        state.ui.completion_time = Some(std::time::Instant::now());
     }
 
     Ok(())

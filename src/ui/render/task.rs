@@ -16,7 +16,7 @@ use rust_i18n::t;
 pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         let scenario = session.scenario();
 
         // Layout: title | description | editor view | stats | instructions
@@ -159,13 +159,13 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         frame.render_widget(stats, chunks[3]);
 
         // Instructions with hint indicator and last command
-        let hint_indicator = if state.show_hint_panel && state.current_hint.is_some() {
+        let hint_indicator = if state.ui.show_hint_panel && state.ui.current_hint.is_some() {
             " [?: Next Hint] "
         } else {
             " [?: Hint | F1] "
         };
 
-        let last_cmd_text = if let Some(cmd) = &state.last_command {
+        let last_cmd_text = if let Some(cmd) = &state.ui.last_command {
             format!(" Last: {} |", cmd)
         } else {
             String::new()
@@ -181,17 +181,17 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         frame.render_widget(instructions, chunks[4]);
 
         // Render hint panel if visible
-        if state.show_hint_panel {
+        if state.ui.show_hint_panel {
             render_hint_popup(frame, state);
         }
 
         // Show key history popup if visible
-        if state.show_key_history {
+        if state.ui.show_key_history {
             render_key_history_popup(frame, state);
         }
 
         // Show success message if scenario just completed
-        if state.completion_time.is_some() {
+        if state.ui.completion_time.is_some() {
             render_success_popup(frame);
         }
     }

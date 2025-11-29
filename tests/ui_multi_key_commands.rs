@@ -5,19 +5,16 @@
 
 use helix_trainer::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
-use helix_trainer::learning::{PerformanceTracker, Scheduler};
+use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::ui::{AppState, Message, update};
 use std::borrow::Cow;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 /// Helper to create AppState for testing
 fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
-    let profile = Rc::new(RefCell::new(UserProfile::new()));
+    let profile = UserProfile::new();
     let storage = ProfileStorage::new();
-    let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-    let scheduler = Scheduler::new(tracker.clone());
-    AppState::new(scenarios, profile, storage, tracker, scheduler)
+    let tracker = PerformanceTracker::new();
+    AppState::new(scenarios, profile, storage, tracker)
 }
 
 /// Helper to create a simple test scenario
@@ -76,8 +73,8 @@ fn test_replace_command_multi_key() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("r"))).unwrap();
 
     // Check that command buffer contains 'r' and command hasn't executed yet
-    assert_eq!(state.command_buffer, "r");
-    if let Some(session) = &state.session {
+    assert_eq!(state.ui.command_buffer, "r");
+    if let Some(session) = &state.game.session {
         // Content should still be "Hxllo" - nothing changed yet
         assert_eq!(session.current_state().content(), "Hxllo");
     } else {
@@ -88,10 +85,10 @@ fn test_replace_command_multi_key() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("e"))).unwrap();
 
     // Command buffer should be cleared
-    assert_eq!(state.command_buffer, "");
+    assert_eq!(state.ui.command_buffer, "");
 
     // Content should now be "Hello"
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         assert_eq!(session.current_state().content(), "Hello");
     } else {
         panic!("Session should exist");
@@ -114,17 +111,17 @@ fn test_dd_command_multi_key() {
 
     // First 'd' - stored in buffer
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
-    assert_eq!(state.command_buffer, "d");
+    assert_eq!(state.ui.command_buffer, "d");
 
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         assert_eq!(session.current_state().content(), "line1\nline2\nline3");
     }
 
     // Second 'd' - completes 'dd'
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
-    assert_eq!(state.command_buffer, "");
+    assert_eq!(state.ui.command_buffer, "");
 
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         assert_eq!(session.current_state().content(), "line1\nline3");
     }
 }
@@ -145,13 +142,13 @@ fn test_gg_command_multi_key() {
 
     // First 'g'
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("g"))).unwrap();
-    assert_eq!(state.command_buffer, "g");
+    assert_eq!(state.ui.command_buffer, "g");
 
     // Second 'g'
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("g"))).unwrap();
-    assert_eq!(state.command_buffer, "");
+    assert_eq!(state.ui.command_buffer, "");
 
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         let cursor = session.current_state().cursor_position();
         assert_eq!((cursor.row, cursor.col), (0, 0));
     }
@@ -167,16 +164,16 @@ fn test_replace_command_valid_sequence() {
 
     // Press 'r'
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("r"))).unwrap();
-    assert_eq!(state.command_buffer, "r");
+    assert_eq!(state.ui.command_buffer, "r");
 
     // Press 'r' again - this completes 'rr' (replace 't' with 'r')
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("r"))).unwrap();
 
     // Buffer should be cleared after command executes
-    assert_eq!(state.command_buffer, "");
+    assert_eq!(state.ui.command_buffer, "");
 
     // Content should be "rest" (replaced 't' with 'r')
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         assert_eq!(session.current_state().content(), "rest");
     }
 }
@@ -199,10 +196,10 @@ fn test_single_key_command_immediate_execution() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("l"))).unwrap();
 
     // Buffer should be empty (command executed)
-    assert_eq!(state.command_buffer, "");
+    assert_eq!(state.ui.command_buffer, "");
 
     // Cursor should have moved
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         assert_eq!(session.current_state().cursor_position().col, 1);
     }
 }
@@ -219,7 +216,7 @@ fn test_replace_with_special_chars() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("r"))).unwrap();
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("!"))).unwrap();
 
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         assert_eq!(session.current_state().content(), "!");
     }
 }
@@ -237,14 +234,14 @@ fn test_undo_integration() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
 
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         assert_eq!(session.current_state().content(), "line2");
     }
 
     // Undo: u
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("u"))).unwrap();
 
-    if let Some(session) = &state.session {
+    if let Some(session) = &state.game.session {
         assert_eq!(session.current_state().content(), "line1\nline2");
     }
 

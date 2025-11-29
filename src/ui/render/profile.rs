@@ -55,7 +55,7 @@ fn render_profile_content(frame: &mut Frame, state: &AppState, area: ratatui::la
 
     // Get profile data with scoped borrow
     let (level, total_xp, xp_progress, xp_for_next, scenarios_completed, perfect_scenarios) = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         (
             profile.level,
             profile.total_xp,
@@ -188,7 +188,7 @@ fn render_stats_section(
 
     // Quest section
     let (active_quests, completed_today) = {
-        let profile = state.profile.borrow();
+        let profile = state.progress.profile.borrow();
         let active = profile.daily_quests.len();
         let completed = profile.daily_quests.iter().filter(|q| q.completed).count();
         (active, completed)

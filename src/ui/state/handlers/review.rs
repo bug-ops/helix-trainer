@@ -11,14 +11,14 @@ use std::time::Instant;
 /// Initializes a new review session with due commands
 pub fn handle_start_review_session(state: &mut AppState) -> Result<(), UserError> {
     // Get due commands from scheduler
-    let due_commands = state.scheduler.get_due_reviews();
+    let due_commands = state.progress.scheduler.get_due_reviews();
 
     if due_commands.is_empty() {
         // No reviews due, stay on menu
         return Ok(());
     }
 
-    state.review_session = Some(ReviewSessionState {
+    state.game.review_session = Some(ReviewSessionState {
         due_commands: due_commands.clone(),
         current_index: 0,
         current_command: due_commands.first().cloned(),
@@ -26,7 +26,7 @@ pub fn handle_start_review_session(state: &mut AppState) -> Result<(), UserError
         completed_reviews: Vec::new(),
     });
 
-    state.screen = Screen::Review;
+    state.ui.screen = Screen::Review;
     Ok(())
 }
 
@@ -37,7 +37,7 @@ pub fn handle_complete_review_command(
     state: &mut AppState,
     success: bool,
 ) -> Result<(), UserError> {
-    if let Some(session) = &mut state.review_session {
+    if let Some(session) = &mut state.game.review_session {
         if let Some(command) = &session.current_command {
             let duration = session.session_started_at.elapsed();
 
@@ -50,7 +50,7 @@ pub fn handle_complete_review_command(
 
             // Update performance tracker
             {
-                let mut tracker = state.performance_tracker.borrow_mut();
+                let mut tracker = state.progress.performance_tracker.borrow_mut();
                 tracker.record_attempt(
                     command,
                     duration,
@@ -70,7 +70,7 @@ pub fn handle_complete_review_command(
 ///
 /// Advances to next review command or completes session
 pub fn handle_next_review_command(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(session) = &mut state.review_session {
+    if let Some(session) = &mut state.game.review_session {
         session.current_index += 1;
 
         if session.current_index >= session.due_commands.len() {
@@ -90,13 +90,13 @@ pub fn handle_next_review_command(state: &mut AppState) -> Result<(), UserError>
             // Award XP for review session
             let xp = (completed as u64 * 10) + (success_rate * 20.0) as u64;
             {
-                let mut profile = state.profile.borrow_mut();
+                let mut profile = state.progress.profile.borrow_mut();
                 profile.add_xp(xp);
             }
 
             // Return to menu
-            state.screen = Screen::MainMenu;
-            state.review_session = None;
+            state.ui.screen = Screen::MainMenu;
+            state.game.review_session = None;
         } else {
             // Move to next command
             session.current_command = session.due_commands.get(session.current_index).cloned();
@@ -109,7 +109,7 @@ pub fn handle_next_review_command(state: &mut AppState) -> Result<(), UserError>
 ///
 /// Cancels the current review session
 pub fn handle_abandon_review_session(state: &mut AppState) -> Result<(), UserError> {
-    state.review_session = None;
-    state.screen = Screen::MainMenu;
+    state.game.review_session = None;
+    state.ui.screen = Screen::MainMenu;
     Ok(())
 }

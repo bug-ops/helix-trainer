@@ -2,10 +2,8 @@
 
 use crate::config::{ScoringConfig, Setup, Solution, TargetState};
 use crate::gamification::{ProfileStorage, UserProfile};
-use crate::learning::{PerformanceTracker, Scheduler};
+use crate::learning::PerformanceTracker;
 use crate::ui::state::AppState;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 fn create_test_scenario() -> crate::config::Scenario {
     crate::config::Scenario {
@@ -37,11 +35,10 @@ fn create_test_scenario() -> crate::config::Scenario {
 }
 
 fn create_test_app_state(scenarios: Vec<crate::config::Scenario>) -> AppState {
-    let profile = Rc::new(RefCell::new(UserProfile::new()));
+    let profile = UserProfile::new();
     let storage = ProfileStorage::new();
-    let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-    let scheduler = Scheduler::new(tracker.clone());
-    AppState::new(scenarios, profile, storage, tracker, scheduler)
+    let tracker = PerformanceTracker::new();
+    AppState::new(scenarios, profile, storage, tracker)
 }
 
 #[test]

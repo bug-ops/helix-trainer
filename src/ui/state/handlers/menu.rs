@@ -9,8 +9,8 @@ use crate::ui::state::{AppState, Message, update};
 ///
 /// Moves menu selection up (with bounds checking)
 pub fn handle_menu_up(state: &mut AppState) -> Result<(), UserError> {
-    if state.selected_menu_item > 0 {
-        state.selected_menu_item -= 1;
+    if state.ui.selected_menu_item > 0 {
+        state.ui.selected_menu_item -= 1;
     }
     Ok(())
 }
@@ -20,9 +20,9 @@ pub fn handle_menu_up(state: &mut AppState) -> Result<(), UserError> {
 /// Moves menu selection down (with bounds checking)
 pub fn handle_menu_down(state: &mut AppState) -> Result<(), UserError> {
     // Total menu items = filtered scenarios + Review + Profile + Statistics + Quit
-    let max_items = state.scenario_collection.count() + 4;
-    if state.selected_menu_item < max_items - 1 {
-        state.selected_menu_item += 1;
+    let max_items = state.game.scenario_collection.count() + 4;
+    if state.ui.selected_menu_item < max_items - 1 {
+        state.ui.selected_menu_item += 1;
     }
     Ok(())
 }
@@ -31,8 +31,8 @@ pub fn handle_menu_down(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Executes action based on currently selected menu item
 pub fn handle_menu_select(state: &mut AppState) -> Result<(), UserError> {
-    let scenario_count = state.scenario_collection.count();
-    let selected = state.selected_menu_item;
+    let scenario_count = state.game.scenario_collection.count();
+    let selected = state.ui.selected_menu_item;
 
     if selected < scenario_count {
         // Start selected scenario (0..scenario_count-1)

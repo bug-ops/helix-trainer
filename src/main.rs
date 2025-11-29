@@ -13,14 +13,12 @@ use helix_trainer::{
     config::ScenarioLoader,
     gamification::{ProfileStorage, QuestGenerator, StreakManager},
     helix::commands::*,
-    learning::{PerformanceTracker, Scheduler},
+    learning::PerformanceTracker,
     ui::{self, AppState, Message},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::io;
-use std::rc::Rc;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
@@ -103,24 +101,11 @@ fn main() -> Result<()> {
     let streak_change = StreakManager::update_streak(&mut profile);
     tracing::debug!("Streak status: {:?}", streak_change);
 
-    // Create shared references
-    let profile_rc = Rc::new(RefCell::new(profile));
-
     // Initialize performance tracker
     let tracker = PerformanceTracker::new();
-    let tracker_rc = Rc::new(RefCell::new(tracker));
-
-    // Create scheduler
-    let scheduler = Scheduler::new(tracker_rc.clone());
 
     // Initialize app state
-    let mut app_state = AppState::new(
-        scenarios,
-        profile_rc.clone(),
-        profile_storage,
-        tracker_rc,
-        scheduler,
-    );
+    let mut app_state = AppState::new(scenarios, profile, profile_storage, tracker);
 
     // Setup terminal
     enable_raw_mode()?;
@@ -175,17 +160,17 @@ fn run_app(
         terminal.draw(|f| ui::render(f, state))?;
 
         // Check if we should exit
-        if !state.running {
+        if !state.ui.running {
             break;
         }
 
         // Check if scenario completed and delay elapsed
-        if let Some(completion_time) = state.completion_time
+        if let Some(completion_time) = state.ui.completion_time
             && completion_time.elapsed() >= Duration::from_millis(1500)
         {
             tracing::debug!("Success screen delay elapsed, transitioning to results");
             ui::update(state, Message::CompleteScenario)?;
-            state.completion_time = None;
+            state.ui.completion_time = None;
         }
 
         // Handle events with timeout
@@ -215,7 +200,7 @@ fn run_app(
 /// This function is responsible for converting keyboard input into
 /// application messages based on the current screen.
 fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
-    match state.screen {
+    match state.ui.screen {
         ui::Screen::MainMenu => handle_menu_keys(key, state),
         ui::Screen::Task => handle_task_keys(key, state),
         ui::Screen::Results => handle_results_keys(key),
@@ -229,8 +214,12 @@ fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message>
     match key.code {
         KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('q') => Some(Message::QuitApp),
-        KeyCode::Char('s') if state.screen == ui::Screen::Profile => Some(Message::ShowStatistics),
-        KeyCode::Char('p') if state.screen == ui::Screen::Statistics => Some(Message::ShowProfile),
+        KeyCode::Char('s') if state.ui.screen == ui::Screen::Profile => {
+            Some(Message::ShowStatistics)
+        }
+        KeyCode::Char('p') if state.ui.screen == ui::Screen::Statistics => {
+            Some(Message::ShowProfile)
+        }
         _ => None,
     }
 }
@@ -251,7 +240,7 @@ fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
                 .to_digit(10)
                 .expect("char is validated as ascii_digit by guard condition")
                 as usize;
-            if digit >= 1 && digit <= state.scenario_collection.count() {
+            if digit >= 1 && digit <= state.game.scenario_collection.count() {
                 // Jump to scenario (digit - 1 because scenarios are 0-indexed)
                 Some(Message::StartScenario(digit - 1))
             } else {
@@ -359,8 +348,7 @@ fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
 /// Check if current game session is in Insert mode
 fn is_in_insert_mode(state: &AppState) -> bool {
     state
-        .session
-        .as_ref()
+        .session()
         .map(|session| session.is_insert_mode())
         .unwrap_or(false)
 }
@@ -408,15 +396,10 @@ mod tests {
     use super::*;
 
     fn create_test_app_state() -> AppState {
-        use std::cell::RefCell;
-        use std::rc::Rc;
-        let profile = Rc::new(RefCell::new(helix_trainer::gamification::UserProfile::new()));
+        let profile = helix_trainer::gamification::UserProfile::new();
         let storage = helix_trainer::gamification::ProfileStorage::new();
-        let tracker = Rc::new(RefCell::new(
-            helix_trainer::learning::PerformanceTracker::new(),
-        ));
-        let scheduler = helix_trainer::learning::Scheduler::new(tracker.clone());
-        AppState::new(vec![], profile, storage, tracker, scheduler)
+        let tracker = helix_trainer::learning::PerformanceTracker::new();
+        AppState::new(vec![], profile, storage, tracker)
     }
 
     #[test]

@@ -70,8 +70,6 @@ impl SessionState for Active {}
 impl SessionState for Completed {}
 impl SessionState for Abandoned {}
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;

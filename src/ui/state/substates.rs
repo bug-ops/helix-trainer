@@ -58,6 +58,9 @@ pub struct UIState {
 
     /// Scenario mastery info (for results display)
     pub scenario_mastery: Option<(ScenarioMastery, f64)>,
+
+    /// Feedback from last completed/abandoned session (for results screen)
+    pub last_feedback: Option<crate::game::Feedback>,
 }
 
 impl UIState {
@@ -78,6 +81,7 @@ impl UIState {
             xp_breakdown: None,
             quest_progress_changes: Vec::new(),
             scenario_mastery: None,
+            last_feedback: None,
         }
     }
 
@@ -86,6 +90,7 @@ impl UIState {
         self.xp_breakdown = None;
         self.quest_progress_changes.clear();
         self.scenario_mastery = None;
+        self.last_feedback = None;
     }
 
     /// Add a key to the history (keeps last 5)
@@ -117,7 +122,9 @@ pub struct GameState {
     pub scenario_collection: ScenarioCollection,
 
     /// Active game session (Some if playing)
-    pub session: Option<GameSession>,
+    /// Only active sessions are stored here. Completed/abandoned sessions
+    /// are transitioned to the results screen immediately.
+    pub session: Option<GameSession<crate::game::session::Active>>,
 
     /// Active review session (Some if reviewing)
     pub review_session: Option<ReviewSessionState>,

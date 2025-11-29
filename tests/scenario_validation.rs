@@ -103,7 +103,7 @@ fn test_all_scenarios_execute_solution() {
                 total_scenarios += 1;
 
                 // Create game session
-                let mut session = match GameSession::new(scenario.clone()) {
+                let session = match GameSession::new(scenario.clone()) {
                     Ok(s) => s,
                     Err(e) => {
                         failed_scenarios.push((
@@ -115,28 +115,62 @@ fn test_all_scenarios_execute_solution() {
                 };
 
                 // Execute solution commands
+                use helix_trainer::game::SessionAfterAction;
+                let mut session_or_completed: Option<SessionAfterAction> =
+                    Some(SessionAfterAction::StillActive(session));
+
                 for (i, cmd) in scenario.solution.commands.iter().enumerate() {
-                    if let Err(e) = session.record_action(cmd.clone()) {
-                        failed_scenarios.push((
-                            scenario.id.clone(),
-                            format!("Failed at command {} '{}': {:?}", i, cmd, e),
-                        ));
-                        break;
+                    if let Some(state) = session_or_completed.take() {
+                        match state {
+                            SessionAfterAction::StillActive(s) => {
+                                match s.record_action(cmd.clone()) {
+                                    Ok(result) => {
+                                        session_or_completed = Some(result);
+                                        // If completed, stop
+                                        if matches!(session_or_completed, Some(SessionAfterAction::Completed(_)))
+                                        {
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        failed_scenarios.push((
+                                            scenario.id.clone(),
+                                            format!("Failed at command {} '{}': {:?}", i, cmd, e),
+                                        ));
+                                        break;
+                                    }
+                                }
+                            }
+                            SessionAfterAction::Completed(c) => {
+                                // Already completed
+                                session_or_completed = Some(SessionAfterAction::Completed(c));
+                                break;
+                            }
+                        }
                     }
                 }
 
                 // Check if scenario is completed
-                if !session.is_completed() {
-                    failed_scenarios.push((
-                        scenario.id.clone(),
-                        format!(
-                            "Solution did not complete scenario. Current state:\n  Content: '{}'\n  Cursor: {:?}\n  Target content: '{}'\n  Target cursor: {:?}",
-                            session.current_state().content(),
-                            session.current_state().cursor_position(),
-                            session.target_state().content(),
-                            session.target_state().cursor_position()
-                        ),
-                    ));
+                if let Some(final_state) = session_or_completed {
+                    match final_state {
+                        SessionAfterAction::Completed(_) => {
+                            // Success!
+                        }
+                        SessionAfterAction::StillActive(s) => {
+                            if !s.check_completion() {
+                                failed_scenarios.push((
+                                    scenario.id.clone(),
+                                    format!(
+                                        "Solution did not complete scenario. Current state:\n  Content: '{}'\n  Cursor: {:?}\n  Target content: '{}'\n  Target cursor: {:?}",
+                                        s.current_state().content(),
+                                        s.current_state().cursor_position(),
+                                        s.target_state().content(),
+                                        s.target_state().cursor_position()
+                                    ),
+                                ));
+                            }
+                        }
+                    }
                 }
             }
         }

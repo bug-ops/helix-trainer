@@ -34,19 +34,18 @@ pub fn handle_start_scenario(state: &mut AppState, index: usize) -> Result<(), U
 ///
 /// Processes scenario completion: awards XP, updates quests, records FSRS data
 pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
-    // Update quest progress BEFORE awarding XP
-    // Extract data we need first to avoid borrow issues
-    let (duration, feedback, scenario_id) = if let Some(session) = &state.game.session {
-        let duration = session.elapsed();
-        let feedback = session
-            .get_feedback()
-            .map_err(|_| UserError::OperationFailed)?;
-        let scenario_id = session.scenario().id.clone();
-        (duration, feedback, scenario_id)
+    // Get feedback from UI state (set by gameplay handler when session completed)
+    let feedback = if let Some(ref feedback) = state.ui.last_feedback {
+        feedback.clone()
     } else {
+        // No feedback available, transition to results anyway
         state.ui.screen = Screen::Results;
         return Ok(());
     };
+
+    // Extract data from feedback
+    let scenario_id = feedback.scenario_id.clone();
+    let duration = feedback.duration;
 
     // Update quest progress
     update(
@@ -154,19 +153,17 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
         .save_profile_debounced()
         .map_err(|_| UserError::OperationFailed)?;
 
-    // Record commands in FSRS scheduler for spaced repetition
-    if let Some(session) = &state.game.session {
-        let commands: Vec<String> = session
-            .actions()
-            .iter()
-            .map(|action| action.command.clone())
-            .collect();
+    // Record commands in FSRS scheduler for spaced repetition (from feedback)
+    let commands: Vec<String> = feedback
+        .user_actions
+        .iter()
+        .map(|action| action.command.clone())
+        .collect();
 
-        state
-            .progress
-            .scheduler
-            .record_scenario_commands(&commands, duration, score > 0);
-    }
+    state
+        .progress
+        .scheduler
+        .record_scenario_commands(&commands, duration, feedback.score > 0);
 
     state.ui.screen = Screen::Results;
     Ok(())
@@ -176,8 +173,12 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
 ///
 /// Marks the session as abandoned and shows results
 pub fn handle_abandon_scenario(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(session) = &mut state.game.session {
-        session.abandon();
+    // Take ownership of session and transition to abandoned state
+    if let Some(session) = state.game.session.take() {
+        let abandoned = session.abandon();
+        // Get feedback from abandoned session and store for results screen
+        let feedback = abandoned.feedback();
+        state.ui.last_feedback = Some(feedback);
     }
     state.ui.screen = Screen::Results;
     Ok(())

@@ -625,13 +625,17 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
-        let session = state.game.session.as_ref().unwrap();
-        assert!(session.is_active());
+        // Session is GameSession<Active> - stored in state.game.session
+        assert!(state.game.session.is_some());
 
         update(&mut state, Message::AbandonScenario).unwrap();
         assert_eq!(state.ui.screen, Screen::Results);
-        let session = state.game.session.as_ref().unwrap();
-        assert!(!session.is_active());
+        // After abandon, session is removed and feedback is stored
+        assert!(state.game.session.is_none());
+        assert!(state.ui.last_feedback.is_some());
+        let feedback = state.ui.last_feedback.as_ref().unwrap();
+        assert!(!feedback.success);
+        assert_eq!(feedback.score, 0);
     }
 
     #[test]
@@ -649,14 +653,25 @@ mod tests {
 
     #[test]
     fn test_retry_scenario_resets_state() {
+        use crate::game::SessionAfterAction;
+
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
         update(&mut state, Message::StartScenario(0)).unwrap();
-        if let Some(session) = &mut state.game.session {
-            session.record_action("l".to_string()).unwrap();
+
+        // Record an action
+        if let Some(session) = state.game.session.take() {
+            match session.record_action("l".to_string()).unwrap() {
+                SessionAfterAction::StillActive(s) => {
+                    assert_eq!(s.action_count(), 1);
+                    state.game.session = Some(s);
+                }
+                SessionAfterAction::Completed(_) => {
+                    panic!("Should not complete on 'l'");
+                }
+            }
         }
-        assert_eq!(state.game.session.as_ref().unwrap().action_count(), 1);
 
         update(&mut state, Message::RetryScenario).unwrap();
         assert_eq!(state.ui.screen, Screen::Task);
@@ -1006,6 +1021,8 @@ mod tests {
     // XP Breakdown tests
     #[test]
     fn test_xp_breakdown_base_only() {
+        use crate::game::SessionAfterAction;
+
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
@@ -1014,10 +1031,28 @@ mod tests {
         update(&mut state, Message::StartScenario(0)).unwrap();
 
         // Execute non-optimal solution to get points but not perfect
-        if let Some(session) = &mut state.game.session {
-            session.record_action("l".to_string()).unwrap(); // Extra move
-            session.record_action("h".to_string()).unwrap(); // Extra move
-            session.record_action("dd".to_string()).unwrap(); // Correct solution
+        // Take ownership, execute actions, and complete
+        if let Some(session) = state.game.session.take() {
+            let mut current = session;
+            // Extra move
+            current = match current.record_action("l".to_string()).unwrap() {
+                SessionAfterAction::StillActive(s) => s,
+                SessionAfterAction::Completed(_) => panic!("Should not complete on 'l'"),
+            };
+            // Extra move
+            current = match current.record_action("h".to_string()).unwrap() {
+                SessionAfterAction::StillActive(s) => s,
+                SessionAfterAction::Completed(_) => panic!("Should not complete on 'h'"),
+            };
+            // Correct solution - should complete
+            match current.record_action("dd".to_string()).unwrap() {
+                SessionAfterAction::Completed(completed) => {
+                    // Store feedback for CompleteScenario handler
+                    let feedback = completed.feedback().unwrap();
+                    state.ui.last_feedback = Some(feedback);
+                }
+                SessionAfterAction::StillActive(_) => panic!("Should complete on 'dd'"),
+            }
         }
 
         update(&mut state, Message::CompleteScenario).unwrap();
@@ -1037,6 +1072,8 @@ mod tests {
 
     #[test]
     fn test_xp_breakdown_with_perfect_bonus() {
+        use crate::game::SessionAfterAction;
+
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
@@ -1044,8 +1081,14 @@ mod tests {
         update(&mut state, Message::StartScenario(0)).unwrap();
 
         // Execute perfect solution
-        if let Some(session) = &mut state.game.session {
-            session.record_action("dd".to_string()).unwrap();
+        if let Some(session) = state.game.session.take() {
+            match session.record_action("dd".to_string()).unwrap() {
+                SessionAfterAction::Completed(completed) => {
+                    let feedback = completed.feedback().unwrap();
+                    state.ui.last_feedback = Some(feedback);
+                }
+                SessionAfterAction::StillActive(_) => panic!("Should complete on 'dd'"),
+            }
         }
 
         update(&mut state, Message::CompleteScenario).unwrap();
@@ -1061,6 +1104,8 @@ mod tests {
 
     #[test]
     fn test_xp_breakdown_with_first_today_bonus() {
+        use crate::game::SessionAfterAction;
+
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
@@ -1069,8 +1114,14 @@ mod tests {
 
         update(&mut state, Message::StartScenario(0)).unwrap();
 
-        if let Some(session) = &mut state.game.session {
-            session.record_action("dd".to_string()).unwrap();
+        if let Some(session) = state.game.session.take() {
+            match session.record_action("dd".to_string()).unwrap() {
+                SessionAfterAction::Completed(completed) => {
+                    let feedback = completed.feedback().unwrap();
+                    state.ui.last_feedback = Some(feedback);
+                }
+                SessionAfterAction::StillActive(_) => panic!("Should complete on 'dd'"),
+            }
         }
 
         update(&mut state, Message::CompleteScenario).unwrap();

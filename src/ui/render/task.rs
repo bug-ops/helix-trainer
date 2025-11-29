@@ -172,7 +172,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         };
 
         let instructions = Paragraph::new(format!(
-            "{}{}| Esc: Abandon | Ctrl-c: Quit",
+            "{}{}| Ctrl-Q: Abandon | Ctrl-C: Quit",
             hint_indicator, last_cmd_text
         ))
         .style(Style::default().fg(Color::Gray))

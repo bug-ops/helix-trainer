@@ -263,118 +263,121 @@ fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
 }
 
 /// Handle keyboard events on the task screen
-fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
-    // Handle special UI keys first
+/// Handle special UI keys (F1, ?, Ctrl+Q)
+fn handle_task_special_keys(key: KeyEvent) -> Option<Message> {
     match (key.code, key.modifiers) {
         // F1 always shows hint
-        (KeyCode::F(1), _) => return Some(Message::ShowHint),
+        (KeyCode::F(1), _) => Some(Message::ShowHint),
         // '?' key (might come as Char('?') or Char('/') with SHIFT depending on platform)
         (KeyCode::Char('?'), _)
             if !key.modifiers.contains(KeyModifiers::CONTROL)
                 && !key.modifiers.contains(KeyModifiers::ALT) =>
         {
-            return Some(Message::ShowHint);
+            Some(Message::ShowHint)
         }
-        (KeyCode::Char('/'), KeyModifiers::SHIFT) => return Some(Message::ShowHint),
-        // Esc abandons scenario
-        (KeyCode::Esc, _) => return Some(Message::AbandonScenario),
-        _ => {}
+        (KeyCode::Char('/'), KeyModifiers::SHIFT) => Some(Message::ShowHint),
+        // Ctrl+Q abandons scenario (Esc is needed for Helix insert mode exit)
+        (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Message::AbandonScenario),
+        _ => None,
     }
+}
 
-    // Check if we're in Insert mode
-    let in_insert_mode = state
+/// Convert key to text input for Insert mode
+fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
+    match key.code {
+        KeyCode::Char(c) => Some(Cow::Owned(c.to_string())),
+        KeyCode::Enter => Some(Cow::Borrowed("\n")),
+        KeyCode::Backspace => Some(Cow::Borrowed(CMD_BACKSPACE)),
+        KeyCode::Left => Some(Cow::Borrowed(CMD_ARROW_LEFT)),
+        KeyCode::Right => Some(Cow::Borrowed(CMD_ARROW_RIGHT)),
+        KeyCode::Up => Some(Cow::Borrowed(CMD_ARROW_UP)),
+        KeyCode::Down => Some(Cow::Borrowed(CMD_ARROW_DOWN)),
+        _ => None,
+    }
+}
+
+/// Map key to Helix command (Normal mode)
+fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
+    match (key.code, key.modifiers) {
+        // Movement commands
+        (KeyCode::Char('h'), KeyModifiers::NONE) => Some(CMD_MOVE_LEFT),
+        (KeyCode::Char('j'), KeyModifiers::NONE) => Some(CMD_MOVE_DOWN),
+        (KeyCode::Char('k'), KeyModifiers::NONE) => Some(CMD_MOVE_UP),
+        (KeyCode::Char('l'), KeyModifiers::NONE) => Some(CMD_MOVE_RIGHT),
+
+        // Word movement
+        (KeyCode::Char('w'), KeyModifiers::NONE) => Some(CMD_MOVE_WORD_FORWARD),
+        (KeyCode::Char('b'), KeyModifiers::NONE) => Some(CMD_MOVE_WORD_BACKWARD),
+        (KeyCode::Char('e'), KeyModifiers::NONE) => Some(CMD_MOVE_WORD_END),
+
+        // Line movement
+        (KeyCode::Char('0'), KeyModifiers::NONE) => Some(CMD_MOVE_LINE_START),
+        (KeyCode::Char('$'), KeyModifiers::NONE) => Some(CMD_MOVE_LINE_END),
+
+        // Deletion commands
+        (KeyCode::Char('x'), KeyModifiers::NONE) => Some(CMD_DELETE_CHAR),
+        (KeyCode::Char('d'), KeyModifiers::NONE) => Some("d"), // Single 'd' for multi-key handling
+        (KeyCode::Char('c'), KeyModifiers::NONE) => Some(CMD_CHANGE),
+        (KeyCode::Char('J'), KeyModifiers::SHIFT) => Some(CMD_JOIN_LINES),
+
+        // Indentation
+        (KeyCode::Char('>'), KeyModifiers::NONE) => Some(CMD_INDENT),
+        (KeyCode::Char('<'), KeyModifiers::NONE) => Some(CMD_DEDENT),
+
+        // Yank and paste
+        (KeyCode::Char('y'), KeyModifiers::NONE) => Some(CMD_YANK),
+        (KeyCode::Char('p'), KeyModifiers::NONE) => Some(CMD_PASTE_AFTER),
+        (KeyCode::Char('P'), KeyModifiers::SHIFT) => Some(CMD_PASTE_BEFORE),
+
+        // Mode changes and editing
+        (KeyCode::Char('i'), KeyModifiers::NONE) => Some(CMD_INSERT),
+        (KeyCode::Char('a'), KeyModifiers::NONE) => Some(CMD_APPEND),
+        (KeyCode::Char('I'), KeyModifiers::SHIFT) => Some(CMD_INSERT_LINE_START),
+        (KeyCode::Char('A'), KeyModifiers::SHIFT) => Some(CMD_APPEND_LINE_END),
+        (KeyCode::Char('o'), KeyModifiers::NONE) => Some(CMD_OPEN_BELOW),
+        (KeyCode::Char('O'), KeyModifiers::SHIFT) => Some(CMD_OPEN_ABOVE),
+
+        // Replace character
+        (KeyCode::Char('r'), KeyModifiers::NONE) => Some(CMD_REPLACE),
+
+        // Undo/Redo
+        (KeyCode::Char('u'), KeyModifiers::NONE) => Some(CMD_UNDO),
+        (KeyCode::Char('U'), KeyModifiers::SHIFT) => Some(CMD_REDO),
+        (KeyCode::Char('r'), KeyModifiers::CONTROL) => Some("ctrl-r"), // TODO: add constant
+
+        // Repeat last action
+        (KeyCode::Char('.'), KeyModifiers::NONE) => Some(CMD_REPEAT),
+
+        // Document movement
+        (KeyCode::Char('g'), KeyModifiers::NONE) => Some("g"), // Note: multi-key 'gg' handled elsewhere
+        (KeyCode::Char('G'), KeyModifiers::NONE) => Some(CMD_GOTO_FILE_END),
+
+        _ => None,
+    }
+}
+
+/// Check if current game session is in Insert mode
+fn is_in_insert_mode(state: &AppState) -> bool {
+    state
         .session
         .as_ref()
         .map(|session| session.is_insert_mode())
-        .unwrap_or(false);
+        .unwrap_or(false)
+}
 
-    // In Insert mode, capture text input
-    if in_insert_mode {
-        match key.code {
-            KeyCode::Char(c) => {
-                return Some(Message::ExecuteCommand(Cow::Owned(c.to_string())));
-            }
-            KeyCode::Enter => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed("\n")));
-            }
-            KeyCode::Backspace => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_BACKSPACE)));
-            }
-            KeyCode::Left => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_ARROW_LEFT)));
-            }
-            KeyCode::Right => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_ARROW_RIGHT)));
-            }
-            KeyCode::Up => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_ARROW_UP)));
-            }
-            KeyCode::Down => {
-                return Some(Message::ExecuteCommand(Cow::Borrowed(CMD_ARROW_DOWN)));
-            }
-            _ => {}
-        }
+fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+    // Check special UI keys first
+    if let Some(msg) = handle_task_special_keys(key) {
+        return Some(msg);
     }
 
-    // Convert key to Helix command string (Normal mode)
-    let command = match (key.code, key.modifiers) {
-        // Movement commands
-        (KeyCode::Char('h'), KeyModifiers::NONE) => CMD_MOVE_LEFT,
-        (KeyCode::Char('j'), KeyModifiers::NONE) => CMD_MOVE_DOWN,
-        (KeyCode::Char('k'), KeyModifiers::NONE) => CMD_MOVE_UP,
-        (KeyCode::Char('l'), KeyModifiers::NONE) => CMD_MOVE_RIGHT,
+    // Handle Insert mode input
+    if is_in_insert_mode(state) {
+        return handle_insert_mode_input(key).map(Message::ExecuteCommand);
+    }
 
-        // Word movement
-        (KeyCode::Char('w'), KeyModifiers::NONE) => CMD_MOVE_WORD_FORWARD,
-        (KeyCode::Char('b'), KeyModifiers::NONE) => CMD_MOVE_WORD_BACKWARD,
-        (KeyCode::Char('e'), KeyModifiers::NONE) => CMD_MOVE_WORD_END,
-
-        // Line movement
-        (KeyCode::Char('0'), KeyModifiers::NONE) => CMD_MOVE_LINE_START,
-        (KeyCode::Char('$'), KeyModifiers::NONE) => CMD_MOVE_LINE_END,
-
-        // Deletion commands
-        (KeyCode::Char('x'), KeyModifiers::NONE) => CMD_DELETE_CHAR,
-        (KeyCode::Char('d'), KeyModifiers::NONE) => "d", // Single 'd' for multi-key handling
-        (KeyCode::Char('c'), KeyModifiers::NONE) => CMD_CHANGE,
-        (KeyCode::Char('J'), KeyModifiers::SHIFT) => CMD_JOIN_LINES,
-
-        // Indentation
-        (KeyCode::Char('>'), KeyModifiers::NONE) => CMD_INDENT,
-        (KeyCode::Char('<'), KeyModifiers::NONE) => CMD_DEDENT,
-
-        // Yank and paste
-        (KeyCode::Char('y'), KeyModifiers::NONE) => CMD_YANK,
-        (KeyCode::Char('p'), KeyModifiers::NONE) => CMD_PASTE_AFTER,
-        (KeyCode::Char('P'), KeyModifiers::SHIFT) => CMD_PASTE_BEFORE,
-
-        // Mode changes and editing
-        (KeyCode::Char('i'), KeyModifiers::NONE) => CMD_INSERT,
-        (KeyCode::Char('a'), KeyModifiers::NONE) => CMD_APPEND,
-        (KeyCode::Char('I'), KeyModifiers::SHIFT) => CMD_INSERT_LINE_START,
-        (KeyCode::Char('A'), KeyModifiers::SHIFT) => CMD_APPEND_LINE_END,
-        (KeyCode::Char('o'), KeyModifiers::NONE) => CMD_OPEN_BELOW,
-        (KeyCode::Char('O'), KeyModifiers::SHIFT) => CMD_OPEN_ABOVE,
-
-        // Replace character
-        (KeyCode::Char('r'), KeyModifiers::NONE) => CMD_REPLACE,
-
-        // Undo/Redo
-        (KeyCode::Char('u'), KeyModifiers::NONE) => CMD_UNDO,
-        (KeyCode::Char('U'), KeyModifiers::SHIFT) => CMD_REDO,
-        (KeyCode::Char('r'), KeyModifiers::CONTROL) => "ctrl-r", // TODO: add constant
-
-        // Repeat last action
-        (KeyCode::Char('.'), KeyModifiers::NONE) => CMD_REPEAT,
-
-        // Document movement
-        (KeyCode::Char('g'), KeyModifiers::NONE) => "g", // Note: multi-key 'gg' handled elsewhere
-        (KeyCode::Char('G'), KeyModifiers::NONE) => CMD_GOTO_FILE_END,
-
-        _ => return None,
-    };
-
-    Some(Message::ExecuteCommand(Cow::Borrowed(command)))
+    // Handle Normal mode commands
+    map_key_to_helix_command(key).map(|cmd| Message::ExecuteCommand(Cow::Borrowed(cmd)))
 }
 
 /// Handle keyboard events on the results screen
@@ -473,8 +476,8 @@ mod tests {
     }
 
     #[test]
-    fn test_task_key_esc_abandons() {
-        let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    fn test_task_key_ctrl_q_abandons() {
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
         assert_eq!(msg, Some(Message::AbandonScenario));

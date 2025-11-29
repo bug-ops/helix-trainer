@@ -144,7 +144,16 @@ impl CommandPerformance {
         self.difficulty = memory.difficulty;
         self.scheduled_days = interval.round().max(1.0) as u32;
         self.last_review = Utc::now();
-        self.due = self.last_review + chrono::Duration::days(self.scheduled_days as i64);
+
+        // For first review (reps == 0), make command immediately due
+        // This allows users to practice new commands right away
+        // Subsequent reviews use FSRS scheduling with 1+ day intervals
+        if self.reps == 0 {
+            self.due = self.last_review; // Immediately due
+        } else {
+            self.due = self.last_review + chrono::Duration::days(self.scheduled_days as i64);
+        }
+
         self.reps += 1;
     }
 }

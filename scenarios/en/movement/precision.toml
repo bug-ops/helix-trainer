@@ -1,0 +1,274 @@
+# Precision Movement Scenarios
+# Single-step navigation challenges
+
+[[scenarios]]
+id = "precision_left_001"
+name = "Move left exactly once"
+description = "Navigate left by one character"
+
+hints = [
+    "'h' moves cursor left",
+    "Precise for small adjustments",
+]
+
+[scenarios.setup]
+file_content = "abcdef"
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = "abcdef"
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["h"]
+description = "Press 'h' to move left"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["character", "precision"]
+commands_taught = ["h"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "precision_right_001"
+name = "Move right exactly once"
+description = "Navigate right by one character"
+
+hints = [
+    "'l' moves cursor right",
+    "Precise for small adjustments",
+]
+
+[scenarios.setup]
+file_content = "abcdef"
+cursor_position = [0, 2]
+
+[scenarios.target]
+file_content = "abcdef"
+cursor_position = [0, 3]
+
+[scenarios.solution]
+commands = ["l"]
+description = "Press 'l' to move right"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["character", "precision"]
+commands_taught = ["l"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "precision_down_001"
+name = "Move down exactly once"
+description = "Navigate down by one line"
+
+hints = [
+    "'j' moves cursor down",
+    "Column position preserved",
+]
+
+[scenarios.setup]
+file_content = "aaa\nbbb\nccc"
+cursor_position = [0, 1]
+
+[scenarios.target]
+file_content = "aaa\nbbb\nccc"
+cursor_position = [1, 1]
+
+[scenarios.solution]
+commands = ["j"]
+description = "Press 'j' to move down"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "precision"]
+commands_taught = ["j"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "precision_up_001"
+name = "Move up exactly once"
+description = "Navigate up by one line"
+
+hints = [
+    "'k' moves cursor up",
+    "Column position preserved",
+]
+
+[scenarios.setup]
+file_content = "aaa\nbbb\nccc"
+cursor_position = [2, 1]
+
+[scenarios.target]
+file_content = "aaa\nbbb\nccc"
+cursor_position = [1, 1]
+
+[scenarios.solution]
+commands = ["k"]
+description = "Press 'k' to move up"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "precision"]
+commands_taught = ["k"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "precision_word_001"
+name = "Jump one word forward"
+description = "Navigate to next word"
+
+hints = [
+    "'w' jumps to next word start",
+    "Efficient for word navigation",
+]
+
+[scenarios.setup]
+file_content = "one two three"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "one two three"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["w"]
+description = "Press 'w' to jump to next word"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "precision"]
+commands_taught = ["w"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "precision_word_back_001"
+name = "Jump one word backward"
+description = "Navigate to previous word"
+
+hints = [
+    "'b' jumps to previous word start",
+    "Opposite of 'w'",
+]
+
+[scenarios.setup]
+file_content = "one two three"
+cursor_position = [0, 8]
+
+[scenarios.target]
+file_content = "one two three"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["b"]
+description = "Press 'b' to jump back one word"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "precision"]
+commands_taught = ["b"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "precision_line_start_001"
+name = "Jump to line start"
+description = "Navigate to beginning of line"
+
+hints = [
+    "'0' goes to column zero",
+    "Fastest way to line start",
+]
+
+[scenarios.setup]
+file_content = "hello world"
+cursor_position = [0, 8]
+
+[scenarios.target]
+file_content = "hello world"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["0"]
+description = "Press '0' to go to line start"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "start"]
+commands_taught = ["0"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "precision_doc_start_001"
+name = "Jump to document start"
+description = "Navigate to first line"
+
+hints = [
+    "'gg' goes to first line",
+    "Essential for long files",
+]
+
+[scenarios.setup]
+file_content = "one\ntwo\nthree\nfour"
+cursor_position = [3, 2]
+
+[scenarios.target]
+file_content = "one\ntwo\nthree\nfour"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["gg"]
+description = "Press 'gg' to go to document start"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["document", "start"]
+commands_taught = ["gg"]
+estimated_time_seconds = 5

@@ -1,0 +1,240 @@
+# Word Movement Basics
+# Scenarios for w, b navigation
+
+[[scenarios]]
+id = "word_forward_basic_001"
+name = "Move forward one word"
+description = "Use 'w' to jump to next word start"
+
+hints = [
+    "'w' moves to the start of the next word",
+    "Spaces separate words",
+]
+
+[scenarios.setup]
+file_content = "Hello World"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "Hello World"
+cursor_position = [0, 6]
+
+[scenarios.solution]
+commands = ["w"]
+description = "Press 'w' to move to next word"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "forward"]
+commands_taught = ["w"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "word_forward_basic_002"
+name = "Move forward two words"
+description = "Jump through two words using 'w'"
+
+hints = [
+    "'w' moves to next word start",
+    "Press twice for two words",
+]
+
+[scenarios.setup]
+file_content = "one two three"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "one two three"
+cursor_position = [0, 8]
+
+[scenarios.solution]
+commands = ["w", "w"]
+description = "Press 'w' twice"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "forward"]
+commands_taught = ["w"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "word_backward_basic_001"
+name = "Move backward one word"
+description = "Use 'b' to jump to previous word start"
+
+hints = [
+    "'b' moves to the start of the previous word",
+    "Opposite of 'w'",
+]
+
+[scenarios.setup]
+file_content = "Hello World"
+cursor_position = [0, 6]
+
+[scenarios.target]
+file_content = "Hello World"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["b"]
+description = "Press 'b' to move back"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "backward"]
+commands_taught = ["b"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "word_backward_basic_002"
+name = "Move backward two words"
+description = "Jump back through two words using 'b'"
+
+hints = [
+    "'b' moves to previous word start",
+    "Press twice for two words",
+]
+
+[scenarios.setup]
+file_content = "one two three"
+cursor_position = [0, 8]
+
+[scenarios.target]
+file_content = "one two three"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["b", "b"]
+description = "Press 'b' twice"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "backward"]
+commands_taught = ["b"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "word_combined_001"
+name = "Navigate words bidirectionally"
+description = "Use both 'w' and 'b' to navigate"
+
+hints = [
+    "'w' goes forward, 'b' goes backward",
+    "Combine for flexible navigation",
+]
+
+[scenarios.setup]
+file_content = "alpha beta gamma"
+cursor_position = [0, 6]
+
+[scenarios.target]
+file_content = "alpha beta gamma"
+cursor_position = [0, 11]
+
+[scenarios.solution]
+commands = ["w"]
+description = "Press 'w' to go to 'gamma'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "combined"]
+commands_taught = ["w", "b"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "word_code_001"
+name = "Navigate code tokens"
+description = "Move through code using word commands"
+
+hints = [
+    "'w' treats punctuation as boundaries",
+    "Effective for navigating code",
+]
+
+[scenarios.setup]
+file_content = "let x = 10"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "let x = 10"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["w"]
+description = "Move to variable name"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "code"]
+commands_taught = ["w"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "word_sentence_001"
+name = "Navigate in sentence"
+description = "Move through words in a sentence"
+
+hints = [
+    "Use 'w' to move word by word",
+    "Count words to reach target",
+]
+
+[scenarios.setup]
+file_content = "The quick fox"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "The quick fox"
+cursor_position = [0, 10]
+
+[scenarios.solution]
+commands = ["w", "w"]
+description = "Move forward two words"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "sentence"]
+commands_taught = ["w"]
+estimated_time_seconds = 10

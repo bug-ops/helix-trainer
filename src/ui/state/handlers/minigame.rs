@@ -68,24 +68,25 @@ pub(in crate::ui::state) fn handle_minigame_tick(state: &mut AppState) -> Result
 
 /// Execute a command in the mini-game session
 ///
-/// Handles command execution, quest progress updates, and completion detection
+/// Handles command execution, quest progress updates, and completion detection.
+/// Uses shared quest tracking functions from quests module.
 fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), UserError> {
+    // Snapshot quest completion status before updates
+    let was_completed = super::snapshot_quest_completion(state);
+
     let Some(ref mut session) = state.game.minigame_session else {
         return Ok(());
     };
 
     session.handle_command(command)?;
 
-    // Update quest progress for command used
-    let mut profile = state.progress.profile.borrow_mut();
-    crate::gamification::QuestTracker::update_command_progress(&mut profile.daily_quests, command);
-    drop(profile);
+    // Update quest progress for command used (shared function)
+    super::track_command_for_quests(state, command);
 
-    // Track commands used today
-    state
-        .progress
-        .commands_used_today
-        .insert(command.to_string());
+    // Re-borrow session after state modification
+    let Some(ref mut session) = state.game.minigame_session else {
+        return Ok(());
+    };
 
     // Check for completion
     if session.check_completion() {
@@ -97,20 +98,19 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
                 drop(tracker);
             }
 
-            // Update quest progress for scenario completion
+            // Update quest progress for scenario completion (shared function)
             let duration = scenario.elapsed();
             let scenario_id = scenario.scenario.id.clone();
-
-            let mut profile = state.progress.profile.borrow_mut();
-            crate::gamification::QuestTracker::update_scenario_progress(
-                &mut profile.daily_quests,
-                &scenario_id,
-                duration,
-            );
-            drop(profile);
+            super::track_scenario_completion_for_quests(state, &scenario_id, duration);
         }
 
-        session.advance_to_next();
+        // Award XP for newly completed quests (shared function)
+        super::award_quest_completion_xp(state, &was_completed);
+
+        // Re-borrow session after state modification
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.advance_to_next();
+        }
         // Transition state will be handled by timer
     }
 

@@ -504,4 +504,356 @@ mod tests {
         let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, None);
     }
+
+    // Unit tests for handle_insert_mode_input()
+    mod handle_insert_mode_input_tests {
+        use super::*;
+
+        #[test]
+        fn test_handle_insert_mode_input_regular_char() {
+            let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Owned("a".to_string())));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_space() {
+            let key = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Owned(" ".to_string())));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_digit() {
+            let key = KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Owned("5".to_string())));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_special_char() {
+            let key = KeyEvent::new(KeyCode::Char('@'), KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Owned("@".to_string())));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_enter() {
+            let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Borrowed("\n")));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_backspace() {
+            let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Borrowed(CMD_BACKSPACE)));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_arrow_left() {
+            let key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Borrowed(CMD_ARROW_LEFT)));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_arrow_right() {
+            let key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Borrowed(CMD_ARROW_RIGHT)));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_arrow_up() {
+            let key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Borrowed(CMD_ARROW_UP)));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_arrow_down() {
+            let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, Some(Cow::Borrowed(CMD_ARROW_DOWN)));
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_escape_returns_none() {
+            // Escape is handled elsewhere, not in insert mode input
+            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_tab_returns_none() {
+            let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_handle_insert_mode_input_f_keys_return_none() {
+            let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
+            let result = handle_insert_mode_input(key);
+            assert_eq!(result, None);
+        }
+    }
+
+    // Unit tests for map_key_to_helix_command()
+    mod map_key_to_helix_command_tests {
+        use super::*;
+
+        // Movement commands
+        #[test]
+        fn test_map_key_movement_hjkl() {
+            let h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(h), Some(CMD_MOVE_LEFT));
+
+            let j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(j), Some(CMD_MOVE_DOWN));
+
+            let k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(k), Some(CMD_MOVE_UP));
+
+            let l = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(l), Some(CMD_MOVE_RIGHT));
+        }
+
+        #[test]
+        fn test_map_key_word_movement() {
+            let w = KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(w), Some(CMD_MOVE_WORD_FORWARD));
+
+            let b = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(b), Some(CMD_MOVE_WORD_BACKWARD));
+
+            let e = KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(e), Some(CMD_MOVE_WORD_END));
+        }
+
+        #[test]
+        fn test_map_key_line_movement() {
+            let zero = KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(zero), Some(CMD_MOVE_LINE_START));
+
+            let dollar = KeyEvent::new(KeyCode::Char('$'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(dollar), Some(CMD_MOVE_LINE_END));
+        }
+
+        // Deletion commands
+        #[test]
+        fn test_map_key_deletion() {
+            let x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(x), Some(CMD_DELETE_CHAR));
+
+            let d = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(d), Some("d"));
+
+            let c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(c), Some(CMD_CHANGE));
+
+            let j_shift = KeyEvent::new(KeyCode::Char('J'), KeyModifiers::SHIFT);
+            assert_eq!(map_key_to_helix_command(j_shift), Some(CMD_JOIN_LINES));
+        }
+
+        // Indentation
+        #[test]
+        fn test_map_key_indentation() {
+            let gt = KeyEvent::new(KeyCode::Char('>'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(gt), Some(CMD_INDENT));
+
+            let lt = KeyEvent::new(KeyCode::Char('<'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(lt), Some(CMD_DEDENT));
+        }
+
+        // Clipboard
+        #[test]
+        fn test_map_key_clipboard() {
+            let y = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(y), Some(CMD_YANK));
+
+            let p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(p), Some(CMD_PASTE_AFTER));
+
+            let p_shift = KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT);
+            assert_eq!(map_key_to_helix_command(p_shift), Some(CMD_PASTE_BEFORE));
+        }
+
+        // Mode changes
+        #[test]
+        fn test_map_key_mode_changes() {
+            let i = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(i), Some(CMD_INSERT));
+
+            let a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(a), Some(CMD_APPEND));
+
+            let i_shift = KeyEvent::new(KeyCode::Char('I'), KeyModifiers::SHIFT);
+            assert_eq!(
+                map_key_to_helix_command(i_shift),
+                Some(CMD_INSERT_LINE_START)
+            );
+
+            let a_shift = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT);
+            assert_eq!(map_key_to_helix_command(a_shift), Some(CMD_APPEND_LINE_END));
+
+            let o = KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(o), Some(CMD_OPEN_BELOW));
+
+            let o_shift = KeyEvent::new(KeyCode::Char('O'), KeyModifiers::SHIFT);
+            assert_eq!(map_key_to_helix_command(o_shift), Some(CMD_OPEN_ABOVE));
+        }
+
+        // Replace
+        #[test]
+        fn test_map_key_replace() {
+            let r = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(r), Some(CMD_REPLACE));
+        }
+
+        // Undo/Redo
+        #[test]
+        fn test_map_key_undo_redo() {
+            let u = KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(u), Some(CMD_UNDO));
+
+            let u_shift = KeyEvent::new(KeyCode::Char('U'), KeyModifiers::SHIFT);
+            assert_eq!(map_key_to_helix_command(u_shift), Some(CMD_REDO));
+
+            let r_ctrl = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL);
+            assert_eq!(map_key_to_helix_command(r_ctrl), Some("ctrl-r"));
+        }
+
+        // Repeat
+        #[test]
+        fn test_map_key_repeat() {
+            let dot = KeyEvent::new(KeyCode::Char('.'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(dot), Some(CMD_REPEAT));
+        }
+
+        // Document movement
+        #[test]
+        fn test_map_key_document_movement() {
+            let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(g), Some("g"));
+
+            let g_shift = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(g_shift), Some(CMD_GOTO_FILE_END));
+        }
+
+        // Edge cases
+        #[test]
+        fn test_map_key_unknown_returns_none() {
+            let z = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(z), None);
+
+            let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(f1), None);
+        }
+
+        #[test]
+        fn test_map_key_with_wrong_modifier() {
+            let h_ctrl = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::CONTROL);
+            assert_eq!(map_key_to_helix_command(h_ctrl), None);
+
+            let h_alt = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::ALT);
+            assert_eq!(map_key_to_helix_command(h_alt), None);
+        }
+    }
+
+    // Unit tests for is_in_insert_mode()
+    mod is_in_insert_mode_tests {
+        use super::*;
+        use helix_trainer::game::GameSession;
+        use helix_trainer::ui::state::{MenuData, TaskData, TypedScreen};
+
+        #[test]
+        fn test_is_in_insert_mode_on_menu_screen() {
+            let mut state = create_test_app_state();
+            state.screen = TypedScreen::Menu(MenuData::default());
+            assert!(!is_in_insert_mode(&state));
+        }
+
+        #[test]
+        fn test_is_in_insert_mode_on_task_screen_normal_mode() {
+            use helix_trainer::config::Scenario;
+
+            let mut state = create_test_app_state();
+
+            // Create a simple scenario
+            let scenario = Scenario {
+                id: "test".to_string(),
+                name: "Test".to_string(),
+                description: "Test scenario".to_string(),
+                setup: helix_trainer::config::Setup {
+                    file_content: "test".to_string(),
+                    cursor_position: (0, 0),
+                },
+                target: helix_trainer::config::TargetState {
+                    file_content: "test2".to_string(),
+                    cursor_position: (0, 0),
+                    selection: None,
+                },
+                solution: helix_trainer::config::Solution {
+                    commands: vec!["x".to_string()],
+                    description: "Delete char".to_string(),
+                },
+                scoring: helix_trainer::config::ScoringConfig {
+                    optimal_count: 1,
+                    max_points: 100,
+                    tolerance: 0,
+                },
+                hints: vec![],
+                alternatives: vec![],
+                metadata: None,
+            };
+
+            let session = GameSession::new(scenario).unwrap();
+            state.screen = TypedScreen::Task(TaskData::new(session));
+
+            // GameSession starts in Normal mode
+            assert!(!is_in_insert_mode(&state));
+        }
+    }
+
+    // Unit tests for handle_task_special_keys()
+    mod handle_task_special_keys_tests {
+        use super::*;
+
+        #[test]
+        fn test_handle_task_special_keys_f1() {
+            let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
+            assert_eq!(handle_task_special_keys(key), Some(Message::ShowHint));
+        }
+
+        #[test]
+        fn test_handle_task_special_keys_question_mark() {
+            let key = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
+            assert_eq!(handle_task_special_keys(key), Some(Message::ShowHint));
+        }
+
+        #[test]
+        fn test_handle_task_special_keys_ctrl_q() {
+            let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+            assert_eq!(
+                handle_task_special_keys(key),
+                Some(Message::AbandonScenario)
+            );
+        }
+
+        #[test]
+        fn test_handle_task_special_keys_regular_key() {
+            let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+            assert_eq!(handle_task_special_keys(key), None);
+        }
+
+        #[test]
+        fn test_handle_task_special_keys_escape() {
+            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            assert_eq!(handle_task_special_keys(key), None);
+        }
+    }
 }

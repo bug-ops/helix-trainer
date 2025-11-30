@@ -25,6 +25,55 @@ fn format_key_for_display(command: &str) -> String {
     }
 }
 
+/// Parse command buffer to determine if a complete command is available
+///
+/// Returns Some(command) if buffer contains a complete command, None if waiting for more keys
+fn parse_command_buffer(buffer: &str) -> Option<&str> {
+    match buffer {
+        // Multi-key commands
+        CMD_DELETE_LINE => Some(CMD_DELETE_LINE),
+        CMD_GOTO_FILE_START => Some(CMD_GOTO_FILE_START),
+
+        // Replace character command: r + any char
+        cmd if cmd.starts_with('r') && cmd.len() == 2 => Some(buffer),
+
+        // Partial commands - wait for more input
+        "d" | "g" | CMD_REPLACE => None,
+
+        // Single-key commands
+        _ if buffer.len() == 1 => Some(buffer),
+
+        // Invalid sequence - return empty to signal clear
+        _ => Some(""),
+    }
+}
+
+/// Process session result and update state accordingly
+///
+/// Returns whether session was completed
+fn process_session_result(
+    session_result: crate::game::SessionAfterAction,
+    task_data: &mut crate::ui::state::TaskData,
+    state: &mut AppState,
+) -> Result<bool, UserError> {
+    use crate::game::SessionAfterAction;
+    use crate::ui::state::ResultsData;
+
+    match session_result {
+        SessionAfterAction::StillActive(s) => {
+            task_data.session = s;
+            Ok(false)
+        }
+        SessionAfterAction::Completed(s) => {
+            let feedback = s.feedback().map_err(|_| UserError::OperationFailed)?;
+            state.ui.last_feedback = Some(feedback.clone());
+            state.ui.completion_time = Some(std::time::Instant::now());
+            state.screen = TypedScreen::Results(ResultsData::from_completed(s, feedback)?);
+            Ok(true)
+        }
+    }
+}
+
 /// Handle ShowHint message
 ///
 /// Toggles hint panel visibility and fetches next hint
@@ -56,9 +105,6 @@ pub fn handle_execute_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
-    use crate::game::SessionAfterAction;
-    use crate::ui::state::ResultsData;
-
     // Only handle if we're on Task screen
     if !matches!(state.screen, TypedScreen::Task(_)) {
         return Ok(()); // Not on task screen
@@ -84,99 +130,72 @@ pub fn handle_execute_command(
     let mut executed_command: Option<String> = None;
     let mut session_completed = false;
 
-    // Take ownership of session for state transition
-    let session = task_data.session;
-
     // In Insert mode, execute commands directly
-    if session.is_insert_mode() {
+    if task_data.session.is_insert_mode() {
         // Store last command for display (skip special commands and single chars)
         if command.as_ref() == CMD_ESCAPE {
             task_data.last_command = Some(command.to_string());
         }
 
-        // Execute command through session (consumes session)
-        match session.record_action(command.to_string())? {
-            SessionAfterAction::StillActive(s) => {
-                // Session still active, put it back in task_data
-                task_data.session = s;
-                // Restore Task screen
-                state.screen = TypedScreen::Task(task_data);
-            }
-            SessionAfterAction::Completed(s) => {
-                // Session completed, get feedback and mark completion time
-                let feedback = s.feedback().map_err(|_| UserError::OperationFailed)?;
-                state.ui.last_feedback = Some(feedback.clone());
-                state.ui.completion_time = Some(std::time::Instant::now());
-                session_completed = true;
+        // Clone scenario before taking session (to avoid borrow conflict)
+        let scenario = task_data.session.scenario().clone();
 
-                // Transition to Results screen
-                state.screen = TypedScreen::Results(ResultsData::from_completed(s, feedback)?);
-            }
+        // Take session for state transition
+        let session = std::mem::replace(
+            &mut task_data.session,
+            crate::game::GameSession::new(scenario)?,
+        );
+
+        // Execute command and process result
+        let result = session.record_action(command.to_string())?;
+        session_completed = process_session_result(result, &mut task_data, state)?;
+
+        // Restore screen if not completed
+        if !session_completed {
+            state.screen = TypedScreen::Task(task_data);
         }
     } else {
         // Normal mode: handle command buffer for multi-key commands
         task_data.command_buffer.push_str(&command);
 
         // Try to match a complete command
-        let final_command = match task_data.command_buffer.as_str() {
-            // Multi-key commands
-            CMD_DELETE_LINE => Some(CMD_DELETE_LINE),
-            CMD_GOTO_FILE_START => Some(CMD_GOTO_FILE_START),
+        let final_command = parse_command_buffer(&task_data.command_buffer);
 
-            // Replace character command: r + any char
-            cmd if cmd.starts_with('r') && cmd.len() == 2 => {
-                Some(task_data.command_buffer.as_str())
-            }
-
-            // Partial commands - wait for more input
-            "d" | "g" | CMD_REPLACE => None,
-
-            // Single-key commands (clear buffer and execute)
-            _ if task_data.command_buffer.len() == 1 => Some(task_data.command_buffer.as_str()),
-
-            // Invalid sequence - clear buffer
-            _ => {
+        match final_command {
+            Some("") => {
+                // Invalid sequence - clear buffer and restore state
                 task_data.command_buffer.clear();
-                // Put task_data back with session
-                task_data.session = session;
                 state.screen = TypedScreen::Task(task_data);
                 return Ok(());
             }
-        };
+            Some(cmd) => {
+                // Complete command - execute it
+                let cmd_string = cmd.to_string();
+                task_data.command_buffer.clear();
+                task_data.last_command = Some(cmd_string.clone());
+                executed_command = Some(cmd_string.clone());
 
-        if let Some(cmd) = final_command {
-            // We have a complete command
-            let cmd_string = cmd.to_string();
-            task_data.command_buffer.clear();
+                // Clone scenario before taking session (to avoid borrow conflict)
+                let scenario = task_data.session.scenario().clone();
 
-            // Store for display
-            task_data.last_command = Some(cmd_string.clone());
+                // Take session for state transition
+                let session = std::mem::replace(
+                    &mut task_data.session,
+                    crate::game::GameSession::new(scenario)?,
+                );
 
-            // Track for quest progress
-            executed_command = Some(cmd_string.clone());
+                let result = session.record_action(cmd_string)?;
+                session_completed = process_session_result(result, &mut task_data, state)?;
 
-            // Execute command through session (consumes session)
-            match session.record_action(cmd_string)? {
-                SessionAfterAction::StillActive(s) => {
-                    // Session still active, put it back
-                    task_data.session = s;
+                // Restore screen if not completed
+                if !session_completed {
                     state.screen = TypedScreen::Task(task_data);
                 }
-                SessionAfterAction::Completed(s) => {
-                    // Session completed, get feedback and mark completion time
-                    let feedback = s.feedback().map_err(|_| UserError::OperationFailed)?;
-                    state.ui.last_feedback = Some(feedback.clone());
-                    state.ui.completion_time = Some(std::time::Instant::now());
-                    session_completed = true;
-
-                    // Transition to Results screen
-                    state.screen = TypedScreen::Results(ResultsData::from_completed(s, feedback)?);
-                }
             }
-        } else {
-            // Waiting for more keys, put session back
-            task_data.session = session;
-            state.screen = TypedScreen::Task(task_data);
+            None => {
+                // Waiting for more keys
+                state.screen = TypedScreen::Task(task_data);
+            }
         }
     }
 

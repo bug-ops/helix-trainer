@@ -784,5 +784,28 @@ impl GameSession<Abandoned> {
 /// Typestate pattern markers for compile-time state machine enforcement
 pub mod typestate;
 
+// Implement PlayableScenario trait for GameSession<Active>
+impl super::PlayableScenario for GameSession<Active> {
+    fn current_state(&self) -> &super::EditorState {
+        &self.current_state
+    }
+
+    fn target_state(&self) -> &super::EditorState {
+        &self.target_state
+    }
+
+    fn action_count(&self) -> usize {
+        self.user_actions.len()
+    }
+
+    fn is_insert_mode(&self) -> bool {
+        self.simulator.mode() == crate::helix::Mode::Insert
+    }
+
+    fn elapsed(&self) -> std::time::Duration {
+        self.started_at.elapsed()
+    }
+}
+
 #[cfg(test)]
 mod tests;

@@ -148,6 +148,29 @@ impl ActiveMiniScenario {
     }
 }
 
+// Implement PlayableScenario trait for ActiveMiniScenario
+impl crate::game::PlayableScenario for ActiveMiniScenario {
+    fn current_state(&self) -> &crate::game::EditorState {
+        &self.current_state
+    }
+
+    fn target_state(&self) -> &crate::game::EditorState {
+        &self.target_state
+    }
+
+    fn action_count(&self) -> usize {
+        self.actions.len()
+    }
+
+    fn is_insert_mode(&self) -> bool {
+        self.simulator.is_insert_mode()
+    }
+
+    fn elapsed(&self) -> std::time::Duration {
+        self.started_at.elapsed()
+    }
+}
+
 /// Mini-game session state
 ///
 /// Manages the complete arcade-style gameplay session including:

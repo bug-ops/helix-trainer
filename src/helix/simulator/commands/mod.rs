@@ -353,3 +353,167 @@ pub(super) fn execute_command_any_mode(
     *sim = new_sim;
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Unit tests for is_insert_command()
+    mod is_insert_command_tests {
+        use super::*;
+
+        #[test]
+        fn test_insert_command_insert() {
+            assert!(is_insert_command(CMD_INSERT));
+        }
+
+        #[test]
+        fn test_insert_command_append() {
+            assert!(is_insert_command(CMD_APPEND));
+        }
+
+        #[test]
+        fn test_insert_command_insert_line_start() {
+            assert!(is_insert_command(CMD_INSERT_LINE_START));
+        }
+
+        #[test]
+        fn test_insert_command_append_line_end() {
+            assert!(is_insert_command(CMD_APPEND_LINE_END));
+        }
+
+        #[test]
+        fn test_insert_command_open_below() {
+            assert!(is_insert_command(CMD_OPEN_BELOW));
+        }
+
+        #[test]
+        fn test_insert_command_open_above() {
+            assert!(is_insert_command(CMD_OPEN_ABOVE));
+        }
+
+        #[test]
+        fn test_insert_command_change() {
+            assert!(is_insert_command(CMD_CHANGE));
+        }
+
+        #[test]
+        fn test_insert_command_movement_not_insert() {
+            assert!(!is_insert_command(CMD_MOVE_LEFT));
+            assert!(!is_insert_command(CMD_MOVE_RIGHT));
+            assert!(!is_insert_command(CMD_MOVE_UP));
+            assert!(!is_insert_command(CMD_MOVE_DOWN));
+        }
+
+        #[test]
+        fn test_insert_command_editing_not_insert() {
+            assert!(!is_insert_command(CMD_DELETE_CHAR));
+            assert!(!is_insert_command(CMD_DELETE_LINE));
+            assert!(!is_insert_command(CMD_YANK));
+            assert!(!is_insert_command(CMD_PASTE_AFTER));
+        }
+
+        #[test]
+        fn test_insert_command_escape_not_insert() {
+            assert!(!is_insert_command(CMD_ESCAPE));
+        }
+
+        #[test]
+        fn test_insert_command_random_string() {
+            assert!(!is_insert_command("xyz"));
+            assert!(!is_insert_command(""));
+        }
+    }
+
+    // Unit tests for cmd_to_key_events()
+    mod cmd_to_key_events_tests {
+        use super::*;
+
+        #[test]
+        fn test_cmd_to_key_events_delete_line() {
+            let events = cmd_to_key_events(CMD_DELETE_LINE);
+            assert_eq!(events.len(), 2);
+            assert_eq!(events[0].code, KeyCode::Char('d'));
+            assert_eq!(events[1].code, KeyCode::Char('d'));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_goto_file_start() {
+            let events = cmd_to_key_events(CMD_GOTO_FILE_START);
+            assert_eq!(events.len(), 2);
+            assert_eq!(events[0].code, KeyCode::Char('g'));
+            assert_eq!(events[1].code, KeyCode::Char('g'));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_escape() {
+            let events = cmd_to_key_events(CMD_ESCAPE);
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].code, KeyCode::Esc);
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_backspace() {
+            let events = cmd_to_key_events(CMD_BACKSPACE);
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].code, KeyCode::Backspace);
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_arrow_keys() {
+            let left = cmd_to_key_events(CMD_ARROW_LEFT);
+            assert_eq!(left.len(), 1);
+            assert_eq!(left[0].code, KeyCode::Left);
+
+            let right = cmd_to_key_events(CMD_ARROW_RIGHT);
+            assert_eq!(right.len(), 1);
+            assert_eq!(right[0].code, KeyCode::Right);
+
+            let up = cmd_to_key_events(CMD_ARROW_UP);
+            assert_eq!(up.len(), 1);
+            assert_eq!(up[0].code, KeyCode::Up);
+
+            let down = cmd_to_key_events(CMD_ARROW_DOWN);
+            assert_eq!(down.len(), 1);
+            assert_eq!(down[0].code, KeyCode::Down);
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_replace_command() {
+            let events = cmd_to_key_events("rx");
+            assert_eq!(events.len(), 2);
+            assert_eq!(events[0].code, KeyCode::Char('r'));
+            assert_eq!(events[1].code, KeyCode::Char('x'));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_single_char() {
+            let events = cmd_to_key_events("h");
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].code, KeyCode::Char('h'));
+
+            let events2 = cmd_to_key_events("x");
+            assert_eq!(events2.len(), 1);
+            assert_eq!(events2[0].code, KeyCode::Char('x'));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_empty_string() {
+            let events = cmd_to_key_events("");
+            assert!(events.is_empty());
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_unknown_multi_char() {
+            let events = cmd_to_key_events("xyz");
+            assert!(events.is_empty());
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_all_modifiers_none() {
+            let events = cmd_to_key_events("a");
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].modifiers, KeyModifiers::NONE);
+        }
+    }
+}

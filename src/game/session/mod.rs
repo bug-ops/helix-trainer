@@ -807,5 +807,31 @@ impl super::PlayableScenario for GameSession<Active> {
     }
 }
 
+// Implement PlayableScenario trait for GameSession<Completed>
+impl super::PlayableScenario for GameSession<Completed> {
+    fn current_state(&self) -> &super::EditorState {
+        &self.current_state
+    }
+
+    fn target_state(&self) -> &super::EditorState {
+        &self.target_state
+    }
+
+    fn action_count(&self) -> usize {
+        self.user_actions.len()
+    }
+
+    fn is_insert_mode(&self) -> bool {
+        self.simulator.mode() == crate::helix::Mode::Insert
+    }
+
+    fn elapsed(&self) -> std::time::Duration {
+        // For completed sessions, return duration from start to completion
+        self.completed_at
+            .map(|end| end.duration_since(self.started_at))
+            .unwrap_or_else(|| self.started_at.elapsed())
+    }
+}
+
 #[cfg(test)]
 mod tests;

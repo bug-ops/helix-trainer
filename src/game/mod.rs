@@ -52,4 +52,13 @@ pub trait PlayableScenario {
     fn is_completed(&self) -> bool {
         self.current_state() == self.target_state()
     }
+
+    /// Get current editor mode as string for UI display
+    fn mode_name(&self) -> &'static str {
+        if self.is_insert_mode() {
+            "INSERT"
+        } else {
+            "NORMAL"
+        }
+    }
 }

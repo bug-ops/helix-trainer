@@ -1,6 +1,7 @@
 //! Mini-game screen rendering (Arcade Mode)
 
 use super::editor::render_editor_pair;
+use crate::game::PlayableScenario;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
@@ -132,7 +133,7 @@ fn render_playing(frame: &mut Frame, area: Rect, session: &crate::minigame::Mini
 
     // Editor content (current scenario)
     if let Some(current) = session.current_scenario() {
-        render_scenario_editor(frame, chunks[2], current);
+        render_scenario_editor(frame, chunks[2], current, &current.scenario.description);
     }
 
     // Timer bar
@@ -167,10 +168,14 @@ fn render_queue(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGa
 }
 
 /// Render scenario editor view - uses shared editor rendering
-fn render_scenario_editor(
+///
+/// Uses PlayableScenario trait to access current and target states,
+/// enabling code reuse with training mode.
+fn render_scenario_editor<S: PlayableScenario>(
     frame: &mut Frame,
     area: Rect,
-    scenario: &crate::minigame::ActiveMiniScenario,
+    scenario: &S,
+    description: &str,
 ) {
     // Layout: task description | editor views (current + target)
     let chunks = Layout::default()
@@ -182,7 +187,7 @@ fn render_scenario_editor(
         .split(area);
 
     // Task description
-    let task = Paragraph::new(format!("TASK: {}", scenario.scenario.description))
+    let task = Paragraph::new(format!("TASK: {}", description))
         .style(Style::default().fg(Color::Yellow))
         .wrap(Wrap { trim: true })
         .block(Block::default().borders(Borders::ALL));

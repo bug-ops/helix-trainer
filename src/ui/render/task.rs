@@ -2,6 +2,7 @@
 
 use super::editor::render_editor_pair;
 use super::popups::{render_hint_popup, render_key_history_popup, render_success_popup};
+use crate::game::PlayableScenario;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
@@ -65,14 +66,15 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
 
         // Editor view - get current and target states
         // When completed, use pending_completed_session for final state display
-        let (current_state, target_state) = if is_completed {
+        // Use PlayableScenario trait to get states from either Active or Completed session
+        let playable: &dyn PlayableScenario = if is_completed {
             if let Some(completed) = &state.game.pending_completed_session {
-                (completed.current_state(), completed.target_state())
+                completed as &dyn PlayableScenario
             } else {
-                (session.current_state(), session.target_state())
+                session as &dyn PlayableScenario
             }
         } else {
-            (session.current_state(), session.target_state())
+            session as &dyn PlayableScenario
         };
 
         // Render editor pair using shared function
@@ -81,38 +83,22 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         render_editor_pair(
             frame,
             chunks[2],
-            current_state,
-            target_state,
+            playable.current_state(),
+            playable.target_state(),
             &current_title,
             &target_title,
         );
 
         // Stats with mode indicator and progress
-        // When completed, use pending_completed_session for accurate stats
+        // Use PlayableScenario trait for common stats, completion_progress is specific to Active
         let optimal = scenario.scoring.optimal_count;
-        let (actions, elapsed, mode, progress) = if is_completed {
-            if let Some(completed) = &state.game.pending_completed_session {
-                (
-                    completed.action_count(),
-                    completed.elapsed(),
-                    completed.mode_name(),
-                    100u8, // Completed = 100%
-                )
-            } else {
-                (
-                    session.action_count(),
-                    session.elapsed(),
-                    session.mode_name(),
-                    session.completion_progress(),
-                )
-            }
+        let actions = playable.action_count();
+        let elapsed = playable.elapsed();
+        let mode = playable.mode_name();
+        let progress = if is_completed {
+            100u8 // Completed = 100%
         } else {
-            (
-                session.action_count(),
-                session.elapsed(),
-                session.mode_name(),
-                session.completion_progress(),
-            )
+            session.completion_progress()
         };
         let elapsed_secs = elapsed.as_secs_f32();
 

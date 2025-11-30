@@ -283,28 +283,42 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     frame.render_widget(paragraph, area);
 }
 
-/// Render transition screen (brief "SUCCESS!" or "TIME'S UP!" flash)
+/// Render transition screen (shows result with SUCCESS!/TIME'S UP! overlay)
 fn render_transition(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGameSession) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Length(3)])
+        .constraints([
+            Constraint::Length(3), // Result message
+            Constraint::Min(8),    // Editor content (shows final state)
+            Constraint::Length(3), // Stats bar
+        ])
         .split(area);
 
     // Show SUCCESS or TIME'S UP based on transition type
     let is_success = session.state().transition_success().unwrap_or(true);
     let (message, color) = if is_success {
-        ("SUCCESS!", Color::Green)
+        ("✓ SUCCESS!", Color::Green)
     } else {
-        ("TIME'S UP!", Color::Red)
+        ("✗ TIME'S UP!", Color::Red)
     };
+
+    let result_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(color));
 
     let text = Paragraph::new(message)
         .style(Style::default().fg(color).add_modifier(Modifier::BOLD))
-        .alignment(Alignment::Center);
+        .alignment(Alignment::Center)
+        .block(result_block);
     frame.render_widget(text, chunks[0]);
 
+    // Show final editor state so user can see the result
+    if let Some(current) = session.current_scenario() {
+        render_scenario_editor(frame, chunks[1], current);
+    }
+
     // Stats bar
-    render_stats_bar(frame, chunks[1], session);
+    render_stats_bar(frame, chunks[2], session);
 }
 
 /// Render paused screen

@@ -49,11 +49,12 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 }
 
 /// Render key history popup showing last 5 keys pressed with large text
-pub(super) fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
-    // Only render if we're on Task screen
-    let TypedScreen::Task(task_data) = &state.screen else {
+///
+/// Used by both training mode and arcade mode.
+pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String]) {
+    if key_history.is_empty() {
         return;
-    };
+    }
 
     let area = frame.area();
 
@@ -62,7 +63,7 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
 
     // Build text from recent keys
     let mut key_text = String::new();
-    for (idx, key) in task_data.key_history.iter().take(max_keys).enumerate() {
+    for (idx, key) in key_history.iter().take(max_keys).enumerate() {
         if idx > 0 {
             key_text.push(' ');
         }

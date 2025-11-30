@@ -71,6 +71,11 @@ pub(in crate::ui::state) fn handle_minigame_tick(state: &mut AppState) -> Result
 /// Handles command execution, quest progress updates, and completion detection.
 /// Uses shared quest tracking functions from quests module.
 fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), UserError> {
+    // Record key to history for display
+    if let TypedScreen::MiniGame(ref mut data) = state.screen {
+        data.add_key_to_history(command.to_string());
+    }
+
     // Snapshot quest completion status before updates
     let was_completed = super::snapshot_quest_completion(state);
 
@@ -90,6 +95,9 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
 
     // Check for completion
     if session.check_completion() {
+        // Get current streak before advancing
+        let current_streak = session.stats().streak;
+
         // Record to FSRS before advancing (only if we have actions)
         if let Some(scenario) = session.current_scenario() {
             if !scenario.actions().is_empty() {
@@ -104,8 +112,22 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
             super::track_scenario_completion_for_quests(state, &scenario_id, duration);
         }
 
-        // Award XP for newly completed quests (shared function)
-        super::award_quest_completion_xp(state, &was_completed);
+        // Award XP for scenario completion in arcade mode
+        // Base: 15 XP per scenario + 2 XP per streak level (encourages maintaining streaks)
+        let scenario_xp = 15 + (current_streak.saturating_sub(1) * 2) as u64;
+        {
+            let mut profile = state.progress.profile.borrow_mut();
+            profile.add_xp(scenario_xp);
+        }
+
+        // Award XP for newly completed quests (this function adds XP internally)
+        let quest_xp = super::award_quest_completion_xp(state, &was_completed);
+
+        // Store total XP earned for display in transition popup
+        let total_xp = scenario_xp + quest_xp;
+        if let TypedScreen::MiniGame(ref mut data) = state.screen {
+            data.last_xp_earned = Some(total_xp);
+        }
 
         // Re-borrow session after state modification
         if let Some(ref mut session) = state.game.minigame_session {
@@ -280,9 +302,16 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
 }
 
 /// Handle returning to mode selection from mini-game
+///
+/// Awards XP for current progress before exiting.
 pub(in crate::ui::state) fn handle_minigame_back_to_menu(
     state: &mut AppState,
 ) -> Result<(), UserError> {
+    // Award XP for progress before exiting (if session exists)
+    if state.game.minigame_session.is_some() {
+        handle_minigame_game_over(state)?;
+    }
+
     // Clear mini-game session
     state.game.minigame_session = None;
 

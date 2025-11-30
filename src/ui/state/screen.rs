@@ -258,6 +258,28 @@ pub struct ModeSelectionData {
 pub struct MiniGameData {
     /// Command buffer for multi-key commands (e.g., "g" waiting for "g")
     pub command_buffer: String,
+    /// Last XP earned (for popup display during transition)
+    pub last_xp_earned: Option<u64>,
+    /// History of recent key presses (for display)
+    pub key_history: Vec<String>,
+}
+
+impl MiniGameData {
+    /// Add a key to the history (keeps last 5)
+    pub fn add_key_to_history(&mut self, key: String) {
+        // Insert at the beginning (most recent first)
+        self.key_history.insert(0, key);
+
+        // Keep only last 5 keys
+        if self.key_history.len() > 5 {
+            self.key_history.truncate(5);
+        }
+    }
+
+    /// Clear key history (called when starting new scenario)
+    pub fn clear_key_history(&mut self) {
+        self.key_history.clear();
+    }
 }
 
 /// Trait for types that manage a command buffer for multi-key commands

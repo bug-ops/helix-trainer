@@ -196,7 +196,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
 
         // Show key history popup if visible
         if state.ui.show_key_history {
-            render_key_history_popup(frame, state);
+            render_key_history_popup(frame, &task_data.key_history);
         }
 
         // Show success message if scenario just completed

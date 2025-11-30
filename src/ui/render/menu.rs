@@ -329,14 +329,20 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
 /// Render the profile header showing level, XP, and streak
 fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
+    use crate::gamification::XPCalculator;
+
     let profile = state.progress.profile.borrow();
 
-    let next_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level + 1);
+    // Calculate XP progress within current level
+    let current_level_xp = XPCalculator::xp_for_level(profile.level);
+    let next_level_xp = XPCalculator::xp_for_level(profile.level + 1);
+    let xp_in_level = profile.total_xp.saturating_sub(current_level_xp);
+    let xp_needed = next_level_xp.saturating_sub(current_level_xp);
     let progress_pct = (profile.xp_progress() * 100.0) as u8;
 
     let header_text = format!(
         "Level {} ⭐  🔥 {} days   XP: {}/{} ({}%)",
-        profile.level, profile.current_streak, profile.total_xp, next_level_xp, progress_pct
+        profile.level, profile.current_streak, xp_in_level, xp_needed, progress_pct
     );
 
     let header = Paragraph::new(header_text)

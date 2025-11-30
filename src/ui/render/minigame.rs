@@ -14,7 +14,7 @@ use ratatui::{
 /// Render the mini-game screen
 pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
     // Extract MiniGameData from TypedScreen::MiniGame
-    let TypedScreen::MiniGame(_) = &state.screen else {
+    let TypedScreen::MiniGame(minigame_data) = &state.screen else {
         return; // Wrong screen type
     };
 
@@ -31,8 +31,10 @@ pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
         render_countdown(frame, area, session);
     } else if session.state().is_playing() {
         render_playing(frame, area, session);
+        // Show key history during gameplay
+        super::popups::render_key_history_popup(frame, &minigame_data.key_history);
     } else if session.state().is_transition() {
-        render_transition(frame, area, session);
+        render_transition(frame, area, session, minigame_data.last_xp_earned);
     } else if session.state().is_paused() {
         render_paused(frame, area, session);
     } else if session.state().is_game_over() {
@@ -293,19 +295,32 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
 }
 
 /// Render transition screen (shows editor with popup overlay)
-fn render_transition(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGameSession) {
+fn render_transition(
+    frame: &mut Frame,
+    area: Rect,
+    session: &crate::minigame::MiniGameSession,
+    last_xp: Option<u64>,
+) {
     // Render playing screen as background (shows final editor state)
     render_playing(frame, area, session);
 
     // Render popup overlay on top using shared function
     let is_success = session.state().transition_success().unwrap_or(true);
     let (title, message, color) = if is_success {
-        ("SUCCESS!", "Loading next scenario...", Color::Green)
+        let xp_msg = match last_xp {
+            Some(xp) if xp > 0 => format!("+{} XP", xp),
+            _ => "Loading next scenario...".to_string(),
+        };
+        ("SUCCESS!", xp_msg, Color::Green)
     } else {
-        ("TIME'S UP!", "Loading next scenario...", Color::Red)
+        (
+            "TIME'S UP!",
+            "Loading next scenario...".to_string(),
+            Color::Red,
+        )
     };
 
-    super::popups::render_result_popup(frame, title, message, color);
+    super::popups::render_result_popup(frame, title, &message, color);
 }
 
 /// Render paused screen

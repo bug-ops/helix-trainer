@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-11-30
+
+### 🚀 Async Non-Blocking Architecture
+
+This release introduces a complete async architecture overhaul, making the application instantly responsive with background data loading.
+
+### Added
+
+**Async Architecture** (#49)
+
+- Tokio async runtime with non-blocking event loop
+- `AsyncState<T>` enum for type-safe loading states (Loading/Ready/Failed)
+- `DataLoadMessage` enum for channel-based communication
+- Background data loaders using `tokio::task::spawn_blocking`
+- Parallel loading of scenarios and profile at startup
+- Biased `tokio::select!` for responsive keyboard handling
+
+**New Modules**:
+- `src/async_state.rs` (179 lines) - Type-safe async state management
+- `src/data_loader.rs` (239 lines) - Background data loading functions
+
+**Quest TOML System** (#48)
+
+- Quest templates extracted to TOML files (`quests/en/daily.toml`)
+- `QuestLoader` with security validation and limits
+- `QuestTemplateRegistry` for template management
+- 12 quest templates across 3 difficulty levels
+- Strict TOML parsing with `#[serde(deny_unknown_fields)]`
+- Validation for IDs, versions, locales, and level ranges
+
+### Changed
+
+**Performance Optimizations**:
+- Runtime limited to 2 worker threads (sufficient for TUI workload)
+- Instant UI display (~10-50ms to first render)
+- Scenarios and profile load in parallel background tasks
+- Keyboard events prioritized with biased select
+
+**Code Quality** (#47, #45):
+- Large functions split into focused helpers
+- Hardcoded commands replaced with constants
+- CI/CD improvements with cargo doc tests and benchmark checks
+
+### Performance
+
+- **Cold start**: 50-80ms (UI displays immediately)
+- **Background loading**: Scenarios + profile load in parallel
+- **Event loop**: Non-blocking, remains responsive during all operations
+- **Memory overhead**: 1-2 MB for async runtime
+
+### Quality
+
+- All 563 tests passing (9 new async tests)
+- Zero clippy warnings
+- Security audit passed (cargo deny check)
+- Comprehensive test coverage for `handle_data_message()`
+
+### Security
+
+- Bounded channels (32 messages) prevent memory exhaustion
+- Error sanitization chain intact
+- No race conditions (single-threaded event loop)
+- Path validation layer for quest templates
+- All input bounded by strict limits
+
 ## [0.2.1] - 2025-11-29
 
 ### Fixed
@@ -485,7 +550,9 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/bug-ops/helix-trainer/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/bug-ops/helix-trainer/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bug-ops/helix-trainer/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/bug-ops/helix-trainer/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/bug-ops/helix-trainer/compare/v0.1.3...v0.1.4

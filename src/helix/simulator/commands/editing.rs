@@ -168,16 +168,19 @@ pub(super) fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 }
 
 /// Select current line (Helix 'x' command)
-/// In Helix, 'x' selects the line with cursor at line start (anchor at line end).
+/// In Helix, 'x' selects the line including the trailing newline.
+/// Selection goes from line start to end of line (including \n).
 pub(super) fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
-    let line_end = if line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(line + 1)
-    } else {
-        sim.doc.len_chars()
-    };
+
+    // Get line content to find the actual end position
+    let line_content = sim.doc.line(line);
+    let line_len = line_content.len_chars();
+
+    // line_end is line_start + line length (includes \n if present)
+    let line_end = line_start + line_len;
 
     // Selection::single(anchor, head) - head is where cursor appears
     // In Helix 'x', cursor stays at line start, anchor is at line end

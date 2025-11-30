@@ -51,7 +51,14 @@ pub(super) fn render_editor_with_diff<'a>(
                 let sel_start_line = sel.start.row;
                 let sel_end_line = sel.end.row;
 
-                if line_idx >= sel_start_line && line_idx <= sel_end_line {
+                // Skip if this is the end line but end_col is 0 (selection ends before this line)
+                let line_has_selection = if line_idx == sel_end_line && sel.end.col == 0 {
+                    false
+                } else {
+                    line_idx >= sel_start_line && line_idx <= sel_end_line
+                };
+
+                if line_has_selection {
                     // This line contains selection
                     let mut spans = Vec::new();
 

@@ -55,7 +55,12 @@ fn init_secure_logging() -> Result<()> {
 }
 
 /// Main entry point (async)
-#[tokio::main]
+///
+/// Uses 2 worker threads - sufficient for our async workload:
+/// - Terminal event handling
+/// - Background data loading (scenarios, profile)
+/// - Tick interval for animations
+#[tokio::main(worker_threads = 2)]
 async fn main() -> Result<()> {
     // Warn if running debug build
     #[cfg(debug_assertions)]
@@ -160,8 +165,11 @@ async fn run_async_event_loop(
         }
 
         // Select on multiple event sources (non-blocking)
+        // Use biased to prioritize keyboard events for responsive UI
         tokio::select! {
-            // Terminal events (keyboard input)
+            biased;
+
+            // Terminal events (keyboard input) - highest priority
             maybe_event = event_stream.next() => {
                 if let Some(Ok(Event::Key(key))) = maybe_event {
                     // Handle global quit shortcut first
@@ -926,6 +934,159 @@ mod tests {
         fn test_handle_task_special_keys_escape() {
             let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
             assert_eq!(handle_task_special_keys(key), None);
+        }
+    }
+
+    // Unit tests for handle_data_message()
+    mod handle_data_message_tests {
+        use super::*;
+        use helix_trainer::async_state::DataLoadMessage;
+        use helix_trainer::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
+
+        fn create_test_scenario() -> Scenario {
+            Scenario {
+                id: "test_001".to_string(),
+                name: "Test Scenario".to_string(),
+                description: "A test scenario".to_string(),
+                setup: Setup {
+                    file_content: "line 1\nline 2\n".to_string(),
+                    cursor_position: (0, 0),
+                },
+                target: TargetState {
+                    file_content: "line 2\n".to_string(),
+                    cursor_position: (0, 0),
+                    selection: None,
+                },
+                solution: Solution {
+                    commands: vec!["dd".to_string()],
+                    description: "Delete first line".to_string(),
+                },
+                alternatives: vec![],
+                hints: vec![],
+                scoring: ScoringConfig {
+                    optimal_count: 1,
+                    max_points: 100,
+                    tolerance: 0,
+                },
+                metadata: None,
+            }
+        }
+
+        #[test]
+        fn test_handle_scenarios_ready() {
+            let mut state = create_test_app_state();
+            let scenarios = vec![create_test_scenario()];
+
+            let result =
+                handle_data_message(&mut state, DataLoadMessage::ScenariosReady(scenarios));
+
+            assert!(result.is_ok());
+            assert_eq!(state.game.scenario_collection.count(), 1);
+        }
+
+        #[test]
+        fn test_handle_scenarios_ready_empty() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(&mut state, DataLoadMessage::ScenariosReady(vec![]));
+
+            assert!(result.is_ok());
+            assert_eq!(state.game.scenario_collection.count(), 0);
+        }
+
+        #[test]
+        fn test_handle_scenarios_error() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(
+                &mut state,
+                DataLoadMessage::ScenariosError("File not found".to_string()),
+            );
+
+            // Should not panic, just log error
+            assert!(result.is_ok());
+            // Scenarios should remain empty
+            assert_eq!(state.game.scenario_collection.count(), 0);
+        }
+
+        #[test]
+        fn test_handle_profile_ready() {
+            let mut state = create_test_app_state();
+            let mut profile = helix_trainer::gamification::UserProfile::new();
+            profile.total_xp = 500;
+            profile.level = 3;
+
+            let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+            assert!(result.is_ok());
+            let loaded_profile = state.progress.profile.borrow();
+            assert_eq!(loaded_profile.total_xp, 500);
+            assert_eq!(loaded_profile.level, 3);
+        }
+
+        #[test]
+        fn test_handle_profile_error_uses_fallback() {
+            let mut state = create_test_app_state();
+            let mut fallback = helix_trainer::gamification::UserProfile::new();
+            fallback.total_xp = 100; // Mark fallback with some XP
+
+            let result = handle_data_message(
+                &mut state,
+                DataLoadMessage::ProfileError {
+                    error: "Corrupted file".to_string(),
+                    fallback,
+                },
+            );
+
+            assert!(result.is_ok());
+            let loaded_profile = state.progress.profile.borrow();
+            assert_eq!(loaded_profile.total_xp, 100); // Fallback was used
+        }
+
+        #[test]
+        fn test_handle_profile_saved() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(&mut state, DataLoadMessage::ProfileSaved);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_handle_profile_save_error() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(
+                &mut state,
+                DataLoadMessage::ProfileSaveError("Disk full".to_string()),
+            );
+
+            // Should not panic, just log error
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_handle_quest_registry_ready() {
+            let mut state = create_test_app_state();
+            let registry = helix_trainer::gamification::QuestTemplateRegistry::new();
+
+            let result =
+                handle_data_message(&mut state, DataLoadMessage::QuestRegistryReady(registry));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_handle_quest_registry_error() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(
+                &mut state,
+                DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+            );
+
+            // Should not panic, just log error
+            assert!(result.is_ok());
         }
     }
 }

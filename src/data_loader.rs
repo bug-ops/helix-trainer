@@ -47,7 +47,9 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
             Ok(scenarios) => DataLoadMessage::ScenariosReady(scenarios),
             Err(e) => DataLoadMessage::ScenariosError(e.to_string()),
         };
-        let _ = tx_scenarios.send(msg).await;
+        if tx_scenarios.send(msg).await.is_err() {
+            tracing::warn!("Failed to send scenarios message: receiver dropped");
+        }
     });
 
     // Spawn profile loader (runs in parallel)
@@ -60,7 +62,9 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
                 fallback: UserProfile::new(),
             },
         };
-        let _ = tx_profile.send(msg).await;
+        if tx_profile.send(msg).await.is_err() {
+            tracing::warn!("Failed to send profile message: receiver dropped");
+        }
     });
 }
 
@@ -155,15 +159,23 @@ mod tests {
     async fn test_load_profile_async() {
         let result = load_profile_async().await;
 
-        // Profile loading should always succeed (creates new if missing)
+        // Profile loading should succeed - either loads existing or creates new
         match result {
             Ok(profile) => {
-                // Profile should have default values
-                assert_eq!(profile.level, 1, "New profile should start at level 1");
+                // Profile should have valid level (1 for new, or higher for existing)
+                assert!(
+                    profile.level >= 1,
+                    "Profile level should be at least 1, got {}",
+                    profile.level
+                );
             }
-            Err(_) => {
-                // Profile load can fail, but should provide fallback
-                // This is handled by the caller
+            Err(e) => {
+                // Profile load should not fail in normal circumstances
+                // If config directory is inaccessible, this may fail
+                panic!(
+                    "Profile loading should succeed (creates new if missing). Error: {}",
+                    e
+                );
             }
         }
     }
@@ -172,22 +184,21 @@ mod tests {
     async fn test_load_quest_registry_async() {
         let result = load_quest_registry_async("en").await;
 
-        // Quest registry should load or fail gracefully
+        // Quest registry should load successfully (quests/en/daily.toml exists)
         match result {
             Ok(registry) => {
-                // Registry loaded successfully
+                // Registry loaded successfully - verify it has templates
                 assert!(
-                    !registry.is_empty() || registry.is_empty(),
-                    "Registry should be valid (empty or with templates)"
+                    !registry.is_empty(),
+                    "Quest registry should have templates loaded from quests/en/daily.toml"
                 );
             }
             Err(e) => {
-                // If registry doesn't exist, should have a clear error
-                let error_msg = e.to_string();
-                assert!(
-                    error_msg.contains("quest") || error_msg.contains("Quest"),
-                    "Error should mention quest registry: {}",
-                    error_msg
+                // If this fails, the quests directory may be missing
+                panic!(
+                    "Quest registry should load successfully. Error: {}. \
+                     Make sure quests/en/daily.toml exists.",
+                    e
                 );
             }
         }

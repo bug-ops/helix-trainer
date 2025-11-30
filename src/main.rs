@@ -99,6 +99,10 @@ async fn main() -> Result<()> {
     // Spawn background data loaders
     spawn_data_loaders(data_tx);
 
+    // Draw initial screen before entering event loop
+    // This ensures the UI is visible immediately on startup
+    terminal.draw(|f| ui::render(f, &mut app_state))?;
+
     // Run the async event loop
     let result = run_async_event_loop(&mut terminal, &mut app_state, &mut data_rx).await;
 
@@ -434,7 +438,7 @@ fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
 
         // Document movement
         (KeyCode::Char('g'), KeyModifiers::NONE) => Some("g"), // Note: multi-key 'gg' handled elsewhere
-        (KeyCode::Char('G'), KeyModifiers::NONE) => Some(CMD_GOTO_FILE_END),
+        (KeyCode::Char('G'), KeyModifiers::SHIFT) => Some(CMD_GOTO_FILE_END),
 
         _ => None,
     }
@@ -915,7 +919,7 @@ mod tests {
             let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
             assert_eq!(map_key_to_helix_command(g), Some("g"));
 
-            let g_shift = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::NONE);
+            let g_shift = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT);
             assert_eq!(map_key_to_helix_command(g_shift), Some(CMD_GOTO_FILE_END));
         }
 

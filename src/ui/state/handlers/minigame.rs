@@ -76,7 +76,10 @@ pub(in crate::ui::state) fn handle_minigame_command(
 
         // Update quest progress for command used
         let mut profile = state.progress.profile.borrow_mut();
-        crate::gamification::QuestTracker::update_command_progress(&mut profile.daily_quests, &command);
+        crate::gamification::QuestTracker::update_command_progress(
+            &mut profile.daily_quests,
+            &command,
+        );
         drop(profile);
 
         // Track commands used today

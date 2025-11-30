@@ -30,17 +30,37 @@ fn format_key_for_display(command: &str) -> String {
 /// Returns Some(command) if buffer contains a complete command, None if waiting for more keys
 pub(super) fn parse_command_buffer(buffer: &str) -> Option<&str> {
     match buffer {
-        // Multi-key commands
-        CMD_DELETE_LINE => Some(CMD_DELETE_LINE),
+        // Goto menu commands (g prefix)
         CMD_GOTO_FILE_START => Some(CMD_GOTO_FILE_START),
+        CMD_GOTO_LINE_START => Some(CMD_GOTO_LINE_START),
+        CMD_GOTO_LINE_END => Some(CMD_GOTO_LINE_END),
+        CMD_GOTO_FIRST_NONWHITESPACE => Some(CMD_GOTO_FIRST_NONWHITESPACE),
+        CMD_GOTO_LAST_LINE => Some(CMD_GOTO_LAST_LINE),
 
         // Replace character command: r + any char
         cmd if cmd.starts_with('r') && cmd.len() == 2 => Some(buffer),
 
-        // Partial commands - wait for more input
-        "d" | "g" | CMD_REPLACE => None,
+        // Find/till commands: f/F/t/T + any char
+        cmd if (cmd.starts_with('f')
+            || cmd.starts_with('F')
+            || cmd.starts_with('t')
+            || cmd.starts_with('T'))
+            && cmd.len() == 2 =>
+        {
+            Some(buffer)
+        }
 
-        // Single-key commands
+        // Partial commands - wait for more input
+        // Note: 'd' executes immediately (delete selection), not waiting for 'dd'
+        // In Helix, use 'xd' to delete line (x = select line, d = delete selection)
+        "g"
+        | CMD_REPLACE
+        | CMD_FIND_CHAR
+        | CMD_FIND_CHAR_REVERSE
+        | CMD_TILL_CHAR
+        | CMD_TILL_CHAR_REVERSE => None,
+
+        // Single-key commands (including 'd' which deletes selection immediately)
         _ if buffer.len() == 1 => Some(buffer),
 
         // Invalid sequence - return empty to signal clear

@@ -93,7 +93,9 @@ impl<M: EditorMode> HelixSimulator<M> {
 
     /// Get current editor state
     pub fn get_state(&self) -> Result<EditorState, UserError> {
-        let mut head = self.selection.primary().head;
+        let range = self.selection.primary();
+        let mut head = range.head;
+        let anchor = range.anchor;
 
         // Clamp cursor to valid bounds (sometimes helix-core can put it past end)
         let max_pos = self.doc.len_chars();
@@ -106,10 +108,33 @@ impl<M: EditorMode> HelixSimulator<M> {
         let line_start = self.doc.line_to_char(line);
         let col = head - line_start;
 
+        // Extract selection if anchor != head (non-empty selection)
+        let selection = if anchor != head {
+            let anchor_clamped = anchor.min(max_pos);
+            let anchor_line = self.doc.char_to_line(anchor_clamped);
+            let anchor_line_start = self.doc.line_to_char(anchor_line);
+            let anchor_col = anchor_clamped - anchor_line_start;
+
+            // Create selection with start being the smaller position
+            let (start_line, start_col, end_line, end_col) = if anchor_clamped < head {
+                (anchor_line, anchor_col, line, col)
+            } else {
+                (line, col, anchor_line, anchor_col)
+            };
+
+            Some(crate::game::Selection::new(
+                CursorPosition::new(start_line, start_col)
+                    .map_err(|_| UserError::OperationFailed)?,
+                CursorPosition::new(end_line, end_col).map_err(|_| UserError::OperationFailed)?,
+            ))
+        } else {
+            None
+        };
+
         EditorState::new(
             self.doc.to_string(),
             CursorPosition::new(line, col).map_err(|_| UserError::OperationFailed)?,
-            None,
+            selection,
         )
         .map_err(|_| UserError::OperationFailed)
     }

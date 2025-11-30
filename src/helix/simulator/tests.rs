@@ -71,10 +71,91 @@ fn test_delete_line() {
 }
 
 #[test]
+fn test_select_line_then_delete() {
+    let mut sim = AnyModeSimulator::new("Keep\nDelete me\nKeep".to_string());
+
+    // Move to line 1
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1);
+
+    // Execute x (select line)
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    let state = sim.get_state().unwrap();
+    // Selection should cover "Delete me\n" (line 1 with newline)
+    let sel = state.selection().expect("Should have selection after x");
+    assert_eq!(sel.start.row, 1, "Selection start row");
+    assert_eq!(sel.start.col, 0, "Selection start col");
+    // End should be at start of next line (row 2, col 0) or end of this line
+    assert!(sel.end.row >= 1, "Selection end row should be >= 1");
+
+    // Execute d (delete selection)
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "Keep\nKeep");
+}
+
+#[test]
+fn test_select_line_scenario_exact() {
+    // Replicate exact scenario: "Select line then delete"
+    // setup: file_content = "Keep\nDelete me\nKeep", cursor_position = [1, 0]
+    use crate::game::{CursorPosition, EditorState};
+
+    let initial_state = EditorState::new(
+        "Keep\nDelete me\nKeep".to_string(),
+        CursorPosition::new(1, 0).unwrap(),
+        None,
+    )
+    .unwrap();
+
+    let mut sim = AnyModeSimulator::from_editor_state(&initial_state);
+    let state = sim.get_state().unwrap();
+    eprintln!(
+        "Initial: cursor={:?}, sel={:?}, content={:?}",
+        state.cursor_position(),
+        state.selection(),
+        state.content()
+    );
+    assert_eq!(state.cursor_position().row, 1);
+    assert_eq!(state.cursor_position().col, 0);
+
+    // Execute x (select line)
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    let state = sim.get_state().unwrap();
+    eprintln!(
+        "After x: cursor={:?}, sel={:?}",
+        state.cursor_position(),
+        state.selection()
+    );
+
+    let sel = state.selection().expect("Should have selection after x");
+    assert_eq!(sel.start.row, 1, "Selection should start at row 1");
+    assert_eq!(
+        sel.end.row, 2,
+        "Selection should end at row 2 (newline included)"
+    );
+
+    // Execute d (delete selection)
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    let state = sim.get_state().unwrap();
+    eprintln!(
+        "After d: cursor={:?}, sel={:?}, content={:?}",
+        state.cursor_position(),
+        state.selection(),
+        state.content()
+    );
+    assert_eq!(
+        state.content(),
+        "Keep\nKeep",
+        "After xd should delete only line 1"
+    );
+}
+
+#[test]
 fn test_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "ello");
@@ -86,7 +167,7 @@ fn test_delete_char_in_middle() {
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // Move to 'e'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // Move to 'l'
-    sim.execute_command(CMD_DELETE_CHAR).unwrap(); // Delete 'l'
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // Delete 'l'
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "helo");
@@ -632,7 +713,7 @@ fn test_repeat_buffer_records_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute delete command
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Verify command was recorded
     let buffer = sim.repeat_buffer();
@@ -690,7 +771,7 @@ fn test_repeat_buffer_does_not_record_undo() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Do something first
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Undo it
     sim.execute_command(CMD_UNDO).unwrap();
@@ -923,10 +1004,10 @@ fn test_normal_command_overwrites_previous() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute first command
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Execute second command
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Verify only last command is recorded
     let buffer = sim.repeat_buffer();
@@ -939,7 +1020,7 @@ fn test_insert_mode_overwrites_normal_command() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Execute normal command first
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Enter insert mode
     sim.execute_command(CMD_INSERT).unwrap();
@@ -968,7 +1049,7 @@ fn test_change_command_records_and_enters_insert() {
     assert!(sim.repeat_buffer().insert_recorder().is_recording());
 
     // Type replacement text
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Exit insert mode
     sim.execute_command(CMD_ESCAPE).unwrap();
@@ -977,7 +1058,8 @@ fn test_change_command_records_and_enters_insert() {
     let buffer = sim.repeat_buffer();
     match buffer.last_action() {
         Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, .. }) => {
-            assert_eq!(text, "x");
+            // CMD_DELETE_SELECTION is "d", so it types "d" in insert mode
+            assert_eq!(text, "d");
         }
         _ => panic!("Expected InsertSequence action"),
     }
@@ -992,7 +1074,7 @@ fn test_repeat_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute delete command
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "ello");
 
@@ -1056,7 +1138,7 @@ fn test_repeat_is_not_recorded() {
     let mut sim = AnyModeSimulator::new("abcd".to_string());
 
     // Delete a char
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "bcd");
 
@@ -1239,24 +1321,24 @@ fn test_repeat_insert_with_movements() {
 fn test_repeat_insert_simple() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
-    // Insert 'x' at the beginning
+    // Insert 'd' at the beginning (CMD_DELETE_SELECTION is "d")
     sim.execute_command(CMD_INSERT).unwrap(); // Enter insert mode
-    sim.execute_command(CMD_DELETE_CHAR).unwrap(); // Insert 'x'
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // Insert 'd'
     sim.execute_command(CMD_ESCAPE).unwrap();
 
     let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "xhello");
-    // After insert + escape, cursor is at position 1 (after 'x')
+    assert_eq!(state.content(), "dhello");
+    // After insert + escape, cursor is at position 1 (after 'd')
 
     // Move to position: cursor at 1, move right twice → position 3 (on first 'l')
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // cursor at 2 ('e')
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // cursor at 3 (first 'l')
 
-    // Repeat - should insert 'x' at position 3
+    // Repeat - should insert 'd' at position 3
     sim.execute_command(".").unwrap();
     let state = sim.get_state().unwrap();
-    // Result: "xhe" + "x" + "llo" = "xhexllo"
-    assert_eq!(state.content(), "xhexllo");
+    // Result: "dhe" + "d" + "llo" = "dhedllo"
+    assert_eq!(state.content(), "dhedllo");
 }
 
 #[test]
@@ -1264,7 +1346,7 @@ fn test_repeat_multiple_times() {
     let mut sim = AnyModeSimulator::new("xxxxxx".to_string());
 
     // Delete once
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Repeat 4 times
     for _ in 0..4 {
@@ -1280,7 +1362,7 @@ fn test_repeat_after_undo() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Delete a char
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Undo it
     sim.execute_command(CMD_UNDO).unwrap();
@@ -1297,7 +1379,7 @@ fn test_repeat_preserves_action_across_movements() {
     let mut sim = AnyModeSimulator::new("hello world".to_string());
 
     // Delete 'h'
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Move around (movements don't change repeat buffer)
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();

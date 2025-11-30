@@ -1,0 +1,241 @@
+# Delete Selection Commands
+# Scenarios for d (delete selection), dd (delete line)
+
+[[scenarios]]
+id = "delete_selection_001"
+name = "Delete single character"
+description = "Use 'd' to delete the character under cursor"
+
+hints = [
+    "'d' deletes the current selection",
+    "Default selection is one character",
+]
+
+[scenarios.setup]
+file_content = "Hello"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "ello"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["d"]
+description = "Press 'd' to delete selection"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "selection"]
+commands_taught = ["d"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_selection_002"
+name = "Delete character in middle"
+description = "Delete a character from middle of word"
+
+hints = [
+    "'d' deletes whatever is selected",
+    "Navigate to target first",
+]
+
+[scenarios.setup]
+file_content = "Heello"
+cursor_position = [0, 2]
+
+[scenarios.target]
+file_content = "Hello"
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["d"]
+description = "Press 'd' to delete the extra 'e'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "selection"]
+commands_taught = ["d"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_selection_003"
+name = "Delete multiple characters"
+description = "Delete two characters with 'd'"
+
+hints = [
+    "Press 'd' multiple times",
+    "Each 'd' deletes one character",
+]
+
+[scenarios.setup]
+file_content = "Heeello"
+cursor_position = [0, 2]
+
+[scenarios.target]
+file_content = "Hello"
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["d", "d"]
+description = "Press 'd' twice to delete two characters"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "selection", "multiple"]
+commands_taught = ["d"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "delete_line_001"
+name = "Delete entire line"
+description = "Use 'xd' to delete current line (select + delete)"
+
+hints = [
+    "'x' selects the current line",
+    "'d' deletes the selection",
+    "In Helix, use 'xd' to delete a line",
+]
+
+[scenarios.setup]
+file_content = "Line 1\nLine 2\nLine 3"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "Line 1\nLine 3"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["x", "d"]
+description = "Press 'x' to select line, then 'd' to delete"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "line", "selection"]
+commands_taught = ["x", "d"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_line_002"
+name = "Delete first line"
+description = "Delete the first line of file using 'xd'"
+
+hints = [
+    "'x' selects the line under cursor",
+    "'d' deletes whatever is selected",
+]
+
+[scenarios.setup]
+file_content = "Remove me\nKeep me"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "Keep me"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["x", "d"]
+description = "Press 'xd' to delete first line"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "line", "selection"]
+commands_taught = ["x", "d"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_line_003"
+name = "Delete middle line"
+description = "Delete a line from the middle using 'xd'"
+
+hints = [
+    "'xd' is the Helix way to delete a line",
+    "Lines below move up to fill gap",
+]
+
+[scenarios.setup]
+file_content = "First\nSecond\nThird"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "First\nThird"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["x", "d"]
+description = "Press 'xd' to delete middle line"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "line", "selection"]
+commands_taught = ["x", "d"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "select_delete_line_001"
+name = "Select line then delete"
+description = "Use 'x' to select line, then 'd' to delete"
+
+hints = [
+    "'x' selects the current line",
+    "'d' deletes the selection",
+]
+
+[scenarios.setup]
+file_content = "Keep\nDelete me\nKeep"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "Keep\nKeep"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["x", "d"]
+description = "Press 'x' to select, 'd' to delete"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "selection", "line"]
+commands_taught = ["x", "d"]
+estimated_time_seconds = 10

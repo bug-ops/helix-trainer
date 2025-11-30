@@ -71,6 +71,87 @@ fn test_delete_line() {
 }
 
 #[test]
+fn test_select_line_then_delete() {
+    let mut sim = AnyModeSimulator::new("Keep\nDelete me\nKeep".to_string());
+
+    // Move to line 1
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1);
+
+    // Execute x (select line)
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    let state = sim.get_state().unwrap();
+    // Selection should cover "Delete me\n" (line 1 with newline)
+    let sel = state.selection().expect("Should have selection after x");
+    assert_eq!(sel.start.row, 1, "Selection start row");
+    assert_eq!(sel.start.col, 0, "Selection start col");
+    // End should be at start of next line (row 2, col 0) or end of this line
+    assert!(sel.end.row >= 1, "Selection end row should be >= 1");
+
+    // Execute d (delete selection)
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "Keep\nKeep");
+}
+
+#[test]
+fn test_select_line_scenario_exact() {
+    // Replicate exact scenario: "Select line then delete"
+    // setup: file_content = "Keep\nDelete me\nKeep", cursor_position = [1, 0]
+    use crate::game::{CursorPosition, EditorState};
+
+    let initial_state = EditorState::new(
+        "Keep\nDelete me\nKeep".to_string(),
+        CursorPosition::new(1, 0).unwrap(),
+        None,
+    )
+    .unwrap();
+
+    let mut sim = AnyModeSimulator::from_editor_state(&initial_state);
+    let state = sim.get_state().unwrap();
+    eprintln!(
+        "Initial: cursor={:?}, sel={:?}, content={:?}",
+        state.cursor_position(),
+        state.selection(),
+        state.content()
+    );
+    assert_eq!(state.cursor_position().row, 1);
+    assert_eq!(state.cursor_position().col, 0);
+
+    // Execute x (select line)
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    let state = sim.get_state().unwrap();
+    eprintln!(
+        "After x: cursor={:?}, sel={:?}",
+        state.cursor_position(),
+        state.selection()
+    );
+
+    let sel = state.selection().expect("Should have selection after x");
+    assert_eq!(sel.start.row, 1, "Selection should start at row 1");
+    assert_eq!(
+        sel.end.row, 2,
+        "Selection should end at row 2 (newline included)"
+    );
+
+    // Execute d (delete selection)
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    let state = sim.get_state().unwrap();
+    eprintln!(
+        "After d: cursor={:?}, sel={:?}, content={:?}",
+        state.cursor_position(),
+        state.selection(),
+        state.content()
+    );
+    assert_eq!(
+        state.content(),
+        "Keep\nKeep",
+        "After xd should delete only line 1"
+    );
+}
+
+#[test]
 fn test_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 

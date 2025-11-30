@@ -114,40 +114,47 @@ fn test_replace_command_multi_key() {
 }
 
 #[test]
-fn test_dd_command_multi_key() {
-    // Test scenario: delete line (target is different so dd won't auto-complete)
+fn test_xd_command_line_delete() {
+    // Test scenario: delete line using Helix idiom 'xd' (select line + delete selection)
+    // Target is different so xd won't auto-complete
     let scenario = create_test_scenario(
-        "test_dd",
+        "test_xd",
         "line1\nline2\nline3",
         (1, 0),                // cursor on line2
-        "line1\nline3\nextra", // Different target - won't auto-complete on dd
+        "line1\nline3\nextra", // Different target - won't auto-complete on xd
         (1, 0),
     );
 
     let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
-    // First 'd' - stored in buffer
-    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
+    // 'x' - selects current line (executes immediately)
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("x"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "d");
+        assert_eq!(task_data.command_buffer, "");
+        // Content unchanged after x (selection only)
         assert_eq!(
             task_data.session.current_state().content(),
             "line1\nline2\nline3"
+        );
+        // Selection should be set
+        assert!(
+            task_data.session.current_state().selection().is_some(),
+            "Selection should be set after 'x'"
         );
     } else {
         panic!("Should be on Task screen");
     }
 
-    // Second 'd' - completes 'dd' command but doesn't complete scenario
+    // 'd' - deletes the selection (executes immediately)
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
         assert_eq!(task_data.command_buffer, "");
         assert_eq!(task_data.session.current_state().content(), "line1\nline3");
     } else {
-        panic!("Should be on Task screen after dd (scenario incomplete)");
+        panic!("Should be on Task screen after xd (scenario incomplete)");
     }
 }
 
@@ -280,8 +287,8 @@ fn test_undo_integration() {
     let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
-    // Delete line: dd
-    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
+    // Delete line using Helix idiom: xd (select line + delete selection)
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("x"))).unwrap();
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
@@ -290,10 +297,11 @@ fn test_undo_integration() {
         panic!("Should be on Task screen (scenario incomplete)");
     }
 
-    // Undo: u
+    // Undo: u (undoes the delete, but note: undo is per-transaction so may need multiple u)
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("u"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
+        // After undo, line1 should be restored
         assert_eq!(task_data.session.current_state().content(), "line1\nline2");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");

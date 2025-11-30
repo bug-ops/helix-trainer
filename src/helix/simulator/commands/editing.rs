@@ -4,20 +4,15 @@ use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
-/// Delete current line
+/// Delete current line (legacy 'dd' compatibility)
+///
+/// NOTE: In Helix, the idiomatic way is 'xd' (select_line + delete_selection).
+/// This function is kept for backward compatibility with existing scenarios.
 pub(super) fn delete_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
-        let line = sim.doc.char_to_line(range.head);
-        let start = sim.doc.line_to_char(line);
-        let end = if line + 1 < sim.doc.len_lines() {
-            sim.doc.line_to_char(line + 1)
-        } else {
-            sim.doc.len_chars()
-        };
-        (start, end, None)
-    });
-
-    sim.apply_transaction(transaction);
+    // Select current line first
+    select_line(sim)?;
+    // Then delete the selection
+    delete_selection(sim)?;
     Ok(())
 }
 
@@ -117,6 +112,9 @@ pub(super) fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 pub(super) fn delete_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
+    // Get the start position before deletion
+    let start_pos = sim.selection.primary().from();
+
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = range.to();
@@ -130,6 +128,11 @@ pub(super) fn delete_selection<M: EditorMode>(
     });
 
     sim.apply_transaction(transaction);
+
+    // Reset selection to point at start position (clamped to doc bounds)
+    let new_pos = start_pos.min(sim.doc.len_chars().saturating_sub(1));
+    sim.selection = Selection::point(new_pos);
+
     Ok(())
 }
 

@@ -454,7 +454,9 @@ mod tests {
     use super::*;
     use crate::config::{ScoringConfig, Setup, Solution, TargetState};
     use crate::gamification::{ProfileStorage, UserProfile};
-    use crate::helix::commands::{CMD_DELETE_LINE, CMD_MOVE_LEFT, CMD_MOVE_RIGHT};
+    use crate::helix::commands::{
+        CMD_DELETE_LINE, CMD_DELETE_SELECTION, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_SELECT_LINE,
+    };
     use crate::learning::PerformanceTracker;
 
     fn create_test_scenario() -> Scenario {
@@ -739,14 +741,15 @@ mod tests {
         assert!(matches!(state.screen, TypedScreen::Task(_)));
 
         // Execute the solution command to reach target state
+        // In Helix, 'xd' = select line + delete selection (or legacy 'dd')
         update(
             &mut state,
-            Message::ExecuteCommand(std::borrow::Cow::Borrowed("d")),
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_SELECT_LINE)),
         )
         .unwrap();
         update(
             &mut state,
-            Message::ExecuteCommand(std::borrow::Cow::Borrowed("d")),
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_DELETE_SELECTION)),
         )
         .unwrap();
 
@@ -1334,16 +1337,17 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Add a quest that will be completed
+        // In Helix, use 'x' (select_line) for line-based quests
         {
             let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
-                    command: "dd".to_string(),
+                    command: "x".to_string(),
                     target: 1,
                     current: 0,
                 },
-                "Delete 1 line".to_string(),
+                "Select 1 line".to_string(),
                 QuestDifficulty::Easy,
             ));
         }
@@ -1351,10 +1355,15 @@ mod tests {
         update(&mut state, Message::StartScenario(0)).unwrap();
 
         // Execute command to complete quest through message
-        // This will mark completion_time and stay on Task screen for success animation
+        // In Helix, 'xd' = select line + delete selection
         update(
             &mut state,
-            Message::ExecuteCommand(std::borrow::Cow::Borrowed("dd")),
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_SELECT_LINE)),
+        )
+        .unwrap();
+        update(
+            &mut state,
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_DELETE_SELECTION)),
         )
         .unwrap();
 
@@ -1437,16 +1446,17 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario.clone()]);
 
         // Add a quest that will be completed on first scenario
+        // In Helix, use 'x' (select_line) for line-based quests
         {
             let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
-                    command: "dd".to_string(),
+                    command: "x".to_string(),
                     target: 1,
                     current: 0,
                 },
-                "Delete 1 line".to_string(),
+                "Select 1 line".to_string(),
                 QuestDifficulty::Easy,
             ));
         }
@@ -1455,15 +1465,15 @@ mod tests {
         update(&mut state, Message::StartScenario(0)).unwrap();
 
         // Execute command through message to trigger quest progress tracking and complete scenario
-        // The test scenario requires 'dd' which is two keys
+        // In Helix, 'xd' = select line + delete selection
         update(
             &mut state,
-            Message::ExecuteCommand(std::borrow::Cow::Borrowed("d")),
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_SELECT_LINE)),
         )
         .unwrap();
         update(
             &mut state,
-            Message::ExecuteCommand(std::borrow::Cow::Borrowed("d")),
+            Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_DELETE_SELECTION)),
         )
         .unwrap();
 
@@ -1484,7 +1494,7 @@ mod tests {
             let quest = &profile.daily_quests[0];
             assert!(
                 quest.is_completed(),
-                "Quest should be completed after executing 'dd'. Quest state: {:?}",
+                "Quest should be completed after executing 'x'. Quest state: {:?}",
                 quest
             );
         }

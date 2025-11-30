@@ -106,11 +106,12 @@ estimated_time_seconds = 10
 [[scenarios]]
 id = "delete_line_001"
 name = "Delete entire line"
-description = "Use 'dd' to delete current line"
+description = "Use 'xd' to delete current line (select + delete)"
 
 hints = [
-    "'dd' deletes the entire current line",
-    "Press 'd' twice quickly",
+    "'x' selects the current line",
+    "'d' deletes the selection",
+    "In Helix, use 'xd' to delete a line",
 ]
 
 [scenarios.setup]
@@ -122,8 +123,8 @@ file_content = "Line 1\nLine 3"
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["dd"]
-description = "Press 'dd' to delete line"
+commands = ["x", "d"]
+description = "Press 'x' to select line, then 'd' to delete"
 
 [scenarios.scoring]
 optimal_count = 2
@@ -133,18 +134,18 @@ tolerance = 0
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
-tags = ["delete", "line"]
-commands_taught = ["dd"]
+tags = ["delete", "line", "selection"]
+commands_taught = ["x", "d"]
 estimated_time_seconds = 5
 
 [[scenarios]]
 id = "delete_line_002"
 name = "Delete first line"
-description = "Delete the first line of file"
+description = "Delete the first line of file using 'xd'"
 
 hints = [
-    "'dd' works on any line",
-    "Remaining lines move up",
+    "'x' selects the line under cursor",
+    "'d' deletes whatever is selected",
 ]
 
 [scenarios.setup]
@@ -156,8 +157,8 @@ file_content = "Keep me"
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["dd"]
-description = "Press 'dd' to delete first line"
+commands = ["x", "d"]
+description = "Press 'xd' to delete first line"
 
 [scenarios.scoring]
 optimal_count = 2
@@ -167,17 +168,17 @@ tolerance = 0
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
-tags = ["delete", "line"]
-commands_taught = ["dd"]
+tags = ["delete", "line", "selection"]
+commands_taught = ["x", "d"]
 estimated_time_seconds = 5
 
 [[scenarios]]
 id = "delete_line_003"
 name = "Delete middle line"
-description = "Delete a line from the middle"
+description = "Delete a line from the middle using 'xd'"
 
 hints = [
-    "'dd' removes entire line",
+    "'xd' is the Helix way to delete a line",
     "Lines below move up to fill gap",
 ]
 
@@ -190,8 +191,8 @@ file_content = "First\nThird"
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["dd"]
-description = "Press 'dd' to delete middle line"
+commands = ["x", "d"]
+description = "Press 'xd' to delete middle line"
 
 [scenarios.scoring]
 optimal_count = 2
@@ -201,8 +202,8 @@ tolerance = 0
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
-tags = ["delete", "line"]
-commands_taught = ["dd"]
+tags = ["delete", "line", "selection"]
+commands_taught = ["x", "d"]
 estimated_time_seconds = 5
 
 [[scenarios]]

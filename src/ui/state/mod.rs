@@ -35,8 +35,8 @@ pub use substates::{ConfigState, GameState, ProgressState, UIState};
 // Type-safe screen variants with required data
 pub mod screen;
 pub use screen::{
-    CompletedOrAbandoned, MenuData, ProfileData, ResultsData, ReviewData, StatisticsData, TaskData,
-    TypedScreen,
+    CommandBufferAccess, CompletedOrAbandoned, MenuData, MiniGameData, ModeSelectionData,
+    ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario
@@ -79,7 +79,9 @@ pub struct ReviewResult {
 /// The current screen being displayed in the UI
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
-    /// Main menu screen
+    /// Mode selection screen (Training vs Arcade)
+    ModeSelection,
+    /// Main menu screen (Training Mode)
     MainMenu,
     /// Task/scenario gameplay screen
     Task,
@@ -91,6 +93,8 @@ pub enum Screen {
     Statistics,
     /// Review session screen for spaced repetition
     Review,
+    /// Mini-game mode (Arcade Mode)
+    MiniGame,
 }
 
 /// Messages that trigger state updates
@@ -105,6 +109,48 @@ pub enum Message {
 
     /// Quit the application
     QuitApp,
+
+    /// Mode selection: move selection up
+    ModeSelectionUp,
+
+    /// Mode selection: move selection down
+    ModeSelectionDown,
+
+    /// Mode selection: select current mode
+    ModeSelectionSelect,
+
+    /// Select Training Mode (manual scenario selection)
+    SelectTrainingMode,
+
+    /// Select Arcade Mode (mini-games)
+    SelectArcadeMode,
+
+    /// Start mini-game session
+    StartMiniGame,
+
+    /// Pause mini-game
+    PauseMiniGame,
+
+    /// Resume mini-game from paused state
+    ResumeMiniGame,
+
+    /// Mini-game timer tick (100ms interval)
+    MiniGameTick,
+
+    /// Execute Helix command during mini-game
+    MiniGameCommand(std::borrow::Cow<'static, str>),
+
+    /// Timeout on current mini-game scenario
+    MiniGameTimeout,
+
+    /// Current mini-game scenario completed
+    MiniGameScenarioComplete,
+
+    /// Advance to next mini-game scenario (after transition delay)
+    MiniGameNextScenario,
+
+    /// Return to mode selection from mini-game
+    MiniGameBackToMenu,
 
     /// Menu navigation: move selection up
     MenuUp,
@@ -250,7 +296,7 @@ impl AppState {
         performance_tracker: PerformanceTracker,
     ) -> Self {
         Self {
-            screen: TypedScreen::Menu(MenuData::default()),
+            screen: TypedScreen::ModeSelection(ModeSelectionData::default()),
             ui: UIState::new(),
             game: GameState::new(scenarios),
             progress: ProgressState::new(profile, performance_tracker, profile_storage),
@@ -335,6 +381,24 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::QuitApp => handlers::handle_quit_app(state),
         Message::NavigateTo(screen) => handlers::handle_navigate_to(state, screen),
         Message::BackToMenu => handlers::handle_back_to_menu(state),
+
+        // Mode selection messages
+        Message::ModeSelectionUp => handlers::handle_mode_selection_up(state),
+        Message::ModeSelectionDown => handlers::handle_mode_selection_down(state),
+        Message::ModeSelectionSelect => handlers::handle_mode_selection_select(state),
+        Message::SelectTrainingMode => handlers::handle_select_training_mode(state),
+        Message::SelectArcadeMode => handlers::handle_select_arcade_mode(state),
+        Message::StartMiniGame => handlers::handle_start_minigame(state),
+
+        // Mini-game messages
+        Message::PauseMiniGame => handlers::handle_pause_minigame(state),
+        Message::ResumeMiniGame => handlers::handle_resume_minigame(state),
+        Message::MiniGameTick => handlers::handle_minigame_tick(state),
+        Message::MiniGameCommand(command) => handlers::handle_minigame_command(state, command),
+        Message::MiniGameTimeout => handlers::handle_minigame_timeout(state),
+        Message::MiniGameScenarioComplete => handlers::handle_minigame_scenario_complete(state),
+        Message::MiniGameNextScenario => handlers::handle_minigame_next_scenario(state),
+        Message::MiniGameBackToMenu => handlers::handle_minigame_back_to_menu(state),
 
         // Menu messages
         Message::MenuUp => handlers::handle_menu_up(state),
@@ -432,10 +496,10 @@ mod tests {
     #[test]
     fn test_new_state() {
         let state = create_test_app_state(vec![]);
-        if let TypedScreen::Menu(menu_data) = &state.screen {
-            assert_eq!(menu_data.selected_item, 0);
+        if let TypedScreen::ModeSelection(mode_data) = &state.screen {
+            assert_eq!(mode_data.selected_mode, 0);
         } else {
-            panic!("Should be on Menu screen");
+            panic!("Should be on ModeSelection screen");
         }
         assert!(state.ui.running);
         assert!(state.game.session.is_none());
@@ -453,10 +517,10 @@ mod tests {
     #[test]
     fn test_navigate_to_screen() {
         let mut state = create_test_app_state(vec![]);
-        assert!(matches!(state.screen, TypedScreen::Menu(_)));
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
 
         // After TypedScreen refactoring, only screens with standalone data can be navigated to
-        // Task and Results require active sessions, so only test Profile/Statistics/Menu
+        // Task and Results require active sessions, so only test Profile/Statistics/Menu/ModeSelection
         update(&mut state, Message::NavigateTo(Screen::Profile)).unwrap();
         assert!(matches!(state.screen, TypedScreen::Profile(_)));
 
@@ -465,6 +529,9 @@ mod tests {
 
         update(&mut state, Message::NavigateTo(Screen::MainMenu)).unwrap();
         assert!(matches!(state.screen, TypedScreen::Menu(_)));
+
+        update(&mut state, Message::NavigateTo(Screen::ModeSelection)).unwrap();
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     }
 
     #[test]
@@ -538,7 +605,8 @@ mod tests {
     fn test_menu_select_start_training() {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
-        // Menu is already at index 0 by default
+        // Navigate to menu first (start on ModeSelection)
+        update(&mut state, Message::SelectTrainingMode).unwrap();
 
         update(&mut state, Message::MenuSelect).unwrap();
 
@@ -556,6 +624,9 @@ mod tests {
         let scenario1 = create_test_scenario();
         let scenario2 = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario1, scenario2]);
+        // Navigate to menu first
+        update(&mut state, Message::SelectTrainingMode).unwrap();
+
         // Select Quit option (index = scenario_count + 3)
         if let TypedScreen::Menu(menu_data) = &mut state.screen {
             menu_data.selected_item = 5; // 2 scenarios + Review + Profile + Statistics + Quit = index 5
@@ -570,6 +641,9 @@ mod tests {
     fn test_menu_select_profile() {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
+        // Navigate to menu first
+        update(&mut state, Message::SelectTrainingMode).unwrap();
+
         if let TypedScreen::Menu(menu_data) = &mut state.screen {
             menu_data.selected_item = 2; // Profile is at index 2 (after 1 scenario + Review)
         }
@@ -582,6 +656,9 @@ mod tests {
     fn test_menu_select_statistics() {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
+        // Navigate to menu first
+        update(&mut state, Message::SelectTrainingMode).unwrap();
+
         if let TypedScreen::Menu(menu_data) = &mut state.screen {
             menu_data.selected_item = 3; // Statistics is at index 3 (after 1 scenario + Review + Profile)
         }
@@ -594,6 +671,8 @@ mod tests {
     fn test_menu_with_zero_scenarios() {
         // Edge case: no scenarios loaded
         let mut state = create_test_app_state(vec![]);
+        // Navigate to menu first
+        update(&mut state, Message::SelectTrainingMode).unwrap();
 
         // Review should be at index 0 (no scenarios)
         update(&mut state, Message::MenuSelect).unwrap();
@@ -671,7 +750,15 @@ mod tests {
         )
         .unwrap();
 
-        // After completing the scenario, should automatically transition to Results
+        // After completing the scenario, completion_time is set (success animation starts)
+        // Screen stays on Task until CompleteScenario message is sent after delay
+        assert!(state.ui.completion_time.is_some());
+        assert!(matches!(state.screen, TypedScreen::Task(_)));
+
+        // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        // Now should be on Results screen
         assert!(matches!(state.screen, TypedScreen::Results(_)));
     }
 
@@ -771,8 +858,8 @@ mod tests {
         assert!(matches!(state.screen, TypedScreen::Task(_)));
 
         update(&mut state, Message::BackToMenu).unwrap();
-        // Should transition back to Menu screen
-        assert!(matches!(state.screen, TypedScreen::Menu(_)));
+        // Should transition back to ModeSelection screen (the main menu)
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     }
 
     #[test]
@@ -1264,20 +1351,24 @@ mod tests {
         update(&mut state, Message::StartScenario(0)).unwrap();
 
         // Execute command to complete quest through message
-        // This will auto-complete the scenario and transition to Results screen
+        // This will mark completion_time and stay on Task screen for success animation
         update(
             &mut state,
             Message::ExecuteCommand(std::borrow::Cow::Borrowed("dd")),
         )
         .unwrap();
 
-        // After auto-completion, should be on Results screen
+        // After completing scenario, completion_time is set, screen stays on Task
         assert!(
-            matches!(state.screen, TypedScreen::Results(_)),
-            "Should be on Results screen after auto-completion"
+            state.ui.completion_time.is_some(),
+            "completion_time should be set after completing scenario"
+        );
+        assert!(
+            matches!(state.screen, TypedScreen::Task(_)),
+            "Should stay on Task screen for success animation"
         );
 
-        // Verify quest was completed
+        // Verify quest was completed during gameplay
         {
             let profile = state.progress.profile.borrow();
             let quest = &profile.daily_quests[0];
@@ -1287,9 +1378,14 @@ mod tests {
             );
         }
 
-        // Note: XP breakdown and quest bonuses are only populated by CompleteScenario handler,
-        // which is not automatically triggered during auto-completion.
-        // This is tested separately in other XP breakdown tests.
+        // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        // Now should be on Results screen
+        assert!(
+            matches!(state.screen, TypedScreen::Results(_)),
+            "Should be on Results screen after CompleteScenario"
+        );
     }
 
     #[test]
@@ -1371,13 +1467,18 @@ mod tests {
         )
         .unwrap();
 
-        // After executing the solution, scenario should auto-complete and transition to Results
+        // After executing the solution, completion_time is set (success animation)
+        // Screen stays on Task until CompleteScenario message is sent after delay
         assert!(
-            matches!(state.screen, TypedScreen::Results(_)),
-            "Should be on Results screen after completing scenario"
+            state.ui.completion_time.is_some(),
+            "completion_time should be set after completing scenario"
+        );
+        assert!(
+            matches!(state.screen, TypedScreen::Task(_)),
+            "Should stay on Task screen during success animation"
         );
 
-        // Quest should be completed (command was tracked)
+        // Quest should be completed (command was tracked during gameplay)
         {
             let profile = state.progress.profile.borrow();
             let quest = &profile.daily_quests[0];
@@ -1388,15 +1489,14 @@ mod tests {
             );
         }
 
-        // Verify auto-completion worked and we're on Results screen
+        // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        // Now should be on Results screen
         assert!(
             matches!(state.screen, TypedScreen::Results(_)),
-            "Should be on Results screen after auto-completion"
+            "Should be on Results screen after CompleteScenario"
         );
-
-        // Test documents that quest completion tracking works during gameplay.
-        // Full XP/quest reward processing requires explicit CompleteScenario message,
-        // which is tested separately in other tests.
     }
 
     // ============================================================================
@@ -1436,7 +1536,7 @@ mod tests {
         let state = create_test_app_state(vec![scenario]);
 
         // Test AbandonReviewSession message handler
-        assert!(matches!(state.screen, TypedScreen::Menu(_)));
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
 
         // The actual review session behavior depends on FSRS scheduling
         // This test verifies the message handlers are correctly wired
@@ -1448,12 +1548,12 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Don't add any reviews to tracker
-        assert!(matches!(state.screen, TypedScreen::Menu(_)));
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
 
         update(&mut state, Message::StartReviewSession).unwrap();
 
-        // Should stay on MainMenu when no reviews are due
-        assert!(matches!(state.screen, TypedScreen::Menu(_)));
+        // Should stay on ModeSelection when no reviews are due
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
         assert!(state.game.review_session.is_none());
     }
 

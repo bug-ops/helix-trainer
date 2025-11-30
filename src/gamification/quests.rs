@@ -21,6 +21,36 @@ pub enum QuestDifficulty {
     Hard,
 }
 
+impl crate::learning::ProgressionTier for QuestDifficulty {
+    fn name(&self) -> &'static str {
+        match self {
+            QuestDifficulty::Easy => "Easy",
+            QuestDifficulty::Medium => "Medium",
+            QuestDifficulty::Hard => "Hard",
+        }
+    }
+
+    fn emoji(&self) -> &'static str {
+        match self {
+            QuestDifficulty::Easy => "🟢",
+            QuestDifficulty::Medium => "🟡",
+            QuestDifficulty::Hard => "🔴",
+        }
+    }
+
+    fn tier_level(&self) -> u32 {
+        match self {
+            QuestDifficulty::Easy => 0,
+            QuestDifficulty::Medium => 1,
+            QuestDifficulty::Hard => 2,
+        }
+    }
+
+    fn is_max_tier(&self) -> bool {
+        matches!(self, QuestDifficulty::Hard)
+    }
+}
+
 /// Types of quests available
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QuestType {
@@ -76,43 +106,61 @@ mod duration_serde {
 }
 
 impl QuestType {
-    /// Check if quest is completed
+    /// Check if quest type is completed (convenience method)
     pub fn is_completed(&self) -> bool {
-        match self {
-            QuestType::CommandPractice {
-                target, current, ..
-            } => current >= target,
-            QuestType::ScenarioCompletion { target, current } => current >= target,
-            QuestType::SpeedRun { .. } => false, // Completed in one attempt
-            QuestType::TimeInvested {
-                target_minutes,
-                current_minutes,
-            } => current_minutes >= target_minutes,
-            QuestType::Exploration {
-                target_commands,
-                commands_used,
-            } => commands_used.len() >= *target_commands as usize,
-        }
+        use crate::learning::ProgressTracker;
+        ProgressTracker::is_complete(self)
     }
 
-    /// Get progress percentage (0.0 - 1.0)
+    /// Get progress (0.0 - 1.0) (convenience method)
     pub fn progress(&self) -> f64 {
+        use crate::learning::ProgressTracker;
+        ProgressTracker::progress(self)
+    }
+}
+
+impl crate::learning::ProgressTracker for QuestType {
+    fn progress(&self) -> f64 {
         match self {
             QuestType::CommandPractice {
                 target, current, ..
-            } => (*current as f64) / (*target as f64).max(1.0),
+            } => (*current as f64 / (*target).max(1) as f64).min(1.0),
             QuestType::ScenarioCompletion { target, current } => {
-                (*current as f64) / (*target as f64).max(1.0)
+                (*current as f64 / (*target).max(1) as f64).min(1.0)
             }
             QuestType::SpeedRun { .. } => 0.0,
             QuestType::TimeInvested {
                 target_minutes,
                 current_minutes,
-            } => (*current_minutes as f64) / (*target_minutes as f64).max(1.0),
+            } => (*current_minutes as f64 / (*target_minutes).max(1) as f64).min(1.0),
             QuestType::Exploration {
                 target_commands,
                 commands_used,
-            } => (commands_used.len() as f64) / (*target_commands as f64).max(1.0),
+            } => (commands_used.len() as f64 / (*target_commands).max(1) as f64).min(1.0),
+        }
+    }
+
+    fn current(&self) -> u64 {
+        match self {
+            QuestType::CommandPractice { current, .. } => *current as u64,
+            QuestType::ScenarioCompletion { current, .. } => *current as u64,
+            QuestType::SpeedRun { .. } => 0,
+            QuestType::TimeInvested {
+                current_minutes, ..
+            } => *current_minutes as u64,
+            QuestType::Exploration { commands_used, .. } => commands_used.len() as u64,
+        }
+    }
+
+    fn target(&self) -> u64 {
+        match self {
+            QuestType::CommandPractice { target, .. } => *target as u64,
+            QuestType::ScenarioCompletion { target, .. } => *target as u64,
+            QuestType::SpeedRun { .. } => 1,
+            QuestType::TimeInvested { target_minutes, .. } => *target_minutes as u64,
+            QuestType::Exploration {
+                target_commands, ..
+            } => *target_commands as u64,
         }
     }
 }
@@ -147,23 +195,51 @@ impl Quest {
         }
     }
 
-    /// Check if quest is completed
-    pub fn is_completed(&self) -> bool {
-        self.completed || self.quest_type.is_completed()
-    }
-
-    /// Get progress (0.0 - 1.0)
-    pub fn progress(&self) -> f64 {
-        if self.completed {
-            1.0
-        } else {
-            self.quest_type.progress()
-        }
-    }
-
     /// Mark quest as completed
     pub fn mark_completed(&mut self) {
         self.completed = true;
+    }
+
+    /// Check if quest is completed (convenience method)
+    pub fn is_completed(&self) -> bool {
+        use crate::learning::ProgressTracker;
+        ProgressTracker::is_complete(self)
+    }
+
+    /// Get progress (0.0 - 1.0) (convenience method)
+    pub fn progress(&self) -> f64 {
+        use crate::learning::ProgressTracker;
+        ProgressTracker::progress(self)
+    }
+}
+
+impl crate::learning::ProgressTracker for Quest {
+    fn progress(&self) -> f64 {
+        use crate::learning::ProgressTracker;
+        if self.completed {
+            1.0
+        } else {
+            ProgressTracker::progress(&self.quest_type)
+        }
+    }
+
+    fn current(&self) -> u64 {
+        use crate::learning::ProgressTracker;
+        if self.completed {
+            ProgressTracker::target(self)
+        } else {
+            ProgressTracker::current(&self.quest_type)
+        }
+    }
+
+    fn target(&self) -> u64 {
+        use crate::learning::ProgressTracker;
+        ProgressTracker::target(&self.quest_type)
+    }
+
+    fn is_complete(&self) -> bool {
+        use crate::learning::ProgressTracker;
+        self.completed || ProgressTracker::is_complete(&self.quest_type)
     }
 }
 

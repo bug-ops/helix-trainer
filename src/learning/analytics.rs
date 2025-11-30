@@ -52,11 +52,12 @@ impl Analytics {
 
         for command in &all_commands {
             if let Some(perf) = tracker.get_performance(command) {
-                match perf.mastery_level {
-                    MasteryLevel::Master => master += 1,
-                    MasteryLevel::Advanced => advanced += 1,
-                    MasteryLevel::Intermediate => intermediate += 1,
-                    MasteryLevel::Beginner => beginner += 1,
+                use super::ProgressionTier;
+                match perf.mastery_level.tier_level() {
+                    3 => master += 1,
+                    2 => advanced += 1,
+                    1 => intermediate += 1,
+                    _ => beginner += 1,
                 }
                 total_stability += perf.stability;
                 total_difficulty += perf.difficulty;

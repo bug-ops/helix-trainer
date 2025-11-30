@@ -53,6 +53,39 @@ pub enum MasteryLevel {
     Master,
 }
 
+impl super::traits::ProgressionTier for MasteryLevel {
+    fn name(&self) -> &'static str {
+        match self {
+            MasteryLevel::Beginner => "Beginner",
+            MasteryLevel::Intermediate => "Intermediate",
+            MasteryLevel::Advanced => "Advanced",
+            MasteryLevel::Master => "Master",
+        }
+    }
+
+    fn emoji(&self) -> &'static str {
+        match self {
+            MasteryLevel::Beginner => "🔰",
+            MasteryLevel::Intermediate => "📚",
+            MasteryLevel::Advanced => "⭐",
+            MasteryLevel::Master => "🏆",
+        }
+    }
+
+    fn tier_level(&self) -> u32 {
+        match self {
+            MasteryLevel::Beginner => 0,
+            MasteryLevel::Intermediate => 1,
+            MasteryLevel::Advanced => 2,
+            MasteryLevel::Master => 3,
+        }
+    }
+
+    fn is_max_tier(&self) -> bool {
+        matches!(self, MasteryLevel::Master)
+    }
+}
+
 impl CommandPerformance {
     pub fn new(command: String) -> Self {
         let now = Utc::now();

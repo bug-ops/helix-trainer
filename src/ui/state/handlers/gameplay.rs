@@ -28,7 +28,7 @@ fn format_key_for_display(command: &str) -> String {
 /// Parse command buffer to determine if a complete command is available
 ///
 /// Returns Some(command) if buffer contains a complete command, None if waiting for more keys
-fn parse_command_buffer(buffer: &str) -> Option<&str> {
+pub(super) fn parse_command_buffer(buffer: &str) -> Option<&str> {
     match buffer {
         // Multi-key commands
         CMD_DELETE_LINE => Some(CMD_DELETE_LINE),
@@ -57,7 +57,6 @@ fn process_session_result(
     state: &mut AppState,
 ) -> Result<bool, UserError> {
     use crate::game::SessionAfterAction;
-    use crate::ui::state::ResultsData;
 
     match session_result {
         SessionAfterAction::StillActive(s) => {
@@ -67,8 +66,11 @@ fn process_session_result(
         SessionAfterAction::Completed(s) => {
             let feedback = s.feedback().map_err(|_| UserError::OperationFailed)?;
             state.ui.last_feedback = Some(feedback.clone());
+            // Start success animation - keep Task screen, just mark completion time
+            // The event loop will transition to Results after 1.5s delay
             state.ui.completion_time = Some(std::time::Instant::now());
-            state.screen = TypedScreen::Results(ResultsData::from_completed(s, feedback)?);
+            // Store completed session for later transition by CompleteScenario handler
+            state.game.pending_completed_session = Some(s);
             Ok(true)
         }
     }
@@ -150,28 +152,28 @@ pub fn handle_execute_command(
         let result = session.record_action(command.to_string())?;
         session_completed = process_session_result(result, &mut task_data, state)?;
 
-        // Restore screen if not completed
-        if !session_completed {
-            state.screen = TypedScreen::Task(task_data);
-        }
+        // Always restore Task screen - even when completed, we show success popup
+        state.screen = TypedScreen::Task(task_data);
     } else {
+        use crate::ui::state::CommandBufferAccess;
+
         // Normal mode: handle command buffer for multi-key commands
-        task_data.command_buffer.push_str(&command);
+        task_data.push_command(&command);
 
         // Try to match a complete command
-        let final_command = parse_command_buffer(&task_data.command_buffer);
+        let final_command = parse_command_buffer(task_data.command_buffer());
 
         match final_command {
             Some("") => {
                 // Invalid sequence - clear buffer and restore state
-                task_data.command_buffer.clear();
+                task_data.clear_buffer();
                 state.screen = TypedScreen::Task(task_data);
                 return Ok(());
             }
             Some(cmd) => {
                 // Complete command - execute it
                 let cmd_string = cmd.to_string();
-                task_data.command_buffer.clear();
+                task_data.clear_buffer();
                 task_data.last_command = Some(cmd_string.clone());
                 executed_command = Some(cmd_string.clone());
 
@@ -187,10 +189,8 @@ pub fn handle_execute_command(
                 let result = session.record_action(cmd_string)?;
                 session_completed = process_session_result(result, &mut task_data, state)?;
 
-                // Restore screen if not completed
-                if !session_completed {
-                    state.screen = TypedScreen::Task(task_data);
-                }
+                // Always restore Task screen - even when completed, we show success popup
+                state.screen = TypedScreen::Task(task_data);
             }
             None => {
                 // Waiting for more keys

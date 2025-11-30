@@ -49,11 +49,12 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 }
 
 /// Render key history popup showing last 5 keys pressed with large text
-pub(super) fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
-    // Only render if we're on Task screen
-    let TypedScreen::Task(task_data) = &state.screen else {
+///
+/// Used by both training mode and arcade mode.
+pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String]) {
+    if key_history.is_empty() {
         return;
-    };
+    }
 
     let area = frame.area();
 
@@ -62,7 +63,7 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
 
     // Build text from recent keys
     let mut key_text = String::new();
-    for (idx, key) in task_data.key_history.iter().take(max_keys).enumerate() {
+    for (idx, key) in key_history.iter().take(max_keys).enumerate() {
         if idx > 0 {
             key_text.push(' ');
         }
@@ -108,31 +109,38 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, state: &AppState) {
 
 /// Render success popup when scenario is completed
 pub(super) fn render_success_popup(frame: &mut Frame) {
+    render_result_popup(
+        frame,
+        t!("success.title").as_ref(),
+        t!("success.message").as_ref(),
+        Color::Green,
+    );
+}
+
+/// Render a result popup with customizable title, message, and color
+///
+/// Used for both training mode (SUCCESS!) and arcade mode (SUCCESS!/TIME'S UP!)
+pub(super) fn render_result_popup(frame: &mut Frame, title: &str, message: &str, color: Color) {
     let area = frame.area();
 
     // Create centered popup area
     let popup_area = centered_popup(area, 40, 7);
 
-    // Success message
-    let success_text = vec![
+    // Result message
+    let result_text = vec![
         Line::from(""),
         Line::from(Span::styled(
-            t!("success.title").to_string(),
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
+            title,
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
-        Line::from(Span::styled(
-            t!("success.message").to_string(),
-            Style::default().fg(Color::White),
-        )),
+        Line::from(Span::styled(message, Style::default().fg(Color::White))),
         Line::from(""),
     ];
 
-    let success_paragraph = Paragraph::new(success_text)
+    let result_paragraph = Paragraph::new(result_text)
         .alignment(Alignment::Center)
-        .block(popup_block(None, Color::Green));
+        .block(popup_block(None, color));
 
-    frame.render_widget(success_paragraph, popup_area);
+    frame.render_widget(result_paragraph, popup_area);
 }

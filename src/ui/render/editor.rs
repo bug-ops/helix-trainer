@@ -2,8 +2,11 @@
 
 use super::helpers::{char_range_to_bytes, split_at_char_index};
 use ratatui::{
+    Frame,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 
 /// Render editor text with cursor and diff highlighting
@@ -205,4 +208,57 @@ pub(super) fn render_editor_with_selection<'a>(
             }
         })
         .collect()
+}
+
+/// Render a side-by-side editor view (current state vs target state)
+///
+/// This is the common layout used by both Training mode and Arcade mode.
+/// Shows current state on the left with diff highlighting and cursor,
+/// and target state on the right with selection highlighting.
+///
+/// # Arguments
+///
+/// * `frame` - Ratatui frame to render into
+/// * `area` - Area to render the editor views
+/// * `current_state` - Current editor state with cursor
+/// * `target_state` - Target state to achieve
+/// * `current_title` - Title for current state panel
+/// * `target_title` - Title for target state panel
+pub(super) fn render_editor_pair(
+    frame: &mut Frame,
+    area: Rect,
+    current_state: &crate::game::EditorState,
+    target_state: &crate::game::EditorState,
+    current_title: &str,
+    target_title: &str,
+) {
+    // Split into two columns
+    let editor_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    // Current state with cursor and diff highlighting
+    let current_lines = render_editor_with_diff(current_state, target_state);
+    let current = Paragraph::new(current_lines)
+        .block(
+            Block::default()
+                .title(current_title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(current, editor_chunks[0]);
+
+    // Target state with selection highlighting (if any)
+    let target_lines = render_editor_with_selection(target_state);
+    let target = Paragraph::new(target_lines)
+        .block(
+            Block::default()
+                .title(target_title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green)),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(target, editor_chunks[1]);
 }

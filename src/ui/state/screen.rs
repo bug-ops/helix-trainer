@@ -15,7 +15,10 @@ use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 /// at compile time that the required data exists.
 #[derive(Debug)]
 pub enum TypedScreen {
-    /// Main menu with selected item
+    /// Mode selection screen (Training vs Arcade)
+    ModeSelection(ModeSelectionData),
+
+    /// Main menu with selected item (Training Mode scenarios)
     Menu(MenuData),
 
     /// Active game session (guaranteed to have session)
@@ -32,30 +35,37 @@ pub enum TypedScreen {
 
     /// Review session screen
     Review(ReviewData),
+
+    /// Mini-game mode (arcade-style training)
+    MiniGame(MiniGameData),
 }
 
 impl TypedScreen {
     /// Get screen type for display/logging
     pub fn screen_type(&self) -> &'static str {
         match self {
+            Self::ModeSelection(_) => "ModeSelection",
             Self::Menu(_) => "Menu",
             Self::Task(_) => "Task",
             Self::Results(_) => "Results",
             Self::Profile(_) => "Profile",
             Self::Statistics(_) => "Statistics",
             Self::Review(_) => "Review",
+            Self::MiniGame(_) => "MiniGame",
         }
     }
 
     /// Get the corresponding Screen enum value (for backward compatibility)
     pub fn to_screen_enum(&self) -> super::Screen {
         match self {
+            Self::ModeSelection(_) => super::Screen::ModeSelection,
             Self::Menu(_) => super::Screen::MainMenu,
             Self::Task(_) => super::Screen::Task,
             Self::Results(_) => super::Screen::Results,
             Self::Profile(_) => super::Screen::Profile,
             Self::Statistics(_) => super::Screen::Statistics,
             Self::Review(_) => super::Screen::Review,
+            Self::MiniGame(_) => super::Screen::MiniGame,
         }
     }
 }
@@ -198,20 +208,28 @@ impl CompletedOrAbandoned {
     }
 }
 
+/// Return destination when navigating back from profile/statistics screens
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReturnDestination {
+    /// Return to main menu (default)
+    #[default]
+    Menu,
+    /// Return to paused mini-game
+    PausedMiniGame,
+}
+
 /// Data required for profile screen
 #[derive(Debug, Clone, Default)]
 pub struct ProfileData {
-    // Profile screen doesn't need any additional data beyond ProgressState
-    // which is already in AppState. This is here for future extensibility.
-    _placeholder: (),
+    /// Where to return when pressing Esc/back
+    pub return_to: ReturnDestination,
 }
 
 /// Data required for statistics screen
 #[derive(Debug, Clone, Default)]
 pub struct StatisticsData {
-    // Statistics screen doesn't need any additional data beyond ProgressState.
-    // This is here for future extensibility.
-    _placeholder: (),
+    /// Where to return when pressing Esc/back
+    pub return_to: ReturnDestination,
 }
 
 /// Data required for review session screen
@@ -225,6 +243,84 @@ impl ReviewData {
     /// Create new ReviewData with a review session
     pub fn new(session: ReviewSessionState) -> Self {
         Self { session }
+    }
+}
+
+/// Data required for mode selection screen
+#[derive(Debug, Clone, Default)]
+pub struct ModeSelectionData {
+    /// Index of selected mode (0 = Training, 1 = Arcade)
+    pub selected_mode: usize,
+}
+
+/// Data required for mini-game screen
+#[derive(Debug, Clone, Default)]
+pub struct MiniGameData {
+    /// Command buffer for multi-key commands (e.g., "g" waiting for "g")
+    pub command_buffer: String,
+    /// Last XP earned (for popup display during transition)
+    pub last_xp_earned: Option<u64>,
+    /// History of recent key presses (for display)
+    pub key_history: Vec<String>,
+}
+
+impl MiniGameData {
+    /// Add a key to the history (keeps last 5)
+    pub fn add_key_to_history(&mut self, key: String) {
+        // Insert at the beginning (most recent first)
+        self.key_history.insert(0, key);
+
+        // Keep only last 5 keys
+        if self.key_history.len() > 5 {
+            self.key_history.truncate(5);
+        }
+    }
+
+    /// Clear key history (called when starting new scenario)
+    pub fn clear_key_history(&mut self) {
+        self.key_history.clear();
+    }
+}
+
+/// Trait for types that manage a command buffer for multi-key commands
+///
+/// Both training mode (TaskData) and arcade mode (MiniGameData) use command
+/// buffers to handle multi-key sequences like `dd`, `gg`, and `rx`.
+pub trait CommandBufferAccess {
+    /// Get reference to the command buffer
+    fn command_buffer(&self) -> &str;
+
+    /// Get mutable reference to the command buffer
+    fn command_buffer_mut(&mut self) -> &mut String;
+
+    /// Push a command string to the buffer
+    fn push_command(&mut self, cmd: &str) {
+        self.command_buffer_mut().push_str(cmd);
+    }
+
+    /// Clear the command buffer
+    fn clear_buffer(&mut self) {
+        self.command_buffer_mut().clear();
+    }
+}
+
+impl CommandBufferAccess for TaskData {
+    fn command_buffer(&self) -> &str {
+        &self.command_buffer
+    }
+
+    fn command_buffer_mut(&mut self) -> &mut String {
+        &mut self.command_buffer
+    }
+}
+
+impl CommandBufferAccess for MiniGameData {
+    fn command_buffer(&self) -> &str {
+        &self.command_buffer
+    }
+
+    fn command_buffer_mut(&mut self) -> &mut String {
+        &mut self.command_buffer
     }
 }
 

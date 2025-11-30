@@ -1,7 +1,8 @@
 //! Task screen rendering
 
-use super::editor::{render_editor_with_diff, render_editor_with_selection};
+use super::editor::render_editor_pair;
 use super::popups::{render_hint_popup, render_key_history_popup, render_success_popup};
+use crate::game::PlayableScenario;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
@@ -24,6 +25,9 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
     {
         let session = &task_data.session;
         let scenario = session.scenario();
+
+        // Check if scenario just completed - use pending session for final state display
+        let is_completed = state.ui.completion_time.is_some();
 
         // Layout: title | description | editor view | stats | instructions
         let chunks = Layout::default()
@@ -60,44 +64,43 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             );
         frame.render_widget(description, chunks[1]);
 
-        // Editor view - split into current and target
-        let editor_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(chunks[2]);
+        // Editor view - get current and target states
+        // When completed, use pending_completed_session for final state display
+        // Use PlayableScenario trait to get states from either Active or Completed session
+        let playable: &dyn PlayableScenario = if is_completed {
+            if let Some(completed) = &state.game.pending_completed_session {
+                completed as &dyn PlayableScenario
+            } else {
+                session as &dyn PlayableScenario
+            }
+        } else {
+            session as &dyn PlayableScenario
+        };
 
-        // Current state with cursor and diff highlighting
-        let current_state = session.current_state();
-        let target_state = session.target_state();
-        let current_lines = render_editor_with_diff(current_state, target_state);
-        let current = Paragraph::new(current_lines)
-            .block(
-                Block::default()
-                    .title(t!("editor.current_state").to_string())
-                    .borders(Borders::ALL),
-            )
-            .wrap(Wrap { trim: false });
-        frame.render_widget(current, editor_chunks[0]);
-
-        // Target state with selection highlighting (if any)
-        let target_state = session.target_state();
-        let target_lines = render_editor_with_selection(target_state);
-        let target = Paragraph::new(target_lines)
-            .block(
-                Block::default()
-                    .title(t!("editor.target_state").to_string())
-                    .borders(Borders::ALL),
-            )
-            .wrap(Wrap { trim: false });
-        frame.render_widget(target, editor_chunks[1]);
+        // Render editor pair using shared function
+        let current_title = t!("editor.current_state");
+        let target_title = t!("editor.target_state");
+        render_editor_pair(
+            frame,
+            chunks[2],
+            playable.current_state(),
+            playable.target_state(),
+            &current_title,
+            &target_title,
+        );
 
         // Stats with mode indicator and progress
+        // Use PlayableScenario trait for common stats, completion_progress is specific to Active
         let optimal = scenario.scoring.optimal_count;
-        let actions = session.action_count();
-        let elapsed = session.elapsed();
+        let actions = playable.action_count();
+        let elapsed = playable.elapsed();
+        let mode = playable.mode_name();
+        let progress = if is_completed {
+            100u8 // Completed = 100%
+        } else {
+            session.completion_progress()
+        };
         let elapsed_secs = elapsed.as_secs_f32();
-        let mode = session.mode_name();
-        let progress = session.completion_progress();
 
         // Color code mode: green for Normal, yellow for Insert
         let mode_color = if mode == "NORMAL" {
@@ -193,7 +196,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
 
         // Show key history popup if visible
         if state.ui.show_key_history {
-            render_key_history_popup(frame, state);
+            render_key_history_popup(frame, &task_data.key_history);
         }
 
         // Show success message if scenario just completed

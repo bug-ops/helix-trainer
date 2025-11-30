@@ -91,6 +91,9 @@ pub struct GameState {
     /// Temporary storage for completed session (Phase 3 migration)
     /// Used to pass session from gameplay handler to CompleteScenario handler
     pub pending_completed_session: Option<GameSession<crate::game::session::Completed>>,
+
+    /// Active mini-game session (Arcade Mode)
+    pub minigame_session: Option<crate::minigame::MiniGameSession>,
 }
 
 impl GameState {
@@ -101,6 +104,7 @@ impl GameState {
             session: None,
             review_session: None,
             pending_completed_session: None,
+            minigame_session: None,
         }
     }
 
@@ -113,6 +117,11 @@ impl GameState {
     pub fn is_reviewing(&self) -> bool {
         self.review_session.is_some()
     }
+
+    /// Check if playing mini-game
+    pub fn is_playing_minigame(&self) -> bool {
+        self.minigame_session.is_some()
+    }
 }
 
 impl Default for GameState {
@@ -122,6 +131,7 @@ impl Default for GameState {
             session: None,
             review_session: None,
             pending_completed_session: None,
+            minigame_session: None,
         }
     }
 }
@@ -132,6 +142,7 @@ impl std::fmt::Debug for GameState {
             .field("scenario_count", &self.scenario_collection.count())
             .field("session", &self.session.is_some())
             .field("review_session", &self.review_session.is_some())
+            .field("minigame_session", &self.minigame_session.is_some())
             .finish()
     }
 }

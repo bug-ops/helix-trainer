@@ -8,6 +8,71 @@ use crate::ui::state::{AppState, QuestProgressChange};
 use std::collections::HashMap;
 use std::time::Duration;
 
+/// Track command usage for quests
+///
+/// Shared between training and arcade modes.
+/// Updates command practice and exploration quests.
+pub fn track_command_for_quests(state: &mut AppState, command: &str) {
+    // Track for exploration quests
+    state
+        .progress
+        .commands_used_today
+        .insert(command.to_string());
+
+    // Update command progress in quests
+    let mut profile = state.progress.profile.borrow_mut();
+    QuestTracker::update_command_progress(&mut profile.daily_quests, command);
+}
+
+/// Track scenario completion for quests
+///
+/// Shared between training and arcade modes.
+/// Updates scenario completion and speed run quests.
+pub fn track_scenario_completion_for_quests(
+    state: &mut AppState,
+    scenario_id: &str,
+    duration: Duration,
+) {
+    let mut profile = state.progress.profile.borrow_mut();
+    QuestTracker::update_scenario_progress(&mut profile.daily_quests, scenario_id, duration);
+}
+
+/// Check and award XP for newly completed quests
+///
+/// Returns total XP awarded for quest completions.
+pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -> u64 {
+    let newly_completed_xp: Vec<u32> = {
+        let profile = state.progress.profile.borrow();
+        profile
+            .daily_quests
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, quest)| {
+                if idx < was_completed.len() && !was_completed[idx] && quest.completed {
+                    Some(quest.xp_reward)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+
+    if !newly_completed_xp.is_empty() {
+        let total_bonus_xp: u64 = newly_completed_xp.iter().map(|xp| *xp as u64).sum();
+        let mut profile = state.progress.profile.borrow_mut();
+        profile.add_xp(total_bonus_xp);
+        total_bonus_xp
+    } else {
+        0
+    }
+}
+
+/// Snapshot quest completion status before updates
+pub fn snapshot_quest_completion(state: &AppState) -> Vec<bool> {
+    let profile = state.progress.profile.borrow();
+    profile.daily_quests.iter().map(|q| q.completed).collect()
+}
+
 /// Get current progress value from quest type
 fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
     use QuestType::*;
@@ -24,7 +89,8 @@ fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
 
 /// Handle UpdateQuestProgress message
 ///
-/// Updates quest progress based on commands, scenario completions, or time
+/// Updates quest progress based on commands, scenario completions, or time.
+/// This is used by training mode through the Message system.
 pub fn handle_update_quest_progress(
     state: &mut AppState,
     command: Option<String>,
@@ -45,19 +111,11 @@ pub fn handle_update_quest_progress(
     };
 
     // Track which quests were already completed before this update
-    let was_completed: Vec<bool> = {
-        let profile = state.progress.profile.borrow();
-        profile.daily_quests.iter().map(|q| q.completed).collect()
-    };
+    let was_completed = snapshot_quest_completion(state);
 
     // Update command practice quests and exploration quests
     if let Some(cmd) = &command {
-        // Track for exploration quests
-        state.progress.commands_used_today.insert(cmd.clone());
-
-        // Update command progress in quests
-        let mut profile = state.progress.profile.borrow_mut();
-        QuestTracker::update_command_progress(&mut profile.daily_quests, cmd);
+        track_command_for_quests(state, cmd);
     }
 
     // Update scenario completion quests and speed run quests
@@ -69,8 +127,7 @@ pub fn handle_update_quest_progress(
             .map(|s| s.scenario().id.clone())
             .unwrap_or_default();
 
-        let mut profile = state.progress.profile.borrow_mut();
-        QuestTracker::update_scenario_progress(&mut profile.daily_quests, &scenario_id, duration);
+        track_scenario_completion_for_quests(state, &scenario_id, duration);
     }
 
     // Update time invested quests
@@ -97,29 +154,8 @@ pub fn handle_update_quest_progress(
         }
     }
 
-    // Check for newly completed quests and award bonus XP
-    let newly_completed_xp: Vec<u32> = {
-        let profile = state.progress.profile.borrow();
-        profile
-            .daily_quests
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, quest)| {
-                if !was_completed[idx] && quest.completed {
-                    Some(quest.xp_reward)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    };
-
     // Award XP for newly completed quests
-    if !newly_completed_xp.is_empty() {
-        let total_bonus_xp: u64 = newly_completed_xp.iter().map(|xp| *xp as u64).sum();
-        let mut profile = state.progress.profile.borrow_mut();
-        profile.add_xp(total_bonus_xp);
-    }
+    award_quest_completion_xp(state, &was_completed);
 
     Ok(())
 }

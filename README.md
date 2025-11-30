@@ -258,7 +258,21 @@ Duolingo-proven mechanics:
 - Automated scenario validation tests
 - 392 passing tests, zero clippy warnings
 
-### 🔄 Phase 2: Workflow Simulator (Planned - 6+ months)
+### 🎮 Phase 2: Mini-Games Mode (Planned)
+
+Arcade-style training with time pressure:
+
+- **Scenario Rain** — Tasks automatically queue and "rain down" on you
+- **Time Pressure** — 3-10 seconds per task based on difficulty
+- **Lives System** — Start with 3 lives, earn more at score milestones
+- **Score Multiplier** — Build streaks up to x5.0 for consecutive completions
+- **Adaptive Difficulty** — System adjusts to your performance in real-time
+- **Sound Effects** — Audio feedback with volume control (can be muted)
+- **Full Integration** — XP, quests, and FSRS all count toward your progression
+
+**Why this matters**: Build muscle memory through fast-paced repetition while having fun.
+
+### 🔄 Phase 3: Workflow Simulator (Planned)
 
 The flagship feature that makes Helix Trainer unique:
 
@@ -376,12 +390,13 @@ Helix-specific. Many commands overlap with Vim, but Helix uses a different selec
 > [!NOTE]
 > **Transparent Development**: We prioritize stability over speed. Phase 2's 6-month timeline ensures Phase 1 is battle-tested before adding complexity.
 
-| Phase | Status | Timeline | Focus |
-|-------|--------|----------|-------|
-| **Phase A** | ✅ Complete | — | Foundation (30+ commands, 20 scenarios, TUI) |
-| **Phase 1** | ✅ Complete | — | Smart learning (FSRS, quests, mastery) |
-| **Phase 2** | 📋 Planned | 6 months | Workflow simulator (LSP, git, multi-file) |
-| **Phase 3** | 💡 Future | TBD | Network effects (multiplayer, scenarios marketplace) |
+| Phase | Status | Focus |
+|-------|--------|-------|
+| **Phase A** | ✅ Complete | Foundation (30+ commands, 20 scenarios, TUI) |
+| **Phase 1** | ✅ Complete | Smart learning (FSRS, quests, mastery) |
+| **Phase 2** | 📋 Planned | Mini-Games mode (arcade, time pressure, sound) |
+| **Phase 3** | 📋 Planned | Workflow simulator (LSP, git, multi-file) |
+| **Phase 4** | 💡 Future | Network effects (multiplayer, scenarios marketplace) |
 
 ---
 

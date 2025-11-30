@@ -297,14 +297,6 @@ impl<S: SessionState> GameSession<S> {
         self.simulator.mode() == Mode::Insert
     }
 
-    /// Get current editor mode as string for UI display
-    pub fn mode_name(&self) -> &str {
-        match self.simulator.mode() {
-            Mode::Normal => "NORMAL",
-            Mode::Insert => "INSERT",
-        }
-    }
-
     /// Get number of hints shown so far
     pub fn hints_shown(&self) -> usize {
         self.hints_shown
@@ -783,6 +775,55 @@ impl GameSession<Abandoned> {
 
 /// Typestate pattern markers for compile-time state machine enforcement
 pub mod typestate;
+
+// Implement PlayableScenario trait for GameSession<Active>
+impl super::PlayableScenario for GameSession<Active> {
+    fn current_state(&self) -> &super::EditorState {
+        &self.current_state
+    }
+
+    fn target_state(&self) -> &super::EditorState {
+        &self.target_state
+    }
+
+    fn action_count(&self) -> usize {
+        self.user_actions.len()
+    }
+
+    fn is_insert_mode(&self) -> bool {
+        self.simulator.mode() == crate::helix::Mode::Insert
+    }
+
+    fn elapsed(&self) -> std::time::Duration {
+        self.started_at.elapsed()
+    }
+}
+
+// Implement PlayableScenario trait for GameSession<Completed>
+impl super::PlayableScenario for GameSession<Completed> {
+    fn current_state(&self) -> &super::EditorState {
+        &self.current_state
+    }
+
+    fn target_state(&self) -> &super::EditorState {
+        &self.target_state
+    }
+
+    fn action_count(&self) -> usize {
+        self.user_actions.len()
+    }
+
+    fn is_insert_mode(&self) -> bool {
+        self.simulator.mode() == crate::helix::Mode::Insert
+    }
+
+    fn elapsed(&self) -> std::time::Duration {
+        // For completed sessions, return duration from start to completion
+        self.completed_at
+            .map(|end| end.duration_since(self.started_at))
+            .unwrap_or_else(|| self.started_at.elapsed())
+    }
+}
 
 #[cfg(test)]
 mod tests;

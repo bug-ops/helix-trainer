@@ -52,6 +52,14 @@ pub struct UserProfile {
     /// Scenario completion history and mastery tracking
     #[serde(default)]
     pub scenario_history: ScenarioHistory,
+
+    /// Best score achieved in mini-game mode
+    #[serde(default)]
+    pub minigame_high_score: u64,
+
+    /// Best streak achieved in mini-game mode
+    #[serde(default)]
+    pub minigame_best_streak: u32,
 }
 
 impl UserProfile {
@@ -84,6 +92,8 @@ impl UserProfile {
             perfect_scenarios: 0,
             commands_executed: 0,
             scenario_history: ScenarioHistory::new(),
+            minigame_high_score: 0,
+            minigame_best_streak: 0,
         }
     }
 
@@ -317,6 +327,46 @@ impl XPCalculator {
         let base_xp = (score as u64 * 50) / 100;
         (base_xp as f64 * multiplier).round() as u64
     }
+
+    /// Calculate XP earned from mini-game session
+    ///
+    /// # Arguments
+    ///
+    /// * `score` - Total score achieved
+    /// * `level` - Final difficulty level reached
+    /// * `best_streak` - Best streak achieved
+    ///
+    /// # Formula
+    ///
+    /// - Base XP: 1 XP per 100 points scored
+    /// - Level bonus: 10 XP per difficulty level reached
+    /// - Streak bonus: 15 XP per 5 streak achieved
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::XPCalculator;
+    ///
+    /// // Score 5000, level 3, streak 10
+    /// let xp = XPCalculator::minigame_xp(5000, 3, 10);
+    /// assert_eq!(xp, 50 + 30 + 30); // 50 (score) + 30 (level) + 30 (streak) = 110
+    ///
+    /// // Score 10000, level 5, streak 25
+    /// let xp = XPCalculator::minigame_xp(10000, 5, 25);
+    /// assert_eq!(xp, 100 + 50 + 75); // 100 + 50 + 75 = 225
+    /// ```
+    pub fn minigame_xp(score: u64, level: u32, best_streak: u32) -> u64 {
+        // Base XP: 1 XP per 100 points
+        let base_xp = score / 100;
+
+        // Level bonus: 10 XP per level reached
+        let level_bonus = level as u64 * 10;
+
+        // Streak bonus: 15 XP per 5 streak achieved
+        let streak_bonus = (best_streak as u64 / 5) * 15;
+
+        base_xp + level_bonus + streak_bonus
+    }
 }
 
 #[cfg(test)]
@@ -464,5 +514,41 @@ mod tests {
         profile.reset_daily_quests();
         assert!(!profile.is_quest_completed("quest_1"));
         assert!(profile.daily_quests.is_empty());
+    }
+
+    #[test]
+    fn test_minigame_xp_calculation() {
+        // Low score, low level, low streak
+        let xp = XPCalculator::minigame_xp(1000, 1, 2);
+        assert_eq!(xp, 20); // 10 (score) + 10 (level) + 0 (streak < 5) = 20
+
+        // Medium score, medium level, medium streak
+        let xp = XPCalculator::minigame_xp(5000, 3, 10);
+        assert_eq!(xp, 110); // 50 + 30 + 30 = 110
+
+        // High score, high level, high streak
+        let xp = XPCalculator::minigame_xp(10000, 5, 25);
+        assert_eq!(xp, 225); // 100 + 50 + 75 = 225
+
+        // Perfect game example
+        let xp = XPCalculator::minigame_xp(50000, 10, 100);
+        assert_eq!(xp, 900); // 500 + 100 + 300 = 900
+
+        // Edge case: zero score
+        let xp = XPCalculator::minigame_xp(0, 1, 0);
+        assert_eq!(xp, 10); // 10 (level only)
+    }
+
+    #[test]
+    fn test_minigame_high_score_tracking() {
+        let mut profile = UserProfile::new();
+        assert_eq!(profile.minigame_high_score, 0);
+        assert_eq!(profile.minigame_best_streak, 0);
+
+        profile.minigame_high_score = 5000;
+        profile.minigame_best_streak = 15;
+
+        assert_eq!(profile.minigame_high_score, 5000);
+        assert_eq!(profile.minigame_best_streak, 15);
     }
 }

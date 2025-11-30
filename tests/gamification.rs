@@ -12,7 +12,7 @@ fn test_complete_user_flow() {
     let tracker = PerformanceTracker::new();
 
     // Day 1: Generate quests
-    let mut quests = QuestGenerator::generate_quests(&profile, &tracker);
+    let mut quests = QuestGenerator::generate_quests(&profile, &tracker, None);
     assert_eq!(quests.len(), 3); // Beginner gets 3 quests
 
     // Complete a command quest
@@ -70,17 +70,17 @@ fn test_quest_generation_adapts_to_level() {
     // Level 1: Easy quests
     let mut profile = UserProfile::new();
     profile.level = 1;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker);
+    let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
     assert_eq!(quests.len(), 3); // 2 easy + 1 medium
 
     // Level 10: Mixed difficulty
     profile.level = 10;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker);
+    let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
     assert_eq!(quests.len(), 4); // 1 easy + 2 medium + 1 hard
 
     // Level 20: Hard quests
     profile.level = 20;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker);
+    let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
     assert_eq!(quests.len(), 4); // 1 medium + 2 hard + 1 exploration
 }
 
@@ -107,8 +107,8 @@ fn test_quest_type_variations() {
     let profile = UserProfile::new();
 
     // Generate multiple times and check variety
-    let quests1 = QuestGenerator::generate_quests(&profile, &tracker);
-    let quests2 = QuestGenerator::generate_quests(&profile, &tracker);
+    let quests1 = QuestGenerator::generate_quests(&profile, &tracker, None);
+    let quests2 = QuestGenerator::generate_quests(&profile, &tracker, None);
 
     // Since they use the same date seed, they should be identical
     assert_eq!(quests1.len(), quests2.len());

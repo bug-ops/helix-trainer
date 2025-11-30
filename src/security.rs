@@ -168,6 +168,18 @@ pub mod limits {
 
     /// Minimum interval between scenario loads
     pub const MIN_LOAD_INTERVAL: Duration = Duration::from_millis(100);
+
+    /// Maximum number of quest templates per file
+    pub const MAX_QUEST_TEMPLATES_PER_FILE: usize = 100;
+
+    /// Maximum target value for quest objectives
+    pub const MAX_QUEST_TARGET: u32 = 100;
+
+    /// Maximum speed run time limit in seconds (1 hour)
+    pub const MAX_SPEED_RUN_TIME_SECONDS: u64 = 3600;
+
+    /// Maximum custom XP reward
+    pub const MAX_CUSTOM_XP_REWARD: u32 = 1000;
 }
 
 /// Path validation utilities

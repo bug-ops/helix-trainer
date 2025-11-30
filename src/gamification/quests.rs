@@ -7,7 +7,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::time::Duration;
 
+use crate::config::quests::{QuestLoader, QuestTemplate};
+use crate::helix::commands::{
+    CMD_CHANGE, CMD_DELETE_CHAR, CMD_DELETE_LINE, CMD_INSERT, CMD_MOVE_WORD_FORWARD, CMD_YANK,
+};
 use crate::learning::PerformanceTracker;
+use crate::security::UserError;
 
 use super::{UserProfile, XPCalculator};
 
@@ -199,26 +204,165 @@ impl QuestDistribution {
     }
 
     /// Generate quests according to this distribution
-    fn generate_quests(&self, rng: &mut StdRng, tracker: &PerformanceTracker) -> Vec<Quest> {
+    fn generate_quests(
+        &self,
+        rng: &mut StdRng,
+        tracker: &PerformanceTracker,
+        registry: Option<&QuestTemplateRegistry>,
+    ) -> Vec<Quest> {
         let mut quests = Vec::new();
 
         for i in 0..self.easy {
-            quests.push(QuestGenerator::generate_easy_quest(rng, i, tracker));
+            quests.push(QuestGenerator::generate_easy_quest(
+                rng, i, tracker, registry,
+            ));
         }
 
         for i in 0..self.medium {
-            quests.push(QuestGenerator::generate_medium_quest(rng, i, tracker));
+            quests.push(QuestGenerator::generate_medium_quest(
+                rng, i, tracker, registry,
+            ));
         }
 
         for i in 0..self.hard {
-            quests.push(QuestGenerator::generate_hard_quest(rng, i));
+            quests.push(QuestGenerator::generate_hard_quest(rng, i, registry));
         }
 
         for i in 0..self.exploration {
-            quests.push(QuestGenerator::generate_exploration_quest(rng, i));
+            quests.push(QuestGenerator::generate_exploration_quest(rng, i, registry));
         }
 
         quests
+    }
+}
+
+/// Registry for quest templates loaded from TOML files
+///
+/// Provides caching and filtering of quest templates loaded from configuration files.
+/// Acts as an optional enhancement to the hardcoded quest generation logic.
+#[derive(Debug, Clone)]
+pub struct QuestTemplateRegistry {
+    templates: Vec<QuestTemplate>,
+}
+
+impl QuestTemplateRegistry {
+    /// Create a new empty registry
+    pub fn new() -> Self {
+        Self {
+            templates: Vec::new(),
+        }
+    }
+
+    /// Load quest templates from the default path for a given locale
+    ///
+    /// # Errors
+    /// Returns UserError if loading fails
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let registry = QuestTemplateRegistry::load_from_default_path("en")?;
+    /// ```
+    pub fn load_from_default_path(locale: &str) -> Result<Self, UserError> {
+        let loader = QuestLoader::new();
+        let templates = loader.load_for_locale(locale)?;
+
+        tracing::info!(
+            count = templates.len(),
+            locale = locale,
+            "Loaded quest templates from TOML"
+        );
+
+        Ok(Self { templates })
+    }
+
+    /// Get all templates matching a specific difficulty
+    pub fn get_by_difficulty(
+        &self,
+        difficulty: crate::config::quests::QuestDifficulty,
+    ) -> Vec<&QuestTemplate> {
+        self.templates
+            .iter()
+            .filter(|t| t.difficulty == difficulty)
+            .collect()
+    }
+
+    /// Get a template by its ID
+    pub fn get_by_id(&self, id: &str) -> Option<&QuestTemplate> {
+        self.templates.iter().find(|t| t.id == id)
+    }
+
+    /// Get all eligible quests based on user conditions
+    ///
+    /// Filters quests by:
+    /// - Level requirements (min_level, max_level)
+    /// - Required commands (user must have used these)
+    /// - Required scenarios (user must have completed these)
+    pub fn get_eligible_quests(
+        &self,
+        user_level: u32,
+        commands_used: &HashSet<String>,
+        scenarios_completed: &HashSet<String>,
+    ) -> Vec<&QuestTemplate> {
+        self.templates
+            .iter()
+            .filter(|template| {
+                // Check min_level
+                if let Some(min) = template.conditions.min_level
+                    && user_level < min
+                {
+                    return false;
+                }
+
+                // Check max_level
+                if let Some(max) = template.conditions.max_level
+                    && user_level > max
+                {
+                    return false;
+                }
+
+                // Check required commands
+                if !template.conditions.requires_commands.is_empty() {
+                    let has_all_commands = template
+                        .conditions
+                        .requires_commands
+                        .iter()
+                        .all(|cmd| commands_used.contains(cmd));
+                    if !has_all_commands {
+                        return false;
+                    }
+                }
+
+                // Check required scenarios
+                if !template.conditions.requires_scenarios.is_empty() {
+                    let has_all_scenarios = template
+                        .conditions
+                        .requires_scenarios
+                        .iter()
+                        .all(|scenario| scenarios_completed.contains(scenario));
+                    if !has_all_scenarios {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .collect()
+    }
+
+    /// Get count of loaded templates
+    pub fn len(&self) -> usize {
+        self.templates.len()
+    }
+
+    /// Check if registry is empty
+    pub fn is_empty(&self) -> bool {
+        self.templates.is_empty()
+    }
+}
+
+impl Default for QuestTemplateRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -234,6 +378,12 @@ impl QuestGenerator {
     /// - Level 6-15: 1 easy + 2 medium + 1 hard
     /// - Level 16+: 1 medium + 2 hard + 1 exploration
     ///
+    /// # Registry
+    ///
+    /// If a QuestTemplateRegistry is provided, quests will be selected from
+    /// the loaded templates when available. If None or registry is empty,
+    /// falls back to hardcoded quest generation.
+    ///
     /// # Examples
     ///
     /// ```
@@ -242,14 +392,18 @@ impl QuestGenerator {
     ///
     /// let profile = UserProfile::new(); // Level 1
     /// let tracker = PerformanceTracker::new();
-    /// let quests = QuestGenerator::generate_quests(&profile, &tracker);
+    /// let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
     ///
     /// assert_eq!(quests.len(), 3); // Beginners get 3 quests
     /// ```
-    pub fn generate_quests(profile: &UserProfile, tracker: &PerformanceTracker) -> Vec<Quest> {
+    pub fn generate_quests(
+        profile: &UserProfile,
+        tracker: &PerformanceTracker,
+        registry: Option<&QuestTemplateRegistry>,
+    ) -> Vec<Quest> {
         let mut rng = Self::create_rng();
         let distribution = QuestDistribution::for_level(profile.level);
-        distribution.generate_quests(&mut rng, tracker)
+        distribution.generate_quests(&mut rng, tracker, registry)
     }
 
     fn create_rng() -> StdRng {
@@ -259,13 +413,35 @@ impl QuestGenerator {
         StdRng::seed_from_u64(seed)
     }
 
-    fn generate_easy_quest(rng: &mut StdRng, index: usize, _tracker: &PerformanceTracker) -> Quest {
+    fn generate_easy_quest(
+        rng: &mut StdRng,
+        index: usize,
+        _tracker: &PerformanceTracker,
+        registry: Option<&QuestTemplateRegistry>,
+    ) -> Quest {
+        // Try to use templates from registry if available
+        if let Some(reg) = registry {
+            let templates = reg.get_by_difficulty(crate::config::quests::QuestDifficulty::Easy);
+            if !templates.is_empty() {
+                let choice = rng.random_range(0..templates.len());
+                let template = templates[choice];
+                tracing::debug!(
+                    id = %template.id,
+                    "Using TOML template for easy quest"
+                );
+                return template.to_quest();
+            }
+        }
+
+        // Fallback to hardcoded quests
+        tracing::debug!("Using hardcoded easy quest (no templates available)");
+
         let quest_types = [
             // Command practice (basic commands)
-            ("dd", 3, "Delete 3 lines"),
-            ("yy", 3, "Yank 3 lines"),
-            ("w", 5, "Move forward 5 words"),
-            ("x", 5, "Delete 5 characters"),
+            (CMD_DELETE_LINE, 3, "Delete 3 lines"),
+            (CMD_YANK, 3, "Yank 3 lines"),
+            (CMD_MOVE_WORD_FORWARD, 5, "Move forward 5 words"),
+            (CMD_DELETE_CHAR, 5, "Delete 5 characters"),
         ];
 
         let choice = rng.random_range(0..quest_types.len());
@@ -285,7 +461,25 @@ impl QuestGenerator {
         rng: &mut StdRng,
         index: usize,
         _tracker: &PerformanceTracker,
+        registry: Option<&QuestTemplateRegistry>,
     ) -> Quest {
+        // Try to use templates from registry if available
+        if let Some(reg) = registry {
+            let templates = reg.get_by_difficulty(crate::config::quests::QuestDifficulty::Medium);
+            if !templates.is_empty() {
+                let choice = rng.random_range(0..templates.len());
+                let template = templates[choice];
+                tracing::debug!(
+                    id = %template.id,
+                    "Using TOML template for medium quest"
+                );
+                return template.to_quest();
+            }
+        }
+
+        // Fallback to hardcoded quests
+        tracing::debug!("Using hardcoded medium quest (no templates available)");
+
         let quest_types = [
             // Scenario completion
             (0, "Complete 2 scenarios"),
@@ -306,12 +500,12 @@ impl QuestGenerator {
                 current: 0,
             },
             1 => QuestType::CommandPractice {
-                command: "i".to_string(),
+                command: CMD_INSERT.to_string(),
                 target: 5,
                 current: 0,
             },
             2 => QuestType::CommandPractice {
-                command: "c".to_string(),
+                command: CMD_CHANGE.to_string(),
                 target: 3,
                 current: 0,
             },
@@ -325,7 +519,28 @@ impl QuestGenerator {
         Quest::new(id, quest_type, desc.to_string(), QuestDifficulty::Medium)
     }
 
-    fn generate_hard_quest(rng: &mut StdRng, index: usize) -> Quest {
+    fn generate_hard_quest(
+        rng: &mut StdRng,
+        index: usize,
+        registry: Option<&QuestTemplateRegistry>,
+    ) -> Quest {
+        // Try to use templates from registry if available
+        if let Some(reg) = registry {
+            let templates = reg.get_by_difficulty(crate::config::quests::QuestDifficulty::Hard);
+            if !templates.is_empty() {
+                let choice = rng.random_range(0..templates.len());
+                let template = templates[choice];
+                tracing::debug!(
+                    id = %template.id,
+                    "Using TOML template for hard quest"
+                );
+                return template.to_quest();
+            }
+        }
+
+        // Fallback to hardcoded quests
+        tracing::debug!("Using hardcoded hard quest (no templates available)");
+
         let quest_types = [
             // Scenario completion
             (0, "Complete 5 scenarios"),
@@ -361,7 +576,42 @@ impl QuestGenerator {
         Quest::new(id, quest_type, desc.to_string(), QuestDifficulty::Hard)
     }
 
-    fn generate_exploration_quest(_rng: &mut StdRng, index: usize) -> Quest {
+    fn generate_exploration_quest(
+        rng: &mut StdRng,
+        index: usize,
+        registry: Option<&QuestTemplateRegistry>,
+    ) -> Quest {
+        // Try to use exploration templates from registry if available
+        if let Some(reg) = registry {
+            // Exploration quests can be either Medium or Hard difficulty
+            let mut templates = reg.get_by_difficulty(crate::config::quests::QuestDifficulty::Hard);
+            templates.extend(reg.get_by_difficulty(crate::config::quests::QuestDifficulty::Medium));
+
+            // Filter to only exploration type quests
+            let exploration_templates: Vec<_> = templates
+                .into_iter()
+                .filter(|t| {
+                    matches!(
+                        t.quest_type,
+                        crate::config::quests::QuestTypeTag::Exploration
+                    )
+                })
+                .collect();
+
+            if !exploration_templates.is_empty() {
+                let choice = rng.random_range(0..exploration_templates.len());
+                let template = exploration_templates[choice];
+                tracing::debug!(
+                    id = %template.id,
+                    "Using TOML template for exploration quest"
+                );
+                return template.to_quest();
+            }
+        }
+
+        // Fallback to hardcoded quests
+        tracing::debug!("Using hardcoded exploration quest (no templates available)");
+
         let id = format!("quest_exploration_{}", index);
         let quest_type = QuestType::Exploration {
             target_commands: 10,
@@ -477,14 +727,14 @@ mod tests {
     #[test]
     fn test_quest_type_completion() {
         let mut quest_type = QuestType::CommandPractice {
-            command: "dd".to_string(),
+            command: CMD_DELETE_LINE.to_string(),
             target: 5,
             current: 3,
         };
         assert!(!quest_type.is_completed());
 
         quest_type = QuestType::CommandPractice {
-            command: "dd".to_string(),
+            command: CMD_DELETE_LINE.to_string(),
             target: 5,
             current: 5,
         };
@@ -503,7 +753,7 @@ mod tests {
     #[test]
     fn test_quest_creation() {
         let quest_type = QuestType::CommandPractice {
-            command: "dd".to_string(),
+            command: CMD_DELETE_LINE.to_string(),
             target: 5,
             current: 0,
         };
@@ -526,17 +776,17 @@ mod tests {
         // Level 1 - should get 3 quests (2 easy + 1 medium)
         let mut profile = UserProfile::new();
         profile.level = 1;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker);
+        let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
         assert_eq!(quests.len(), 3);
 
         // Level 10 - should get 4 quests (1 easy + 2 medium + 1 hard)
         profile.level = 10;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker);
+        let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
         assert_eq!(quests.len(), 4);
 
         // Level 20 - should get 4 quests (1 medium + 2 hard + 1 exploration)
         profile.level = 20;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker);
+        let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
         assert_eq!(quests.len(), 4);
     }
 
@@ -545,7 +795,7 @@ mod tests {
         let mut quests = vec![Quest::new(
             "test".to_string(),
             QuestType::CommandPractice {
-                command: "dd".to_string(),
+                command: CMD_DELETE_LINE.to_string(),
                 target: 3,
                 current: 0,
             },
@@ -553,11 +803,11 @@ mod tests {
             QuestDifficulty::Easy,
         )];
 
-        QuestTracker::update_command_progress(&mut quests, "dd");
+        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_LINE);
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_command_progress(&mut quests, "dd");
-        QuestTracker::update_command_progress(&mut quests, "dd");
+        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_LINE);
+        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_LINE);
         assert!(quests[0].is_completed());
     }
 
@@ -621,11 +871,11 @@ mod tests {
             QuestDifficulty::Hard,
         )];
 
-        QuestTracker::update_command_progress(&mut quests, "dd");
-        QuestTracker::update_command_progress(&mut quests, "yy");
+        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_LINE);
+        QuestTracker::update_command_progress(&mut quests, CMD_YANK);
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_command_progress(&mut quests, "p");
+        QuestTracker::update_command_progress(&mut quests, crate::helix::commands::CMD_PASTE_AFTER);
         assert!(quests[0].is_completed());
     }
 
@@ -654,7 +904,7 @@ mod tests {
             Quest {
                 id: "completed".to_string(),
                 quest_type: QuestType::CommandPractice {
-                    command: "dd".to_string(),
+                    command: CMD_DELETE_LINE.to_string(),
                     target: 1,
                     current: 1,
                 },
@@ -666,7 +916,7 @@ mod tests {
             Quest {
                 id: "incomplete".to_string(),
                 quest_type: QuestType::CommandPractice {
-                    command: "yy".to_string(),
+                    command: CMD_YANK.to_string(),
                     target: 5,
                     current: 2,
                 },

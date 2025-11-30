@@ -94,7 +94,7 @@ fn main() -> Result<()> {
         tracing::info!("Refreshing daily quests for new day");
         let tracker = PerformanceTracker::new();
         profile.reset_daily_quests();
-        profile.daily_quests = QuestGenerator::generate_quests(&profile, &tracker);
+        profile.daily_quests = QuestGenerator::generate_quests(&profile, &tracker, None);
     }
 
     // Update streak (checks last activity)

@@ -3,9 +3,14 @@
 //! This module handles loading and parsing scenario files in TOML format,
 //! as well as application configuration.
 
+pub mod quests;
 pub mod scenario_collection;
 pub mod scenarios;
 
+pub use quests::{
+    QuestConditions, QuestDifficulty, QuestLoader, QuestParams, QuestTemplate, QuestTypeTag,
+    QuestsFile, QuestsMetadata, XpConfig,
+};
 pub use scenario_collection::{ScenarioCollection, ScenarioFilter, SortMode};
 pub use scenarios::{
     AlternativeSolution, Difficulty, Scenario, ScenarioCategory, ScenarioLoader, ScenarioMetadata,

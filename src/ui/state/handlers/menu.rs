@@ -9,10 +9,10 @@ use crate::ui::state::{AppState, Message, TypedScreen, update};
 ///
 /// Moves menu selection up (with bounds checking)
 pub fn handle_menu_up(state: &mut AppState) -> Result<(), UserError> {
-    if let TypedScreen::Menu(menu_data) = &mut state.screen {
-        if menu_data.selected_item > 0 {
-            menu_data.selected_item -= 1;
-        }
+    if let TypedScreen::Menu(menu_data) = &mut state.screen
+        && menu_data.selected_item > 0
+    {
+        menu_data.selected_item -= 1;
     }
     Ok(())
 }

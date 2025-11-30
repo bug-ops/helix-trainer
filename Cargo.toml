@@ -2,7 +2,7 @@
 name = "helix-trainer"
 version = "0.4.2"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 authors = ["Andrei G <andrei.g@my.com>"]
 description = "Interactive trainer for learning Helix editor keybindings"
 license = "MIT"
@@ -52,3 +52,10 @@ harness = false
 [[bench]]
 name = "filtering_sorting"
 harness = false
+
+[profile.release]
+opt-level = "z"        # Optimize for size
+lto = "fat"            # Full Link-Time Optimization for maximum size reduction
+codegen-units = 1      # Single codegen unit for better optimization
+strip = true           # Strip symbols from binary
+panic = "abort"        # Abort on panic (no unwinding = smaller binary)

@@ -38,31 +38,31 @@ pub fn handle_complete_review_command(
     state: &mut AppState,
     success: bool,
 ) -> Result<(), UserError> {
-    if let Some(session) = &mut state.game.review_session {
-        if let Some(command) = &session.current_command {
-            let duration = session.session_started_at.elapsed();
+    if let Some(session) = &mut state.game.review_session
+        && let Some(command) = &session.current_command
+    {
+        let duration = session.session_started_at.elapsed();
 
-            // Record result
-            session.completed_reviews.push(ReviewResult {
-                command: command.clone(),
-                success,
+        // Record result
+        session.completed_reviews.push(ReviewResult {
+            command: command.clone(),
+            success,
+            duration,
+        });
+
+        // Update performance tracker
+        {
+            let mut tracker = state.progress.performance_tracker.borrow_mut();
+            tracker.record_attempt(
+                command,
                 duration,
-            });
-
-            // Update performance tracker
-            {
-                let mut tracker = state.progress.performance_tracker.borrow_mut();
-                tracker.record_attempt(
-                    command,
-                    duration,
-                    success,
-                    std::time::Duration::from_secs(3), // Optimal time
-                );
-            }
-
-            // Move to next
-            update(state, Message::NextReviewCommand)?;
+                success,
+                std::time::Duration::from_secs(3), // Optimal time
+            );
         }
+
+        // Move to next
+        update(state, Message::NextReviewCommand)?;
     }
     Ok(())
 }

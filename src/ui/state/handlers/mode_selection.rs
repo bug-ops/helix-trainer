@@ -7,10 +7,10 @@ use crate::ui::state::{AppState, MenuData, TypedScreen};
 pub(in crate::ui::state) fn handle_mode_selection_up(
     state: &mut AppState,
 ) -> Result<(), UserError> {
-    if let TypedScreen::ModeSelection(mode_data) = &mut state.screen {
-        if mode_data.selected_mode > 0 {
-            mode_data.selected_mode -= 1;
-        }
+    if let TypedScreen::ModeSelection(mode_data) = &mut state.screen
+        && mode_data.selected_mode > 0
+    {
+        mode_data.selected_mode -= 1;
     }
     Ok(())
 }

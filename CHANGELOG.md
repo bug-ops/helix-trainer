@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-11-30
+
+### 🎮 Phase 2.1: Mini-Games Mode (Arcade Training)
+
+This release introduces Mini-Games mode - an arcade-style training experience with time pressure and gamification mechanics designed to build muscle memory through fast-paced repetition.
+
+### Added
+
+**Mini-Games Mode** (#50)
+
+- **Arcade Training Experience**
+  - Mode selection screen (Training vs Arcade)
+  - 60-second timed sessions with countdown
+  - Automatic scenario progression with 2-second transitions
+  - 5-10 second time limits per scenario based on difficulty
+
+- **Scoring & Progression**
+  - Real-time score tracking with streak multiplier (1.0x → 5.0x)
+  - XP awards per scenario (15 base + streak bonus)
+  - "+X XP" notification popup during transitions
+  - High score tracking per session
+
+- **Lives System**
+  - Start with 3 lives
+  - Lose life on timeout or excessive actions
+  - Lives displayed with ❤️ indicators
+  - Bonus life at 1000, 2500, 5000 points
+
+- **UI/UX Improvements**
+  - Key history display (last 5 keys, big text)
+  - Pause menu (Esc) with profile/stats navigation
+  - Game over screen with final score and stats
+  - Countdown animation (3... 2... 1... GO!)
+
+- **Integration**
+  - Full XP/quest/FSRS integration
+  - Profile and statistics accessible from pause menu
+  - Proper navigation flow (arcade → pause → profile → arcade)
+
+**Technical Implementation**:
+
+- New `MiniGameSession` struct with state machine (Countdown → Playing → Transition → Paused → GameOver)
+- `MiniGameData` screen state with command buffer and key history
+- `ReturnDestination` enum for context-aware back navigation
+- Unified `render_key_history_popup` (DRY refactoring)
+- 82 new tests for mini-game functionality
+
+### Changed
+
+- BackToMenu now returns to ModeSelection (main mode menu)
+- XP display fixed to show progress within current level (not total XP)
+- Refactored render functions for code reuse between training and arcade modes
+
+### Quality
+
+- All 645 tests passing
+- Zero clippy warnings
+- Code formatted with rustfmt nightly
+- Security audit passed (cargo deny check)
+
 ## [0.3.0] - 2025-11-30
 
 ### 🚀 Async Non-Blocking Architecture
@@ -550,7 +610,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/bug-ops/helix-trainer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bug-ops/helix-trainer/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/bug-ops/helix-trainer/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bug-ops/helix-trainer/compare/v0.1.5...v0.2.0

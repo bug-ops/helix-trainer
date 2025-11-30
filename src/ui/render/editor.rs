@@ -9,11 +9,12 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
-/// Render editor text with cursor and diff highlighting
+/// Render editor text with cursor, selection and diff highlighting
 ///
 /// Compares current state with target state and colors lines:
 /// - Green: lines that match target
 /// - Red: lines that differ from target
+/// - Selection shown with blue background
 /// - Cursor shown with inverse colors
 pub(super) fn render_editor_with_diff<'a>(
     current: &'a crate::game::EditorState,
@@ -23,6 +24,7 @@ pub(super) fn render_editor_with_diff<'a>(
     let target_content = target.content();
     let cursor = current.cursor_position();
     let (cursor_line, cursor_col) = (cursor.row, cursor.col);
+    let selection = current.selection();
 
     let current_lines: Vec<&str> = current_content.lines().collect();
     let target_lines: Vec<&str> = target_content.lines().collect();
@@ -44,6 +46,64 @@ pub(super) fn render_editor_with_diff<'a>(
                 Color::Red
             };
 
+            // Check if this line has selection
+            if let Some(sel) = selection {
+                let sel_start_line = sel.start.row;
+                let sel_end_line = sel.end.row;
+
+                if line_idx >= sel_start_line && line_idx <= sel_end_line {
+                    // This line contains selection
+                    let mut spans = Vec::new();
+
+                    // Determine selection range for this line
+                    let line_start_col = if line_idx == sel_start_line {
+                        sel.start.col
+                    } else {
+                        0
+                    };
+
+                    let line_end_col = if line_idx == sel_end_line {
+                        sel.end.col
+                    } else {
+                        line_text.chars().count()
+                    };
+
+                    // Get byte indices for selection range
+                    let (start_byte, end_byte) =
+                        char_range_to_bytes(line_text, line_start_col, line_end_col);
+
+                    // Text before selection
+                    if start_byte > 0 {
+                        spans.push(Span::styled(
+                            &line_text[..start_byte],
+                            Style::default().fg(line_color),
+                        ));
+                    }
+
+                    // Selected text with highlight
+                    if start_byte < end_byte && end_byte <= line_text.len() {
+                        spans.push(Span::styled(
+                            &line_text[start_byte..end_byte],
+                            Style::default()
+                                .bg(Color::Blue)
+                                .fg(Color::White)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+                    }
+
+                    // Text after selection
+                    if end_byte < line_text.len() {
+                        spans.push(Span::styled(
+                            &line_text[end_byte..],
+                            Style::default().fg(line_color),
+                        ));
+                    }
+
+                    return Line::from(spans);
+                }
+            }
+
+            // No selection - show cursor if on this line
             if line_idx == cursor_line {
                 // This line contains the cursor
                 let mut spans = Vec::new();

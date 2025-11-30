@@ -306,12 +306,12 @@ impl QuestLoader {
         }
 
         // Validate min_level <= max_level consistency
-        if let (Some(min), Some(max)) = (quest.conditions.min_level, quest.conditions.max_level) {
-            if min > max {
-                return Err(SecurityError::InvalidInput(
-                    "min_level cannot be greater than max_level".into(),
-                ));
-            }
+        if let (Some(min), Some(max)) = (quest.conditions.min_level, quest.conditions.max_level)
+            && min > max
+        {
+            return Err(SecurityError::InvalidInput(
+                "min_level cannot be greater than max_level".into(),
+            ));
         }
 
         // Validate that params match quest type

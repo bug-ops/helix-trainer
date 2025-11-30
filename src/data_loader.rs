@@ -131,7 +131,9 @@ pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegi
 mod tests {
     use super::*;
 
+    // Miri is too slow for async/tokio tests (300+ seconds per test)
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_load_scenarios_async() {
         // This test requires scenario files to exist
         // In a real scenario, we'd have test fixtures
@@ -156,6 +158,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_load_profile_async() {
         let result = load_profile_async().await;
 
@@ -181,6 +184,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_load_quest_registry_async() {
         let result = load_quest_registry_async("en").await;
 
@@ -205,6 +209,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_spawn_data_loaders() {
         let (tx, mut rx) = mpsc::channel(32);
 

@@ -129,6 +129,51 @@ jobs:
       - name: Security audit with cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
 
+  msrv:
+    name: Check MSRV
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        run: |
+          MSRV=$(grep '^rust-version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$MSRV" >> $GITHUB_OUTPUT
+          echo "Detected MSRV: $MSRV"
+
+      - name: Install Rust ${{ steps.msrv.outputs.version }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-msrv-
+            ${{ runner.os }}-cargo-
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Check with MSRV
+        run: cargo check --all-features --verbose
+
+      - name: Show sccache statistics
+        shell: bash
+        run: sccache --show-stats
+
   build:
     name: Build
     runs-on: ${{ matrix.os }}
@@ -159,8 +204,94 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
+      - name: Install cargo-bloat (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-bloat
+
       - name: Build release
         run: cargo build --release --verbose
+
+      - name: Binary size analysis (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          echo "=== Binary Size Report (${{ matrix.os }}) ==="
+          BINARY_PATH="target/release/helix-trainer"
+
+          if [ -f "$BINARY_PATH" ]; then
+            # Get file size
+            SIZE=$(ls -lh "$BINARY_PATH" | awk '{print $5}')
+            SIZE_BYTES=$(stat -f%z "$BINARY_PATH" 2>/dev/null || stat -c%s "$BINARY_PATH" 2>/dev/null)
+            SIZE_MB=$(echo "scale=2; $SIZE_BYTES / 1024 / 1024" | bc)
+
+            echo "Binary: $BINARY_PATH"
+            echo "Size: $SIZE ($SIZE_MB MB)"
+            echo "Size (bytes): $SIZE_BYTES"
+            echo ""
+
+            # Check if stripped (Unix)
+            if file "$BINARY_PATH" | grep -q "not stripped"; then
+              echo "⚠️  Warning: Binary is NOT stripped (strip=true in Cargo.toml should handle this)"
+            else
+              echo "✓ Binary is stripped"
+            fi
+
+            # Show section sizes (Unix)
+            echo ""
+            echo "=== Section Sizes ==="
+            size "$BINARY_PATH" || true
+          else
+            echo "❌ Binary not found at $BINARY_PATH"
+            exit 1
+          fi
+
+      - name: Binary size analysis (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "=== Binary Size Report (${{ matrix.os }}) ==="
+          $BinaryPath = "target/release/helix-trainer.exe"
+
+          if (Test-Path $BinaryPath) {
+            $FileInfo = Get-Item $BinaryPath
+            $SizeBytes = $FileInfo.Length
+            $SizeMB = [math]::Round($SizeBytes / 1MB, 2)
+
+            Write-Host "Binary: $BinaryPath"
+            Write-Host "Size: $SizeMB MB"
+            Write-Host "Size (bytes): $SizeBytes"
+            Write-Host ""
+
+            Write-Host "File details:"
+            Get-Item $BinaryPath | Format-List Name, Length, LastWriteTime
+          } else {
+            Write-Host "❌ Binary not found at $BinaryPath"
+            exit 1
+          }
+
+      - name: Analyze binary bloat (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          echo ""
+          echo "=== Top 20 Functions by Size ==="
+          cargo bloat --release -n 20 || true
+
+          echo ""
+          echo "=== Crate Size Breakdown ==="
+          cargo bloat --release --crates -n 20 || true
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helix-trainer-${{ matrix.os }}
+          path: |
+            target/release/helix-trainer
+            target/release/helix-trainer.exe
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Show sccache statistics
         shell: bash

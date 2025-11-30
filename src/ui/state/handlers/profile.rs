@@ -9,13 +9,11 @@ use crate::ui::state::{AppState, ProfileData, ReturnDestination, StatisticsData,
 ///
 /// If coming from a paused mini-game, return there; otherwise return to menu.
 fn determine_return_destination(state: &AppState) -> ReturnDestination {
-    if let TypedScreen::MiniGame(_) = &state.screen {
-        // Check if minigame is paused
-        if let Some(session) = &state.game.minigame_session {
-            if session.state().is_paused() {
-                return ReturnDestination::PausedMiniGame;
-            }
-        }
+    if let TypedScreen::MiniGame(_) = &state.screen
+        && let Some(session) = &state.game.minigame_session
+        && session.state().is_paused()
+    {
+        return ReturnDestination::PausedMiniGame;
     }
     ReturnDestination::Menu
 }

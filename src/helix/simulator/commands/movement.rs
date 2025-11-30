@@ -270,13 +270,13 @@ pub(super) fn find_next_char<M: EditorMode>(
     let mut pos = head + 1; // Start after current position
 
     while pos < line_end {
-        if let Some(c) = slice.get_char(pos) {
-            if c == ch {
-                found_count += 1;
-                if found_count >= count {
-                    sim.selection = Selection::point(pos);
-                    return Ok(());
-                }
+        if let Some(c) = slice.get_char(pos)
+            && c == ch
+        {
+            found_count += 1;
+            if found_count >= count {
+                sim.selection = Selection::point(pos);
+                return Ok(());
             }
         }
         pos += 1;
@@ -303,13 +303,13 @@ pub(super) fn find_prev_char<M: EditorMode>(
     if head > line_start {
         let mut pos = head - 1;
         loop {
-            if let Some(c) = slice.get_char(pos) {
-                if c == ch {
-                    found_count += 1;
-                    if found_count >= count {
-                        sim.selection = Selection::point(pos);
-                        return Ok(());
-                    }
+            if let Some(c) = slice.get_char(pos)
+                && c == ch
+            {
+                found_count += 1;
+                if found_count >= count {
+                    sim.selection = Selection::point(pos);
+                    return Ok(());
                 }
             }
             if pos == line_start {
@@ -343,16 +343,16 @@ pub(super) fn till_next_char<M: EditorMode>(
     let mut pos = head + 1;
 
     while pos < line_end {
-        if let Some(c) = slice.get_char(pos) {
-            if c == ch {
-                found_count += 1;
-                if found_count >= count {
-                    // Stop one position before the character
-                    if pos > head + 1 {
-                        sim.selection = Selection::point(pos - 1);
-                    }
-                    return Ok(());
+        if let Some(c) = slice.get_char(pos)
+            && c == ch
+        {
+            found_count += 1;
+            if found_count >= count {
+                // Stop one position before the character
+                if pos > head + 1 {
+                    sim.selection = Selection::point(pos - 1);
                 }
+                return Ok(());
             }
         }
         pos += 1;
@@ -378,14 +378,14 @@ pub(super) fn till_prev_char<M: EditorMode>(
     if head > line_start {
         let mut pos = head - 1;
         loop {
-            if let Some(c) = slice.get_char(pos) {
-                if c == ch {
-                    found_count += 1;
-                    if found_count >= count {
-                        // Stop one position after the character
-                        sim.selection = Selection::point(pos + 1);
-                        return Ok(());
-                    }
+            if let Some(c) = slice.get_char(pos)
+                && c == ch
+            {
+                found_count += 1;
+                if found_count >= count {
+                    // Stop one position after the character
+                    sim.selection = Selection::point(pos + 1);
+                    return Ok(());
                 }
             }
             if pos == line_start {
@@ -415,11 +415,11 @@ pub(super) fn goto_first_nonwhitespace<M: EditorMode>(
     let mut pos = line_start;
 
     while pos < line_end {
-        if let Some(c) = slice.get_char(pos) {
-            if !c.is_whitespace() {
-                sim.selection = Selection::point(pos);
-                return Ok(());
-            }
+        if let Some(c) = slice.get_char(pos)
+            && !c.is_whitespace()
+        {
+            sim.selection = Selection::point(pos);
+            return Ok(());
         }
         pos += 1;
     }

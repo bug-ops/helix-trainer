@@ -223,12 +223,12 @@ pub(in crate::ui::state) fn handle_minigame_scenario_complete(
 pub(in crate::ui::state) fn handle_minigame_next_scenario(
     state: &mut AppState,
 ) -> Result<(), UserError> {
-    if let Some(ref mut session) = state.game.minigame_session {
-        if let Err(e) = session.complete_transition() {
-            // Log error but don't crash - user can still see current state
-            tracing::warn!("Failed to load next mini-game scenario: {:?}", e);
-            // The game will continue in its current state
-        }
+    if let Some(ref mut session) = state.game.minigame_session
+        && let Err(e) = session.complete_transition()
+    {
+        // Log error but don't crash - user can still see current state
+        tracing::warn!("Failed to load next mini-game scenario: {:?}", e);
+        // The game will continue in its current state
     }
     Ok(())
 }

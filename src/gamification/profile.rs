@@ -205,13 +205,13 @@ impl XPCalculator {
     ///
     /// assert_eq!(XPCalculator::xp_for_level(1), 0);      // Level 1 starts at 0
     /// assert_eq!(XPCalculator::xp_for_level(2), 100);    // Level 2 starts at 100
-    /// assert_eq!(XPCalculator::xp_for_level(3), 282);    // Level 3 starts at ~282
+    /// assert_eq!(XPCalculator::xp_for_level(3), 283);    // Level 3 starts at 283 (rounded)
     /// ```
     pub fn xp_for_level(level: u32) -> u64 {
         if level <= 1 {
             0
         } else {
-            (100.0 * ((level - 1) as f64).powf(1.5)) as u64
+            (100.0 * ((level - 1) as f64).powf(1.5)).round() as u64
         }
     }
 
@@ -227,7 +227,7 @@ impl XPCalculator {
     /// assert_eq!(XPCalculator::level_from_xp(0), 1);
     /// assert_eq!(XPCalculator::level_from_xp(99), 1);
     /// assert_eq!(XPCalculator::level_from_xp(100), 2);
-    /// assert_eq!(XPCalculator::level_from_xp(282), 3);
+    /// assert_eq!(XPCalculator::level_from_xp(283), 3);
     /// ```
     pub fn level_from_xp(total_xp: u64) -> u32 {
         // Binary search for level
@@ -430,7 +430,7 @@ mod tests {
     fn test_xp_calculator_level_formula() {
         assert_eq!(XPCalculator::xp_for_level(1), 0);
         assert_eq!(XPCalculator::xp_for_level(2), 100);
-        assert_eq!(XPCalculator::xp_for_level(3), 282); // 100 * 2^1.5 = 282.8
+        assert_eq!(XPCalculator::xp_for_level(3), 283); // 100 * 2^1.5 = 282.8 → 283 (rounded)
 
         // Level 5 should be 100 * 4^1.5 = 100 * 8 = 800
         let level5_xp = XPCalculator::xp_for_level(5);
@@ -443,7 +443,7 @@ mod tests {
         assert_eq!(XPCalculator::level_from_xp(99), 1); // Just below threshold
         assert_eq!(XPCalculator::level_from_xp(100), 2);
         assert_eq!(XPCalculator::level_from_xp(101), 2); // Just above threshold
-        assert_eq!(XPCalculator::level_from_xp(282), 3);
+        assert_eq!(XPCalculator::level_from_xp(283), 3); // 283 with rounding
         assert_eq!(XPCalculator::level_from_xp(800), 5);
     }
 

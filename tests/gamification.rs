@@ -5,14 +5,21 @@ use helix_trainer::learning::PerformanceTracker;
 use std::time::Duration;
 use tempfile::TempDir;
 
+/// Helper to create a registry for tests
+fn test_registry() -> QuestTemplateRegistry {
+    QuestTemplateRegistry::load_from_default_path("en")
+        .expect("Failed to load quest templates for tests")
+}
+
 #[test]
 fn test_complete_user_flow() {
     // Test a complete user journey
     let mut profile = UserProfile::new();
     let tracker = PerformanceTracker::new();
+    let registry = test_registry();
 
     // Day 1: Generate quests
-    let mut quests = QuestGenerator::generate_quests(&profile, &tracker, None);
+    let mut quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
     assert_eq!(quests.len(), 3); // Beginner gets 3 quests
 
     // Complete a command quest
@@ -66,21 +73,22 @@ fn test_level_progression() {
 #[test]
 fn test_quest_generation_adapts_to_level() {
     let tracker = PerformanceTracker::new();
+    let registry = test_registry();
 
     // Level 1: Easy quests
     let mut profile = UserProfile::new();
     profile.level = 1;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
+    let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
     assert_eq!(quests.len(), 3); // 2 easy + 1 medium
 
     // Level 10: Mixed difficulty
     profile.level = 10;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
+    let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
     assert_eq!(quests.len(), 4); // 1 easy + 2 medium + 1 hard
 
     // Level 20: Hard quests
     profile.level = 20;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker, None);
+    let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
     assert_eq!(quests.len(), 4); // 1 medium + 2 hard + 1 exploration
 }
 
@@ -105,10 +113,11 @@ fn test_streak_milestone_rewards() {
 fn test_quest_type_variations() {
     let tracker = PerformanceTracker::new();
     let profile = UserProfile::new();
+    let registry = test_registry();
 
     // Generate multiple times and check variety
-    let quests1 = QuestGenerator::generate_quests(&profile, &tracker, None);
-    let quests2 = QuestGenerator::generate_quests(&profile, &tracker, None);
+    let quests1 = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+    let quests2 = QuestGenerator::generate_quests(&profile, &tracker, &registry);
 
     // Since they use the same date seed, they should be identical
     assert_eq!(quests1.len(), quests2.len());

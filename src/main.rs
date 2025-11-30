@@ -1,16 +1,19 @@
 //! Main entry point for the Helix Keybindings Trainer
 //!
 //! This is the application's entry point. It initializes the terminal UI,
-//! loads scenarios, and runs the main event loop.
+//! loads scenarios asynchronously, and runs the async event loop.
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{Event, EventStream, KeyCode, KeyEvent, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use futures::StreamExt;
 use helix_trainer::{
-    config::ScenarioLoader,
+    async_state::DataLoadMessage,
+    config::ScenarioCollection,
+    data_loader::spawn_data_loaders,
     gamification::{ProfileStorage, QuestGenerator, QuestTemplateRegistry, StreakManager},
     helix::commands::*,
     learning::PerformanceTracker,
@@ -20,6 +23,7 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use std::borrow::Cow;
 use std::io;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -50,8 +54,14 @@ fn init_secure_logging() -> Result<()> {
     Ok(())
 }
 
-/// Main entry point
-fn main() -> Result<()> {
+/// Main entry point (async)
+///
+/// Uses 2 worker threads - sufficient for our async workload:
+/// - Terminal event handling
+/// - Background data loading (scenarios, profile)
+/// - Tick interval for animations
+#[tokio::main(worker_threads = 2)]
+async fn main() -> Result<()> {
     // Warn if running debug build
     #[cfg(debug_assertions)]
     {
@@ -62,59 +72,20 @@ fn main() -> Result<()> {
     // Initialize secure logging
     init_secure_logging()?;
 
-    tracing::info!("Starting Helix Keybindings Trainer");
+    tracing::info!("Starting Helix Keybindings Trainer (async mode)");
 
-    // Load scenarios from language-specific directory (recursively)
-    // Use current locale from rust-i18n
-    let current_locale = rust_i18n::locale();
-    let locale_str: &str = current_locale.as_ref();
-    let scenarios_path = format!("./scenarios/{}", locale_str);
+    // Create channel for data loading messages
+    let (data_tx, mut data_rx) = mpsc::channel::<DataLoadMessage>(32);
 
-    tracing::info!("Loading scenarios for locale: {}", locale_str);
-
-    let loader = ScenarioLoader::new();
-    let scenarios = loader.load_directory(std::path::Path::new(&scenarios_path))?;
-
-    tracing::info!(
-        "Loaded {} scenarios from {} locale",
-        scenarios.len(),
-        locale_str
-    );
-
-    // Initialize profile system
+    // Initialize app state (empty, will be populated by async loaders)
     let profile_storage = ProfileStorage::new();
-    let mut profile = profile_storage.load().unwrap_or_else(|e| {
-        tracing::warn!("Failed to load profile: {}, creating new", e);
-        helix_trainer::gamification::UserProfile::new()
-    });
-
-    // Load quest templates
-    let quest_registry = QuestTemplateRegistry::load_from_default_path("en").unwrap_or_else(|e| {
-        tracing::warn!(
-            "Failed to load quest templates: {}, using empty registry",
-            e
-        );
-        QuestTemplateRegistry::new()
-    });
-
-    // Check if we need to refresh daily quests
-    let now = chrono::Utc::now();
-    if should_refresh_quests(&profile, now) {
-        tracing::info!("Refreshing daily quests for new day");
-        let tracker = PerformanceTracker::new();
-        profile.reset_daily_quests();
-        profile.daily_quests = QuestGenerator::generate_quests(&profile, &tracker, &quest_registry);
-    }
-
-    // Update streak (checks last activity)
-    let streak_change = StreakManager::update_streak(&mut profile);
-    tracing::debug!("Streak status: {:?}", streak_change);
-
-    // Initialize performance tracker
     let tracker = PerformanceTracker::new();
-
-    // Initialize app state
-    let mut app_state = AppState::new(scenarios, profile, profile_storage, tracker);
+    let mut app_state = AppState::new(
+        vec![],
+        helix_trainer::gamification::UserProfile::new(),
+        profile_storage,
+        tracker,
+    );
 
     // Setup terminal
     enable_raw_mode()?;
@@ -125,8 +96,11 @@ fn main() -> Result<()> {
 
     tracing::debug!("Terminal initialized");
 
-    // Run the main event loop
-    let result = run_app(&mut terminal, &mut app_state);
+    // Spawn background data loaders
+    spawn_data_loaders(data_tx);
+
+    // Run the async event loop
+    let result = run_async_event_loop(&mut terminal, &mut app_state, &mut data_rx).await;
 
     // Save profile before exit
     if let Err(e) = app_state.save_profile_immediate() {
@@ -153,17 +127,25 @@ fn should_refresh_quests(
     now.date_naive() != profile.last_quest_refresh.date_naive()
 }
 
-/// Main application event loop
+/// Async event loop using tokio::select!
 ///
 /// This function runs the core event loop that:
 /// 1. Renders the current state
-/// 2. Handles user input
-/// 3. Updates state based on messages
-/// 4. Repeats until the app exits
-fn run_app(
+/// 2. Handles user input (async)
+/// 3. Handles background data loading results
+/// 4. Updates state based on messages
+/// 5. Repeats until the app exits
+async fn run_async_event_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     state: &mut AppState,
+    data_rx: &mut mpsc::Receiver<DataLoadMessage>,
 ) -> Result<()> {
+    // Create event stream from crossterm
+    let mut event_stream = EventStream::new();
+
+    // Tick interval for animations (100ms)
+    let mut tick_interval = tokio::time::interval(Duration::from_millis(100));
+
     loop {
         // Render the current state
         terminal.draw(|f| ui::render(f, state))?;
@@ -182,22 +164,111 @@ fn run_app(
             state.ui.completion_time = None;
         }
 
-        // Handle events with timeout
-        if event::poll(Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-        {
-            // Handle global quit shortcut first
-            if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                tracing::debug!("User pressed Ctrl+C");
-                ui::update(state, Message::QuitApp)?;
-                continue;
+        // Select on multiple event sources (non-blocking)
+        // Use biased to prioritize keyboard events for responsive UI
+        tokio::select! {
+            biased;
+
+            // Terminal events (keyboard input) - highest priority
+            maybe_event = event_stream.next() => {
+                if let Some(Ok(Event::Key(key))) = maybe_event {
+                    // Handle global quit shortcut first
+                    if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL)
+                    {
+                        tracing::debug!("User pressed Ctrl+C");
+                        ui::update(state, Message::QuitApp)?;
+                        continue;
+                    }
+
+                    // Dispatch to screen-specific handlers
+                    if let Some(msg) = handle_key_event(key, state) {
+                        tracing::debug!("Message: {:?}", msg);
+                        ui::update(state, msg)?;
+                    }
+                }
             }
 
-            // Dispatch to screen-specific handlers
-            if let Some(msg) = handle_key_event(key, state) {
-                tracing::debug!("Message: {:?}", msg);
-                ui::update(state, msg)?;
+            // Data loading results
+            Some(data_msg) = data_rx.recv() => {
+                handle_data_message(state, data_msg)?;
             }
+
+            // Tick for animations (though we don't have loading spinners yet)
+            _ = tick_interval.tick() => {
+                // Future use: update loading spinners
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle messages from background data loaders
+fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result<()> {
+    match msg {
+        DataLoadMessage::ScenariosReady(scenarios) => {
+            let count = scenarios.len();
+            state.game.scenario_collection = ScenarioCollection::new(scenarios);
+            tracing::info!(count, "Scenarios loaded");
+        }
+
+        DataLoadMessage::ScenariosError(err) => {
+            tracing::error!("Failed to load scenarios: {}", err);
+        }
+
+        DataLoadMessage::ProfileReady(profile) => {
+            // Update streak and refresh quests if needed
+            let mut updated_profile = profile;
+            let streak_change = StreakManager::update_streak(&mut updated_profile);
+            tracing::debug!("Streak status: {:?}", streak_change);
+
+            // Check if we need to refresh daily quests
+            let now = chrono::Utc::now();
+            if should_refresh_quests(&updated_profile, now) {
+                tracing::info!("Refreshing daily quests for new day");
+                let tracker = PerformanceTracker::new();
+                updated_profile.reset_daily_quests();
+
+                // Load quest registry synchronously for now (Phase 4 will make this lazy)
+                let quest_registry = QuestTemplateRegistry::load_from_default_path("en")
+                    .unwrap_or_else(|e| {
+                        tracing::warn!(
+                            "Failed to load quest templates: {}, using empty registry",
+                            e
+                        );
+                        QuestTemplateRegistry::new()
+                    });
+
+                updated_profile.daily_quests =
+                    QuestGenerator::generate_quests(&updated_profile, &tracker, &quest_registry);
+            }
+
+            *state.progress.profile.borrow_mut() = updated_profile;
+            tracing::info!("Profile loaded");
+        }
+
+        DataLoadMessage::ProfileError { error, fallback } => {
+            *state.progress.profile.borrow_mut() = fallback;
+            tracing::warn!("Profile load failed, using default: {}", error);
+        }
+
+        DataLoadMessage::QuestRegistryReady(_registry) => {
+            // Phase 4: Handle quest registry loading
+            tracing::debug!("Quest registry loaded (not yet integrated)");
+        }
+
+        DataLoadMessage::QuestRegistryError(err) => {
+            tracing::error!("Failed to load quest registry: {}", err);
+        }
+
+        DataLoadMessage::ProfileSaved => {
+            state.progress.mark_saved();
+            tracing::debug!("Profile saved");
+        }
+
+        DataLoadMessage::ProfileSaveError(err) => {
+            tracing::error!("Failed to save profile: {}", err);
         }
     }
 
@@ -863,6 +934,159 @@ mod tests {
         fn test_handle_task_special_keys_escape() {
             let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
             assert_eq!(handle_task_special_keys(key), None);
+        }
+    }
+
+    // Unit tests for handle_data_message()
+    mod handle_data_message_tests {
+        use super::*;
+        use helix_trainer::async_state::DataLoadMessage;
+        use helix_trainer::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
+
+        fn create_test_scenario() -> Scenario {
+            Scenario {
+                id: "test_001".to_string(),
+                name: "Test Scenario".to_string(),
+                description: "A test scenario".to_string(),
+                setup: Setup {
+                    file_content: "line 1\nline 2\n".to_string(),
+                    cursor_position: (0, 0),
+                },
+                target: TargetState {
+                    file_content: "line 2\n".to_string(),
+                    cursor_position: (0, 0),
+                    selection: None,
+                },
+                solution: Solution {
+                    commands: vec!["dd".to_string()],
+                    description: "Delete first line".to_string(),
+                },
+                alternatives: vec![],
+                hints: vec![],
+                scoring: ScoringConfig {
+                    optimal_count: 1,
+                    max_points: 100,
+                    tolerance: 0,
+                },
+                metadata: None,
+            }
+        }
+
+        #[test]
+        fn test_handle_scenarios_ready() {
+            let mut state = create_test_app_state();
+            let scenarios = vec![create_test_scenario()];
+
+            let result =
+                handle_data_message(&mut state, DataLoadMessage::ScenariosReady(scenarios));
+
+            assert!(result.is_ok());
+            assert_eq!(state.game.scenario_collection.count(), 1);
+        }
+
+        #[test]
+        fn test_handle_scenarios_ready_empty() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(&mut state, DataLoadMessage::ScenariosReady(vec![]));
+
+            assert!(result.is_ok());
+            assert_eq!(state.game.scenario_collection.count(), 0);
+        }
+
+        #[test]
+        fn test_handle_scenarios_error() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(
+                &mut state,
+                DataLoadMessage::ScenariosError("File not found".to_string()),
+            );
+
+            // Should not panic, just log error
+            assert!(result.is_ok());
+            // Scenarios should remain empty
+            assert_eq!(state.game.scenario_collection.count(), 0);
+        }
+
+        #[test]
+        fn test_handle_profile_ready() {
+            let mut state = create_test_app_state();
+            let mut profile = helix_trainer::gamification::UserProfile::new();
+            profile.total_xp = 500;
+            profile.level = 3;
+
+            let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+            assert!(result.is_ok());
+            let loaded_profile = state.progress.profile.borrow();
+            assert_eq!(loaded_profile.total_xp, 500);
+            assert_eq!(loaded_profile.level, 3);
+        }
+
+        #[test]
+        fn test_handle_profile_error_uses_fallback() {
+            let mut state = create_test_app_state();
+            let mut fallback = helix_trainer::gamification::UserProfile::new();
+            fallback.total_xp = 100; // Mark fallback with some XP
+
+            let result = handle_data_message(
+                &mut state,
+                DataLoadMessage::ProfileError {
+                    error: "Corrupted file".to_string(),
+                    fallback,
+                },
+            );
+
+            assert!(result.is_ok());
+            let loaded_profile = state.progress.profile.borrow();
+            assert_eq!(loaded_profile.total_xp, 100); // Fallback was used
+        }
+
+        #[test]
+        fn test_handle_profile_saved() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(&mut state, DataLoadMessage::ProfileSaved);
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_handle_profile_save_error() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(
+                &mut state,
+                DataLoadMessage::ProfileSaveError("Disk full".to_string()),
+            );
+
+            // Should not panic, just log error
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_handle_quest_registry_ready() {
+            let mut state = create_test_app_state();
+            let registry = helix_trainer::gamification::QuestTemplateRegistry::new();
+
+            let result =
+                handle_data_message(&mut state, DataLoadMessage::QuestRegistryReady(registry));
+
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_handle_quest_registry_error() {
+            let mut state = create_test_app_state();
+
+            let result = handle_data_message(
+                &mut state,
+                DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+            );
+
+            // Should not panic, just log error
+            assert!(result.is_ok());
         }
     }
 }

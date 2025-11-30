@@ -10,7 +10,7 @@ repository = "https://github.com/bug-ops/helix-trainer"
 
 [dependencies]
 ratatui = "0.29"
-crossterm = "0.29"
+crossterm = { version = "0.29", features = ["event-stream"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
 tracing = "0.1"
@@ -18,18 +18,25 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 anyhow = "1.0"
 thiserror = "2.0"
 helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
-tui-big-text = "0.7"
+tui-big-text = "0.7.3"
 rust-i18n = "3"
 chrono = { version = "0.4", features = ["serde"] }
 fsrs = "5.2"
 rand = "0.9"
 dirs = "6.0"
 serde_json = "1.0"
+tokio = { version = "1.48", features = [
+    "rt-multi-thread",
+    "sync",
+    "time",
+    "macros",
+] }
+futures = "0.3"
 
 [dev-dependencies]
 tempfile = "3.8"
 proptest = "1.9"
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 dhat = "0.3"
 regex = "1.11"
 walkdir = "2.5"

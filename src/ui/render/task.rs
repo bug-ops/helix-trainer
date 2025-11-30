@@ -25,6 +25,9 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         let session = &task_data.session;
         let scenario = session.scenario();
 
+        // Check if scenario just completed - use pending session for final state display
+        let is_completed = state.ui.completion_time.is_some();
+
         // Layout: title | description | editor view | stats | instructions
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -67,8 +70,16 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             .split(chunks[2]);
 
         // Current state with cursor and diff highlighting
-        let current_state = session.current_state();
-        let target_state = session.target_state();
+        // When completed, use pending_completed_session for final state display
+        let (current_state, target_state) = if is_completed {
+            if let Some(completed) = &state.game.pending_completed_session {
+                (completed.current_state(), completed.target_state())
+            } else {
+                (session.current_state(), session.target_state())
+            }
+        } else {
+            (session.current_state(), session.target_state())
+        };
         let current_lines = render_editor_with_diff(current_state, target_state);
         let current = Paragraph::new(current_lines)
             .block(
@@ -80,7 +91,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         frame.render_widget(current, editor_chunks[0]);
 
         // Target state with selection highlighting (if any)
-        let target_state = session.target_state();
+        // Note: target_state already obtained above (uses completed session if available)
         let target_lines = render_editor_with_selection(target_state);
         let target = Paragraph::new(target_lines)
             .block(
@@ -92,12 +103,33 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         frame.render_widget(target, editor_chunks[1]);
 
         // Stats with mode indicator and progress
+        // When completed, use pending_completed_session for accurate stats
         let optimal = scenario.scoring.optimal_count;
-        let actions = session.action_count();
-        let elapsed = session.elapsed();
+        let (actions, elapsed, mode, progress) = if is_completed {
+            if let Some(completed) = &state.game.pending_completed_session {
+                (
+                    completed.action_count(),
+                    completed.elapsed(),
+                    completed.mode_name(),
+                    100u8, // Completed = 100%
+                )
+            } else {
+                (
+                    session.action_count(),
+                    session.elapsed(),
+                    session.mode_name(),
+                    session.completion_progress(),
+                )
+            }
+        } else {
+            (
+                session.action_count(),
+                session.elapsed(),
+                session.mode_name(),
+                session.completion_progress(),
+            )
+        };
         let elapsed_secs = elapsed.as_secs_f32();
-        let mode = session.mode_name();
-        let progress = session.completion_progress();
 
         // Color code mode: green for Normal, yellow for Insert
         let mode_color = if mode == "NORMAL" {

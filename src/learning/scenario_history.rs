@@ -41,17 +41,27 @@ pub enum ScenarioMastery {
 }
 
 impl ScenarioMastery {
-    /// Get emoji representation for UI display
-    pub fn emoji(&self) -> &'static str {
-        match self {
-            ScenarioMastery::Learning => "🌱",
-            ScenarioMastery::Proficient => "⭐",
-            ScenarioMastery::Mastered => "🏆",
-        }
+    /// Get display name (alias for trait method)
+    pub fn display_name(&self) -> &'static str {
+        use super::traits::ProgressionTier;
+        self.name()
     }
 
-    /// Get display name
-    pub fn display_name(&self) -> &'static str {
+    /// Get emoji representation for UI display (convenience method)
+    pub fn emoji(&self) -> &'static str {
+        use super::traits::ProgressionTier;
+        ProgressionTier::emoji(self)
+    }
+
+    /// Get XP reduction description (convenience method)
+    pub fn xp_description(&self) -> &'static str {
+        use super::traits::ProgressionTier;
+        ProgressionTier::xp_description(self)
+    }
+}
+
+impl super::traits::ProgressionTier for ScenarioMastery {
+    fn name(&self) -> &'static str {
         match self {
             ScenarioMastery::Learning => "Learning",
             ScenarioMastery::Proficient => "Proficient",
@@ -59,8 +69,27 @@ impl ScenarioMastery {
         }
     }
 
-    /// Get XP reduction description
-    pub fn xp_description(&self) -> &'static str {
+    fn emoji(&self) -> &'static str {
+        match self {
+            ScenarioMastery::Learning => "🌱",
+            ScenarioMastery::Proficient => "⭐",
+            ScenarioMastery::Mastered => "🏆",
+        }
+    }
+
+    fn tier_level(&self) -> u32 {
+        match self {
+            ScenarioMastery::Learning => 0,
+            ScenarioMastery::Proficient => 1,
+            ScenarioMastery::Mastered => 2,
+        }
+    }
+
+    fn is_max_tier(&self) -> bool {
+        matches!(self, ScenarioMastery::Mastered)
+    }
+
+    fn xp_description(&self) -> &'static str {
         match self {
             ScenarioMastery::Learning => "",
             ScenarioMastery::Proficient => "(-50% XP)",

@@ -7,12 +7,14 @@ pub mod performance;
 pub mod scenario_history;
 pub mod scheduler;
 pub mod session;
+pub mod traits;
 
 pub use analytics::{Analytics, MasterySummary};
 pub use performance::{CardState, CommandPerformance, MasteryLevel, PerformanceTracker};
 pub use scenario_history::{MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery};
 pub use scheduler::{ReviewItem, Scheduler};
 pub use session::{ReviewResult, ReviewSession, SessionSummary};
+pub use traits::{Modifier, ProgressTracker, ProgressionTier};
 
 use thiserror::Error;
 

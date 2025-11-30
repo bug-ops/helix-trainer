@@ -314,7 +314,7 @@ fn render_paused(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniG
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(8),
-            Constraint::Length(5),
+            Constraint::Length(7),
             Constraint::Length(3),
         ])
         .split(area);
@@ -340,6 +340,14 @@ fn render_paused(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniG
     let controls_text = vec![
         Line::from(Span::styled(
             "Esc - Resume",
+            Style::default().fg(Color::Cyan),
+        )),
+        Line::from(Span::styled(
+            "p - View Profile",
+            Style::default().fg(Color::Cyan),
+        )),
+        Line::from(Span::styled(
+            "s - View Statistics",
             Style::default().fg(Color::Cyan),
         )),
         Line::from(Span::styled(

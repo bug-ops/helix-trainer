@@ -208,20 +208,28 @@ impl CompletedOrAbandoned {
     }
 }
 
+/// Return destination when navigating back from profile/statistics screens
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReturnDestination {
+    /// Return to main menu (default)
+    #[default]
+    Menu,
+    /// Return to paused mini-game
+    PausedMiniGame,
+}
+
 /// Data required for profile screen
 #[derive(Debug, Clone, Default)]
 pub struct ProfileData {
-    // Profile screen doesn't need any additional data beyond ProgressState
-    // which is already in AppState. This is here for future extensibility.
-    _placeholder: (),
+    /// Where to return when pressing Esc/back
+    pub return_to: ReturnDestination,
 }
 
 /// Data required for statistics screen
 #[derive(Debug, Clone, Default)]
 pub struct StatisticsData {
-    // Statistics screen doesn't need any additional data beyond ProgressState.
-    // This is here for future extensibility.
-    _placeholder: (),
+    /// Where to return when pressing Esc/back
+    pub return_to: ReturnDestination,
 }
 
 /// Data required for review session screen

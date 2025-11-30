@@ -36,7 +36,7 @@ pub use substates::{ConfigState, GameState, ProgressState, UIState};
 pub mod screen;
 pub use screen::{
     CommandBufferAccess, CompletedOrAbandoned, MenuData, MiniGameData, ModeSelectionData,
-    ProfileData, ResultsData, ReviewData, StatisticsData, TaskData, TypedScreen,
+    ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario
@@ -858,8 +858,8 @@ mod tests {
         assert!(matches!(state.screen, TypedScreen::Task(_)));
 
         update(&mut state, Message::BackToMenu).unwrap();
-        // Should transition back to Menu screen
-        assert!(matches!(state.screen, TypedScreen::Menu(_)));
+        // Should transition back to ModeSelection screen (the main menu)
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     }
 
     #[test]

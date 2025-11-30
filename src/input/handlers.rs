@@ -160,10 +160,12 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
     }
 
     if session.state().is_paused() {
-        // Paused - allow resume, quit, or back to menu
+        // Paused - allow resume, quit, back to menu, or view profile/stats
         return match key.code {
             KeyCode::Esc => Some(Message::ResumeMiniGame),
             KeyCode::Char('q') => Some(Message::MiniGameBackToMenu),
+            KeyCode::Char('p') => Some(Message::ShowProfile),
+            KeyCode::Char('s') => Some(Message::ShowStatistics),
             _ => None,
         };
     }

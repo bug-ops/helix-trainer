@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use crossterm::{
+    cursor::Hide,
     event::{Event, EventStream, KeyCode, KeyEvent, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -29,7 +30,17 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
 /// Initialize secure logging
+///
+/// In release mode, logging is disabled by default to avoid interfering with TUI.
+/// Set RUST_LOG environment variable to enable logging (e.g., RUST_LOG=debug).
 fn init_secure_logging() -> Result<()> {
+    // Only enable logging if RUST_LOG is explicitly set
+    // This prevents log output from interfering with TUI rendering
+    if std::env::var("RUST_LOG").is_err() {
+        // No logging configured - use a no-op subscriber
+        return Ok(());
+    }
+
     // Create filter that excludes sensitive modules at high log levels
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
@@ -44,7 +55,8 @@ fn init_secure_logging() -> Result<()> {
         .with_thread_ids(false) // Don't leak thread info
         .with_thread_names(false)
         .with_file(false) // Don't leak file paths in production
-        .with_line_number(false);
+        .with_line_number(true)
+        .with_writer(std::io::stderr); // Write to stderr, not stdout
 
     tracing_subscriber::registry()
         .with(filter)
@@ -90,7 +102,7 @@ async fn main() -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, Hide)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -99,9 +111,12 @@ async fn main() -> Result<()> {
     // Spawn background data loaders
     spawn_data_loaders(data_tx);
 
-    // Draw initial screen before entering event loop
+    // Force full redraw on first render by clearing the terminal
     // This ensures the UI is visible immediately on startup
+    terminal.clear()?;
     terminal.draw(|f| ui::render(f, &mut app_state))?;
+    // Flush to ensure immediate display
+    io::Write::flush(terminal.backend_mut())?;
 
     // Run the async event loop
     let result = run_async_event_loop(&mut terminal, &mut app_state, &mut data_rx).await;

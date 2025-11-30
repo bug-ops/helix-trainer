@@ -3,9 +3,10 @@
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph},
 };
 
 /// Render the mode selection screen
@@ -46,48 +47,31 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(title, chunks[0]);
 
-    // Build mode selection items
-    let modes = [
-        (
-            "Training Mode",
-            "Manual scenario selection with detailed feedback",
-        ),
-        (
-            "Arcade Mode",
-            "Fast-paced mini-games with progressive difficulty",
-        ),
-    ];
+    // Render mode selection items using Paragraph for reliable display
+    let block = Block::default()
+        .title(" Select Mode ")
+        .borders(Borders::ALL);
+    let inner = block.inner(chunks[1]);
+    frame.render_widget(block, chunks[1]);
 
-    let mode_items: Vec<ListItem> = modes
-        .iter()
-        .enumerate()
-        .map(|(i, (name, description))| {
-            let selected = i == mode_data.selected_mode;
-            let style = if selected {
-                Style::default()
-                    .bg(Color::Blue)
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
+    // Render each mode option with icons
+    render_mode_option(
+        frame,
+        Rect::new(inner.x, inner.y + 1, inner.width, 2),
+        "Training Mode",
+        "Manual scenario selection with detailed feedback",
+        mode_data.selected_mode == 0,
+        "📚",
+    );
 
-            let prefix = if selected { " > " } else { "   " };
-            let icon = if i == 0 { "📚" } else { "🎮" };
-
-            let text = format!("{}{} {}\n      {}", prefix, icon, name, description);
-            ListItem::new(text).style(style)
-        })
-        .collect();
-
-    let mode_list = List::new(mode_items)
-        .block(
-            Block::default()
-                .title(" Select Mode ")
-                .borders(Borders::ALL),
-        )
-        .style(Style::default().fg(Color::White));
-    frame.render_widget(mode_list, chunks[1]);
+    render_mode_option(
+        frame,
+        Rect::new(inner.x, inner.y + 4, inner.width, 2),
+        "Arcade Mode",
+        "Fast-paced mini-games with time pressure",
+        mode_data.selected_mode == 1,
+        "🎮",
+    );
 
     // Instructions
     let instructions = Paragraph::new("↑/↓ or j/k: Navigate  |  Enter: Select  |  q: Quit")
@@ -95,6 +79,42 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(instructions, chunks[2]);
+}
+
+/// Render a single mode option with icon
+fn render_mode_option(
+    frame: &mut Frame,
+    area: Rect,
+    name: &str,
+    description: &str,
+    selected: bool,
+    icon: &str,
+) {
+    let (prefix, style) = if selected {
+        (
+            " > ",
+            Style::default()
+                .bg(Color::Blue)
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        ("   ", Style::default().fg(Color::White))
+    };
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(prefix, style),
+            Span::styled(format!("{} {}", icon, name), style),
+        ]),
+        Line::from(vec![
+            Span::raw("      "),
+            Span::styled(description, Style::default().fg(Color::Gray)),
+        ]),
+    ];
+
+    let paragraph = Paragraph::new(lines);
+    frame.render_widget(paragraph, area);
 }
 
 #[cfg(test)]

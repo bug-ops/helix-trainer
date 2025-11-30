@@ -60,6 +60,16 @@ impl ScenarioMastery {
     }
 }
 
+impl super::traits::Modifier for ScenarioMastery {
+    fn factor(&self) -> f64 {
+        match self {
+            ScenarioMastery::Learning => 1.0,
+            ScenarioMastery::Proficient => 0.5,
+            ScenarioMastery::Mastered => 0.2,
+        }
+    }
+}
+
 impl super::traits::ProgressionTier for ScenarioMastery {
     fn name(&self) -> &'static str {
         match self {
@@ -201,12 +211,10 @@ impl ScenarioCompletion {
     /// assert_eq!(completion.xp_multiplier(), 0.7); // Second attempt today (after construction)
     /// ```
     pub fn xp_multiplier(&self) -> f64 {
-        // Base multiplier from mastery
-        let mastery_mult = match self.mastery_level {
-            ScenarioMastery::Learning => 1.0,
-            ScenarioMastery::Proficient => 0.5,
-            ScenarioMastery::Mastered => 0.2,
-        };
+        use super::traits::Modifier;
+
+        // Base multiplier from mastery (uses Modifier trait)
+        let mastery_mult = self.mastery_level.factor();
 
         // Session repeat penalty (anti-spam)
         let session_mult = match self.attempts_today {

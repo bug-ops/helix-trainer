@@ -383,25 +383,18 @@ fn render_quest_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &Ap
     frame.render_widget(panel, area);
 }
 
-/// Format quest progress string based on quest type
+/// Format quest progress string using ProgressTracker trait
 fn format_quest_progress(quest_type: &crate::gamification::QuestType) -> String {
     use crate::gamification::QuestType;
+    use crate::learning::ProgressTracker;
 
-    match quest_type {
-        QuestType::CommandPractice {
-            current, target, ..
-        } => format!(" ({}/{})", current, target),
-        QuestType::ScenarioCompletion { current, target } => format!(" ({}/{})", current, target),
-        QuestType::TimeInvested {
-            current_minutes,
-            target_minutes,
-        } => format!(" ({}/{})", current_minutes, target_minutes),
-        QuestType::Exploration {
-            commands_used,
-            target_commands,
-        } => format!(" ({}/{})", commands_used.len(), target_commands),
-        QuestType::SpeedRun { .. } => String::new(), // No progress display for speed runs
+    // SpeedRun has no incremental progress display
+    if matches!(quest_type, QuestType::SpeedRun { .. }) {
+        return String::new();
     }
+
+    // Use ProgressTracker trait for consistent progress formatting
+    format!(" ({}/{})", quest_type.current(), quest_type.target())
 }
 
 #[cfg(test)]

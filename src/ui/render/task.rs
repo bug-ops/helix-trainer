@@ -1,6 +1,6 @@
 //! Task screen rendering
 
-use super::editor::{render_editor_with_diff, render_editor_with_selection};
+use super::editor::render_editor_pair;
 use super::popups::{render_hint_popup, render_key_history_popup, render_success_popup};
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
@@ -63,13 +63,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             );
         frame.render_widget(description, chunks[1]);
 
-        // Editor view - split into current and target
-        let editor_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(chunks[2]);
-
-        // Current state with cursor and diff highlighting
+        // Editor view - get current and target states
         // When completed, use pending_completed_session for final state display
         let (current_state, target_state) = if is_completed {
             if let Some(completed) = &state.game.pending_completed_session {
@@ -80,27 +74,18 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         } else {
             (session.current_state(), session.target_state())
         };
-        let current_lines = render_editor_with_diff(current_state, target_state);
-        let current = Paragraph::new(current_lines)
-            .block(
-                Block::default()
-                    .title(t!("editor.current_state").to_string())
-                    .borders(Borders::ALL),
-            )
-            .wrap(Wrap { trim: false });
-        frame.render_widget(current, editor_chunks[0]);
 
-        // Target state with selection highlighting (if any)
-        // Note: target_state already obtained above (uses completed session if available)
-        let target_lines = render_editor_with_selection(target_state);
-        let target = Paragraph::new(target_lines)
-            .block(
-                Block::default()
-                    .title(t!("editor.target_state").to_string())
-                    .borders(Borders::ALL),
-            )
-            .wrap(Wrap { trim: false });
-        frame.render_widget(target, editor_chunks[1]);
+        // Render editor pair using shared function
+        let current_title = t!("editor.current_state");
+        let target_title = t!("editor.target_state");
+        render_editor_pair(
+            frame,
+            chunks[2],
+            current_state,
+            target_state,
+            &current_title,
+            &target_title,
+        );
 
         // Stats with mode indicator and progress
         // When completed, use pending_completed_session for accurate stats

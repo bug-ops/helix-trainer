@@ -1,5 +1,6 @@
 //! Mini-game screen rendering (Arcade Mode)
 
+use super::editor::render_editor_pair;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
@@ -165,37 +166,37 @@ fn render_queue(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGa
     frame.render_widget(paragraph, area);
 }
 
-/// Render scenario editor view
+/// Render scenario editor view - uses shared editor rendering
 fn render_scenario_editor(
     frame: &mut Frame,
     area: Rect,
     scenario: &crate::minigame::ActiveMiniScenario,
 ) {
-    // Get current state
-    let state = scenario.current_state();
-    let content = state.content();
+    // Layout: task description | editor views (current + target)
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Task description
+            Constraint::Min(5),    // Editor views
+        ])
+        .split(area);
 
-    // Create task description
-    let task_text = format!("TASK: {}", scenario.scenario.description);
-
-    // Build editor lines
-    let mut lines = vec![
-        Line::from(task_text),
-        Line::from("────────────────────────"),
-    ];
-
-    for (idx, line) in content.lines().enumerate() {
-        let line_num = idx + 1;
-        let line_text = format!("{:>4} │ {}", line_num, line);
-        lines.push(Line::from(line_text));
-    }
-
-    let paragraph = Paragraph::new(lines)
-        .style(Style::default().fg(Color::White))
-        .wrap(Wrap { trim: false })
+    // Task description
+    let task = Paragraph::new(format!("TASK: {}", scenario.scenario.description))
+        .style(Style::default().fg(Color::Yellow))
+        .wrap(Wrap { trim: true })
         .block(Block::default().borders(Borders::ALL));
+    frame.render_widget(task, chunks[0]);
 
-    frame.render_widget(paragraph, area);
+    // Editor views - reuse common rendering function
+    render_editor_pair(
+        frame,
+        chunks[1],
+        scenario.current_state(),
+        scenario.target_state(),
+        " Current ",
+        " Target ",
+    );
 }
 
 /// Render timer bar

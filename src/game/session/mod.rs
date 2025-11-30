@@ -297,14 +297,6 @@ impl<S: SessionState> GameSession<S> {
         self.simulator.mode() == Mode::Insert
     }
 
-    /// Get current editor mode as string for UI display
-    pub fn mode_name(&self) -> &str {
-        match self.simulator.mode() {
-            Mode::Normal => "NORMAL",
-            Mode::Insert => "INSERT",
-        }
-    }
-
     /// Get number of hints shown so far
     pub fn hints_shown(&self) -> usize {
         self.hints_shown

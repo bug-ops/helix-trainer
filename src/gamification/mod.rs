@@ -10,7 +10,9 @@ pub mod streak;
 
 pub use achievements::{Achievement, AchievementEngine, AchievementId};
 pub use profile::{UserProfile, XPCalculator};
-pub use quests::{Quest, QuestDifficulty, QuestGenerator, QuestTracker, QuestType};
+pub use quests::{
+    Quest, QuestDifficulty, QuestGenerator, QuestTemplateRegistry, QuestTracker, QuestType,
+};
 pub use storage::ProfileStorage;
 pub use streak::{StreakChange, StreakManager};
 

@@ -11,7 +11,7 @@ use crossterm::{
 };
 use helix_trainer::{
     config::ScenarioLoader,
-    gamification::{ProfileStorage, QuestGenerator, StreakManager},
+    gamification::{ProfileStorage, QuestGenerator, QuestTemplateRegistry, StreakManager},
     helix::commands::*,
     learning::PerformanceTracker,
     ui::{self, AppState, Message, state::TypedScreen},
@@ -88,13 +88,22 @@ fn main() -> Result<()> {
         helix_trainer::gamification::UserProfile::new()
     });
 
+    // Load quest templates
+    let quest_registry = QuestTemplateRegistry::load_from_default_path("en").unwrap_or_else(|e| {
+        tracing::warn!(
+            "Failed to load quest templates: {}, using empty registry",
+            e
+        );
+        QuestTemplateRegistry::new()
+    });
+
     // Check if we need to refresh daily quests
     let now = chrono::Utc::now();
     if should_refresh_quests(&profile, now) {
         tracing::info!("Refreshing daily quests for new day");
         let tracker = PerformanceTracker::new();
         profile.reset_daily_quests();
-        profile.daily_quests = QuestGenerator::generate_quests(&profile, &tracker);
+        profile.daily_quests = QuestGenerator::generate_quests(&profile, &tracker, &quest_registry);
     }
 
     // Update streak (checks last activity)

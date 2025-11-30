@@ -1,0 +1,659 @@
+//! Tests for quest template loading
+
+use super::*;
+use std::path::PathBuf;
+
+#[test]
+fn test_quest_loader_creation() {
+    let loader = QuestLoader::new();
+    assert_eq!(loader.allowed_base_paths.len(), 2);
+}
+
+#[test]
+fn test_quest_loader_with_custom_paths() {
+    let paths = vec![PathBuf::from("./custom")];
+    let loader = QuestLoader::with_allowed_paths(paths.clone());
+    assert_eq!(loader.allowed_base_paths, paths);
+}
+
+#[test]
+fn test_validate_id_field_valid() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(deserialize_with = "validate_id_field")]
+        id: String,
+    }
+
+    let valid = r#"id = "cmd_dd_easy""#;
+    let result: Result<Test, _> = toml::from_str(valid);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_validate_id_field_invalid_too_long() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(deserialize_with = "validate_id_field")]
+        id: String,
+    }
+
+    let invalid = r#"id = "a_very_long_id_that_exceeds_the_maximum_allowed_length_of_64_characters_and_should_fail""#;
+    let result: Result<Test, _> = toml::from_str(invalid);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_validate_id_field_invalid_characters() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(deserialize_with = "validate_id_field")]
+        id: String,
+    }
+
+    let invalid = r#"id = "invalid-id-with-hyphens""#;
+    let result: Result<Test, _> = toml::from_str(invalid);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_quest_type_tag_deserialization() {
+    #[derive(Deserialize)]
+    struct Test {
+        #[serde(rename = "type")]
+        quest_type: QuestTypeTag,
+    }
+
+    let valid = r#"type = "command_practice""#;
+    let result: Test = toml::from_str(valid).unwrap();
+    assert_eq!(result.quest_type, QuestTypeTag::CommandPractice);
+
+    let valid = r#"type = "speed_run""#;
+    let result: Test = toml::from_str(valid).unwrap();
+    assert_eq!(result.quest_type, QuestTypeTag::SpeedRun);
+}
+
+#[test]
+fn test_quest_difficulty_deserialization() {
+    #[derive(Deserialize)]
+    struct Test {
+        difficulty: QuestDifficulty,
+    }
+
+    let easy = r#"difficulty = "easy""#;
+    let result: Test = toml::from_str(easy).unwrap();
+    assert_eq!(result.difficulty, QuestDifficulty::Easy);
+
+    let medium = r#"difficulty = "medium""#;
+    let result: Test = toml::from_str(medium).unwrap();
+    assert_eq!(result.difficulty, QuestDifficulty::Medium);
+
+    let hard = r#"difficulty = "hard""#;
+    let result: Test = toml::from_str(hard).unwrap();
+    assert_eq!(result.difficulty, QuestDifficulty::Hard);
+}
+
+#[test]
+fn test_quest_params_command_practice() {
+    let toml_str = r#"
+command = "dd"
+target = 3
+"#;
+    let params: QuestParams = toml::from_str(toml_str).unwrap();
+    match params {
+        QuestParams::CommandPractice { command, target } => {
+            assert_eq!(command, "dd");
+            assert_eq!(target, 3);
+        }
+        _ => panic!("Wrong variant"),
+    }
+}
+
+#[test]
+fn test_quest_params_scenario_completion() {
+    let toml_str = r#"
+target = 5
+"#;
+    let params: QuestParams = toml::from_str(toml_str).unwrap();
+    match params {
+        QuestParams::ScenarioCompletion { target } => {
+            assert_eq!(target, 5);
+        }
+        _ => panic!("Wrong variant"),
+    }
+}
+
+#[test]
+fn test_quest_params_speed_run() {
+    let toml_str = r#"
+scenario_id = "delete_line_001"
+time_limit_seconds = 5
+"#;
+    let params: QuestParams = toml::from_str(toml_str).unwrap();
+    match params {
+        QuestParams::SpeedRun {
+            scenario_id,
+            time_limit_seconds,
+        } => {
+            assert_eq!(scenario_id, "delete_line_001");
+            assert_eq!(time_limit_seconds, 5);
+        }
+        _ => panic!("Wrong variant"),
+    }
+}
+
+#[test]
+fn test_quest_conditions_default() {
+    let conditions = QuestConditions::default();
+    assert!(conditions.min_level.is_none());
+    assert!(conditions.max_level.is_none());
+    assert!(conditions.requires_commands.is_empty());
+    assert!(conditions.requires_scenarios.is_empty());
+}
+
+#[test]
+fn test_xp_config_default() {
+    let xp_config = XpConfig::default();
+    assert!(xp_config.base_reward.is_none());
+}
+
+#[test]
+fn test_load_daily_quests_toml() {
+    use std::path::Path;
+
+    let loader = QuestLoader::new();
+    let quest_file = Path::new("./quests/en/daily.toml");
+
+    // Only run if file exists (for CI compatibility)
+    if !quest_file.exists() {
+        return;
+    }
+
+    let result = loader.load(quest_file);
+    assert!(result.is_ok(), "Failed to load daily quests: {:?}", result);
+
+    let quests = result.unwrap();
+    assert_eq!(quests.len(), 12, "Expected 12 quest templates");
+
+    // Verify we have expected quest IDs
+    let ids: Vec<_> = quests.iter().map(|q| q.id.as_str()).collect();
+    assert!(ids.contains(&"cmd_dd_easy"));
+    assert!(ids.contains(&"cmd_yy_easy"));
+    assert!(ids.contains(&"cmd_w_easy"));
+    assert!(ids.contains(&"cmd_x_easy"));
+    assert!(ids.contains(&"scenario_2_medium"));
+    assert!(ids.contains(&"cmd_i_medium"));
+    assert!(ids.contains(&"cmd_c_medium"));
+    assert!(ids.contains(&"time_5_medium"));
+    assert!(ids.contains(&"scenario_5_hard"));
+    assert!(ids.contains(&"speed_delete_hard"));
+    assert!(ids.contains(&"time_15_hard"));
+    assert!(ids.contains(&"explore_10_hard"));
+}
+
+#[test]
+fn test_quest_template_to_quest_conversion() {
+    let template = QuestTemplate {
+        id: "test_quest".to_string(),
+        name: "Test Quest".to_string(),
+        description: "Delete 3 lines".to_string(),
+        quest_type: QuestTypeTag::CommandPractice,
+        difficulty: QuestDifficulty::Easy,
+        params: QuestParams::CommandPractice {
+            command: "dd".to_string(),
+            target: 3,
+        },
+        xp: None,
+        conditions: QuestConditions::default(),
+    };
+
+    let quest = template.to_quest();
+    assert_eq!(quest.id, "test_quest");
+    assert_eq!(quest.description, "Delete 3 lines");
+    assert!(!quest.completed);
+}
+
+#[test]
+fn test_validate_id_field_empty() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(deserialize_with = "validate_id_field")]
+        id: String,
+    }
+
+    let invalid = r#"id = """#;
+    let result: Result<Test, _> = toml::from_str(invalid);
+    assert!(result.is_err(), "Empty ID should be rejected");
+}
+
+#[test]
+fn test_quest_params_time_invested() {
+    let toml_str = r#"
+target_minutes = 10
+"#;
+    let params: QuestParams = toml::from_str(toml_str).unwrap();
+    match params {
+        QuestParams::TimeInvested { target_minutes } => {
+            assert_eq!(target_minutes, 10);
+        }
+        _ => panic!("Wrong variant"),
+    }
+}
+
+#[test]
+fn test_quest_params_exploration() {
+    let toml_str = r#"
+target_commands = 15
+"#;
+    let params: QuestParams = toml::from_str(toml_str).unwrap();
+    match params {
+        QuestParams::Exploration { target_commands } => {
+            assert_eq!(target_commands, 15);
+        }
+        _ => panic!("Wrong variant"),
+    }
+}
+
+#[test]
+fn test_quest_conditions_with_values() {
+    let toml_str = r#"
+min_level = 5
+max_level = 20
+requires_commands = ["dd", "yy"]
+requires_scenarios = ["basic_001"]
+"#;
+    let conditions: QuestConditions = toml::from_str(toml_str).unwrap();
+    assert_eq!(conditions.min_level, Some(5));
+    assert_eq!(conditions.max_level, Some(20));
+    assert_eq!(conditions.requires_commands.len(), 2);
+    assert_eq!(conditions.requires_scenarios.len(), 1);
+}
+
+#[test]
+fn test_metadata_version_validation() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(deserialize_with = "validate_version_field")]
+        version: String,
+    }
+
+    // Valid version
+    let valid = r#"version = "1.0""#;
+    let result: Result<Test, _> = toml::from_str(valid);
+    assert!(result.is_ok());
+
+    // Empty version should fail
+    let empty = r#"version = """#;
+    let result: Result<Test, _> = toml::from_str(empty);
+    assert!(result.is_err(), "Empty version should be rejected");
+
+    // Too long version should fail
+    let too_long = r#"version = "1.0.0.0.0.0.0.0.0.0.0""#;
+    let result: Result<Test, _> = toml::from_str(too_long);
+    assert!(result.is_err(), "Too long version should be rejected");
+}
+
+#[test]
+fn test_metadata_locale_validation() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(default, deserialize_with = "validate_locale_field")]
+        locale: Option<String>,
+    }
+
+    // Valid locale
+    let valid = r#"locale = "en""#;
+    let result: Result<Test, _> = toml::from_str(valid);
+    assert!(result.is_ok());
+
+    // Valid locale with underscore
+    let valid_underscore = r#"locale = "en_US""#;
+    let result: Result<Test, _> = toml::from_str(valid_underscore);
+    assert!(result.is_ok());
+
+    // Invalid locale with hyphen
+    let invalid_hyphen = r#"locale = "en-US""#;
+    let result: Result<Test, _> = toml::from_str(invalid_hyphen);
+    assert!(result.is_err(), "Locale with hyphen should be rejected");
+}
+
+#[test]
+fn test_deny_unknown_fields_quests_file() {
+    let invalid_toml = r#"
+[metadata]
+version = "1.0"
+unknown_field = "value"
+
+[[quests]]
+id = "test"
+name = "Test"
+description = "Test"
+type = "command_practice"
+difficulty = "easy"
+
+[quests.params]
+command = "dd"
+target = 3
+"#;
+    let result: Result<QuestsFile, _> = toml::from_str(invalid_toml);
+    assert!(
+        result.is_err(),
+        "Unknown field in metadata should be rejected"
+    );
+}
+
+#[test]
+fn test_deny_unknown_fields_quest_template() {
+    let invalid_toml = r#"
+[metadata]
+version = "1.0"
+
+[[quests]]
+id = "test"
+name = "Test"
+description = "Test"
+type = "command_practice"
+difficulty = "easy"
+unknown_field = "value"
+
+[quests.params]
+command = "dd"
+target = 3
+"#;
+    let result: Result<QuestsFile, _> = toml::from_str(invalid_toml);
+    assert!(
+        result.is_err(),
+        "Unknown field in quest template should be rejected"
+    );
+}
+
+#[test]
+fn test_validate_all_quest_templates() {
+    use std::collections::{HashMap, HashSet};
+
+    // Load quest templates for English locale
+    let loader = QuestLoader::default();
+    let templates = loader
+        .load_for_locale("en")
+        .expect("Failed to load quest templates for locale 'en'");
+
+    // Verify minimum count (12 templates in daily.toml)
+    assert!(
+        templates.len() >= 12,
+        "Expected at least 12 quest templates, got {}",
+        templates.len()
+    );
+
+    // Track unique IDs
+    let mut seen_ids = HashSet::new();
+    let mut commands_used = HashSet::new();
+    let mut scenario_ids_used = HashSet::new();
+
+    // Validate each template
+    for template in &templates {
+        // 1. Check unique IDs
+        assert!(
+            seen_ids.insert(&template.id),
+            "Duplicate quest ID found: {}",
+            template.id
+        );
+
+        // 2. Validate ID format (alphanumeric + underscores, max 64 chars)
+        assert!(
+            template.id.len() <= 64,
+            "Quest ID too long (max 64): {}",
+            template.id
+        );
+        assert!(
+            template.id.chars().all(|c| c.is_alphanumeric() || c == '_'),
+            "Quest ID contains invalid characters: {}",
+            template.id
+        );
+
+        // 3. Validate name and description are non-empty and within limits
+        assert!(
+            !template.name.is_empty(),
+            "Quest name is empty for ID: {}",
+            template.id
+        );
+        assert!(
+            template.name.len() <= 100,
+            "Quest name too long for ID: {}",
+            template.id
+        );
+        assert!(
+            !template.description.is_empty(),
+            "Quest description is empty for ID: {}",
+            template.id
+        );
+        assert!(
+            template.description.len() <= 500,
+            "Quest description too long for ID: {}",
+            template.id
+        );
+
+        // 4. Validate quest type matches parameters
+        match (&template.quest_type, &template.params) {
+            (QuestTypeTag::CommandPractice, QuestParams::CommandPractice { command, target }) => {
+                assert!(!command.is_empty(), "Empty command for ID: {}", template.id);
+                assert!(
+                    command.len() <= 10,
+                    "Command name too long for ID: {}",
+                    template.id
+                );
+                assert!(*target > 0, "Target must be > 0 for ID: {}", template.id);
+                assert!(
+                    *target <= 100,
+                    "Target exceeds maximum (100) for ID: {}",
+                    template.id
+                );
+                commands_used.insert(command.clone());
+            }
+            (QuestTypeTag::ScenarioCompletion, QuestParams::ScenarioCompletion { target }) => {
+                assert!(*target > 0, "Target must be > 0 for ID: {}", template.id);
+                assert!(
+                    *target <= 100,
+                    "Target exceeds maximum (100) for ID: {}",
+                    template.id
+                );
+            }
+            (
+                QuestTypeTag::SpeedRun,
+                QuestParams::SpeedRun {
+                    scenario_id,
+                    time_limit_seconds,
+                },
+            ) => {
+                assert!(
+                    !scenario_id.is_empty(),
+                    "Empty scenario_id for ID: {}",
+                    template.id
+                );
+                assert!(
+                    scenario_id.len() <= 64,
+                    "Scenario ID too long for ID: {}",
+                    template.id
+                );
+                assert!(
+                    *time_limit_seconds > 0,
+                    "Time limit must be > 0 for ID: {}",
+                    template.id
+                );
+                assert!(
+                    *time_limit_seconds <= 3600,
+                    "Time limit exceeds 1 hour for ID: {}",
+                    template.id
+                );
+                scenario_ids_used.insert(scenario_id.clone());
+            }
+            (QuestTypeTag::TimeInvested, QuestParams::TimeInvested { target_minutes }) => {
+                assert!(
+                    *target_minutes > 0,
+                    "Target minutes must be > 0 for ID: {}",
+                    template.id
+                );
+                assert!(
+                    *target_minutes <= 100,
+                    "Target minutes exceeds maximum (100) for ID: {}",
+                    template.id
+                );
+            }
+            (QuestTypeTag::Exploration, QuestParams::Exploration { target_commands }) => {
+                assert!(
+                    *target_commands > 0,
+                    "Target commands must be > 0 for ID: {}",
+                    template.id
+                );
+                assert!(
+                    *target_commands <= 100,
+                    "Target commands exceeds maximum (100) for ID: {}",
+                    template.id
+                );
+            }
+            _ => panic!(
+                "Quest type {:?} does not match params for ID: {}",
+                template.quest_type, template.id
+            ),
+        }
+
+        // 5. Validate custom XP reward if present
+        if let Some(xp_config) = &template.xp
+            && let Some(reward) = xp_config.base_reward
+        {
+            assert!(
+                reward <= 1000,
+                "XP reward exceeds maximum (1000) for ID: {}",
+                template.id
+            );
+        }
+
+        // 6. Validate conditions
+        assert!(
+            template.conditions.requires_commands.len() <= 20,
+            "Too many required commands (max 20) for ID: {}",
+            template.id
+        );
+        assert!(
+            template.conditions.requires_scenarios.len() <= 20,
+            "Too many required scenarios (max 20) for ID: {}",
+            template.id
+        );
+
+        // Collect scenario IDs from conditions
+        for scenario_id in &template.conditions.requires_scenarios {
+            scenario_ids_used.insert(scenario_id.clone());
+        }
+
+        // 7. Validate template converts to runtime Quest
+        let quest = template.to_quest();
+        assert_eq!(quest.id, template.id);
+        assert_eq!(quest.description, template.description);
+        assert!(!quest.completed, "New quest should not be completed");
+    }
+
+    // 8. Validate referenced commands are valid Helix commands
+    let valid_commands: HashSet<&str> = [
+        // Movement
+        "h", "j", "k", "l", "w", "b", "e", "0", "$", "gg", "G", // Editing
+        "x", "dd", "i", "a", "I", "A", "o", "O", "c", "J", ">", "<", // Clipboard
+        "y", "yy", "p", "P", // Undo/Redo
+        "u", "U", // Repeat
+        ".", // Replace (r + char is handled specially)
+        "r",
+    ]
+    .iter()
+    .copied()
+    .collect();
+
+    for command in &commands_used {
+        // Check if command is valid or is a replace command (rx, ry, etc.)
+        let is_valid = valid_commands.contains(command.as_str())
+            || (command.starts_with('r')
+                && command.len() == 2
+                && command.chars().nth(1).unwrap().is_alphanumeric());
+
+        assert!(
+            is_valid,
+            "Quest references invalid/unknown Helix command: {}",
+            command
+        );
+    }
+
+    // 9. Validate referenced scenario IDs exist in scenario files
+    // Note: We only check if the format is valid; actual existence check would
+    // require loading all scenario files which is better done in integration tests
+    for scenario_id in &scenario_ids_used {
+        // Scenario IDs should follow same format as quest IDs
+        assert!(
+            scenario_id.len() <= 64,
+            "Referenced scenario ID too long: {}",
+            scenario_id
+        );
+        assert!(
+            scenario_id.chars().all(|c| c.is_alphanumeric() || c == '_'),
+            "Referenced scenario ID contains invalid characters: {}",
+            scenario_id
+        );
+    }
+
+    // 10. Verify distribution of difficulties
+    let difficulty_counts: HashMap<QuestDifficulty, usize> =
+        templates.iter().fold(HashMap::new(), |mut acc, t| {
+            *acc.entry(t.difficulty).or_insert(0) += 1;
+            acc
+        });
+
+    // Should have quests of all difficulty levels
+    assert!(
+        difficulty_counts.contains_key(&QuestDifficulty::Easy),
+        "No easy quests found"
+    );
+    assert!(
+        difficulty_counts.contains_key(&QuestDifficulty::Medium),
+        "No medium quests found"
+    );
+    assert!(
+        difficulty_counts.contains_key(&QuestDifficulty::Hard),
+        "No hard quests found"
+    );
+
+    // Report summary
+    println!("\n=== Quest Template Validation Summary ===");
+    println!("Total templates loaded: {}", templates.len());
+    println!("Unique quest IDs: {}", seen_ids.len());
+    println!("Commands referenced: {}", commands_used.len());
+    println!("Scenario IDs referenced: {}", scenario_ids_used.len());
+    println!("\nDifficulty distribution:");
+    println!(
+        "  Easy: {}",
+        difficulty_counts.get(&QuestDifficulty::Easy).unwrap_or(&0)
+    );
+    println!(
+        "  Medium: {}",
+        difficulty_counts
+            .get(&QuestDifficulty::Medium)
+            .unwrap_or(&0)
+    );
+    println!(
+        "  Hard: {}",
+        difficulty_counts.get(&QuestDifficulty::Hard).unwrap_or(&0)
+    );
+    println!("\nAll quest templates are valid!");
+}

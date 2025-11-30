@@ -1,0 +1,150 @@
+# Daily Quest Templates
+#
+# This file contains all available daily quest templates that can be generated
+# for users based on their level and progress.
+
+[metadata]
+version = "1.0"
+locale = "en"
+
+# === EASY QUESTS ===
+# Suitable for levels 1-5
+
+[[quests]]
+id = "cmd_dd_easy"
+name = "Line Deletion Practice"
+description = "Delete 3 lines using the 'dd' command"
+type = "command_practice"
+difficulty = "easy"
+
+[quests.params]
+command = "dd"
+target = 3
+
+[[quests]]
+id = "cmd_yy_easy"
+name = "Yank Lines"
+description = "Copy 3 lines to clipboard using 'yy'"
+type = "command_practice"
+difficulty = "easy"
+
+[quests.params]
+command = "yy"
+target = 3
+
+[[quests]]
+id = "cmd_w_easy"
+name = "Word Navigation"
+description = "Move forward 5 words using 'w'"
+type = "command_practice"
+difficulty = "easy"
+
+[quests.params]
+command = "w"
+target = 5
+
+[[quests]]
+id = "cmd_x_easy"
+name = "Character Deletion"
+description = "Delete 5 characters using 'x'"
+type = "command_practice"
+difficulty = "easy"
+
+[quests.params]
+command = "x"
+target = 5
+
+# === MEDIUM QUESTS ===
+# Suitable for levels 6-15
+
+[[quests]]
+id = "scenario_2_medium"
+name = "Scenario Practice"
+description = "Complete 2 scenarios"
+type = "scenario_completion"
+difficulty = "medium"
+
+[quests.params]
+target = 2
+
+[[quests]]
+id = "cmd_i_medium"
+name = "Insert Mode Master"
+description = "Use insert mode 5 times"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "i"
+target = 5
+
+[[quests]]
+id = "cmd_c_medium"
+name = "Change Command"
+description = "Use change command 3 times"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "c"
+target = 3
+
+[[quests]]
+id = "time_5_medium"
+name = "Consistent Practice"
+description = "Practice for 5 minutes"
+type = "time_invested"
+difficulty = "medium"
+
+[quests.params]
+target_minutes = 5
+
+# === HARD QUESTS ===
+# Suitable for levels 16+
+
+[[quests]]
+id = "scenario_5_hard"
+name = "Scenario Marathon"
+description = "Complete 5 scenarios"
+type = "scenario_completion"
+difficulty = "hard"
+
+[quests.params]
+target = 5
+
+[[quests]]
+id = "speed_delete_hard"
+name = "Speed Run: Delete Line"
+description = "Complete 'delete_line_001' in under 5 seconds"
+type = "speed_run"
+difficulty = "hard"
+
+[quests.params]
+scenario_id = "delete_line_001"
+time_limit_seconds = 5
+
+[quests.conditions]
+requires_scenarios = ["delete_line_001"]
+
+[[quests]]
+id = "time_15_hard"
+name = "Dedicated Practice"
+description = "Practice for 15 minutes"
+type = "time_invested"
+difficulty = "hard"
+
+[quests.params]
+target_minutes = 15
+
+# === EXPLORATION QUESTS ===
+# Suitable for advanced users (levels 16+)
+
+[[quests]]
+id = "explore_10_hard"
+name = "Command Explorer"
+description = "Use 10 different commands today"
+type = "exploration"
+difficulty = "hard"
+
+[quests.params]
+target_commands = 10

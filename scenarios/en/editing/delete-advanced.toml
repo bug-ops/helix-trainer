@@ -1,0 +1,206 @@
+# Advanced Deletion Scenarios
+# More complex deletion operations
+
+[[scenarios]]
+id = "delete_multi_char_001"
+name = "Delete three characters"
+description = "Remove multiple characters one by one"
+
+hints = [
+    "'x' deletes one character at cursor",
+    "Repeat for multiple deletions",
+]
+
+[scenarios.setup]
+file_content = "Helllo"
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = "Hello"
+cursor_position = [0, 3]
+
+[scenarios.solution]
+commands = ["x"]
+description = "Press 'x' to delete extra 'l'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "character"]
+commands_taught = ["x"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_first_char_001"
+name = "Delete first character"
+description = "Remove character at start of text"
+
+hints = [
+    "'x' deletes character under cursor",
+    "Works at any position",
+]
+
+[scenarios.setup]
+file_content = "Xtest"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["x"]
+description = "Press 'x' to delete 'X'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "character"]
+commands_taught = ["x"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_space_001"
+name = "Delete extra space"
+description = "Remove unwanted space between words"
+
+hints = [
+    "'x' can delete any character",
+    "Including spaces",
+]
+
+[scenarios.setup]
+file_content = "hello  world"
+cursor_position = [0, 6]
+
+[scenarios.target]
+file_content = "hello world"
+cursor_position = [0, 6]
+
+[scenarios.solution]
+commands = ["x"]
+description = "Press 'x' to delete extra space"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "space"]
+commands_taught = ["x"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_line_multifile_001"
+name = "Delete empty line"
+description = "Remove an empty line from document"
+
+hints = [
+    "'dd' deletes entire line",
+    "Works on empty lines too",
+]
+
+[scenarios.setup]
+file_content = "line one\n\nline two"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "line one\nline two"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["dd"]
+description = "Press 'dd' to delete empty line"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "line", "empty"]
+commands_taught = ["dd"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_line_code_001"
+name = "Delete code comment"
+description = "Remove a comment line from code"
+
+hints = [
+    "'dd' removes the entire line",
+    "Useful for removing comments",
+]
+
+[scenarios.setup]
+file_content = "let x = 1;\n// old code\nlet y = 2;"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "let x = 1;\nlet y = 2;"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["dd"]
+description = "Press 'dd' to delete comment"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "line", "code"]
+commands_taught = ["dd"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "delete_punctuation_001"
+name = "Delete punctuation"
+description = "Remove unwanted punctuation"
+
+hints = [
+    "'x' deletes any character",
+    "Works on punctuation too",
+]
+
+[scenarios.setup]
+file_content = "hello,, world"
+cursor_position = [0, 6]
+
+[scenarios.target]
+file_content = "hello, world"
+cursor_position = [0, 6]
+
+[scenarios.solution]
+commands = ["x"]
+description = "Press 'x' to delete extra comma"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["delete", "punctuation"]
+commands_taught = ["x"]
+estimated_time_seconds = 5

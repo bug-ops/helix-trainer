@@ -1,0 +1,308 @@
+# Basic Character Movement
+# Simple h, j, k, l navigation scenarios
+
+[[scenarios]]
+id = "move_left_basic_001"
+name = "Move left one character"
+description = "Move cursor left using 'h'"
+
+hints = [
+    "'h' moves cursor left by one character",
+    "This is the most basic left movement",
+]
+
+[scenarios.setup]
+file_content = "Hello"
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = "Hello"
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["h"]
+description = "Press 'h' to move left"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["character", "basic"]
+commands_taught = ["h"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "move_right_basic_001"
+name = "Move right one character"
+description = "Move cursor right using 'l'"
+
+hints = [
+    "'l' moves cursor right by one character",
+    "This is the most basic right movement",
+]
+
+[scenarios.setup]
+file_content = "Hello"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "Hello"
+cursor_position = [0, 1]
+
+[scenarios.solution]
+commands = ["l"]
+description = "Press 'l' to move right"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["character", "basic"]
+commands_taught = ["l"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "move_down_basic_001"
+name = "Move down one line"
+description = "Move cursor down using 'j'"
+
+hints = [
+    "'j' moves cursor down by one line",
+    "Column position is preserved if possible",
+]
+
+[scenarios.setup]
+file_content = "First\nSecond"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "First\nSecond"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["j"]
+description = "Press 'j' to move down"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "basic"]
+commands_taught = ["j"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "move_up_basic_001"
+name = "Move up one line"
+description = "Move cursor up using 'k'"
+
+hints = [
+    "'k' moves cursor up by one line",
+    "Column position is preserved if possible",
+]
+
+[scenarios.setup]
+file_content = "First\nSecond"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = "First\nSecond"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["k"]
+description = "Press 'k' to move up"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "basic"]
+commands_taught = ["k"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "move_left_multiple_001"
+name = "Move left three times"
+description = "Move cursor left multiple characters"
+
+hints = [
+    "'h' moves cursor left",
+    "Press multiple times for larger moves",
+]
+
+[scenarios.setup]
+file_content = "Hello World"
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = "Hello World"
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["h", "h", "h"]
+description = "Press 'h' three times"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["character", "multiple"]
+commands_taught = ["h"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "move_right_multiple_001"
+name = "Move right three times"
+description = "Move cursor right multiple characters"
+
+hints = [
+    "'l' moves cursor right",
+    "Press multiple times for larger moves",
+]
+
+[scenarios.setup]
+file_content = "Hello World"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "Hello World"
+cursor_position = [0, 3]
+
+[scenarios.solution]
+commands = ["l", "l", "l"]
+description = "Press 'l' three times"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["character", "multiple"]
+commands_taught = ["l"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "move_down_multiple_001"
+name = "Move down two lines"
+description = "Move cursor down through multiple lines"
+
+hints = [
+    "'j' moves down one line at a time",
+    "Or use 'G' to go to end",
+]
+
+[scenarios.setup]
+file_content = "One\nTwo\nThree"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "One\nTwo\nThree"
+cursor_position = [2, 0]
+
+[scenarios.solution]
+commands = ["j", "j"]
+description = "Press 'j' twice"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "multiple"]
+commands_taught = ["j"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "move_up_multiple_001"
+name = "Move up two lines"
+description = "Move cursor up through multiple lines"
+
+hints = [
+    "'k' moves up one line at a time",
+    "Or use 'gg' to go to start",
+]
+
+[scenarios.setup]
+file_content = "One\nTwo\nThree"
+cursor_position = [2, 0]
+
+[scenarios.target]
+file_content = "One\nTwo\nThree"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["k", "k"]
+description = "Press 'k' twice"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["line", "multiple"]
+commands_taught = ["k"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "diagonal_basic_001"
+name = "Move diagonally"
+description = "Combine horizontal and vertical movement"
+
+hints = [
+    "Combine 'j' and 'l' for diagonal movement",
+    "Order doesn't matter for the end position",
+]
+
+[scenarios.setup]
+file_content = "ABC\nDEF\nGHI"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "ABC\nDEF\nGHI"
+cursor_position = [1, 1]
+
+[scenarios.solution]
+commands = ["j", "l"]
+description = "Move down and right"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "basic"]
+commands_taught = ["j", "l"]
+estimated_time_seconds = 10

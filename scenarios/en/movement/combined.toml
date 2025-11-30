@@ -1,0 +1,274 @@
+# Combined Movement Scenarios
+# Using multiple movement commands together
+
+[[scenarios]]
+id = "combined_move_001"
+name = "Navigate to specific position"
+description = "Use h, j, k, l to reach target"
+
+hints = [
+    "Combine movements for diagonal navigation",
+    "Think about shortest path",
+]
+
+[scenarios.setup]
+file_content = "ABCDE\nFGHIJ\nKLMNO"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "ABCDE\nFGHIJ\nKLMNO"
+cursor_position = [1, 2]
+
+[scenarios.solution]
+commands = ["j", "l", "l"]
+description = "Move down and right twice"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "navigation"]
+commands_taught = ["h", "j", "k", "l"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "combined_move_002"
+name = "Navigate grid upward"
+description = "Move up and left to target"
+
+hints = [
+    "'k' moves up, 'h' moves left",
+    "Plan your movements",
+]
+
+[scenarios.setup]
+file_content = "ABCDE\nFGHIJ\nKLMNO"
+cursor_position = [2, 4]
+
+[scenarios.target]
+file_content = "ABCDE\nFGHIJ\nKLMNO"
+cursor_position = [1, 2]
+
+[scenarios.solution]
+commands = ["k", "h", "h"]
+description = "Move up and left twice"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "navigation"]
+commands_taught = ["h", "k"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "combined_move_003"
+name = "Word and character movement"
+description = "Use 'w' and character commands"
+
+hints = [
+    "'w' jumps to next word",
+    "Then fine-tune with 'h' or 'l'",
+]
+
+[scenarios.setup]
+file_content = "one two three"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "one two three"
+cursor_position = [0, 5]
+
+[scenarios.solution]
+commands = ["w", "l", "l"]
+description = "Jump word then move right twice"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "word"]
+commands_taught = ["w", "l"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "combined_move_004"
+name = "Navigate multiline text"
+description = "Move across multiple lines"
+
+hints = [
+    "Use 'j' to go down",
+    "Use 'w' or 'l' for horizontal",
+]
+
+[scenarios.setup]
+file_content = "Line one\nLine two\nLine three"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "Line one\nLine two\nLine three"
+cursor_position = [2, 0]
+
+[scenarios.solution]
+commands = ["j", "j"]
+description = "Move down twice"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "multiline"]
+commands_taught = ["j"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "combined_move_005"
+name = "Jump to document then navigate"
+description = "Use 'gg' then character movements"
+
+hints = [
+    "'gg' goes to start of document",
+    "Then navigate to exact position",
+]
+
+[scenarios.setup]
+file_content = "ABC\nDEF\nGHI"
+cursor_position = [2, 2]
+
+[scenarios.target]
+file_content = "ABC\nDEF\nGHI"
+cursor_position = [0, 1]
+
+[scenarios.solution]
+commands = ["gg", "l"]
+description = "Jump to start then move right"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "document"]
+commands_taught = ["gg", "l"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "combined_move_006"
+name = "Line start then down"
+description = "Go to line start then navigate"
+
+hints = [
+    "'0' goes to line start",
+    "'j' moves down",
+]
+
+[scenarios.setup]
+file_content = "First\nSecond"
+cursor_position = [0, 4]
+
+[scenarios.target]
+file_content = "First\nSecond"
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["j", "0"]
+description = "Move down then to line start"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "line"]
+commands_taught = ["j", "0"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "combined_word_001"
+name = "Navigate words backwards"
+description = "Use 'b' to go back through words"
+
+hints = [
+    "'b' moves to previous word start",
+    "Works like 'w' but backwards",
+]
+
+[scenarios.setup]
+file_content = "one two three four"
+cursor_position = [0, 14]
+
+[scenarios.target]
+file_content = "one two three four"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["b", "b"]
+description = "Move back two words"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "word", "backward"]
+commands_taught = ["b"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "combined_word_002"
+name = "Navigate words forward"
+description = "Use 'w' to move through words"
+
+hints = [
+    "'w' moves to next word start",
+    "Efficient for word-level navigation",
+]
+
+[scenarios.setup]
+file_content = "alpha beta gamma delta"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "alpha beta gamma delta"
+cursor_position = [0, 17]
+
+[scenarios.solution]
+commands = ["w", "w", "w"]
+description = "Move forward three words"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["combined", "word", "forward"]
+commands_taught = ["w"]
+estimated_time_seconds = 10

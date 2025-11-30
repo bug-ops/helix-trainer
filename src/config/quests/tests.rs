@@ -181,22 +181,41 @@ fn test_load_daily_quests_toml() {
     assert!(result.is_ok(), "Failed to load daily quests: {:?}", result);
 
     let quests = result.unwrap();
-    assert_eq!(quests.len(), 12, "Expected 12 quest templates");
+    assert_eq!(quests.len(), 55, "Expected 55 quest templates");
 
-    // Verify we have expected quest IDs
+    // Verify we have expected quest IDs across all difficulty levels
     let ids: Vec<_> = quests.iter().map(|q| q.id.as_str()).collect();
+
+    // Easy quests
+    assert!(ids.contains(&"cmd_h_easy"));
+    assert!(ids.contains(&"cmd_j_easy"));
+    assert!(ids.contains(&"cmd_k_easy"));
+    assert!(ids.contains(&"cmd_l_easy"));
+    assert!(ids.contains(&"cmd_w_easy"));
+    assert!(ids.contains(&"cmd_b_easy"));
+    assert!(ids.contains(&"cmd_0_easy"));
+    assert!(ids.contains(&"cmd_gg_easy"));
+    assert!(ids.contains(&"cmd_G_easy"));
+    assert!(ids.contains(&"cmd_x_easy"));
     assert!(ids.contains(&"cmd_dd_easy"));
     assert!(ids.contains(&"cmd_yy_easy"));
-    assert!(ids.contains(&"cmd_w_easy"));
-    assert!(ids.contains(&"cmd_x_easy"));
-    assert!(ids.contains(&"scenario_2_medium"));
+    assert!(ids.contains(&"scenario_1_easy"));
+    assert!(ids.contains(&"time_2_easy"));
+
+    // Medium quests
+    assert!(ids.contains(&"cmd_w_medium"));
     assert!(ids.contains(&"cmd_i_medium"));
     assert!(ids.contains(&"cmd_c_medium"));
+    assert!(ids.contains(&"scenario_2_medium"));
     assert!(ids.contains(&"time_5_medium"));
+    assert!(ids.contains(&"explore_5_medium"));
+
+    // Hard quests
     assert!(ids.contains(&"scenario_5_hard"));
     assert!(ids.contains(&"speed_delete_hard"));
     assert!(ids.contains(&"time_15_hard"));
     assert!(ids.contains(&"explore_10_hard"));
+    assert!(ids.contains(&"explore_20_hard"));
 }
 
 #[test]

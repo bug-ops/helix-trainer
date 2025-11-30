@@ -283,22 +283,25 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     frame.render_widget(paragraph, area);
 }
 
-/// Render transition screen (brief "SUCCESS!" flash)
+/// Render transition screen (brief "SUCCESS!" or "TIME'S UP!" flash)
 fn render_transition(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGameSession) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(10), Constraint::Length(3)])
         .split(area);
 
-    // Success message
-    let success = Paragraph::new("SUCCESS!")
-        .style(
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        )
+    // Show SUCCESS or TIME'S UP based on transition type
+    let is_success = session.state().transition_success().unwrap_or(true);
+    let (message, color) = if is_success {
+        ("SUCCESS!", Color::Green)
+    } else {
+        ("TIME'S UP!", Color::Red)
+    };
+
+    let text = Paragraph::new(message)
+        .style(Style::default().fg(color).add_modifier(Modifier::BOLD))
         .alignment(Alignment::Center);
-    frame.render_widget(success, chunks[0]);
+    frame.render_widget(text, chunks[0]);
 
     // Stats bar
     render_stats_bar(frame, chunks[1], session);

@@ -334,8 +334,8 @@ impl MiniGameSession {
             }
         }
 
-        // Transition state
-        self.state = MiniGameState::Transition;
+        // Transition state (success)
+        self.state = MiniGameState::Transition { success: true };
     }
 
     /// Complete transition and load next scenario
@@ -380,8 +380,8 @@ impl MiniGameSession {
         self.difficulty.update_after_result(false);
 
         if has_lives {
-            // Continue to next scenario
-            self.state = MiniGameState::Transition;
+            // Continue to next scenario (failure transition)
+            self.state = MiniGameState::Transition { success: false };
         } else {
             // Game over
             self.state = MiniGameState::GameOver;

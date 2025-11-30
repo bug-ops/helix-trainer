@@ -22,9 +22,10 @@ pub enum MiniGameState {
 
     /// Brief pause between scenarios
     ///
-    /// Short transition period after completing one scenario
-    /// before the next one appears.
-    Transition,
+    /// Short transition period after completing/failing one scenario
+    /// before the next one appears. The `success` flag indicates
+    /// whether the scenario was completed successfully or timed out.
+    Transition { success: bool },
 
     /// Game paused by user
     ///
@@ -105,11 +106,21 @@ impl MiniGameState {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameState;
     ///
-    /// let state = MiniGameState::Transition;
+    /// let state = MiniGameState::Transition { success: true };
     /// assert!(state.is_transition());
     /// ```
     pub fn is_transition(&self) -> bool {
-        matches!(self, Self::Transition)
+        matches!(self, Self::Transition { .. })
+    }
+
+    /// Check if transition was successful
+    ///
+    /// Returns Some(true) if success, Some(false) if failure, None if not in transition.
+    pub fn transition_success(&self) -> Option<bool> {
+        match self {
+            Self::Transition { success } => Some(*success),
+            _ => None,
+        }
     }
 
     /// Get countdown remaining value
@@ -151,7 +162,7 @@ mod tests {
         assert!(!MiniGameState::Paused.is_playing());
         assert!(!MiniGameState::GameOver.is_playing());
         assert!(!MiniGameState::Countdown { remaining: 3 }.is_playing());
-        assert!(!MiniGameState::Transition.is_playing());
+        assert!(!MiniGameState::Transition { success: true }.is_playing());
     }
 
     #[test]
@@ -175,8 +186,22 @@ mod tests {
 
     #[test]
     fn test_is_transition() {
-        assert!(MiniGameState::Transition.is_transition());
+        assert!(MiniGameState::Transition { success: true }.is_transition());
+        assert!(MiniGameState::Transition { success: false }.is_transition());
         assert!(!MiniGameState::Playing.is_transition());
+    }
+
+    #[test]
+    fn test_transition_success() {
+        assert_eq!(
+            MiniGameState::Transition { success: true }.transition_success(),
+            Some(true)
+        );
+        assert_eq!(
+            MiniGameState::Transition { success: false }.transition_success(),
+            Some(false)
+        );
+        assert_eq!(MiniGameState::Playing.transition_success(), None);
     }
 
     #[test]

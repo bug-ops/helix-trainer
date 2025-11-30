@@ -66,56 +66,104 @@ pub(in crate::ui::state) fn handle_minigame_tick(state: &mut AppState) -> Result
     Ok(())
 }
 
+/// Execute a command in the mini-game session
+///
+/// Handles command execution, quest progress updates, and completion detection
+fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), UserError> {
+    let Some(ref mut session) = state.game.minigame_session else {
+        return Ok(());
+    };
+
+    session.handle_command(command)?;
+
+    // Update quest progress for command used
+    let mut profile = state.progress.profile.borrow_mut();
+    crate::gamification::QuestTracker::update_command_progress(&mut profile.daily_quests, command);
+    drop(profile);
+
+    // Track commands used today
+    state
+        .progress
+        .commands_used_today
+        .insert(command.to_string());
+
+    // Check for completion
+    if session.check_completion() {
+        // Record to FSRS before advancing (only if we have actions)
+        if let Some(scenario) = session.current_scenario() {
+            if !scenario.actions().is_empty() {
+                let mut tracker = state.progress.performance_tracker.borrow_mut();
+                session.record_to_fsrs(&mut tracker, true); // Success!
+                drop(tracker);
+            }
+
+            // Update quest progress for scenario completion
+            let duration = scenario.elapsed();
+            let scenario_id = scenario.scenario.id.clone();
+
+            let mut profile = state.progress.profile.borrow_mut();
+            crate::gamification::QuestTracker::update_scenario_progress(
+                &mut profile.daily_quests,
+                &scenario_id,
+                duration,
+            );
+            drop(profile);
+        }
+
+        session.advance_to_next();
+        // Transition state will be handled by timer
+    }
+
+    Ok(())
+}
+
 /// Handle executing a Helix command during mini-game
+///
+/// Uses command buffer to handle multi-key commands (dd, gg, rx).
 pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
-    if let Some(ref mut session) = state.game.minigame_session {
-        session.handle_command(&command)?;
+    // Get minigame data for command buffer
+    let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
+        return Ok(());
+    };
 
-        // Update quest progress for command used
-        let mut profile = state.progress.profile.borrow_mut();
-        crate::gamification::QuestTracker::update_command_progress(
-            &mut profile.daily_quests,
-            &command,
-        );
-        drop(profile);
+    // Check if we're in insert mode (send directly without buffering)
+    let is_insert_mode = state
+        .game
+        .minigame_session
+        .as_ref()
+        .map(|s| s.is_insert_mode())
+        .unwrap_or(false);
 
-        // Track commands used today
-        state
-            .progress
-            .commands_used_today
-            .insert(command.to_string());
+    if is_insert_mode {
+        return execute_minigame_command(state, &command);
+    }
 
-        // Check for completion
-        if session.check_completion() {
-            // Record to FSRS before advancing (only if we have actions)
-            if let Some(scenario) = session.current_scenario() {
-                if !scenario.actions().is_empty() {
-                    let mut tracker = state.progress.performance_tracker.borrow_mut();
-                    session.record_to_fsrs(&mut tracker, true); // Success!
-                    drop(tracker);
-                }
+    // Normal mode: handle command buffer for multi-key commands
+    minigame_data.command_buffer.push_str(&command);
 
-                // Update quest progress for scenario completion
-                let duration = scenario.elapsed();
-                let scenario_id = scenario.scenario.id.clone();
+    // Try to match a complete command
+    let final_command = super::gameplay::parse_command_buffer(&minigame_data.command_buffer);
 
-                let mut profile = state.progress.profile.borrow_mut();
-                crate::gamification::QuestTracker::update_scenario_progress(
-                    &mut profile.daily_quests,
-                    &scenario_id,
-                    duration,
-                );
-                drop(profile);
-            }
-
-            session.advance_to_next();
-            // Transition state will be handled by timer
+    match final_command {
+        Some("") => {
+            // Invalid sequence - clear buffer
+            minigame_data.command_buffer.clear();
+            Ok(())
+        }
+        Some(cmd) => {
+            // Complete command - execute it
+            let cmd_string = cmd.to_string();
+            minigame_data.command_buffer.clear();
+            execute_minigame_command(state, &cmd_string)
+        }
+        None => {
+            // Waiting for more keys - nothing to do
+            Ok(())
         }
     }
-    Ok(())
 }
 
 /// Handle timeout on current mini-game scenario

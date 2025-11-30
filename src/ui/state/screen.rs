@@ -248,8 +248,8 @@ pub struct ModeSelectionData {
 /// Data required for mini-game screen
 #[derive(Debug, Clone, Default)]
 pub struct MiniGameData {
-    /// Placeholder - session is stored in GameState.minigame_session
-    _placeholder: (),
+    /// Command buffer for multi-key commands (e.g., "g" waiting for "g")
+    pub command_buffer: String,
 }
 
 #[cfg(test)]

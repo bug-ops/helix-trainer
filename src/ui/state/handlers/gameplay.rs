@@ -28,7 +28,7 @@ fn format_key_for_display(command: &str) -> String {
 /// Parse command buffer to determine if a complete command is available
 ///
 /// Returns Some(command) if buffer contains a complete command, None if waiting for more keys
-fn parse_command_buffer(buffer: &str) -> Option<&str> {
+pub(super) fn parse_command_buffer(buffer: &str) -> Option<&str> {
     match buffer {
         // Multi-key commands
         CMD_DELETE_LINE => Some(CMD_DELETE_LINE),

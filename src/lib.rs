@@ -20,7 +20,9 @@
 // Translations are loaded from locales/ directory at compile time
 rust_i18n::i18n!("locales", fallback = "en");
 
+pub mod async_state;
 pub mod config;
+pub mod data_loader;
 pub mod game;
 pub mod gamification;
 pub mod helix;

@@ -141,6 +141,11 @@ impl ActiveMiniScenario {
     pub fn actions(&self) -> &[String] {
         &self.actions
     }
+
+    /// Check if currently in Insert mode
+    pub fn is_insert_mode(&self) -> bool {
+        self.simulator.is_insert_mode()
+    }
 }
 
 /// Mini-game session state
@@ -493,6 +498,14 @@ impl MiniGameSession {
     /// Get difficulty level
     pub fn difficulty_level(&self) -> u8 {
         self.difficulty.current_level()
+    }
+
+    /// Check if current scenario is in Insert mode
+    pub fn is_insert_mode(&self) -> bool {
+        self.current
+            .as_ref()
+            .map(|s| s.is_insert_mode())
+            .unwrap_or(false)
     }
 
     /// Record commands from completed scenario for FSRS learning

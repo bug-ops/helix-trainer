@@ -128,6 +128,16 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
     }
 }
 
+/// Check if mini-game session is in Insert mode
+fn is_minigame_insert_mode(state: &AppState) -> bool {
+    state
+        .game
+        .minigame_session
+        .as_ref()
+        .map(|s| s.is_insert_mode())
+        .unwrap_or(false)
+}
+
 /// Handle keyboard events on mini-game screen
 pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Check if game over or paused
@@ -151,22 +161,33 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
         };
     }
 
-    // Countdown or playing state - handle normal keys
-    match key.code {
-        KeyCode::Esc => Some(Message::PauseMiniGame),
-        KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            Some(Message::QuitApp)
-        }
-        _ => {
-            // Map to Helix command if in playing state
-            if session.state().is_playing() {
-                map_key_to_helix_command(key)
-                    .map(|cmd| Message::MiniGameCommand(Cow::Borrowed(cmd)))
-            } else {
-                None
-            }
-        }
+    // Handle Ctrl+Q for quit
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::QuitApp);
     }
+
+    // In playing state - handle input
+    if session.state().is_playing() {
+        // Handle Insert mode input (including Esc to exit)
+        if is_minigame_insert_mode(state) {
+            return handle_insert_mode_input(key).map(Message::MiniGameCommand);
+        }
+
+        // Normal mode - Esc pauses, other keys are commands
+        if key.code == KeyCode::Esc {
+            return Some(Message::PauseMiniGame);
+        }
+
+        return map_key_to_helix_command(key)
+            .map(|cmd| Message::MiniGameCommand(Cow::Borrowed(cmd)));
+    }
+
+    // Countdown state - Esc pauses
+    if key.code == KeyCode::Esc {
+        return Some(Message::PauseMiniGame);
+    }
+
+    None
 }
 
 #[cfg(test)]

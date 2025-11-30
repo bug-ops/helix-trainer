@@ -124,6 +124,8 @@ pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
+    use crate::ui::state::CommandBufferAccess;
+
     // Get minigame data for command buffer
     let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
         return Ok(());
@@ -142,21 +144,21 @@ pub(in crate::ui::state) fn handle_minigame_command(
     }
 
     // Normal mode: handle command buffer for multi-key commands
-    minigame_data.command_buffer.push_str(&command);
+    minigame_data.push_command(&command);
 
     // Try to match a complete command
-    let final_command = super::gameplay::parse_command_buffer(&minigame_data.command_buffer);
+    let final_command = super::gameplay::parse_command_buffer(minigame_data.command_buffer());
 
     match final_command {
         Some("") => {
             // Invalid sequence - clear buffer
-            minigame_data.command_buffer.clear();
+            minigame_data.clear_buffer();
             Ok(())
         }
         Some(cmd) => {
             // Complete command - execute it
             let cmd_string = cmd.to_string();
-            minigame_data.command_buffer.clear();
+            minigame_data.clear_buffer();
             execute_minigame_command(state, &cmd_string)
         }
         None => {

@@ -155,23 +155,25 @@ pub fn handle_execute_command(
         // Always restore Task screen - even when completed, we show success popup
         state.screen = TypedScreen::Task(task_data);
     } else {
+        use crate::ui::state::CommandBufferAccess;
+
         // Normal mode: handle command buffer for multi-key commands
-        task_data.command_buffer.push_str(&command);
+        task_data.push_command(&command);
 
         // Try to match a complete command
-        let final_command = parse_command_buffer(&task_data.command_buffer);
+        let final_command = parse_command_buffer(task_data.command_buffer());
 
         match final_command {
             Some("") => {
                 // Invalid sequence - clear buffer and restore state
-                task_data.command_buffer.clear();
+                task_data.clear_buffer();
                 state.screen = TypedScreen::Task(task_data);
                 return Ok(());
             }
             Some(cmd) => {
                 // Complete command - execute it
                 let cmd_string = cmd.to_string();
-                task_data.command_buffer.clear();
+                task_data.clear_buffer();
                 task_data.last_command = Some(cmd_string.clone());
                 executed_command = Some(cmd_string.clone());
 

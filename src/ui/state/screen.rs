@@ -252,6 +252,48 @@ pub struct MiniGameData {
     pub command_buffer: String,
 }
 
+/// Trait for types that manage a command buffer for multi-key commands
+///
+/// Both training mode (TaskData) and arcade mode (MiniGameData) use command
+/// buffers to handle multi-key sequences like `dd`, `gg`, and `rx`.
+pub trait CommandBufferAccess {
+    /// Get reference to the command buffer
+    fn command_buffer(&self) -> &str;
+
+    /// Get mutable reference to the command buffer
+    fn command_buffer_mut(&mut self) -> &mut String;
+
+    /// Push a command string to the buffer
+    fn push_command(&mut self, cmd: &str) {
+        self.command_buffer_mut().push_str(cmd);
+    }
+
+    /// Clear the command buffer
+    fn clear_buffer(&mut self) {
+        self.command_buffer_mut().clear();
+    }
+}
+
+impl CommandBufferAccess for TaskData {
+    fn command_buffer(&self) -> &str {
+        &self.command_buffer
+    }
+
+    fn command_buffer_mut(&mut self) -> &mut String {
+        &mut self.command_buffer
+    }
+}
+
+impl CommandBufferAccess for MiniGameData {
+    fn command_buffer(&self) -> &str {
+        &self.command_buffer
+    }
+
+    fn command_buffer_mut(&mut self) -> &mut String {
+        &mut self.command_buffer
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

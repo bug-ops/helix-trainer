@@ -70,12 +70,34 @@ fn handle_task_special_keys(key: KeyEvent) -> Option<Message> {
     }
 }
 
-/// Check if current game session is in Insert mode
-fn is_in_insert_mode(state: &AppState) -> bool {
-    if let TypedScreen::Task(task_data) = &state.screen {
-        task_data.session.is_insert_mode()
+/// Check if current gameplay session is in Insert mode
+///
+/// Works for both training mode (Task screen) and arcade mode (MiniGame screen).
+fn is_gameplay_insert_mode(state: &AppState) -> bool {
+    match &state.screen {
+        TypedScreen::Task(task_data) => task_data.session.is_insert_mode(),
+        TypedScreen::MiniGame(_) => state
+            .game
+            .minigame_session
+            .as_ref()
+            .map(|s| s.is_insert_mode())
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+/// Handle gameplay input (insert mode or normal mode command)
+///
+/// Shared logic for both training and arcade modes.
+/// Returns the command wrapped in the provided message constructor.
+fn handle_gameplay_input<F>(key: KeyEvent, state: &AppState, make_message: F) -> Option<Message>
+where
+    F: FnOnce(Cow<'static, str>) -> Message,
+{
+    if is_gameplay_insert_mode(state) {
+        handle_insert_mode_input(key).map(make_message)
     } else {
-        false
+        map_key_to_helix_command(key).map(|cmd| make_message(Cow::Borrowed(cmd)))
     }
 }
 
@@ -86,13 +108,8 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         return Some(msg);
     }
 
-    // Handle Insert mode input
-    if is_in_insert_mode(state) {
-        return handle_insert_mode_input(key).map(Message::ExecuteCommand);
-    }
-
-    // Handle Normal mode commands
-    map_key_to_helix_command(key).map(|cmd| Message::ExecuteCommand(Cow::Borrowed(cmd)))
+    // Handle gameplay input (insert mode or normal mode)
+    handle_gameplay_input(key, state, Message::ExecuteCommand)
 }
 
 /// Handle keyboard events on the results screen
@@ -128,16 +145,6 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
     }
 }
 
-/// Check if mini-game session is in Insert mode
-fn is_minigame_insert_mode(state: &AppState) -> bool {
-    state
-        .game
-        .minigame_session
-        .as_ref()
-        .map(|s| s.is_insert_mode())
-        .unwrap_or(false)
-}
-
 /// Handle keyboard events on mini-game screen
 pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Check if game over or paused
@@ -166,11 +173,11 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
         return Some(Message::QuitApp);
     }
 
-    // In playing state - handle input
+    // In playing state - handle input using shared gameplay logic
     if session.state().is_playing() {
-        // Handle Insert mode input (including Esc to exit)
-        if is_minigame_insert_mode(state) {
-            return handle_insert_mode_input(key).map(Message::MiniGameCommand);
+        // In insert mode - use shared handler (includes Esc to exit insert)
+        if is_gameplay_insert_mode(state) {
+            return handle_gameplay_input(key, state, Message::MiniGameCommand);
         }
 
         // Normal mode - Esc pauses, other keys are commands
@@ -178,8 +185,7 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
             return Some(Message::PauseMiniGame);
         }
 
-        return map_key_to_helix_command(key)
-            .map(|cmd| Message::MiniGameCommand(Cow::Borrowed(cmd)));
+        return handle_gameplay_input(key, state, Message::MiniGameCommand);
     }
 
     // Countdown state - Esc pauses
@@ -306,19 +312,19 @@ mod tests {
         assert_eq!(msg, None);
     }
 
-    // Unit tests for is_in_insert_mode()
-    mod is_in_insert_mode_tests {
+    // Unit tests for is_gameplay_insert_mode()
+    mod is_gameplay_insert_mode_tests {
         use super::*;
 
         #[test]
-        fn test_is_in_insert_mode_on_menu_screen() {
+        fn test_is_gameplay_insert_mode_on_menu_screen() {
             let mut state = create_test_app_state();
             state.screen = TypedScreen::Menu(MenuData::default());
-            assert!(!is_in_insert_mode(&state));
+            assert!(!is_gameplay_insert_mode(&state));
         }
 
         #[test]
-        fn test_is_in_insert_mode_on_task_screen_normal_mode() {
+        fn test_is_gameplay_insert_mode_on_task_screen_normal_mode() {
             use helix_trainer::config::{ScoringConfig, Setup, Solution, TargetState};
 
             let mut state = create_test_app_state();
@@ -355,7 +361,7 @@ mod tests {
             state.screen = TypedScreen::Task(TaskData::new(session));
 
             // GameSession starts in Normal mode
-            assert!(!is_in_insert_mode(&state));
+            assert!(!is_gameplay_insert_mode(&state));
         }
     }
 

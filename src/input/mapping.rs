@@ -23,13 +23,27 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
         (KeyCode::Char('b'), KeyModifiers::NONE) => Some(CMD_MOVE_WORD_BACKWARD),
         (KeyCode::Char('e'), KeyModifiers::NONE) => Some(CMD_MOVE_WORD_END),
 
+        // WORD movement (whitespace-delimited)
+        (KeyCode::Char('W'), KeyModifiers::SHIFT) => Some(CMD_MOVE_LONG_WORD_FORWARD),
+        (KeyCode::Char('B'), KeyModifiers::SHIFT) => Some(CMD_MOVE_LONG_WORD_BACKWARD),
+        (KeyCode::Char('E'), KeyModifiers::SHIFT) => Some(CMD_MOVE_LONG_WORD_END),
+
         // Line movement
         (KeyCode::Char('0'), KeyModifiers::NONE) => Some(CMD_MOVE_LINE_START),
         (KeyCode::Char('$'), KeyModifiers::NONE) => Some(CMD_MOVE_LINE_END),
 
-        // Deletion commands
-        (KeyCode::Char('x'), KeyModifiers::NONE) => Some(CMD_DELETE_CHAR),
-        (KeyCode::Char('d'), KeyModifiers::NONE) => Some("d"), // Single 'd' for multi-key handling
+        // Selection commands
+        (KeyCode::Char('X'), KeyModifiers::SHIFT) => Some(CMD_EXTEND_LINE),
+        (KeyCode::Char('%'), KeyModifiers::NONE) => Some(CMD_SELECT_ALL),
+        (KeyCode::Char(';'), KeyModifiers::NONE) => Some(CMD_COLLAPSE_SELECTION),
+
+        // Case switching
+        (KeyCode::Char('~'), KeyModifiers::NONE) => Some(CMD_SWITCH_CASE),
+        (KeyCode::Char('`'), KeyModifiers::NONE) => Some(CMD_SWITCH_CASE_ALT),
+
+        // Selection and deletion commands
+        (KeyCode::Char('x'), KeyModifiers::NONE) => Some(CMD_SELECT_LINE),
+        (KeyCode::Char('d'), KeyModifiers::NONE) => Some(CMD_DELETE_SELECTION),
         (KeyCode::Char('c'), KeyModifiers::NONE) => Some(CMD_CHANGE),
         (KeyCode::Char('J'), KeyModifiers::SHIFT) => Some(CMD_JOIN_LINES),
 
@@ -52,6 +66,21 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
 
         // Replace character
         (KeyCode::Char('r'), KeyModifiers::NONE) => Some(CMD_REPLACE),
+
+        // Find/till character (prefix commands - need second char)
+        (KeyCode::Char('f'), KeyModifiers::NONE) => Some(CMD_FIND_CHAR),
+        (KeyCode::Char('F'), KeyModifiers::SHIFT) => Some(CMD_FIND_CHAR_REVERSE),
+        (KeyCode::Char('t'), KeyModifiers::NONE) => Some(CMD_TILL_CHAR),
+        (KeyCode::Char('T'), KeyModifiers::SHIFT) => Some(CMD_TILL_CHAR_REVERSE),
+
+        // Match brackets
+        (KeyCode::Char('m'), KeyModifiers::NONE) => Some(CMD_MATCH_BRACKETS),
+
+        // Select mode
+        (KeyCode::Char('v'), KeyModifiers::NONE) => Some(CMD_SELECT_MODE),
+
+        // Flip selection direction
+        (KeyCode::Char(';'), KeyModifiers::ALT) => Some(CMD_FLIP_SELECTIONS),
 
         // Undo/Redo
         (KeyCode::Char('u'), KeyModifiers::NONE) => Some(CMD_UNDO),
@@ -130,20 +159,71 @@ mod tests {
             assert_eq!(map_key_to_helix_command(dollar), Some(CMD_MOVE_LINE_END));
         }
 
+        // Selection commands
+        #[test]
+        fn test_map_key_selection() {
+            let x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(x), Some(CMD_SELECT_LINE));
+
+            let x_shift = KeyEvent::new(KeyCode::Char('X'), KeyModifiers::SHIFT);
+            assert_eq!(map_key_to_helix_command(x_shift), Some(CMD_EXTEND_LINE));
+
+            let percent = KeyEvent::new(KeyCode::Char('%'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(percent), Some(CMD_SELECT_ALL));
+
+            let semicolon = KeyEvent::new(KeyCode::Char(';'), KeyModifiers::NONE);
+            assert_eq!(
+                map_key_to_helix_command(semicolon),
+                Some(CMD_COLLAPSE_SELECTION)
+            );
+        }
+
         // Deletion commands
         #[test]
         fn test_map_key_deletion() {
-            let x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
-            assert_eq!(map_key_to_helix_command(x), Some(CMD_DELETE_CHAR));
-
             let d = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE);
-            assert_eq!(map_key_to_helix_command(d), Some("d"));
+            assert_eq!(map_key_to_helix_command(d), Some(CMD_DELETE_SELECTION));
 
             let c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE);
             assert_eq!(map_key_to_helix_command(c), Some(CMD_CHANGE));
 
             let j_shift = KeyEvent::new(KeyCode::Char('J'), KeyModifiers::SHIFT);
             assert_eq!(map_key_to_helix_command(j_shift), Some(CMD_JOIN_LINES));
+        }
+
+        // Case switching
+        #[test]
+        fn test_map_key_case_switch() {
+            let tilde = KeyEvent::new(KeyCode::Char('~'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(tilde), Some(CMD_SWITCH_CASE));
+
+            let backtick = KeyEvent::new(KeyCode::Char('`'), KeyModifiers::NONE);
+            assert_eq!(
+                map_key_to_helix_command(backtick),
+                Some(CMD_SWITCH_CASE_ALT)
+            );
+        }
+
+        // WORD movement
+        #[test]
+        fn test_map_key_word_movement_caps() {
+            let w_shift = KeyEvent::new(KeyCode::Char('W'), KeyModifiers::SHIFT);
+            assert_eq!(
+                map_key_to_helix_command(w_shift),
+                Some(CMD_MOVE_LONG_WORD_FORWARD)
+            );
+
+            let b_shift = KeyEvent::new(KeyCode::Char('B'), KeyModifiers::SHIFT);
+            assert_eq!(
+                map_key_to_helix_command(b_shift),
+                Some(CMD_MOVE_LONG_WORD_BACKWARD)
+            );
+
+            let e_shift = KeyEvent::new(KeyCode::Char('E'), KeyModifiers::SHIFT);
+            assert_eq!(
+                map_key_to_helix_command(e_shift),
+                Some(CMD_MOVE_LONG_WORD_END)
+            );
         }
 
         // Indentation

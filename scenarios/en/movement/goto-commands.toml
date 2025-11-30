@@ -1,0 +1,138 @@
+# Goto Commands
+# Scenarios for g-prefixed goto commands (gh, gl, gs, ge)
+
+[[scenarios]]
+id = "goto_line_start_001"
+name = "Go to line start"
+description = "Use 'gh' to go to the start of the current line"
+
+hints = [
+    "'gh' moves cursor to the beginning of the line",
+    "Similar to '0' but part of the goto menu",
+]
+
+[scenarios.setup]
+file_content = "    indented text"
+cursor_position = [0, 10]
+
+[scenarios.target]
+file_content = "    indented text"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["gh"]
+description = "Press 'gh' to go to line start"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["goto", "line", "navigation"]
+commands_taught = ["gh"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "goto_line_end_001"
+name = "Go to line end"
+description = "Use 'gl' to go to the end of the current line"
+
+hints = [
+    "'gl' moves cursor to the last character of the line",
+    "Similar to '$' but part of the goto menu",
+]
+
+[scenarios.setup]
+file_content = "hello world\n"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "hello world\n"
+cursor_position = [0, 11]
+
+[scenarios.solution]
+commands = ["gl"]
+description = "Press 'gl' to go to line end (position before newline)"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["goto", "line", "navigation"]
+commands_taught = ["gl"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "goto_first_nonwhitespace_001"
+name = "Go to first non-whitespace"
+description = "Use 'gs' to go to the first non-whitespace character"
+
+hints = [
+    "'gs' skips leading whitespace",
+    "Useful for indented code",
+]
+
+[scenarios.setup]
+file_content = "    fn main() {"
+cursor_position = [0, 10]
+
+[scenarios.target]
+file_content = "    fn main() {"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["gs"]
+description = "Press 'gs' to go to first non-whitespace"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["goto", "whitespace", "navigation"]
+commands_taught = ["gs"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "goto_last_line_001"
+name = "Go to last line"
+description = "Use 'ge' to go to the last line of the document"
+
+hints = [
+    "'ge' moves to the last line",
+    "Cursor goes to the start of the last line",
+]
+
+[scenarios.setup]
+file_content = "Line 1\nLine 2\nLine 3\nLast line"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "Line 1\nLine 2\nLine 3\nLast line"
+cursor_position = [3, 0]
+
+[scenarios.solution]
+commands = ["ge"]
+description = "Press 'ge' to go to last line"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["goto", "document", "navigation"]
+commands_taught = ["ge"]
+estimated_time_seconds = 5

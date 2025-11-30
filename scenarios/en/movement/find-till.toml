@@ -1,0 +1,172 @@
+# Find/Till Character Commands
+# Scenarios for f, F, t, T (find and till character movements)
+
+[[scenarios]]
+id = "find_char_001"
+name = "Find next character"
+description = "Use 'f' to jump to the next occurrence of a character"
+
+hints = [
+    "'f' followed by a character jumps to that character",
+    "Press 'f' then the character you want to find",
+]
+
+[scenarios.setup]
+file_content = "hello world"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "hello world"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["fo"]
+description = "Press 'fo' to find next 'o'"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["find", "character", "navigation"]
+commands_taught = ["f"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "find_char_002"
+name = "Find character in code"
+description = "Jump to a specific character in a line of code"
+
+hints = [
+    "'f' searches forward on the current line only",
+    "Useful for quickly navigating to punctuation",
+]
+
+[scenarios.setup]
+file_content = "fn main() { println!(\"Hello\"); }"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "fn main() { println!(\"Hello\"); }"
+cursor_position = [0, 10]
+
+[scenarios.solution]
+commands = ["f{"]
+description = "Press 'f{' to jump to opening brace"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["find", "code", "navigation"]
+commands_taught = ["f"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "find_prev_char_001"
+name = "Find previous character"
+description = "Use 'F' to jump to a previous occurrence of a character"
+
+hints = [
+    "'F' (capital) searches backward",
+    "Useful when you've gone past your target",
+]
+
+[scenarios.setup]
+file_content = "hello world"
+cursor_position = [0, 10]
+
+[scenarios.target]
+file_content = "hello world"
+cursor_position = [0, 7]
+
+[scenarios.solution]
+commands = ["Fo"]
+description = "Press 'Fo' to find previous 'o' (at position 7 in 'world')"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["find", "backward", "navigation"]
+commands_taught = ["F"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "till_char_001"
+name = "Till next character"
+description = "Use 't' to move just before a character"
+
+hints = [
+    "'t' moves to one position BEFORE the character",
+    "Useful for operations that shouldn't include the target",
+]
+
+[scenarios.setup]
+file_content = "hello, world"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "hello, world"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["t,"]
+description = "Press 't,' to move just before the comma"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["till", "character", "navigation"]
+commands_taught = ["t"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "till_prev_char_001"
+name = "Till previous character"
+description = "Use 'T' to move just after a previous character"
+
+hints = [
+    "'T' (capital) searches backward",
+    "Stops one position AFTER the found character",
+]
+
+[scenarios.setup]
+file_content = "hello, world"
+cursor_position = [0, 11]
+
+[scenarios.target]
+file_content = "hello, world"
+cursor_position = [0, 6]
+
+[scenarios.solution]
+commands = ["T,"]
+description = "Press 'T,' to move just after the comma (comma at 5, cursor at 6)"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["till", "backward", "navigation"]
+commands_taught = ["T"]
+estimated_time_seconds = 10

@@ -4,18 +4,6 @@ use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
-/// Delete character at cursor
-pub(super) fn delete_char<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
-        let start = range.from();
-        let end = start.saturating_add(1).min(sim.doc.len_chars()).max(start);
-        (start, end, None)
-    });
-
-    sim.apply_transaction(transaction);
-    Ok(())
-}
-
 /// Delete current line
 pub(super) fn delete_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
@@ -122,5 +110,111 @@ pub(super) fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
     };
     sim.selection = Selection::point(new_head);
 
+    Ok(())
+}
+
+/// Delete selection (single 'd' - deletes current selection)
+pub(super) fn delete_selection<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
+    let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
+        let start = range.from();
+        let end = range.to();
+        // Ensure we delete at least one character
+        let end = if start == end {
+            start.saturating_add(1).min(sim.doc.len_chars())
+        } else {
+            end
+        };
+        (start, end, None)
+    });
+
+    sim.apply_transaction(transaction);
+    Ok(())
+}
+
+/// Switch case of character under cursor
+pub(super) fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
+        let start = range.from();
+        let end = start.saturating_add(1).min(sim.doc.len_chars());
+
+        if start >= sim.doc.len_chars() {
+            return (start, end, None);
+        }
+
+        let ch = sim.doc.char(start);
+        let new_ch = if ch.is_uppercase() {
+            ch.to_lowercase().next().unwrap_or(ch)
+        } else if ch.is_lowercase() {
+            ch.to_uppercase().next().unwrap_or(ch)
+        } else {
+            ch
+        };
+
+        (start, end, Some(new_ch.to_string().into()))
+    });
+
+    sim.apply_transaction(transaction);
+
+    // Move cursor right after switch
+    let head = sim.selection.primary().head;
+    sim.selection = Selection::point(head.saturating_add(1).min(sim.doc.len_chars()));
+
+    Ok(())
+}
+
+/// Select current line (Helix 'x' command)
+/// In Helix, 'x' selects the line with cursor at line start (anchor at line end).
+pub(super) fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let line = sim.doc.char_to_line(head);
+    let line_start = sim.doc.line_to_char(line);
+    let line_end = if line + 1 < sim.doc.len_lines() {
+        sim.doc.line_to_char(line + 1)
+    } else {
+        sim.doc.len_chars()
+    };
+
+    // Selection::single(anchor, head) - head is where cursor appears
+    // In Helix 'x', cursor stays at line start, anchor is at line end
+    sim.selection = Selection::single(line_end, line_start);
+    Ok(())
+}
+
+/// Extend selection to line bounds (Helix 'X' command)
+/// In Helix, 'X' extends selection to full lines with cursor at selection start.
+pub(super) fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let range = sim.selection.primary();
+    let start_line = sim.doc.char_to_line(range.from());
+    let end_line = sim
+        .doc
+        .char_to_line(range.to().saturating_sub(1).max(range.from()));
+
+    let line_start = sim.doc.line_to_char(start_line);
+    let line_end = if end_line + 1 < sim.doc.len_lines() {
+        sim.doc.line_to_char(end_line + 1)
+    } else {
+        sim.doc.len_chars()
+    };
+
+    // Selection::single(anchor, head) - head is where cursor appears
+    // In Helix 'X', cursor stays at line start, anchor is at line end
+    sim.selection = Selection::single(line_end, line_start);
+    Ok(())
+}
+
+/// Select entire document (Helix '%' command)
+pub(super) fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    sim.selection = Selection::single(0, sim.doc.len_chars());
+    Ok(())
+}
+
+/// Collapse selection to cursor (Helix ';' command)
+pub(super) fn collapse_selection<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    sim.selection = Selection::point(head);
     Ok(())
 }

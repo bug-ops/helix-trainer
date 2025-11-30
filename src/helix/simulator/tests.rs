@@ -74,7 +74,7 @@ fn test_delete_line() {
 fn test_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "ello");
@@ -86,7 +86,7 @@ fn test_delete_char_in_middle() {
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // Move to 'e'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // Move to 'l'
-    sim.execute_command(CMD_DELETE_CHAR).unwrap(); // Delete 'l'
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // Delete 'l'
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "helo");
@@ -632,7 +632,7 @@ fn test_repeat_buffer_records_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute delete command
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Verify command was recorded
     let buffer = sim.repeat_buffer();
@@ -690,7 +690,7 @@ fn test_repeat_buffer_does_not_record_undo() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Do something first
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Undo it
     sim.execute_command(CMD_UNDO).unwrap();
@@ -923,10 +923,10 @@ fn test_normal_command_overwrites_previous() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute first command
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Execute second command
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Verify only last command is recorded
     let buffer = sim.repeat_buffer();
@@ -939,7 +939,7 @@ fn test_insert_mode_overwrites_normal_command() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Execute normal command first
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Enter insert mode
     sim.execute_command(CMD_INSERT).unwrap();
@@ -968,7 +968,7 @@ fn test_change_command_records_and_enters_insert() {
     assert!(sim.repeat_buffer().insert_recorder().is_recording());
 
     // Type replacement text
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Exit insert mode
     sim.execute_command(CMD_ESCAPE).unwrap();
@@ -977,7 +977,8 @@ fn test_change_command_records_and_enters_insert() {
     let buffer = sim.repeat_buffer();
     match buffer.last_action() {
         Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, .. }) => {
-            assert_eq!(text, "x");
+            // CMD_DELETE_SELECTION is "d", so it types "d" in insert mode
+            assert_eq!(text, "d");
         }
         _ => panic!("Expected InsertSequence action"),
     }
@@ -992,7 +993,7 @@ fn test_repeat_delete_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Execute delete command
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "ello");
 
@@ -1056,7 +1057,7 @@ fn test_repeat_is_not_recorded() {
     let mut sim = AnyModeSimulator::new("abcd".to_string());
 
     // Delete a char
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "bcd");
 
@@ -1239,24 +1240,24 @@ fn test_repeat_insert_with_movements() {
 fn test_repeat_insert_simple() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
-    // Insert 'x' at the beginning
+    // Insert 'd' at the beginning (CMD_DELETE_SELECTION is "d")
     sim.execute_command(CMD_INSERT).unwrap(); // Enter insert mode
-    sim.execute_command(CMD_DELETE_CHAR).unwrap(); // Insert 'x'
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // Insert 'd'
     sim.execute_command(CMD_ESCAPE).unwrap();
 
     let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "xhello");
-    // After insert + escape, cursor is at position 1 (after 'x')
+    assert_eq!(state.content(), "dhello");
+    // After insert + escape, cursor is at position 1 (after 'd')
 
     // Move to position: cursor at 1, move right twice → position 3 (on first 'l')
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // cursor at 2 ('e')
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // cursor at 3 (first 'l')
 
-    // Repeat - should insert 'x' at position 3
+    // Repeat - should insert 'd' at position 3
     sim.execute_command(".").unwrap();
     let state = sim.get_state().unwrap();
-    // Result: "xhe" + "x" + "llo" = "xhexllo"
-    assert_eq!(state.content(), "xhexllo");
+    // Result: "dhe" + "d" + "llo" = "dhedllo"
+    assert_eq!(state.content(), "dhedllo");
 }
 
 #[test]
@@ -1264,7 +1265,7 @@ fn test_repeat_multiple_times() {
     let mut sim = AnyModeSimulator::new("xxxxxx".to_string());
 
     // Delete once
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Repeat 4 times
     for _ in 0..4 {
@@ -1280,7 +1281,7 @@ fn test_repeat_after_undo() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Delete a char
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Undo it
     sim.execute_command(CMD_UNDO).unwrap();
@@ -1297,7 +1298,7 @@ fn test_repeat_preserves_action_across_movements() {
     let mut sim = AnyModeSimulator::new("hello world".to_string());
 
     // Delete 'h'
-    sim.execute_command(CMD_DELETE_CHAR).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     // Move around (movements don't change repeat buffer)
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();

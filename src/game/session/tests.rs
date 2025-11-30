@@ -177,11 +177,14 @@ fn test_get_feedback_with_hint() {
 
     // Take many actions (>2x optimal)
     // Optimal is 2 (dd command = 2 chars), so we need >4 actions
+    // Use j/k movements that will return cursor to (0,0)
     let mut session_or_completed = SessionAfterAction::StillActive(session);
 
-    for _ in 0..5 {
+    // Move down twice, then up twice (4 actions, returns to start)
+    let movements = ["j", "j", "k", "k", "j"];
+    for cmd in movements {
         session_or_completed = match session_or_completed {
-            SessionAfterAction::StillActive(s) => s.record_action("x".to_string()).unwrap(),
+            SessionAfterAction::StillActive(s) => s.record_action(cmd.to_string()).unwrap(),
             SessionAfterAction::Completed(c) => {
                 // Already completed early, just return
                 SessionAfterAction::Completed(c)
@@ -193,6 +196,12 @@ fn test_get_feedback_with_hint() {
             break;
         }
     }
+
+    // Move back up to row 0 before completing
+    session_or_completed = match session_or_completed {
+        SessionAfterAction::StillActive(s) => s.record_action("k".to_string()).unwrap(),
+        SessionAfterAction::Completed(c) => SessionAfterAction::Completed(c),
+    };
 
     // Complete with dd command (if not already completed)
     let result = match session_or_completed {

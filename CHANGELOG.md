@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2025-11-30
+
+### Added
+
+**Expanded Commands** (#52)
+
+- **14 New Commands**: Expanded from 31 to 45+ supported commands
+  - Find/till character: `f`, `F`, `t`, `T` (jump to/before character)
+  - Match brackets: `m` (jump to matching bracket)
+  - Goto commands: `gh` (line start), `gl` (line end), `gs` (first non-whitespace), `ge` (last line)
+  - Selection: `x` (select line), `X` (extend to line), `v` (select mode), `;` (collapse selection)
+  - Case switching: `~` (toggle case)
+  - Delete selection: `d` (delete current selection)
+
+- **New Scenario Files**:
+  - `find-till.toml`: f/F/t/T character search (5 scenarios)
+  - `goto-commands.toml`: gh/gl/gs/ge navigation (4 scenarios)
+  - `match-brackets.toml`: bracket matching (4 scenarios)
+  - `line-selection.toml`: x/X line selection (3 scenarios)
+
+### Changed
+
+- **Helix-correct command behavior**:
+  - `d` now executes immediately as delete selection (not waiting for `dd`)
+  - `x` selects current line only (not including next line)
+  - Idiomatic Helix: use `xd` to delete line (select + delete)
+
+- **Selection visualization**: Selected text now highlighted with blue background
+
+### Fixed
+
+- Selection not being displayed visually after selection commands
+- `d` command waiting for second `d` instead of executing immediately
+- `x` command selecting two lines instead of one
+- Selection end boundary including next line when it shouldn't
+
 ## [0.4.1] - 2025-11-30
 
 ### Added
@@ -630,7 +666,9 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/bug-ops/helix-trainer/compare/v0.4.1...v0.4.2
+[0.4.1]: https://github.com/bug-ops/helix-trainer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/bug-ops/helix-trainer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bug-ops/helix-trainer/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/bug-ops/helix-trainer/compare/v0.2.0...v0.2.1

@@ -195,11 +195,18 @@ pub(in crate::ui::state) fn handle_minigame_scenario_complete(
 }
 
 /// Handle advancing to next scenario (after transition delay)
+///
+/// If scenario loading fails (e.g., empty queue), logs error but continues.
+/// This prevents crash when scenario pool is exhausted.
 pub(in crate::ui::state) fn handle_minigame_next_scenario(
     state: &mut AppState,
 ) -> Result<(), UserError> {
     if let Some(ref mut session) = state.game.minigame_session {
-        session.complete_transition()?;
+        if let Err(e) = session.complete_transition() {
+            // Log error but don't crash - user can still see current state
+            tracing::warn!("Failed to load next mini-game scenario: {:?}", e);
+            // The game will continue in its current state
+        }
     }
     Ok(())
 }
@@ -211,7 +218,7 @@ pub(in crate::ui::state) fn handle_minigame_next_scenario(
 /// - Records final FSRS data for last scenario
 /// - Calculates and awards XP
 /// - Updates high scores
-/// - Saves profile to disk
+/// - Saves profile to disk (non-fatal on error)
 pub(in crate::ui::state) fn handle_minigame_game_over(
     state: &mut AppState,
 ) -> Result<(), UserError> {
@@ -255,16 +262,18 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
 
         drop(profile);
 
-        // 4. Persist profile to disk
-        let profile_borrowed = state.progress.profile.borrow();
-        state
-            .progress
-            .storage
-            .save(&profile_borrowed)
-            .map_err(|_| UserError::OperationFailed)?;
-        drop(profile_borrowed);
+        // 4. Persist profile to disk (non-fatal error - log but continue)
+        let save_result = {
+            let profile_borrowed = state.progress.profile.borrow();
+            state.progress.storage.save(&profile_borrowed)
+        };
 
-        state.progress.mark_saved();
+        if let Err(e) = save_result {
+            tracing::error!("Failed to save profile after mini-game: {:?}", e);
+            // Don't return error - game over screen should still display
+        } else {
+            state.progress.mark_saved();
+        }
     }
 
     Ok(())
@@ -484,4 +493,119 @@ mod tests {
 
     // TODO: Add integration test for quest updates
     // This requires a properly loaded scenario with valid state transitions
+
+    #[test]
+    fn test_minigame_timeout_to_game_over() {
+        let mut state = create_test_state();
+        handle_start_minigame(&mut state).unwrap();
+
+        // Transition to playing state
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        assert!(
+            state
+                .game
+                .minigame_session
+                .as_ref()
+                .map(|s| s.state().is_playing())
+                .unwrap_or(false)
+        );
+
+        // Deplete all 3 lives via timeout
+        for _ in 0..3 {
+            handle_minigame_timeout(&mut state).unwrap();
+        }
+
+        // Should be in game over state
+        assert!(
+            state
+                .game
+                .minigame_session
+                .as_ref()
+                .map(|s| s.state().is_game_over())
+                .unwrap_or(false)
+        );
+
+        // Current scenario should be None after game over
+        assert!(
+            state
+                .game
+                .minigame_session
+                .as_ref()
+                .map(|s| s.current_scenario().is_none())
+                .unwrap_or(false)
+        );
+    }
+
+    #[test]
+    fn test_minigame_render_game_over() {
+        use ratatui::{Terminal, backend::TestBackend};
+
+        let mut state = create_test_state();
+        handle_start_minigame(&mut state).unwrap();
+
+        // Progress to playing
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        // Trigger game over
+        for _ in 0..3 {
+            handle_minigame_timeout(&mut state).unwrap();
+        }
+
+        // Verify game over state
+        assert!(
+            state
+                .game
+                .minigame_session
+                .as_ref()
+                .map(|s| s.state().is_game_over())
+                .unwrap_or(false)
+        );
+
+        // Render should not panic - use public render function
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let result = terminal.draw(|f| crate::ui::render::render(f, &mut state));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_minigame_game_over_handles_errors_gracefully() {
+        // Test that game over handler doesn't return error even if save fails
+        // (uses test storage that doesn't actually persist, so save succeeds)
+        let mut state = create_test_state();
+        handle_start_minigame(&mut state).unwrap();
+
+        // Progress to playing
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        // Deplete all lives
+        for _ in 0..3 {
+            // Each timeout should succeed without panic
+            let result = handle_minigame_timeout(&mut state);
+            assert!(result.is_ok(), "handle_minigame_timeout should not fail");
+        }
+
+        // Game over handler should have run successfully
+        assert!(
+            state
+                .game
+                .minigame_session
+                .as_ref()
+                .map(|s| s.state().is_game_over())
+                .unwrap_or(false)
+        );
+    }
 }

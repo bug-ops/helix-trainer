@@ -145,7 +145,9 @@ impl crate::learning::ProgressTracker for QuestType {
             QuestType::CommandPractice { current, .. } => *current as u64,
             QuestType::ScenarioCompletion { current, .. } => *current as u64,
             QuestType::SpeedRun { .. } => 0,
-            QuestType::TimeInvested { current_minutes, .. } => *current_minutes as u64,
+            QuestType::TimeInvested {
+                current_minutes, ..
+            } => *current_minutes as u64,
             QuestType::Exploration { commands_used, .. } => commands_used.len() as u64,
         }
     }
@@ -156,7 +158,9 @@ impl crate::learning::ProgressTracker for QuestType {
             QuestType::ScenarioCompletion { target, .. } => *target as u64,
             QuestType::SpeedRun { .. } => 1,
             QuestType::TimeInvested { target_minutes, .. } => *target_minutes as u64,
-            QuestType::Exploration { target_commands, .. } => *target_commands as u64,
+            QuestType::Exploration {
+                target_commands, ..
+            } => *target_commands as u64,
         }
     }
 }

@@ -117,9 +117,11 @@ impl ActiveMiniScenario {
         self.elapsed() >= self.time_limit
     }
 
-    /// Get progress percentage (0.0 to 1.0)
+    /// Get progress percentage (0.0 to 1.0, clamped)
+    ///
+    /// Returns value clamped to [0.0, 1.0] range even if time has expired.
     pub fn progress_percent(&self) -> f64 {
-        self.elapsed().as_secs_f64() / self.time_limit.as_secs_f64()
+        (self.elapsed().as_secs_f64() / self.time_limit.as_secs_f64()).clamp(0.0, 1.0)
     }
 
     /// Get current editor state

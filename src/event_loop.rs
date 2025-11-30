@@ -47,6 +47,16 @@ fn is_minigame_timed_out(state: &AppState) -> bool {
         .unwrap_or(false)
 }
 
+/// Check if mini-game should auto-advance to next scenario
+fn should_minigame_advance(state: &AppState) -> bool {
+    state
+        .game
+        .minigame_session
+        .as_ref()
+        .map(|s| s.should_advance_to_next())
+        .unwrap_or(false)
+}
+
 /// Async event loop using tokio::select!
 ///
 /// This function runs the core event loop that:
@@ -127,6 +137,10 @@ pub async fn run_async_event_loop(
                 // Check for mini-game timeout
                 if is_minigame_playing(state) && is_minigame_timed_out(state) {
                     ui::update(state, Message::MiniGameTimeout)?;
+                }
+                // Check for mini-game transition auto-advance
+                if should_minigame_advance(state) {
+                    ui::update(state, Message::MiniGameNextScenario)?;
                 }
             }
         }

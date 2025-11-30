@@ -169,6 +169,9 @@ pub struct MiniGameSession {
 
     /// All available scenarios (reference)
     scenarios: Arc<Vec<Scenario>>,
+
+    /// When transition state started (for auto-advance)
+    transition_started_at: Option<Instant>,
 }
 
 impl MiniGameSession {
@@ -191,6 +194,7 @@ impl MiniGameSession {
             difficulty: DifficultyController::new(),
             state: MiniGameState::default(),
             scenarios,
+            transition_started_at: None,
         };
 
         // Pre-fill queue
@@ -336,6 +340,7 @@ impl MiniGameSession {
 
         // Transition state (success)
         self.state = MiniGameState::Transition { success: true };
+        self.transition_started_at = Some(Instant::now());
     }
 
     /// Complete transition and load next scenario
@@ -348,9 +353,22 @@ impl MiniGameSession {
     pub fn complete_transition(&mut self) -> Result<(), UserError> {
         if self.state.is_transition() {
             self.state = MiniGameState::Playing;
+            self.transition_started_at = None;
             self.load_next_scenario()?;
         }
         Ok(())
+    }
+
+    /// Check if transition delay has elapsed and should auto-advance
+    ///
+    /// Returns true if in transition state and delay (1 second) has passed.
+    pub fn should_advance_to_next(&self) -> bool {
+        if !self.state.is_transition() {
+            return false;
+        }
+        self.transition_started_at
+            .map(|t| t.elapsed() >= Duration::from_secs(1))
+            .unwrap_or(false)
     }
 
     /// Handle timeout for current scenario
@@ -382,10 +400,12 @@ impl MiniGameSession {
         if has_lives {
             // Continue to next scenario (failure transition)
             self.state = MiniGameState::Transition { success: false };
+            self.transition_started_at = Some(Instant::now());
         } else {
             // Game over
             self.state = MiniGameState::GameOver;
             self.current = None;
+            self.transition_started_at = None;
         }
     }
 

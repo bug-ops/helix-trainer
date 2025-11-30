@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-11-30
+
+### Added
+
+**Expanded Content** (#51)
+
+- **Training Scenarios**: Expanded from 25 to 78 scenarios (3.1x increase)
+  - `basic-movement.toml`: h, j, k, l character navigation (9 scenarios)
+  - `word-basics.toml`: w, b word navigation (7 scenarios)
+  - `line-navigation.toml`: 0, gg line/document navigation (7 scenarios)
+  - `combined.toml`: multi-key navigation challenges (8 scenarios)
+  - `precision.toml`: single-step precision movements (8 scenarios)
+  - `deletion.toml`: x, dd deletion operations (8 scenarios)
+  - `delete-advanced.toml`: advanced deletion patterns (6 scenarios)
+
+- **Daily Quests**: Expanded from 12 to 55 quest templates (4.6x increase)
+  - Easy (14): Movement commands (h, j, k, l, w, b, 0, gg, G), editing (x, dd, yy)
+  - Medium (23): Word navigation, insert/append modes, clipboard, undo/redo
+  - Hard (18): Marathons, speed runs, time challenges, exploration quests
+
 ## [0.4.0] - 2025-11-30
 
 ### 🎮 Phase 2.1: Mini-Games Mode (Arcade Training)

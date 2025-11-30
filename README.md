@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
 [![Release](https://img.shields.io/github/v/release/bug-ops/helix-trainer)](https://github.com/bug-ops/helix-trainer/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/bug-ops/helix-trainer/releases/tag/v0.4.0)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/bug-ops/helix-trainer/releases/tag/v0.4.1)
 
 **Master Helix editor keybindings through scientifically-optimized spaced repetition and gamified training.**
 
@@ -28,7 +28,7 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 - 🛡️ **Anti-Farming Protection** — Session penalties prevent XP exploitation
 - 📈 **Profile & Statistics** — Track your progress, view mastery levels, and see performance analytics
 
-### 🎮 Mini-Games Mode (NEW in v0.4.0!)
+### 🎮 Mini-Games Mode (NEW in v0.4.1!)
 - ⏱️ **Arcade Training** — 60-second timed sessions with automatic scenario progression
 - 🔥 **Streak Multiplier** — Build combos up to 5x for consecutive completions
 - ❤️ **Lives System** — Start with 3 lives, earn bonus lives at score milestones
@@ -40,7 +40,8 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 - 📋 **Rich Metadata** — Every scenario tagged with category, difficulty, taught commands, and practice focus
 - ⚡ **Real Helix Accuracy** — Uses official `helix-core` library (v25.07.1)
 - 🎮 **31 Commands** — Movement, editing, clipboard, undo/redo, repeat
-- 📚 **25 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
+- 📚 **78 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
+- 🎯 **55 Daily Quests** — Easy, medium, and hard challenges across all commands
 - 🔒 **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
 
 ---
@@ -59,15 +60,15 @@ Download for your platform from [**Releases**](https://github.com/bug-ops/helix-
 
 ```bash
 # GNU libc (most distributions)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.0-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.0-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.0-x86_64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.1-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.4.1-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.4.1-x86_64-unknown-linux-gnu
 ./helix-trainer
 
 # musl (Alpine Linux, static binary)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.0-x86_64-unknown-linux-musl.tar.gz
-tar -xzf helix-trainer-v0.4.0-x86_64-unknown-linux-musl.tar.gz
-cd helix-trainer-v0.4.0-x86_64-unknown-linux-musl
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.1-x86_64-unknown-linux-musl.tar.gz
+tar -xzf helix-trainer-v0.4.1-x86_64-unknown-linux-musl.tar.gz
+cd helix-trainer-v0.4.1-x86_64-unknown-linux-musl
 ./helix-trainer
 ```
 </details>
@@ -77,15 +78,15 @@ cd helix-trainer-v0.4.0-x86_64-unknown-linux-musl
 
 ```bash
 # GNU libc
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.0-aarch64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.0-aarch64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.0-aarch64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.1-aarch64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.4.1-aarch64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.4.1-aarch64-unknown-linux-gnu
 ./helix-trainer
 
 # musl
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.0-aarch64-unknown-linux-musl.tar.gz
-tar -xzf helix-trainer-v0.4.0-aarch64-unknown-linux-musl.tar.gz
-cd helix-trainer-v0.4.0-aarch64-unknown-linux-musl
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.1-aarch64-unknown-linux-musl.tar.gz
+tar -xzf helix-trainer-v0.4.1-aarch64-unknown-linux-musl.tar.gz
+cd helix-trainer-v0.4.1-aarch64-unknown-linux-musl
 ./helix-trainer
 ```
 </details>
@@ -95,15 +96,15 @@ cd helix-trainer-v0.4.0-aarch64-unknown-linux-musl
 
 ```bash
 # Apple Silicon (M1/M2/M3/M4)
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.0-aarch64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.4.0-aarch64-apple-darwin.tar.gz
-cd helix-trainer-v0.4.0-aarch64-apple-darwin
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.1-aarch64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.4.1-aarch64-apple-darwin.tar.gz
+cd helix-trainer-v0.4.1-aarch64-apple-darwin
 ./helix-trainer
 
 # Intel
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.0-x86_64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.4.0-x86_64-apple-darwin.tar.gz
-cd helix-trainer-v0.4.0-x86_64-apple-darwin
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.1-x86_64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.4.1-x86_64-apple-darwin.tar.gz
+cd helix-trainer-v0.4.1-x86_64-apple-darwin
 ./helix-trainer
 ```
 </details>
@@ -112,8 +113,8 @@ cd helix-trainer-v0.4.0-x86_64-apple-darwin
 <summary><b>Windows</b></summary>
 
 Download from [Releases page](https://github.com/bug-ops/helix-trainer/releases/latest):
-- **x86_64**: `helix-trainer-v0.4.0-x86_64-pc-windows-msvc.zip`
-- **ARM64**: `helix-trainer-v0.4.0-aarch64-pc-windows-msvc.zip`
+- **x86_64**: `helix-trainer-v0.4.1-x86_64-pc-windows-msvc.zip`
+- **ARM64**: `helix-trainer-v0.4.1-aarch64-pc-windows-msvc.zip`
 
 Extract and run `helix-trainer.exe`
 </details>
@@ -264,7 +265,7 @@ Duolingo-proven mechanics:
 - Performance benchmarks for filtering/sorting (<1ms for 1000 scenarios)
 - Automated scenario validation tests
 
-### ✅ Phase 2.1: Mini-Games Mode (COMPLETE - v0.4.0)
+### ✅ Phase 2.1: Mini-Games Mode (COMPLETE - v0.4.1)
 
 Arcade-style training with time pressure:
 
@@ -449,9 +450,9 @@ Licensed under MIT — see [LICENSE](LICENSE) for details.
 
 ```bash
 # Download and run
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.0-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.0-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.0-x86_64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.1-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.4.1-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.4.1-x86_64-unknown-linux-gnu
 ./helix-trainer
 ```
 

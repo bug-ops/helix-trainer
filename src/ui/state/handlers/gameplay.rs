@@ -57,7 +57,6 @@ fn process_session_result(
     state: &mut AppState,
 ) -> Result<bool, UserError> {
     use crate::game::SessionAfterAction;
-    use crate::ui::state::ResultsData;
 
     match session_result {
         SessionAfterAction::StillActive(s) => {
@@ -67,8 +66,11 @@ fn process_session_result(
         SessionAfterAction::Completed(s) => {
             let feedback = s.feedback().map_err(|_| UserError::OperationFailed)?;
             state.ui.last_feedback = Some(feedback.clone());
+            // Start success animation - keep Task screen, just mark completion time
+            // The event loop will transition to Results after 1.5s delay
             state.ui.completion_time = Some(std::time::Instant::now());
-            state.screen = TypedScreen::Results(ResultsData::from_completed(s, feedback)?);
+            // Store completed session for later transition by CompleteScenario handler
+            state.game.pending_completed_session = Some(s);
             Ok(true)
         }
     }
@@ -150,10 +152,8 @@ pub fn handle_execute_command(
         let result = session.record_action(command.to_string())?;
         session_completed = process_session_result(result, &mut task_data, state)?;
 
-        // Restore screen if not completed
-        if !session_completed {
-            state.screen = TypedScreen::Task(task_data);
-        }
+        // Always restore Task screen - even when completed, we show success popup
+        state.screen = TypedScreen::Task(task_data);
     } else {
         // Normal mode: handle command buffer for multi-key commands
         task_data.command_buffer.push_str(&command);
@@ -187,10 +187,8 @@ pub fn handle_execute_command(
                 let result = session.record_action(cmd_string)?;
                 session_completed = process_session_result(result, &mut task_data, state)?;
 
-                // Restore screen if not completed
-                if !session_completed {
-                    state.screen = TypedScreen::Task(task_data);
-                }
+                // Always restore Task screen - even when completed, we show success popup
+                state.screen = TypedScreen::Task(task_data);
             }
             None => {
                 // Waiting for more keys

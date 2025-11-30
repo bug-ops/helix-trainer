@@ -750,7 +750,15 @@ mod tests {
         )
         .unwrap();
 
-        // After completing the scenario, should automatically transition to Results
+        // After completing the scenario, completion_time is set (success animation starts)
+        // Screen stays on Task until CompleteScenario message is sent after delay
+        assert!(state.ui.completion_time.is_some());
+        assert!(matches!(state.screen, TypedScreen::Task(_)));
+
+        // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        // Now should be on Results screen
         assert!(matches!(state.screen, TypedScreen::Results(_)));
     }
 
@@ -1343,20 +1351,24 @@ mod tests {
         update(&mut state, Message::StartScenario(0)).unwrap();
 
         // Execute command to complete quest through message
-        // This will auto-complete the scenario and transition to Results screen
+        // This will mark completion_time and stay on Task screen for success animation
         update(
             &mut state,
             Message::ExecuteCommand(std::borrow::Cow::Borrowed("dd")),
         )
         .unwrap();
 
-        // After auto-completion, should be on Results screen
+        // After completing scenario, completion_time is set, screen stays on Task
         assert!(
-            matches!(state.screen, TypedScreen::Results(_)),
-            "Should be on Results screen after auto-completion"
+            state.ui.completion_time.is_some(),
+            "completion_time should be set after completing scenario"
+        );
+        assert!(
+            matches!(state.screen, TypedScreen::Task(_)),
+            "Should stay on Task screen for success animation"
         );
 
-        // Verify quest was completed
+        // Verify quest was completed during gameplay
         {
             let profile = state.progress.profile.borrow();
             let quest = &profile.daily_quests[0];
@@ -1366,9 +1378,14 @@ mod tests {
             );
         }
 
-        // Note: XP breakdown and quest bonuses are only populated by CompleteScenario handler,
-        // which is not automatically triggered during auto-completion.
-        // This is tested separately in other XP breakdown tests.
+        // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        // Now should be on Results screen
+        assert!(
+            matches!(state.screen, TypedScreen::Results(_)),
+            "Should be on Results screen after CompleteScenario"
+        );
     }
 
     #[test]
@@ -1450,13 +1467,18 @@ mod tests {
         )
         .unwrap();
 
-        // After executing the solution, scenario should auto-complete and transition to Results
+        // After executing the solution, completion_time is set (success animation)
+        // Screen stays on Task until CompleteScenario message is sent after delay
         assert!(
-            matches!(state.screen, TypedScreen::Results(_)),
-            "Should be on Results screen after completing scenario"
+            state.ui.completion_time.is_some(),
+            "completion_time should be set after completing scenario"
+        );
+        assert!(
+            matches!(state.screen, TypedScreen::Task(_)),
+            "Should stay on Task screen during success animation"
         );
 
-        // Quest should be completed (command was tracked)
+        // Quest should be completed (command was tracked during gameplay)
         {
             let profile = state.progress.profile.borrow();
             let quest = &profile.daily_quests[0];
@@ -1467,15 +1489,14 @@ mod tests {
             );
         }
 
-        // Verify auto-completion worked and we're on Results screen
+        // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
+        update(&mut state, Message::CompleteScenario).unwrap();
+
+        // Now should be on Results screen
         assert!(
             matches!(state.screen, TypedScreen::Results(_)),
-            "Should be on Results screen after auto-completion"
+            "Should be on Results screen after CompleteScenario"
         );
-
-        // Test documents that quest completion tracking works during gameplay.
-        // Full XP/quest reward processing requires explicit CompleteScenario message,
-        // which is tested separately in other tests.
     }
 
     // ============================================================================

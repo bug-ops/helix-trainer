@@ -85,16 +85,28 @@ fn test_replace_command_multi_key() {
     // Second key: 'e' - should complete the 'r' command
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("e"))).unwrap();
 
-    // After typestate refactoring, the session completes when target is reached
-    // Check screen state and verify completion
+    // After typestate refactoring and success popup changes:
+    // - Session completes when target is reached
+    // - We stay on Task screen with completion_time set
+    // - pending_completed_session contains the completed session
+    // - After delay, CompleteScenario transitions to Results
     match &state.screen {
         TypedScreen::Task(task_data) => {
-            // Session still active (if target was different)
+            // Buffer should be cleared
             assert_eq!(task_data.command_buffer, "");
-            assert_eq!(task_data.session.current_state().content(), "Hello");
+            // Check completion via pending session or completion_time
+            if state.ui.completion_time.is_some() {
+                // Scenario completed - check pending session has correct content
+                let pending = state.game.pending_completed_session.as_ref();
+                assert!(pending.is_some(), "Should have pending completed session");
+                assert_eq!(pending.unwrap().current_state().content(), "Hello");
+            } else {
+                // Scenario not yet complete - check session content
+                assert_eq!(task_data.session.current_state().content(), "Hello");
+            }
         }
         TypedScreen::Results(results_data) => {
-            // Session completed!
+            // Session completed and transitioned to Results
             assert!(results_data.feedback.success);
         }
         _ => panic!("Should be on Task or Results screen"),

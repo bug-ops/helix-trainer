@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 /// File wrapper for quest templates
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct QuestsFile {
     pub metadata: QuestsMetadata,
     pub quests: Vec<QuestTemplate>,
@@ -19,9 +20,11 @@ pub struct QuestsFile {
 
 /// File-level metadata
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct QuestsMetadata {
+    #[serde(deserialize_with = "validate_version_field")]
     pub version: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "validate_locale_field")]
     pub locale: Option<String>,
 }
 
@@ -91,6 +94,7 @@ pub enum QuestParams {
 
 /// Optional XP configuration override
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct XpConfig {
     #[serde(default)]
     pub base_reward: Option<u32>,
@@ -98,6 +102,7 @@ pub struct XpConfig {
 
 /// Quest unlock conditions
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct QuestConditions {
     #[serde(default)]
     pub min_level: Option<u32>,
@@ -116,6 +121,11 @@ where
 {
     let s = String::deserialize(deserializer)?;
 
+    // Validate ID is not empty
+    if s.is_empty() {
+        return Err(serde::de::Error::custom("Invalid ID: cannot be empty"));
+    }
+
     // Validate ID format: alphanumeric with underscores, max 64 chars
     if s.len() > 64 || !s.chars().all(|c| c.is_alphanumeric() || c == '_') {
         return Err(serde::de::Error::custom(
@@ -124,6 +134,53 @@ where
     }
 
     Ok(s)
+}
+
+/// Custom deserialization for version field to validate format
+fn validate_version_field<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    // Version must not be empty and max MAX_VERSION_LENGTH chars
+    if s.is_empty() {
+        return Err(serde::de::Error::custom("Invalid version: cannot be empty"));
+    }
+    if s.len() > MAX_VERSION_LENGTH {
+        return Err(serde::de::Error::custom(format!(
+            "Invalid version: max {} characters",
+            MAX_VERSION_LENGTH
+        )));
+    }
+
+    Ok(s)
+}
+
+/// Custom deserialization for locale field to validate format
+fn validate_locale_field<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+
+    if let Some(ref locale) = opt {
+        // Locale should be 1-MAX_LOCALE_LENGTH chars (e.g., "en", "ru", "en_US")
+        if locale.is_empty() || locale.len() > MAX_LOCALE_LENGTH {
+            return Err(serde::de::Error::custom(format!(
+                "Invalid locale: must be 1-{} characters",
+                MAX_LOCALE_LENGTH
+            )));
+        }
+        // Only allow alphanumeric and underscore
+        if !locale.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            return Err(serde::de::Error::custom(
+                "Invalid locale: must be alphanumeric with underscores",
+            ));
+        }
+    }
+
+    Ok(opt)
 }
 
 /// Quest loader with security validation
@@ -217,10 +274,10 @@ impl QuestLoader {
     /// Validate a single quest template for security and correctness
     fn validate_quest(&self, quest: &QuestTemplate) -> Result<(), SecurityError> {
         // Validate string lengths
-        if quest.name.len() > 100 {
+        if quest.name.len() > MAX_QUEST_NAME_LENGTH {
             return Err(SecurityError::InvalidInput("Quest name too long".into()));
         }
-        if quest.description.len() > 500 {
+        if quest.description.len() > MAX_QUEST_DESCRIPTION_LENGTH {
             return Err(SecurityError::InvalidInput(
                 "Quest description too long".into(),
             ));
@@ -237,15 +294,24 @@ impl QuestLoader {
         }
 
         // Validate conditions
-        if quest.conditions.requires_commands.len() > 20 {
+        if quest.conditions.requires_commands.len() > MAX_REQUIRED_CONDITIONS {
             return Err(SecurityError::InvalidInput(
                 "Too many required commands".into(),
             ));
         }
-        if quest.conditions.requires_scenarios.len() > 20 {
+        if quest.conditions.requires_scenarios.len() > MAX_REQUIRED_CONDITIONS {
             return Err(SecurityError::InvalidInput(
                 "Too many required scenarios".into(),
             ));
+        }
+
+        // Validate min_level <= max_level consistency
+        if let (Some(min), Some(max)) = (quest.conditions.min_level, quest.conditions.max_level) {
+            if min > max {
+                return Err(SecurityError::InvalidInput(
+                    "min_level cannot be greater than max_level".into(),
+                ));
+            }
         }
 
         // Validate that params match quest type

@@ -180,6 +180,21 @@ pub mod limits {
 
     /// Maximum custom XP reward
     pub const MAX_CUSTOM_XP_REWARD: u32 = 1000;
+
+    /// Maximum quest name length
+    pub const MAX_QUEST_NAME_LENGTH: usize = 100;
+
+    /// Maximum quest description length
+    pub const MAX_QUEST_DESCRIPTION_LENGTH: usize = 500;
+
+    /// Maximum version string length
+    pub const MAX_VERSION_LENGTH: usize = 20;
+
+    /// Maximum locale string length
+    pub const MAX_LOCALE_LENGTH: usize = 10;
+
+    /// Maximum required conditions count
+    pub const MAX_REQUIRED_CONDITIONS: usize = 20;
 }
 
 /// Path validation utilities

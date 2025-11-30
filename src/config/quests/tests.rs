@@ -222,6 +222,169 @@ fn test_quest_template_to_quest_conversion() {
 }
 
 #[test]
+fn test_validate_id_field_empty() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(deserialize_with = "validate_id_field")]
+        id: String,
+    }
+
+    let invalid = r#"id = """#;
+    let result: Result<Test, _> = toml::from_str(invalid);
+    assert!(result.is_err(), "Empty ID should be rejected");
+}
+
+#[test]
+fn test_quest_params_time_invested() {
+    let toml_str = r#"
+target_minutes = 10
+"#;
+    let params: QuestParams = toml::from_str(toml_str).unwrap();
+    match params {
+        QuestParams::TimeInvested { target_minutes } => {
+            assert_eq!(target_minutes, 10);
+        }
+        _ => panic!("Wrong variant"),
+    }
+}
+
+#[test]
+fn test_quest_params_exploration() {
+    let toml_str = r#"
+target_commands = 15
+"#;
+    let params: QuestParams = toml::from_str(toml_str).unwrap();
+    match params {
+        QuestParams::Exploration { target_commands } => {
+            assert_eq!(target_commands, 15);
+        }
+        _ => panic!("Wrong variant"),
+    }
+}
+
+#[test]
+fn test_quest_conditions_with_values() {
+    let toml_str = r#"
+min_level = 5
+max_level = 20
+requires_commands = ["dd", "yy"]
+requires_scenarios = ["basic_001"]
+"#;
+    let conditions: QuestConditions = toml::from_str(toml_str).unwrap();
+    assert_eq!(conditions.min_level, Some(5));
+    assert_eq!(conditions.max_level, Some(20));
+    assert_eq!(conditions.requires_commands.len(), 2);
+    assert_eq!(conditions.requires_scenarios.len(), 1);
+}
+
+#[test]
+fn test_metadata_version_validation() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(deserialize_with = "validate_version_field")]
+        version: String,
+    }
+
+    // Valid version
+    let valid = r#"version = "1.0""#;
+    let result: Result<Test, _> = toml::from_str(valid);
+    assert!(result.is_ok());
+
+    // Empty version should fail
+    let empty = r#"version = """#;
+    let result: Result<Test, _> = toml::from_str(empty);
+    assert!(result.is_err(), "Empty version should be rejected");
+
+    // Too long version should fail
+    let too_long = r#"version = "1.0.0.0.0.0.0.0.0.0.0""#;
+    let result: Result<Test, _> = toml::from_str(too_long);
+    assert!(result.is_err(), "Too long version should be rejected");
+}
+
+#[test]
+fn test_metadata_locale_validation() {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Test {
+        #[serde(default, deserialize_with = "validate_locale_field")]
+        locale: Option<String>,
+    }
+
+    // Valid locale
+    let valid = r#"locale = "en""#;
+    let result: Result<Test, _> = toml::from_str(valid);
+    assert!(result.is_ok());
+
+    // Valid locale with underscore
+    let valid_underscore = r#"locale = "en_US""#;
+    let result: Result<Test, _> = toml::from_str(valid_underscore);
+    assert!(result.is_ok());
+
+    // Invalid locale with hyphen
+    let invalid_hyphen = r#"locale = "en-US""#;
+    let result: Result<Test, _> = toml::from_str(invalid_hyphen);
+    assert!(result.is_err(), "Locale with hyphen should be rejected");
+}
+
+#[test]
+fn test_deny_unknown_fields_quests_file() {
+    let invalid_toml = r#"
+[metadata]
+version = "1.0"
+unknown_field = "value"
+
+[[quests]]
+id = "test"
+name = "Test"
+description = "Test"
+type = "command_practice"
+difficulty = "easy"
+
+[quests.params]
+command = "dd"
+target = 3
+"#;
+    let result: Result<QuestsFile, _> = toml::from_str(invalid_toml);
+    assert!(
+        result.is_err(),
+        "Unknown field in metadata should be rejected"
+    );
+}
+
+#[test]
+fn test_deny_unknown_fields_quest_template() {
+    let invalid_toml = r#"
+[metadata]
+version = "1.0"
+
+[[quests]]
+id = "test"
+name = "Test"
+description = "Test"
+type = "command_practice"
+difficulty = "easy"
+unknown_field = "value"
+
+[quests.params]
+command = "dd"
+target = 3
+"#;
+    let result: Result<QuestsFile, _> = toml::from_str(invalid_toml);
+    assert!(
+        result.is_err(),
+        "Unknown field in quest template should be rejected"
+    );
+}
+
+#[test]
 fn test_validate_all_quest_templates() {
     use std::collections::{HashMap, HashSet};
 

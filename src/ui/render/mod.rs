@@ -7,6 +7,8 @@
 mod editor;
 mod helpers;
 mod menu;
+mod minigame;
+mod mode_selection;
 mod popups;
 mod profile;
 mod results;
@@ -32,6 +34,9 @@ use ratatui::Frame;
 pub fn render(frame: &mut Frame, state: &mut AppState) {
     // Use TypedScreen pattern for type-safe dispatch
     match &state.screen {
+        crate::ui::state::TypedScreen::ModeSelection(_) => {
+            mode_selection::render_mode_selection(frame, state)
+        }
         crate::ui::state::TypedScreen::Menu(_) => menu::render_main_menu(frame, state),
         crate::ui::state::TypedScreen::Task(_) => task::render_task_screen(frame, state),
         crate::ui::state::TypedScreen::Results(_) => results::render_results_screen(frame, state),
@@ -40,5 +45,6 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             statistics::render_statistics_screen(frame, state)
         }
         crate::ui::state::TypedScreen::Review(_) => review::render_review_screen(frame, state),
+        crate::ui::state::TypedScreen::MiniGame(_) => minigame::render_minigame(frame, state),
     }
 }

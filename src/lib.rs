@@ -27,5 +27,6 @@ pub mod game;
 pub mod gamification;
 pub mod helix;
 pub mod learning;
+pub mod minigame;
 pub mod security;
 pub mod ui;

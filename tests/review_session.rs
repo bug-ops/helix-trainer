@@ -44,7 +44,7 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
 #[test]
 fn test_start_review_session_with_due_reviews() {
     let mut state = create_test_app_state_with_reviews(5);
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     assert!(state.game.review_session.is_none());
 
     // Start review session
@@ -64,13 +64,13 @@ fn test_start_review_session_with_due_reviews() {
 #[test]
 fn test_start_review_session_with_zero_due_reviews() {
     let mut state = create_test_app_state_with_reviews(0);
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
 
     // Try to start review session with no due reviews
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    // Should stay on MainMenu (no reviews available)
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    // Should stay on ModeSelection (no reviews available)
+    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     assert!(state.game.review_session.is_none());
 }
 
@@ -336,9 +336,9 @@ fn test_state_transition_review_to_abandon_to_menu() {
 fn test_state_transition_menu_to_review_no_due() {
     let mut state = create_test_app_state_with_reviews(0);
 
-    // MainMenu → (Try Review) → Stay on MainMenu
+    // ModeSelection → (Try Review) → Stay on ModeSelection
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
 }
 
 // ============================================================================
@@ -604,8 +604,8 @@ fn test_complete_flow_zero_reviews() {
     // Try to start review with no due reviews
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    // Should stay on menu
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    // Should stay on ModeSelection (initial screen)
+    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     assert!(state.game.review_session.is_none());
 }
 

@@ -3,7 +3,10 @@
 //! Handles screen transitions and application lifecycle messages
 
 use crate::security::UserError;
-use crate::ui::state::{AppState, MenuData, ProfileData, Screen, StatisticsData, TypedScreen};
+use crate::ui::state::{
+    AppState, MenuData, MiniGameData, ModeSelectionData, ProfileData, Screen, StatisticsData,
+    TypedScreen,
+};
 
 /// Handle QuitApp message
 ///
@@ -19,9 +22,11 @@ pub fn handle_quit_app(state: &mut AppState) -> Result<(), UserError> {
 pub fn handle_navigate_to(state: &mut AppState, screen: Screen) -> Result<(), UserError> {
     // Convert Screen enum to TypedScreen variant
     state.screen = match screen {
+        Screen::ModeSelection => TypedScreen::ModeSelection(ModeSelectionData::default()),
         Screen::MainMenu => TypedScreen::Menu(MenuData::default()),
         Screen::Profile => TypedScreen::Profile(ProfileData::default()),
         Screen::Statistics => TypedScreen::Statistics(StatisticsData::default()),
+        Screen::MiniGame => TypedScreen::MiniGame(MiniGameData::default()),
         // NOTE: Task, Results, and Review screens require data and should not be
         // navigated to via NavigateTo - they have their own handlers
         Screen::Task | Screen::Results | Screen::Review => {

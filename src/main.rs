@@ -143,8 +143,11 @@ async fn run_async_event_loop(
     // Create event stream from crossterm
     let mut event_stream = EventStream::new();
 
-    // Tick interval for animations (100ms)
+    // Tick interval for animations and mini-game (100ms)
     let mut tick_interval = tokio::time::interval(Duration::from_millis(100));
+
+    // Countdown tick interval for mini-game (1 second)
+    let mut countdown_tick_interval = tokio::time::interval(Duration::from_secs(1));
 
     loop {
         // Render the current state
@@ -194,9 +197,17 @@ async fn run_async_event_loop(
                 handle_data_message(state, data_msg)?;
             }
 
-            // Tick for animations (though we don't have loading spinners yet)
+            // Countdown tick for mini-game (1 second)
+            _ = countdown_tick_interval.tick(), if is_minigame_countdown(state) => {
+                ui::update(state, Message::MiniGameTick)?;
+            }
+
+            // Fast tick for animations and mini-game timeout checking (100ms)
             _ = tick_interval.tick() => {
-                // Future use: update loading spinners
+                // Check for mini-game timeout
+                if is_minigame_playing(state) && is_minigame_timed_out(state) {
+                    ui::update(state, Message::MiniGameTimeout)?;
+                }
             }
         }
     }
@@ -281,6 +292,7 @@ fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result<()>
 /// application messages based on the current screen.
 fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
     match &state.screen {
+        TypedScreen::ModeSelection(_) => handle_mode_selection_keys(key),
         TypedScreen::Menu(_) => handle_menu_keys(key, state),
         TypedScreen::Task(_) => handle_task_keys(key, state),
         TypedScreen::Results(_) => handle_results_keys(key),
@@ -288,6 +300,7 @@ fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
             handle_profile_stats_keys(key, state)
         }
         TypedScreen::Review(_) => handle_review_keys(key),
+        TypedScreen::MiniGame(_) => handle_minigame_keys(key, state),
     }
 }
 
@@ -471,6 +484,88 @@ fn handle_review_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Char('q') => Some(Message::QuitApp),
         _ => None,
     }
+}
+
+/// Handle keyboard events on mode selection screen
+fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Up | KeyCode::Char('k') => Some(Message::ModeSelectionUp),
+        KeyCode::Down | KeyCode::Char('j') => Some(Message::ModeSelectionDown),
+        KeyCode::Enter => Some(Message::ModeSelectionSelect),
+        _ => None,
+    }
+}
+
+/// Handle keyboard events on mini-game screen
+fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+    // Check if game over or paused
+    let session = state.game.minigame_session.as_ref()?;
+
+    if session.state().is_game_over() {
+        // Game over - only allow quit or back to menu
+        return match key.code {
+            KeyCode::Char('q') => Some(Message::QuitApp),
+            KeyCode::Esc | KeyCode::Char('m') => Some(Message::MiniGameBackToMenu),
+            _ => None,
+        };
+    }
+
+    if session.state().is_paused() {
+        // Paused - allow resume, quit, or back to menu
+        return match key.code {
+            KeyCode::Esc => Some(Message::ResumeMiniGame),
+            KeyCode::Char('q') => Some(Message::MiniGameBackToMenu),
+            _ => None,
+        };
+    }
+
+    // Countdown or playing state - handle normal keys
+    match key.code {
+        KeyCode::Esc => Some(Message::PauseMiniGame),
+        KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Message::QuitApp)
+        }
+        _ => {
+            // Map to Helix command if in playing state
+            if session.state().is_playing() {
+                map_key_to_helix_command(key)
+                    .map(|cmd| Message::MiniGameCommand(Cow::Borrowed(cmd)))
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// Check if mini-game is in countdown state
+fn is_minigame_countdown(state: &AppState) -> bool {
+    state
+        .game
+        .minigame_session
+        .as_ref()
+        .map(|s| s.state().is_countdown())
+        .unwrap_or(false)
+}
+
+/// Check if mini-game is in playing state
+fn is_minigame_playing(state: &AppState) -> bool {
+    state
+        .game
+        .minigame_session
+        .as_ref()
+        .map(|s| s.state().is_playing())
+        .unwrap_or(false)
+}
+
+/// Check if current mini-game scenario has timed out
+fn is_minigame_timed_out(state: &AppState) -> bool {
+    state
+        .game
+        .minigame_session
+        .as_ref()
+        .map(|s| s.is_timed_out())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

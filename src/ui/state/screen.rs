@@ -15,7 +15,10 @@ use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 /// at compile time that the required data exists.
 #[derive(Debug)]
 pub enum TypedScreen {
-    /// Main menu with selected item
+    /// Mode selection screen (Training vs Arcade)
+    ModeSelection(ModeSelectionData),
+
+    /// Main menu with selected item (Training Mode scenarios)
     Menu(MenuData),
 
     /// Active game session (guaranteed to have session)
@@ -32,30 +35,37 @@ pub enum TypedScreen {
 
     /// Review session screen
     Review(ReviewData),
+
+    /// Mini-game mode (arcade-style training)
+    MiniGame(MiniGameData),
 }
 
 impl TypedScreen {
     /// Get screen type for display/logging
     pub fn screen_type(&self) -> &'static str {
         match self {
+            Self::ModeSelection(_) => "ModeSelection",
             Self::Menu(_) => "Menu",
             Self::Task(_) => "Task",
             Self::Results(_) => "Results",
             Self::Profile(_) => "Profile",
             Self::Statistics(_) => "Statistics",
             Self::Review(_) => "Review",
+            Self::MiniGame(_) => "MiniGame",
         }
     }
 
     /// Get the corresponding Screen enum value (for backward compatibility)
     pub fn to_screen_enum(&self) -> super::Screen {
         match self {
+            Self::ModeSelection(_) => super::Screen::ModeSelection,
             Self::Menu(_) => super::Screen::MainMenu,
             Self::Task(_) => super::Screen::Task,
             Self::Results(_) => super::Screen::Results,
             Self::Profile(_) => super::Screen::Profile,
             Self::Statistics(_) => super::Screen::Statistics,
             Self::Review(_) => super::Screen::Review,
+            Self::MiniGame(_) => super::Screen::MiniGame,
         }
     }
 }
@@ -226,6 +236,20 @@ impl ReviewData {
     pub fn new(session: ReviewSessionState) -> Self {
         Self { session }
     }
+}
+
+/// Data required for mode selection screen
+#[derive(Debug, Clone, Default)]
+pub struct ModeSelectionData {
+    /// Index of selected mode (0 = Training, 1 = Arcade)
+    pub selected_mode: usize,
+}
+
+/// Data required for mini-game screen
+#[derive(Debug, Clone, Default)]
+pub struct MiniGameData {
+    /// Placeholder - session is stored in GameState.minigame_session
+    _placeholder: (),
 }
 
 #[cfg(test)]

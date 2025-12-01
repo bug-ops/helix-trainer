@@ -84,11 +84,17 @@ pub enum SecurityError {
 
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
 }
 
 /// User-facing error messages (sanitized)
 #[derive(Error, Debug)]
 pub enum UserError {
+    #[error("Invalid application state. Please restart the application.")]
+    InvalidState { message: String },
+
     #[error("Failed to load scenario file. Please check the file path and format.")]
     ScenarioLoadError,
 
@@ -103,6 +109,15 @@ pub enum UserError {
 
     #[error("Session has expired. Please start a new session.")]
     SessionExpired,
+}
+
+impl UserError {
+    /// Create an InvalidState error with a descriptive message
+    pub fn invalid_state(message: &str) -> Self {
+        Self::InvalidState {
+            message: message.to_string(),
+        }
+    }
 }
 
 impl From<SecurityError> for UserError {
@@ -126,6 +141,8 @@ impl From<SecurityError> for UserError {
             SecurityError::ProcessSpawnFailed(_) => UserError::EditorStartFailed,
 
             SecurityError::SessionTimeout(_) => UserError::SessionExpired,
+
+            SecurityError::InvalidState(msg) => UserError::InvalidState { message: msg },
 
             _ => UserError::OperationFailed,
         }

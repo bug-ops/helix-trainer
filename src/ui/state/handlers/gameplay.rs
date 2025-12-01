@@ -4,7 +4,7 @@
 
 use crate::helix::commands::*;
 use crate::security::UserError;
-use crate::ui::state::{AppState, Message, TypedScreen, update};
+use crate::ui::state::{AppState, HandlerOutcome, Message, TypedScreen, update};
 use std::time::Duration;
 
 /// Format a key command for display in key history
@@ -99,17 +99,19 @@ fn process_session_result(
 /// Handle ShowHint message
 ///
 /// Toggles hint panel visibility and fetches next hint
-pub fn handle_show_hint(state: &mut AppState) -> Result<(), UserError> {
+///
+/// Note: This handler operates on TaskData screen, so it uses AppState to access the screen
+pub fn handle_show_hint(state: &mut AppState) -> Result<HandlerOutcome, UserError> {
     // Only handle if we're on Task screen
     let TypedScreen::Task(task_data) = &mut state.screen else {
-        return Ok(()); // Not on task screen
+        return Ok(HandlerOutcome::Stay); // Not on task screen
     };
 
     // If hint panel is already visible, close it (toggle behavior)
     if task_data.show_hint_panel {
         task_data.show_hint_panel = false;
         task_data.current_hint = None;
-        return Ok(());
+        return Ok(HandlerOutcome::Stay);
     }
 
     // Otherwise, try to show next hint
@@ -117,19 +119,22 @@ pub fn handle_show_hint(state: &mut AppState) -> Result<(), UserError> {
         task_data.current_hint = Some(hint.clone());
         task_data.show_hint_panel = true;
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Handle ExecuteCommand message
 ///
 /// Processes user commands in normal or insert mode, tracks for quests
+///
+/// Note: This handler operates on TaskData screen and calls update() for quest progress,
+/// so it requires full AppState access
 pub fn handle_execute_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
-) -> Result<(), UserError> {
+) -> Result<HandlerOutcome, UserError> {
     // Only handle if we're on Task screen
     if !matches!(state.screen, TypedScreen::Task(_)) {
-        return Ok(()); // Not on task screen
+        return Ok(HandlerOutcome::Stay); // Not on task screen
     }
 
     // Temporarily replace screen with a placeholder to get ownership
@@ -188,7 +193,7 @@ pub fn handle_execute_command(
                 // Invalid sequence - clear buffer and restore state
                 task_data.clear_buffer();
                 state.screen = TypedScreen::Task(task_data);
-                return Ok(());
+                return Ok(HandlerOutcome::Stay);
             }
             Some(cmd) => {
                 // Complete command - execute it
@@ -231,5 +236,5 @@ pub fn handle_execute_command(
         )?;
     }
 
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }

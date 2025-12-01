@@ -1,62 +1,99 @@
 //! Message handlers for mode selection screen
+//!
+//! Type-safe handlers that receive ModeSelectionData directly instead of
+//! performing runtime checks on AppState.
 
 use crate::security::UserError;
-use crate::ui::state::{AppState, MenuData, TypedScreen};
+use crate::ui::state::{
+    HandlerContext, HandlerOutcome, MenuData, MiniGameData, ModeSelectionData, TypedScreen,
+};
 
 /// Handle mode selection up navigation
+///
+/// Type-safe handler that only accepts ModeSelectionData, ensuring compile-time
+/// guarantee that it's called on the correct screen.
 pub(in crate::ui::state) fn handle_mode_selection_up(
-    state: &mut AppState,
-) -> Result<(), UserError> {
-    if let TypedScreen::ModeSelection(mode_data) = &mut state.screen
-        && mode_data.selected_mode > 0
-    {
-        mode_data.selected_mode -= 1;
+    data: &mut ModeSelectionData,
+) -> Result<HandlerOutcome, UserError> {
+    if data.selected_mode > 0 {
+        data.selected_mode -= 1;
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Handle mode selection down navigation
+///
+/// Type-safe handler that only accepts ModeSelectionData.
 pub(in crate::ui::state) fn handle_mode_selection_down(
-    state: &mut AppState,
-) -> Result<(), UserError> {
-    if let TypedScreen::ModeSelection(mode_data) = &mut state.screen {
-        // Only 2 modes: Training (0) and Arcade (1)
-        if mode_data.selected_mode < 1 {
-            mode_data.selected_mode += 1;
-        }
+    data: &mut ModeSelectionData,
+) -> Result<HandlerOutcome, UserError> {
+    // Only 2 modes: Training (0) and Arcade (1)
+    if data.selected_mode < 1 {
+        data.selected_mode += 1;
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Handle mode selection confirmation
+///
+/// Type-safe handler that transitions to the selected mode screen.
+/// Uses HandlerContext to delegate to other handlers.
 pub(in crate::ui::state) fn handle_mode_selection_select(
-    state: &mut AppState,
-) -> Result<(), UserError> {
-    if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        match mode_data.selected_mode {
-            0 => handle_select_training_mode(state),
-            1 => handle_select_arcade_mode(state),
-            _ => Ok(()), // Invalid selection, do nothing
-        }
-    } else {
-        Ok(())
+    data: &ModeSelectionData,
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    match data.selected_mode {
+        0 => handle_select_training_mode(ctx),
+        1 => handle_select_arcade_mode(ctx),
+        _ => Ok(HandlerOutcome::Stay), // Invalid selection, do nothing
     }
 }
 
 /// Handle selecting Training Mode
+///
+/// Transitions to the main menu screen.
 pub(in crate::ui::state) fn handle_select_training_mode(
-    state: &mut AppState,
-) -> Result<(), UserError> {
-    state.screen = TypedScreen::Menu(MenuData::default());
-    Ok(())
+    _ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+        MenuData::default(),
+    ))))
 }
 
 /// Handle selecting Arcade Mode
+///
+/// Transitions to the mini-game screen.
 pub(in crate::ui::state) fn handle_select_arcade_mode(
-    state: &mut AppState,
-) -> Result<(), UserError> {
-    // Delegate to start_minigame handler
-    super::minigame::handle_start_minigame(state)
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    // Create mini-game session with available scenarios
+    let scenarios: Vec<crate::config::Scenario> = ctx
+        .game
+        .scenario_collection
+        .get_filtered()
+        .into_iter()
+        .cloned()
+        .collect();
+
+    if scenarios.is_empty() {
+        tracing::warn!("No scenarios available for mini-game");
+        // Still navigate to screen, renderer will show error
+        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
+            MiniGameData::default(),
+        ))));
+    }
+
+    let session = crate::minigame::MiniGameSession::new(std::sync::Arc::new(scenarios));
+    ctx.game.minigame_session = Some(session);
+
+    // Start the game (begins countdown)
+    if let Some(ref mut session) = ctx.game.minigame_session {
+        session.start();
+    }
+
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
+        MiniGameData::default(),
+    ))))
 }
 
 #[cfg(test)]
@@ -64,131 +101,112 @@ mod tests {
     use super::*;
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
-    use crate::ui::state::{ConfigState, GameState, ModeSelectionData, ProgressState, UIState};
+    use crate::ui::state::{ConfigState, GameState, ProgressState, UIState};
 
-    fn create_test_state() -> AppState {
-        AppState {
-            screen: TypedScreen::ModeSelection(ModeSelectionData::default()),
-            ui: UIState::new(),
-            game: GameState::new(vec![]),
-            progress: ProgressState::new(
+    fn create_test_context() -> (UIState, GameState, ProgressState, ConfigState) {
+        (
+            UIState::new(),
+            GameState::new(vec![]),
+            ProgressState::new(
                 UserProfile::new(),
                 PerformanceTracker::new(),
                 ProfileStorage::new(),
             ),
-            config: ConfigState::default(),
-        }
+            ConfigState::default(),
+        )
     }
 
     #[test]
     fn test_mode_selection_up() {
-        let mut state = create_test_state();
-        if let TypedScreen::ModeSelection(mode_data) = &mut state.screen {
-            mode_data.selected_mode = 1; // Start at Arcade
-        }
+        let mut data = ModeSelectionData { selected_mode: 1 }; // Start at Arcade
 
-        handle_mode_selection_up(&mut state).unwrap();
+        let outcome = handle_mode_selection_up(&mut data).unwrap();
 
-        if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-            assert_eq!(mode_data.selected_mode, 0); // Should move to Training
-        } else {
-            panic!("Should be on ModeSelection screen");
-        }
+        assert!(outcome.is_stay());
+        assert_eq!(data.selected_mode, 0); // Should move to Training
     }
 
     #[test]
     fn test_mode_selection_up_at_top() {
-        let mut state = create_test_state();
-        // Already at top (0)
+        let mut data = ModeSelectionData::default(); // Already at top (0)
 
-        handle_mode_selection_up(&mut state).unwrap();
+        let outcome = handle_mode_selection_up(&mut data).unwrap();
 
-        if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-            assert_eq!(mode_data.selected_mode, 0); // Should stay at 0
-        } else {
-            panic!("Should be on ModeSelection screen");
-        }
+        assert!(outcome.is_stay());
+        assert_eq!(data.selected_mode, 0); // Should stay at 0
     }
 
     #[test]
     fn test_mode_selection_down() {
-        let mut state = create_test_state();
-        // Start at 0 (Training)
+        let mut data = ModeSelectionData::default(); // Start at 0 (Training)
 
-        handle_mode_selection_down(&mut state).unwrap();
+        let outcome = handle_mode_selection_down(&mut data).unwrap();
 
-        if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-            assert_eq!(mode_data.selected_mode, 1); // Should move to Arcade
-        } else {
-            panic!("Should be on ModeSelection screen");
-        }
+        assert!(outcome.is_stay());
+        assert_eq!(data.selected_mode, 1); // Should move to Arcade
     }
 
     #[test]
     fn test_mode_selection_down_at_bottom() {
-        let mut state = create_test_state();
-        if let TypedScreen::ModeSelection(mode_data) = &mut state.screen {
-            mode_data.selected_mode = 1; // Already at bottom (Arcade)
-        }
+        let mut data = ModeSelectionData { selected_mode: 1 }; // Already at bottom (Arcade)
 
-        handle_mode_selection_down(&mut state).unwrap();
+        let outcome = handle_mode_selection_down(&mut data).unwrap();
 
-        if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-            assert_eq!(mode_data.selected_mode, 1); // Should stay at 1
-        } else {
-            panic!("Should be on ModeSelection screen");
-        }
+        assert!(outcome.is_stay());
+        assert_eq!(data.selected_mode, 1); // Should stay at 1
     }
 
     #[test]
     fn test_select_training_mode() {
-        let mut state = create_test_state();
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        handle_select_training_mode(&mut state).unwrap();
+        let outcome = handle_select_training_mode(&mut ctx).unwrap();
 
-        assert!(
-            matches!(state.screen, TypedScreen::Menu(_)),
-            "Should navigate to Menu screen"
-        );
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::Menu(_)));
+        }
     }
 
     #[test]
     fn test_select_arcade_mode() {
-        let mut state = create_test_state();
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        handle_select_arcade_mode(&mut state).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
 
-        assert!(
-            matches!(state.screen, TypedScreen::MiniGame(_)),
-            "Should navigate to MiniGame screen"
-        );
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::MiniGame(_)));
+        }
     }
 
     #[test]
     fn test_mode_selection_select_training() {
-        let mut state = create_test_state();
-        // Default is 0 (Training)
+        let data = ModeSelectionData::default(); // Default is 0 (Training)
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        handle_mode_selection_select(&mut state).unwrap();
+        let outcome = handle_mode_selection_select(&data, &mut ctx).unwrap();
 
-        assert!(
-            matches!(state.screen, TypedScreen::Menu(_)),
-            "Should navigate to Menu screen when selecting Training"
-        );
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::Menu(_)));
+        }
     }
 
     #[test]
     fn test_mode_selection_select_arcade() {
-        let mut state = create_test_state();
-        if let TypedScreen::ModeSelection(mode_data) = &mut state.screen {
-            mode_data.selected_mode = 1; // Select Arcade
+        let data = ModeSelectionData { selected_mode: 1 }; // Select Arcade
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let outcome = handle_mode_selection_select(&data, &mut ctx).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::MiniGame(_)));
         }
-
-        handle_mode_selection_select(&mut state).unwrap();
-
-        assert!(
-            matches!(state.screen, TypedScreen::MiniGame(_)),
-            "Should navigate to MiniGame screen when selecting Arcade"
-        );
     }
 }

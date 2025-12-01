@@ -25,48 +25,8 @@ fn format_key_for_display(command: &str) -> String {
     }
 }
 
-/// Parse command buffer to determine if a complete command is available
-///
-/// Returns Some(command) if buffer contains a complete command, None if waiting for more keys
-pub(super) fn parse_command_buffer(buffer: &str) -> Option<&str> {
-    match buffer {
-        // Goto menu commands (g prefix)
-        CMD_GOTO_FILE_START => Some(CMD_GOTO_FILE_START),
-        CMD_GOTO_LINE_START => Some(CMD_GOTO_LINE_START),
-        CMD_GOTO_LINE_END => Some(CMD_GOTO_LINE_END),
-        CMD_GOTO_FIRST_NONWHITESPACE => Some(CMD_GOTO_FIRST_NONWHITESPACE),
-        CMD_GOTO_LAST_LINE => Some(CMD_GOTO_LAST_LINE),
-
-        // Replace character command: r + any char
-        cmd if cmd.starts_with('r') && cmd.len() == 2 => Some(buffer),
-
-        // Find/till commands: f/F/t/T + any char
-        cmd if (cmd.starts_with('f')
-            || cmd.starts_with('F')
-            || cmd.starts_with('t')
-            || cmd.starts_with('T'))
-            && cmd.len() == 2 =>
-        {
-            Some(buffer)
-        }
-
-        // Partial commands - wait for more input
-        // Note: 'd' executes immediately (delete selection), not waiting for 'dd'
-        // In Helix, use 'xd' to delete line (x = select line, d = delete selection)
-        "g"
-        | CMD_REPLACE
-        | CMD_FIND_CHAR
-        | CMD_FIND_CHAR_REVERSE
-        | CMD_TILL_CHAR
-        | CMD_TILL_CHAR_REVERSE => None,
-
-        // Single-key commands (including 'd' which deletes selection immediately)
-        _ if buffer.len() == 1 => Some(buffer),
-
-        // Invalid sequence - return empty to signal clear
-        _ => Some(""),
-    }
-}
+// NOTE: parse_command_buffer moved to src/game/command_context.rs
+// Use crate::game::parse_command_buffer instead
 
 /// Process session result and update state accordingly
 ///
@@ -175,27 +135,27 @@ pub fn handle_execute_command(
         // Always restore Task screen - even when completed, we show success popup
         state.screen = TypedScreen::Task(task_data);
     } else {
+        use crate::game::{ParsedCommand, parse_command_buffer};
         use crate::ui::state::CommandBufferAccess;
 
         // Normal mode: handle command buffer for multi-key commands
         task_data.push_command(&command);
 
         // Try to match a complete command
-        let final_command = parse_command_buffer(task_data.command_buffer());
+        let parsed = parse_command_buffer(task_data.command_buffer());
 
-        match final_command {
-            Some("") => {
+        match parsed {
+            ParsedCommand::Invalid => {
                 // Invalid sequence - clear buffer and restore state
                 task_data.clear_buffer();
                 state.screen = TypedScreen::Task(task_data);
                 return Ok(());
             }
-            Some(cmd) => {
+            ParsedCommand::Complete(cmd) => {
                 // Complete command - execute it
-                let cmd_string = cmd.to_string();
                 task_data.clear_buffer();
-                task_data.last_command = Some(cmd_string.clone());
-                executed_command = Some(cmd_string.clone());
+                task_data.last_command = Some(cmd.clone());
+                executed_command = Some(cmd.clone());
 
                 // Clone scenario before taking session (to avoid borrow conflict)
                 let scenario = task_data.session.scenario().clone();
@@ -206,13 +166,13 @@ pub fn handle_execute_command(
                     crate::game::GameSession::new(scenario)?,
                 );
 
-                let result = session.record_action(cmd_string)?;
+                let result = session.record_action(cmd)?;
                 session_completed = process_session_result(result, &mut task_data, state)?;
 
                 // Always restore Task screen - even when completed, we show success popup
                 state.screen = TypedScreen::Task(task_data);
             }
-            None => {
+            ParsedCommand::Partial => {
                 // Waiting for more keys
                 state.screen = TypedScreen::Task(task_data);
             }

@@ -3,19 +3,24 @@
 //! Handles spaced repetition review sessions
 
 use crate::security::UserError;
-use crate::ui::state::{AppState, Message, ReviewResult, ReviewSessionState, TypedScreen, update};
+use crate::ui::state::{
+    HandlerContext, HandlerOutcome, MenuData, ReviewData, ReviewResult, ReviewSessionState,
+    TypedScreen,
+};
 use std::time::Instant;
 
 /// Handle StartReviewSession message
 ///
 /// Initializes a new review session with due commands
-pub fn handle_start_review_session(state: &mut AppState) -> Result<(), UserError> {
+pub fn handle_start_review_session(
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
     // Get due commands from scheduler
-    let due_commands = state.progress.scheduler.get_due_reviews();
+    let due_commands = ctx.progress.scheduler.get_due_reviews();
 
     if due_commands.is_empty() {
-        // No reviews due, stay on menu
-        return Ok(());
+        // No reviews due, stay on current screen
+        return Ok(HandlerOutcome::Stay);
     }
 
     let review_session = ReviewSessionState {
@@ -26,19 +31,23 @@ pub fn handle_start_review_session(state: &mut AppState) -> Result<(), UserError
         completed_reviews: Vec::new(),
     };
 
-    state.game.review_session = Some(review_session.clone());
-    state.screen = TypedScreen::Review(crate::ui::state::ReviewData::new(review_session));
-    Ok(())
+    ctx.game.review_session = Some(review_session.clone());
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Review(
+        ReviewData::new(review_session),
+    ))))
 }
 
 /// Handle CompleteReviewCommand message
 ///
 /// Records review result and updates performance tracker
+///
+/// Note: This handler mutates review session data and then delegates to
+/// handle_next_review_command for screen transitions
 pub fn handle_complete_review_command(
-    state: &mut AppState,
+    ctx: &mut HandlerContext<'_>,
     success: bool,
-) -> Result<(), UserError> {
-    if let Some(session) = &mut state.game.review_session
+) -> Result<HandlerOutcome, UserError> {
+    if let Some(session) = &mut ctx.game.review_session
         && let Some(command) = &session.current_command
     {
         let duration = session.session_started_at.elapsed();
@@ -52,7 +61,7 @@ pub fn handle_complete_review_command(
 
         // Update performance tracker
         {
-            let mut tracker = state.progress.performance_tracker.borrow_mut();
+            let mut tracker = ctx.progress.performance_tracker.borrow_mut();
             tracker.record_attempt(
                 command,
                 duration,
@@ -60,18 +69,19 @@ pub fn handle_complete_review_command(
                 std::time::Duration::from_secs(3), // Optimal time
             );
         }
-
-        // Move to next
-        update(state, Message::NextReviewCommand)?;
     }
-    Ok(())
+
+    // Delegate to next review handler for screen transition logic
+    handle_next_review_command(ctx)
 }
 
 /// Handle NextReviewCommand message
 ///
 /// Advances to next review command or completes session
-pub fn handle_next_review_command(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(session) = &mut state.game.review_session {
+pub fn handle_next_review_command(
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    if let Some(session) = &mut ctx.game.review_session {
         session.current_index += 1;
 
         if session.current_index >= session.due_commands.len() {
@@ -91,26 +101,33 @@ pub fn handle_next_review_command(state: &mut AppState) -> Result<(), UserError>
             // Award XP for review session
             let xp = (completed as u64 * 10) + (success_rate * 20.0) as u64;
             {
-                let mut profile = state.progress.profile.borrow_mut();
+                let mut profile = ctx.progress.profile.borrow_mut();
                 profile.add_xp(xp);
             }
 
+            // Clear review session
+            ctx.game.review_session = None;
+
             // Return to menu
-            state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
-            state.game.review_session = None;
+            return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+                MenuData::default(),
+            ))));
         } else {
             // Move to next command
             session.current_command = session.due_commands.get(session.current_index).cloned();
         }
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Handle AbandonReviewSession message
 ///
 /// Cancels the current review session
-pub fn handle_abandon_review_session(state: &mut AppState) -> Result<(), UserError> {
-    state.game.review_session = None;
-    state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
-    Ok(())
+pub fn handle_abandon_review_session(
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    ctx.game.review_session = None;
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+        MenuData::default(),
+    ))))
 }

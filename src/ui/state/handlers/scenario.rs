@@ -5,14 +5,18 @@
 use crate::game::GameSession;
 use crate::security::UserError;
 use crate::ui::state::{
-    AppState, MenuData, Message, ResultsData, TaskData, TypedScreen, XPBreakdown, update,
+    AppState, HandlerContext, HandlerOutcome, MenuData, Message, ResultsData, TaskData,
+    TypedScreen, XPBreakdown, update,
 };
 
 /// Handle StartScenario message
 ///
 /// Initializes a new game session with the selected scenario
-pub fn handle_start_scenario(state: &mut AppState, index: usize) -> Result<(), UserError> {
-    if let Some(scenario) = state
+pub fn handle_start_scenario(
+    ctx: &mut HandlerContext<'_>,
+    index: usize,
+) -> Result<HandlerOutcome, UserError> {
+    if let Some(scenario) = ctx
         .game
         .scenario_collection
         .get_filtered_by_index(index)
@@ -22,15 +26,19 @@ pub fn handle_start_scenario(state: &mut AppState, index: usize) -> Result<(), U
         // Create TaskData with the new session
         let task_data = TaskData::new(session);
 
-        // Transition to Task screen with data
-        state.screen = TypedScreen::Task(task_data);
-        state.ui.show_key_history = false;
-        state.ui.completion_time = None;
+        // Update UI state
+        ctx.ui.show_key_history = false;
+        ctx.ui.completion_time = None;
 
         // Clear old session from game state
-        state.game.session = None;
+        ctx.game.session = None;
+
+        // Transition to Task screen with data
+        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Task(
+            task_data,
+        ))));
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Calculate XP breakdown from scenario feedback
@@ -60,26 +68,26 @@ fn calculate_xp_breakdown(
 /// Collect quest bonuses for newly completed quests
 ///
 /// Returns list of (description, xp) pairs for quests completed during this scenario
-fn collect_quest_bonuses(state: &mut AppState) -> Vec<(String, u64)> {
+fn collect_quest_bonuses(ctx: &mut HandlerContext<'_>) -> Vec<(String, u64)> {
     let newly_completed_quest_ids: Vec<String> = {
-        let profile = state.progress.profile.borrow();
+        let profile = ctx.progress.profile.borrow();
         profile
             .daily_quests
             .iter()
-            .filter(|q| q.completed && !state.progress.previously_completed_quests.contains(&q.id))
+            .filter(|q| q.completed && !ctx.progress.previously_completed_quests.contains(&q.id))
             .map(|q| q.id.clone())
             .collect()
     };
 
     let mut quest_bonuses = Vec::new();
     for quest_id in newly_completed_quest_ids {
-        let profile = state.progress.profile.borrow();
+        let profile = ctx.progress.profile.borrow();
         if let Some(quest) = profile.daily_quests.iter().find(|q| q.id == quest_id) {
             let description = super::format_quest_description(&quest.quest_type);
             let xp = quest.xp_reward as u64;
             drop(profile);
             quest_bonuses.push((description, xp));
-            state.progress.previously_completed_quests.insert(quest_id);
+            ctx.progress.previously_completed_quests.insert(quest_id);
         }
     }
     quest_bonuses
@@ -89,7 +97,7 @@ fn collect_quest_bonuses(state: &mut AppState) -> Vec<(String, u64)> {
 ///
 /// Updates profile with XP, counters, and saves to disk
 fn record_scenario_completion(
-    state: &mut AppState,
+    ctx: &mut HandlerContext<'_>,
     feedback: &crate::game::Feedback,
     total_xp: u64,
 ) -> Result<(), UserError> {
@@ -97,7 +105,7 @@ fn record_scenario_completion(
 
     // Award XP to profile
     let leveled_up = {
-        let mut profile = state.progress.profile.borrow_mut();
+        let mut profile = ctx.progress.profile.borrow_mut();
         let leveled_up = profile.add_xp(total_xp);
 
         // Update counters
@@ -111,15 +119,27 @@ fn record_scenario_completion(
 
     // Save profile if leveled up
     if leveled_up {
-        state
-            .save_profile_immediate()
+        let profile_ref = ctx.progress.profile.borrow();
+        ctx.progress
+            .storage
+            .save(&profile_ref)
             .map_err(|_| UserError::OperationFailed)?;
+        drop(profile_ref);
+        ctx.progress.mark_saved();
     }
 
-    state.progress.scenarios_completed_today += 1;
-    state
-        .save_profile_debounced()
-        .map_err(|_| UserError::OperationFailed)?;
+    ctx.progress.scenarios_completed_today += 1;
+
+    // Debounced save
+    if ctx.progress.should_save() {
+        let profile_ref = ctx.progress.profile.borrow();
+        ctx.progress
+            .storage
+            .save(&profile_ref)
+            .map_err(|_| UserError::OperationFailed)?;
+        drop(profile_ref);
+        ctx.progress.mark_saved();
+    }
 
     // Record commands in FSRS scheduler for spaced repetition
     let commands: Vec<String> = feedback
@@ -128,7 +148,7 @@ fn record_scenario_completion(
         .map(|action| action.command.clone())
         .collect();
 
-    state.progress.scheduler.record_scenario_commands(
+    ctx.progress.scheduler.record_scenario_commands(
         &commands,
         feedback.duration,
         feedback.score > 0,
@@ -140,7 +160,9 @@ fn record_scenario_completion(
 /// Handle CompleteScenario message
 ///
 /// Processes scenario completion: awards XP, updates quests, records FSRS data
-pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
+///
+/// Note: This handler needs full AppState access to call update() for quest progress
+pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, UserError> {
     // Get feedback and completed session from temporary storage
     let (feedback, completed_session) = if let Some(ref feedback) = state.ui.last_feedback {
         // Extract completed session from pending storage
@@ -154,11 +176,13 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
                 .map_err(|_| UserError::OperationFailed)?
         } else {
             // No session either, just go to menu
-            state.screen = TypedScreen::Menu(MenuData::default());
-            return Ok(());
+            return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+                MenuData::default(),
+            ))));
         };
-        state.screen = TypedScreen::Results(results_data);
-        return Ok(());
+        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Results(
+            results_data,
+        ))));
     };
 
     // Extract data from feedback
@@ -175,14 +199,22 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
         },
     )?;
 
+    // Create context for helper functions
+    let mut ctx = HandlerContext::new(
+        &mut state.ui,
+        &mut state.game,
+        &mut state.progress,
+        &state.config,
+    );
+
     // Calculate base XP components
-    let is_first_today = state.progress.scenarios_completed_today == 0;
+    let is_first_today = ctx.progress.scenarios_completed_today == 0;
     let (base_xp, perfect_bonus, first_today_bonus, total_base_xp) =
         calculate_xp_breakdown(&feedback, is_first_today);
 
     // Apply mastery scaling and record completion
     let (actual_xp, mastery_level, mastery_multiplier) = {
-        let mut profile = state.progress.profile.borrow_mut();
+        let mut profile = ctx.progress.profile.borrow_mut();
         let actual_xp =
             profile
                 .scenario_history
@@ -197,15 +229,15 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
     };
 
     // Store mastery info for results display
-    state.ui.scenario_mastery = Some((mastery_level, mastery_multiplier));
+    ctx.ui.scenario_mastery = Some((mastery_level, mastery_multiplier));
 
     // Collect quest bonuses
-    let quest_bonuses = collect_quest_bonuses(state);
+    let quest_bonuses = collect_quest_bonuses(&mut ctx);
     let quest_xp = quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
     let total_xp = actual_xp + quest_xp;
 
     // Store breakdown for results display
-    state.ui.xp_breakdown = Some(XPBreakdown {
+    ctx.ui.xp_breakdown = Some(XPBreakdown {
         base_xp,
         perfect_bonus,
         first_today_bonus,
@@ -215,88 +247,85 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<(), UserError> {
     });
 
     // Record completion and award XP
-    record_scenario_completion(state, &feedback, total_xp)?;
+    record_scenario_completion(&mut ctx, &feedback, total_xp)?;
 
     // Create ResultsData with completed session and transition to Results screen
     let Some(session) = completed_session else {
         // No completed session available - go back to menu
         // This shouldn't happen in normal flow, but handle gracefully
-        state.screen = TypedScreen::Menu(MenuData::default());
-        state.ui.clear_temp_results();
-        return Ok(());
+        ctx.ui.clear_temp_results();
+        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+            MenuData::default(),
+        ))));
     };
 
     let mut results_data = ResultsData::from_completed(session, feedback.clone())
         .map_err(|_| UserError::OperationFailed)?;
     // Populate with XP breakdown and quest changes
-    results_data.xp_breakdown = state.ui.xp_breakdown.clone();
-    results_data.quest_changes = state.ui.quest_progress_changes.clone();
-    results_data.scenario_mastery = state.ui.scenario_mastery;
+    results_data.xp_breakdown = ctx.ui.xp_breakdown.clone();
+    results_data.quest_changes = ctx.ui.quest_progress_changes.clone();
+    results_data.scenario_mastery = ctx.ui.scenario_mastery;
 
-    state.screen = TypedScreen::Results(results_data);
-    state.ui.clear_temp_results();
-    Ok(())
+    ctx.ui.clear_temp_results();
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Results(
+        results_data,
+    ))))
 }
 
 /// Handle AbandonScenario message
 ///
 /// Marks the session as abandoned and shows results
-pub fn handle_abandon_scenario(state: &mut AppState) -> Result<(), UserError> {
-    // Extract session from Task screen
-    if let TypedScreen::Task(task_data) = std::mem::replace(
-        &mut state.screen,
-        TypedScreen::Menu(MenuData::default()), // Temporary placeholder
-    ) {
-        // Take ownership and transition to abandoned state
-        let abandoned = task_data.session.abandon();
-        let feedback = abandoned.feedback();
+///
+/// Takes ownership of TaskData to consume the session
+pub fn handle_abandon_scenario(task_data: TaskData) -> Result<TypedScreen, UserError> {
+    // Take ownership and transition to abandoned state
+    let abandoned = task_data.session.abandon();
+    let feedback = abandoned.feedback();
 
-        // Create ResultsData from abandoned session
-        let results_data = ResultsData::from_abandoned(abandoned, feedback);
+    // Create ResultsData from abandoned session
+    let results_data = ResultsData::from_abandoned(abandoned, feedback);
 
-        // Transition to Results screen
-        state.screen = TypedScreen::Results(results_data);
-    }
-    Ok(())
+    // Return new screen directly
+    Ok(TypedScreen::Results(results_data))
 }
 
 /// Handle RetryScenario message
 ///
 /// Resets the current scenario to initial state
-pub fn handle_retry_scenario(state: &mut AppState) -> Result<(), UserError> {
-    // Get scenario from results screen and create new session
-    if let TypedScreen::Results(results_data) =
-        std::mem::replace(&mut state.screen, TypedScreen::Menu(MenuData::default()))
-    {
-        // Extract scenario from the session
-        let scenario = match results_data.session {
-            crate::ui::state::CompletedOrAbandoned::Completed(session) => {
-                session.scenario().clone()
-            }
-            crate::ui::state::CompletedOrAbandoned::Abandoned(session) => {
-                session.scenario().clone()
-            }
-        };
+///
+/// Takes ownership of ResultsData to extract scenario
+pub fn handle_retry_scenario(
+    results_data: ResultsData,
+    ctx: &mut HandlerContext<'_>,
+) -> Result<TypedScreen, UserError> {
+    // Extract scenario from the session
+    let scenario = match results_data.session {
+        crate::ui::state::CompletedOrAbandoned::Completed(session) => session.scenario().clone(),
+        crate::ui::state::CompletedOrAbandoned::Abandoned(session) => session.scenario().clone(),
+    };
 
-        // Create new session with same scenario
-        let new_session = GameSession::new(scenario)?;
-        let task_data = TaskData::new(new_session);
+    // Create new session with same scenario
+    let new_session = GameSession::new(scenario)?;
+    let task_data = TaskData::new(new_session);
 
-        state.screen = TypedScreen::Task(task_data);
-        state.ui.show_key_history = false;
-        state.ui.completion_time = None;
-    }
-    Ok(())
+    // Reset UI state
+    ctx.ui.show_key_history = false;
+    ctx.ui.completion_time = None;
+
+    Ok(TypedScreen::Task(task_data))
 }
 
 /// Handle NextScenario message
 ///
 /// Completes the current scenario flow and returns to menu
-pub fn handle_next_scenario(state: &mut AppState) -> Result<(), UserError> {
+pub fn handle_next_scenario(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
+    // Clear session
+    ctx.game.session = None;
+
     // Preserve menu state if possible
-    state.screen = TypedScreen::Menu(MenuData::default());
-    state.game.session = None;
-    Ok(())
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+        MenuData::default(),
+    ))))
 }
 
 #[cfg(test)]

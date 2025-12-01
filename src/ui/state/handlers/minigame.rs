@@ -8,6 +8,9 @@ use std::sync::Arc;
 
 /// Handle starting a mini-game session
 pub(in crate::ui::state) fn handle_start_minigame(state: &mut AppState) -> Result<(), UserError> {
+    // NOTE: This handler uses AppState directly because it needs to set screen and game state
+    // It cannot be easily refactored to HandlerContext without significant changes
+
     // Navigate to mini-game screen first (renderer will show error if no scenarios)
     state.screen = TypedScreen::MiniGame(MiniGameData::default());
 

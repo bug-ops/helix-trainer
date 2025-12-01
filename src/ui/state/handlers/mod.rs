@@ -9,7 +9,7 @@ pub(super) use filters::{
     handle_toggle_completed_filter, handle_toggle_difficulty_filter,
 };
 pub(super) use gameplay::{handle_execute_command, handle_show_hint};
-pub(super) use menu::{handle_menu_down, handle_menu_select, handle_menu_up};
+pub(super) use menu::{handle_menu_down, handle_menu_up};
 pub(super) use minigame::{
     handle_minigame_back_to_menu, handle_minigame_command, handle_minigame_next_scenario,
     handle_minigame_scenario_complete, handle_minigame_tick, handle_minigame_timeout,

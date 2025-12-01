@@ -3,14 +3,15 @@
 //! Handles profile screen navigation and XP awards
 
 use crate::security::UserError;
-use crate::ui::state::{AppState, ProfileData, ReturnDestination, StatisticsData, TypedScreen};
+use crate::ui::state::{
+    HandlerContext, HandlerOutcome, ProfileData, ReturnDestination, StatisticsData, TypedScreen,
+};
 
-/// Determine return destination based on current screen
+/// Determine return destination based on current context
 ///
 /// If coming from a paused mini-game, return there; otherwise return to menu.
-fn determine_return_destination(state: &AppState) -> ReturnDestination {
-    if let TypedScreen::MiniGame(_) = &state.screen
-        && let Some(session) = &state.game.minigame_session
+fn determine_return_destination(ctx: &HandlerContext<'_>) -> ReturnDestination {
+    if let Some(session) = &ctx.game.minigame_session
         && session.state().is_paused()
     {
         return ReturnDestination::PausedMiniGame;
@@ -21,33 +22,39 @@ fn determine_return_destination(state: &AppState) -> ReturnDestination {
 /// Handle ShowProfile message
 ///
 /// Navigates to the profile screen, tracking where to return
-pub fn handle_show_profile(state: &mut AppState) -> Result<(), UserError> {
-    let return_to = determine_return_destination(state);
-    state.screen = TypedScreen::Profile(ProfileData { return_to });
-    Ok(())
+pub fn handle_show_profile(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
+    let return_to = determine_return_destination(ctx);
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Profile(
+        ProfileData { return_to },
+    ))))
 }
 
 /// Handle ShowStatistics message
 ///
 /// Navigates to the statistics screen, tracking where to return
-pub fn handle_show_statistics(state: &mut AppState) -> Result<(), UserError> {
-    let return_to = determine_return_destination(state);
-    state.screen = TypedScreen::Statistics(StatisticsData { return_to });
-    Ok(())
+pub fn handle_show_statistics(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
+    let return_to = determine_return_destination(ctx);
+    Ok(HandlerOutcome::Transition(Box::new(
+        TypedScreen::Statistics(StatisticsData { return_to }),
+    )))
 }
 
 /// Handle AwardXP message
 ///
 /// Awards XP to the user profile and saves if level up occurs
-pub fn handle_award_xp(state: &mut AppState, amount: u64) -> Result<(), UserError> {
-    let mut profile = state.progress.profile.borrow_mut();
+pub fn handle_award_xp(ctx: &mut HandlerContext<'_>, amount: u64) -> Result<(), UserError> {
+    let mut profile = ctx.progress.profile.borrow_mut();
     let leveled_up = profile.add_xp(amount);
 
     if leveled_up {
         drop(profile); // Release borrow before save
-        state
-            .save_profile_immediate()
+        let profile_ref = ctx.progress.profile.borrow();
+        ctx.progress
+            .storage
+            .save(&profile_ref)
             .map_err(|_| UserError::OperationFailed)?;
+        drop(profile_ref);
+        ctx.progress.mark_saved();
     }
     Ok(())
 }
@@ -62,7 +69,7 @@ mod tests {
     use crate::learning::PerformanceTracker;
     use crate::ui::state::handlers::minigame::handle_start_minigame;
     use crate::ui::state::{
-        ConfigState, GameState, MenuData, ModeSelectionData, ProgressState, UIState,
+        AppState, ConfigState, GameState, MenuData, ModeSelectionData, ProgressState, UIState,
     };
 
     fn create_test_scenario(id: &str) -> Scenario {
@@ -122,12 +129,21 @@ mod tests {
         let mut state = create_test_state();
         state.screen = TypedScreen::Menu(MenuData::default());
 
-        handle_show_profile(&mut state).unwrap();
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_show_profile(&mut ctx).unwrap();
 
-        if let TypedScreen::Profile(data) = &state.screen {
-            assert_eq!(data.return_to, ReturnDestination::Menu);
-        } else {
-            panic!("Expected Profile screen");
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(boxed) = outcome {
+            if let TypedScreen::Profile(data) = *boxed {
+                assert_eq!(data.return_to, ReturnDestination::Menu);
+            } else {
+                panic!("Expected Profile screen");
+            }
         }
     }
 
@@ -136,12 +152,21 @@ mod tests {
         let mut state = create_test_state();
         state.screen = TypedScreen::Menu(MenuData::default());
 
-        handle_show_statistics(&mut state).unwrap();
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_show_statistics(&mut ctx).unwrap();
 
-        if let TypedScreen::Statistics(data) = &state.screen {
-            assert_eq!(data.return_to, ReturnDestination::Menu);
-        } else {
-            panic!("Expected Statistics screen");
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(boxed) = outcome {
+            if let TypedScreen::Statistics(data) = *boxed {
+                assert_eq!(data.return_to, ReturnDestination::Menu);
+            } else {
+                panic!("Expected Statistics screen");
+            }
         }
     }
 
@@ -163,12 +188,21 @@ mod tests {
             assert!(session.state().is_paused());
         }
 
-        handle_show_profile(&mut state).unwrap();
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_show_profile(&mut ctx).unwrap();
 
-        if let TypedScreen::Profile(data) = &state.screen {
-            assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
-        } else {
-            panic!("Expected Profile screen");
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(boxed) = outcome {
+            if let TypedScreen::Profile(data) = *boxed {
+                assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
+            } else {
+                panic!("Expected Profile screen");
+            }
         }
     }
 
@@ -187,12 +221,21 @@ mod tests {
             session.pause();
         }
 
-        handle_show_statistics(&mut state).unwrap();
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_show_statistics(&mut ctx).unwrap();
 
-        if let TypedScreen::Statistics(data) = &state.screen {
-            assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
-        } else {
-            panic!("Expected Statistics screen");
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(boxed) = outcome {
+            if let TypedScreen::Statistics(data) = *boxed {
+                assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
+            } else {
+                panic!("Expected Statistics screen");
+            }
         }
     }
 
@@ -211,13 +254,22 @@ mod tests {
             assert!(session.state().is_playing());
         }
 
-        handle_show_profile(&mut state).unwrap();
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_show_profile(&mut ctx).unwrap();
 
-        // Since game is playing (not paused), should return to menu
-        if let TypedScreen::Profile(data) = &state.screen {
-            assert_eq!(data.return_to, ReturnDestination::Menu);
-        } else {
-            panic!("Expected Profile screen");
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(boxed) = outcome {
+            // Since game is playing (not paused), should return to menu
+            if let TypedScreen::Profile(data) = *boxed {
+                assert_eq!(data.return_to, ReturnDestination::Menu);
+            } else {
+                panic!("Expected Profile screen");
+            }
         }
     }
 }

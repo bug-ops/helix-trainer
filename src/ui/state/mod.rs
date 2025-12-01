@@ -28,6 +28,10 @@ use std::time::{Duration, Instant};
 // Message handlers in separate modules
 mod handlers;
 
+// Handler infrastructure for type-safe handlers
+mod handler_context;
+pub use handler_context::{HandlerContext, HandlerOutcome};
+
 // Sub-structures for organizing AppState
 mod substates;
 pub use substates::{ConfigState, GameState, ProgressState, UIState};
@@ -350,6 +354,81 @@ impl AppState {
     }
 }
 
+/// Helper macro to extract screen data and call type-safe handler
+///
+/// This macro handles the pattern of:
+/// 1. Extract screen data from TypedScreen variant
+/// 2. Call handler with extracted data
+/// 3. Apply HandlerOutcome (transition or stay)
+macro_rules! extract_screen {
+    // Data-only handler (no context)
+    ($state:expr, $variant:ident, $data:ident => $handler:expr) => {
+        if let TypedScreen::$variant(ref mut $data) = $state.screen {
+            let outcome = $handler?;
+            apply_outcome($state, outcome);
+            Ok(())
+        } else {
+            Err(UserError::invalid_state(concat!(
+                "Expected ",
+                stringify!($variant),
+                " screen"
+            )))
+        }
+    };
+    // Handler with context (immutable data)
+    ($state:expr, $variant:ident, $data:ident, $ctx:ident => $handler:expr) => {
+        if let TypedScreen::$variant(ref $data) = $state.screen {
+            #[allow(unused_mut)]
+            let mut $ctx = HandlerContext::new(
+                &mut $state.ui,
+                &mut $state.game,
+                &mut $state.progress,
+                &$state.config,
+            );
+            let outcome = $handler?;
+            apply_outcome($state, outcome);
+            Ok(())
+        } else {
+            Err(UserError::invalid_state(concat!(
+                "Expected ",
+                stringify!($variant),
+                " screen"
+            )))
+        }
+    };
+    // Handler with context (mutable data)
+    ($state:expr, $variant:ident, mut $data:ident, $ctx:ident => $handler:expr) => {
+        if let TypedScreen::$variant(ref mut $data) = $state.screen {
+            #[allow(unused_mut)]
+            let mut $ctx = HandlerContext::new(
+                &mut $state.ui,
+                &mut $state.game,
+                &mut $state.progress,
+                &$state.config,
+            );
+            let outcome = $handler?;
+            apply_outcome($state, outcome);
+            Ok(())
+        } else {
+            Err(UserError::invalid_state(concat!(
+                "Expected ",
+                stringify!($variant),
+                " screen"
+            )))
+        }
+    };
+}
+
+/// Apply a HandlerOutcome to the state
+///
+/// If the outcome is a Transition, update the screen.
+/// If it's Stay, do nothing.
+fn apply_outcome(state: &mut AppState, outcome: HandlerOutcome) {
+    if let HandlerOutcome::Transition(boxed_screen) = outcome {
+        state.screen = *boxed_screen;
+    }
+}
+
 /// Pure update function for state transitions
 ///
 /// This function is the heart of the Elm Architecture pattern.
@@ -377,20 +456,72 @@ impl AppState {
 /// ```
 pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
     match msg {
-        // Navigation messages
-        Message::QuitApp => handlers::handle_quit_app(state),
-        Message::NavigateTo(screen) => handlers::handle_navigate_to(state, screen),
-        Message::BackToMenu => handlers::handle_back_to_menu(state),
+        // Navigation messages (don't require specific screen)
+        Message::QuitApp => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_quit_app(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::NavigateTo(screen) => {
+            let outcome = handlers::handle_navigate_to(screen)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::BackToMenu => {
+            // Need to access current screen before creating context
+            let current_screen_ref = &state.screen;
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_back_to_menu(current_screen_ref, &mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
 
         // Mode selection messages
-        Message::ModeSelectionUp => handlers::handle_mode_selection_up(state),
-        Message::ModeSelectionDown => handlers::handle_mode_selection_down(state),
-        Message::ModeSelectionSelect => handlers::handle_mode_selection_select(state),
-        Message::SelectTrainingMode => handlers::handle_select_training_mode(state),
-        Message::SelectArcadeMode => handlers::handle_select_arcade_mode(state),
+        Message::ModeSelectionUp => {
+            extract_screen!(state, ModeSelection, data => handlers::handle_mode_selection_up(data))
+        }
+        Message::ModeSelectionDown => {
+            extract_screen!(state, ModeSelection, data => handlers::handle_mode_selection_down(data))
+        }
+        Message::ModeSelectionSelect => {
+            extract_screen!(state, ModeSelection, data, ctx => handlers::handle_mode_selection_select(data, &mut ctx))
+        }
+        Message::SelectTrainingMode => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_select_training_mode(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::SelectArcadeMode => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_select_arcade_mode(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
         Message::StartMiniGame => handlers::handle_start_minigame(state),
 
-        // Mini-game messages
+        // Mini-game messages (not refactored yet)
         Message::PauseMiniGame => handlers::handle_pause_minigame(state),
         Message::ResumeMiniGame => handlers::handle_resume_minigame(state),
         Message::MiniGameTick => handlers::handle_minigame_tick(state),
@@ -401,25 +532,180 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::MiniGameBackToMenu => handlers::handle_minigame_back_to_menu(state),
 
         // Menu messages
-        Message::MenuUp => handlers::handle_menu_up(state),
-        Message::MenuDown => handlers::handle_menu_down(state),
-        Message::MenuSelect => handlers::handle_menu_select(state),
+        Message::MenuUp => {
+            extract_screen!(state, Menu, data => handlers::handle_menu_up(data))
+        }
+        Message::MenuDown => {
+            extract_screen!(state, Menu, mut data, ctx => handlers::handle_menu_down(data, &ctx))
+        }
+        Message::MenuSelect => {
+            // TODO: Refactor to use extract_screen! after other handlers are refactored
+            // Need to extract selected_item before borrowing state mutably
+            let selected_item = if let TypedScreen::Menu(ref data) = state.screen {
+                data.selected_item
+            } else {
+                return Err(UserError::invalid_state("Expected Menu screen"));
+            };
+
+            // Now we can pass state mutably
+            let scenario_count = state.game.scenario_collection.count();
+
+            let outcome = if selected_item < scenario_count {
+                // Start selected scenario
+                let mut ctx = HandlerContext::new(
+                    &mut state.ui,
+                    &mut state.game,
+                    &mut state.progress,
+                    &state.config,
+                );
+                handlers::handle_start_scenario(&mut ctx, selected_item)?
+            } else if selected_item == scenario_count {
+                // Review Commands
+                let mut ctx = HandlerContext::new(
+                    &mut state.ui,
+                    &mut state.game,
+                    &mut state.progress,
+                    &state.config,
+                );
+                handlers::handle_start_review_session(&mut ctx)?
+            } else if selected_item == scenario_count + 1 {
+                // View Profile
+                let mut ctx = HandlerContext::new(
+                    &mut state.ui,
+                    &mut state.game,
+                    &mut state.progress,
+                    &state.config,
+                );
+                handlers::handle_show_profile(&mut ctx)?
+            } else if selected_item == scenario_count + 2 {
+                // Statistics
+                let mut ctx = HandlerContext::new(
+                    &mut state.ui,
+                    &mut state.game,
+                    &mut state.progress,
+                    &state.config,
+                );
+                handlers::handle_show_statistics(&mut ctx)?
+            } else if selected_item == scenario_count + 3 {
+                // Quit
+                state.ui.running = false;
+                HandlerOutcome::Stay
+            } else {
+                HandlerOutcome::Stay
+            };
+
+            apply_outcome(state, outcome);
+            Ok(())
+        }
 
         // Scenario lifecycle messages
-        Message::StartScenario(index) => handlers::handle_start_scenario(state, index),
-        Message::CompleteScenario => handlers::handle_complete_scenario(state),
-        Message::AbandonScenario => handlers::handle_abandon_scenario(state),
-        Message::RetryScenario => handlers::handle_retry_scenario(state),
-        Message::NextScenario => handlers::handle_next_scenario(state),
+        Message::StartScenario(index) => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_start_scenario(&mut ctx, index)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::CompleteScenario => {
+            // This handler needs full AppState access to call update() for quest progress
+            let outcome = handlers::handle_complete_scenario(state)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::AbandonScenario => {
+            // Extract TaskData by replacing screen temporarily
+            if let TypedScreen::Task(task_data) =
+                std::mem::replace(&mut state.screen, TypedScreen::Menu(MenuData::default()))
+            {
+                let new_screen = handlers::handle_abandon_scenario(task_data)?;
+                state.screen = new_screen;
+                Ok(())
+            } else {
+                Err(UserError::invalid_state(
+                    "Expected Task screen for AbandonScenario",
+                ))
+            }
+        }
+        Message::RetryScenario => {
+            // Extract ResultsData by replacing screen temporarily
+            if let TypedScreen::Results(results_data) =
+                std::mem::replace(&mut state.screen, TypedScreen::Menu(MenuData::default()))
+            {
+                let mut ctx = HandlerContext::new(
+                    &mut state.ui,
+                    &mut state.game,
+                    &mut state.progress,
+                    &state.config,
+                );
+                let new_screen = handlers::handle_retry_scenario(results_data, &mut ctx)?;
+                state.screen = new_screen;
+                Ok(())
+            } else {
+                Err(UserError::invalid_state(
+                    "Expected Results screen for RetryScenario",
+                ))
+            }
+        }
+        Message::NextScenario => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_next_scenario(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
 
         // Gameplay messages
-        Message::ShowHint => handlers::handle_show_hint(state),
-        Message::ExecuteCommand(command) => handlers::handle_execute_command(state, command),
+        Message::ShowHint => {
+            let outcome = handlers::handle_show_hint(state)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::ExecuteCommand(command) => {
+            let outcome = handlers::handle_execute_command(state, command)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
 
         // Profile messages
-        Message::ShowProfile => handlers::handle_show_profile(state),
-        Message::ShowStatistics => handlers::handle_show_statistics(state),
-        Message::AwardXP { amount } => handlers::handle_award_xp(state, amount),
+        Message::ShowProfile => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_show_profile(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::ShowStatistics => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_show_statistics(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::AwardXP { amount } => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            handlers::handle_award_xp(&mut ctx, amount)
+        }
 
         // Quest messages
         Message::UpdateQuestProgress {
@@ -429,23 +715,107 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         } => handlers::handle_update_quest_progress(state, command, scenario_completed, duration),
 
         // Filter messages
-        Message::SetSortMode(mode) => handlers::handle_set_sort_mode(state, mode),
+        Message::SetSortMode(mode) => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_set_sort_mode(&mut ctx, mode)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
         Message::ToggleCategoryFilter(category) => {
-            handlers::handle_toggle_category_filter(state, category)
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_toggle_category_filter(&mut ctx, category)?;
+            apply_outcome(state, outcome);
+            Ok(())
         }
         Message::ToggleDifficultyFilter(difficulty) => {
-            handlers::handle_toggle_difficulty_filter(state, difficulty)
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_toggle_difficulty_filter(&mut ctx, difficulty)?;
+            apply_outcome(state, outcome);
+            Ok(())
         }
-        Message::ToggleCompletedFilter => handlers::handle_toggle_completed_filter(state),
-        Message::ResetFilters => handlers::handle_reset_filters(state),
+        Message::ToggleCompletedFilter => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_toggle_completed_filter(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::ResetFilters => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_reset_filters(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
 
         // Review session messages
-        Message::StartReviewSession => handlers::handle_start_review_session(state),
-        Message::CompleteReviewCommand { success } => {
-            handlers::handle_complete_review_command(state, success)
+        Message::StartReviewSession => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_start_review_session(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
         }
-        Message::NextReviewCommand => handlers::handle_next_review_command(state),
-        Message::AbandonReviewSession => handlers::handle_abandon_review_session(state),
+        Message::CompleteReviewCommand { success } => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_complete_review_command(&mut ctx, success)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::NextReviewCommand => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_next_review_command(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::AbandonReviewSession => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_abandon_review_session(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
     }
 }
 
@@ -539,6 +909,8 @@ mod tests {
     #[test]
     fn test_menu_navigation_up() {
         let mut state = create_test_app_state(vec![]);
+        // Navigate to Menu screen first (starts on ModeSelection)
+        update(&mut state, Message::SelectTrainingMode).unwrap();
         // Set initial menu item to 1
         if let TypedScreen::Menu(menu_data) = &mut state.screen {
             menu_data.selected_item = 1;
@@ -561,6 +933,9 @@ mod tests {
         let scenario1 = create_test_scenario();
         let scenario2 = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario1, scenario2]);
+
+        // Navigate to Menu screen first (starts on ModeSelection)
+        update(&mut state, Message::SelectTrainingMode).unwrap();
 
         if let TypedScreen::Menu(menu_data) = &state.screen {
             assert_eq!(menu_data.selected_item, 0);

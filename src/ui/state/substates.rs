@@ -13,6 +13,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use super::{QuestProgressChange, ReviewSessionState, XPBreakdown};
+use crate::ui::notification::NotificationQueue;
 
 /// UI rendering and display state
 ///
@@ -45,6 +46,9 @@ pub struct UIState {
     /// TEMPORARY (Phase 3): Scenario mastery info
     /// Will be moved into ResultsData in future refactoring
     pub scenario_mastery: Option<(ScenarioMastery, f64)>,
+
+    /// Notification queue for transient messages (level-up, achievements, etc.)
+    pub notifications: NotificationQueue,
 }
 
 impl UIState {
@@ -58,6 +62,7 @@ impl UIState {
             xp_breakdown: None,
             quest_progress_changes: Vec::new(),
             scenario_mastery: None,
+            notifications: NotificationQueue::new(),
         }
     }
 

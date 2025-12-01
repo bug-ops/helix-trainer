@@ -39,9 +39,6 @@ pub fn handle_menu_down(
 ///
 /// Executes action based on currently selected menu item.
 /// Uses HandlerContext to delegate to other handlers and perform transitions.
-///
-/// TODO: Refactor scenario, review, and profile handlers to use HandlerContext
-/// For now, we need to work with the old AppState-based handlers
 #[allow(dead_code)] // Used directly in update() function, not through handlers::
 pub fn handle_menu_select(
     data: &MenuData,

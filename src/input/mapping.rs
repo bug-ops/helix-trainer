@@ -85,7 +85,7 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
         // Undo/Redo
         (KeyCode::Char('u'), KeyModifiers::NONE) => Some(CMD_UNDO),
         (KeyCode::Char('U'), KeyModifiers::SHIFT) => Some(CMD_REDO),
-        (KeyCode::Char('r'), KeyModifiers::CONTROL) => Some("ctrl-r"), // TODO: add constant
+        (KeyCode::Char('r'), KeyModifiers::CONTROL) => Some(CMD_CTRL_R),
 
         // Repeat last action
         (KeyCode::Char('.'), KeyModifiers::NONE) => Some(CMD_REPEAT),
@@ -292,7 +292,7 @@ mod tests {
             assert_eq!(map_key_to_helix_command(u_shift), Some(CMD_REDO));
 
             let r_ctrl = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL);
-            assert_eq!(map_key_to_helix_command(r_ctrl), Some("ctrl-r"));
+            assert_eq!(map_key_to_helix_command(r_ctrl), Some(CMD_CTRL_R));
         }
 
         // Repeat

@@ -371,12 +371,17 @@ impl AnyModeSimulator {
                     execute_key_sequence(self, keys)
                 }
             }
-            crate::helix::repeat::RepeatableAction::InsertSequence { text, movements } => {
+            crate::helix::repeat::RepeatableAction::InsertSequence {
+                entry_command,
+                text,
+                movements,
+            } => {
                 // Execute insert sequence through wrapper
                 use crate::helix::commands::*;
 
-                // Enter insert mode
-                commands::execute_command_any_mode(self, CMD_INSERT)?;
+                // Enter insert mode with the same command that was used originally
+                let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
+                commands::execute_command_any_mode(self, insert_cmd)?;
 
                 // Insert text character by character
                 for ch in text.chars() {

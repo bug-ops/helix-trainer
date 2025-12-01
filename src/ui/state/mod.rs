@@ -231,6 +231,12 @@ pub enum Message {
 
     /// Abandon the review session
     AbandonReviewSession,
+
+    /// Show a notification (level-up, achievement, quest complete, streak)
+    ShowNotification(crate::ui::notification::Notification),
+
+    /// Remove expired notifications from the queue
+    CleanupNotifications,
 }
 
 /// Main application state
@@ -539,61 +545,17 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             extract_screen!(state, Menu, mut data, ctx => handlers::handle_menu_down(data, &ctx))
         }
         Message::MenuSelect => {
-            // TODO: Refactor to use extract_screen! after other handlers are refactored
-            // Need to extract selected_item before borrowing state mutably
-            let selected_item = if let TypedScreen::Menu(ref data) = state.screen {
-                data.selected_item
+            let (selected_item, scroll_offset) = if let TypedScreen::Menu(ref data) = state.screen {
+                (data.selected_item, data.scroll_offset)
             } else {
                 return Err(UserError::invalid_state("Expected Menu screen"));
             };
 
-            // Now we can pass state mutably
-            let scenario_count = state.game.scenario_collection.count();
-
-            let outcome = if selected_item < scenario_count {
-                // Start selected scenario
-                let mut ctx = HandlerContext::new(
-                    &mut state.ui,
-                    &mut state.game,
-                    &mut state.progress,
-                    &state.config,
-                );
-                handlers::handle_start_scenario(&mut ctx, selected_item)?
-            } else if selected_item == scenario_count {
-                // Review Commands
-                let mut ctx = HandlerContext::new(
-                    &mut state.ui,
-                    &mut state.game,
-                    &mut state.progress,
-                    &state.config,
-                );
-                handlers::handle_start_review_session(&mut ctx)?
-            } else if selected_item == scenario_count + 1 {
-                // View Profile
-                let mut ctx = HandlerContext::new(
-                    &mut state.ui,
-                    &mut state.game,
-                    &mut state.progress,
-                    &state.config,
-                );
-                handlers::handle_show_profile(&mut ctx)?
-            } else if selected_item == scenario_count + 2 {
-                // Statistics
-                let mut ctx = HandlerContext::new(
-                    &mut state.ui,
-                    &mut state.game,
-                    &mut state.progress,
-                    &state.config,
-                );
-                handlers::handle_show_statistics(&mut ctx)?
-            } else if selected_item == scenario_count + 3 {
-                // Quit
-                state.ui.running = false;
-                HandlerOutcome::Stay
-            } else {
-                HandlerOutcome::Stay
+            let menu_data = MenuData {
+                selected_item,
+                scroll_offset,
             };
-
+            let outcome = handlers::menu::handle_menu_select(&menu_data, state)?;
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -813,6 +775,18 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 &state.config,
             );
             let outcome = handlers::handle_abandon_review_session(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+
+        // Notification messages
+        Message::ShowNotification(notification) => {
+            let outcome = handlers::handle_show_notification(&mut state.ui, notification)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::CleanupNotifications => {
+            let outcome = handlers::handle_cleanup_notifications(&mut state.ui)?;
             apply_outcome(state, outcome);
             Ok(())
         }

@@ -45,9 +45,17 @@ pub fn handle_show_statistics(ctx: &mut HandlerContext<'_>) -> Result<HandlerOut
 pub fn handle_award_xp(ctx: &mut HandlerContext<'_>, amount: u64) -> Result<(), UserError> {
     let mut profile = ctx.progress.profile.borrow_mut();
     let leveled_up = profile.add_xp(amount);
+    let new_level = profile.level;
 
     if leveled_up {
         drop(profile); // Release borrow before save
+
+        // Show level-up notification
+        let notification = crate::ui::notification::Notification::new(
+            crate::ui::notification::NotificationType::LevelUp { new_level },
+        );
+        ctx.ui.notifications.push(notification);
+
         let profile_ref = ctx.progress.profile.borrow();
         ctx.progress
             .storage

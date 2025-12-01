@@ -68,9 +68,11 @@ pub enum RepeatableAction {
     ///
     /// # Fields
     ///
+    /// - `entry_command`: The command used to enter insert mode (`i`, `a`, `A`, `I`, `o`, `O`)
     /// - `text`: The text that was typed
     /// - `movements`: Arrow key movements made during insert
     InsertSequence {
+        entry_command: Option<String>,
         text: String,
         movements: Vec<Movement>,
     },
@@ -232,6 +234,7 @@ impl Default for RepeatBuffer {
 #[derive(Debug)]
 pub struct InsertModeRecorder {
     is_recording: bool,
+    entry_command: Option<String>,
     text: String,
     movements: Vec<Movement>,
 }
@@ -241,6 +244,7 @@ impl InsertModeRecorder {
     pub fn new() -> Self {
         Self {
             is_recording: false,
+            entry_command: None,
             text: String::new(),
             movements: Vec::new(),
         }
@@ -254,8 +258,13 @@ impl InsertModeRecorder {
     /// Begin recording insert mode actions
     ///
     /// Clears any previous recording and starts fresh.
-    pub fn start(&mut self) {
+    /// Optionally captures the command used to enter insert mode.
+    ///
+    /// # Arguments
+    /// * `entry_command` - The command that entered insert mode (`i`, `a`, `A`, `I`, `o`, `O`)
+    pub fn start(&mut self, entry_command: Option<String>) {
         self.is_recording = true;
+        self.entry_command = entry_command;
         self.text.clear();
         self.movements.clear();
     }
@@ -291,17 +300,19 @@ impl InsertModeRecorder {
     /// Finish recording and return the recorded action
     ///
     /// Stops recording and returns a `RepeatableAction::InsertSequence`
-    /// containing all recorded text and movements. Resets the recorder
+    /// containing all recorded text, movements, and the entry command. Resets the recorder
     /// to empty state.
     pub fn finish(&mut self) -> RepeatableAction {
         self.is_recording = false;
 
         let action = RepeatableAction::InsertSequence {
+            entry_command: self.entry_command.clone(),
             text: self.text.clone(),
             movements: self.movements.clone(),
         };
 
         // Reset state
+        self.entry_command = None;
         self.text.clear();
         self.movements.clear();
 
@@ -459,14 +470,14 @@ mod tests {
     #[test]
     fn test_insert_mode_recorder_start() {
         let mut recorder = InsertModeRecorder::new();
-        recorder.start();
+        recorder.start(None);
         assert!(recorder.is_recording());
     }
 
     #[test]
     fn test_insert_mode_recorder_record_char() {
         let mut recorder = InsertModeRecorder::new();
-        recorder.start();
+        recorder.start(Some("i".to_string()));
 
         recorder.record_char('h');
         recorder.record_char('e');
@@ -478,7 +489,12 @@ mod tests {
         assert!(!recorder.is_recording());
 
         match action {
-            RepeatableAction::InsertSequence { text, movements } => {
+            RepeatableAction::InsertSequence {
+                entry_command,
+                text,
+                movements,
+            } => {
+                assert_eq!(entry_command, Some("i".to_string()));
                 assert_eq!(text, "hello");
                 assert!(movements.is_empty());
             }
@@ -489,7 +505,7 @@ mod tests {
     #[test]
     fn test_insert_mode_recorder_record_movement() {
         let mut recorder = InsertModeRecorder::new();
-        recorder.start();
+        recorder.start(Some("a".to_string()));
 
         recorder.record_char('h');
         recorder.record_char('i');
@@ -500,7 +516,12 @@ mod tests {
         let action = recorder.finish();
 
         match action {
-            RepeatableAction::InsertSequence { text, movements } => {
+            RepeatableAction::InsertSequence {
+                entry_command,
+                text,
+                movements,
+            } => {
+                assert_eq!(entry_command, Some("a".to_string()));
                 assert_eq!(text, "hi!");
                 assert_eq!(movements.len(), 2);
                 assert_eq!(movements[0], Movement::Left);
@@ -513,12 +534,17 @@ mod tests {
     #[test]
     fn test_insert_mode_recorder_empty_recording() {
         let mut recorder = InsertModeRecorder::new();
-        recorder.start();
+        recorder.start(None);
 
         let action = recorder.finish();
 
         match action {
-            RepeatableAction::InsertSequence { text, movements } => {
+            RepeatableAction::InsertSequence {
+                entry_command,
+                text,
+                movements,
+            } => {
+                assert_eq!(entry_command, None);
                 assert!(text.is_empty());
                 assert!(movements.is_empty());
             }
@@ -537,7 +563,12 @@ mod tests {
         let action = recorder.finish();
 
         match action {
-            RepeatableAction::InsertSequence { text, movements } => {
+            RepeatableAction::InsertSequence {
+                entry_command,
+                text,
+                movements,
+            } => {
+                assert_eq!(entry_command, None);
                 assert!(text.is_empty());
                 assert!(movements.is_empty());
             }
@@ -548,7 +579,7 @@ mod tests {
     #[test]
     fn test_insert_mode_recorder_max_text_length() {
         let mut recorder = InsertModeRecorder::new();
-        recorder.start();
+        recorder.start(None);
 
         // Record MAX_INSERT_TEXT_LENGTH + 100 characters
         for _ in 0..MAX_INSERT_TEXT_LENGTH + 100 {
@@ -569,7 +600,7 @@ mod tests {
     #[test]
     fn test_insert_mode_recorder_max_movements() {
         let mut recorder = InsertModeRecorder::new();
-        recorder.start();
+        recorder.start(None);
 
         // Record MAX_INSERT_MOVEMENTS + 10 movements
         for _ in 0..MAX_INSERT_MOVEMENTS + 10 {
@@ -592,17 +623,22 @@ mod tests {
         let mut recorder = InsertModeRecorder::new();
 
         // First recording
-        recorder.start();
+        recorder.start(Some("a".to_string()));
         recorder.record_char('a');
         let _ = recorder.finish();
 
         // Second recording should start fresh
-        recorder.start();
+        recorder.start(Some("i".to_string()));
         recorder.record_char('b');
         let action = recorder.finish();
 
         match action {
-            RepeatableAction::InsertSequence { text, .. } => {
+            RepeatableAction::InsertSequence {
+                entry_command,
+                text,
+                ..
+            } => {
+                assert_eq!(entry_command, Some("i".to_string()));
                 assert_eq!(text, "b"); // Should only have 'b', not 'ab'
             }
             _ => panic!("Expected InsertSequence"),
@@ -710,11 +746,13 @@ mod tests {
         assert_eq!(action1, action2);
 
         let insert1 = RepeatableAction::InsertSequence {
+            entry_command: Some("i".to_string()),
             text: "hello".to_string(),
             movements: vec![Movement::Left],
         };
 
         let insert2 = RepeatableAction::InsertSequence {
+            entry_command: Some("i".to_string()),
             text: "hello".to_string(),
             movements: vec![Movement::Left],
         };

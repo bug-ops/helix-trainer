@@ -55,4 +55,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         crate::ui::state::TypedScreen::Review(_) => review::render_review_screen(frame, state),
         crate::ui::state::TypedScreen::MiniGame(_) => minigame::render_minigame(frame, state),
     }
+
+    // Render global notifications on top of all screens
+    popups::render_notifications(frame, state);
 }

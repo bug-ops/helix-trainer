@@ -366,10 +366,9 @@ impl AnyModeSimulator {
                 if expected_mode != &Mode::Normal {
                     Ok(()) // No-op: requires Normal mode
                 } else {
-                    // Convert keys to command string
-                    let cmd = key_events_to_cmd(keys)?;
-                    // Execute through wrapper to handle mode transitions
-                    commands::execute_command_any_mode(self, &cmd)
+                    // Execute each command in sequence
+                    // This handles compound actions like x+d (select line + delete)
+                    execute_key_sequence(self, keys)
                 }
             }
             crate::helix::repeat::RepeatableAction::InsertSequence { text, movements } => {
@@ -411,7 +410,78 @@ impl AnyModeSimulator {
     }
 }
 
-/// Convert a sequence of KeyEvents back to a command string
+/// Execute a sequence of KeyEvents as commands
+///
+/// This handles both simple commands and compound actions (e.g., x+d for select line + delete).
+/// Commands are parsed and executed in order, with multi-key sequences (dd, gg, rx) handled properly.
+fn execute_key_sequence(
+    sim: &mut AnyModeSimulator,
+    keys: &[crossterm::event::KeyEvent],
+) -> Result<(), UserError> {
+    use crate::helix::commands::*;
+    use crossterm::event::KeyCode;
+
+    if keys.is_empty() {
+        return Ok(());
+    }
+
+    let mut i = 0;
+    while i < keys.len() {
+        let key = &keys[i];
+
+        // Check for multi-key command patterns
+        let cmd = if i + 1 < keys.len() {
+            if let (KeyCode::Char(ch1), KeyCode::Char(ch2)) = (key.code, keys[i + 1].code) {
+                match (ch1, ch2) {
+                    ('g', 'g') => {
+                        i += 2;
+                        Some(CMD_GOTO_FILE_START.to_string())
+                    }
+                    ('r', _) => {
+                        i += 2;
+                        Some(format!("r{}", ch2))
+                    }
+                    ('f', _) | ('F', _) | ('t', _) | ('T', _) => {
+                        i += 2;
+                        Some(format!("{}{}", ch1, ch2))
+                    }
+                    ('g', 'h') | ('g', 'l') | ('g', 's') | ('g', 'e') => {
+                        i += 2;
+                        Some(format!("{}{}", ch1, ch2))
+                    }
+                    _ => None, // Not a multi-key sequence, try single
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // If no multi-key match, process as single key
+        let cmd = cmd.unwrap_or_else(|| {
+            i += 1;
+            match key.code {
+                KeyCode::Char(ch) => ch.to_string(),
+                KeyCode::Esc => CMD_ESCAPE.to_string(),
+                KeyCode::Backspace => CMD_BACKSPACE.to_string(),
+                KeyCode::Left => CMD_ARROW_LEFT.to_string(),
+                KeyCode::Right => CMD_ARROW_RIGHT.to_string(),
+                KeyCode::Up => CMD_ARROW_UP.to_string(),
+                KeyCode::Down => CMD_ARROW_DOWN.to_string(),
+                _ => String::new(), // Unknown - skip
+            }
+        });
+
+        if !cmd.is_empty() {
+            commands::execute_command_any_mode(sim, &cmd)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Convert a sequence of KeyEvents back to a command string (legacy, kept for tests)
 ///
 /// This reconstructs the original command from the recorded KeyEvent sequence.
 /// Handles both single-key commands (`x`, `i`, etc.) and multi-key sequences (`dd`, `gg`, `rx`).
@@ -422,6 +492,7 @@ impl AnyModeSimulator {
 /// - The key sequence is empty
 /// - The key sequence is unrecognized (unsupported multi-key command)
 /// - The key code is not a known command
+#[allow(dead_code)]
 fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> Result<String, UserError> {
     use crate::helix::commands::*;
     use crossterm::event::KeyCode;
@@ -436,7 +507,6 @@ fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> Result<String, User
     {
         // Check for known multi-key commands
         return match (ch1, ch2) {
-            ('d', 'd') => Ok(CMD_DELETE_LINE.to_string()),
             ('g', 'g') => Ok(CMD_GOTO_FILE_START.to_string()),
             ('r', _) => Ok(format!("r{}", ch2)), // Replace command
             _ => Err(UserError::OperationFailed), // Unknown multi-key sequence

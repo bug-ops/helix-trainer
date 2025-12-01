@@ -4,9 +4,6 @@
 //! string literal duplication and provide type safety.
 
 // Multi-key commands
-/// DEPRECATED: In Helix, use 'xd' (select line + delete selection) instead of 'dd'.
-/// This is kept for backward compatibility with existing scenarios and tests.
-pub const CMD_DELETE_LINE: &str = "dd";
 pub const CMD_GOTO_FILE_START: &str = "gg";
 pub const CMD_GOTO_FILE_END: &str = "G";
 

@@ -655,7 +655,7 @@ impl QuestTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::helix::commands::{CMD_DELETE_LINE, CMD_YANK};
+    use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_YANK};
 
     /// Helper to create a registry for tests
     fn test_registry() -> QuestTemplateRegistry {
@@ -666,14 +666,14 @@ mod tests {
     #[test]
     fn test_quest_type_completion() {
         let mut quest_type = QuestType::CommandPractice {
-            command: CMD_DELETE_LINE.to_string(),
+            command: CMD_DELETE_SELECTION.to_string(),
             target: 5,
             current: 3,
         };
         assert!(!quest_type.is_completed());
 
         quest_type = QuestType::CommandPractice {
-            command: CMD_DELETE_LINE.to_string(),
+            command: CMD_DELETE_SELECTION.to_string(),
             target: 5,
             current: 5,
         };
@@ -692,7 +692,7 @@ mod tests {
     #[test]
     fn test_quest_creation() {
         let quest_type = QuestType::CommandPractice {
-            command: CMD_DELETE_LINE.to_string(),
+            command: CMD_DELETE_SELECTION.to_string(),
             target: 5,
             current: 0,
         };
@@ -735,7 +735,7 @@ mod tests {
         let mut quests = vec![Quest::new(
             "test".to_string(),
             QuestType::CommandPractice {
-                command: CMD_DELETE_LINE.to_string(),
+                command: CMD_DELETE_SELECTION.to_string(),
                 target: 3,
                 current: 0,
             },
@@ -743,11 +743,11 @@ mod tests {
             QuestDifficulty::Easy,
         )];
 
-        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_LINE);
+        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_SELECTION);
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_LINE);
-        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_LINE);
+        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_SELECTION);
+        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_SELECTION);
         assert!(quests[0].is_completed());
     }
 
@@ -811,7 +811,7 @@ mod tests {
             QuestDifficulty::Hard,
         )];
 
-        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_LINE);
+        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_SELECTION);
         QuestTracker::update_command_progress(&mut quests, CMD_YANK);
         assert!(!quests[0].is_completed());
 
@@ -844,7 +844,7 @@ mod tests {
             Quest {
                 id: "completed".to_string(),
                 quest_type: QuestType::CommandPractice {
-                    command: CMD_DELETE_LINE.to_string(),
+                    command: CMD_DELETE_SELECTION.to_string(),
                     target: 1,
                     current: 1,
                 },

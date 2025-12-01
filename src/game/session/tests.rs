@@ -18,11 +18,11 @@ fn create_test_scenario() -> Scenario {
             selection: None,
         },
         solution: Solution {
-            commands: vec!["d".to_string(), "d".to_string()],
+            commands: vec!["x".to_string(), "d".to_string()],
             description: "Delete first line".to_string(),
         },
         alternatives: vec![],
-        hints: vec!["Use dd to delete a line".to_string()],
+        hints: vec!["Use x to select line, then d to delete".to_string()],
         scoring: ScoringConfig {
             optimal_count: 2,
             max_points: 100,
@@ -78,13 +78,18 @@ fn test_completion_detection() {
     let scenario = create_test_scenario();
     let session = GameSession::new(scenario).unwrap();
 
-    // Execute the "dd" command which should complete the scenario
-    let result = session.record_action("dd".to_string()).unwrap();
+    // Execute 'x' to select line, then 'd' to delete - this should complete the scenario
+    let result = session.record_action("x".to_string()).unwrap();
+    let session = match result {
+        SessionAfterAction::StillActive(s) => s,
+        SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+    };
+    let result = session.record_action("d".to_string()).unwrap();
 
     // Should be completed now
     assert!(
         matches!(result, SessionAfterAction::Completed(_)),
-        "Session should be completed after 'dd' command"
+        "Session should be completed after 'x' + 'd' commands"
     );
 }
 
@@ -95,7 +100,7 @@ fn test_get_hint() {
 
     let hint = session.get_hint();
     assert!(hint.is_some());
-    assert_eq!(hint.unwrap(), "Use dd to delete a line");
+    assert_eq!(hint.unwrap(), "Use x to select line, then d to delete");
 
     // Second call should return None (only one hint)
     let hint2 = session.get_hint();
@@ -120,17 +125,22 @@ fn test_calculate_score_perfect() {
     let scenario = create_test_scenario();
     let session = GameSession::new(scenario).unwrap();
 
-    // Record optimal number of actions (execute dd to delete first line)
-    let result = session.record_action("dd".to_string()).unwrap();
+    // Record optimal number of actions (x to select line, d to delete)
+    let result = session.record_action("x".to_string()).unwrap();
+    let session = match result {
+        SessionAfterAction::StillActive(s) => s,
+        SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+    };
+    let result = session.record_action("d".to_string()).unwrap();
 
     // The session should automatically mark as completed when state matches
     match result {
         SessionAfterAction::Completed(completed) => {
             let score = completed.score().unwrap();
-            assert_eq!(score, 100); // Perfect score (1 action, optimal is 2, tolerance is 0)
+            assert_eq!(score, 100); // Perfect score (2 actions, optimal is 2)
         }
         SessionAfterAction::StillActive(_) => {
-            panic!("Session should be completed after 'dd' command");
+            panic!("Session should be completed after 'x' + 'd' commands");
         }
     }
 }
@@ -152,8 +162,13 @@ fn test_get_feedback_success() {
     let scenario = create_test_scenario();
     let session = GameSession::new(scenario).unwrap();
 
-    // Complete with dd command
-    let result = session.record_action("dd".to_string()).unwrap();
+    // Complete with x + d commands
+    let result = session.record_action("x".to_string()).unwrap();
+    let session = match result {
+        SessionAfterAction::StillActive(s) => s,
+        SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+    };
+    let result = session.record_action("d".to_string()).unwrap();
 
     // Should be automatically completed
     match result {
@@ -165,7 +180,7 @@ fn test_get_feedback_success() {
             assert!(feedback.is_optimal);
         }
         SessionAfterAction::StillActive(_) => {
-            panic!("Session should be completed after 'dd' command");
+            panic!("Session should be completed after 'x' + 'd' commands");
         }
     }
 }
@@ -176,7 +191,7 @@ fn test_get_feedback_with_hint() {
     let session = GameSession::new(scenario).unwrap();
 
     // Take many actions (>2x optimal)
-    // Optimal is 2 (dd command = 2 chars), so we need >4 actions
+    // Optimal is 2 (x + d commands), so we need >4 actions
     // Use j/k movements that will return cursor to (0,0)
     let mut session_or_completed = SessionAfterAction::StillActive(session);
 
@@ -203,9 +218,16 @@ fn test_get_feedback_with_hint() {
         SessionAfterAction::Completed(c) => SessionAfterAction::Completed(c),
     };
 
-    // Complete with dd command (if not already completed)
+    // Complete with x + d commands (if not already completed)
+    // First select line with x
+    session_or_completed = match session_or_completed {
+        SessionAfterAction::StillActive(s) => s.record_action("x".to_string()).unwrap(),
+        SessionAfterAction::Completed(c) => SessionAfterAction::Completed(c),
+    };
+
+    // Then delete with d
     let result = match session_or_completed {
-        SessionAfterAction::StillActive(s) => s.record_action("dd".to_string()).unwrap(),
+        SessionAfterAction::StillActive(s) => s.record_action("d".to_string()).unwrap(),
         SessionAfterAction::Completed(c) => SessionAfterAction::Completed(c),
     };
 
@@ -217,7 +239,7 @@ fn test_get_feedback_with_hint() {
             assert!(!feedback.is_optimal);
         }
         SessionAfterAction::StillActive(_) => {
-            panic!("Session should be completed after 'dd' command");
+            panic!("Session should be completed after 'x' + 'd' commands");
         }
     }
 }
@@ -284,8 +306,13 @@ fn test_timer_fixed_on_completion() {
     let scenario = create_test_scenario();
     let session = GameSession::new(scenario).unwrap();
 
-    // Complete with dd command
-    let result = session.record_action("dd".to_string()).unwrap();
+    // Complete with x + d commands
+    let result = session.record_action("x".to_string()).unwrap();
+    let session = match result {
+        SessionAfterAction::StillActive(s) => s,
+        SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+    };
+    let result = session.record_action("d".to_string()).unwrap();
 
     match result {
         SessionAfterAction::Completed(completed) => {
@@ -308,7 +335,7 @@ fn test_timer_fixed_on_completion() {
             );
         }
         SessionAfterAction::StillActive(_) => {
-            panic!("Session should be completed after 'dd' command");
+            panic!("Session should be completed after 'x' + 'd' commands");
         }
     }
 }

@@ -12,16 +12,10 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Convert a command string to KeyEvents
 ///
-/// This helper converts string commands (like "dd", "x", "gg") back into
+/// This helper converts string commands (like "x", "gg") back into
 /// the KeyEvent sequence that would have generated them.
 fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
     // Multi-key sequences
-    if cmd == CMD_DELETE_LINE {
-        return vec![
-            KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
-        ];
-    }
     if cmd == CMD_GOTO_FILE_START {
         return vec![
             KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
@@ -222,9 +216,8 @@ pub(super) fn execute_normal_mode_command_internal(
         movement::move_document_end(sim)?;
     }
     // Deletion commands
-    else if cmd == CMD_DELETE_LINE {
-        editing::delete_line(sim)?;
-    } else if cmd == CMD_DELETE_SELECTION {
+    // Note: In Helix, use 'x' (select line) + 'd' (delete) instead of 'dd'
+    else if cmd == CMD_DELETE_SELECTION {
         editing::delete_selection(sim)?;
     } else if cmd == CMD_CHANGE {
         sim.change_selection()?;
@@ -498,7 +491,6 @@ mod tests {
         #[test]
         fn test_insert_command_editing_not_insert() {
             assert!(!is_insert_command(CMD_DELETE_SELECTION));
-            assert!(!is_insert_command(CMD_DELETE_LINE));
             assert!(!is_insert_command(CMD_YANK));
             assert!(!is_insert_command(CMD_PASTE_AFTER));
         }
@@ -518,14 +510,6 @@ mod tests {
     // Unit tests for cmd_to_key_events()
     mod cmd_to_key_events_tests {
         use super::*;
-
-        #[test]
-        fn test_cmd_to_key_events_delete_line() {
-            let events = cmd_to_key_events(CMD_DELETE_LINE);
-            assert_eq!(events.len(), 2);
-            assert_eq!(events[0].code, KeyCode::Char('d'));
-            assert_eq!(events[1].code, KeyCode::Char('d'));
-        }
 
         #[test]
         fn test_cmd_to_key_events_goto_file_start() {

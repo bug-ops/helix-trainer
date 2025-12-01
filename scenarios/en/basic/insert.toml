@@ -16,8 +16,8 @@ file_content = "hello world"
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "hello !world"
-cursor_position = [0, 7]
+file_content = "hello! world"
+cursor_position = [0, 6]
 
 [scenarios.solution]
 commands = ["e", "a", "!", "Escape"]

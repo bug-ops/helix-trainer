@@ -94,19 +94,20 @@ impl<M: EditorMode> HelixSimulator<M> {
     /// Get current editor state
     pub fn get_state(&self) -> Result<EditorState, UserError> {
         let range = self.selection.primary();
-        let mut head = range.head;
+        let head = range.head;
         let anchor = range.anchor;
 
-        // Clamp cursor to valid bounds (sometimes helix-core can put it past end)
+        // Clamp to valid bounds
         let max_pos = self.doc.len_chars();
-        if head > max_pos {
-            head = max_pos;
-        }
+        let head_clamped = head.min(max_pos);
 
         // Convert head position to (line, col)
-        let line = self.doc.char_to_line(head);
+        // Note: We use `head` (not cursor()) for backward compatibility with scenarios.
+        // The `head` represents the actual selection head position, while `cursor()`
+        // returns the visual block cursor position which is head-1 for forward selections.
+        let line = self.doc.char_to_line(head_clamped);
         let line_start = self.doc.line_to_char(line);
-        let col = head - line_start;
+        let col = head_clamped - line_start;
 
         // Extract selection if anchor != head (non-empty selection)
         let selection = if anchor != head {

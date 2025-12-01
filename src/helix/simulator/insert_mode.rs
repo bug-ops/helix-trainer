@@ -6,11 +6,24 @@ use helix_core::{Selection, Transaction};
 
 // Operations that prepare for entering insert mode (Normal mode methods)
 impl HelixSimulator<NormalMode> {
-    /// Append: move cursor one position right (prepare for insert mode)
+    /// Append: move cursor after current character (prepare for insert mode)
     pub fn append(&mut self) -> Result<(), UserError> {
-        // Move cursor one position to the right (after current character)
-        let head = self.selection.primary().head;
-        let new_pos = (head + 1).min(self.doc.len_chars());
+        let range = self.selection.primary();
+        let head = range.head;
+        let anchor = range.anchor;
+
+        // In Helix, when head > anchor (forward selection), the visual cursor
+        // is on head-1. Append should insert AFTER the visual cursor position.
+        // - If head > anchor: visual cursor at head-1, insert at head (no change needed)
+        // - If head <= anchor (point or backward): visual cursor at head, insert at head+1
+        let new_pos = if head > anchor {
+            // Forward selection: head already points after visual cursor
+            head.min(self.doc.len_chars())
+        } else {
+            // Point or backward: need to move one right
+            (head + 1).min(self.doc.len_chars())
+        };
+
         self.selection = Selection::point(new_pos);
         Ok(())
     }

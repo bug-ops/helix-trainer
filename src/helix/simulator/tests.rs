@@ -52,12 +52,15 @@ fn test_word_movement() {
     // Move to next word
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().col, 6); // "world"
+    // 'w' extends selection from current position to start of next word
+    // helix-core: anchor=0, head=6 (start of "world")
+    // get_state() returns head position for cursor
+    assert_eq!(state.cursor_position().col, 6); // Start of "world"
 
     // Move to next word again
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().col, 12); // "foo"
+    assert_eq!(state.cursor_position().col, 12); // Start of "foo"
 }
 
 #[test]
@@ -1604,3 +1607,4 @@ fn test_scenario_repeat_insert_001() {
         "Both lines should have ' Update docs' appended"
     );
 }
+

@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2025-12-01
+
+### Added
+
+- **Notification System** — Real-time notifications for level-ups, quest completions, and achievements
+  - Auto-dismissing popups (3 seconds) in top-right corner
+  - Color-coded by type (yellow/magenta/green/cyan)
+  - Queue system for multiple simultaneous notifications
+
+- **Filtering System** — Full implementation of scenario filters
+  - Category filtering (toggle Movement, Editing, Clipboard, Advanced)
+  - Difficulty filtering (toggle Beginner, Intermediate, Advanced)
+  - Completion filtering (cycle: All → Completed → Not Completed)
+
+- **Learning Scheduler Improvements** — Mix new content with reviews
+  - 50/50 split between review items and new content in practice sessions
+  - Weak command detection (low mastery, high difficulty, many lapses)
+  - Untried essential command suggestions
+
+- **Repeat Command Enhancement** — Full support for insert mode entry commands
+  - Correctly replay `a`, `A`, `I`, `o`, `O` with proper entry point
+  - `entry_command` field in `RepeatableAction::InsertSequence`
+
+### Changed
+
+- **Type-Safe Handler Architecture** — Compile-time guarantees for screen handlers
+  - `HandlerContext<'a>` struct for borrowing non-screen state
+  - `HandlerOutcome` enum (Stay/Transition) for explicit screen changes
+  - `extract_screen!` macro for type-safe screen data extraction
+  - 30+ handlers refactored to use new patterns
+
+- **Unified Command Parsing** — Extracted shared logic into `CommandContext` trait
+  - `ParsedCommand` enum (Complete/Partial/Invalid)
+  - Single source of truth for command buffer parsing
+  - Reduced code duplication between training and arcade modes
+
+### Removed
+
+- 23 redundant tests (3.2% reduction, coverage maintained)
+- Phase/Stage/Iteration comments from documentation
+- Invalid `dd` command references (replaced with `x` + `d` pattern)
+
+### Fixed
+
+- Unused import warnings after test cleanup
+- Damaged "Add" comments from bulk replacement
+
+### Quality
+
+- **Tests**: 685 (was 708, -23 redundant)
+- **Clippy**: Zero warnings
+- **Code**: Cleaner documentation without development phase references
+
 ## [0.4.3] - 2025-12-01
 
 ### Added
@@ -685,7 +738,9 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/bug-ops/helix-trainer/compare/v0.4.3...v0.4.4
+[0.4.3]: https://github.com/bug-ops/helix-trainer/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/bug-ops/helix-trainer/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/bug-ops/helix-trainer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/bug-ops/helix-trainer/compare/v0.3.0...v0.4.0

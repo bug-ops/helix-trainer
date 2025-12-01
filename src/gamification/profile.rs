@@ -254,7 +254,7 @@ impl XPCalculator {
     /// use helix_trainer::gamification::{QuestDifficulty, QuestType, XPCalculator};
     ///
     /// let easy_practice = QuestType::CommandPractice {
-    ///     command: "dd".to_string(),
+    ///     command: "w".to_string(),
     ///     target: 5,
     ///     current: 0,
     /// };

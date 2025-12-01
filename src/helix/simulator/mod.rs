@@ -418,7 +418,7 @@ impl AnyModeSimulator {
 /// Execute a sequence of KeyEvents as commands
 ///
 /// This handles both simple commands and compound actions (e.g., x+d for select line + delete).
-/// Commands are parsed and executed in order, with multi-key sequences (dd, gg, rx) handled properly.
+/// Commands are parsed and executed in order, with multi-key sequences (gg, rx) handled properly.
 fn execute_key_sequence(
     sim: &mut AnyModeSimulator,
     keys: &[crossterm::event::KeyEvent],
@@ -489,7 +489,7 @@ fn execute_key_sequence(
 /// Convert a sequence of KeyEvents back to a command string (legacy, kept for tests)
 ///
 /// This reconstructs the original command from the recorded KeyEvent sequence.
-/// Handles both single-key commands (`x`, `i`, etc.) and multi-key sequences (`dd`, `gg`, `rx`).
+/// Handles both single-key commands (`x`, `i`, etc.) and multi-key sequences (`gg`, `rx`).
 ///
 /// # Errors
 ///

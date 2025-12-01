@@ -28,7 +28,7 @@ pub trait CommandExecutor {
     ///
     /// # Arguments
     ///
-    /// * `cmd` - The command string to execute (e.g., "h", "dd", "i")
+    /// * `cmd` - The command string to execute (e.g., "h", "d", "i")
     ///
     /// # Errors
     ///

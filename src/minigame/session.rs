@@ -300,7 +300,8 @@ impl MiniGameSession {
     ///
     /// let mut session = MiniGameSession::new(scenarios);
     /// session.start();
-    /// session.handle_command("dd")?;
+    /// session.handle_command("x")?; // select line
+    /// session.handle_command("d")?; // delete
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn handle_command(&mut self, command: &str) -> Result<(), UserError> {
@@ -687,7 +688,7 @@ mod tests {
                 selection: None,
             },
             solution: Solution {
-                commands: vec!["dd".to_string()],
+                commands: vec!["x".to_string(), "d".to_string()],
                 description: "Delete line".to_string(),
             },
             alternatives: vec![],

@@ -99,7 +99,7 @@ impl ReviewSession {
     ///
     /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
     /// let mut tracker_mut = tracker.borrow_mut();
-    /// tracker_mut.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+    /// tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
     /// drop(tracker_mut);
     ///
     /// let scheduler = Scheduler::new(Rc::clone(&tracker));
@@ -173,7 +173,7 @@ impl ReviewSession {
     ///
     /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
     /// let mut tracker_mut = tracker.borrow_mut();
-    /// tracker_mut.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+    /// tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
     /// drop(tracker_mut);
     ///
     /// let scheduler = Scheduler::new(Rc::clone(&tracker));
@@ -226,7 +226,7 @@ mod tests {
 
         // Add some commands that are immediately due
         let mut tracker_mut = tracker.borrow_mut();
-        tracker_mut.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker_mut.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
         tracker_mut.record_attempt("p", Duration::from_secs(1), true, Duration::from_secs(1));
         drop(tracker_mut);

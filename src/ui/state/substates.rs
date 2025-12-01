@@ -17,9 +17,8 @@ use crate::ui::notification::NotificationQueue;
 
 /// UI rendering and display state
 ///
-/// NOTE: After Phase 3 refactoring, most screen-specific data has been moved
-/// into TypedScreen variants. This struct now only contains global UI state
-/// that persists across screen transitions.
+/// Contains global UI state that persists across screen transitions.
+/// Screen-specific data is stored in TypedScreen variants.
 #[derive(Debug)]
 pub struct UIState {
     /// Whether the application is running
@@ -31,20 +30,16 @@ pub struct UIState {
     /// Time when scenario was completed (for success animation)
     pub completion_time: Option<Instant>,
 
-    /// TEMPORARY (Phase 3): Feedback storage for transition to results screen
-    /// Will be moved into TypedScreen::Results in future refactoring
+    /// Feedback storage for transition to results screen
     pub last_feedback: Option<crate::game::Feedback>,
 
-    /// TEMPORARY (Phase 3): XP breakdown for results display
-    /// Will be moved into ResultsData in future refactoring
+    /// XP breakdown for results display
     pub xp_breakdown: Option<XPBreakdown>,
 
-    /// TEMPORARY (Phase 3): Quest progress changes
-    /// Will be moved into ResultsData in future refactoring
+    /// Quest progress changes for results display
     pub quest_progress_changes: Vec<QuestProgressChange>,
 
-    /// TEMPORARY (Phase 3): Scenario mastery info
-    /// Will be moved into ResultsData in future refactoring
+    /// Scenario mastery info for results display
     pub scenario_mastery: Option<(ScenarioMastery, f64)>,
 
     /// Notification queue for transient messages (level-up, achievements, etc.)
@@ -66,7 +61,7 @@ impl UIState {
         }
     }
 
-    /// Clear temporary results data (Phase 3 compatibility)
+    /// Clear results data after transitioning away from results screen
     pub fn clear_temp_results(&mut self) {
         self.last_feedback = None;
         self.xp_breakdown = None;
@@ -86,15 +81,13 @@ pub struct GameState {
     /// All available scenarios with filtering and sorting
     pub scenario_collection: ScenarioCollection,
 
-    /// DEPRECATED: Kept for backward compatibility during Phase 3 migration
-    /// Will be removed in Phase 4. Session is now stored in TypedScreen::Task.
+    /// Legacy session field (session is now stored in TypedScreen::Task)
     pub session: Option<GameSession<crate::game::session::Active>>,
 
     /// Active review session (Some if reviewing)
     pub review_session: Option<ReviewSessionState>,
 
-    /// Temporary storage for completed session (Phase 3 migration)
-    /// Used to pass session from gameplay handler to CompleteScenario handler
+    /// Completed session pending transition to results screen
     pub pending_completed_session: Option<GameSession<crate::game::session::Completed>>,
 
     /// Active mini-game session (Arcade Mode)

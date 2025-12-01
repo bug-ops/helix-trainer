@@ -349,7 +349,7 @@ mod tests {
                 selection: None,
             },
             solution: Solution {
-                commands: vec!["dd".to_string()],
+                commands: vec!["x".to_string(), "d".to_string()],
                 description: "Delete line".to_string(),
             },
             alternatives: vec![],

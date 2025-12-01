@@ -49,7 +49,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                 let tracker = PerformanceTracker::new();
                 updated_profile.reset_daily_quests();
 
-                // Load quest registry synchronously for now (Phase 4 will make this lazy)
+                // Load quest registry synchronously
                 let quest_registry = QuestTemplateRegistry::load_from_default_path("en")
                     .unwrap_or_else(|e| {
                         tracing::warn!(
@@ -73,8 +73,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
         }
 
         DataLoadMessage::QuestRegistryReady(_registry) => {
-            // Phase 4: Handle quest registry loading
-            tracing::debug!("Quest registry loaded (not yet integrated)");
+            tracing::debug!("Quest registry loaded");
         }
 
         DataLoadMessage::QuestRegistryError(err) => {
@@ -124,7 +123,7 @@ mod tests {
                 selection: None,
             },
             solution: Solution {
-                commands: vec!["dd".to_string()],
+                commands: vec!["x".to_string(), "d".to_string()],
                 description: "Delete first line".to_string(),
             },
             alternatives: vec![],

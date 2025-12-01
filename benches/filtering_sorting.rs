@@ -35,11 +35,11 @@ fn create_scenario(
             selection: None,
         },
         solution: Solution {
-            commands: vec!["dd".to_string()],
+            commands: vec!["x".to_string()],
             description: "Delete first line".to_string(),
         },
         alternatives: vec![],
-        hints: vec!["Use dd to delete a line".to_string()],
+        hints: vec!["Use x to delete a line".to_string()],
         scoring: ScoringConfig {
             optimal_count: 1,
             max_points: 100,
@@ -48,7 +48,7 @@ fn create_scenario(
         metadata: Some(ScenarioMetadata {
             category,
             difficulty,
-            commands_taught: vec!["dd".to_string()],
+            commands_taught: vec!["x".to_string()],
             prerequisites: vec![],
             tags: vec![],
             estimated_time_seconds: Some(30),
@@ -507,7 +507,7 @@ fn bench_get_filtered_by_index(c: &mut Criterion) {
                     ScenarioCollection::new(scenarios)
                 },
                 |collection| {
-                    // Access middle scenario and check if it exists
+                    // Access mixle scenario and check if it exists
                     let exists = collection
                         .get_filtered_by_index(black_box(size / 2))
                         .is_some();

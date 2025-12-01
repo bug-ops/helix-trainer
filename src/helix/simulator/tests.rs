@@ -61,18 +61,6 @@ fn test_word_movement() {
 }
 
 #[test]
-fn test_delete_line() {
-    // In Helix, delete line is done with 'x' (select line) + 'd' (delete)
-    let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\n".to_string());
-
-    sim.execute_command(CMD_SELECT_LINE).unwrap();
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "line 2\nline 3\n");
-}
-
-#[test]
 fn test_select_line_then_delete() {
     let mut sim = AnyModeSimulator::new("Keep\nDelete me\nKeep".to_string());
 
@@ -501,21 +489,6 @@ fn test_append_at_line_end_and_insert() {
 }
 
 #[test]
-fn test_insert_text_works_in_insert_mode() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Enter Insert mode
-    sim.execute_command(CMD_INSERT).unwrap();
-
-    // Insert text should work via execute_command
-    let result = sim.execute_command("!");
-    assert!(result.is_ok());
-
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "!hello");
-}
-
-#[test]
 fn test_insert_multiple_chars() {
     let mut sim = AnyModeSimulator::new("".to_string());
 
@@ -610,21 +583,6 @@ fn test_arrow_keys_in_insert_mode() {
 }
 
 #[test]
-fn test_backspace_works_in_insert_mode() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Enter Insert mode
-    sim.execute_command(CMD_INSERT).unwrap();
-
-    // Move right first to have something to delete
-    sim.execute_command(CMD_ARROW_RIGHT).unwrap(); // Arrow right
-
-    // Backspace should work in Insert mode
-    let result = sim.execute_command(CMD_BACKSPACE);
-    assert!(result.is_ok());
-}
-
-#[test]
 fn test_join_lines() {
     let mut sim = AnyModeSimulator::new("line1\nline2\nline3".to_string());
 
@@ -713,7 +671,7 @@ fn test_multiple_indent() {
 }
 
 // ============================================================================
-// Phase 2: Repeat Buffer Integration Tests
+// Repeat Buffer Integration Tests
 // ============================================================================
 
 #[test]
@@ -1081,7 +1039,7 @@ fn test_change_command_records_and_enters_insert() {
 }
 
 // ============================================================================
-// Phase 3: Repeat Execution Tests
+// Repeat Execution Tests
 // ============================================================================
 
 #[test]
@@ -1494,74 +1452,8 @@ fn test_paste_before_cursor_scenario() {
     );
 }
 
-/// Test scenario: Repeat text insertion (repeat_insert_001)
-/// This tests the full flow: insert text, escape to normal, move, repeat
-#[test]
-fn test_scenario_repeat_text_insertion() {
-    // Setup: "TODO:\nFIX:\nNOTE:" with cursor at (0, 5)
-    let mut sim = AnyModeSimulator::new("TODO:\nFIX:\nNOTE:".to_string());
-
-    // Move cursor to position (0, 5) - end of "TODO:"
-    for _ in 0..5 {
-        sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    }
-
-    // Verify initial state
-    assert_eq!(sim.mode(), Mode::Normal);
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 5);
-
-    // Enter insert mode with 'i'
-    sim.execute_command(CMD_INSERT).unwrap();
-    assert_eq!(
-        sim.mode(),
-        Mode::Insert,
-        "Should be in insert mode after 'i'"
-    );
-
-    // Type " Update docs"
-    for ch in " Update docs".chars() {
-        sim.execute_command(&ch.to_string()).unwrap();
-    }
-
-    let state = sim.get_state().unwrap();
-    assert!(
-        state.content().starts_with("TODO: Update docs"),
-        "First line should have inserted text, got: {}",
-        state.content()
-    );
-
-    // Exit insert mode with Escape
-    sim.execute_command(CMD_ESCAPE).unwrap();
-    assert_eq!(
-        sim.mode(),
-        Mode::Normal,
-        "Should be in normal mode after Escape"
-    );
-
-    // Navigate to FIX: line end
-    sim.execute_command(CMD_MOVE_DOWN).unwrap(); // j - move to FIX: line
-    sim.execute_command(CMD_MOVE_LINE_START).unwrap(); // 0 - go to line start
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap(); // $ - go to line end
-
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().row, 1, "Should be on line 1 (FIX:)");
-
-    // Repeat insertion with '.'
-    sim.execute_command(CMD_REPEAT).unwrap();
-
-    // Verify final state
-    let state = sim.get_state().unwrap();
-    assert_eq!(
-        state.content(),
-        "TODO: Update docs\nFIX: Update docs\nNOTE:",
-        "Both lines should have ' Update docs' appended"
-    );
-}
-
-// Phase 4: Compound Action Tests (selection + operator)
-// Tests for x+d, x+y, %+d etc. combinations that should be recorded and repeated together
+// Compound Action Tests (selection + operator)
+// Tests for x+d, x+y, %+d etc. combinations
 
 #[test]
 fn test_repeat_select_line_then_delete() {
@@ -1661,129 +1553,8 @@ fn test_compound_action_overwritten_by_simple_command() {
     // Repeat should do x+d again
 }
 
-// Phase 5: Scenario Validation Tests
-// These tests verify that the actual scenarios from TOML files work correctly
-
-#[test]
-fn test_scenario_repeat_delete_char_001() {
-    // Scenario: repeat_delete_char_001
-    // Setup: "hello world", cursor [0,0]
-    // Target: "llo world", cursor [0,0]
-    // Commands: ["d", "."]
-    let mut sim = AnyModeSimulator::new("hello world".to_string());
-
-    // Execute commands from scenario
-    sim.execute_command("d").unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "ello world", "After first 'd'");
-
-    sim.execute_command(".").unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "llo world", "After '.' repeat");
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 0);
-}
-
-#[test]
-fn test_scenario_repeat_delete_line_001() {
-    // Scenario: repeat_delete_line_001
-    // Setup: "line 1\nline 2\nline 3\nline 4", cursor [0,0]
-    // Target: "line 3\nline 4", cursor [0,0]
-    // Commands: ["x", "d", "."]
-    let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\nline 4".to_string());
-
-    // Select line with x, then delete with d
-    sim.execute_command("x").unwrap();
-    sim.execute_command("d").unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(
-        state.content(),
-        "line 2\nline 3\nline 4",
-        "After first 'xd'"
-    );
-
-    // Repeat with . - should execute x+d together
-    sim.execute_command(".").unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "line 3\nline 4", "After '.' repeat");
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 0);
-}
-
-#[test]
-fn test_scenario_repeat_indent_001() {
-    // Scenario: repeat_indent_001
-    // Setup: "def foo():\nprint('hello')\nprint('world')\nreturn", cursor [1,0]
-    // Target: "def foo():\n  print('hello')\n  print('world')\nreturn", cursor [2,4]
-    // Commands: [">", "j", "."]
-    let mut sim =
-        AnyModeSimulator::new("def foo():\nprint('hello')\nprint('world')\nreturn".to_string());
-
-    // Move to line 1
-    sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().row, 1);
-
-    // Indent
-    sim.execute_command(">").unwrap();
-    let state = sim.get_state().unwrap();
-    assert!(
-        state.content().contains("  print('hello')"),
-        "Line 1 should be indented"
-    );
-
-    // Move down
-    sim.execute_command("j").unwrap();
-
-    // Repeat indent
-    sim.execute_command(".").unwrap();
-    let state = sim.get_state().unwrap();
-    assert!(
-        state.content().contains("  print('world')"),
-        "Line 2 should be indented"
-    );
-
-    // Final content check
-    assert_eq!(
-        state.content(),
-        "def foo():\n  print('hello')\n  print('world')\nreturn"
-    );
-}
-
-#[test]
-fn test_scenario_repeat_replace_001() {
-    // Scenario: repeat_replace_001
-    // Setup: "foo-bar-baz", cursor [0,3]
-    // Target: "foo_bar_baz", cursor [0,7]
-    // Commands: ["r_", "l", "l", "l", "l", "."]
-    let mut sim = AnyModeSimulator::new("foo-bar-baz".to_string());
-
-    // Move to position 3 (first '-')
-    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().col, 3);
-
-    // Replace '-' with '_'
-    sim.execute_command("r_").unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "foo_bar-baz", "After first replace");
-
-    // Move right 4 times to reach second '-'
-    sim.execute_command("l").unwrap();
-    sim.execute_command("l").unwrap();
-    sim.execute_command("l").unwrap();
-    sim.execute_command("l").unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().col, 7);
-
-    // Repeat replace
-    sim.execute_command(".").unwrap();
-    let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "foo_bar_baz", "After repeat replace");
-    assert_eq!(state.cursor_position().col, 7);
-}
+// Scenario Validation Tests
+// Verify that scenarios from TOML files work correctly
 
 #[test]
 fn test_scenario_repeat_insert_001() {

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
-const DEFAULT_DIFFICULTY: f32 = 5.0; // Middle difficulty (0-10 scale)
+const DEFAULT_DIFFICULTY: f32 = 5.0; // Mixle difficulty (0-10 scale)
 const DEFAULT_DESIRED_RETENTION: f32 = 0.9; // 90% target retention
 
 /// Card state tracked by the application (FSRS doesn't track this)
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_new_command_defaults() {
-        let perf = CommandPerformance::new("dd".to_string());
+        let perf = CommandPerformance::new("x".to_string());
         assert_eq!(perf.stability, 0.0);
         assert_eq!(perf.difficulty, DEFAULT_DIFFICULTY);
         assert_eq!(perf.reps, 0);
@@ -384,9 +384,9 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
 
         // First attempt (perfect)
-        tracker.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let perf = tracker.get_performance("dd").unwrap();
+        let perf = tracker.get_performance("x").unwrap();
         assert!(perf.stability > 0.0);
         assert_eq!(perf.reps, 1);
         assert!(matches!(
@@ -397,9 +397,9 @@ mod tests {
         let first_stability = perf.stability;
 
         // Second attempt (perfect)
-        tracker.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let perf = tracker.get_performance("dd").unwrap();
+        let perf = tracker.get_performance("x").unwrap();
         assert!(perf.stability > first_stability); // FSRS increases stability
         assert_eq!(perf.reps, 2);
     }
@@ -409,15 +409,15 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
 
         // Build up some stability
-        tracker.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let lapses_before = tracker.get_performance("dd").unwrap().lapses;
+        let lapses_before = tracker.get_performance("x").unwrap().lapses;
 
         // Fail
-        tracker.record_attempt("dd", Duration::from_secs(10), false, Duration::from_secs(1));
+        tracker.record_attempt("x", Duration::from_secs(10), false, Duration::from_secs(1));
 
-        let perf = tracker.get_performance("dd").unwrap();
+        let perf = tracker.get_performance("x").unwrap();
         // Lapse count increases when failing
         assert_eq!(perf.lapses, lapses_before + 1);
         assert!(matches!(
@@ -432,10 +432,10 @@ mod tests {
 
         // Spam failures - difficulty should stay within 0-10
         for _ in 0..100 {
-            tracker.record_attempt("dd", Duration::from_secs(10), false, Duration::from_secs(1));
+            tracker.record_attempt("x", Duration::from_secs(10), false, Duration::from_secs(1));
         }
 
-        let perf = tracker.get_performance("dd").unwrap();
+        let perf = tracker.get_performance("x").unwrap();
         assert!(perf.difficulty >= 0.0);
         assert!(perf.difficulty <= 10.0);
     }
@@ -482,7 +482,7 @@ mod tests {
 
     #[test]
     fn test_memory_state_conversion() {
-        let mut perf = CommandPerformance::new("dd".to_string());
+        let mut perf = CommandPerformance::new("x".to_string());
         assert!(perf.memory_state().is_none());
 
         perf.stability = 5.0;
@@ -497,7 +497,7 @@ mod tests {
 
     #[test]
     fn test_mastery_level_progression() {
-        let mut perf = CommandPerformance::new("dd".to_string());
+        let mut perf = CommandPerformance::new("x".to_string());
         assert_eq!(perf.mastery_level, MasteryLevel::Beginner);
 
         // Simulate progression through states
@@ -549,13 +549,13 @@ mod tests {
     fn test_all_commands() {
         let mut tracker = PerformanceTracker::new();
 
-        tracker.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker.record_attempt("yy", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker.record_attempt("p", Duration::from_secs(1), true, Duration::from_secs(1));
 
         let all = tracker.all_commands();
         assert_eq!(all.len(), 3);
-        assert!(all.contains(&"dd"));
+        assert!(all.contains(&"x"));
         assert!(all.contains(&"yy"));
         assert!(all.contains(&"p"));
     }

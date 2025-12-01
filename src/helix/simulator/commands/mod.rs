@@ -216,7 +216,7 @@ pub(super) fn execute_normal_mode_command_internal(
         movement::move_document_end(sim)?;
     }
     // Deletion commands
-    // Note: In Helix, use 'x' (select line) + 'd' (delete) instead of 'dd'
+    // In Helix, use 'x' (select line) + 'd' (delete) to delete a line
     else if cmd == CMD_DELETE_SELECTION {
         editing::delete_selection(sim)?;
     } else if cmd == CMD_CHANGE {

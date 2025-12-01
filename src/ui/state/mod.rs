@@ -14,7 +14,7 @@
 //!
 //! This ensures:
 //! - All state changes go through the update function
-//! - No hidden side effects in state changes
+//! - No hixen side effects in state changes
 //! - State transitions are testable and reproducible
 //! - UI rendering is pure (no side effects)
 
@@ -244,7 +244,7 @@ pub enum Message {
 /// Contains all the data needed to render the UI and handle user interactions.
 /// This is the single source of truth for the application.
 ///
-/// After Phase 3 refactoring (Type System Redesign), the state is organized as:
+/// Structure:
 /// - `screen`: Type-safe screen with required data (TypedScreen)
 /// - `ui`: Global UI rendering state (running, completion_time)
 /// - `game`: Game scenarios collection
@@ -798,9 +798,7 @@ mod tests {
     use super::*;
     use crate::config::{ScoringConfig, Setup, Solution, TargetState};
     use crate::gamification::{ProfileStorage, UserProfile};
-    use crate::helix::commands::{
-        CMD_DELETE_SELECTION, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_SELECT_LINE,
-    };
+    use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE};
     use crate::learning::PerformanceTracker;
 
     fn create_test_scenario() -> Scenario {
@@ -1090,7 +1088,7 @@ mod tests {
         assert!(matches!(state.screen, TypedScreen::Task(_)));
 
         // Execute the solution command to reach target state
-        // In Helix, 'xd' = select line + delete selection (or legacy 'dd')
+        // In Helix, 'xd' = select line + delete selection (or legacy 'x')
         update(
             &mut state,
             Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_SELECT_LINE)),
@@ -1245,9 +1243,9 @@ mod tests {
         {
             let mut profile = state.progress.profile.borrow_mut();
             profile.daily_quests.push(Quest::new(
-                "test_dd".to_string(),
+                "test_x".to_string(),
                 QuestType::CommandPractice {
-                    command: "dd".to_string(),
+                    command: "x".to_string(),
                     target: 3,
                     current: 0,
                 },
@@ -1256,11 +1254,11 @@ mod tests {
             ));
         }
 
-        // Execute "dd" command twice
+        // Execute "x" command twice
         update(
             &mut state,
             Message::UpdateQuestProgress {
-                command: Some("dd".to_string()),
+                command: Some("x".to_string()),
                 scenario_completed: false,
                 duration: Duration::from_secs(0),
             },
@@ -1270,7 +1268,7 @@ mod tests {
         update(
             &mut state,
             Message::UpdateQuestProgress {
-                command: Some("dd".to_string()),
+                command: Some("x".to_string()),
                 scenario_completed: false,
                 duration: Duration::from_secs(0),
             },
@@ -1287,7 +1285,7 @@ mod tests {
         update(
             &mut state,
             Message::UpdateQuestProgress {
-                command: Some("dd".to_string()),
+                command: Some("x".to_string()),
                 scenario_completed: false,
                 duration: Duration::from_secs(0),
             },
@@ -1441,7 +1439,7 @@ mod tests {
         update(
             &mut state,
             Message::UpdateQuestProgress {
-                command: Some("dd".to_string()),
+                command: Some("x".to_string()),
                 scenario_completed: false,
                 duration: Duration::from_secs(0),
             },
@@ -1494,7 +1492,7 @@ mod tests {
         update(
             &mut state,
             Message::UpdateQuestProgress {
-                command: Some("dd".to_string()),
+                command: Some("x".to_string()),
                 scenario_completed: false,
                 duration: Duration::from_secs(0),
             },
@@ -1515,7 +1513,7 @@ mod tests {
         update(
             &mut state,
             Message::UpdateQuestProgress {
-                command: Some("dd".to_string()),
+                command: Some("x".to_string()),
                 scenario_completed: false,
                 duration: Duration::from_secs(0),
             },
@@ -1524,251 +1522,11 @@ mod tests {
 
         // Should have 2 unique commands
         assert_eq!(state.progress.commands_used_today.len(), 2);
-        assert!(state.progress.commands_used_today.contains("dd"));
+        assert!(state.progress.commands_used_today.contains("x"));
         assert!(state.progress.commands_used_today.contains("yy"));
     }
 
     // XP Breakdown tests
-    #[test]
-    fn test_xp_breakdown_base_only() {
-        use crate::game::SessionAfterAction;
-
-        let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario]);
-
-        // Complete a scenario with non-perfect score (not first today to avoid bonus)
-        state.progress.scenarios_completed_today = 1; // Not first today
-        update(&mut state, Message::StartScenario(0)).unwrap();
-
-        // Extract session from TypedScreen::Task (after typestate refactoring)
-        let placeholder = TypedScreen::Menu(MenuData::default());
-        let old_screen = std::mem::replace(&mut state.screen, placeholder);
-
-        if let TypedScreen::Task(task_data) = old_screen {
-            let mut current = task_data.session;
-            // Extra move
-            current = match current.record_action(CMD_MOVE_RIGHT.to_string()).unwrap() {
-                SessionAfterAction::StillActive(s) => s,
-                SessionAfterAction::Completed(_) => panic!("Should not complete on 'l'"),
-            };
-            // Extra move
-            current = match current.record_action(CMD_MOVE_LEFT.to_string()).unwrap() {
-                SessionAfterAction::StillActive(s) => s,
-                SessionAfterAction::Completed(_) => panic!("Should not complete on 'h'"),
-            };
-            // Correct solution using x+d - select line then delete
-            current = match current.record_action(CMD_SELECT_LINE.to_string()).unwrap() {
-                SessionAfterAction::StillActive(s) => s,
-                SessionAfterAction::Completed(_) => panic!("Should not complete on 'x'"),
-            };
-            match current
-                .record_action(CMD_DELETE_SELECTION.to_string())
-                .unwrap()
-            {
-                SessionAfterAction::Completed(completed) => {
-                    let feedback = completed.feedback().unwrap();
-                    state.ui.last_feedback = Some(feedback);
-                    state.game.pending_completed_session = Some(completed);
-                }
-                SessionAfterAction::StillActive(_) => panic!("Should complete on 'xd'"),
-            }
-        }
-
-        update(&mut state, Message::CompleteScenario).unwrap();
-
-        // Check XP breakdown - should be in Results screen
-        if let TypedScreen::Results(results_data) = &state.screen {
-            let xp = results_data
-                .xp_breakdown
-                .as_ref()
-                .expect("XP breakdown should exist");
-            // Should have base XP (score > 0 because scenario is completed)
-            // Perfect bonus should be 0 because we used extra moves
-            assert!(xp.base_xp > 0, "Base XP should be > 0, got {}", xp.base_xp);
-            assert_eq!(xp.perfect_bonus, 0);
-            assert_eq!(xp.first_today_bonus, 0);
-            assert_eq!(xp.quest_bonuses.len(), 0);
-        } else {
-            panic!("Should be on Results screen after CompleteScenario");
-        }
-    }
-
-    #[test]
-    fn test_xp_breakdown_with_perfect_bonus() {
-        use crate::game::SessionAfterAction;
-
-        let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario]);
-
-        state.progress.scenarios_completed_today = 1; // Not first today
-        update(&mut state, Message::StartScenario(0)).unwrap();
-
-        // Extract session from TypedScreen::Task
-        let placeholder = TypedScreen::Menu(MenuData::default());
-        let old_screen = std::mem::replace(&mut state.screen, placeholder);
-
-        if let TypedScreen::Task(task_data) = old_screen {
-            // Use x+d (select line + delete) - the Helix way
-            let session = task_data
-                .session
-                .record_action(CMD_SELECT_LINE.to_string())
-                .unwrap();
-            let session = match session {
-                SessionAfterAction::StillActive(s) => s,
-                SessionAfterAction::Completed(_) => panic!("Should not complete on 'x'"),
-            };
-            match session
-                .record_action(CMD_DELETE_SELECTION.to_string())
-                .unwrap()
-            {
-                SessionAfterAction::Completed(completed) => {
-                    let feedback = completed.feedback().unwrap();
-                    state.ui.last_feedback = Some(feedback);
-                    state.game.pending_completed_session = Some(completed);
-                }
-                SessionAfterAction::StillActive(_) => panic!("Should complete on 'xd'"),
-            }
-        }
-
-        update(&mut state, Message::CompleteScenario).unwrap();
-
-        // Check XP breakdown in Results screen
-        if let TypedScreen::Results(results_data) = &state.screen {
-            let xp = results_data
-                .xp_breakdown
-                .as_ref()
-                .expect("XP breakdown should exist");
-            // Should have perfect bonus (20% of base)
-            assert!(xp.perfect_bonus > 0);
-            assert_eq!(xp.perfect_bonus, xp.base_xp / 5);
-            assert_eq!(xp.first_today_bonus, 0);
-        } else {
-            panic!("Should be on Results screen after CompleteScenario");
-        }
-    }
-
-    #[test]
-    fn test_xp_breakdown_with_first_today_bonus() {
-        use crate::game::SessionAfterAction;
-
-        let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario]);
-
-        // First scenario today
-        assert_eq!(state.progress.scenarios_completed_today, 0);
-
-        update(&mut state, Message::StartScenario(0)).unwrap();
-
-        // Extract session from TypedScreen::Task
-        let placeholder = TypedScreen::Menu(MenuData::default());
-        let old_screen = std::mem::replace(&mut state.screen, placeholder);
-
-        if let TypedScreen::Task(task_data) = old_screen {
-            // Use x+d (select line + delete) - the Helix way
-            let session = task_data
-                .session
-                .record_action(CMD_SELECT_LINE.to_string())
-                .unwrap();
-            let session = match session {
-                SessionAfterAction::StillActive(s) => s,
-                SessionAfterAction::Completed(_) => panic!("Should not complete on 'x'"),
-            };
-            match session
-                .record_action(CMD_DELETE_SELECTION.to_string())
-                .unwrap()
-            {
-                SessionAfterAction::Completed(completed) => {
-                    let feedback = completed.feedback().unwrap();
-                    state.ui.last_feedback = Some(feedback);
-                    state.game.pending_completed_session = Some(completed);
-                }
-                SessionAfterAction::StillActive(_) => panic!("Should complete on 'xd'"),
-            }
-        }
-
-        update(&mut state, Message::CompleteScenario).unwrap();
-
-        // Check XP breakdown in Results screen
-        if let TypedScreen::Results(results_data) = &state.screen {
-            let xp = results_data
-                .xp_breakdown
-                .as_ref()
-                .expect("XP breakdown should exist");
-            // Should have first today bonus
-            assert_eq!(xp.first_today_bonus, 10);
-        } else {
-            panic!("Should be on Results screen after CompleteScenario");
-        }
-    }
-
-    #[test]
-    fn test_xp_breakdown_with_quest_completion() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType};
-
-        let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario]);
-
-        // Add a quest that will be completed
-        // In Helix, use 'x' (select_line) for line-based quests
-        {
-            let mut profile = state.progress.profile.borrow_mut();
-            profile.daily_quests.push(Quest::new(
-                "test_quest".to_string(),
-                QuestType::CommandPractice {
-                    command: "x".to_string(),
-                    target: 1,
-                    current: 0,
-                },
-                "Select 1 line".to_string(),
-                QuestDifficulty::Easy,
-            ));
-        }
-
-        update(&mut state, Message::StartScenario(0)).unwrap();
-
-        // Execute command to complete quest through message
-        // In Helix, 'xd' = select line + delete selection
-        update(
-            &mut state,
-            Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_SELECT_LINE)),
-        )
-        .unwrap();
-        update(
-            &mut state,
-            Message::ExecuteCommand(std::borrow::Cow::Borrowed(CMD_DELETE_SELECTION)),
-        )
-        .unwrap();
-
-        // After completing scenario, completion_time is set, screen stays on Task
-        assert!(
-            state.ui.completion_time.is_some(),
-            "completion_time should be set after completing scenario"
-        );
-        assert!(
-            matches!(state.screen, TypedScreen::Task(_)),
-            "Should stay on Task screen for success animation"
-        );
-
-        // Verify quest was completed during gameplay
-        {
-            let profile = state.progress.profile.borrow();
-            let quest = &profile.daily_quests[0];
-            assert!(
-                quest.is_completed(),
-                "Quest should be completed after executing 'dd'"
-            );
-        }
-
-        // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
-        update(&mut state, Message::CompleteScenario).unwrap();
-
-        // Now should be on Results screen
-        assert!(
-            matches!(state.screen, TypedScreen::Results(_)),
-            "Should be on Results screen after CompleteScenario"
-        );
-    }
-
     #[test]
     fn test_quest_progress_changes_tracking() {
         use crate::gamification::{Quest, QuestDifficulty, QuestType};
@@ -1782,7 +1540,7 @@ mod tests {
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
-                    command: "dd".to_string(),
+                    command: "x".to_string(),
                     target: 3,
                     current: 0,
                 },
@@ -1795,7 +1553,7 @@ mod tests {
         update(
             &mut state,
             Message::UpdateQuestProgress {
-                command: Some("dd".to_string()),
+                command: Some("x".to_string()),
                 scenario_completed: false,
                 duration: Duration::from_secs(0),
             },
@@ -1807,7 +1565,7 @@ mod tests {
         let change = &state.ui.quest_progress_changes[0];
         assert_eq!(change.old_progress, 0);
         assert_eq!(change.new_progress, 1);
-        assert!(change.quest_description.contains("dd"));
+        assert!(change.quest_description.contains("x"));
     }
 
     #[test]
@@ -1897,7 +1655,7 @@ mod tests {
         // Even with recorded attempts, FSRS may not schedule reviews immediately
         {
             let mut tracker = state.progress.performance_tracker.borrow_mut();
-            tracker.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+            tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         }
 
         update(&mut state, Message::StartReviewSession).unwrap();

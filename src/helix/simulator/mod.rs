@@ -9,7 +9,7 @@
 //! The simulator uses the typestate pattern to enforce mode-specific operations
 //! at compile time. See the `mode` module for details.
 
-mod commands;
+pub mod commands;
 mod insert_mode;
 mod mode;
 mod undo;

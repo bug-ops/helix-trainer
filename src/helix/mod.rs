@@ -18,6 +18,7 @@
 
 pub mod commands;
 pub mod executor;
+pub mod registry;
 pub mod repeat;
 pub mod simulator;
 

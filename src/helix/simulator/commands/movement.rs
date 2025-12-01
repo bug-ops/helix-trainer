@@ -10,7 +10,7 @@ use helix_core::{
 };
 
 /// Move left by count characters (works in any mode)
-pub(super) fn move_left<M: EditorMode>(
+pub fn move_left<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
@@ -37,7 +37,7 @@ pub(super) fn move_left<M: EditorMode>(
 }
 
 /// Move right by count characters
-pub(super) fn move_right<M: EditorMode>(
+pub fn move_right<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
@@ -64,7 +64,7 @@ pub(super) fn move_right<M: EditorMode>(
 }
 
 /// Move down by count lines
-pub(super) fn move_down<M: EditorMode>(
+pub fn move_down<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
@@ -91,10 +91,7 @@ pub(super) fn move_down<M: EditorMode>(
 }
 
 /// Move up by count lines
-pub(super) fn move_up<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    count: usize,
-) -> Result<(), UserError> {
+pub fn move_up<M: EditorMode>(sim: &mut HelixSimulator<M>, count: usize) -> Result<(), UserError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -118,10 +115,7 @@ pub(super) fn move_up<M: EditorMode>(
 }
 
 /// Move to start of next word
-pub(super) fn move_next_word_start(
-    sim: &mut HelixSimulator,
-    count: usize,
-) -> Result<(), UserError> {
+pub fn move_next_word_start(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -133,10 +127,7 @@ pub(super) fn move_next_word_start(
 }
 
 /// Move to start of previous word
-pub(super) fn move_prev_word_start(
-    sim: &mut HelixSimulator,
-    count: usize,
-) -> Result<(), UserError> {
+pub fn move_prev_word_start(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -148,7 +139,7 @@ pub(super) fn move_prev_word_start(
 }
 
 /// Move to end of next word
-pub(super) fn move_next_word_end<M: EditorMode>(
+pub fn move_next_word_end<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
@@ -163,7 +154,7 @@ pub(super) fn move_next_word_end<M: EditorMode>(
 }
 
 /// Move to start of next WORD (whitespace-delimited)
-pub(super) fn move_next_long_word_start<M: EditorMode>(
+pub fn move_next_long_word_start<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
@@ -178,7 +169,7 @@ pub(super) fn move_next_long_word_start<M: EditorMode>(
 }
 
 /// Move to start of previous WORD (whitespace-delimited)
-pub(super) fn move_prev_long_word_start<M: EditorMode>(
+pub fn move_prev_long_word_start<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
@@ -193,7 +184,7 @@ pub(super) fn move_prev_long_word_start<M: EditorMode>(
 }
 
 /// Move to end of next WORD (whitespace-delimited)
-pub(super) fn move_next_long_word_end<M: EditorMode>(
+pub fn move_next_long_word_end<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
@@ -208,7 +199,7 @@ pub(super) fn move_next_long_word_end<M: EditorMode>(
 }
 
 /// Move to start of current line
-pub(super) fn move_line_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn move_line_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
@@ -218,7 +209,7 @@ pub(super) fn move_line_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Res
 }
 
 /// Move to end of current line
-pub(super) fn move_line_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn move_line_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
 
@@ -234,24 +225,20 @@ pub(super) fn move_line_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resul
 }
 
 /// Move to start of document
-pub(super) fn move_document_start<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+pub fn move_document_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     sim.selection = Selection::point(0);
     Ok(())
 }
 
 /// Move to end of document
-pub(super) fn move_document_end<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+pub fn move_document_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let end = sim.doc.len_chars();
     sim.selection = Selection::point(end);
     Ok(())
 }
 
 /// Find next occurrence of character on current line (Helix 'f' command)
-pub(super) fn find_next_char<M: EditorMode>(
+pub fn find_next_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
@@ -287,7 +274,7 @@ pub(super) fn find_next_char<M: EditorMode>(
 }
 
 /// Find previous occurrence of character on current line (Helix 'F' command)
-pub(super) fn find_prev_char<M: EditorMode>(
+pub fn find_prev_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
@@ -324,7 +311,7 @@ pub(super) fn find_prev_char<M: EditorMode>(
 }
 
 /// Move till (before) next occurrence of character (Helix 't' command)
-pub(super) fn till_next_char<M: EditorMode>(
+pub fn till_next_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
@@ -362,7 +349,7 @@ pub(super) fn till_next_char<M: EditorMode>(
 }
 
 /// Move till (after) previous occurrence of character (Helix 'T' command)
-pub(super) fn till_prev_char<M: EditorMode>(
+pub fn till_prev_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
@@ -399,7 +386,7 @@ pub(super) fn till_prev_char<M: EditorMode>(
 }
 
 /// Move to first non-whitespace character on line (Helix 'gs' command)
-pub(super) fn goto_first_nonwhitespace<M: EditorMode>(
+pub fn goto_first_nonwhitespace<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
@@ -430,7 +417,7 @@ pub(super) fn goto_first_nonwhitespace<M: EditorMode>(
 }
 
 /// Go to last line of document (Helix 'ge' command)
-pub(super) fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let last_line = sim.doc.len_lines().saturating_sub(1);
     let line_start = sim.doc.line_to_char(last_line);
     sim.selection = Selection::point(line_start);
@@ -438,7 +425,7 @@ pub(super) fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
 }
 
 /// Match brackets - find matching bracket pair (Helix 'm' command)
-pub(super) fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let slice = sim.doc.slice(..);
 
@@ -504,7 +491,7 @@ pub(super) fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
 }
 
 /// Flip selection direction (swap anchor and head) - Helix 'Alt-;' command
-pub(super) fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let range = sim.selection.primary();
     // Swap anchor and head
     sim.selection = Selection::single(range.head, range.anchor);

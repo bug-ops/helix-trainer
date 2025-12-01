@@ -1,8 +1,8 @@
 //! Command execution and dispatch
 
-mod clipboard;
-mod editing;
-mod movement;
+pub mod clipboard;
+pub mod editing;
+pub mod movement;
 
 use super::{AnyModeSimulator, HelixSimulator, InsertMode, Mode, NormalMode};
 use crate::helix::commands::*;
@@ -171,166 +171,73 @@ fn execute_insert_mode_command_internal(
 
 /// Execute a command in Normal mode (internal, public for repeat functionality)
 ///
-/// Routes commands to appropriate handlers (movement, editing, clipboard, etc.).
+/// Routes commands to appropriate handlers via the Command Registry (O(1) dispatch).
 /// Returns an error for unknown commands. Does NOT handle mode transitions.
 pub(super) fn execute_normal_mode_command_internal(
     sim: &mut HelixSimulator<NormalMode>,
     cmd: &str,
 ) -> Result<(), UserError> {
-    // Movement commands - single character
-    if cmd == CMD_MOVE_LEFT {
-        movement::move_left(sim, 1)?;
-    } else if cmd == CMD_MOVE_RIGHT {
-        movement::move_right(sim, 1)?;
-    } else if cmd == CMD_MOVE_DOWN {
-        movement::move_down(sim, 1)?;
-    } else if cmd == CMD_MOVE_UP {
-        movement::move_up(sim, 1)?;
+    use crate::helix::registry::normal_registry;
+
+    // Get the global command registry
+    let registry = normal_registry();
+
+    // Special handling for parametric commands (r/f/F/t/T + character)
+    // These need character extraction before dispatch
+    if cmd.len() == 2 {
+        let first = cmd.chars().next().unwrap();
+        let second = cmd.chars().nth(1).unwrap();
+
+        match first {
+            'r' => {
+                // Replace character command
+                sim.replace_char(second)?;
+                return Ok(());
+            }
+            'f' => {
+                // Find next character
+                movement::find_next_char(sim, second, 1)?;
+                return Ok(());
+            }
+            'F' => {
+                // Find previous character
+                movement::find_prev_char(sim, second, 1)?;
+                return Ok(());
+            }
+            't' => {
+                // Till next character
+                movement::till_next_char(sim, second, 1)?;
+                return Ok(());
+            }
+            'T' => {
+                // Till previous character
+                movement::till_prev_char(sim, second, 1)?;
+                return Ok(());
+            }
+            _ => {
+                // Not a parametric command, try registry below
+            }
+        }
     }
-    // Word movement
-    else if cmd == CMD_MOVE_WORD_FORWARD {
-        movement::move_next_word_start(sim, 1)?;
-    } else if cmd == CMD_MOVE_WORD_BACKWARD {
-        movement::move_prev_word_start(sim, 1)?;
-    } else if cmd == CMD_MOVE_WORD_END {
-        movement::move_next_word_end(sim, 1)?;
-    }
-    // WORD movement (whitespace-delimited)
-    else if cmd == CMD_MOVE_LONG_WORD_FORWARD {
-        movement::move_next_long_word_start(sim, 1)?;
-    } else if cmd == CMD_MOVE_LONG_WORD_BACKWARD {
-        movement::move_prev_long_word_start(sim, 1)?;
-    } else if cmd == CMD_MOVE_LONG_WORD_END {
-        movement::move_next_long_word_end(sim, 1)?;
-    }
-    // Line movement
-    else if cmd == CMD_MOVE_LINE_START {
-        movement::move_line_start(sim)?;
-    } else if cmd == CMD_MOVE_LINE_END {
-        movement::move_line_end(sim)?;
-    }
-    // Document movement
-    else if cmd == CMD_GOTO_FILE_START {
-        movement::move_document_start(sim)?;
-    } else if cmd == CMD_GOTO_FILE_END {
-        movement::move_document_end(sim)?;
-    }
-    // Deletion commands
-    // In Helix, use 'x' (select line) + 'd' (delete) to delete a line
-    else if cmd == CMD_DELETE_SELECTION {
-        editing::delete_selection(sim)?;
-    } else if cmd == CMD_CHANGE {
-        sim.change_selection()?;
-    } else if cmd == CMD_JOIN_LINES {
-        editing::join_lines(sim)?;
-    }
-    // Selection commands
-    else if cmd == CMD_SELECT_LINE {
-        editing::select_line(sim)?;
-    } else if cmd == CMD_EXTEND_LINE {
-        editing::extend_line(sim)?;
-    } else if cmd == CMD_SELECT_ALL {
-        editing::select_all(sim)?;
-    } else if cmd == CMD_COLLAPSE_SELECTION {
-        editing::collapse_selection(sim)?;
-    }
-    // Case switching
-    else if cmd == CMD_SWITCH_CASE || cmd == CMD_SWITCH_CASE_ALT {
-        editing::switch_case(sim)?;
-    }
-    // Indentation
-    else if cmd == CMD_INDENT {
-        editing::indent_line(sim)?;
-    } else if cmd == CMD_DEDENT {
-        editing::dedent_line(sim)?;
-    }
-    // Yank and paste
-    else if cmd == CMD_YANK {
-        clipboard::yank(sim)?;
-    } else if cmd == CMD_PASTE_AFTER {
-        clipboard::paste_after(sim)?;
-    } else if cmd == CMD_PASTE_BEFORE {
-        clipboard::paste_before(sim)?;
-    }
-    // Mode changes and editing (these prepare for mode transition but don't execute it)
-    else if cmd == CMD_INSERT {
-        // Mode transition handled by caller
-    } else if cmd == CMD_APPEND {
-        sim.append()?;
-    } else if cmd == CMD_INSERT_LINE_START {
-        sim.insert_at_line_start()?;
-    } else if cmd == CMD_APPEND_LINE_END {
-        sim.append_at_line_end()?;
-    } else if cmd == CMD_OPEN_BELOW {
-        sim.open_below()?;
-    } else if cmd == CMD_OPEN_ABOVE {
-        sim.open_above()?;
-    } else if cmd == CMD_ESCAPE {
+
+    // Special cases that need manual handling
+    if cmd == CMD_ESCAPE {
         // No-op in normal mode
+        return Ok(());
     }
-    // Character operations - replace command (e.g., "rx")
-    else if cmd.starts_with('r') && cmd.len() == 2 {
-        let ch = cmd.chars().nth(1).unwrap();
-        sim.replace_char(ch)?;
-    }
-    // Find character commands (e.g., "fx", "Fx")
-    else if cmd.starts_with('f') && cmd.len() == 2 {
-        let ch = cmd.chars().nth(1).unwrap();
-        movement::find_next_char(sim, ch, 1)?;
-    } else if cmd.starts_with('F') && cmd.len() == 2 {
-        let ch = cmd.chars().nth(1).unwrap();
-        movement::find_prev_char(sim, ch, 1)?;
-    }
-    // Till character commands (e.g., "tx", "Tx")
-    else if cmd.starts_with('t') && cmd.len() == 2 {
-        let ch = cmd.chars().nth(1).unwrap();
-        movement::till_next_char(sim, ch, 1)?;
-    } else if cmd.starts_with('T') && cmd.len() == 2 {
-        let ch = cmd.chars().nth(1).unwrap();
-        movement::till_prev_char(sim, ch, 1)?;
-    }
-    // Match brackets
-    else if cmd == CMD_MATCH_BRACKETS {
-        movement::match_brackets(sim)?;
-    }
-    // Flip selection direction
-    else if cmd == CMD_FLIP_SELECTIONS {
-        movement::flip_selections(sim)?;
-    }
-    // Goto mode commands
-    else if cmd == CMD_GOTO_LINE_START {
-        movement::move_line_start(sim)?;
-    } else if cmd == CMD_GOTO_LINE_END {
-        movement::move_line_end(sim)?;
-    } else if cmd == CMD_GOTO_FIRST_NONWHITESPACE {
-        movement::goto_first_nonwhitespace(sim)?;
-    } else if cmd == CMD_GOTO_LAST_LINE {
-        movement::goto_last_line(sim)?;
-    }
-    // Select mode (just stays in normal mode but could enable selection extension)
-    else if cmd == CMD_SELECT_MODE {
-        // Select mode is a visual enhancement - no actual operation needed
-        // In a full implementation this would toggle selection extension
-    }
-    // Repeat last action - this shouldn't reach here but handle gracefully
-    else if cmd == CMD_REPEAT {
+
+    if cmd == CMD_REPEAT {
         // Repeat is handled specially by execute_command_any_mode
         // If we reach here, something is wrong but don't error
         return Ok(());
     }
-    // Undo/Redo
-    else if cmd == CMD_UNDO {
-        sim.undo()?;
-    } else if cmd == CMD_REDO {
-        sim.redo()?;
-    } else if cmd == "ctrl-r" {
-        // Alternative redo binding
-        sim.redo()?;
-    } else {
-        // Unknown command
-        return Err(UserError::OperationFailed);
-    }
 
+    // Try to execute via registry (O(1) HashMap lookup)
+    // The registry returns Err if command not found or execution failed
+    registry.execute(sim, cmd)?;
+
+    // Mode transition information is returned but not used at this level
+    // Mode transitions are handled by the caller in execute_command_any_mode
     Ok(())
 }
 

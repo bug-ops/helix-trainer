@@ -7,7 +7,7 @@ use helix_core::{Selection, Transaction};
 // Operations that prepare for entering insert mode (Normal mode methods)
 impl HelixSimulator<NormalMode> {
     /// Append: move cursor one position right (prepare for insert mode)
-    pub(super) fn append(&mut self) -> Result<(), UserError> {
+    pub fn append(&mut self) -> Result<(), UserError> {
         // Move cursor one position to the right (after current character)
         let head = self.selection.primary().head;
         let new_pos = (head + 1).min(self.doc.len_chars());
@@ -16,7 +16,7 @@ impl HelixSimulator<NormalMode> {
     }
 
     /// Insert at line start: move to beginning of line (prepare for insert mode)
-    pub(super) fn insert_at_line_start(&mut self) -> Result<(), UserError> {
+    pub fn insert_at_line_start(&mut self) -> Result<(), UserError> {
         // Move cursor to start of current line
         let head = self.selection.primary().head;
         let current_line = self.doc.char_to_line(head);
@@ -26,7 +26,7 @@ impl HelixSimulator<NormalMode> {
     }
 
     /// Append at line end: move to end of line (prepare for insert mode)
-    pub(super) fn append_at_line_end(&mut self) -> Result<(), UserError> {
+    pub fn append_at_line_end(&mut self) -> Result<(), UserError> {
         // Move cursor to end of current line
         let head = self.selection.primary().head;
         let current_line = self.doc.char_to_line(head);
@@ -45,7 +45,7 @@ impl HelixSimulator<NormalMode> {
     }
 
     /// Open below: insert new line below current line (prepare for insert mode)
-    pub(super) fn open_below(&mut self) -> Result<(), UserError> {
+    pub fn open_below(&mut self) -> Result<(), UserError> {
         // Find end of current line
         let head = self.selection.primary().head;
         let current_line = self.doc.char_to_line(head);
@@ -71,7 +71,7 @@ impl HelixSimulator<NormalMode> {
     }
 
     /// Open above: insert new line above current line (prepare for insert mode)
-    pub(super) fn open_above(&mut self) -> Result<(), UserError> {
+    pub fn open_above(&mut self) -> Result<(), UserError> {
         // Find start of current line
         let head = self.selection.primary().head;
         let current_line = self.doc.char_to_line(head);
@@ -92,7 +92,7 @@ impl HelixSimulator<NormalMode> {
     }
 
     /// Replace character at cursor with the given character
-    pub(super) fn replace_char(&mut self, ch: char) -> Result<(), UserError> {
+    pub fn replace_char(&mut self, ch: char) -> Result<(), UserError> {
         // Replace character at cursor with the given character
         let head = self.selection.primary().head;
 
@@ -118,7 +118,7 @@ impl HelixSimulator<NormalMode> {
     }
 
     /// Change selection: delete current character (prepare for insert mode)
-    pub(super) fn change_selection(&mut self) -> Result<(), UserError> {
+    pub fn change_selection(&mut self) -> Result<(), UserError> {
         // Delete current character (similar to delete_char)
         let head = self.selection.primary().head;
 
@@ -147,7 +147,7 @@ impl HelixSimulator<NormalMode> {
 // Operations only available in Insert mode
 impl HelixSimulator<InsertMode> {
     /// Insert text at cursor position
-    pub(super) fn insert_text(&mut self, text: &str) -> Result<(), UserError> {
+    pub fn insert_text(&mut self, text: &str) -> Result<(), UserError> {
         let head = self.selection.primary().head;
         let text_len = text.chars().count();
 
@@ -164,7 +164,7 @@ impl HelixSimulator<InsertMode> {
     }
 
     /// Delete character before cursor (backspace)
-    pub(super) fn backspace(&mut self) -> Result<(), UserError> {
+    pub fn backspace(&mut self) -> Result<(), UserError> {
         let head = self.selection.primary().head;
 
         // Can't backspace at position 0

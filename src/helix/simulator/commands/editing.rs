@@ -5,7 +5,7 @@ use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
 /// Join current line with next line
-pub(super) fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Join current line with next line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
@@ -30,7 +30,7 @@ pub(super) fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(
 }
 
 /// Indent current line (add 2 spaces)
-pub(super) fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Add indentation (2 spaces) at the beginning of current line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
@@ -52,7 +52,7 @@ pub(super) fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 }
 
 /// Dedent current line (remove up to 2 spaces)
-pub(super) fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Remove indentation (up to 2 spaces) from the beginning of current line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
@@ -97,9 +97,7 @@ pub(super) fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 }
 
 /// Delete selection (single 'd' - deletes current selection)
-pub(super) fn delete_selection<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Get the start position before deletion
     let start_pos = sim.selection.primary().from();
 
@@ -125,7 +123,7 @@ pub(super) fn delete_selection<M: EditorMode>(
 }
 
 /// Switch case of character under cursor
-pub(super) fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = start.saturating_add(1).min(sim.doc.len_chars());
@@ -158,7 +156,7 @@ pub(super) fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 /// Select current line (Helix 'x' command)
 /// In Helix, 'x' selects the line including the trailing newline.
 /// Selection goes from line start to end of line (including \n).
-pub(super) fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
@@ -178,7 +176,7 @@ pub(super) fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 
 /// Extend selection to line bounds (Helix 'X' command)
 /// In Helix, 'X' extends selection to full lines with cursor at selection start.
-pub(super) fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let range = sim.selection.primary();
     let start_line = sim.doc.char_to_line(range.from());
     let end_line = sim
@@ -199,15 +197,13 @@ pub(super) fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 }
 
 /// Select entire document (Helix '%' command)
-pub(super) fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     sim.selection = Selection::single(0, sim.doc.len_chars());
     Ok(())
 }
 
 /// Collapse selection to cursor (Helix ';' command)
-pub(super) fn collapse_selection<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+pub fn collapse_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     sim.selection = Selection::point(head);
     Ok(())

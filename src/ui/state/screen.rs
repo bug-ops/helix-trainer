@@ -285,7 +285,7 @@ impl MiniGameData {
 /// Trait for types that manage a command buffer for multi-key commands
 ///
 /// Both training mode (TaskData) and arcade mode (MiniGameData) use command
-/// buffers to handle multi-key sequences like `dd`, `gg`, and `rx`.
+/// buffers to handle multi-key sequences like `gg`, `rx`, and `fa`.
 pub trait CommandBufferAccess {
     /// Get reference to the command buffer
     fn command_buffer(&self) -> &str;
@@ -385,7 +385,7 @@ mod tests {
                 selection: None,
             },
             solution: Solution {
-                commands: vec!["dd".to_string()],
+                commands: vec!["x".to_string(), "d".to_string()],
                 description: "Test".to_string(),
             },
             alternatives: vec![],
@@ -433,7 +433,7 @@ mod tests {
                 selection: None,
             },
             solution: Solution {
-                commands: vec!["dd".to_string()],
+                commands: vec!["x".to_string(), "d".to_string()],
                 description: "Test".to_string(),
             },
             alternatives: vec![],
@@ -477,7 +477,7 @@ mod tests {
                 selection: None,
             },
             solution: Solution {
-                commands: vec!["dd".to_string()],
+                commands: vec!["x".to_string(), "d".to_string()],
                 description: "Test".to_string(),
             },
             alternatives: vec![],

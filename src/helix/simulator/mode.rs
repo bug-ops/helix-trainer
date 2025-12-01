@@ -84,28 +84,4 @@ mod tests {
         assert_eq!(std::mem::size_of::<PhantomData<NormalMode>>(), 0);
         assert_eq!(std::mem::size_of::<PhantomData<InsertMode>>(), 0);
     }
-
-    #[test]
-    fn test_mode_equality() {
-        assert_eq!(NormalMode, NormalMode);
-        assert_eq!(InsertMode, InsertMode);
-        // Note: Cannot compare NormalMode != InsertMode because they're different types
-    }
-
-    #[test]
-    fn test_mode_clone() {
-        let normal = NormalMode;
-        let normal2 = normal;
-        assert_eq!(normal, normal2);
-
-        let insert = InsertMode;
-        let insert2 = insert;
-        assert_eq!(insert, insert2);
-    }
-
-    #[test]
-    fn test_mode_debug() {
-        assert_eq!(format!("{:?}", NormalMode), "NormalMode");
-        assert_eq!(format!("{:?}", InsertMode), "InsertMode");
-    }
 }

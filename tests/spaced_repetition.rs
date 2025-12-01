@@ -23,21 +23,21 @@ fn test_complete_learning_workflow() {
     {
         let mut tracker_mut = tracker.borrow_mut();
 
-        // Record successful dd (delete line) - 3 times
+        // Record successful x (delete line) - 3 times
         tracker_mut.record_attempt(
-            "dd",
+            "x",
             Duration::from_millis(500),
             true,
             Duration::from_millis(400),
         );
         tracker_mut.record_attempt(
-            "dd",
+            "x",
             Duration::from_millis(450),
             true,
             Duration::from_millis(400),
         );
         tracker_mut.record_attempt(
-            "dd",
+            "x",
             Duration::from_millis(400),
             true,
             Duration::from_millis(400),
@@ -77,12 +77,12 @@ fn test_complete_learning_workflow() {
     // Verify initial state
     {
         let tracker_ref = tracker.borrow();
-        let dd_perf = tracker_ref.get_performance("dd").unwrap();
-        assert_eq!(dd_perf.attempts, 3);
-        assert_eq!(dd_perf.successes, 3);
+        let x_perf = tracker_ref.get_performance("x").unwrap();
+        assert_eq!(x_perf.attempts, 3);
+        assert_eq!(x_perf.successes, 3);
         // Mastery level is calculated by FSRS, don't assert specific level
         assert!(matches!(
-            dd_perf.mastery_level,
+            x_perf.mastery_level,
             MasteryLevel::Beginner
                 | MasteryLevel::Intermediate
                 | MasteryLevel::Advanced
@@ -155,7 +155,7 @@ fn test_mastery_progression() {
         // Perfect performance over time should increase mastery
         for _ in 0..20 {
             tracker_mut.record_attempt(
-                "dd",
+                "x",
                 Duration::from_millis(300),
                 true,
                 Duration::from_millis(500),
@@ -164,7 +164,7 @@ fn test_mastery_progression() {
     }
 
     let tracker_ref = tracker.borrow();
-    let perf = tracker_ref.get_performance("dd").unwrap();
+    let perf = tracker_ref.get_performance("x").unwrap();
 
     // With 20 successful attempts, should have valid mastery level
     assert!(matches!(

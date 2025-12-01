@@ -163,7 +163,7 @@ fn record_scenario_completion(
 ///
 /// Note: This handler needs full AppState access to call update() for quest progress
 pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, UserError> {
-    // Get feedback and completed session from temporary storage
+    // Get feedback and completed session from state
     let (feedback, completed_session) = if let Some(ref feedback) = state.ui.last_feedback {
         // Extract completed session from pending storage
         let session = state.game.pending_completed_session.take();

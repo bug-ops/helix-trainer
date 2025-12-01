@@ -127,13 +127,13 @@ target = 5
 
 [[quests]]
 id = "cmd_dd_easy"
-name = "Line Deletion Practice"
-description = "Delete 3 lines using the 'dd' command"
+name = "Line Selection Practice"
+description = "Select 3 lines using the 'x' command"
 type = "command_practice"
 difficulty = "easy"
 
 [quests.params]
-command = "dd"
+command = "x"
 target = 3
 
 [[quests]]
@@ -245,13 +245,13 @@ target = 15
 
 [[quests]]
 id = "cmd_dd_medium"
-name = "Line Cleaner"
-description = "Delete 8 lines using 'dd'"
+name = "Line Selector"
+description = "Select 8 lines using 'x'"
 type = "command_practice"
 difficulty = "medium"
 
 [quests.params]
-command = "dd"
+command = "x"
 target = 8
 
 [[quests]]
@@ -463,13 +463,13 @@ target = 50
 
 [[quests]]
 id = "cmd_dd_hard"
-name = "Line Destroyer"
-description = "Delete 15 lines using 'dd'"
+name = "Line Selection Master"
+description = "Select 15 lines using 'x'"
 type = "command_practice"
 difficulty = "hard"
 
 [quests.params]
-command = "dd"
+command = "x"
 target = 15
 
 [[quests]]

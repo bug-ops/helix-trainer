@@ -205,7 +205,7 @@ impl Scheduler {
         // Common Helix commands that users should learn
         // This list focuses on essential editing commands
         let essential_commands = [
-            "dd", "x", "i", "a", "o", "O", "u", "U", "y", "p", "P", "c", "r", "J", ">", "<", "I",
+            "d", "x", "i", "a", "o", "O", "u", "U", "y", "p", "P", "c", "r", "J", ">", "<", "I",
             "A", "gg", "G", "w", "b", "e", "0", "$",
         ];
 
@@ -242,7 +242,7 @@ mod tests {
 
         // Add some commands with different due dates and difficulties
         let mut tracker_mut = tracker.borrow_mut();
-        tracker_mut.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker_mut.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
         tracker_mut.record_attempt("p", Duration::from_secs(4), true, Duration::from_secs(1));
         drop(tracker_mut);
@@ -266,13 +266,13 @@ mod tests {
         // Make one command overdue by setting its due date to the past
         {
             let tracker_ref = tracker.borrow();
-            if let Some(perf) = tracker_ref.get_performance("dd") {
+            if let Some(perf) = tracker_ref.get_performance("x") {
                 let mut _perf = perf.clone();
                 _perf.due = Utc::now() - ChronoDuration::days(1);
             }
         }
         tracker.borrow_mut().record_attempt(
-            "dd",
+            "x",
             Duration::from_secs(1),
             true,
             Duration::from_secs(1),
@@ -367,7 +367,7 @@ mod tests {
         // Add some commands with reviews due
         {
             let mut tracker_mut = tracker.borrow_mut();
-            tracker_mut.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+            tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
             tracker_mut.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
         }
 
@@ -380,8 +380,8 @@ mod tests {
         // Max 4 items: 2 reviews + 2 new content
         assert!(session.len() <= 4);
 
-        // Should contain at least one review item (dd or yy)
-        let has_review = session.contains(&"dd".to_string()) || session.contains(&"yy".to_string());
+        // Should contain at least one review item (x or yy)
+        let has_review = session.contains(&"x".to_string()) || session.contains(&"yy".to_string());
         assert!(
             has_review,
             "Session should contain at least one review item"
@@ -395,10 +395,10 @@ mod tests {
         // Add some weak commands (low success rate)
         {
             let mut tracker_mut = tracker.borrow_mut();
-            // Make "dd" weak by failing it multiple times
+            // Make "x" weak by failing it multiple times
             for _ in 0..5 {
                 tracker_mut.record_attempt(
-                    "dd",
+                    "x",
                     Duration::from_secs(10),
                     false,
                     Duration::from_secs(1),
@@ -414,17 +414,17 @@ mod tests {
         // Should have up to 5 items
         assert!(new_content.len() <= 5);
 
-        // Should include weak command (dd)
+        // Should include weak command (x)
         assert!(
-            new_content.contains(&"dd".to_string()),
-            "Should include weak command 'dd'"
+            new_content.contains(&"x".to_string()),
+            "Should include weak command 'x'"
         );
 
         // Should also include some untried essential commands
         // (at least one command that wasn't practiced)
         let has_untried = new_content
             .iter()
-            .any(|cmd| cmd != "dd" && ["x", "i", "a", "o", "O"].contains(&cmd.as_str()));
+            .any(|cmd| cmd != "x" && ["x", "i", "a", "o", "O"].contains(&cmd.as_str()));
         assert!(has_untried, "Should include at least one untried command");
     }
 

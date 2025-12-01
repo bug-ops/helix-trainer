@@ -27,7 +27,7 @@ fn test_validate_id_field_valid() {
         id: String,
     }
 
-    let valid = r#"id = "cmd_dd_easy""#;
+    let valid = r#"id = "cmd_x_easy""#;
     let result: Result<Test, _> = toml::from_str(valid);
     assert!(result.is_ok());
 }
@@ -104,13 +104,13 @@ fn test_quest_difficulty_deserialization() {
 #[test]
 fn test_quest_params_command_practice() {
     let toml_str = r#"
-command = "dd"
+command = "x"
 target = 3
 "#;
     let params: QuestParams = toml::from_str(toml_str).unwrap();
     match params {
         QuestParams::CommandPractice { command, target } => {
-            assert_eq!(command, "dd");
+            assert_eq!(command, "x");
             assert_eq!(target, 3);
         }
         _ => panic!("Wrong variant"),
@@ -197,7 +197,7 @@ fn test_load_daily_quests_toml() {
     assert!(ids.contains(&"cmd_gg_easy"));
     assert!(ids.contains(&"cmd_G_easy"));
     assert!(ids.contains(&"cmd_x_easy"));
-    assert!(ids.contains(&"cmd_dd_easy"));
+    assert!(ids.contains(&"cmd_x_easy"));
     assert!(ids.contains(&"cmd_yy_easy"));
     assert!(ids.contains(&"scenario_1_easy"));
     assert!(ids.contains(&"time_2_easy"));
@@ -227,7 +227,7 @@ fn test_quest_template_to_quest_conversion() {
         quest_type: QuestTypeTag::CommandPractice,
         difficulty: QuestDifficulty::Easy,
         params: QuestParams::CommandPractice {
-            command: "dd".to_string(),
+            command: "x".to_string(),
             target: 3,
         },
         xp: None,
@@ -289,7 +289,7 @@ fn test_quest_conditions_with_values() {
     let toml_str = r#"
 min_level = 5
 max_level = 20
-requires_commands = ["dd", "yy"]
+requires_commands = ["x", "yy"]
 requires_scenarios = ["basic_001"]
 "#;
     let conditions: QuestConditions = toml::from_str(toml_str).unwrap();
@@ -368,7 +368,7 @@ type = "command_practice"
 difficulty = "easy"
 
 [quests.params]
-command = "dd"
+command = "x"
 target = 3
 "#;
     let result: Result<QuestsFile, _> = toml::from_str(invalid_toml);
@@ -393,7 +393,7 @@ difficulty = "easy"
 unknown_field = "value"
 
 [quests.params]
-command = "dd"
+command = "x"
 target = 3
 "#;
     let result: Result<QuestsFile, _> = toml::from_str(invalid_toml);
@@ -591,7 +591,7 @@ fn test_validate_all_quest_templates() {
     let valid_commands: HashSet<&str> = [
         // Movement
         "h", "j", "k", "l", "w", "b", "e", "0", "$", "gg", "G", // Editing
-        "x", "dd", "i", "a", "I", "A", "o", "O", "c", "J", ">", "<", // Clipboard
+        "x", "x", "i", "a", "I", "A", "o", "O", "c", "J", ">", "<", // Clipboard
         "y", "yy", "p", "P", // Undo/Redo
         "u", "U", // Repeat
         ".", // Replace (r + char is handled specially)

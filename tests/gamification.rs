@@ -23,9 +23,9 @@ fn test_complete_user_flow() {
     assert_eq!(quests.len(), 3); // Beginner gets 3 quests
 
     // Complete a command quest
-    QuestTracker::update_command_progress(&mut quests, "dd");
-    QuestTracker::update_command_progress(&mut quests, "dd");
-    QuestTracker::update_command_progress(&mut quests, "dd");
+    QuestTracker::update_command_progress(&mut quests, "x");
+    QuestTracker::update_command_progress(&mut quests, "x");
+    QuestTracker::update_command_progress(&mut quests, "x");
 
     // Check if any quests completed
     let completions = QuestTracker::check_completions(&quests);
@@ -174,17 +174,17 @@ fn test_quest_progress_tracking() {
     let mut quests = vec![Quest::new(
         "test".to_string(),
         QuestType::CommandPractice {
-            command: "dd".to_string(),
+            command: "x".to_string(),
             target: 5,
             current: 0,
         },
-        "Practice dd 5 times".to_string(),
+        "Practice x 5 times".to_string(),
         QuestDifficulty::Easy,
     )];
 
     // Progress through quest
     for i in 1..=5 {
-        QuestTracker::update_command_progress(&mut quests, "dd");
+        QuestTracker::update_command_progress(&mut quests, "x");
         if i < 5 {
             assert!(!quests[0].is_completed());
         }
@@ -209,7 +209,7 @@ fn test_xp_calculator_formulas() {
 
     // Test quest XP rewards
     let easy_command = QuestType::CommandPractice {
-        command: "dd".to_string(),
+        command: "x".to_string(),
         target: 5,
         current: 0,
     };
@@ -282,19 +282,19 @@ fn test_exploration_quest_tracking() {
     )];
 
     // Use different commands
-    QuestTracker::update_command_progress(&mut quests, "dd");
+    QuestTracker::update_command_progress(&mut quests, "x");
     assert!(!quests[0].is_completed());
 
     QuestTracker::update_command_progress(&mut quests, "yy");
     QuestTracker::update_command_progress(&mut quests, "p");
-    QuestTracker::update_command_progress(&mut quests, "x");
+    QuestTracker::update_command_progress(&mut quests, "w");
     assert!(!quests[0].is_completed());
 
     QuestTracker::update_command_progress(&mut quests, "i");
     assert!(quests[0].is_completed());
 
     // Duplicate commands don't count
-    QuestTracker::update_command_progress(&mut quests, "dd");
+    QuestTracker::update_command_progress(&mut quests, "x");
     if let QuestType::Exploration { commands_used, .. } = &quests[0].quest_type {
         assert_eq!(commands_used.len(), 5);
     }

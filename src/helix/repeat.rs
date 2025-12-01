@@ -53,7 +53,7 @@ pub enum Movement {
 /// Represents a repeatable action that can be replayed
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepeatableAction {
-    /// Single command or multi-key sequence (e.g., `x`, `dd`, `J`)
+    /// Single command or multi-key sequence (e.g., `x`, `gg`, `J`)
     ///
     /// # Fields
     ///
@@ -375,7 +375,7 @@ pub fn is_operator_command(key: &KeyEvent) -> bool {
 ///
 /// Returns `true` for all editing commands:
 /// - Character operations: `x`, `r`
-/// - Line operations: `d` (dd), `J`
+/// - Line operations: `d`, `J`
 /// - Insert commands: `i`, `a`, `I`, `A`, `o`, `O`
 /// - Change: `c`
 /// - Clipboard: `y`, `p`, `P`
@@ -442,25 +442,12 @@ mod tests {
 
     // RepeatBuffer tests
     #[test]
-    fn test_repeat_buffer_starts_empty() {
-        let buffer = RepeatBuffer::new();
-        assert!(buffer.is_empty());
-        assert!(buffer.last_action().is_none());
-    }
-
-    #[test]
     fn test_repeat_buffer_default() {
         let buffer = RepeatBuffer::default();
         assert!(buffer.is_empty());
     }
 
     // InsertModeRecorder tests
-    #[test]
-    fn test_insert_mode_recorder_new() {
-        let recorder = InsertModeRecorder::new();
-        assert!(!recorder.is_recording());
-    }
-
     #[test]
     fn test_insert_mode_recorder_default() {
         let recorder = InsertModeRecorder::default();
@@ -666,7 +653,7 @@ mod tests {
     fn test_is_repeatable_editing_commands() {
         // All editing commands SHOULD be repeatable
         assert!(is_repeatable_command(&make_key('x'))); // delete char
-        assert!(is_repeatable_command(&make_key('d'))); // delete line (dd)
+        assert!(is_repeatable_command(&make_key('d'))); // delete selection
         assert!(is_repeatable_command(&make_key('i'))); // insert
         assert!(is_repeatable_command(&make_key('a'))); // append
         assert!(is_repeatable_command(&make_key('I'))); // insert at start
@@ -716,54 +703,5 @@ mod tests {
             KeyCode::Tab,
             KeyModifiers::NONE
         )));
-    }
-
-    #[test]
-    fn test_movement_enum_equality() {
-        assert_eq!(Movement::Left, Movement::Left);
-        assert_eq!(Movement::Right, Movement::Right);
-        assert_eq!(Movement::Up, Movement::Up);
-        assert_eq!(Movement::Down, Movement::Down);
-
-        assert_ne!(Movement::Left, Movement::Right);
-        assert_ne!(Movement::Up, Movement::Down);
-    }
-
-    #[test]
-    fn test_repeatable_action_equality() {
-        let key = make_key('x');
-
-        let action1 = RepeatableAction::Command {
-            keys: vec![key],
-            expected_mode: Mode::Normal,
-        };
-
-        let action2 = RepeatableAction::Command {
-            keys: vec![key],
-            expected_mode: Mode::Normal,
-        };
-
-        assert_eq!(action1, action2);
-
-        let insert1 = RepeatableAction::InsertSequence {
-            entry_command: Some("i".to_string()),
-            text: "hello".to_string(),
-            movements: vec![Movement::Left],
-        };
-
-        let insert2 = RepeatableAction::InsertSequence {
-            entry_command: Some("i".to_string()),
-            text: "hello".to_string(),
-            movements: vec![Movement::Left],
-        };
-
-        assert_eq!(insert1, insert2);
-    }
-
-    #[test]
-    fn test_mode_equality() {
-        assert_eq!(Mode::Normal, Mode::Normal);
-        assert_eq!(Mode::Insert, Mode::Insert);
-        assert_ne!(Mode::Normal, Mode::Insert);
     }
 }

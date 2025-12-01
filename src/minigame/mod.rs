@@ -23,7 +23,8 @@
 //! let mut session = MiniGameSession::new(scenarios);
 //!
 //! session.start();
-//! session.handle_command("dd")?;
+//! session.handle_command("x")?; // select line
+//! session.handle_command("d")?; // delete selection
 //!
 //! if session.check_completion() {
 //!     session.advance_to_next();

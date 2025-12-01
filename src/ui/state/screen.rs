@@ -314,6 +314,20 @@ impl CommandBufferAccess for TaskData {
     }
 }
 
+impl crate::game::CommandContext for TaskData {
+    fn command_buffer(&self) -> &str {
+        &self.command_buffer
+    }
+
+    fn is_insert_mode(&self) -> bool {
+        self.session.is_insert_mode()
+    }
+
+    fn last_command(&self) -> Option<&str> {
+        self.last_command.as_deref()
+    }
+}
+
 impl CommandBufferAccess for MiniGameData {
     fn command_buffer(&self) -> &str {
         &self.command_buffer

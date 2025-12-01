@@ -146,6 +146,7 @@ pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
+    use crate::game::{ParsedCommand, parse_command_buffer};
     use crate::ui::state::CommandBufferAccess;
 
     // Get minigame data for command buffer
@@ -169,21 +170,20 @@ pub(in crate::ui::state) fn handle_minigame_command(
     minigame_data.push_command(&command);
 
     // Try to match a complete command
-    let final_command = super::gameplay::parse_command_buffer(minigame_data.command_buffer());
+    let parsed = parse_command_buffer(minigame_data.command_buffer());
 
-    match final_command {
-        Some("") => {
+    match parsed {
+        ParsedCommand::Invalid => {
             // Invalid sequence - clear buffer
             minigame_data.clear_buffer();
             Ok(())
         }
-        Some(cmd) => {
+        ParsedCommand::Complete(cmd) => {
             // Complete command - execute it
-            let cmd_string = cmd.to_string();
             minigame_data.clear_buffer();
-            execute_minigame_command(state, &cmd_string)
+            execute_minigame_command(state, &cmd)
         }
-        None => {
+        ParsedCommand::Partial => {
             // Waiting for more keys - nothing to do
             Ok(())
         }

@@ -24,8 +24,8 @@ Keep this too"""
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["dd", "u", "U"]
-description = "Press 'dd' to delete, 'u' to undo, 'U' to redo"
+commands = ["x", "d", "u", "U"]
+description = "Press 'x' to select line, 'd' to delete, 'u' to undo, 'U' to redo"
 
 [scenarios.scoring]
 optimal_count = 4

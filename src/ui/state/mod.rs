@@ -455,7 +455,7 @@ mod tests {
     use crate::config::{ScoringConfig, Setup, Solution, TargetState};
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::helix::commands::{
-        CMD_DELETE_LINE, CMD_DELETE_SELECTION, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_SELECT_LINE,
+        CMD_DELETE_SELECTION, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_SELECT_LINE,
     };
     use crate::learning::PerformanceTracker;
 
@@ -474,13 +474,13 @@ mod tests {
                 selection: None,
             },
             solution: Solution {
-                commands: vec!["dd".to_string()],
+                commands: vec!["x".to_string(), "d".to_string()],
                 description: "Delete first line".to_string(),
             },
             alternatives: vec![],
-            hints: vec!["Use dd to delete a line".to_string()],
+            hints: vec!["Use x to select line, then d to delete".to_string()],
             scoring: ScoringConfig {
-                optimal_count: 1,
+                optimal_count: 2,
                 max_points: 100,
                 tolerance: 0,
             },
@@ -1207,14 +1207,21 @@ mod tests {
                 SessionAfterAction::StillActive(s) => s,
                 SessionAfterAction::Completed(_) => panic!("Should not complete on 'h'"),
             };
-            // Correct solution - should complete
-            match current.record_action(CMD_DELETE_LINE.to_string()).unwrap() {
+            // Correct solution using x+d - select line then delete
+            current = match current.record_action(CMD_SELECT_LINE.to_string()).unwrap() {
+                SessionAfterAction::StillActive(s) => s,
+                SessionAfterAction::Completed(_) => panic!("Should not complete on 'x'"),
+            };
+            match current
+                .record_action(CMD_DELETE_SELECTION.to_string())
+                .unwrap()
+            {
                 SessionAfterAction::Completed(completed) => {
                     let feedback = completed.feedback().unwrap();
                     state.ui.last_feedback = Some(feedback);
                     state.game.pending_completed_session = Some(completed);
                 }
-                SessionAfterAction::StillActive(_) => panic!("Should complete on 'dd'"),
+                SessionAfterAction::StillActive(_) => panic!("Should complete on 'xd'"),
             }
         }
 
@@ -1252,9 +1259,17 @@ mod tests {
         let old_screen = std::mem::replace(&mut state.screen, placeholder);
 
         if let TypedScreen::Task(task_data) = old_screen {
-            match task_data
+            // Use x+d (select line + delete) - the Helix way
+            let session = task_data
                 .session
-                .record_action(CMD_DELETE_LINE.to_string())
+                .record_action(CMD_SELECT_LINE.to_string())
+                .unwrap();
+            let session = match session {
+                SessionAfterAction::StillActive(s) => s,
+                SessionAfterAction::Completed(_) => panic!("Should not complete on 'x'"),
+            };
+            match session
+                .record_action(CMD_DELETE_SELECTION.to_string())
                 .unwrap()
             {
                 SessionAfterAction::Completed(completed) => {
@@ -1262,7 +1277,7 @@ mod tests {
                     state.ui.last_feedback = Some(feedback);
                     state.game.pending_completed_session = Some(completed);
                 }
-                SessionAfterAction::StillActive(_) => panic!("Should complete on 'dd'"),
+                SessionAfterAction::StillActive(_) => panic!("Should complete on 'xd'"),
             }
         }
 
@@ -1300,9 +1315,17 @@ mod tests {
         let old_screen = std::mem::replace(&mut state.screen, placeholder);
 
         if let TypedScreen::Task(task_data) = old_screen {
-            match task_data
+            // Use x+d (select line + delete) - the Helix way
+            let session = task_data
                 .session
-                .record_action(CMD_DELETE_LINE.to_string())
+                .record_action(CMD_SELECT_LINE.to_string())
+                .unwrap();
+            let session = match session {
+                SessionAfterAction::StillActive(s) => s,
+                SessionAfterAction::Completed(_) => panic!("Should not complete on 'x'"),
+            };
+            match session
+                .record_action(CMD_DELETE_SELECTION.to_string())
                 .unwrap()
             {
                 SessionAfterAction::Completed(completed) => {
@@ -1310,7 +1333,7 @@ mod tests {
                     state.ui.last_feedback = Some(feedback);
                     state.game.pending_completed_session = Some(completed);
                 }
-                SessionAfterAction::StillActive(_) => panic!("Should complete on 'dd'"),
+                SessionAfterAction::StillActive(_) => panic!("Should complete on 'xd'"),
             }
         }
 

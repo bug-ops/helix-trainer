@@ -50,9 +50,8 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
             let selected = i == selected_item;
             let style = if selected {
                 Style::default()
-                    .bg(Color::Blue)
+                    .bg(super::SELECTION_BG_COLOR)
                     .fg(Color::White)
-                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -99,9 +98,8 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
     let due_count = state.progress.scheduler.get_due_reviews().len();
     let review_style = if review_selected {
         Style::default()
-            .bg(Color::Blue)
+            .bg(super::SELECTION_BG_COLOR)
             .fg(Color::White)
-            .add_modifier(Modifier::BOLD)
     } else if due_count > 0 {
         Style::default()
             .fg(Color::Yellow)
@@ -128,9 +126,8 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
     let profile_selected = profile_index == selected_item;
     let profile_style = if profile_selected {
         Style::default()
-            .bg(Color::Blue)
+            .bg(super::SELECTION_BG_COLOR)
             .fg(Color::White)
-            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Cyan)
     };
@@ -143,9 +140,8 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
     let stats_selected = stats_index == selected_item;
     let stats_style = if stats_selected {
         Style::default()
-            .bg(Color::Blue)
+            .bg(super::SELECTION_BG_COLOR)
             .fg(Color::White)
-            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Cyan)
     };
@@ -157,9 +153,8 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
     let quit_selected = quit_index == selected_item;
     let quit_style = if quit_selected {
         Style::default()
-            .bg(Color::Blue)
+            .bg(super::SELECTION_BG_COLOR)
             .fg(Color::White)
-            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Red)
     };

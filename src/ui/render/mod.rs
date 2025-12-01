@@ -4,6 +4,14 @@
 //! Rendering functions may update view-related state (like scroll offsets) but
 //! do not modify business logic state.
 
+use ratatui::style::Color;
+
+/// Muted dark blue color for selection/hover highlighting
+///
+/// Used for menu item hover, editor selection, and mode selection.
+/// Provides better text readability than bright blue.
+pub(super) const SELECTION_BG_COLOR: Color = Color::Rgb(60, 80, 120);
+
 mod editor;
 mod helpers;
 mod menu;

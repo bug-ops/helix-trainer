@@ -1502,6 +1502,72 @@ fn test_paste_before_cursor_scenario() {
     );
 }
 
+/// Test scenario: Repeat text insertion (repeat_insert_001)
+/// This tests the full flow: insert text, escape to normal, move, repeat
+#[test]
+fn test_scenario_repeat_text_insertion() {
+    // Setup: "TODO:\nFIX:\nNOTE:" with cursor at (0, 5)
+    let mut sim = AnyModeSimulator::new("TODO:\nFIX:\nNOTE:".to_string());
+
+    // Move cursor to position (0, 5) - end of "TODO:"
+    for _ in 0..5 {
+        sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    }
+
+    // Verify initial state
+    assert_eq!(sim.mode(), Mode::Normal);
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 5);
+
+    // Enter insert mode with 'i'
+    sim.execute_command(CMD_INSERT).unwrap();
+    assert_eq!(
+        sim.mode(),
+        Mode::Insert,
+        "Should be in insert mode after 'i'"
+    );
+
+    // Type " Update docs"
+    for ch in " Update docs".chars() {
+        sim.execute_command(&ch.to_string()).unwrap();
+    }
+
+    let state = sim.get_state().unwrap();
+    assert!(
+        state.content().starts_with("TODO: Update docs"),
+        "First line should have inserted text, got: {}",
+        state.content()
+    );
+
+    // Exit insert mode with Escape
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    assert_eq!(
+        sim.mode(),
+        Mode::Normal,
+        "Should be in normal mode after Escape"
+    );
+
+    // Navigate to FIX: line end
+    sim.execute_command(CMD_MOVE_DOWN).unwrap(); // j - move to FIX: line
+    sim.execute_command(CMD_MOVE_LINE_START).unwrap(); // 0 - go to line start
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap(); // $ - go to line end
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1, "Should be on line 1 (FIX:)");
+
+    // Repeat insertion with '.'
+    sim.execute_command(CMD_REPEAT).unwrap();
+
+    // Verify final state
+    let state = sim.get_state().unwrap();
+    assert_eq!(
+        state.content(),
+        "TODO: Update docs\nFIX: Update docs\nNOTE:",
+        "Both lines should have ' Update docs' appended"
+    );
+}
+
 // Phase 4: Compound Action Tests (selection + operator)
 // Tests for x+d, x+y, %+d etc. combinations that should be recorded and repeated together
 
@@ -1772,6 +1838,6 @@ fn test_scenario_repeat_insert_001() {
     assert_eq!(
         state.content(),
         "TODO: Update docs\nFIX: Update docs\nNOTE:",
-        "After repeat insert"
+        "Both lines should have ' Update docs' appended"
     );
 }

@@ -5,10 +5,12 @@
 
 use std::time::Duration;
 
+pub mod command_context;
 pub mod editor_state;
 pub mod scorer;
 pub mod session;
 
+pub use command_context::{CommandContext, ParsedCommand, parse_command_buffer};
 pub use editor_state::{CursorPosition, EditorState, Selection};
 pub use scorer::{PerformanceRating, Scorer};
 pub use session::{

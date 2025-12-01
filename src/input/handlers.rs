@@ -5,9 +5,28 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 
+use helix_trainer::ui::state::CommandBufferAccess;
 use helix_trainer::ui::{AppState, Message, state::TypedScreen};
 
 use super::mapping::{handle_insert_mode_input, map_key_to_helix_command};
+
+/// Check if the command buffer is waiting for a character argument
+///
+/// Commands like `r`, `f`, `F`, `t`, `T` expect a character to follow.
+/// When the buffer contains one of these, we should accept any printable character.
+fn is_waiting_for_char_arg(state: &AppState) -> bool {
+    match &state.screen {
+        TypedScreen::Task(task_data) => {
+            let buffer = task_data.command_buffer();
+            matches!(buffer, "r" | "f" | "F" | "t" | "T")
+        }
+        TypedScreen::MiniGame(minigame_data) => {
+            let buffer = minigame_data.command_buffer();
+            matches!(buffer, "r" | "f" | "F" | "t" | "T")
+        }
+        _ => false,
+    }
+}
 
 /// Handle keyboard events on profile and statistics screens
 pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
@@ -97,6 +116,27 @@ where
     if is_gameplay_insert_mode(state) {
         handle_insert_mode_input(key).map(make_message)
     } else {
+        // Check if we're waiting for a character argument (e.g., after 'r', 'f', 't')
+        if is_waiting_for_char_arg(state) {
+            match key.code {
+                // Accept any printable character as the argument
+                KeyCode::Char(c) => {
+                    return Some(make_message(Cow::Owned(c.to_string())));
+                }
+                // Esc or non-char keys cancel the pending command
+                // Send a marker that will make the buffer invalid, triggering clear
+                KeyCode::Esc
+                | KeyCode::Left
+                | KeyCode::Right
+                | KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Backspace
+                | KeyCode::Enter => {
+                    return Some(make_message(Cow::Borrowed("<cancel>")));
+                }
+                _ => {}
+            }
+        }
         map_key_to_helix_command(key).map(|cmd| make_message(Cow::Borrowed(cmd)))
     }
 }

@@ -94,9 +94,8 @@ fn render_mode_option(
         (
             " > ",
             Style::default()
-                .bg(Color::Blue)
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
+                .bg(super::SELECTION_BG_COLOR)
+                .fg(Color::White),
         )
     } else {
         ("   ", Style::default().fg(Color::White))

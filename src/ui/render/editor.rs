@@ -87,12 +87,12 @@ pub(super) fn render_editor_with_diff<'a>(
                         ));
                     }
 
-                    // Selected text with highlight (muted blue background for better readability)
+                    // Selected text with highlight
                     if start_byte < end_byte && end_byte <= line_text.len() {
                         spans.push(Span::styled(
                             &line_text[start_byte..end_byte],
                             Style::default()
-                                .bg(Color::Rgb(60, 80, 120)) // Muted dark blue
+                                .bg(super::SELECTION_BG_COLOR)
                                 .fg(Color::White),
                         ));
                     }
@@ -208,12 +208,12 @@ pub(super) fn render_editor_with_selection<'a>(
                         ));
                     }
 
-                    // Selected text with highlight (muted blue background for better readability)
+                    // Selected text with highlight
                     if start_byte < end_byte {
                         spans.push(Span::styled(
                             &line_text[start_byte..end_byte],
                             Style::default()
-                                .bg(Color::Rgb(60, 80, 120)) // Muted dark blue
+                                .bg(super::SELECTION_BG_COLOR)
                                 .fg(Color::White),
                         ));
                     }

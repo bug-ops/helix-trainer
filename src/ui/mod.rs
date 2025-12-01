@@ -33,8 +33,10 @@
 //! terminal.draw(|f| render(f, &app_state))?;
 //! ```
 
+pub mod notification;
 pub mod render;
 pub mod state;
 
+pub use notification::{Notification, NotificationQueue, NotificationType};
 pub use render::render;
 pub use state::{AppState, Message, Screen, update};

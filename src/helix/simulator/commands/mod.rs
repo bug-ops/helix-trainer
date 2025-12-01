@@ -347,6 +347,7 @@ fn record_command_if_needed_normal(
     key_events: &[KeyEvent],
     mode_before: Mode,
     entering_insert: bool,
+    entry_command: Option<String>,
 ) {
     // Determine if we should record this command
     // Only record for repeatable commands, and NOT during repeat
@@ -358,9 +359,9 @@ fn record_command_if_needed_normal(
             .record_command(key_events.to_vec(), mode_before);
     }
 
-    // If we just entered insert mode, start recording
+    // If we just entered insert mode, start recording with the entry command
     if entering_insert {
-        sim.repeat_buffer.insert_recorder_mut().start();
+        sim.repeat_buffer.insert_recorder_mut().start(entry_command);
     }
 }
 
@@ -396,11 +397,19 @@ pub(super) fn execute_command_any_mode(
             let result = execute_normal_mode_command_internal(&mut normal_sim, cmd);
 
             if result.is_ok() {
+                // If entering insert mode, capture the command used for repeat
+                let entry_cmd = if should_start_recording {
+                    Some(cmd.to_string())
+                } else {
+                    None
+                };
+
                 record_command_if_needed_normal(
                     &mut normal_sim,
                     &key_events,
                     Mode::Normal,
                     should_start_recording,
+                    entry_cmd,
                 );
 
                 // Transition to insert mode if this is an insert command

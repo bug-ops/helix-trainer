@@ -149,23 +149,85 @@ impl Scheduler {
 
     /// Recommend practice session content
     ///
-    /// Returns a mix of review items and potentially new content.
-    /// Currently focuses on reviews; new content integration is TODO.
+    /// Returns a mix of review items and new content for optimal learning.
+    /// Uses a 50/50 split: half review items (due for practice), half new content
+    /// (weak commands or commands not yet learned).
     ///
     /// # Arguments
     /// * `duration_minutes` - Target session duration
     ///
     /// # Returns
-    /// Command IDs to practice
+    /// Command IDs to practice (mix of reviews and new/weak commands)
     pub fn recommend_practice_session(&self, duration_minutes: u32) -> Vec<String> {
         const AVG_SCENARIO_TIME_MINUTES: u32 = 3;
         let max_items = duration_minutes / AVG_SCENARIO_TIME_MINUTES;
 
-        // Get reviews (use half the session for reviews)
-        let review_items = self.get_review_queue((max_items / 2) as usize);
+        // Split session: 50% reviews, 50% new/weak content
+        let review_count = (max_items / 2) as usize;
+        let new_content_count = (max_items - review_count as u32) as usize;
 
-        // TODO: Mix with new content (weak commands, new scenarios)
-        review_items.into_iter().map(|item| item.id).collect()
+        // Get review items (commands due for practice)
+        let review_items = self.get_review_queue(review_count);
+
+        // Get new content (weak commands + untried commands)
+        let new_content = self.get_new_content(new_content_count);
+
+        // Combine and return
+        let mut session: Vec<String> = review_items.into_iter().map(|item| item.id).collect();
+        session.extend(new_content);
+
+        session
+    }
+
+    /// Get new content for practice session
+    ///
+    /// Returns a mix of weak commands (low mastery) and completely new commands
+    /// (not yet practiced). Prioritizes weak commands first.
+    ///
+    /// # Arguments
+    /// * `count` - Maximum number of items to return
+    ///
+    /// # Returns
+    /// Command IDs for new/weak content
+    fn get_new_content(&self, count: usize) -> Vec<String> {
+        if count == 0 {
+            return Vec::new();
+        }
+
+        let tracker = self.tracker.borrow();
+
+        // Get weak commands (low mastery, high difficulty, or many lapses)
+        let weak_commands = tracker.get_weak_commands();
+
+        // Get all known commands to find untried ones
+        let all_known_commands = tracker.all_commands();
+
+        // Common Helix commands that users should learn
+        // This list focuses on essential editing commands
+        let essential_commands = [
+            "dd", "x", "i", "a", "o", "O", "u", "U", "y", "p", "P", "c", "r", "J", ">", "<", "I",
+            "A", "gg", "G", "w", "b", "e", "0", "$",
+        ];
+
+        // Find untried essential commands
+        let mut untried_commands: Vec<String> = essential_commands
+            .iter()
+            .filter(|cmd| !all_known_commands.contains(cmd.to_owned()))
+            .map(|cmd| cmd.to_string())
+            .collect();
+
+        // Combine: weak commands first, then untried
+        let mut result = Vec::new();
+
+        // Add weak commands (up to half the count)
+        let weak_limit = count / 2;
+        result.extend(weak_commands.into_iter().take(weak_limit));
+
+        // Fill remaining slots with untried commands
+        let remaining = count.saturating_sub(result.len());
+        result.extend(untried_commands.drain(..remaining.min(untried_commands.len())));
+
+        result
     }
 }
 
@@ -296,6 +358,83 @@ mod tests {
 
         // Should return some items (exact count depends on reviews available)
         assert!(session.len() <= 5); // 15 / 3 = 5 max items
+    }
+
+    #[test]
+    fn test_recommend_practice_session_mixes_reviews_and_new_content() {
+        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+
+        // Add some commands with reviews due
+        {
+            let mut tracker_mut = tracker.borrow_mut();
+            tracker_mut.record_attempt("dd", Duration::from_secs(1), true, Duration::from_secs(1));
+            tracker_mut.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
+        }
+
+        let scheduler = Scheduler::new(tracker.clone());
+
+        // Request a 12-minute session (4 items max)
+        let session = scheduler.recommend_practice_session(12);
+
+        // Should have a mix of reviews and new content
+        // Max 4 items: 2 reviews + 2 new content
+        assert!(session.len() <= 4);
+
+        // Should contain at least one review item (dd or yy)
+        let has_review = session.contains(&"dd".to_string()) || session.contains(&"yy".to_string());
+        assert!(
+            has_review,
+            "Session should contain at least one review item"
+        );
+    }
+
+    #[test]
+    fn test_get_new_content_returns_weak_and_untried_commands() {
+        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+
+        // Add some weak commands (low success rate)
+        {
+            let mut tracker_mut = tracker.borrow_mut();
+            // Make "dd" weak by failing it multiple times
+            for _ in 0..5 {
+                tracker_mut.record_attempt(
+                    "dd",
+                    Duration::from_secs(10),
+                    false,
+                    Duration::from_secs(1),
+                );
+            }
+        }
+
+        let scheduler = Scheduler::new(tracker.clone());
+
+        // Get new content
+        let new_content = scheduler.get_new_content(5);
+
+        // Should have up to 5 items
+        assert!(new_content.len() <= 5);
+
+        // Should include weak command (dd)
+        assert!(
+            new_content.contains(&"dd".to_string()),
+            "Should include weak command 'dd'"
+        );
+
+        // Should also include some untried essential commands
+        // (at least one command that wasn't practiced)
+        let has_untried = new_content
+            .iter()
+            .any(|cmd| cmd != "dd" && ["x", "i", "a", "o", "O"].contains(&cmd.as_str()));
+        assert!(has_untried, "Should include at least one untried command");
+    }
+
+    #[test]
+    fn test_get_new_content_empty_when_count_zero() {
+        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+        let scheduler = Scheduler::new(tracker);
+
+        let new_content = scheduler.get_new_content(0);
+        assert!(new_content.is_empty());
     }
 
     #[test]

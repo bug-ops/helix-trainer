@@ -23,6 +23,7 @@ pub(super) use navigation::{handle_back_to_menu, handle_navigate_to, handle_quit
 pub(super) use profile::{handle_award_xp, handle_show_profile, handle_show_statistics};
 pub(super) use quests::{format_quest_description, handle_update_quest_progress};
 // Shared quest tracking functions for both training and arcade modes
+pub(super) use notifications::{handle_cleanup_notifications, handle_show_notification};
 pub(super) use quests::{
     award_quest_completion_xp, snapshot_quest_completion, track_command_for_quests,
     track_scenario_completion_for_quests,
@@ -38,10 +39,11 @@ pub(super) use scenario::{
 
 mod filters;
 mod gameplay;
-mod menu;
+pub(super) mod menu;
 mod minigame;
 mod mode_selection;
 mod navigation;
+mod notifications;
 mod profile;
 mod quests;
 mod review;

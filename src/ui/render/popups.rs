@@ -1,6 +1,4 @@
-//! Popup rendering (hints, success, key history)
-// TODO: Iteration 5 - Add notification system (level-up, achievement unlock, quest complete, streak milestone)
-// TODO: Iteration 5 - Add notification queue with auto-dismiss after 3 seconds
+//! Popup rendering (hints, success, key history, notifications)
 
 use super::helpers::{centered_popup, inner_rect, popup_block};
 use crate::ui::state::{AppState, TypedScreen};
@@ -143,4 +141,71 @@ pub(super) fn render_result_popup(frame: &mut Frame, title: &str, message: &str,
         .block(popup_block(None, color));
 
     frame.render_widget(result_paragraph, popup_area);
+}
+
+/// Render notification popups in the top-right corner
+///
+/// Displays up to 3 notifications stacked vertically. Notifications auto-expire
+/// after their configured duration (default 3 seconds).
+pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
+    let visible = state.ui.notifications.visible();
+    if visible.is_empty() {
+        return;
+    }
+
+    let area = frame.area();
+
+    // Notification dimensions
+    let notification_width = 40.min(area.width.saturating_sub(4));
+    let notification_height = 5; // Title + message + borders
+    let spacing = 1; // Space between notifications
+
+    // Position in top-right corner
+    let base_x = area.width.saturating_sub(notification_width + 2);
+    let base_y = 2;
+
+    // Render each visible notification
+    for (idx, notification) in visible.iter().enumerate() {
+        let y_offset = base_y + (idx as u16 * (notification_height + spacing));
+
+        // Don't render if it would go off-screen
+        if y_offset + notification_height > area.height {
+            break;
+        }
+
+        let popup_area = Rect {
+            x: base_x,
+            y: y_offset,
+            width: notification_width,
+            height: notification_height,
+        };
+
+        // Get color for this notification type
+        let color = notification.color();
+
+        // Build notification content
+        let title = notification.title();
+        let message = notification.message();
+
+        let text = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                title,
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(message, Style::default().fg(Color::White))),
+        ];
+
+        let paragraph = Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true })
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(color))
+                    .style(Style::default().bg(Color::Black)),
+            );
+
+        frame.render_widget(paragraph, popup_area);
+    }
 }

@@ -893,7 +893,9 @@ fn test_insert_mode_recording_simple() {
     // Verify insert sequence was recorded
     let buffer = sim.repeat_buffer();
     match buffer.last_action() {
-        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, movements }) => {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence {
+            text, movements, ..
+        }) => {
             assert_eq!(text, "hi");
             assert!(movements.is_empty());
         }
@@ -924,7 +926,9 @@ fn test_insert_mode_recording_with_movements() {
     // Verify insert sequence with movements was recorded
     let buffer = sim.repeat_buffer();
     match buffer.last_action() {
-        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, movements }) => {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence {
+            text, movements, ..
+        }) => {
             assert_eq!(text, "hi!");
             assert_eq!(movements.len(), 2);
             assert_eq!(movements[0], crate::helix::repeat::Movement::Left);
@@ -1000,7 +1004,9 @@ fn test_insert_mode_empty_recording() {
     // Verify empty insert sequence was recorded
     let buffer = sim.repeat_buffer();
     match buffer.last_action() {
-        Some(crate::helix::repeat::RepeatableAction::InsertSequence { text, movements }) => {
+        Some(crate::helix::repeat::RepeatableAction::InsertSequence {
+            text, movements, ..
+        }) => {
             assert!(text.is_empty());
             assert!(movements.is_empty());
         }
@@ -1252,9 +1258,6 @@ fn test_repeat_replace_char() {
 }
 
 #[test]
-#[ignore] // TODO: Implement proper repeat for insert mode entry commands (a, A, I, o, O)
-// The current RepeatableAction::InsertSequence doesn't capture which insert command
-// was used to enter insert mode, so repeating "a" currently acts like "i"
 fn test_repeat_append() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
@@ -1262,10 +1265,10 @@ fn test_repeat_append() {
     sim.execute_command(CMD_MOVE_LINE_END).unwrap(); // Move to end
     sim.execute_command(CMD_APPEND).unwrap(); // Append (cursor after last char)
     sim.execute_command(" ").unwrap();
-    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
-    sim.execute_command(CMD_OPEN_BELOW).unwrap();
-    sim.execute_command(CMD_REPLACE).unwrap();
-    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command("w").unwrap();
+    sim.execute_command("o").unwrap();
+    sim.execute_command("r").unwrap();
+    sim.execute_command("l").unwrap();
     sim.execute_command("d").unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
 
@@ -1275,27 +1278,18 @@ fn test_repeat_append() {
     // Move to start
     sim.execute_command(CMD_MOVE_LINE_START).unwrap();
 
-    // Repeat should insert " world" at current position
+    // Repeat should append " world" after the first character (using 'a' to append)
     sim.execute_command(".").unwrap();
     let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), " worldhello world");
+    // Since we used 'a' (append), repeat should place cursor after 'h' and insert " world"
+    assert_eq!(state.content(), "h worldello world");
 }
 
 // Note: `o` and `O` commands are complex - they create a newline AND enter insert mode.
 // The newline creation is not captured in InsertSequence recording.
-// These would require a special RepeatableAction variant (e.g., RepeatableAction::OpenLine).
-// For Phase 3, we focus on simpler insert mode replay.
-// These tests are commented out until Phase 4+ implements full command replay.
-
-// #[test]
-// fn test_repeat_open_below() {
-//     // TODO: Implement RepeatableAction::OpenLine variant
-// }
-
-// #[test]
-// fn test_repeat_open_above() {
-//     // TODO: Implement RepeatableAction::OpenLine variant
-// }
+// Note: Open line commands (o, O) are now supported through the entry_command
+// field in RepeatableAction::InsertSequence. The repeat command will use the
+// same entry command that was originally used.
 
 #[test]
 fn test_repeat_insert_with_movements() {
@@ -1426,9 +1420,6 @@ fn test_repeat_insert_at_line_start() {
 }
 
 #[test]
-#[ignore] // TODO: Implement proper repeat for insert mode entry commands (A, I, o, O)
-// The current RepeatableAction::InsertSequence doesn't capture which insert command
-// was used to enter insert mode, so repeating "A" currently acts like "i"
 fn test_repeat_append_at_line_end() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
@@ -1444,10 +1435,11 @@ fn test_repeat_append_at_line_end() {
     // Move to start
     sim.execute_command(CMD_MOVE_LINE_START).unwrap();
 
-    // Repeat
+    // Repeat - should use 'A' to append at line end
     sim.execute_command(".").unwrap();
     let state = sim.get_state().unwrap();
-    assert_eq!(state.content(), "!!hello!!");
+    // 'A' moves to end of line and appends, so "!!" should be at the end
+    assert_eq!(state.content(), "hello!!!!");
 }
 
 #[test]

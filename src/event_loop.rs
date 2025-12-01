@@ -142,6 +142,8 @@ pub async fn run_async_event_loop(
                 if should_minigame_advance(state) {
                     ui::update(state, Message::MiniGameNextScenario)?;
                 }
+                // Cleanup expired notifications
+                ui::update(state, Message::CleanupNotifications)?;
             }
         }
     }

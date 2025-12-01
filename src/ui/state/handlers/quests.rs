@@ -41,7 +41,7 @@ pub fn track_scenario_completion_for_quests(
 ///
 /// Returns total XP awarded for quest completions.
 pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -> u64 {
-    let newly_completed_xp: Vec<u32> = {
+    let newly_completed: Vec<(String, u32)> = {
         let profile = state.progress.profile.borrow();
         profile
             .daily_quests
@@ -49,7 +49,7 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
             .enumerate()
             .filter_map(|(idx, quest)| {
                 if idx < was_completed.len() && !was_completed[idx] && quest.completed {
-                    Some(quest.xp_reward)
+                    Some((quest.description.clone(), quest.xp_reward))
                 } else {
                     None
                 }
@@ -57,10 +57,23 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
             .collect()
     };
 
-    if !newly_completed_xp.is_empty() {
-        let total_bonus_xp: u64 = newly_completed_xp.iter().map(|xp| *xp as u64).sum();
+    if !newly_completed.is_empty() {
+        let total_bonus_xp: u64 = newly_completed.iter().map(|(_, xp)| *xp as u64).sum();
         let mut profile = state.progress.profile.borrow_mut();
         profile.add_xp(total_bonus_xp);
+        drop(profile);
+
+        // Show notifications for each completed quest
+        for (description, xp_reward) in newly_completed {
+            let notification = crate::ui::notification::Notification::new(
+                crate::ui::notification::NotificationType::QuestComplete {
+                    description,
+                    xp_reward,
+                },
+            );
+            state.ui.notifications.push(notification);
+        }
+
         total_bonus_xp
     } else {
         0

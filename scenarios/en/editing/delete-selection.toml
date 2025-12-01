@@ -1,5 +1,5 @@
 # Delete Selection Commands
-# Scenarios for d (delete selection), dd (delete line)
+# Scenarios for d (delete selection), xd (select line + delete)
 
 [[scenarios]]
 id = "delete_selection_001"

@@ -4,18 +4,6 @@ use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
-/// Delete current line (legacy 'dd' compatibility)
-///
-/// NOTE: In Helix, the idiomatic way is 'xd' (select_line + delete_selection).
-/// This function is kept for backward compatibility with existing scenarios.
-pub(super) fn delete_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Select current line first
-    select_line(sim)?;
-    // Then delete the selection
-    delete_selection(sim)?;
-    Ok(())
-}
-
 /// Join current line with next line
 pub(super) fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     // Join current line with next line

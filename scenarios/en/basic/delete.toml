@@ -4,11 +4,12 @@
 [[scenarios]]
 id = "delete_line_001"
 name = "Delete current line"
-description = "Delete the current line where the cursor is located. In Helix, 'd' is the delete operator."
+description = "Delete the current line where the cursor is located. In Helix, use 'x' to select line then 'd' to delete."
 
 hints = [
-    "In Helix (like Vim), 'd' is a modal operator that needs a motion target",
-    "When you press 'd' twice, the second 'd' means 'delete this line'",
+    "In Helix, 'x' selects the current line (including newline)",
+    "Then 'd' deletes the selection",
+    "This is different from Vim's 'dd' - Helix uses selection-first approach",
 ]
 
 [scenarios.setup]
@@ -20,13 +21,8 @@ file_content = "first line\nthird line"
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["dd"]
-description = "Press 'd' twice: first 'd' activates delete mode, second 'd' targets the current line"
-
-[[scenarios.alternatives]]
-commands = ["c", "c"]
-points_multiplier = 0.8
-description = "Alternative: Use 'cc' (change line)"
+commands = ["x", "d"]
+description = "Press 'x' to select line, then 'd' to delete the selection"
 
 [scenarios.scoring]
 optimal_count = 2
@@ -36,6 +32,6 @@ tolerance = 1
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
-tags = ["delete", "line", "basic"]
-commands_taught = ["dd"]
+tags = ["delete", "line", "basic", "selection"]
+commands_taught = ["x", "d"]
 estimated_time_seconds = 20

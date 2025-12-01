@@ -5,15 +5,23 @@
 //!
 //! # Architecture
 //!
-//! - `RepeatBuffer`: Stores the last repeatable action
+//! - `RepeatBuffer`: Stores the last repeatable action with compound action support
 //! - `RepeatableAction`: Enum representing different types of repeatable actions
 //! - `InsertModeRecorder`: Records insert mode sequences for replay
-//! - `is_repeatable_command()`: Determines if a command should be recorded
+//! - `is_selection_command()`: Identifies selection commands that start compound actions
+//! - `is_operator_command()`: Identifies operator commands that complete compound actions
+//!
+//! # Compound Actions
+//!
+//! In Helix, selection + operator combinations (like `xd` for select line then delete)
+//! should be recorded as a single compound action. When `.` is pressed, both the
+//! selection and the operator are replayed together.
 //!
 //! # Security
 //!
 //! - Insert mode text is limited to 1000 characters
 //! - Movements are limited to 100 steps
+//! - Pending key sequences limited to 10 keys
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -25,6 +33,9 @@ const MAX_INSERT_TEXT_LENGTH: usize = 1000;
 
 /// Maximum number of movements in insert mode (security limit)
 const MAX_INSERT_MOVEMENTS: usize = 100;
+
+/// Maximum number of keys in a pending compound action (security limit)
+const MAX_PENDING_KEYS: usize = 10;
 
 /// Arrow key movement directions
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,11 +79,16 @@ pub enum RepeatableAction {
 /// Stores the last repeatable action
 ///
 /// This buffer maintains a history of one action that can be replayed
-/// with the `.` command.
+/// with the `.` command. It also supports compound actions where a selection
+/// command (like `x`) is followed by an operator (like `d`).
 #[derive(Debug)]
 pub struct RepeatBuffer {
     last_action: Option<RepeatableAction>,
     insert_recorder: InsertModeRecorder,
+    /// Pending keys for compound action (selection + operator)
+    /// When a selection command is executed, its keys are stored here.
+    /// When an operator follows, the pending keys are combined with the operator.
+    pending_keys: Vec<KeyEvent>,
 }
 
 impl RepeatBuffer {
@@ -81,6 +97,7 @@ impl RepeatBuffer {
         Self {
             last_action: None,
             insert_recorder: InsertModeRecorder::new(),
+            pending_keys: Vec::new(),
         }
     }
 
@@ -110,18 +127,89 @@ impl RepeatBuffer {
 
     /// Record a command action
     ///
-    /// Stores a command with its key sequence for later replay.
+    /// For selection commands: stores keys in pending buffer for compound action.
+    /// For operator commands: combines with pending selection (if any) and records.
+    /// For other commands: records directly and clears pending.
     pub fn record_command(&mut self, keys: Vec<KeyEvent>, mode: Mode) {
-        self.last_action = Some(RepeatableAction::Command {
-            keys,
-            expected_mode: mode,
-        });
+        // Check if this is a selection command that starts a compound action
+        let is_selection = keys.iter().all(is_selection_command);
+        // Check if this is an operator that completes a compound action
+        let is_operator = keys.iter().all(is_operator_command);
+
+        if is_selection {
+            // Start or extend compound action - add to pending
+            if self.pending_keys.len() < MAX_PENDING_KEYS {
+                self.pending_keys.extend(keys);
+            }
+            // Don't record yet - wait for operator
+        } else if is_operator && !self.pending_keys.is_empty() {
+            // Complete compound action: pending selection + operator
+            let mut compound_keys = std::mem::take(&mut self.pending_keys);
+            compound_keys.extend(keys);
+            self.last_action = Some(RepeatableAction::Command {
+                keys: compound_keys,
+                expected_mode: mode,
+            });
+        } else {
+            // Regular command - record directly and clear pending
+            self.pending_keys.clear();
+            self.last_action = Some(RepeatableAction::Command {
+                keys,
+                expected_mode: mode,
+            });
+        }
+    }
+
+    /// Record a selection command that may start a compound action
+    ///
+    /// Selection commands (`x`, `X`, `%`) are stored in pending and wait
+    /// for an operator to complete the compound action.
+    pub fn record_selection(&mut self, keys: Vec<KeyEvent>) {
+        if self.pending_keys.len() < MAX_PENDING_KEYS {
+            self.pending_keys.extend(keys);
+        }
+    }
+
+    /// Record an operator command, possibly completing a compound action
+    ///
+    /// If there are pending selection keys, combines them with the operator.
+    /// Otherwise records just the operator.
+    pub fn record_operator(&mut self, keys: Vec<KeyEvent>, mode: Mode) {
+        if !self.pending_keys.is_empty() {
+            // Complete compound action
+            let mut compound_keys = std::mem::take(&mut self.pending_keys);
+            compound_keys.extend(keys);
+            self.last_action = Some(RepeatableAction::Command {
+                keys: compound_keys,
+                expected_mode: mode,
+            });
+        } else {
+            // Just the operator
+            self.last_action = Some(RepeatableAction::Command {
+                keys,
+                expected_mode: mode,
+            });
+        }
+    }
+
+    /// Clear pending keys without recording
+    ///
+    /// Called when a non-repeatable command breaks the compound action chain.
+    pub fn clear_pending(&mut self) {
+        self.pending_keys.clear();
+    }
+
+    /// Check if there are pending selection keys
+    pub fn has_pending(&self) -> bool {
+        !self.pending_keys.is_empty()
     }
 
     /// Set the last action directly
     ///
     /// Used primarily for storing insert mode sequences after recording.
+    /// Also clears pending keys.
     pub fn set_last_action(&mut self, action: RepeatableAction) {
+        self.pending_keys.clear();
         self.last_action = Some(action);
     }
 }
@@ -227,6 +315,44 @@ impl Default for InsertModeRecorder {
     }
 }
 
+/// Check if a key is a selection command that starts a compound action
+///
+/// Selection commands modify the selection without changing the document.
+/// They can be followed by an operator to form a compound action.
+///
+/// # Selection Commands
+/// - `x` - Select line (extend)
+/// - `X` - Extend to line bounds
+/// - `%` - Select all
+///
+/// Note: `;` (collapse selection) is NOT included as it doesn't expand selection
+pub fn is_selection_command(key: &KeyEvent) -> bool {
+    if let KeyCode::Char(ch) = key.code {
+        matches!(ch, 'x' | 'X' | '%')
+    } else {
+        false
+    }
+}
+
+/// Check if a key is an operator command that completes a compound action
+///
+/// Operators act on the current selection. When preceded by a selection
+/// command, they form a compound action that can be repeated together.
+///
+/// # Operator Commands
+/// - `d` - Delete selection
+/// - `c` - Change selection (delete and enter insert mode)
+/// - `y` - Yank (copy) selection
+/// - `>` - Indent selection
+/// - `<` - Dedent selection
+pub fn is_operator_command(key: &KeyEvent) -> bool {
+    if let KeyCode::Char(ch) = key.code {
+        matches!(ch, 'd' | 'c' | 'y' | '>' | '<')
+    } else {
+        false
+    }
+}
+
 /// Check if a command should be recorded for repeat
 ///
 /// Returns `false` for:
@@ -258,9 +384,10 @@ pub fn is_repeatable_command(key: &KeyEvent) -> bool {
             '0' | '$' => false,
             'g' | 'G' => false,
 
-            // Editing commands - these ARE repeatable
-            'x' => true,       // delete char
-            'd' => true,       // delete (dd for line)
+            // Selection commands - start compound actions
+            'x' => true, // select line
+            // Operator commands - complete compound actions
+            'd' => true,       // delete line
             'i' | 'a' => true, // insert/append
             'I' | 'A' => true, // insert/append at bounds
             'o' | 'O' => true, // open line

@@ -456,10 +456,12 @@ impl GameSession<Active> {
     ///
     /// ```ignore
     /// use helix_trainer::game::{GameSession, SessionAfterAction};
-    /// use helix_trainer::helix::commands::CMD_DELETE_LINE;
+    /// use helix_trainer::helix::commands::{CMD_SELECT_LINE, CMD_DELETE_SELECTION};
     ///
     /// let session = GameSession::new(scenario)?;
-    /// match session.record_action(CMD_DELETE_LINE.to_string())? {
+    /// // Use x+d (select line + delete) - the Helix way
+    /// let session = session.record_action(CMD_SELECT_LINE.to_string())?;
+    /// match session.record_action(CMD_DELETE_SELECTION.to_string())? {
     ///     SessionAfterAction::StillActive(session) => {
     ///         // Continue playing
     ///     }

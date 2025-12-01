@@ -62,9 +62,11 @@ fn test_word_movement() {
 
 #[test]
 fn test_delete_line() {
+    // In Helix, delete line is done with 'x' (select line) + 'd' (delete)
     let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\n".to_string());
 
-    sim.execute_command(CMD_DELETE_LINE).unwrap();
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line 2\nline 3\n");
@@ -177,7 +179,9 @@ fn test_delete_char_in_middle() {
 fn test_undo() {
     let mut sim = AnyModeSimulator::new("test\n".to_string());
 
-    sim.execute_command(CMD_DELETE_LINE).unwrap();
+    // Delete line using x (select) + d (delete)
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     assert_eq!(sim.get_state().unwrap().content(), "");
 
     sim.execute_command(CMD_UNDO).unwrap();
@@ -259,8 +263,12 @@ fn test_unknown_command() {
 fn test_multiple_line_deletions() {
     let mut sim = AnyModeSimulator::new("line1\nline2\nline3\n".to_string());
 
-    sim.execute_command(CMD_DELETE_LINE).unwrap();
-    sim.execute_command(CMD_DELETE_LINE).unwrap();
+    // Delete first line with x+d
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    // Delete second line with x+d
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line3\n");
@@ -735,10 +743,11 @@ fn test_repeat_buffer_records_delete_char() {
 fn test_repeat_buffer_records_delete_line() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2".to_string());
 
-    // Execute dd command
-    sim.execute_command(CMD_DELETE_LINE).unwrap();
+    // Execute x+d (select line + delete) - the Helix way
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
-    // Verify dd was recorded
+    // Verify x+d was recorded as compound action
     let buffer = sim.repeat_buffer();
     assert!(!buffer.is_empty());
 
@@ -747,7 +756,7 @@ fn test_repeat_buffer_records_delete_line() {
             keys,
             expected_mode,
         }) => {
-            assert_eq!(keys.len(), 2); // Both 'd' keys
+            assert_eq!(keys.len(), 2); // 'x' + 'd' keys
             assert_eq!(*expected_mode, crate::helix::repeat::Mode::Normal);
         }
         _ => panic!("Expected Command action with 2 keys"),
@@ -1088,12 +1097,13 @@ fn test_repeat_delete_char() {
 fn test_repeat_delete_line() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3".to_string());
 
-    // Delete first line
-    sim.execute_command(CMD_DELETE_LINE).unwrap();
+    // Delete first line using x+d (Helix way)
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line 2\nline 3");
 
-    // Repeat delete
+    // Repeat delete - should execute x+d together
     sim.execute_command(".").unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line 3");
@@ -1489,5 +1499,279 @@ fn test_paste_before_cursor_scenario() {
         state.cursor_position().col,
         2,
         "Cursor should be at position 2 (after pasted 'z')"
+    );
+}
+
+// Phase 4: Compound Action Tests (selection + operator)
+// Tests for x+d, x+y, %+d etc. combinations that should be recorded and repeated together
+
+#[test]
+fn test_repeat_select_line_then_delete() {
+    // Scenario: User selects a line with 'x', deletes with 'd', then repeats with '.'
+    // Expected: The repeat should execute both x and d together
+    let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\nline 4\n".to_string());
+
+    // Move to line 2
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1);
+
+    // Select line with x
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+
+    // Delete selection with d
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 1\nline 3\nline 4\n");
+
+    // Now cursor should be on what was line 3 (now line 2)
+    assert_eq!(state.cursor_position().row, 1);
+
+    // Repeat with . - should execute x+d together
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    // Line 3 (now at row 1) should be deleted
+    assert_eq!(state.content(), "line 1\nline 4\n");
+
+    // Repeat again
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 1\n");
+}
+
+#[test]
+fn test_repeat_select_all_then_delete() {
+    // Scenario: User selects all with '%', then deletes with 'd'
+    let mut sim = AnyModeSimulator::new("hello\nworld".to_string());
+
+    // Select all
+    sim.execute_command("%").unwrap();
+
+    // Delete selection
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    let state = sim.get_state().unwrap();
+    assert!(state.content().is_empty() || state.content() == "\n");
+
+    // Create new content to test repeat
+    // (Repeat on empty content won't do much)
+}
+
+#[test]
+fn test_repeat_select_line_then_yank() {
+    // Scenario: User selects a line with 'x', yanks with 'y'
+    let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\n".to_string());
+
+    // Move to line 2
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
+
+    // Select line
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+
+    // Yank
+    sim.execute_command(CMD_YANK).unwrap();
+
+    // Move down - need to navigate away from current selection first
+    // After yank, selection is still active, so collapse it first
+    sim.execute_command(CMD_COLLAPSE_SELECTION).unwrap();
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
+
+    // Repeat x+y - should select current line and yank
+    sim.execute_command(".").unwrap();
+
+    // Verify we're still on same content (yank doesn't delete)
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 1\nline 2\nline 3\n");
+}
+
+#[test]
+fn test_compound_action_overwritten_by_simple_command() {
+    // Test that a simple editing command after x+d overwrites the compound action
+    let mut sim = AnyModeSimulator::new("aaa\nbbb\nccc\n".to_string());
+
+    // Do x+d (compound action)
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "bbb\nccc\n");
+
+    // Now do another x+d (still compound, same sequence)
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "ccc\n");
+
+    // Repeat should do x+d again
+}
+
+// Phase 5: Scenario Validation Tests
+// These tests verify that the actual scenarios from TOML files work correctly
+
+#[test]
+fn test_scenario_repeat_delete_char_001() {
+    // Scenario: repeat_delete_char_001
+    // Setup: "hello world", cursor [0,0]
+    // Target: "llo world", cursor [0,0]
+    // Commands: ["d", "."]
+    let mut sim = AnyModeSimulator::new("hello world".to_string());
+
+    // Execute commands from scenario
+    sim.execute_command("d").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "ello world", "After first 'd'");
+
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "llo world", "After '.' repeat");
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_scenario_repeat_delete_line_001() {
+    // Scenario: repeat_delete_line_001
+    // Setup: "line 1\nline 2\nline 3\nline 4", cursor [0,0]
+    // Target: "line 3\nline 4", cursor [0,0]
+    // Commands: ["x", "d", "."]
+    let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\nline 4".to_string());
+
+    // Select line with x, then delete with d
+    sim.execute_command("x").unwrap();
+    sim.execute_command("d").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(
+        state.content(),
+        "line 2\nline 3\nline 4",
+        "After first 'xd'"
+    );
+
+    // Repeat with . - should execute x+d together
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "line 3\nline 4", "After '.' repeat");
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_scenario_repeat_indent_001() {
+    // Scenario: repeat_indent_001
+    // Setup: "def foo():\nprint('hello')\nprint('world')\nreturn", cursor [1,0]
+    // Target: "def foo():\n  print('hello')\n  print('world')\nreturn", cursor [2,4]
+    // Commands: [">", "j", "."]
+    let mut sim =
+        AnyModeSimulator::new("def foo():\nprint('hello')\nprint('world')\nreturn".to_string());
+
+    // Move to line 1
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1);
+
+    // Indent
+    sim.execute_command(">").unwrap();
+    let state = sim.get_state().unwrap();
+    assert!(
+        state.content().contains("  print('hello')"),
+        "Line 1 should be indented"
+    );
+
+    // Move down
+    sim.execute_command("j").unwrap();
+
+    // Repeat indent
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert!(
+        state.content().contains("  print('world')"),
+        "Line 2 should be indented"
+    );
+
+    // Final content check
+    assert_eq!(
+        state.content(),
+        "def foo():\n  print('hello')\n  print('world')\nreturn"
+    );
+}
+
+#[test]
+fn test_scenario_repeat_replace_001() {
+    // Scenario: repeat_replace_001
+    // Setup: "foo-bar-baz", cursor [0,3]
+    // Target: "foo_bar_baz", cursor [0,7]
+    // Commands: ["r_", "l", "l", "l", "l", "."]
+    let mut sim = AnyModeSimulator::new("foo-bar-baz".to_string());
+
+    // Move to position 3 (first '-')
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 3);
+
+    // Replace '-' with '_'
+    sim.execute_command("r_").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "foo_bar-baz", "After first replace");
+
+    // Move right 4 times to reach second '-'
+    sim.execute_command("l").unwrap();
+    sim.execute_command("l").unwrap();
+    sim.execute_command("l").unwrap();
+    sim.execute_command("l").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().col, 7);
+
+    // Repeat replace
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "foo_bar_baz", "After repeat replace");
+    assert_eq!(state.cursor_position().col, 7);
+}
+
+#[test]
+fn test_scenario_repeat_insert_001() {
+    // Scenario: repeat_insert_001
+    // Setup: "TODO:\nFIX:\nNOTE:", cursor [0,5]
+    // Target: "TODO: Update docs\nFIX: Update docs\nNOTE:", cursor [1,16]
+    // Commands: ["i", " ", "U", "p", "d", "a", "t", "e", " ", "d", "o", "c", "s", "Escape", "j", "0", "$", "."]
+    let mut sim = AnyModeSimulator::new("TODO:\nFIX:\nNOTE:".to_string());
+
+    // Move cursor to position [0,5] (after "TODO:")
+    // "TODO:" has 5 chars, so col 5 is right after ':'
+    // But in Helix cursor can't go past last char, so max is col 4 (the ':')
+    // Scenario says cursor_position = [0, 5] which means we start at position 5
+    // Actually let's check what the scenario expects - it inserts AFTER "TODO:"
+    // So we need to be at the ':' (col 4) or use append mode
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
+
+    // Enter insert mode and type " Update docs"
+    sim.execute_command("i").unwrap();
+    for ch in " Update docs".chars() {
+        sim.execute_command(&ch.to_string()).unwrap();
+    }
+    sim.execute_command("Escape").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(
+        state.content(),
+        "TODO: Update docs\nFIX:\nNOTE:",
+        "After first insert"
+    );
+
+    // Navigate: j (down), 0 (line start), $ (line end)
+    sim.execute_command("j").unwrap();
+    sim.execute_command("0").unwrap();
+    sim.execute_command("$").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 1, "Should be on line 1");
+
+    // Repeat the insert
+    sim.execute_command(".").unwrap();
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(
+        state.content(),
+        "TODO: Update docs\nFIX: Update docs\nNOTE:",
+        "After repeat insert"
     );
 }

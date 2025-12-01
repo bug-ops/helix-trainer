@@ -39,12 +39,12 @@ estimated_time_seconds = 25
 [[scenarios]]
 id = "repeat_delete_line_001"
 name = "Repeat line deletion"
-description = "Delete a line, then repeat to delete another line"
+description = "Delete a line with 'xd', then repeat to delete another line"
 
 hints = [
-    "Use 'dd' to delete the entire current line",
-    "The '.' command will repeat the last 'dd' operation",
-    "Two deletes with just three keystrokes!",
+    "Use 'x' to select the current line, then 'd' to delete it",
+    "The '.' command will repeat the entire 'xd' operation",
+    "Two line deletes with just three keystrokes after the first!",
 ]
 
 [scenarios.setup]
@@ -56,8 +56,8 @@ file_content = "line 3\nline 4"
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["dd", "."]
-description = "Press 'dd' to delete first line, then '.' to delete second line"
+commands = ["x", "d", "."]
+description = "Press 'x' to select line, 'd' to delete, then '.' to repeat xd"
 
 [scenarios.scoring]
 optimal_count = 3
@@ -67,8 +67,8 @@ tolerance = 1
 [scenarios.metadata]
 category = "advanced"
 difficulty = "intermediate"
-tags = ["repeat", "delete", "line"]
-commands_taught = ["."]
+tags = ["repeat", "delete", "line", "selection"]
+commands_taught = [".", "x", "d"]
 estimated_time_seconds = 30
 
 [[scenarios]]

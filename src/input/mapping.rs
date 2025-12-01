@@ -110,6 +110,7 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
         KeyCode::Right => Some(Cow::Borrowed(CMD_ARROW_RIGHT)),
         KeyCode::Up => Some(Cow::Borrowed(CMD_ARROW_UP)),
         KeyCode::Down => Some(Cow::Borrowed(CMD_ARROW_DOWN)),
+        KeyCode::Esc => Some(Cow::Borrowed(CMD_ESCAPE)),
         _ => None,
     }
 }
@@ -406,11 +407,11 @@ mod tests {
         }
 
         #[test]
-        fn test_handle_insert_mode_input_escape_returns_none() {
-            // Escape is handled elsewhere, not in insert mode input
+        fn test_handle_insert_mode_input_escape() {
+            // Escape exits insert mode and returns to normal mode
             let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
             let result = handle_insert_mode_input(key);
-            assert_eq!(result, None);
+            assert_eq!(result, Some(Cow::Borrowed(CMD_ESCAPE)));
         }
 
         #[test]

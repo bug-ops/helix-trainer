@@ -91,8 +91,7 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
         (KeyCode::Char('.'), KeyModifiers::NONE) => Some(CMD_REPEAT),
 
         // Document movement
-        (KeyCode::Char('g'), KeyModifiers::NONE) => Some("g"), // Note: multi-key 'gg' handled elsewhere
-        (KeyCode::Char('G'), KeyModifiers::SHIFT) => Some(CMD_GOTO_FILE_END),
+        (KeyCode::Char('g'), KeyModifiers::NONE) => Some("g"), // Note: multi-key 'gg', 'ge' handled elsewhere
 
         _ => None,
     }
@@ -305,11 +304,9 @@ mod tests {
         // Document movement
         #[test]
         fn test_map_key_document_movement() {
+            // 'g' is the prefix for goto commands (gg, ge, gh, gl, gs)
             let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
             assert_eq!(map_key_to_helix_command(g), Some("g"));
-
-            let g_shift = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT);
-            assert_eq!(map_key_to_helix_command(g_shift), Some(CMD_GOTO_FILE_END));
         }
 
         // Edge cases

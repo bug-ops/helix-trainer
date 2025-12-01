@@ -49,7 +49,7 @@ mod tests {
         assert!(registry.contains("w"), "Missing move_word_forward");
         assert!(registry.contains("b"), "Missing move_word_backward");
         assert!(registry.contains("gg"), "Missing goto_file_start");
-        assert!(registry.contains("G"), "Missing goto_file_end");
+        assert!(registry.contains("ge"), "Missing goto_last_line");
     }
 
     #[test]

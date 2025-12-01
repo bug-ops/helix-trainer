@@ -184,19 +184,6 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         movement::move_document_start,
     ));
 
-    registry.register(Command::new(
-        CommandMetadata::new(
-            "goto_file_end",
-            CMD_GOTO_FILE_END,
-            "Go to file end",
-            "Move to the last line of the document.",
-            Category::Movement,
-            false,
-            None,
-        ),
-        movement::move_document_end,
-    ));
-
     // Goto mode commands
     registry.register(Command::new(
         CommandMetadata::new(

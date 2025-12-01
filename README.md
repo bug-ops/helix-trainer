@@ -2,9 +2,10 @@
 
 [![CI Status](https://img.shields.io/github/actions/workflow/status/bug-ops/helix-trainer/ci.yml?branch=main)](https://github.com/bug-ops/helix-trainer/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.89+-orange.svg)](https://www.rust-lang.org)
 [![Release](https://img.shields.io/github/v/release/bug-ops/helix-trainer)](https://github.com/bug-ops/helix-trainer/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/bug-ops/helix-trainer/releases/tag/v0.4.1)
+[![Version](https://img.shields.io/badge/version-0.4.3-blue)](https://github.com/bug-ops/helix-trainer/releases/tag/v0.4.3)
+[![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 
 **Master Helix editor keybindings through scientifically-optimized spaced repetition and gamified training.**
 
@@ -39,7 +40,7 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 - 🔍 **Smart Scenario Discovery** — Filter by category, difficulty, commands, or completion status with 6 sort modes
 - 📋 **Rich Metadata** — Every scenario tagged with category, difficulty, taught commands, and practice focus
 - ⚡ **Real Helix Accuracy** — Uses official `helix-core` library (v25.07.1)
-- 🎮 **31 Commands** — Movement, editing, clipboard, undo/redo, repeat
+- 🎮 **45+ Commands** — Movement, editing, clipboard, undo/redo, repeat
 - 📚 **78 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
 - 🎯 **55 Daily Quests** — Easy, medium, and hard challenges across all commands
 - 🔒 **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)

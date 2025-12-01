@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2025-12-01
+
+### Added
+
+- **MSRV Check** — CI now verifies build with minimum supported Rust version (1.89)
+- **Miri Workflow** — Scheduled weekly undefined behavior detection (Sundays)
+- **`#![forbid(unsafe_code)]`** — Enforced in lib.rs and main.rs
+
+### Changed
+
+- **MSRV bumped to 1.89** — Required by dependencies (bytemuck avx512_simd)
+- **Float rounding** — XP calculations now use `.round()` for cross-platform consistency
+- **Modern Rust syntax** — Refactored to use `if let && condition` chains
+
+### Fixed
+
+- Float-to-int conversion differences between native and Miri execution
+- Async tests excluded from Miri (too slow, 300+ seconds each)
+
 ## [0.4.2] - 2025-11-30
 
 ### Added

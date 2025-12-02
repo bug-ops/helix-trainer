@@ -35,6 +35,63 @@ pub fn handle_menu_down(
     Ok(HandlerOutcome::Stay)
 }
 
+/// Handle MenuUpBy message
+///
+/// Moves menu selection up by N items (with bounds checking).
+pub fn handle_menu_up_by(data: &mut MenuData, count: usize) -> Result<HandlerOutcome, UserError> {
+    data.selected_item = data.selected_item.saturating_sub(count);
+    Ok(HandlerOutcome::Stay)
+}
+
+/// Handle MenuDownBy message
+///
+/// Moves menu selection down by N items (with bounds checking).
+pub fn handle_menu_down_by(
+    data: &mut MenuData,
+    ctx: &HandlerContext<'_>,
+    count: usize,
+) -> Result<HandlerOutcome, UserError> {
+    let max_items = ctx.game.scenario_collection.count() + 4;
+    let max_index = max_items.saturating_sub(1);
+    data.selected_item = (data.selected_item + count).min(max_index);
+    Ok(HandlerOutcome::Stay)
+}
+
+/// Handle MenuJumpToFirst message (gg)
+///
+/// Jumps to first menu item.
+pub fn handle_menu_jump_to_first(data: &mut MenuData) -> Result<HandlerOutcome, UserError> {
+    data.selected_item = 0;
+    Ok(HandlerOutcome::Stay)
+}
+
+/// Handle MenuJumpToLast message (G)
+///
+/// Jumps to last menu item.
+pub fn handle_menu_jump_to_last(
+    data: &mut MenuData,
+    ctx: &HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    let max_items = ctx.game.scenario_collection.count() + 4;
+    data.selected_item = max_items.saturating_sub(1);
+    Ok(HandlerOutcome::Stay)
+}
+
+/// Handle MenuJumpTo message ({n}G or {n}gg)
+///
+/// Jumps to specific menu item (1-indexed like Helix line numbers).
+pub fn handle_menu_jump_to(
+    data: &mut MenuData,
+    ctx: &HandlerContext<'_>,
+    line: usize,
+) -> Result<HandlerOutcome, UserError> {
+    let max_items = ctx.game.scenario_collection.count() + 4;
+    // Convert 1-indexed to 0-indexed, clamping to valid range
+    let target = line.saturating_sub(1).min(max_items.saturating_sub(1));
+    data.selected_item = target;
+    Ok(HandlerOutcome::Stay)
+}
+
 /// Handle MenuSelect message
 ///
 /// Executes action based on currently selected menu item.

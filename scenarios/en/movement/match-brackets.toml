@@ -1,13 +1,13 @@
 # Match Brackets Command
-# Scenarios for m (match brackets) command
+# Scenarios for mm (match brackets) command in Match Mode
 
 [[scenarios]]
 id = "match_brackets_001"
 name = "Jump to matching parenthesis"
-description = "Use 'm' to jump from opening to closing parenthesis"
+description = "Use 'mm' to jump from opening to closing parenthesis"
 
 hints = [
-    "'m' jumps between matching bracket pairs",
+    "'m' enters Match mode, then 'm' again jumps to matching bracket",
     "Works with (), [], {}, and <>",
 ]
 
@@ -20,8 +20,8 @@ file_content = "fn foo(x: i32)"
 cursor_position = [0, 13]
 
 [scenarios.solution]
-commands = ["m"]
-description = "Press 'm' to jump to matching ')'"
+commands = ["mm"]
+description = "Press 'mm' to jump to matching ')'"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -31,17 +31,17 @@ tolerance = 0
 [scenarios.metadata]
 category = "movement"
 difficulty = "intermediate"
-tags = ["brackets", "navigation", "code"]
-commands_taught = ["m"]
+tags = ["brackets", "navigation", "code", "match-mode"]
+commands_taught = ["mm"]
 estimated_time_seconds = 5
 
 [[scenarios]]
 id = "match_brackets_002"
 name = "Jump back to opening bracket"
-description = "Use 'm' to jump from closing to opening bracket"
+description = "Use 'mm' to jump from closing to opening bracket"
 
 hints = [
-    "'m' works in both directions",
+    "'mm' works in both directions",
     "From ')' it jumps to '('",
 ]
 
@@ -54,8 +54,8 @@ file_content = "{ let x = (1 + 2); }"
 cursor_position = [0, 10]
 
 [scenarios.solution]
-commands = ["m"]
-description = "Press 'm' to jump to matching '('"
+commands = ["mm"]
+description = "Press 'mm' to jump to matching '('"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -65,8 +65,8 @@ tolerance = 0
 [scenarios.metadata]
 category = "movement"
 difficulty = "intermediate"
-tags = ["brackets", "navigation", "code"]
-commands_taught = ["m"]
+tags = ["brackets", "navigation", "code", "match-mode"]
+commands_taught = ["mm"]
 estimated_time_seconds = 5
 
 [[scenarios]]
@@ -75,7 +75,7 @@ name = "Navigate nested brackets"
 description = "Jump between matching braces in nested code"
 
 hints = [
-    "'m' handles nested brackets correctly",
+    "'mm' handles nested brackets correctly",
     "It finds the true matching bracket",
 ]
 
@@ -88,8 +88,8 @@ file_content = "if (a && (b || c)) {"
 cursor_position = [0, 17]
 
 [scenarios.solution]
-commands = ["m"]
-description = "Press 'm' to jump to outer closing ')'"
+commands = ["mm"]
+description = "Press 'mm' to jump to outer closing ')'"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -99,17 +99,17 @@ tolerance = 0
 [scenarios.metadata]
 category = "movement"
 difficulty = "intermediate"
-tags = ["brackets", "nested", "navigation"]
-commands_taught = ["m"]
+tags = ["brackets", "nested", "navigation", "match-mode"]
+commands_taught = ["mm"]
 estimated_time_seconds = 10
 
 [[scenarios]]
 id = "match_brackets_004"
 name = "Jump to matching curly brace"
-description = "Use 'm' to navigate between curly braces"
+description = "Use 'mm' to navigate between curly braces"
 
 hints = [
-    "'m' works with {} curly braces too",
+    "'mm' works with {} curly braces too",
     "Great for navigating function/block boundaries",
 ]
 
@@ -122,8 +122,8 @@ file_content = "fn main() {\n    println!(\"Hi\");\n}"
 cursor_position = [2, 0]
 
 [scenarios.solution]
-commands = ["m"]
-description = "Press 'm' to jump to closing '}'"
+commands = ["mm"]
+description = "Press 'mm' to jump to closing '}'"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -133,6 +133,6 @@ tolerance = 0
 [scenarios.metadata]
 category = "movement"
 difficulty = "intermediate"
-tags = ["brackets", "braces", "navigation"]
-commands_taught = ["m"]
+tags = ["brackets", "braces", "navigation", "match-mode"]
+commands_taught = ["mm"]
 estimated_time_seconds = 10

@@ -51,6 +51,11 @@ fn is_building_count_prefix(state: &AppState) -> bool {
 
 /// Handle keyboard events on profile and statistics screens
 pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+    // Ctrl-Q returns to menu (unified exit key)
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::BackToMenu);
+    }
+
     match key.code {
         KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('q') => Some(Message::QuitApp),
@@ -66,6 +71,11 @@ pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Mess
 
 /// Handle keyboard events on the main menu screen
 pub fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+    // Ctrl-Q exits application from anywhere
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::QuitApp);
+    }
+
     match key.code {
         KeyCode::Char('q') => Some(Message::QuitApp),
         KeyCode::Char('r') => Some(Message::StartReviewSession),
@@ -207,6 +217,11 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
 
 /// Handle keyboard events on the results screen
 pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
+    // Ctrl-Q returns to menu (unified exit key)
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::BackToMenu);
+    }
+
     match key.code {
         KeyCode::Char('q') => Some(Message::QuitApp),
         KeyCode::Char('r') => Some(Message::RetryScenario),
@@ -218,6 +233,11 @@ pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
 
 /// Handle keyboard events on the review session screen
 pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
+    // Ctrl-Q abandons review session (unified exit key)
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::AbandonReviewSession);
+    }
+
     match key.code {
         KeyCode::Char('s') => Some(Message::CompleteReviewCommand { success: true }),
         KeyCode::Char('f') => Some(Message::CompleteReviewCommand { success: false }),
@@ -229,6 +249,11 @@ pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
 
 /// Handle keyboard events on mode selection screen
 pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
+    // Ctrl-Q exits application (unified exit key - mode selection is root screen)
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::QuitApp);
+    }
+
     match key.code {
         KeyCode::Char('q') => Some(Message::QuitApp),
         KeyCode::Up | KeyCode::Char('k') => Some(Message::ModeSelectionUp),
@@ -242,6 +267,11 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
 pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Check if game over or paused
     let session = state.game.minigame_session.as_ref()?;
+
+    // Ctrl-Q returns to menu from any minigame state (unified exit key)
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::MiniGameBackToMenu);
+    }
 
     if session.state().is_game_over() {
         // Game over - only allow quit or back to menu
@@ -261,11 +291,6 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
             KeyCode::Char('s') => Some(Message::ShowStatistics),
             _ => None,
         };
-    }
-
-    // Handle Ctrl+Q for quit
-    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
-        return Some(Message::QuitApp);
     }
 
     // In playing state - handle input using shared gameplay logic
@@ -397,6 +422,43 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
         let msg = handle_results_keys(key);
         assert_eq!(msg, Some(Message::QuitApp));
+    }
+
+    #[test]
+    fn test_results_key_ctrl_q_returns_menu() {
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::BackToMenu));
+    }
+
+    #[test]
+    fn test_menu_key_ctrl_q_quits() {
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+        let state = create_test_app_state();
+        let msg = handle_menu_keys(key, &state);
+        assert_eq!(msg, Some(Message::QuitApp));
+    }
+
+    #[test]
+    fn test_mode_selection_key_ctrl_q_quits() {
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+        let msg = handle_mode_selection_keys(key);
+        assert_eq!(msg, Some(Message::QuitApp));
+    }
+
+    #[test]
+    fn test_review_key_ctrl_q_abandons() {
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+        let msg = handle_review_keys(key);
+        assert_eq!(msg, Some(Message::AbandonReviewSession));
+    }
+
+    #[test]
+    fn test_profile_stats_key_ctrl_q_returns_menu() {
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+        let state = create_test_app_state();
+        let msg = handle_profile_stats_keys(key, &state);
+        assert_eq!(msg, Some(Message::BackToMenu));
     }
 
     #[test]

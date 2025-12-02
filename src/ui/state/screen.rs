@@ -78,6 +78,19 @@ pub struct MenuData {
 
     /// Scroll offset for menu list (top visible item index)
     pub scroll_offset: usize,
+
+    /// Command buffer for multi-key navigation (e.g., "g" waiting for "g", count prefix "12")
+    pub command_buffer: String,
+}
+
+impl CommandBufferAccess for MenuData {
+    fn command_buffer(&self) -> &str {
+        &self.command_buffer
+    }
+
+    fn command_buffer_mut(&mut self) -> &mut String {
+        &mut self.command_buffer
+    }
 }
 
 /// Data required for task screen (contains active session)

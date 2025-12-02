@@ -162,6 +162,21 @@ pub enum Message {
     /// Menu navigation: move selection down
     MenuDown,
 
+    /// Menu navigation: move up by N items
+    MenuUpBy(usize),
+
+    /// Menu navigation: move down by N items
+    MenuDownBy(usize),
+
+    /// Menu navigation: jump to first item (gg)
+    MenuJumpToFirst,
+
+    /// Menu navigation: jump to last item (G)
+    MenuJumpToLast,
+
+    /// Menu navigation: jump to item N (1-indexed, like Helix)
+    MenuJumpTo(usize),
+
     /// Menu action: select current menu item
     MenuSelect,
 
@@ -544,16 +559,37 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::MenuDown => {
             extract_screen!(state, Menu, mut data, ctx => handlers::handle_menu_down(data, &ctx))
         }
+        Message::MenuUpBy(count) => {
+            extract_screen!(state, Menu, data => handlers::menu::handle_menu_up_by(data, count))
+        }
+        Message::MenuDownBy(count) => {
+            extract_screen!(state, Menu, mut data, ctx => handlers::menu::handle_menu_down_by(data, &ctx, count))
+        }
+        Message::MenuJumpToFirst => {
+            extract_screen!(state, Menu, data => handlers::menu::handle_menu_jump_to_first(data))
+        }
+        Message::MenuJumpToLast => {
+            extract_screen!(state, Menu, mut data, ctx => handlers::menu::handle_menu_jump_to_last(data, &ctx))
+        }
+        Message::MenuJumpTo(line) => {
+            extract_screen!(state, Menu, mut data, ctx => handlers::menu::handle_menu_jump_to(data, &ctx, line))
+        }
         Message::MenuSelect => {
-            let (selected_item, scroll_offset) = if let TypedScreen::Menu(ref data) = state.screen {
-                (data.selected_item, data.scroll_offset)
-            } else {
-                return Err(UserError::invalid_state("Expected Menu screen"));
-            };
+            let (selected_item, scroll_offset, command_buffer) =
+                if let TypedScreen::Menu(ref data) = state.screen {
+                    (
+                        data.selected_item,
+                        data.scroll_offset,
+                        data.command_buffer.clone(),
+                    )
+                } else {
+                    return Err(UserError::invalid_state("Expected Menu screen"));
+                };
 
             let menu_data = MenuData {
                 selected_item,
                 scroll_offset,
+                command_buffer,
             };
             let outcome = handlers::menu::handle_menu_select(&menu_data, state)?;
             apply_outcome(state, outcome);

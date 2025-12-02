@@ -15,7 +15,10 @@ use handlers::*;
 ///
 /// This function is the main entry point for input handling.
 /// It dispatches to screen-specific handlers based on current screen state.
-pub fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
+///
+/// Note: Some handlers (like menu) need mutable access to state
+/// for command buffer management.
+pub fn handle_key_event(key: KeyEvent, state: &mut AppState) -> Option<Message> {
     use helix_trainer::ui::state::TypedScreen;
 
     match &state.screen {

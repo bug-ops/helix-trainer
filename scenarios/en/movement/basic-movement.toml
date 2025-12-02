@@ -140,11 +140,11 @@ estimated_time_seconds = 5
 [[scenarios]]
 id = "move_left_multiple_001"
 name = "Move left three times"
-description = "Move cursor left multiple characters"
+description = "Move cursor left multiple characters using count prefix"
 
 hints = [
-    "'h' moves cursor left",
-    "Press multiple times for larger moves",
+    "Use count prefix: '<number><command>' executes command N times",
+    "'3h' moves cursor left 3 times",
 ]
 
 [scenarios.setup]
@@ -156,19 +156,19 @@ file_content = "Hello World"
 cursor_position = [0, 2]
 
 [scenarios.solution]
-commands = ["h", "h", "h"]
-description = "Press 'h' three times"
+commands = ["3h"]
+description = "Press '3h' to move left 3 times"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
 [scenarios.metadata]
 category = "movement"
 difficulty = "beginner"
-tags = ["character", "multiple"]
-commands_taught = ["h"]
+tags = ["character", "multiple", "count"]
+commands_taught = ["3h"]
 estimated_time_seconds = 10
 
 [[scenarios]]

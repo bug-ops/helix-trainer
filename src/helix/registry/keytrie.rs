@@ -1,19 +1,50 @@
 //! KeyTrie for multi-key sequence resolution
 //!
-//! Handles sequences like `gg`, `gh`, `fx`, `rx` by determining
-//! if a buffer contains a complete command, partial sequence, or invalid input.
+//! Handles sequences like `gg`, `gh`, `fx`, `rx`, and count prefixes like `3h`, `10j`
+//! by determining if a buffer contains a complete command, partial sequence, or invalid input.
 
 use std::collections::{HashMap, HashSet};
+
+/// Maximum allowed count prefix to prevent abuse
+pub const MAX_COUNT_PREFIX: usize = 999;
 
 /// Result of matching a key sequence against the trie
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyMatch {
     /// Complete match - command ready to execute
     Complete(String),
-    /// Partial match - more keys needed (g, r, f, F, t, T)
+    /// Partial match - more keys needed (g, r, f, F, t, T, or digits)
     Partial,
     /// No match - invalid sequence
     Invalid,
+}
+
+/// Split a buffer into count prefix and command parts
+///
+/// # Examples
+/// - "3h" -> (Some(3), "h")
+/// - "12j" -> (Some(12), "j")
+/// - "h" -> (None, "h")
+/// - "3" -> (Some(3), "")
+/// - "3gg" -> (Some(3), "gg")
+pub fn split_count_prefix(buffer: &str) -> (Option<usize>, &str) {
+    let digit_end = buffer
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .map(|c| c.len_utf8())
+        .sum();
+
+    if digit_end == 0 {
+        return (None, buffer);
+    }
+
+    let count_str = &buffer[..digit_end];
+    let cmd_str = &buffer[digit_end..];
+
+    match count_str.parse::<usize>() {
+        Ok(count) if count <= MAX_COUNT_PREFIX => (Some(count), cmd_str),
+        _ => (None, buffer), // Invalid count, treat as invalid
+    }
 }
 
 /// KeyTrie for resolving multi-key command sequences
@@ -77,6 +108,38 @@ impl KeyTrie {
             return KeyMatch::Invalid;
         }
 
+        // Check for count prefix (e.g., "3h", "12j")
+        // Note: "0" alone is a command (goto line start), not a count prefix
+        let first_char = buffer.chars().next().unwrap();
+        let has_count_prefix =
+            first_char.is_ascii_digit() && first_char != '0' && !buffer.is_empty();
+
+        if has_count_prefix {
+            let (count, cmd_part) = split_count_prefix(buffer);
+
+            if count.is_some() {
+                // We have a count prefix
+                if cmd_part.is_empty() {
+                    // Just digits so far, waiting for command
+                    return KeyMatch::Partial;
+                }
+
+                // Validate the command part (only single-key commands with count)
+                // Multi-key commands like "3gg" and char-input like "3fx" are not supported
+                if cmd_part.len() == 1 {
+                    let cmd_char = cmd_part.chars().next().unwrap();
+                    // Don't allow count with char-input prefixes (f, t, r, etc.) or goto prefix
+                    if !self.char_input_prefixes.contains(&cmd_char) && cmd_char != 'g' {
+                        return KeyMatch::Complete(buffer.to_string());
+                    }
+                }
+
+                // Invalid count+command combination
+                return KeyMatch::Invalid;
+            }
+        }
+
+        // No count prefix - use standard resolution
         let len = buffer.len();
         let first_char = buffer.chars().next().unwrap();
 
@@ -211,5 +274,66 @@ mod tests {
         assert!(trie.is_multi_key_prefix('r'));
         assert!(!trie.is_multi_key_prefix('h'));
         assert!(!trie.is_multi_key_prefix('d'));
+    }
+
+    // Count prefix tests
+    #[test]
+    fn test_split_count_prefix_with_count() {
+        assert_eq!(split_count_prefix("3h"), (Some(3), "h"));
+        assert_eq!(split_count_prefix("12j"), (Some(12), "j"));
+        assert_eq!(split_count_prefix("999k"), (Some(999), "k"));
+    }
+
+    #[test]
+    fn test_split_count_prefix_no_count() {
+        assert_eq!(split_count_prefix("h"), (None, "h"));
+        assert_eq!(split_count_prefix("gg"), (None, "gg"));
+        assert_eq!(split_count_prefix("fx"), (None, "fx"));
+    }
+
+    #[test]
+    fn test_split_count_prefix_only_digits() {
+        assert_eq!(split_count_prefix("3"), (Some(3), ""));
+        assert_eq!(split_count_prefix("123"), (Some(123), ""));
+    }
+
+    #[test]
+    fn test_split_count_prefix_exceeds_max() {
+        // Count > MAX_COUNT_PREFIX should be treated as invalid
+        assert_eq!(split_count_prefix("1000h"), (None, "1000h"));
+        assert_eq!(split_count_prefix("9999j"), (None, "9999j"));
+    }
+
+    #[test]
+    fn test_count_prefix_partial() {
+        let trie = KeyTrie::new();
+        // Just digits should be partial (waiting for command)
+        assert_eq!(trie.resolve("3"), KeyMatch::Partial);
+        assert_eq!(trie.resolve("12"), KeyMatch::Partial);
+        assert_eq!(trie.resolve("999"), KeyMatch::Partial);
+    }
+
+    #[test]
+    fn test_count_prefix_complete() {
+        let trie = KeyTrie::new();
+        // Count + single-key command should be complete
+        assert_eq!(trie.resolve("3h"), KeyMatch::Complete("3h".to_string()));
+        assert_eq!(trie.resolve("5j"), KeyMatch::Complete("5j".to_string()));
+        assert_eq!(trie.resolve("10w"), KeyMatch::Complete("10w".to_string()));
+        assert_eq!(trie.resolve("99d"), KeyMatch::Complete("99d".to_string()));
+    }
+
+    #[test]
+    fn test_count_prefix_invalid_combinations() {
+        let trie = KeyTrie::new();
+        // Count + goto prefix (g) is invalid
+        assert_eq!(trie.resolve("3g"), KeyMatch::Invalid);
+        // Count + char-input prefix (f, t, r) is invalid
+        assert_eq!(trie.resolve("3f"), KeyMatch::Invalid);
+        assert_eq!(trie.resolve("3r"), KeyMatch::Invalid);
+        assert_eq!(trie.resolve("3t"), KeyMatch::Invalid);
+        // Count + multi-key command is invalid
+        assert_eq!(trie.resolve("3gg"), KeyMatch::Invalid);
+        assert_eq!(trie.resolve("3fx"), KeyMatch::Invalid);
     }
 }

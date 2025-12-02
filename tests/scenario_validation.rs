@@ -9,7 +9,9 @@
 
 use helix_trainer::config::ScenarioLoader;
 use helix_trainer::game::GameSession;
-use helix_trainer::game::command_context::{ParsedCommand, parse_command_buffer};
+use helix_trainer::game::command_context::{
+    ParsedCommand, extract_count_and_command, parse_command_buffer,
+};
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -239,24 +241,57 @@ fn test_all_scenarios_execute_solution() {
                     if let Some(state) = session_or_completed.take() {
                         match state {
                             SessionAfterAction::StillActive(s) => {
-                                match s.record_action(cmd.clone()) {
-                                    Ok(result) => {
-                                        session_or_completed = Some(result);
-                                        // If completed, stop
-                                        if matches!(
-                                            session_or_completed,
-                                            Some(SessionAfterAction::Completed(_))
-                                        ) {
-                                            break;
+                                // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
+                                let (count, base_cmd) = extract_count_and_command(cmd);
+
+                                // Execute base command `count` times
+                                let mut current_session = Some(s);
+                                let mut execution_error = None;
+
+                                for _ in 0..count {
+                                    if let Some(active) = current_session.take() {
+                                        match active.record_action(base_cmd.to_string()) {
+                                            Ok(result) => match result {
+                                                SessionAfterAction::Completed(c) => {
+                                                    session_or_completed =
+                                                        Some(SessionAfterAction::Completed(c));
+                                                    break;
+                                                }
+                                                SessionAfterAction::StillActive(next) => {
+                                                    current_session = Some(next);
+                                                }
+                                            },
+                                            Err(e) => {
+                                                execution_error = Some(e);
+                                                break;
+                                            }
                                         }
                                     }
-                                    Err(e) => {
-                                        failed_scenarios.push((
-                                            scenario.id.clone(),
-                                            format!("Failed at command {} '{}': {:?}", i, cmd, e),
-                                        ));
-                                        break;
-                                    }
+                                }
+
+                                // Handle execution error
+                                if let Some(e) = execution_error {
+                                    failed_scenarios.push((
+                                        scenario.id.clone(),
+                                        format!("Failed at command {} '{}': {:?}", i, cmd, e),
+                                    ));
+                                    break;
+                                }
+
+                                // If not completed, store remaining session
+                                if session_or_completed.is_none()
+                                    && let Some(remaining) = current_session
+                                {
+                                    session_or_completed =
+                                        Some(SessionAfterAction::StillActive(remaining));
+                                }
+
+                                // If completed, stop processing commands
+                                if matches!(
+                                    session_or_completed,
+                                    Some(SessionAfterAction::Completed(_))
+                                ) {
+                                    break;
                                 }
                             }
                             SessionAfterAction::Completed(c) => {

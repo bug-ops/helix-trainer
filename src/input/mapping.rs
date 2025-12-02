@@ -29,8 +29,9 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
         (KeyCode::Char('E'), KeyModifiers::SHIFT) => Some(CMD_MOVE_LONG_WORD_END),
 
         // Line movement
-        (KeyCode::Char('0'), KeyModifiers::NONE) => Some(CMD_MOVE_LINE_START),
-        (KeyCode::Char('$'), KeyModifiers::NONE) => Some(CMD_MOVE_LINE_END),
+        // Note: '0' is NOT a command in Helix - use 'gh' for goto line start
+        // Note: '$' is NOT a line end command in Helix - use 'gl' for goto line end
+        // In Helix, '$' is shell_keep_pipe (pipe selection into shell)
 
         // Selection commands
         (KeyCode::Char('X'), KeyModifiers::SHIFT) => Some(CMD_EXTEND_LINE),
@@ -152,11 +153,13 @@ mod tests {
 
         #[test]
         fn test_map_key_line_movement() {
+            // Note: '0' is NOT a command in Helix - use 'gh' for goto line start
             let zero = KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE);
-            assert_eq!(map_key_to_helix_command(zero), Some(CMD_MOVE_LINE_START));
+            assert_eq!(map_key_to_helix_command(zero), None);
 
+            // Note: '$' is NOT a line end command in Helix - use 'gl' for goto line end
             let dollar = KeyEvent::new(KeyCode::Char('$'), KeyModifiers::NONE);
-            assert_eq!(map_key_to_helix_command(dollar), Some(CMD_MOVE_LINE_END));
+            assert_eq!(map_key_to_helix_command(dollar), None);
         }
 
         // Selection commands

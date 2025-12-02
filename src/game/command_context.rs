@@ -338,14 +338,10 @@ mod tests {
         ));
 
         // Line bounds
-        assert!(matches!(
-            parse_command_buffer("0"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("$"),
-            ParsedCommand::Complete(_)
-        ));
+        // Note: "0" is NOT a command in Helix - use "gh" for goto line start
+        // Note: "$" is NOT a line end command in Helix - use "gl" for goto line end
+        assert!(matches!(parse_command_buffer("0"), ParsedCommand::Invalid));
+        assert!(matches!(parse_command_buffer("$"), ParsedCommand::Invalid));
     }
 
     #[test]
@@ -563,8 +559,10 @@ mod tests {
 
     #[test]
     fn test_parse_command_buffer_case_sensitivity() {
-        // Uppercase commands should work
-        assert!(parse_command_buffer("G").is_complete());
+        // Note: 'G' is NOT a command in Helix - use 'ge' for goto last line
+        assert!(parse_command_buffer("G").is_invalid());
+
+        // Uppercase find command should work
         assert!(parse_command_buffer("F").is_partial()); // Needs char
         assert!(parse_command_buffer("Fx").is_complete());
 

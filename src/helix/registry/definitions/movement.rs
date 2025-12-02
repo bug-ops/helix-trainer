@@ -144,31 +144,9 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     ));
 
     // Line movement
-    registry.register(Command::new(
-        CommandMetadata::new(
-            "move_line_start",
-            CMD_MOVE_LINE_START,
-            "Move to line start",
-            "Move to the first character of the current line.",
-            Category::Movement,
-            false,
-            None,
-        ),
-        movement::move_line_start,
-    ));
-
-    registry.register(Command::new(
-        CommandMetadata::new(
-            "move_line_end",
-            CMD_MOVE_LINE_END,
-            "Move to line end",
-            "Move to the last character of the current line.",
-            Category::Movement,
-            false,
-            None,
-        ),
-        movement::move_line_end,
-    ));
+    // Note: In Helix, '0' and '$' are NOT line movement commands
+    // Use 'gh' (goto_line_start) and 'gl' (goto_line_end) instead
+    // The goto commands are registered below with CMD_GOTO_LINE_START and CMD_GOTO_LINE_END
 
     // Document movement
     registry.register(Command::new(

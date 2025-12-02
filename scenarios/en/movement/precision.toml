@@ -224,7 +224,7 @@ file_content = "hello world"
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["0"]
+commands = ["gh"]
 description = "Press '0' to go to line start"
 
 [scenarios.scoring]
@@ -236,7 +236,7 @@ tolerance = 0
 category = "movement"
 difficulty = "beginner"
 tags = ["line", "start"]
-commands_taught = ["0"]
+commands_taught = ["gh"]
 estimated_time_seconds = 5
 
 [[scenarios]]

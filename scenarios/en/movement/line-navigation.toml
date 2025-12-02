@@ -20,7 +20,7 @@ file_content = "Hello World"
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["0"]
+commands = ["gh"]
 description = "Press '0' to go to line start"
 
 [scenarios.scoring]
@@ -32,7 +32,7 @@ tolerance = 0
 category = "movement"
 difficulty = "beginner"
 tags = ["line", "start"]
-commands_taught = ["0"]
+commands_taught = ["gh"]
 estimated_time_seconds = 5
 
 [[scenarios]]
@@ -54,7 +54,7 @@ file_content = "The quick brown fox"
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["0"]
+commands = ["gh"]
 description = "Press '0' to jump to start"
 
 [scenarios.scoring]
@@ -66,7 +66,7 @@ tolerance = 0
 category = "movement"
 difficulty = "beginner"
 tags = ["line", "start"]
-commands_taught = ["0"]
+commands_taught = ["gh"]
 estimated_time_seconds = 5
 
 [[scenarios]]
@@ -88,7 +88,7 @@ file_content = "First line\nSecond line"
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["0"]
+commands = ["gh"]
 description = "Press '0' to go to line start"
 
 [scenarios.scoring]
@@ -100,7 +100,7 @@ tolerance = 0
 category = "movement"
 difficulty = "beginner"
 tags = ["line", "start"]
-commands_taught = ["0"]
+commands_taught = ["gh"]
 estimated_time_seconds = 5
 
 [[scenarios]]
@@ -190,7 +190,7 @@ file_content = "abcdefghij"
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["0"]
+commands = ["gh"]
 description = "Press '0' to go to start"
 
 [scenarios.scoring]
@@ -202,7 +202,7 @@ tolerance = 0
 category = "movement"
 difficulty = "beginner"
 tags = ["line", "combined"]
-commands_taught = ["0"]
+commands_taught = ["gh"]
 estimated_time_seconds = 5
 
 [[scenarios]]

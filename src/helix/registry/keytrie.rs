@@ -111,8 +111,9 @@ impl KeyTrie {
             return KeyMatch::Invalid;
         }
 
-        // Check for count prefix (e.g., "3h", "12j")
-        // Note: "0" alone is a command (goto line start), not a count prefix
+        // Check for count prefix (e.g., "3h", "12j", "10w")
+        // Note: "0" alone is NOT a command in Helix (use "gh" for goto line start)
+        // Count prefixes must start with 1-9, but can contain 0 (e.g., "10j")
         let first_char = buffer.chars().next().unwrap();
         let has_count_prefix =
             first_char.is_ascii_digit() && first_char != '0' && !buffer.is_empty();
@@ -178,8 +179,13 @@ impl KeyTrie {
                 return KeyMatch::Partial;
             }
 
-            // Single-key commands are complete
-            return KeyMatch::Complete(buffer.to_string());
+            // Check if it's a registered single-key command
+            if self.single_key.contains(buffer) {
+                return KeyMatch::Complete(buffer.to_string());
+            }
+
+            // Unknown single character - invalid
+            return KeyMatch::Invalid;
         }
 
         // Longer sequences are invalid
@@ -206,10 +212,12 @@ impl Default for KeyTrie {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::helix::registry::normal_registry;
 
     #[test]
     fn test_single_key_complete() {
-        let trie = KeyTrie::new();
+        // Use registry's trie which has registered commands
+        let trie = normal_registry().key_trie();
         assert_eq!(trie.resolve("h"), KeyMatch::Complete("h".to_string()));
         assert_eq!(trie.resolve("j"), KeyMatch::Complete("j".to_string()));
         assert_eq!(trie.resolve("d"), KeyMatch::Complete("d".to_string()));
@@ -217,14 +225,25 @@ mod tests {
     }
 
     #[test]
+    fn test_single_key_invalid() {
+        // Use registry's trie to check invalid commands
+        let trie = normal_registry().key_trie();
+        // '0' and '$' are NOT commands in Helix
+        assert_eq!(trie.resolve("0"), KeyMatch::Invalid);
+        assert_eq!(trie.resolve("$"), KeyMatch::Invalid);
+        // 'G' is NOT a command - use 'ge' for goto last line
+        assert_eq!(trie.resolve("G"), KeyMatch::Invalid);
+    }
+
+    #[test]
     fn test_goto_prefix_partial() {
-        let trie = KeyTrie::new();
+        let trie = normal_registry().key_trie();
         assert_eq!(trie.resolve("g"), KeyMatch::Partial);
     }
 
     #[test]
     fn test_goto_commands_complete() {
-        let trie = KeyTrie::new();
+        let trie = normal_registry().key_trie();
         assert_eq!(trie.resolve("gg"), KeyMatch::Complete("gg".to_string()));
         assert_eq!(trie.resolve("gh"), KeyMatch::Complete("gh".to_string()));
         assert_eq!(trie.resolve("gl"), KeyMatch::Complete("gl".to_string()));

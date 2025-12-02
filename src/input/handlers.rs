@@ -13,16 +13,17 @@ use super::mapping::{handle_insert_mode_input, map_key_to_helix_command};
 /// Check if the command buffer is waiting for a character argument
 ///
 /// Commands like `r`, `f`, `F`, `t`, `T` expect a character to follow.
+/// The `g` prefix expects a second character for goto commands (gg, ge, gh, gl, gs).
 /// When the buffer contains one of these, we should accept any printable character.
 fn is_waiting_for_char_arg(state: &AppState) -> bool {
     match &state.screen {
         TypedScreen::Task(task_data) => {
             let buffer = task_data.command_buffer();
-            matches!(buffer, "r" | "f" | "F" | "t" | "T")
+            matches!(buffer, "r" | "f" | "F" | "t" | "T" | "g")
         }
         TypedScreen::MiniGame(minigame_data) => {
             let buffer = minigame_data.command_buffer();
-            matches!(buffer, "r" | "f" | "F" | "t" | "T")
+            matches!(buffer, "r" | "f" | "F" | "t" | "T" | "g")
         }
         _ => false,
     }

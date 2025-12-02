@@ -2,9 +2,14 @@
 //!
 //! This test suite loads and validates every scenario in the scenarios/ directory
 //! to ensure they are correctly defined and can be executed.
+//!
+//! IMPORTANT: The `test_all_scenarios_execute_solution` test validates commands
+//! key-by-key, exactly as the UI does. This catches issues like multi-key commands
+//! (gs, gg, ge) that would fail in the UI due to missing command buffer handling.
 
 use helix_trainer::config::ScenarioLoader;
 use helix_trainer::game::GameSession;
+use helix_trainer::game::command_context::{ParsedCommand, parse_command_buffer};
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -78,6 +83,108 @@ fn test_all_scenarios_load_successfully() {
     println!("\n✓ All scenarios validated successfully!");
 }
 
+/// Commands that are special keys handled outside the normal command buffer
+/// These are processed directly by the UI without going through parse_command_buffer
+const SPECIAL_KEY_COMMANDS: &[&str] = &[
+    "Escape",     // Exit insert mode
+    "Backspace",  // Delete character in insert mode
+    "ArrowLeft",  // Cursor movement in insert mode
+    "ArrowRight", // Cursor movement in insert mode
+    "ArrowUp",    // Cursor movement in insert mode
+    "ArrowDown",  // Cursor movement in insert mode
+];
+
+/// Commands that enter insert mode
+const INSERT_MODE_COMMANDS: &[&str] = &["i", "a", "I", "A", "o", "O", "c"];
+
+/// Validate commands by simulating key-by-key input like the UI does
+///
+/// This function validates that each command in a scenario's solution can be
+/// properly parsed character by character, just as the UI would process it.
+/// It tracks insert mode state to properly handle text input vs commands.
+///
+/// Returns an error for the first invalid command found.
+fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
+    let mut in_insert_mode = false;
+
+    for (i, cmd) in commands.iter().enumerate() {
+        // Handle insert mode content (old <insert:...> format)
+        if cmd.starts_with("<insert:") {
+            continue;
+        }
+
+        // Handle special key commands that bypass normal command buffer
+        if SPECIAL_KEY_COMMANDS.contains(&cmd.as_str()) {
+            if cmd == "Escape" {
+                in_insert_mode = false;
+            }
+            continue;
+        }
+
+        // In insert mode, single characters are text input, not commands
+        if in_insert_mode {
+            // Only single chars are valid in insert mode (text input)
+            if cmd.len() == 1 {
+                continue;
+            }
+            // Multi-char strings in insert mode should use <insert:...> format
+            return Err(format!(
+                "Command {} '{}': Multi-char command in insert mode should use <insert:...> format",
+                i, cmd
+            ));
+        }
+
+        // Check if this command enters insert mode
+        if INSERT_MODE_COMMANDS.contains(&cmd.as_str()) {
+            in_insert_mode = true;
+        }
+
+        // Validate command through command buffer parsing (normal mode)
+        if let Err(e) = validate_single_command(cmd) {
+            return Err(format!("Command {} '{}': {}", i, cmd, e));
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate a single normal mode command through command buffer parsing
+fn validate_single_command(cmd: &str) -> Result<(), String> {
+    let mut buffer = String::new();
+
+    for (i, ch) in cmd.chars().enumerate() {
+        buffer.push(ch);
+
+        match parse_command_buffer(&buffer) {
+            ParsedCommand::Complete(resolved) => {
+                // Command resolved - check it matches expected
+                if resolved != *cmd {
+                    return Err(format!(
+                        "Buffer resolved to '{}' but expected '{}' at char {} ('{}')",
+                        resolved, cmd, i, ch
+                    ));
+                }
+                return Ok(());
+            }
+            ParsedCommand::Partial => {
+                // Still waiting for more input - continue
+                if i == cmd.len() - 1 {
+                    return Err("Left buffer in partial state - missing key handler".to_string());
+                }
+            }
+            ParsedCommand::Invalid => {
+                return Err(format!(
+                    "Became invalid at char {} ('{}') - buffer: '{}'",
+                    i, ch, buffer
+                ));
+            }
+        }
+    }
+
+    // Buffer should have resolved by now
+    Err("Never completed".to_string())
+}
+
 #[test]
 fn test_all_scenarios_execute_solution() {
     let scenarios_dir = Path::new("scenarios");
@@ -102,7 +209,16 @@ fn test_all_scenarios_execute_solution() {
             for scenario in scenarios {
                 total_scenarios += 1;
 
-                // Create game session
+                // PHASE 1: Validate all commands are parseable key-by-key
+                // This catches issues like 'gs' not being recognized when typed as 'g' then 's'
+                if let Err(e) = validate_commands_ui_style(&scenario.solution.commands) {
+                    failed_scenarios.push((
+                        scenario.id.clone(),
+                        format!("UI-style validation failed: {}", e),
+                    ));
+                }
+
+                // PHASE 2: Execute solution and verify completion
                 let session = match GameSession::new(scenario.clone()) {
                     Ok(s) => s,
                     Err(e) => {

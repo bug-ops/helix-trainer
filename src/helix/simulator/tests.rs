@@ -46,6 +46,24 @@ fn test_move_left() {
 }
 
 #[test]
+fn test_goto_first_nonwhitespace() {
+    // Test gs command - go to first non-whitespace character
+    let mut sim = AnyModeSimulator::new("    fn main() {".to_string());
+
+    // Move cursor to middle of line first
+    for _ in 0..10 {
+        sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    }
+    assert_eq!(sim.get_state().unwrap().cursor_position().col, 10);
+
+    // Execute gs command
+    sim.execute_command(CMD_GOTO_FIRST_NONWHITESPACE).unwrap();
+    let state = sim.get_state().unwrap();
+    // Should be at position 4 (first 'f' in "fn")
+    assert_eq!(state.cursor_position().col, 4);
+}
+
+#[test]
 fn test_word_movement() {
     let mut sim = AnyModeSimulator::new("hello world foo".to_string());
 

@@ -4,10 +4,10 @@
 [[scenarios]]
 id = "line_start_basic_001"
 name = "Move to line start"
-description = "Use '0' to jump to beginning of line"
+description = "Jump to beginning of line"
 
 hints = [
-    "'0' moves cursor to column 0",
+    "'gh' moves cursor to column 0",
     "Works on any line",
 ]
 
@@ -21,7 +21,7 @@ cursor_position = [0, 0]
 
 [scenarios.solution]
 commands = ["gh"]
-description = "Press '0' to go to line start"
+description = "Press 'gh' to go to line start"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -41,7 +41,7 @@ name = "Move to start from end"
 description = "Jump from end of line to start"
 
 hints = [
-    "'0' always goes to column 0",
+    "'gh' always goes to column 0",
     "Faster than pressing 'h' many times",
 ]
 
@@ -55,7 +55,7 @@ cursor_position = [0, 0]
 
 [scenarios.solution]
 commands = ["gh"]
-description = "Press '0' to jump to start"
+description = "Press 'gh' to jump to start"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -75,7 +75,7 @@ name = "Move to start on second line"
 description = "Go to beginning of line in multiline text"
 
 hints = [
-    "'0' works on any line",
+    "'gh' works on any line",
     "Only affects horizontal position",
 ]
 
@@ -89,7 +89,7 @@ cursor_position = [1, 0]
 
 [scenarios.solution]
 commands = ["gh"]
-description = "Press '0' to go to line start"
+description = "Press 'gh' to go to line start"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -211,7 +211,7 @@ name = "Navigate document boundaries"
 description = "Use 'gg' to navigate document"
 
 hints = [
-    "'gg' to start, 'G' to end",
+    "'gg' to start, 'ge' to end",
     "Essential for large files",
 ]
 

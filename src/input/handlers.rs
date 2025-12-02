@@ -29,6 +29,26 @@ fn is_waiting_for_char_arg(state: &AppState) -> bool {
     }
 }
 
+/// Check if the command buffer contains a count prefix (digits like "3", "12")
+///
+/// When the buffer is building a count prefix, we should accept more digits
+/// or a command character to complete the sequence.
+fn is_building_count_prefix(state: &AppState) -> bool {
+    let buffer = match &state.screen {
+        TypedScreen::Task(task_data) => task_data.command_buffer(),
+        TypedScreen::MiniGame(minigame_data) => minigame_data.command_buffer(),
+        _ => return false,
+    };
+
+    // Check if buffer starts with a non-zero digit and contains only digits
+    if buffer.is_empty() {
+        return false;
+    }
+
+    let first_char = buffer.chars().next().unwrap();
+    first_char.is_ascii_digit() && first_char != '0' && buffer.chars().all(|c| c.is_ascii_digit())
+}
+
 /// Handle keyboard events on profile and statistics screens
 pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     match key.code {
@@ -138,6 +158,38 @@ where
                 _ => {}
             }
         }
+
+        // Check if we're building a count prefix (e.g., "3", "12")
+        // Accept digits to continue building the count, or a command to complete
+        if is_building_count_prefix(state) {
+            if let KeyCode::Char(c) = key.code {
+                // Accept more digits or a command character
+                return Some(make_message(Cow::Owned(c.to_string())));
+            }
+            // Non-char keys cancel the pending count
+            if matches!(
+                key.code,
+                KeyCode::Esc
+                    | KeyCode::Left
+                    | KeyCode::Right
+                    | KeyCode::Up
+                    | KeyCode::Down
+                    | KeyCode::Backspace
+                    | KeyCode::Enter
+            ) {
+                return Some(make_message(Cow::Borrowed("<cancel>")));
+            }
+        }
+
+        // Handle digit keys (1-9) to start count prefix
+        // Note: '0' is a command (goto line start), not a count prefix start
+        if let KeyCode::Char(c) = key.code
+            && c.is_ascii_digit()
+            && c != '0'
+        {
+            return Some(make_message(Cow::Owned(c.to_string())));
+        }
+
         map_key_to_helix_command(key).map(|cmd| make_message(Cow::Borrowed(cmd)))
     }
 }

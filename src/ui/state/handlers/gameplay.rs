@@ -162,6 +162,9 @@ pub fn handle_execute_command(
                 task_data.last_command = Some(cmd.clone());
                 executed_command = Some(cmd.clone());
 
+                // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
+                let (count, base_cmd) = crate::game::extract_count_and_command(&cmd);
+
                 // Clone scenario before taking session (to avoid borrow conflict)
                 let scenario = task_data.session.scenario().clone();
 
@@ -171,8 +174,38 @@ pub fn handle_execute_command(
                     crate::game::GameSession::new(scenario)?,
                 );
 
-                let result = session.record_action(cmd)?;
-                session_completed = process_session_result(result, &mut task_data, state)?;
+                // Execute command `count` times using Option to track session state
+                let mut current_session = Some(session);
+
+                for _ in 0..count {
+                    if let Some(s) = current_session.take() {
+                        let result = s.record_action(base_cmd.to_string())?;
+                        match result {
+                            crate::game::SessionAfterAction::Completed(completed) => {
+                                // Session completed - process and break
+                                let completed_result =
+                                    crate::game::SessionAfterAction::Completed(completed);
+                                session_completed = process_session_result(
+                                    completed_result,
+                                    &mut task_data,
+                                    state,
+                                )?;
+                                // Leave current_session as None to signal completion
+                                break;
+                            }
+                            crate::game::SessionAfterAction::StillActive(active) => {
+                                current_session = Some(active);
+                            }
+                        }
+                    }
+                }
+
+                // If not completed during loop, finalize the session state
+                if let Some(remaining_session) = current_session {
+                    let final_result =
+                        crate::game::SessionAfterAction::StillActive(remaining_session);
+                    process_session_result(final_result, &mut task_data, state)?;
+                }
 
                 // Always restore Task screen - even when completed, we show success popup
                 state.screen = TypedScreen::Task(task_data);

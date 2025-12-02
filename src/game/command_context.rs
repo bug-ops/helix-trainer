@@ -100,6 +100,24 @@ pub fn parse_command_buffer(buffer: &str) -> ParsedCommand {
     }
 }
 
+/// Extract count prefix and command from a command string
+///
+/// Returns (count, command) where count defaults to 1 if no prefix.
+///
+/// # Examples
+/// - "3h" -> (3, "h")
+/// - "12j" -> (12, "j")
+/// - "h" -> (1, "h")
+/// - "gg" -> (1, "gg")
+pub fn extract_count_and_command(cmd: &str) -> (usize, &str) {
+    use crate::helix::registry::split_count_prefix;
+
+    match split_count_prefix(cmd) {
+        (Some(count), rest) if !rest.is_empty() => (count, rest),
+        _ => (1, cmd),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -557,5 +575,64 @@ mod tests {
         // Test other case-sensitive commands
         assert!(parse_command_buffer("w").is_complete()); // word forward
         assert!(parse_command_buffer("W").is_complete()); // WORD forward
+    }
+
+    // Count prefix tests
+    #[test]
+    fn test_parse_command_buffer_count_prefix_partial() {
+        // Just digits should be partial
+        assert!(parse_command_buffer("3").is_partial());
+        assert!(parse_command_buffer("12").is_partial());
+        assert!(parse_command_buffer("999").is_partial());
+    }
+
+    #[test]
+    fn test_parse_command_buffer_count_prefix_complete() {
+        // Count + single-key command
+        assert_eq!(
+            parse_command_buffer("3h"),
+            ParsedCommand::Complete("3h".to_string())
+        );
+        assert_eq!(
+            parse_command_buffer("5j"),
+            ParsedCommand::Complete("5j".to_string())
+        );
+        assert_eq!(
+            parse_command_buffer("10w"),
+            ParsedCommand::Complete("10w".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_command_buffer_count_prefix_invalid() {
+        // Count + goto prefix is invalid
+        assert!(parse_command_buffer("3g").is_invalid());
+        // Count + char-input prefix is invalid
+        assert!(parse_command_buffer("3f").is_invalid());
+        assert!(parse_command_buffer("3r").is_invalid());
+        // Count + multi-key is invalid
+        assert!(parse_command_buffer("3gg").is_invalid());
+    }
+
+    #[test]
+    fn test_extract_count_and_command_with_count() {
+        assert_eq!(extract_count_and_command("3h"), (3, "h"));
+        assert_eq!(extract_count_and_command("12j"), (12, "j"));
+        assert_eq!(extract_count_and_command("999k"), (999, "k"));
+    }
+
+    #[test]
+    fn test_extract_count_and_command_no_count() {
+        assert_eq!(extract_count_and_command("h"), (1, "h"));
+        assert_eq!(extract_count_and_command("gg"), (1, "gg"));
+        assert_eq!(extract_count_and_command("fx"), (1, "fx"));
+    }
+
+    #[test]
+    fn test_extract_count_and_command_edge_cases() {
+        // Just digits - should return (1, original)
+        assert_eq!(extract_count_and_command("3"), (1, "3"));
+        // Empty - should return (1, empty)
+        assert_eq!(extract_count_and_command(""), (1, ""));
     }
 }

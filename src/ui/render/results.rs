@@ -140,7 +140,7 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
         frame.render_widget(results, middle_chunks[0]);
 
         // Right panel: XP breakdown and quest progress
-        render_progression_panel(frame, state, middle_chunks[1]);
+        render_progression_panel(frame, state, results_data, middle_chunks[1]);
 
         // Instructions
         let instructions = Paragraph::new(t!("results.instructions").to_string())
@@ -152,11 +152,16 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
 }
 
 /// Render XP breakdown and quest progress panel
-fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect) {
+fn render_progression_panel(
+    frame: &mut Frame,
+    state: &AppState,
+    results_data: &crate::ui::state::ResultsData,
+    area: ratatui::layout::Rect,
+) {
     let mut lines = vec![];
 
     // XP Breakdown section
-    if let Some(xp) = &state.ui.xp_breakdown {
+    if let Some(xp) = &results_data.xp_breakdown {
         lines.push(Line::from(vec![Span::styled(
             "XP Earned",
             Style::default()
@@ -198,7 +203,7 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
 
         // Mastery scaling
         if xp.mastery_multiplier < 1.0 {
-            let mastery_text = if let Some((mastery, _)) = &state.ui.scenario_mastery {
+            let mastery_text = if let Some((mastery, _)) = &results_data.scenario_mastery {
                 format!("  {} {}: ", mastery.emoji(), mastery.display_name())
             } else {
                 "  Mastery: ".to_string()
@@ -241,7 +246,7 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
     }
 
     // Quest progress changes
-    if !state.ui.quest_progress_changes.is_empty() {
+    if !results_data.quest_changes.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(""));
         lines.push(Line::from(vec![Span::styled(
@@ -252,7 +257,7 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
         )]));
         lines.push(Line::from(""));
 
-        for change in &state.ui.quest_progress_changes {
+        for change in &results_data.quest_changes {
             lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(
@@ -275,24 +280,85 @@ fn render_progression_panel(frame: &mut Frame, state: &AppState, area: ratatui::
         }
     }
 
-    // Current level and progress
+    // Current level and progress section
     lines.push(Line::from(""));
     lines.push(Line::from(""));
-    let (level, total_xp, xp_for_next) = {
+    lines.push(Line::from(vec![Span::styled(
+        "Your Stats",
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+    )]));
+    lines.push(Line::from(""));
+
+    let (level, xp_in_level, xp_needed_for_level, total_xp, scenarios, perfect, streak) = {
         let profile = state.progress.profile.borrow();
         let current_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level);
-        let xp_in_level = profile.total_xp - current_level_xp;
-        (profile.level, xp_in_level, profile.xp_for_next_level())
+        let next_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level + 1);
+        let xp_in_level = profile.total_xp.saturating_sub(current_level_xp);
+        let xp_needed = next_level_xp.saturating_sub(current_level_xp);
+        (
+            profile.level,
+            xp_in_level,
+            xp_needed,
+            profile.total_xp,
+            profile.scenarios_completed,
+            profile.perfect_scenarios,
+            profile.current_streak,
+        )
     };
+
+    // Level with XP progress
     lines.push(Line::from(vec![
+        Span::raw("  Level: "),
         Span::styled(
-            format!("Level {}", level),
+            format!("{}", level),
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(format!("  ({}/{})", total_xp, xp_for_next)),
+        Span::styled(
+            format!("  ({}/{} XP)", xp_in_level, xp_needed_for_level),
+            Style::default().fg(Color::Gray),
+        ),
     ]));
+
+    // Total XP with earned XP from this scenario
+    let earned_xp = results_data.xp_breakdown.as_ref().map(|xp| xp.total_xp);
+    lines.push(Line::from(vec![
+        Span::raw("  Total XP: "),
+        Span::styled(format!("{}", total_xp), Style::default().fg(Color::Yellow)),
+        if let Some(earned) = earned_xp {
+            Span::styled(
+                format!("  (+{})", earned),
+                Style::default().fg(Color::Green),
+            )
+        } else {
+            Span::raw("")
+        },
+    ]));
+
+    // Scenarios completed
+    lines.push(Line::from(vec![
+        Span::raw("  Scenarios: "),
+        Span::styled(format!("{}", scenarios), Style::default().fg(Color::Green)),
+        Span::styled(
+            format!(" ({} perfect)", perfect),
+            Style::default().fg(Color::Gray),
+        ),
+    ]));
+
+    // Current streak
+    if streak > 0 {
+        lines.push(Line::from(vec![
+            Span::raw("  Streak: "),
+            Span::styled(
+                format!("{} days", streak),
+                Style::default().fg(Color::Magenta),
+            ),
+            Span::raw(" 🔥"),
+        ]));
+    }
 
     let panel = Paragraph::new(lines)
         .block(Block::default().title("Progression").borders(Borders::ALL))

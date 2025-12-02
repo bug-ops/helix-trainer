@@ -52,12 +52,15 @@ fn test_word_movement() {
     // Move to next word
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().col, 6); // "world"
+    // 'w' extends selection from current position to start of next word
+    // helix-core: anchor=0, head=6 (start of "world")
+    // get_state() returns head position for cursor
+    assert_eq!(state.cursor_position().col, 6); // Start of "world"
 
     // Move to next word again
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().col, 12); // "foo"
+    assert_eq!(state.cursor_position().col, 12); // Start of "foo"
 }
 
 #[test]
@@ -286,14 +289,14 @@ fn test_move_word_end() {
 fn test_move_prev_word() {
     let mut sim = AnyModeSimulator::new("hello world foo".to_string());
 
-    // Move to end of document first
-    sim.execute_command(CMD_GOTO_FILE_END).unwrap();
+    // Move to end of line first
+    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
     // Then move to previous word
     sim.execute_command(CMD_MOVE_WORD_BACKWARD).unwrap();
 
     let state = sim.get_state().unwrap();
-    // Should have moved to start of a previous word
-    assert!(state.cursor_position().col >= 11);
+    // Should have moved to start of "foo" (col 12)
+    assert_eq!(state.cursor_position().col, 12);
 }
 
 #[test]

@@ -5,7 +5,6 @@
 
 // Multi-key commands
 pub const CMD_GOTO_FILE_START: &str = "gg";
-pub const CMD_GOTO_FILE_END: &str = "G";
 
 // Single character commands - Movement
 pub const CMD_MOVE_LEFT: &str = "h";

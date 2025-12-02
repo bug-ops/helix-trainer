@@ -6,7 +6,7 @@ use helix_core::Selection;
 
 impl<M: EditorMode> HelixSimulator<M> {
     /// Undo the last operation
-    pub(super) fn undo(&mut self) -> Result<(), UserError> {
+    pub fn undo(&mut self) -> Result<(), UserError> {
         if let Some((_transaction, prev_doc)) = self.history.pop() {
             // Restore the previous document state
             self.doc = prev_doc;
@@ -21,7 +21,7 @@ impl<M: EditorMode> HelixSimulator<M> {
     /// Redo the last undone operation
     ///
     /// Currently a placeholder - full redo would require a separate redo stack
-    pub(super) fn redo(&mut self) -> Result<(), UserError> {
+    pub fn redo(&mut self) -> Result<(), UserError> {
         // Full redo would require keeping a separate redo stack
         // For now, this is a placeholder
         Ok(())

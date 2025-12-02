@@ -76,6 +76,9 @@ impl ParsedCommand {
 /// Returns a ParsedCommand indicating whether the buffer contains a complete
 /// command, is waiting for more input, or contains an invalid sequence.
 ///
+/// This function delegates to the KeyTrie in the command registry for
+/// consistent multi-key sequence handling.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -86,48 +89,14 @@ impl ParsedCommand {
 /// assert!(matches!(parse_command_buffer("xyz"), ParsedCommand::Invalid));
 /// ```
 pub fn parse_command_buffer(buffer: &str) -> ParsedCommand {
-    use crate::helix::commands::*;
+    use crate::helix::registry::{KeyMatch, normal_registry};
 
-    match buffer {
-        // Goto menu commands (g prefix)
-        CMD_GOTO_FILE_START => ParsedCommand::Complete(CMD_GOTO_FILE_START.to_string()),
-        CMD_GOTO_LINE_START => ParsedCommand::Complete(CMD_GOTO_LINE_START.to_string()),
-        CMD_GOTO_LINE_END => ParsedCommand::Complete(CMD_GOTO_LINE_END.to_string()),
-        CMD_GOTO_FIRST_NONWHITESPACE => {
-            ParsedCommand::Complete(CMD_GOTO_FIRST_NONWHITESPACE.to_string())
-        }
-        CMD_GOTO_LAST_LINE => ParsedCommand::Complete(CMD_GOTO_LAST_LINE.to_string()),
-
-        // Replace character command: r + any char
-        cmd if cmd.starts_with('r') && cmd.len() == 2 => {
-            ParsedCommand::Complete(buffer.to_string())
-        }
-
-        // Find/till commands: f/F/t/T + any char
-        cmd if (cmd.starts_with('f')
-            || cmd.starts_with('F')
-            || cmd.starts_with('t')
-            || cmd.starts_with('T'))
-            && cmd.len() == 2 =>
-        {
-            ParsedCommand::Complete(buffer.to_string())
-        }
-
-        // Partial commands - wait for more input
-        // Note: 'd' executes immediately (delete selection), not waiting for 'dd'
-        // In Helix, use 'xd' to delete line (x = select line, d = delete selection)
-        "g"
-        | CMD_REPLACE
-        | CMD_FIND_CHAR
-        | CMD_FIND_CHAR_REVERSE
-        | CMD_TILL_CHAR
-        | CMD_TILL_CHAR_REVERSE => ParsedCommand::Partial,
-
-        // Single-key commands (including 'd' which deletes selection immediately)
-        _ if buffer.len() == 1 => ParsedCommand::Complete(buffer.to_string()),
-
-        // Invalid sequence
-        _ => ParsedCommand::Invalid,
+    // Delegate to KeyTrie for resolution
+    let trie = normal_registry().key_trie();
+    match trie.resolve(buffer) {
+        KeyMatch::Complete(cmd) => ParsedCommand::Complete(cmd),
+        KeyMatch::Partial => ParsedCommand::Partial,
+        KeyMatch::Invalid => ParsedCommand::Invalid,
     }
 }
 

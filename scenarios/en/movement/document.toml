@@ -8,7 +8,7 @@ description = "Navigate to the beginning of the document"
 
 hints = [
     "'gg' jumps to the first line of the document",
-    "'G' jumps to the last line of the document",
+    "'ge' jumps to the last line of the document",
 ]
 
 [scenarios.setup]
@@ -43,43 +43,3 @@ tags = ["document", "navigation"]
 commands_taught = ["gg"]
 estimated_time_seconds = 20
 
-[[scenarios]]
-id = "document_end_001"
-name = "Jump to document end"
-description = "Navigate to the end of the document"
-
-hints = [
-    "'G' jumps to the last line of the document",
-    "'gg' jumps to the first line",
-]
-
-[scenarios.setup]
-file_content = """First line
-Second line
-Third line
-Fourth line
-Last line"""
-cursor_position = [0, 0]
-
-[scenarios.target]
-file_content = """First line
-Second line
-Third line
-Fourth line
-Last line"""
-cursor_position = [4, 9]
-
-[scenarios.solution]
-commands = ["G"]
-description = "Press 'G' to jump to document end"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-[scenarios.metadata]
-category = "movement"
-difficulty = "beginner"
-tags = ["document", "navigation"]
-commands_taught = ["G"]
-estimated_time_seconds = 20

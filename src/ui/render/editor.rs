@@ -127,9 +127,11 @@ pub(super) fn render_editor_with_diff<'a>(
                 }
 
                 // Add cursor character with inverse style
+                // For empty lines, use a special block character that renders as a cursor
+                // without causing line wrapping issues
                 let cursor_char = &line_text[char_start..char_end];
                 let cursor_display = if cursor_char.is_empty() {
-                    " "
+                    "\u{2588}" // Full block character for cursor on empty line
                 } else {
                     cursor_char
                 };
@@ -245,9 +247,10 @@ pub(super) fn render_editor_with_selection<'a>(
                     ));
                 }
 
+                // For empty lines, use a special block character that renders as a cursor
                 let cursor_char = &line_text[char_start..char_end];
                 let cursor_display = if cursor_char.is_empty() {
-                    " "
+                    "\u{2588}" // Full block character for cursor on empty line
                 } else {
                     cursor_char
                 };

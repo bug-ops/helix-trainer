@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2025-12-02
+
+### Added
+
+- **Command Registry Architecture** — Type-safe O(1) command dispatch system
+  - `CommandRegistry<M>` with mode-specific command registration
+  - `CommandMetadata` for rich command documentation (name, key, description, category)
+  - `KeyTrie` for efficient multi-key command resolution (gg, ge, gh, gl, gs)
+  - Category-based organization (Movement, Editing, Selection, Clipboard)
+  - Compile-time mode safety via PhantomData markers
+
+### Fixed
+
+- **Cursor display on empty lines** — Use block character (█) instead of space to prevent visual line duplication when cursor is on empty line
+- **Append after word movement** — Fix `append()` to handle forward selections correctly (e + a now works properly)
+- **Scenario corrections**:
+  - `append_mode_001`: Fixed expected content from "hello !world" to "hello! world"
+  - Removed non-existent `G` command (Helix uses `ge` for goto last line)
+  - Removed duplicate `document_end_001` scenario (use `goto_last_line_001` with `ge`)
+  - Updated hints to reference correct `ge` command instead of `G`
+
+### Changed
+
+- Simplified command dispatch from O(n) string matching to O(1) registry lookup
+- Reduced cyclomatic complexity in command handling code
+- 86 scenarios (removed 1 duplicate)
+
 ## [0.4.4] - 2025-12-01
 
 ### Added

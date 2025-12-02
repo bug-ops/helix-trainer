@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] - 2025-12-02
+
+### Added
+
+- **Helix-style Menu Navigation** — Navigate scenario list with vim-like commands
+  - `j`/`k` for up/down movement
+  - `gg` to jump to first item, `G` to jump to last
+  - Count prefixes: `5j` moves 5 items down, `10k` moves 10 up
+  - `15G` or `15gg` jumps directly to item 15
+
+- **Numeric Count Prefixes for Commands** — Execute commands multiple times
+  - `3h` moves left 3 times, `5j` moves down 5 times
+  - `2w` moves forward 2 words
+  - Counts as single action for scoring (not N separate actions)
+
+### Fixed
+
+- **Match Mode Implementation** — `m` now correctly enters Match Mode
+  - `mm` jumps to matching bracket (was incorrectly just `m`)
+  - Matches official Helix keymap documentation
+
+- **Count Prefix Scoring** — Commands like `3w` now count as 1 action, not 3
+  - Added `record_action_with_count` method for proper scoring
+
+- **Results Screen Progression Panel** — Improved XP and stats display
+  - Added "Your Stats" section with Level, Total XP, Scenarios, Streak
+  - Shows earned XP from scenario (+N) next to total
+  - Fixed data source (was reading cleared state)
+
+- **Unified Exit Keymap** — `Ctrl-Q` now works consistently across all screens
+  - Menu/ModeSelection: exits application
+  - Task/Results/Profile/Stats/Review/MiniGame: returns to previous screen
+
 ## [0.4.5] - 2025-12-02
 
 ### Added

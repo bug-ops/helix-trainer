@@ -79,6 +79,9 @@ impl KeyTrie {
         trie.multi_key.insert("gs", "gs");
         trie.multi_key.insert("ge", "ge");
 
+        // Register multi-key match mode commands
+        trie.multi_key.insert("mm", "mm");
+
         // Register character-input prefixes
         trie.char_input_prefixes.insert('f');
         trie.char_input_prefixes.insert('F');
@@ -166,8 +169,8 @@ impl KeyTrie {
                 return KeyMatch::Partial;
             }
 
-            // Check if this is a goto prefix
-            if first_char == 'g' {
+            // Check if this is a goto prefix or match mode prefix
+            if first_char == 'g' || first_char == 'm' {
                 return KeyMatch::Partial;
             }
 

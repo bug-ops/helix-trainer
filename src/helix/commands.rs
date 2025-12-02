@@ -67,8 +67,9 @@ pub const CMD_SELECT_MODE: &str = "v";
 // Flip selection direction
 pub const CMD_FLIP_SELECTIONS: &str = "Alt-;";
 
-// Match brackets
-pub const CMD_MATCH_BRACKETS: &str = "m";
+// Match mode (prefix for match commands)
+pub const CMD_MATCH_MODE: &str = "m";
+pub const CMD_MATCH_BRACKETS: &str = "mm";
 
 // Goto mode (prefix for goto commands)
 pub const CMD_GOTO_MODE: &str = "g";

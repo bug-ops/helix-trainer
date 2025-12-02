@@ -459,9 +459,12 @@ mod tests {
 
     #[test]
     fn test_parse_command_buffer_special_commands() {
-        // Match brackets
+        // Match mode prefix (waiting for second key)
+        assert!(matches!(parse_command_buffer("m"), ParsedCommand::Partial));
+
+        // Match brackets (mm)
         assert!(matches!(
-            parse_command_buffer("m"),
+            parse_command_buffer("mm"),
             ParsedCommand::Complete(_)
         ));
 
@@ -476,6 +479,9 @@ mod tests {
     fn test_parse_command_buffer_partial_all_prefixes() {
         // Goto prefix
         assert!(matches!(parse_command_buffer("g"), ParsedCommand::Partial));
+
+        // Match mode prefix
+        assert!(matches!(parse_command_buffer("m"), ParsedCommand::Partial));
 
         // Replace prefix
         assert!(matches!(parse_command_buffer("r"), ParsedCommand::Partial));

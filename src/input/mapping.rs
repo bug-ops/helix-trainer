@@ -73,8 +73,8 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
         (KeyCode::Char('t'), KeyModifiers::NONE) => Some(CMD_TILL_CHAR),
         (KeyCode::Char('T'), KeyModifiers::SHIFT) => Some(CMD_TILL_CHAR_REVERSE),
 
-        // Match brackets
-        (KeyCode::Char('m'), KeyModifiers::NONE) => Some(CMD_MATCH_BRACKETS),
+        // Match mode (prefix for mm)
+        (KeyCode::Char('m'), KeyModifiers::NONE) => Some(CMD_MATCH_MODE),
 
         // Select mode
         (KeyCode::Char('v'), KeyModifiers::NONE) => Some(CMD_SELECT_MODE),

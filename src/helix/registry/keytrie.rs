@@ -131,8 +131,12 @@ impl KeyTrie {
                 // Multi-key commands like "3gg" and char-input like "3fx" are not supported
                 if cmd_part.len() == 1 {
                     let cmd_char = cmd_part.chars().next().unwrap();
-                    // Don't allow count with char-input prefixes (f, t, r, etc.) or goto prefix
-                    if !self.char_input_prefixes.contains(&cmd_char) && cmd_char != 'g' {
+                    // Don't allow count with char-input prefixes (f, t, r, etc.),
+                    // goto prefix (g), or match mode prefix (m)
+                    if !self.char_input_prefixes.contains(&cmd_char)
+                        && cmd_char != 'g'
+                        && cmd_char != 'm'
+                    {
                         return KeyMatch::Complete(buffer.to_string());
                     }
                 }
@@ -321,7 +325,9 @@ mod tests {
         let trie = KeyTrie::new();
         // Count + single-key command should be complete
         assert_eq!(trie.resolve("3h"), KeyMatch::Complete("3h".to_string()));
+        assert_eq!(trie.resolve("3l"), KeyMatch::Complete("3l".to_string()));
         assert_eq!(trie.resolve("5j"), KeyMatch::Complete("5j".to_string()));
+        assert_eq!(trie.resolve("5k"), KeyMatch::Complete("5k".to_string()));
         assert_eq!(trie.resolve("10w"), KeyMatch::Complete("10w".to_string()));
         assert_eq!(trie.resolve("99d"), KeyMatch::Complete("99d".to_string()));
     }
@@ -331,12 +337,15 @@ mod tests {
         let trie = KeyTrie::new();
         // Count + goto prefix (g) is invalid
         assert_eq!(trie.resolve("3g"), KeyMatch::Invalid);
+        // Count + match mode prefix (m) is invalid
+        assert_eq!(trie.resolve("3m"), KeyMatch::Invalid);
         // Count + char-input prefix (f, t, r) is invalid
         assert_eq!(trie.resolve("3f"), KeyMatch::Invalid);
         assert_eq!(trie.resolve("3r"), KeyMatch::Invalid);
         assert_eq!(trie.resolve("3t"), KeyMatch::Invalid);
         // Count + multi-key command is invalid
         assert_eq!(trie.resolve("3gg"), KeyMatch::Invalid);
+        assert_eq!(trie.resolve("3mm"), KeyMatch::Invalid);
         assert_eq!(trie.resolve("3fx"), KeyMatch::Invalid);
     }
 }

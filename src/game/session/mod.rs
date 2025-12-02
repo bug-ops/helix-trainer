@@ -499,6 +499,60 @@ impl GameSession<Active> {
         }
     }
 
+    /// Record a user action with count prefix (e.g., "3w" executes "w" 3 times)
+    ///
+    /// This method executes the base command `count` times through the simulator,
+    /// but records only ONE action in the history with the full command string.
+    /// This ensures that "3w" counts as 1 action, not 3.
+    ///
+    /// # Arguments
+    /// * `full_command` - The full command string (e.g., "3w")
+    /// * `base_command` - The base command to execute (e.g., "w")
+    /// * `count` - How many times to execute the base command
+    ///
+    /// # Errors
+    ///
+    /// Returns error if action count exceeds limits or command execution fails.
+    pub fn record_action_with_count(
+        mut self,
+        full_command: String,
+        base_command: &str,
+        count: usize,
+    ) -> Result<SessionAfterAction, UserError> {
+        // Validate action count doesn't exceed limits
+        security::arithmetic::validate_action_count(self.user_actions.len() + 1)
+            .map_err(UserError::from)?;
+
+        // Execute command `count` times through simulator
+        for _ in 0..count {
+            self.simulator.execute_command(base_command)?;
+
+            // Check completion after each execution
+            self.current_state = self.simulator.to_editor_state()?;
+            if self.check_completion() {
+                break;
+            }
+        }
+
+        // Sync current state with simulator (final state)
+        self.current_state = self.simulator.to_editor_state()?;
+
+        // Invalidate progress cache since state changed
+        self.progress_needs_update.set(true);
+
+        // Record ONE action in history with the full command
+        let elapsed = self.elapsed();
+        let action = UserAction::new(full_command, elapsed);
+        self.user_actions.push(action);
+
+        // Check if scenario is completed and return appropriate state
+        if self.check_completion() {
+            Ok(SessionAfterAction::Completed(self.into_completed()))
+        } else {
+            Ok(SessionAfterAction::StillActive(self))
+        }
+    }
+
     /// Transition to completed state (private helper)
     fn into_completed(self) -> GameSession<Completed> {
         GameSession {

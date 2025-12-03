@@ -4,20 +4,15 @@ use crate::config::Scenario;
 use crate::game::format_key_for_display;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
-use crate::ui::state::{AppState, MiniGameData, ModeSelectionData, TypedScreen};
+use crate::ui::state::{AppState, GameState, MiniGameData, ModeSelectionData, TypedScreen};
 use std::sync::Arc;
 
-/// Handle starting a mini-game session
-pub(in crate::ui::state) fn handle_start_minigame(state: &mut AppState) -> Result<(), UserError> {
-    // NOTE: This handler uses AppState directly because it needs to set screen and game state
-    // It cannot be easily refactored to HandlerContext without significant changes
-
-    // Navigate to mini-game screen first (renderer will show error if no scenarios)
-    state.screen = TypedScreen::MiniGame(MiniGameData::default());
-
-    // Create mini-game session with available scenarios
-    let scenarios: Vec<Scenario> = state
-        .game
+/// Create and start a new mini-game session from available scenarios
+///
+/// Shared initialization logic used by both mode selection and direct start.
+/// Returns true if session was created successfully, false if no scenarios available.
+pub(in crate::ui::state) fn create_minigame_session(game: &mut GameState) -> bool {
+    let scenarios: Vec<Scenario> = game
         .scenario_collection
         .get_filtered()
         .into_iter()
@@ -26,17 +21,22 @@ pub(in crate::ui::state) fn handle_start_minigame(state: &mut AppState) -> Resul
 
     if scenarios.is_empty() {
         tracing::warn!("No scenarios available for mini-game");
-        // Still navigated to screen, renderer will show error
-        return Ok(());
+        return false;
     }
 
-    let session = MiniGameSession::new(Arc::new(scenarios));
-    state.game.minigame_session = Some(session);
+    let mut session = MiniGameSession::new(Arc::new(scenarios));
+    session.start(); // Begin countdown
+    game.minigame_session = Some(session);
+    true
+}
 
-    // Start the game (begins countdown)
-    if let Some(ref mut session) = state.game.minigame_session {
-        session.start();
-    }
+/// Handle starting a mini-game session
+pub(in crate::ui::state) fn handle_start_minigame(state: &mut AppState) -> Result<(), UserError> {
+    // Navigate to mini-game screen first (renderer will show error if no scenarios)
+    state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+    // Use shared session creation
+    create_minigame_session(&mut state.game);
 
     Ok(())
 }

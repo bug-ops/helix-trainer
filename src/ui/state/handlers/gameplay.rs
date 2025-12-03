@@ -3,7 +3,7 @@
 //! Handles command execution and hint display
 
 use crate::game::format_key_for_display;
-use crate::helix::commands::*;
+use crate::helix::commands::CMD_ESCAPE;
 use crate::security::UserError;
 use crate::ui::state::{AppState, HandlerOutcome, Message, TypedScreen, update};
 use std::time::Duration;

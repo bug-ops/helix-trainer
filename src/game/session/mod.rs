@@ -31,7 +31,7 @@
 //! ```
 
 use crate::config::Scenario;
-use crate::game::{EditorState, PerformanceRating, Scorer};
+use crate::game::{CommandExecutor, EditorState, PerformanceRating, Scorer};
 use crate::helix::{AnyModeSimulator, Mode};
 use crate::security::{self, SecurityError, UserError};
 use serde::{Deserialize, Serialize};
@@ -477,14 +477,8 @@ impl GameSession<Active> {
         security::arithmetic::validate_action_count(self.user_actions.len() + 1)
             .map_err(UserError::from)?;
 
-        // Execute command through simulator
-        self.simulator.execute_command(&command)?;
-
-        // Sync current state with simulator
-        self.current_state = self.simulator.to_editor_state()?;
-
-        // Invalidate progress cache since state changed
-        self.progress_needs_update.set(true);
+        // Execute command using CommandExecutor trait
+        self.execute_single(&command)?;
 
         // Record action in history
         let elapsed = self.elapsed();
@@ -492,7 +486,7 @@ impl GameSession<Active> {
         self.user_actions.push(action);
 
         // Check if scenario is completed and return appropriate state
-        if self.check_completion() {
+        if CommandExecutor::check_completion(&self) {
             Ok(SessionAfterAction::Completed(self.into_completed()))
         } else {
             Ok(SessionAfterAction::StillActive(self))
@@ -523,22 +517,14 @@ impl GameSession<Active> {
         security::arithmetic::validate_action_count(self.user_actions.len() + 1)
             .map_err(UserError::from)?;
 
-        // Execute command `count` times through simulator
+        // Execute command `count` times using CommandExecutor trait
+        // Stops early if completion is detected
         for _ in 0..count {
-            self.simulator.execute_command(base_command)?;
-
-            // Check completion after each execution
-            self.current_state = self.simulator.to_editor_state()?;
-            if self.check_completion() {
+            self.execute_single(base_command)?;
+            if CommandExecutor::check_completion(&self) {
                 break;
             }
         }
-
-        // Sync current state with simulator (final state)
-        self.current_state = self.simulator.to_editor_state()?;
-
-        // Invalidate progress cache since state changed
-        self.progress_needs_update.set(true);
 
         // Record ONE action in history with the full command
         let elapsed = self.elapsed();
@@ -546,7 +532,7 @@ impl GameSession<Active> {
         self.user_actions.push(action);
 
         // Check if scenario is completed and return appropriate state
-        if self.check_completion() {
+        if CommandExecutor::check_completion(&self) {
             Ok(SessionAfterAction::Completed(self.into_completed()))
         } else {
             Ok(SessionAfterAction::StillActive(self))
@@ -701,6 +687,26 @@ impl GameSession<Active> {
         self.cached_progress.set(None);
         self.progress_needs_update.set(true);
         Ok(())
+    }
+}
+
+// Implement CommandExecutor trait for unified count prefix handling
+impl CommandExecutor for GameSession<Active> {
+    fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
+        // Execute command through simulator
+        self.simulator.execute_command(command)?;
+
+        // Sync current state with simulator
+        self.current_state = self.simulator.to_editor_state()?;
+
+        // Invalidate progress cache since state changed
+        self.progress_needs_update.set(true);
+
+        Ok(())
+    }
+
+    fn check_completion(&self) -> bool {
+        self.current_state.matches(&self.target_state)
     }
 }
 

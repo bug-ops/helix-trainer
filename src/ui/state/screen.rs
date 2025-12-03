@@ -351,6 +351,22 @@ impl CommandBufferAccess for MiniGameData {
     }
 }
 
+// Implement game::CommandBuffer for all types that implement CommandBufferAccess
+// This enables using process_command_input() with TaskData and MiniGameData
+impl<T: CommandBufferAccess> crate::game::CommandBuffer for T {
+    fn buffer(&self) -> &str {
+        self.command_buffer()
+    }
+
+    fn push(&mut self, input: &str) {
+        self.push_command(input);
+    }
+
+    fn clear(&mut self) {
+        self.clear_buffer();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

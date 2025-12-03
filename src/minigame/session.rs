@@ -4,7 +4,7 @@
 //! active scenario, timing, and score calculation.
 
 use crate::config::Scenario;
-use crate::game::EditorState;
+use crate::game::{CommandExecutor, EditorState};
 use crate::helix::AnyModeSimulator;
 use crate::minigame::{DifficultyController, MiniGameState, MiniGameStats};
 use crate::security::UserError;
@@ -85,18 +85,6 @@ impl ActiveMiniScenario {
         })
     }
 
-    /// Execute a command through the simulator
-    ///
-    /// # Errors
-    ///
-    /// Returns `UserError` if command execution fails.
-    fn execute_command(&mut self, command: &str) -> Result<(), UserError> {
-        self.simulator.execute_command(command)?;
-        self.current_state = self.simulator.to_editor_state()?;
-        self.actions.push(command.to_string());
-        Ok(())
-    }
-
     /// Check if scenario is completed
     fn is_completed(&self) -> bool {
         self.current_state.matches(&self.target_state)
@@ -170,6 +158,20 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
 
     fn elapsed(&self) -> std::time::Duration {
         self.started_at.elapsed()
+    }
+}
+
+// Implement CommandExecutor trait for unified command handling with count prefix
+impl CommandExecutor for ActiveMiniScenario {
+    fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
+        self.simulator.execute_command(command)?;
+        self.current_state = self.simulator.to_editor_state()?;
+        self.actions.push(command.to_string());
+        Ok(())
+    }
+
+    fn check_completion(&self) -> bool {
+        self.current_state.matches(&self.target_state)
     }
 }
 
@@ -311,7 +313,8 @@ impl MiniGameSession {
 
         let current = self.current.as_mut().ok_or(UserError::OperationFailed)?;
 
-        current.execute_command(command)?;
+        // Use CommandExecutor trait for unified count prefix handling (e.g., "3d" -> 3x "d")
+        current.execute_with_count(command)?;
 
         Ok(())
     }

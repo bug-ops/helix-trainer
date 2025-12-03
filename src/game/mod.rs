@@ -11,7 +11,8 @@ pub mod scorer;
 pub mod session;
 
 pub use command_context::{
-    CommandContext, ParsedCommand, extract_count_and_command, parse_command_buffer,
+    CommandBuffer, CommandContext, CommandExecutor, CommandInputResult, ParsedCommand,
+    extract_count_and_command, parse_command_buffer, process_command_input,
 };
 pub use editor_state::{CursorPosition, EditorState, Selection};
 pub use scorer::{PerformanceRating, Scorer};

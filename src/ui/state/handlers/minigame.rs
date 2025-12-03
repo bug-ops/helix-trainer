@@ -86,6 +86,8 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
         return Ok(());
     };
 
+    // handle_command internally uses CommandExecutor::execute_with_count
+    // for unified count prefix handling (e.g., "3d" -> 3x "d")
     session.handle_command(command)?;
 
     // Update quest progress for command used (shared function)
@@ -144,20 +146,19 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
 
 /// Handle executing a Helix command during mini-game
 ///
-/// Uses command buffer to handle multi-key commands (dd, gg, rx).
+/// Uses unified command input processing for multi-key commands (dd, gg, rx).
 pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
-    use crate::game::{ParsedCommand, parse_command_buffer};
-    use crate::ui::state::CommandBufferAccess;
+    use crate::game::{CommandInputResult, process_command_input};
 
     // Get minigame data for command buffer
     let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
         return Ok(());
     };
 
-    // Check if we're in insert mode (send directly without buffering)
+    // Check if we're in insert mode
     let is_insert_mode = state
         .game
         .minigame_session
@@ -165,31 +166,13 @@ pub(in crate::ui::state) fn handle_minigame_command(
         .map(|s| s.is_insert_mode())
         .unwrap_or(false);
 
-    if is_insert_mode {
-        return execute_minigame_command(state, &command);
-    }
+    // Use unified command input processing
+    let input_result = process_command_input(minigame_data, &command, is_insert_mode);
 
-    // Normal mode: handle command buffer for multi-key commands
-    minigame_data.push_command(&command);
-
-    // Try to match a complete command
-    let parsed = parse_command_buffer(minigame_data.command_buffer());
-
-    match parsed {
-        ParsedCommand::Invalid => {
-            // Invalid sequence - clear buffer
-            minigame_data.clear_buffer();
-            Ok(())
-        }
-        ParsedCommand::Complete(cmd) => {
-            // Complete command - execute it
-            minigame_data.clear_buffer();
-            execute_minigame_command(state, &cmd)
-        }
-        ParsedCommand::Partial => {
-            // Waiting for more keys - nothing to do
-            Ok(())
-        }
+    match input_result {
+        CommandInputResult::Execute(cmd) => execute_minigame_command(state, &cmd),
+        CommandInputResult::Invalid => Ok(()), // Buffer already cleared
+        CommandInputResult::Partial => Ok(()), // Waiting for more keys
     }
 }
 

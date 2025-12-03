@@ -113,78 +113,56 @@ pub fn handle_execute_command(
     // Show key history popup after first keypress
     state.ui.show_key_history = true;
 
+    // Use unified command input processing
+    use crate::game::{CommandInputResult, process_command_input};
+
+    let is_insert_mode = task_data.session.is_insert_mode();
+    let input_result = process_command_input(&mut task_data, &command, is_insert_mode);
+
     // Track command for quest progress (only execute once per complete command)
     let mut executed_command: Option<String> = None;
     let mut session_completed = false;
 
-    // In Insert mode, execute commands directly
-    if task_data.session.is_insert_mode() {
-        // Store last command for display (skip special commands and single chars)
-        if command.as_ref() == CMD_ESCAPE {
-            task_data.last_command = Some(command.to_string());
-        }
-
-        // Clone scenario before taking session (to avoid borrow conflict)
-        let scenario = task_data.session.scenario().clone();
-
-        // Take session for state transition
-        let session = std::mem::replace(
-            &mut task_data.session,
-            crate::game::GameSession::new(scenario)?,
-        );
-
-        // Execute command and process result
-        let result = session.record_action(command.to_string())?;
-        session_completed = process_session_result(result, &mut task_data, state)?;
-
-        // Always restore Task screen - even when completed, we show success popup
-        state.screen = TypedScreen::Task(task_data);
-    } else {
-        use crate::game::{ParsedCommand, parse_command_buffer};
-        use crate::ui::state::CommandBufferAccess;
-
-        // Normal mode: handle command buffer for multi-key commands
-        task_data.push_command(&command);
-
-        // Try to match a complete command
-        let parsed = parse_command_buffer(task_data.command_buffer());
-
-        match parsed {
-            ParsedCommand::Invalid => {
-                // Invalid sequence - clear buffer and restore state
-                task_data.clear_buffer();
-                state.screen = TypedScreen::Task(task_data);
-                return Ok(HandlerOutcome::Stay);
-            }
-            ParsedCommand::Complete(cmd) => {
-                // Complete command - execute it
-                task_data.clear_buffer();
+    match input_result {
+        CommandInputResult::Execute(cmd) => {
+            // Store last command for display
+            if is_insert_mode {
+                if command.as_ref() == CMD_ESCAPE {
+                    task_data.last_command = Some(command.to_string());
+                }
+            } else {
                 task_data.last_command = Some(cmd.clone());
                 executed_command = Some(cmd.clone());
-
-                // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
-                let (count, base_cmd) = crate::game::extract_count_and_command(&cmd);
-
-                // Clone scenario before taking session (to avoid borrow conflict)
-                let scenario = task_data.session.scenario().clone();
-
-                // Take session for state transition
-                let session = std::mem::replace(
-                    &mut task_data.session,
-                    crate::game::GameSession::new(scenario)?,
-                );
-
-                // Execute command with count - records as ONE action
-                let result = session.record_action_with_count(cmd.clone(), base_cmd, count)?;
-                session_completed = process_session_result(result, &mut task_data, state)?;
-
-                // Always restore Task screen - even when completed, we show success popup
-                state.screen = TypedScreen::Task(task_data);
             }
-            ParsedCommand::Partial => {
-                // Waiting for more keys
-                state.screen = TypedScreen::Task(task_data);
-            }
+
+            // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
+            let (count, base_cmd) = crate::game::extract_count_and_command(&cmd);
+            let base_cmd = base_cmd.to_string();
+
+            // Clone scenario before taking session (to avoid borrow conflict)
+            let scenario = task_data.session.scenario().clone();
+
+            // Take session for state transition
+            let session = std::mem::replace(
+                &mut task_data.session,
+                crate::game::GameSession::new(scenario)?,
+            );
+
+            // Execute command with count - records as ONE action
+            let result = session.record_action_with_count(cmd, &base_cmd, count)?;
+            session_completed = process_session_result(result, &mut task_data, state)?;
+
+            // Always restore Task screen - even when completed, we show success popup
+            state.screen = TypedScreen::Task(task_data);
+        }
+        CommandInputResult::Invalid => {
+            // Invalid sequence - buffer already cleared by process_command_input
+            state.screen = TypedScreen::Task(task_data);
+            return Ok(HandlerOutcome::Stay);
+        }
+        CommandInputResult::Partial => {
+            // Waiting for more keys
+            state.screen = TypedScreen::Task(task_data);
         }
     }
 

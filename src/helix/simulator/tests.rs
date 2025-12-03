@@ -216,14 +216,14 @@ fn test_move_line_start() {
 
     // Move to next line
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    // Move to end of line
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
+    // Move to end of line (use 'gl' in Helix, not '$')
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap();
     let state = sim.get_state().unwrap();
     // Cursor at end of "world" - which is position 4 or 5
     assert!(state.cursor_position().col >= 4);
 
-    // Move to start of line
-    sim.execute_command(CMD_MOVE_LINE_START).unwrap();
+    // Move to start of line (use 'gh' in Helix, not '0')
+    sim.execute_command(CMD_GOTO_LINE_START).unwrap();
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().col, 0);
 }
@@ -307,8 +307,8 @@ fn test_move_word_end() {
 fn test_move_prev_word() {
     let mut sim = AnyModeSimulator::new("hello world foo".to_string());
 
-    // Move to end of line first
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
+    // Move to end of line first (use 'gl' in Helix, not '$')
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap();
     // Then move to previous word
     sim.execute_command(CMD_MOVE_WORD_BACKWARD).unwrap();
 
@@ -532,7 +532,9 @@ fn test_backspace_in_insert_mode() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Enter insert mode at position 5
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap(); // Move to end
+    // Note: Use CMD_GOTO_LINE_END (gl) instead of CMD_MOVE_LINE_END ($)
+    // because '$' is NOT a line end command in Helix - use 'gl' for goto line end
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap(); // Move to end
     sim.execute_command(CMD_APPEND).unwrap(); // Append
     assert_eq!(sim.mode(), Mode::Insert);
 
@@ -1107,8 +1109,8 @@ fn test_repeat_insert_mode() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hiworld");
 
-    // Move to end
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
+    // Move to end (use 'gl' in Helix, not '$')
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap();
 
     // Repeat insert
     sim.execute_command(".").unwrap();
@@ -1240,8 +1242,8 @@ fn test_repeat_replace_char() {
 fn test_repeat_append() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
-    // Move to end of word and append " world"
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap(); // Move to end
+    // Move to end of word and append " world" (use 'gl' in Helix, not '$')
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap(); // Move to end
     sim.execute_command(CMD_APPEND).unwrap(); // Append (cursor after last char)
     sim.execute_command(" ").unwrap();
     sim.execute_command("w").unwrap();
@@ -1254,8 +1256,8 @@ fn test_repeat_append() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello world");
 
-    // Move to start
-    sim.execute_command(CMD_MOVE_LINE_START).unwrap();
+    // Move to start (use 'gh' in Helix, not '0')
+    sim.execute_command(CMD_GOTO_LINE_START).unwrap();
 
     // Repeat should append " world" after the first character (using 'a' to append)
     sim.execute_command(".").unwrap();
@@ -1288,8 +1290,8 @@ fn test_repeat_insert_with_movements() {
     // Cursor should be at position 1 (moved left once from 2)
     assert_eq!(state.cursor_position().col, 1);
 
-    // Move to end
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
+    // Move to end (use 'gl' in Helix, not '$')
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap();
 
     // Repeat insert with movements
     sim.execute_command(".").unwrap();
@@ -1367,7 +1369,7 @@ fn test_repeat_preserves_action_across_movements() {
     // Move around (movements don't change repeat buffer)
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
-    sim.execute_command(CMD_MOVE_LINE_START).unwrap();
+    sim.execute_command(CMD_GOTO_LINE_START).unwrap(); // use 'gh' in Helix
 
     // Repeat should still delete
     sim.execute_command(".").unwrap();
@@ -1388,8 +1390,8 @@ fn test_repeat_insert_at_line_start() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), ">>hello");
 
-    // Move somewhere else
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
+    // Move somewhere else (use 'gl' in Helix, not '$')
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap();
 
     // Repeat
     sim.execute_command(".").unwrap();
@@ -1411,8 +1413,8 @@ fn test_repeat_append_at_line_end() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello!!");
 
-    // Move to start
-    sim.execute_command(CMD_MOVE_LINE_START).unwrap();
+    // Move to start (use 'gh' in Helix, not '0')
+    sim.execute_command(CMD_GOTO_LINE_START).unwrap();
 
     // Repeat - should use 'A' to append at line end
     sim.execute_command(".").unwrap();
@@ -1591,7 +1593,8 @@ fn test_scenario_repeat_insert_001() {
     // Scenario says cursor_position = [0, 5] which means we start at position 5
     // Actually let's check what the scenario expects - it inserts AFTER "TODO:"
     // So we need to be at the ':' (col 4) or use append mode
-    sim.execute_command(CMD_MOVE_LINE_END).unwrap();
+    // Use 'gl' in Helix, not '$'
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap();
 
     // Enter insert mode and type " Update docs"
     sim.execute_command("i").unwrap();
@@ -1607,10 +1610,11 @@ fn test_scenario_repeat_insert_001() {
         "After first insert"
     );
 
-    // Navigate: j (down), 0 (line start), $ (line end)
+    // Navigate: j (down), gh (line start), gl (line end)
+    // Note: '0' and '$' are NOT line movement commands in Helix
     sim.execute_command("j").unwrap();
-    sim.execute_command("0").unwrap();
-    sim.execute_command("$").unwrap();
+    sim.execute_command("gh").unwrap();
+    sim.execute_command("gl").unwrap();
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.cursor_position().row, 1, "Should be on line 1");

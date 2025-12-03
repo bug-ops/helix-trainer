@@ -190,7 +190,7 @@ file_content = "First\nSecond"
 cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["j", "0"]
+commands = ["j", "gh"]
 description = "Move down then to line start"
 
 [scenarios.scoring]
@@ -202,7 +202,7 @@ tolerance = 0
 category = "movement"
 difficulty = "beginner"
 tags = ["combined", "line"]
-commands_taught = ["j", "0"]
+commands_taught = ["j", "gh"]
 estimated_time_seconds = 10
 
 [[scenarios]]

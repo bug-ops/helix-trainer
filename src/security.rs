@@ -107,6 +107,9 @@ pub enum UserError {
     #[error("Operation failed. Please try again.")]
     OperationFailed,
 
+    #[error("Command execution failed: {context}")]
+    CommandFailed { context: String },
+
     #[error("Session has expired. Please start a new session.")]
     SessionExpired,
 }
@@ -116,6 +119,13 @@ impl UserError {
     pub fn invalid_state(message: &str) -> Self {
         Self::InvalidState {
             message: message.to_string(),
+        }
+    }
+
+    /// Create a CommandFailed error with context for debugging
+    pub fn command_failed(context: impl Into<String>) -> Self {
+        Self::CommandFailed {
+            context: context.into(),
         }
     }
 }

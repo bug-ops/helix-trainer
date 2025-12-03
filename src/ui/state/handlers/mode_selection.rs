@@ -66,30 +66,8 @@ pub(in crate::ui::state) fn handle_select_training_mode(
 pub(in crate::ui::state) fn handle_select_arcade_mode(
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    // Create mini-game session with available scenarios
-    let scenarios: Vec<crate::config::Scenario> = ctx
-        .game
-        .scenario_collection
-        .get_filtered()
-        .into_iter()
-        .cloned()
-        .collect();
-
-    if scenarios.is_empty() {
-        tracing::warn!("No scenarios available for mini-game");
-        // Still navigate to screen, renderer will show error
-        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
-            MiniGameData::default(),
-        ))));
-    }
-
-    let session = crate::minigame::MiniGameSession::new(std::sync::Arc::new(scenarios));
-    ctx.game.minigame_session = Some(session);
-
-    // Start the game (begins countdown)
-    if let Some(ref mut session) = ctx.game.minigame_session {
-        session.start();
-    }
+    // Use shared session creation from minigame module
+    super::minigame::create_minigame_session(ctx.game);
 
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
         MiniGameData::default(),

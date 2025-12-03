@@ -4,7 +4,7 @@
 //! active scenario, timing, and score calculation.
 
 use crate::config::Scenario;
-use crate::game::EditorState;
+use crate::game::{CommandExecutor, EditorState};
 use crate::helix::AnyModeSimulator;
 use crate::minigame::{DifficultyController, MiniGameState, MiniGameStats};
 use crate::security::UserError;
@@ -49,52 +49,18 @@ impl ActiveMiniScenario {
     ///
     /// Returns `UserError` if scenario setup or target state is invalid.
     fn new(scenario: Scenario, time_limit: Duration) -> Result<Self, UserError> {
-        // Create initial state from scenario setup
-        let initial_state = EditorState::from_setup(
-            &scenario.setup.file_content,
-            [
-                scenario.setup.cursor_position.0,
-                scenario.setup.cursor_position.1,
-            ],
-        )
-        .map_err(|_| UserError::ScenarioTooComplex)?;
-
-        // Create target state
-        let target_state = EditorState::from_target(
-            &scenario.target.file_content,
-            [
-                scenario.target.cursor_position.0,
-                scenario.target.cursor_position.1,
-            ],
-            scenario.target.selection,
-        )
-        .map_err(|_| UserError::ScenarioTooComplex)?;
-
-        // Initialize simulator from initial state
-        let simulator = AnyModeSimulator::from_editor_state(&initial_state);
-        let current_state = initial_state.clone();
+        // Use unified ScenarioState helper for initialization
+        let state = crate::game::ScenarioState::from_scenario(&scenario)?;
 
         Ok(Self {
             scenario,
-            simulator,
-            current_state,
-            target_state,
+            simulator: state.simulator,
+            current_state: state.current_state,
+            target_state: state.target_state,
             started_at: Instant::now(),
             time_limit,
             actions: Vec::new(),
         })
-    }
-
-    /// Execute a command through the simulator
-    ///
-    /// # Errors
-    ///
-    /// Returns `UserError` if command execution fails.
-    fn execute_command(&mut self, command: &str) -> Result<(), UserError> {
-        self.simulator.execute_command(command)?;
-        self.current_state = self.simulator.to_editor_state()?;
-        self.actions.push(command.to_string());
-        Ok(())
     }
 
     /// Check if scenario is completed
@@ -170,6 +136,20 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
 
     fn elapsed(&self) -> std::time::Duration {
         self.started_at.elapsed()
+    }
+}
+
+// Implement CommandExecutor trait for unified command handling with count prefix
+impl CommandExecutor for ActiveMiniScenario {
+    fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
+        self.simulator.execute_command(command)?;
+        self.current_state = self.simulator.to_editor_state()?;
+        self.actions.push(command.to_string());
+        Ok(())
+    }
+
+    fn check_completion(&self) -> bool {
+        self.current_state.matches(&self.target_state)
     }
 }
 
@@ -311,7 +291,8 @@ impl MiniGameSession {
 
         let current = self.current.as_mut().ok_or(UserError::OperationFailed)?;
 
-        current.execute_command(command)?;
+        // Use CommandExecutor trait for unified count prefix handling (e.g., "3d" -> 3x "d")
+        current.execute_with_count(command)?;
 
         Ok(())
     }
@@ -828,5 +809,72 @@ mod tests {
 
         // After loading one, queue should still have enough scenarios
         assert!(session.queue().len() >= 2);
+    }
+
+    #[test]
+    fn test_handle_command_ge() {
+        // Test that 'ge' command works in minigame session
+        // This is a regression test for the 'ge' command error
+        let scenario = Scenario {
+            id: "test_ge".to_string(),
+            name: "Test ge command".to_string(),
+            description: "Test goto last line".to_string(),
+            setup: Setup {
+                file_content: "line 1\nline 2\nline 3\n".to_string(), // With trailing newline
+                cursor_position: (0, 0),
+            },
+            target: TargetState {
+                file_content: "line 1\nline 2\nline 3\n".to_string(),
+                cursor_position: (2, 0), // After ge, cursor should be on last non-empty line (line 3)
+                selection: None,
+            },
+            solution: Solution {
+                commands: vec!["ge".to_string()],
+                description: "Go to last line".to_string(),
+            },
+            alternatives: vec![],
+            hints: vec![],
+            scoring: ScoringConfig {
+                optimal_count: 1,
+                max_points: 100,
+                tolerance: 0,
+            },
+            metadata: Some(ScenarioMetadata {
+                difficulty: Some(Difficulty::Beginner),
+                ..Default::default()
+            }),
+        };
+
+        let scenarios = Arc::new(vec![scenario]);
+        let mut session = MiniGameSession::new(scenarios);
+
+        // Start and countdown
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(
+            session.state.is_playing(),
+            "Should be playing after countdown"
+        );
+
+        // Execute 'ge' command
+        assert!(
+            session.current_scenario().is_some(),
+            "Current scenario should be set"
+        );
+
+        let result = session.handle_command("ge");
+        assert!(result.is_ok(), "ge command should succeed: {:?}", result);
+
+        // Check that the cursor moved
+        if let Some(scenario) = session.current_scenario() {
+            let state = scenario.current_state();
+            assert_eq!(
+                state.cursor_position().row,
+                2,
+                "Cursor should be on last line (row 2)"
+            );
+        }
     }
 }

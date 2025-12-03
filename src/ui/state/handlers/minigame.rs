@@ -1,22 +1,18 @@
 //! Message handlers for mini-game mode (Arcade Mode)
 
 use crate::config::Scenario;
+use crate::game::format_key_for_display;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
-use crate::ui::state::{AppState, MiniGameData, ModeSelectionData, TypedScreen};
+use crate::ui::state::{AppState, GameState, MiniGameData, ModeSelectionData, TypedScreen};
 use std::sync::Arc;
 
-/// Handle starting a mini-game session
-pub(in crate::ui::state) fn handle_start_minigame(state: &mut AppState) -> Result<(), UserError> {
-    // NOTE: This handler uses AppState directly because it needs to set screen and game state
-    // It cannot be easily refactored to HandlerContext without significant changes
-
-    // Navigate to mini-game screen first (renderer will show error if no scenarios)
-    state.screen = TypedScreen::MiniGame(MiniGameData::default());
-
-    // Create mini-game session with available scenarios
-    let scenarios: Vec<Scenario> = state
-        .game
+/// Create and start a new mini-game session from available scenarios
+///
+/// Shared initialization logic used by both mode selection and direct start.
+/// Returns true if session was created successfully, false if no scenarios available.
+pub(in crate::ui::state) fn create_minigame_session(game: &mut GameState) -> bool {
+    let scenarios: Vec<Scenario> = game
         .scenario_collection
         .get_filtered()
         .into_iter()
@@ -25,17 +21,22 @@ pub(in crate::ui::state) fn handle_start_minigame(state: &mut AppState) -> Resul
 
     if scenarios.is_empty() {
         tracing::warn!("No scenarios available for mini-game");
-        // Still navigated to screen, renderer will show error
-        return Ok(());
+        return false;
     }
 
-    let session = MiniGameSession::new(Arc::new(scenarios));
-    state.game.minigame_session = Some(session);
+    let mut session = MiniGameSession::new(Arc::new(scenarios));
+    session.start(); // Begin countdown
+    game.minigame_session = Some(session);
+    true
+}
 
-    // Start the game (begins countdown)
-    if let Some(ref mut session) = state.game.minigame_session {
-        session.start();
-    }
+/// Handle starting a mini-game session
+pub(in crate::ui::state) fn handle_start_minigame(state: &mut AppState) -> Result<(), UserError> {
+    // Navigate to mini-game screen first (renderer will show error if no scenarios)
+    state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+    // Use shared session creation
+    create_minigame_session(&mut state.game);
 
     Ok(())
 }
@@ -74,9 +75,9 @@ pub(in crate::ui::state) fn handle_minigame_tick(state: &mut AppState) -> Result
 /// Handles command execution, quest progress updates, and completion detection.
 /// Uses shared quest tracking functions from quests module.
 fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), UserError> {
-    // Record key to history for display
+    // Record key to history for display (using shared formatter)
     if let TypedScreen::MiniGame(ref mut data) = state.screen {
-        data.add_key_to_history(command.to_string());
+        data.add_key_to_history(format_key_for_display(command));
     }
 
     // Snapshot quest completion status before updates
@@ -86,6 +87,8 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
         return Ok(());
     };
 
+    // handle_command internally uses CommandExecutor::execute_with_count
+    // for unified count prefix handling (e.g., "3d" -> 3x "d")
     session.handle_command(command)?;
 
     // Update quest progress for command used (shared function)
@@ -144,20 +147,19 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
 
 /// Handle executing a Helix command during mini-game
 ///
-/// Uses command buffer to handle multi-key commands (dd, gg, rx).
+/// Uses unified command input processing for multi-key commands (dd, gg, rx).
 pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
-    use crate::game::{ParsedCommand, parse_command_buffer};
-    use crate::ui::state::CommandBufferAccess;
+    use crate::game::{CommandInputResult, process_command_input};
 
     // Get minigame data for command buffer
     let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
         return Ok(());
     };
 
-    // Check if we're in insert mode (send directly without buffering)
+    // Check if we're in insert mode
     let is_insert_mode = state
         .game
         .minigame_session
@@ -165,31 +167,13 @@ pub(in crate::ui::state) fn handle_minigame_command(
         .map(|s| s.is_insert_mode())
         .unwrap_or(false);
 
-    if is_insert_mode {
-        return execute_minigame_command(state, &command);
-    }
+    // Use unified command input processing
+    let input_result = process_command_input(minigame_data, &command, is_insert_mode);
 
-    // Normal mode: handle command buffer for multi-key commands
-    minigame_data.push_command(&command);
-
-    // Try to match a complete command
-    let parsed = parse_command_buffer(minigame_data.command_buffer());
-
-    match parsed {
-        ParsedCommand::Invalid => {
-            // Invalid sequence - clear buffer
-            minigame_data.clear_buffer();
-            Ok(())
-        }
-        ParsedCommand::Complete(cmd) => {
-            // Complete command - execute it
-            minigame_data.clear_buffer();
-            execute_minigame_command(state, &cmd)
-        }
-        ParsedCommand::Partial => {
-            // Waiting for more keys - nothing to do
-            Ok(())
-        }
+    match input_result {
+        CommandInputResult::Execute(cmd) => execute_minigame_command(state, &cmd),
+        CommandInputResult::Invalid => Ok(()), // Buffer already cleared
+        CommandInputResult::Partial => Ok(()), // Waiting for more keys
     }
 }
 

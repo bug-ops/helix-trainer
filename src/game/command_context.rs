@@ -23,8 +23,8 @@ use crate::security::UserError;
 /// ```
 /// use helix_trainer::game::format_key_for_display;
 ///
-/// assert_eq!(format_key_for_display("<left>"), "←");
-/// assert_eq!(format_key_for_display("<backspace>"), "⌫");
+/// assert_eq!(format_key_for_display("Left"), "←");
+/// assert_eq!(format_key_for_display("Backspace"), "⌫");
 /// assert_eq!(format_key_for_display("x"), "x");
 /// ```
 pub fn format_key_for_display(command: &str) -> String {

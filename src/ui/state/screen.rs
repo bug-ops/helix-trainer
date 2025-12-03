@@ -9,6 +9,57 @@ use crate::game::{Abandoned, Active, Completed, Feedback, GameSession};
 use crate::learning::ScenarioMastery;
 use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 
+/// Maximum number of keys to keep in history
+const KEY_HISTORY_CAPACITY: usize = 5;
+
+/// Shared key history for tracking recent keypresses
+///
+/// Used by both training mode (TaskData) and arcade mode (MiniGameData)
+/// to display recent key presses in the UI. Keeps the last 5 keys
+/// with most recent first.
+#[derive(Debug, Clone, Default)]
+pub struct KeyHistory {
+    /// History of keypresses (most recent first)
+    keys: Vec<String>,
+}
+
+impl KeyHistory {
+    /// Create a new empty key history
+    pub fn new() -> Self {
+        Self {
+            keys: Vec::with_capacity(KEY_HISTORY_CAPACITY),
+        }
+    }
+
+    /// Add a key to the history (keeps last 5, most recent first)
+    pub fn push(&mut self, key: String) {
+        self.keys.insert(0, key);
+        if self.keys.len() > KEY_HISTORY_CAPACITY {
+            self.keys.truncate(KEY_HISTORY_CAPACITY);
+        }
+    }
+
+    /// Clear all key history
+    pub fn clear(&mut self) {
+        self.keys.clear();
+    }
+
+    /// Get the keys as a slice (most recent first)
+    pub fn keys(&self) -> &[String] {
+        &self.keys
+    }
+
+    /// Check if history is empty
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+
+    /// Get the number of keys in history
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+}
+
 /// Screen with associated required data - invalid states unrepresentable
 ///
 /// Each variant contains the exact data needed for that screen, guaranteeing
@@ -99,8 +150,8 @@ pub struct TaskData {
     /// Active game session (guaranteed to exist)
     pub session: GameSession<Active>,
 
-    /// History of last 5 keypresses (most recent first)
-    pub key_history: Vec<String>,
+    /// History of recent keypresses (shared KeyHistory struct)
+    pub key_history: KeyHistory,
 
     /// Current hint being displayed
     pub current_hint: Option<String>,
@@ -120,7 +171,7 @@ impl TaskData {
     pub fn new(session: GameSession<Active>) -> Self {
         Self {
             session,
-            key_history: Vec::with_capacity(5),
+            key_history: KeyHistory::new(),
             current_hint: None,
             show_hint_panel: false,
             command_buffer: String::new(),
@@ -130,13 +181,7 @@ impl TaskData {
 
     /// Add a key to the history (keeps last 5)
     pub fn add_key_to_history(&mut self, key: String) {
-        // Insert at the beginning (most recent first)
-        self.key_history.insert(0, key);
-
-        // Keep only last 5 keys
-        if self.key_history.len() > 5 {
-            self.key_history.truncate(5);
-        }
+        self.key_history.push(key);
     }
 
     /// Clear key history
@@ -273,20 +318,14 @@ pub struct MiniGameData {
     pub command_buffer: String,
     /// Last XP earned (for popup display during transition)
     pub last_xp_earned: Option<u64>,
-    /// History of recent key presses (for display)
-    pub key_history: Vec<String>,
+    /// History of recent keypresses (shared KeyHistory struct)
+    pub key_history: KeyHistory,
 }
 
 impl MiniGameData {
     /// Add a key to the history (keeps last 5)
     pub fn add_key_to_history(&mut self, key: String) {
-        // Insert at the beginning (most recent first)
-        self.key_history.insert(0, key);
-
-        // Keep only last 5 keys
-        if self.key_history.len() > 5 {
-            self.key_history.truncate(5);
-        }
+        self.key_history.push(key);
     }
 
     /// Clear key history (called when starting new scenario)
@@ -434,11 +473,11 @@ mod tests {
 
         task_data.add_key_to_history("j".to_string());
         assert_eq!(task_data.key_history.len(), 1);
-        assert_eq!(task_data.key_history[0], "j");
+        assert_eq!(task_data.key_history.keys()[0], "j");
 
         task_data.add_key_to_history("k".to_string());
         assert_eq!(task_data.key_history.len(), 2);
-        assert_eq!(task_data.key_history[0], "k"); // Most recent first
+        assert_eq!(task_data.key_history.keys()[0], "k"); // Most recent first
 
         task_data.clear_key_history();
         assert!(task_data.key_history.is_empty());
@@ -484,8 +523,8 @@ mod tests {
 
         // Should only keep last 5
         assert_eq!(task_data.key_history.len(), 5);
-        assert_eq!(task_data.key_history[0], "key6"); // Most recent
-        assert_eq!(task_data.key_history[4], "key2");
+        assert_eq!(task_data.key_history.keys()[0], "key6"); // Most recent
+        assert_eq!(task_data.key_history.keys()[4], "key2");
     }
 
     #[test]

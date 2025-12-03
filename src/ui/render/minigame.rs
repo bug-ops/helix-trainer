@@ -32,7 +32,7 @@ pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
     } else if session.state().is_playing() {
         render_playing(frame, area, session);
         // Show key history during gameplay
-        super::popups::render_key_history_popup(frame, &minigame_data.key_history);
+        super::popups::render_key_history_popup(frame, minigame_data.key_history.keys());
     } else if session.state().is_transition() {
         render_transition(frame, area, session, minigame_data.last_xp_earned);
     } else if session.state().is_paused() {

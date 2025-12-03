@@ -4,13 +4,14 @@
 //! from AppState, improving code organization and maintainability.
 
 use crate::config::{Difficulty, ScenarioCategory, ScenarioCollection, SortMode};
+use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use super::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 use crate::ui::notification::NotificationQueue;
@@ -199,10 +200,10 @@ impl ProgressState {
         }
     }
 
-    /// Check if enough time has passed since last save (5 seconds)
+    /// Check if enough time has passed since last save
     pub fn should_save(&self) -> bool {
         match self.last_save_time {
-            Some(last) => last.elapsed() >= Duration::from_secs(5),
+            Some(last) => last.elapsed() >= PROFILE_SAVE_DEBOUNCE,
             None => true,
         }
     }

@@ -3,6 +3,11 @@
 use chrono::{DateTime, Utc};
 
 use super::{GamificationError, Result, UserProfile};
+use crate::constants::{
+    MILESTONE_7_DAY_XP, MILESTONE_30_DAY_XP, MILESTONE_90_DAY_XP, MILESTONE_365_DAY_XP,
+    QUESTS_FOR_STREAK_FREEZE, STREAK_MILESTONE_MONTH, STREAK_MILESTONE_QUARTER,
+    STREAK_MILESTONE_WEEK, STREAK_MILESTONE_YEAR,
+};
 
 /// Streak change event
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,9 +115,10 @@ impl StreakManager {
 
     /// Check if user should be granted a freeze
     ///
-    /// Grants freeze once per week if 5+ quests completed in a day
+    /// Grants freeze once per week if enough quests completed in a day
     pub fn check_freeze_eligibility(profile: &UserProfile) -> bool {
-        !profile.streak_freeze_available && profile.completed_quests_today.len() >= 5
+        !profile.streak_freeze_available
+            && profile.completed_quests_today.len() >= QUESTS_FOR_STREAK_FREEZE as usize
     }
 
     /// Calculate days between two dates
@@ -121,11 +127,12 @@ impl StreakManager {
     }
 
     /// Check if streak milestone reached
-    ///
-    /// Milestones: 7, 30, 90, 365 days
     pub fn milestone_reached(streak: u32) -> Option<u32> {
         match streak {
-            7 | 30 | 90 | 365 => Some(streak),
+            s if s == STREAK_MILESTONE_WEEK => Some(s),
+            s if s == STREAK_MILESTONE_MONTH => Some(s),
+            s if s == STREAK_MILESTONE_QUARTER => Some(s),
+            s if s == STREAK_MILESTONE_YEAR => Some(s),
             _ => None,
         }
     }
@@ -133,10 +140,10 @@ impl StreakManager {
     /// Calculate XP bonus for streak milestone
     pub fn milestone_xp_bonus(streak: u32) -> u64 {
         match streak {
-            7 => 50,
-            30 => 200,
-            90 => 500,
-            365 => 2000,
+            s if s == STREAK_MILESTONE_WEEK => MILESTONE_7_DAY_XP,
+            s if s == STREAK_MILESTONE_MONTH => MILESTONE_30_DAY_XP,
+            s if s == STREAK_MILESTONE_QUARTER => MILESTONE_90_DAY_XP,
+            s if s == STREAK_MILESTONE_YEAR => MILESTONE_365_DAY_XP,
             _ => 0,
         }
     }

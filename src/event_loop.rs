@@ -7,11 +7,11 @@ use crossterm::event::{Event, EventStream, KeyCode, KeyModifiers};
 use futures::StreamExt;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
-use std::time::Duration;
 use tokio::sync::mpsc;
 
 use helix_trainer::{
     async_state::DataLoadMessage,
+    constants::{ANIMATION_TICK_INTERVAL, COUNTDOWN_TICK_INTERVAL, SUCCESS_SCREEN_DELAY},
     ui::{self, AppState, Message},
 };
 
@@ -73,11 +73,11 @@ pub async fn run_async_event_loop(
     // Create event stream from crossterm
     let mut event_stream = EventStream::new();
 
-    // Tick interval for animations and mini-game (100ms)
-    let mut tick_interval = tokio::time::interval(Duration::from_millis(100));
+    // Tick interval for animations and mini-game
+    let mut tick_interval = tokio::time::interval(ANIMATION_TICK_INTERVAL);
 
-    // Countdown tick interval for mini-game (1 second)
-    let mut countdown_tick_interval = tokio::time::interval(Duration::from_secs(1));
+    // Countdown tick interval for mini-game
+    let mut countdown_tick_interval = tokio::time::interval(COUNTDOWN_TICK_INTERVAL);
 
     loop {
         // Render the current state
@@ -90,7 +90,7 @@ pub async fn run_async_event_loop(
 
         // Check if scenario completed and delay elapsed
         if let Some(completion_time) = state.ui.completion_time
-            && completion_time.elapsed() >= Duration::from_millis(1500)
+            && completion_time.elapsed() >= SUCCESS_SCREEN_DELAY
         {
             tracing::debug!("Success screen delay elapsed, transitioning to results");
             ui::update(state, Message::CompleteScenario)?;

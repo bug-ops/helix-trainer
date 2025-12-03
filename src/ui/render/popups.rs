@@ -1,6 +1,10 @@
 //! Popup rendering (hints, success, key history, notifications)
 
 use super::helpers::{centered_popup, inner_rect, popup_block};
+use crate::constants::{
+    BIG_TEXT_CHAR_WIDTH_CELLS, BIG_TEXT_HEIGHT_LINES, HINT_POPUP_MAX_HEIGHT, HINT_POPUP_MAX_WIDTH,
+    KEY_HISTORY_DISPLAY_SIZE, KEY_HISTORY_MIN_WIDTH,
+};
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
@@ -22,8 +26,8 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
     // Calculate popup dimensions with constraints
-    let popup_width = 70.min(area.width.saturating_sub(4));
-    let popup_height = 10.min(area.height.saturating_sub(4));
+    let popup_width = HINT_POPUP_MAX_WIDTH.min(area.width.saturating_sub(4));
+    let popup_height = HINT_POPUP_MAX_HEIGHT.min(area.height.saturating_sub(4));
 
     // Create centered popup area
     let popup_area = centered_popup(area, popup_width, popup_height);
@@ -56,12 +60,13 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String]
 
     let area = frame.area();
 
-    // Show last 5 keys
-    let max_keys = 5;
-
     // Build text from recent keys
     let mut key_text = String::new();
-    for (idx, key) in key_history.iter().take(max_keys).enumerate() {
+    for (idx, key) in key_history
+        .iter()
+        .take(KEY_HISTORY_DISPLAY_SIZE)
+        .enumerate()
+    {
         if idx > 0 {
             key_text.push(' ');
         }
@@ -71,9 +76,10 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String]
     // Calculate required dimensions before consuming key_text
     // Each character in Full size is approximately 4 cells wide, plus spacing
     let chars_count = key_text.chars().count();
-    let popup_width = ((chars_count * 5).max(30) as u16).min(area.width.saturating_sub(4));
-    let text_height = 8;
-    let popup_height = text_height + 2; // +2 for borders
+    let popup_width =
+        ((chars_count * BIG_TEXT_CHAR_WIDTH_CELLS).max(KEY_HISTORY_MIN_WIDTH as usize) as u16)
+            .min(area.width.saturating_sub(4));
+    let popup_height = BIG_TEXT_HEIGHT_LINES + 2; // +2 for borders
 
     // Create BigText widget with large font and cyan color
     let big_text = BigText::builder()

@@ -1,5 +1,6 @@
 //! Statistics screen rendering
 
+use crate::constants::PROGRESS_BAR_WIDTH;
 use crate::ui::state::AppState;
 use ratatui::{
     Frame,
@@ -129,9 +130,9 @@ fn render_rating_bar(
         0
     };
 
-    // Create horizontal bar (max 20 chars)
-    let filled = (percentage as usize / 5).min(20);
-    let empty = 20 - filled;
+    // Create horizontal progress bar
+    let filled = (percentage as usize * PROGRESS_BAR_WIDTH / 100).min(PROGRESS_BAR_WIDTH);
+    let empty = PROGRESS_BAR_WIDTH - filled;
     let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
 
     lines.push(Line::from(vec![

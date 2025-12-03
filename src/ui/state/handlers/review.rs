@@ -2,6 +2,7 @@
 //!
 //! Handles spaced repetition review sessions
 
+use crate::constants::OPTIMAL_REVIEW_TIME;
 use crate::security::UserError;
 use crate::ui::state::{
     HandlerContext, HandlerOutcome, MenuData, ReviewData, ReviewResult, ReviewSessionState,
@@ -62,12 +63,7 @@ pub fn handle_complete_review_command(
         // Update performance tracker
         {
             let mut tracker = ctx.progress.performance_tracker.borrow_mut();
-            tracker.record_attempt(
-                command,
-                duration,
-                success,
-                std::time::Duration::from_secs(3), // Optimal time
-            );
+            tracker.record_attempt(command, duration, success, OPTIMAL_REVIEW_TIME);
         }
     }
 

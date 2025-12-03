@@ -3,6 +3,13 @@
 //! Manages difficulty scaling and scenario selection for mini-games.
 
 use crate::config::{Difficulty, Scenario};
+use crate::constants::{
+    ADVANCED_TIME_LIMIT, BEGINNER_TIME_LIMIT, DIFFICULTY_DECREASE_THRESHOLD,
+    DIFFICULTY_INCREASE_THRESHOLD, FALLBACK_TIME_LIMIT, INTERMEDIATE_TIME_LIMIT,
+    LEVEL_1_3_TIME_SCALE, LEVEL_4_6_TIME_SCALE, LEVEL_7_10_TIME_SCALE, LEVEL_ADVANCED_MAX,
+    LEVEL_ADVANCED_MIN, LEVEL_BEGINNER_MAX, LEVEL_BEGINNER_MIN, LEVEL_INTERMEDIATE_MAX,
+    LEVEL_INTERMEDIATE_MIN, MIN_RESULTS_FOR_DIFFICULTY_CHANGE, MIN_TIME_SCALE_MULTIPLIER,
+};
 use std::collections::VecDeque;
 use std::time::Duration;
 
@@ -84,25 +91,25 @@ impl DifficultyController {
             && let Some(difficulty) = metadata.difficulty
         {
             match difficulty {
-                Difficulty::Beginner => Duration::from_secs(10),
-                Difficulty::Intermediate => Duration::from_secs(8),
-                Difficulty::Advanced => Duration::from_secs(6),
+                Difficulty::Beginner => BEGINNER_TIME_LIMIT,
+                Difficulty::Intermediate => INTERMEDIATE_TIME_LIMIT,
+                Difficulty::Advanced => ADVANCED_TIME_LIMIT,
             }
         } else {
             // Fallback if no metadata: use medium time
-            Duration::from_secs(8)
+            FALLBACK_TIME_LIMIT
         };
 
         // Scale by current level (level 10 = 80% time, but not less than 50%)
         let scale = match self.level {
-            1..=3 => 1.0,
-            4..=6 => 0.9,
-            7..=10 => 0.8,
-            _ => 0.8, // Shouldn't happen, but safe fallback
+            LEVEL_BEGINNER_MIN..=LEVEL_BEGINNER_MAX => LEVEL_1_3_TIME_SCALE,
+            LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => LEVEL_4_6_TIME_SCALE,
+            LEVEL_ADVANCED_MIN..=LEVEL_ADVANCED_MAX => LEVEL_7_10_TIME_SCALE,
+            _ => LEVEL_7_10_TIME_SCALE, // Shouldn't happen, but safe fallback
         };
 
         let scaled_secs = base.as_secs_f64() * scale;
-        let min_secs = base.as_secs_f64() * 0.5; // Never less than 50%
+        let min_secs = base.as_secs_f64() * MIN_TIME_SCALE_MULTIPLIER;
 
         Duration::from_secs_f64(scaled_secs.max(min_secs))
     }
@@ -187,9 +194,13 @@ impl DifficultyController {
     /// ```
     pub fn available_difficulties(&self) -> Vec<Difficulty> {
         match self.level {
-            1..=3 => vec![Difficulty::Beginner],
-            4..=6 => vec![Difficulty::Beginner, Difficulty::Intermediate],
-            7..=10 => vec![Difficulty::Intermediate, Difficulty::Advanced],
+            LEVEL_BEGINNER_MIN..=LEVEL_BEGINNER_MAX => vec![Difficulty::Beginner],
+            LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => {
+                vec![Difficulty::Beginner, Difficulty::Intermediate]
+            }
+            LEVEL_ADVANCED_MIN..=LEVEL_ADVANCED_MAX => {
+                vec![Difficulty::Intermediate, Difficulty::Advanced]
+            }
             _ => vec![Difficulty::Beginner], // Shouldn't happen
         }
     }
@@ -223,8 +234,8 @@ impl DifficultyController {
             self.recent_results.pop_front();
         }
 
-        // Need at least 5 results to adjust difficulty
-        if self.recent_results.len() < 5 {
+        // Need minimum results to adjust difficulty
+        if self.recent_results.len() < MIN_RESULTS_FOR_DIFFICULTY_CHANGE {
             return;
         }
 
@@ -234,9 +245,9 @@ impl DifficultyController {
         let rate = successes as f64 / total as f64;
 
         // Adjust difficulty based on performance
-        if rate > 0.9 && self.level < 10 {
+        if rate > DIFFICULTY_INCREASE_THRESHOLD && self.level < LEVEL_ADVANCED_MAX {
             self.increase_difficulty();
-        } else if rate < 0.5 && self.level > 1 {
+        } else if rate < DIFFICULTY_DECREASE_THRESHOLD && self.level > LEVEL_BEGINNER_MIN {
             self.decrease_difficulty();
         }
     }
@@ -253,7 +264,7 @@ impl DifficultyController {
     /// assert_eq!(controller.current_level(), 2);
     /// ```
     pub fn increase_difficulty(&mut self) {
-        if self.level < 10 {
+        if self.level < LEVEL_ADVANCED_MAX {
             self.level += 1;
             tracing::info!(new_level = self.level, "Difficulty increased");
         }
@@ -272,7 +283,7 @@ impl DifficultyController {
     /// assert_eq!(controller.current_level(), 4);
     /// ```
     pub fn decrease_difficulty(&mut self) {
-        if self.level > 1 {
+        if self.level > LEVEL_BEGINNER_MIN {
             self.level -= 1;
             tracing::info!(new_level = self.level, "Difficulty decreased");
         }

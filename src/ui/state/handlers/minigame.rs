@@ -1,6 +1,7 @@
 //! Message handlers for mini-game mode (Arcade Mode)
 
 use crate::config::Scenario;
+use crate::constants::{MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER};
 use crate::game::format_key_for_display;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
@@ -119,8 +120,9 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
         }
 
         // Award XP for scenario completion in arcade mode
-        // Base: 15 XP per scenario + 2 XP per streak level (encourages maintaining streaks)
-        let scenario_xp = 15 + (current_streak.saturating_sub(1) * 2) as u64;
+        // Base XP per scenario + bonus per streak level (encourages maintaining streaks)
+        let scenario_xp = MINIGAME_SCENARIO_BASE_XP
+            + (current_streak.saturating_sub(1) as u64 * MINIGAME_STREAK_XP_MULTIPLIER);
         {
             let mut profile = state.progress.profile.borrow_mut();
             profile.add_xp(scenario_xp);

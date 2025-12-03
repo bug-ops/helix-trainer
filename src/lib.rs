@@ -24,6 +24,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 pub mod async_state;
 pub mod config;
+pub mod constants;
 pub mod data_loader;
 pub mod game;
 pub mod gamification;

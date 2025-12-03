@@ -5,6 +5,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use super::{AchievementId, Quest};
+use crate::constants::{
+    MAX_PLAYER_LEVEL, MINIGAME_LEVEL_BONUS_XP, MINIGAME_STREAK_BONUS_DIVISOR,
+    MINIGAME_STREAK_BONUS_MAX_XP, MINIGAME_XP_PER_100_POINTS, SCENARIO_BASE_XP_PER_100_POINTS,
+    XP_LEVEL_FORMULA_BASE, XP_LEVEL_FORMULA_EXPONENT,
+};
 use crate::learning::ScenarioHistory;
 
 /// User profile with progression, streaks, and achievements
@@ -211,7 +216,8 @@ impl XPCalculator {
         if level <= 1 {
             0
         } else {
-            (100.0 * ((level - 1) as f64).powf(1.5)).round() as u64
+            (XP_LEVEL_FORMULA_BASE * ((level - 1) as f64).powf(XP_LEVEL_FORMULA_EXPONENT)).round()
+                as u64
         }
     }
 
@@ -232,7 +238,7 @@ impl XPCalculator {
     pub fn level_from_xp(total_xp: u64) -> u32 {
         // Binary search for level
         let mut low = 1u32;
-        let mut high = 100u32; // Arbitrary max level
+        let mut high = MAX_PLAYER_LEVEL;
 
         while low < high {
             let mid = (low + high).div_ceil(2);
@@ -323,8 +329,8 @@ impl XPCalculator {
     /// assert_eq!(XPCalculator::scenario_xp(100, 0.2), 10); // 50 * 0.2 = 10
     /// ```
     pub fn scenario_xp(score: u32, multiplier: f64) -> u64 {
-        // Base XP: 50 per 100 points
-        let base_xp = (score as u64 * 50) / 100;
+        // Base XP per 100 points scored
+        let base_xp = (score as u64 * SCENARIO_BASE_XP_PER_100_POINTS) / 100;
         (base_xp as f64 * multiplier).round() as u64
     }
 
@@ -356,14 +362,15 @@ impl XPCalculator {
     /// assert_eq!(xp, 100 + 50 + 75); // 100 + 50 + 75 = 225
     /// ```
     pub fn minigame_xp(score: u64, level: u32, best_streak: u32) -> u64 {
-        // Base XP: 1 XP per 100 points
-        let base_xp = score / 100;
+        // Base XP per 100 points scored
+        let base_xp = score / MINIGAME_XP_PER_100_POINTS;
 
-        // Level bonus: 10 XP per level reached
-        let level_bonus = level as u64 * 10;
+        // Level bonus per level reached
+        let level_bonus = level as u64 * MINIGAME_LEVEL_BONUS_XP;
 
-        // Streak bonus: 15 XP per 5 streak achieved
-        let streak_bonus = (best_streak as u64 / 5) * 15;
+        // Streak bonus per streak milestone
+        let streak_bonus =
+            (best_streak as u64 / MINIGAME_STREAK_BONUS_DIVISOR) * MINIGAME_STREAK_BONUS_MAX_XP;
 
         base_xp + level_bonus + streak_bonus
     }

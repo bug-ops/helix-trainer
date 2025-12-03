@@ -130,6 +130,7 @@ pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::DATA_LOADING_TIMEOUT;
 
     // Miri is too slow for async/tokio tests (300+ seconds per test)
     #[tokio::test]
@@ -221,9 +222,7 @@ mod tests {
 
         // Wait for both messages with timeout
         for _ in 0..2 {
-            if let Ok(msg) =
-                tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await
-            {
+            if let Ok(msg) = tokio::time::timeout(DATA_LOADING_TIMEOUT, rx.recv()).await {
                 match msg {
                     Some(DataLoadMessage::ScenariosReady(_))
                     | Some(DataLoadMessage::ScenariosError(_)) => {

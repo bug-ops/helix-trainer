@@ -810,4 +810,71 @@ mod tests {
         // After loading one, queue should still have enough scenarios
         assert!(session.queue().len() >= 2);
     }
+
+    #[test]
+    fn test_handle_command_ge() {
+        // Test that 'ge' command works in minigame session
+        // This is a regression test for the 'ge' command error
+        let scenario = Scenario {
+            id: "test_ge".to_string(),
+            name: "Test ge command".to_string(),
+            description: "Test goto last line".to_string(),
+            setup: Setup {
+                file_content: "line 1\nline 2\nline 3\n".to_string(), // With trailing newline
+                cursor_position: (0, 0),
+            },
+            target: TargetState {
+                file_content: "line 1\nline 2\nline 3\n".to_string(),
+                cursor_position: (2, 0), // After ge, cursor should be on last non-empty line (line 3)
+                selection: None,
+            },
+            solution: Solution {
+                commands: vec!["ge".to_string()],
+                description: "Go to last line".to_string(),
+            },
+            alternatives: vec![],
+            hints: vec![],
+            scoring: ScoringConfig {
+                optimal_count: 1,
+                max_points: 100,
+                tolerance: 0,
+            },
+            metadata: Some(ScenarioMetadata {
+                difficulty: Some(Difficulty::Beginner),
+                ..Default::default()
+            }),
+        };
+
+        let scenarios = Arc::new(vec![scenario]);
+        let mut session = MiniGameSession::new(scenarios);
+
+        // Start and countdown
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(
+            session.state.is_playing(),
+            "Should be playing after countdown"
+        );
+
+        // Execute 'ge' command
+        assert!(
+            session.current_scenario().is_some(),
+            "Current scenario should be set"
+        );
+
+        let result = session.handle_command("ge");
+        assert!(result.is_ok(), "ge command should succeed: {:?}", result);
+
+        // Check that the cursor moved
+        if let Some(scenario) = session.current_scenario() {
+            let state = scenario.current_state();
+            assert_eq!(
+                state.cursor_position().row,
+                2,
+                "Cursor should be on last line (row 2)"
+            );
+        }
+    }
 }

@@ -94,7 +94,10 @@ impl<M: EditorMode> CommandRegistry<M> {
             (cmd.handler)(sim)?;
             Ok(cmd.metadata.mode_change)
         } else {
-            Err(UserError::OperationFailed)
+            Err(UserError::command_failed(format!(
+                "unknown command '{}'",
+                key
+            )))
         }
     }
 

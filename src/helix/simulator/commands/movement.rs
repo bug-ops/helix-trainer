@@ -417,8 +417,36 @@ pub fn goto_first_nonwhitespace<M: EditorMode>(
 }
 
 /// Go to last line of document (Helix 'ge' command)
+///
+/// Moves cursor to the start of the last line with content.
+/// If the document ends with a newline, goes to the line before the empty final line.
 pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let last_line = sim.doc.len_lines().saturating_sub(1);
+    let total_lines = sim.doc.len_lines();
+    let doc_len = sim.doc.len_chars();
+
+    // If document is empty, stay at position 0
+    if doc_len == 0 {
+        sim.selection = Selection::point(0);
+        return Ok(());
+    }
+
+    // Find the last line with content
+    // If the last line is empty (document ends with newline), go to the line before it
+    let mut last_line = total_lines.saturating_sub(1);
+
+    // Check if the last line is empty
+    let last_line_start = sim.doc.line_to_char(last_line);
+    let last_line_len = if last_line + 1 < total_lines {
+        sim.doc.line_to_char(last_line + 1) - last_line_start
+    } else {
+        doc_len - last_line_start
+    };
+
+    // If the last line is empty (0 characters or just a newline position at end), go to previous line
+    if last_line_len == 0 && last_line > 0 {
+        last_line = last_line.saturating_sub(1);
+    }
+
     let line_start = sim.doc.line_to_char(last_line);
     sim.selection = Selection::point(line_start);
     Ok(())

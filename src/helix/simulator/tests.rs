@@ -1629,3 +1629,30 @@ fn test_scenario_repeat_insert_001() {
         "Both lines should have ' Update docs' appended"
     );
 }
+
+#[test]
+fn test_goto_last_line_ge_command() {
+    // Test 'ge' command (goto last line)
+    let mut sim = AnyModeSimulator::new("Line 1\nLine 2\nLine 3\nLast line".to_string());
+
+    // Cursor starts at (0, 0)
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+
+    // Execute 'ge' to go to last line
+    let result = sim.execute_command(CMD_GOTO_LAST_LINE);
+    assert!(result.is_ok(), "ge command should succeed: {:?}", result);
+
+    let state = sim.get_state().unwrap();
+    assert_eq!(
+        state.cursor_position().row,
+        3,
+        "Should be on last line (row 3)"
+    );
+    assert_eq!(
+        state.cursor_position().col,
+        0,
+        "Cursor should be at start of line"
+    );
+}

@@ -2,31 +2,11 @@
 //!
 //! Handles command execution and hint display
 
+use crate::game::format_key_for_display;
 use crate::helix::commands::*;
 use crate::security::UserError;
 use crate::ui::state::{AppState, HandlerOutcome, Message, TypedScreen, update};
 use std::time::Duration;
-
-/// Format a key command for display in key history
-///
-/// Converts internal command names to user-friendly display strings
-fn format_key_for_display(command: &str) -> String {
-    match command {
-        CMD_ARROW_LEFT => "←".to_string(),
-        CMD_ARROW_RIGHT => "→".to_string(),
-        CMD_ARROW_UP => "↑".to_string(),
-        CMD_ARROW_DOWN => "↓".to_string(),
-        CMD_BACKSPACE => "⌫".to_string(),
-        CMD_ESCAPE => "Esc".to_string(),
-        "\n" => "↵".to_string(),
-        " " => "Space".to_string(),
-        cmd if cmd.len() == 1 => cmd.to_string(),
-        cmd => cmd.to_string(),
-    }
-}
-
-// NOTE: parse_command_buffer moved to src/game/command_context.rs
-// Use crate::game::parse_command_buffer instead
 
 /// Process session result and update state accordingly
 ///

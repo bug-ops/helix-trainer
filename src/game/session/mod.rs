@@ -395,39 +395,15 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn new(scenario: Scenario) -> Result<Self, UserError> {
-        // Create initial state from scenario setup
-        let initial_state = EditorState::from_setup(
-            &scenario.setup.file_content,
-            [
-                scenario.setup.cursor_position.0,
-                scenario.setup.cursor_position.1,
-            ],
-        )
-        .map_err(|_| UserError::ScenarioTooComplex)?;
-
-        // Create target state with optional selection
-        let target_state = EditorState::from_target(
-            &scenario.target.file_content,
-            [
-                scenario.target.cursor_position.0,
-                scenario.target.cursor_position.1,
-            ],
-            scenario.target.selection,
-        )
-        .map_err(|_| UserError::ScenarioTooComplex)?;
-
-        // Clone initial state as current state
-        let current_state = initial_state.clone();
-
-        // Initialize Helix simulator from initial state (includes cursor position)
-        let simulator = AnyModeSimulator::from_editor_state(&initial_state);
+        // Use unified ScenarioState helper for initialization
+        let state = crate::game::ScenarioState::from_scenario(&scenario)?;
 
         Ok(Self {
             scenario,
-            initial_state,
-            target_state,
-            current_state,
-            simulator,
+            initial_state: state.initial_state,
+            target_state: state.target_state,
+            current_state: state.current_state,
+            simulator: state.simulator,
             user_actions: Vec::new(),
             started_at: Instant::now(),
             completed_at: None,

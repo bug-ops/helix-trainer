@@ -49,36 +49,14 @@ impl ActiveMiniScenario {
     ///
     /// Returns `UserError` if scenario setup or target state is invalid.
     fn new(scenario: Scenario, time_limit: Duration) -> Result<Self, UserError> {
-        // Create initial state from scenario setup
-        let initial_state = EditorState::from_setup(
-            &scenario.setup.file_content,
-            [
-                scenario.setup.cursor_position.0,
-                scenario.setup.cursor_position.1,
-            ],
-        )
-        .map_err(|_| UserError::ScenarioTooComplex)?;
-
-        // Create target state
-        let target_state = EditorState::from_target(
-            &scenario.target.file_content,
-            [
-                scenario.target.cursor_position.0,
-                scenario.target.cursor_position.1,
-            ],
-            scenario.target.selection,
-        )
-        .map_err(|_| UserError::ScenarioTooComplex)?;
-
-        // Initialize simulator from initial state
-        let simulator = AnyModeSimulator::from_editor_state(&initial_state);
-        let current_state = initial_state.clone();
+        // Use unified ScenarioState helper for initialization
+        let state = crate::game::ScenarioState::from_scenario(&scenario)?;
 
         Ok(Self {
             scenario,
-            simulator,
-            current_state,
-            target_state,
+            simulator: state.simulator,
+            current_state: state.current_state,
+            target_state: state.target_state,
             started_at: Instant::now(),
             time_limit,
             actions: Vec::new(),

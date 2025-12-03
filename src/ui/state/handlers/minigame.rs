@@ -1,6 +1,7 @@
 //! Message handlers for mini-game mode (Arcade Mode)
 
 use crate::config::Scenario;
+use crate::game::format_key_for_display;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
 use crate::ui::state::{AppState, MiniGameData, ModeSelectionData, TypedScreen};
@@ -74,9 +75,9 @@ pub(in crate::ui::state) fn handle_minigame_tick(state: &mut AppState) -> Result
 /// Handles command execution, quest progress updates, and completion detection.
 /// Uses shared quest tracking functions from quests module.
 fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), UserError> {
-    // Record key to history for display
+    // Record key to history for display (using shared formatter)
     if let TypedScreen::MiniGame(ref mut data) = state.screen {
-        data.add_key_to_history(command.to_string());
+        data.add_key_to_history(format_key_for_display(command));
     }
 
     // Snapshot quest completion status before updates

@@ -8,6 +8,7 @@
 //!
 //! Notifications auto-dismiss after a configurable duration (default 3 seconds).
 
+use crate::constants::{DEFAULT_NOTIFICATION_DURATION, MAX_VISIBLE_NOTIFICATIONS};
 use std::time::{Duration, Instant};
 
 /// Type of notification to display
@@ -66,7 +67,7 @@ impl Notification {
         Self {
             notification_type,
             created_at: Instant::now(),
-            duration: Duration::from_secs(3),
+            duration: DEFAULT_NOTIFICATION_DURATION,
         }
     }
 
@@ -167,7 +168,7 @@ impl NotificationQueue {
     pub fn new() -> Self {
         Self {
             notifications: Vec::new(),
-            max_visible: 3, // Show max 3 notifications at once
+            max_visible: MAX_VISIBLE_NOTIFICATIONS,
         }
     }
 

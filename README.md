@@ -60,15 +60,15 @@ Download for your platform from [**Releases**](https://github.com/bug-ops/helix-
 
 ```bash
 # GNU libc (most distributions)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.6-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.6-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.6-x86_64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.4.7-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.4.7-x86_64-unknown-linux-gnu
 ./helix-trainer
 
 # musl (Alpine Linux, static binary)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.6-x86_64-unknown-linux-musl.tar.gz
-tar -xzf helix-trainer-v0.4.6-x86_64-unknown-linux-musl.tar.gz
-cd helix-trainer-v0.4.6-x86_64-unknown-linux-musl
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-x86_64-unknown-linux-musl.tar.gz
+tar -xzf helix-trainer-v0.4.7-x86_64-unknown-linux-musl.tar.gz
+cd helix-trainer-v0.4.7-x86_64-unknown-linux-musl
 ./helix-trainer
 ```
 </details>
@@ -78,15 +78,15 @@ cd helix-trainer-v0.4.6-x86_64-unknown-linux-musl
 
 ```bash
 # GNU libc
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.6-aarch64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.6-aarch64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.6-aarch64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-aarch64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.4.7-aarch64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.4.7-aarch64-unknown-linux-gnu
 ./helix-trainer
 
 # musl
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.6-aarch64-unknown-linux-musl.tar.gz
-tar -xzf helix-trainer-v0.4.6-aarch64-unknown-linux-musl.tar.gz
-cd helix-trainer-v0.4.6-aarch64-unknown-linux-musl
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-aarch64-unknown-linux-musl.tar.gz
+tar -xzf helix-trainer-v0.4.7-aarch64-unknown-linux-musl.tar.gz
+cd helix-trainer-v0.4.7-aarch64-unknown-linux-musl
 ./helix-trainer
 ```
 </details>
@@ -96,15 +96,15 @@ cd helix-trainer-v0.4.6-aarch64-unknown-linux-musl
 
 ```bash
 # Apple Silicon (M1/M2/M3/M4)
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.6-aarch64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.4.6-aarch64-apple-darwin.tar.gz
-cd helix-trainer-v0.4.6-aarch64-apple-darwin
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-aarch64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.4.7-aarch64-apple-darwin.tar.gz
+cd helix-trainer-v0.4.7-aarch64-apple-darwin
 ./helix-trainer
 
 # Intel
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.6-x86_64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.4.6-x86_64-apple-darwin.tar.gz
-cd helix-trainer-v0.4.6-x86_64-apple-darwin
+curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-x86_64-apple-darwin.tar.gz
+tar -xzf helix-trainer-v0.4.7-x86_64-apple-darwin.tar.gz
+cd helix-trainer-v0.4.7-x86_64-apple-darwin
 ./helix-trainer
 ```
 </details>
@@ -113,8 +113,8 @@ cd helix-trainer-v0.4.6-x86_64-apple-darwin
 <summary><b>Windows</b></summary>
 
 Download from [Releases page](https://github.com/bug-ops/helix-trainer/releases/latest):
-- **x86_64**: `helix-trainer-v0.4.6-x86_64-pc-windows-msvc.zip`
-- **ARM64**: `helix-trainer-v0.4.6-aarch64-pc-windows-msvc.zip`
+- **x86_64**: `helix-trainer-v0.4.7-x86_64-pc-windows-msvc.zip`
+- **ARM64**: `helix-trainer-v0.4.7-aarch64-pc-windows-msvc.zip`
 
 Extract and run `helix-trainer.exe`
 </details>
@@ -452,9 +452,9 @@ Licensed under MIT — see [LICENSE](LICENSE) for details.
 
 ```bash
 # Download and run
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.6-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.6-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.6-x86_64-unknown-linux-gnu
+wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf helix-trainer-v0.4.7-x86_64-unknown-linux-gnu.tar.gz
+cd helix-trainer-v0.4.7-x86_64-unknown-linux-gnu
 ./helix-trainer
 ```
 

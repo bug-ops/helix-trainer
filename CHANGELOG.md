@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7] - 2025-12-03
+
+### Changed
+
+- **Constants Module** — Extracted hardcoded values to `src/constants.rs` (#77)
+  - Centralized timing constants (tick rate, animation delays)
+  - UI dimension constants (key history size, popup dimensions)
+  - Game balance constants (XP values, streak multipliers)
+  - Improved maintainability and configurability
+
+- **Unified Command Handling** — Refactored command parsing between modes (#76)
+  - Shared `CommandContext` trait for training and arcade modes
+  - Eliminated code duplication in key handling
+  - Consistent behavior across all game modes
+
+### Fixed
+
+- **Match Mode Multi-Key Handling** — Added `m` prefix to multi-key commands (#75)
+  - `mm` now correctly detected as partial command (was incorrectly treating `m` as complete)
+  - Fixes issue where Match Mode was not accessible in certain contexts
+
 ## [0.4.6] - 2025-12-02
 
 ### Added
@@ -798,7 +819,10 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/bug-ops/helix-trainer/compare/v0.4.6...v0.4.7
+[0.4.6]: https://github.com/bug-ops/helix-trainer/compare/v0.4.5...v0.4.6
+[0.4.5]: https://github.com/bug-ops/helix-trainer/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/bug-ops/helix-trainer/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/bug-ops/helix-trainer/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/bug-ops/helix-trainer/compare/v0.4.1...v0.4.2

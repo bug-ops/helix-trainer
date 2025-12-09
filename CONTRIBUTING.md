@@ -12,7 +12,21 @@ We follow a strict PR-based workflow. All changes go through:
 4. Code review
 5. Merge only when green
 
-### Pre-Commit Checks
+## Quick Start
+
+```bash
+# Clone repository
+git clone https://github.com/bug-ops/helix-trainer.git
+cd helix-trainer
+
+# Create feature branch
+git checkout -b feature/amazing-feature
+```
+
+## Pre-Commit Checks
+
+> [!IMPORTANT]
+> All PRs must pass these checks. CI enforces them automatically with zero tolerance for warnings.
 
 **Always run before pushing:**
 
@@ -30,75 +44,86 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo build --release
 ```
 
-With sccache configured, rebuilds are 5x faster (~10s vs ~54s).
+> [!TIP]
+> With sccache configured, rebuilds are 5x faster (~10s vs ~54s).
 
-### Quick Guidelines
+## Commit Guidelines
 
-- Fork the repository
-- Create feature branch (`git checkout -b feature/amazing-feature`)
-- Make changes and add tests
-- Run full check pipeline
-- Commit with conventional commits (`feat:`, `fix:`, `docs:`)
-- Push and create Pull Request
-- Wait for CI checks to pass
+We use [Conventional Commits](https://www.conventionalcommits.org/):
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+| Prefix | Purpose | Example |
+|--------|---------|---------|
+| `feat:` | New feature | `feat: add streak multiplier` |
+| `fix:` | Bug fix | `fix: correct XP calculation` |
+| `docs:` | Documentation | `docs: update installation guide` |
+| `refactor:` | Code refactoring | `refactor: simplify command handler` |
+| `test:` | Add/update tests | `test: add fsrs scheduler tests` |
+| `chore:` | Maintenance | `chore: update dependencies` |
+| `ci:` | CI/CD changes | `ci: add ARM64 builds` |
 
-</details>
+## Pull Request Process
 
----
+1. Ensure all checks pass locally
+2. Update documentation if needed
+3. Add tests for new functionality
+4. Write a clear PR description
+5. Link related issues
+6. Wait for CI to pass
+7. Request review
 
-## Releases
+## Code Style
 
-### Download Latest Release
+- Follow idiomatic Rust patterns
+- Use `rustfmt` with nightly (enforced by CI)
+- Keep functions focused and small
+- Prefer explicit error handling over `.unwrap()`
+- Add doc comments for public APIs
 
-**Latest version**: [v0.1.0](https://github.com/bug-ops/helix-trainer/releases/latest) (Phase 1 - Smart Learning & Gamification)
+> [!CAUTION]
+> No `unsafe` code without explicit justification and approval.
 
-**Supported Platforms**:
+## Adding Scenarios
 
-- Linux x86_64 (GNU and musl)
-- Linux ARM64 (aarch64 GNU and musl)
-- macOS x86_64 (Intel)
-- macOS ARM64 (Apple Silicon M1/M2/M3)
-- Windows x86_64
-- Windows ARM64
+Scenarios are defined in `scenarios/en/*.toml`. Each scenario must have:
 
-Each release includes:
+```toml
+[[scenarios]]
+id = "unique_id"
+name = "Human readable name"
+description = "Clear description of what to achieve"
 
-- Pre-built binary
-- README and documentation
-- LICENSE file
-- CHANGELOG with release notes
-- SHA256 checksums for verification
+[scenarios.setup]
+file_content = "initial text"
+cursor_position = [0, 0]
 
-**Release Schedule**: We follow semantic versioning (MAJOR.MINOR.PATCH)
+[scenarios.target]
+file_content = "expected result"
+cursor_position = [0, 0]
 
-- Major releases: Breaking changes or major new features
-- Minor releases: New features, backward compatible
-- Patch releases: Bug fixes and improvements
+[scenarios.solution]
+commands = ["command", "sequence"]
 
-See [CHANGELOG.md](CHANGELOG.md) for detailed release history.
+[scenarios.metadata]
+category = "Movement"  # Movement, Editing, Clipboard, Selection, Search, Advanced
+difficulty = "Beginner"  # Beginner, Intermediate, Advanced
+tags = ["relevant", "tags"]
+commands_taught = ["w", "e"]
+```
 
-### Creating a Release (Maintainers)
+Run `cargo nextest run scenario` to validate all scenarios.
 
-Releases are automated via GitHub Actions:
+## Testing
 
-1. Update version in `Cargo.toml`
-2. Update `CHANGELOG.md` with release notes
-3. Commit changes: `git commit -m "chore: prepare v0.2.0 release"`
-4. Create and push tag: `git tag v0.2.0 && git push origin v0.2.0`
-5. GitHub Actions will automatically:
-   - Validate version consistency
-   - Build binaries for all platforms
-   - Generate SHA256 checksums
-   - Create GitHub release
-   - Upload all artifacts
+- Unit tests: `cargo nextest run`
+- Specific test: `cargo nextest run test_name`
+- With coverage: `cargo llvm-cov`
 
-**Workflow**: `.github/workflows/release.yml`
+## Getting Help
 
----
+- Open an [issue](https://github.com/bug-ops/helix-trainer/issues) for bugs or feature requests
+- Check existing issues before creating new ones
+- Use discussion threads for questions
 
-## Documentation
+## License
 
-- [CHANGELOG.md](CHANGELOG.md) - Release history and version notes
-- [CLAUDE.md](CLAUDE.md) - Project overview, tech stack, development workflow
+By contributing, you agree that your contributions will be licensed under the MIT License.

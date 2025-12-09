@@ -13,40 +13,36 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 > [!IMPORTANT]
 > **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in `~/.config/helix-trainer/`
 
-<!-- Demo GIF/screenshot will go here -->
-> 🎬 **Demo GIF coming soon** — Watch training in action with mastery tracking, daily quests, and real-time feedback
+## Features
 
----
+### Smart Learning System
 
-## ✨ Features
+- **FSRS Spaced Repetition** — 20-30% fewer reviews than traditional methods (research-proven)
+- **Interactive Review Sessions** — Practice due commands with instant feedback and XP rewards
+- **Scenario Mastery Tracking** — Three-tier progression (Learning → Proficient → Mastered) with graduated XP scaling
+- **Daily Quest System** — Duolingo-style challenges with streak tracking
+- **Anti-Farming Protection** — Session penalties prevent XP exploitation
+- **Profile & Statistics** — Track your progress, view mastery levels, and see performance analytics
 
-### 🎓 Smart Learning System (Phase 1 Complete!)
-- 🧠 **FSRS Spaced Repetition** — 20-30% fewer reviews than traditional methods (research-proven)
-- 🎯 **Interactive Review Sessions** — Practice due commands with instant feedback and XP rewards
-- 📊 **Scenario Mastery Tracking** — Three-tier progression (Learning → Proficient → Mastered) with graduated XP scaling
-- 🔥 **Daily Quest System** — Duolingo-style challenges with streak tracking
-- 🛡️ **Anti-Farming Protection** — Session penalties prevent XP exploitation
-- 📈 **Profile & Statistics** — Track your progress, view mastery levels, and see performance analytics
+### Mini-Games Mode
 
-### 🎮 Mini-Games Mode (NEW in v0.4.1!)
-- ⏱️ **Arcade Training** — 60-second timed sessions with automatic scenario progression
-- 🔥 **Streak Multiplier** — Build combos up to 5x for consecutive completions
-- ❤️ **Lives System** — Start with 3 lives, earn bonus lives at score milestones
-- 🎯 **XP Integration** — Per-scenario XP awards with streak bonuses
-- ⏸️ **Pause & Resume** — Access profile/stats mid-game
+- **Arcade Training** — 60-second timed sessions with automatic scenario progression
+- **Streak Multiplier** — Build combos up to 5x for consecutive completions
+- **Lives System** — Start with 3 lives, earn bonus lives at score milestones
+- **XP Integration** — Per-scenario XP awards with streak bonuses
+- **Pause & Resume** — Access profile/stats mid-game
 
-### 🎓 Training Features
-- 🔍 **Smart Scenario Discovery** — Filter by category, difficulty, commands, or completion status with 6 sort modes
-- 📋 **Rich Metadata** — Every scenario tagged with category, difficulty, taught commands, and practice focus
-- ⚡ **Real Helix Accuracy** — Uses official `helix-core` library (v25.07.1)
-- 🎮 **45+ Commands** — Movement, editing, clipboard, undo/redo, repeat
-- 📚 **78 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
-- 🎯 **55 Daily Quests** — Easy, medium, and hard challenges across all commands
-- 🔒 **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
+### Training Features
 
----
+- **Smart Scenario Discovery** — Filter by category, difficulty, commands, or completion status with 6 sort modes
+- **Rich Metadata** — Every scenario tagged with category, difficulty, taught commands, and practice focus
+- **Real Helix Accuracy** — Uses official `helix-core` library (v25.07.1)
+- **45+ Commands** — Movement, editing, clipboard, undo/redo, repeat
+- **78 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
+- **55 Daily Quests** — Easy, medium, and hard challenges across all commands
+- **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
 
-## 📦 Installation
+## Installation
 
 > [!NOTE]
 > **Requirements**: Terminal with Unicode support. No additional dependencies needed for pre-built binaries.
@@ -71,6 +67,7 @@ tar -xzf helix-trainer-v0.4.7-x86_64-unknown-linux-musl.tar.gz
 cd helix-trainer-v0.4.7-x86_64-unknown-linux-musl
 ./helix-trainer
 ```
+
 </details>
 
 <details>
@@ -89,6 +86,7 @@ tar -xzf helix-trainer-v0.4.7-aarch64-unknown-linux-musl.tar.gz
 cd helix-trainer-v0.4.7-aarch64-unknown-linux-musl
 ./helix-trainer
 ```
+
 </details>
 
 <details>
@@ -107,12 +105,14 @@ tar -xzf helix-trainer-v0.4.7-x86_64-apple-darwin.tar.gz
 cd helix-trainer-v0.4.7-x86_64-apple-darwin
 ./helix-trainer
 ```
+
 </details>
 
 <details>
 <summary><b>Windows</b></summary>
 
 Download from [Releases page](https://github.com/bug-ops/helix-trainer/releases/latest):
+
 - **x86_64**: `helix-trainer-v0.4.7-x86_64-pc-windows-msvc.zip`
 - **ARM64**: `helix-trainer-v0.4.7-aarch64-pc-windows-msvc.zip`
 
@@ -121,6 +121,7 @@ Extract and run `helix-trainer.exe`
 
 > [!TIP]
 > **Security**: Verify checksums after download to ensure binary integrity:
+>
 > ```bash
 > sha256sum -c helix-trainer-*.sha256
 > ```
@@ -137,9 +138,7 @@ cargo build --release
 ./target/release/helix-trainer
 ```
 
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 helix-trainer
@@ -157,7 +156,7 @@ The interactive TUI will guide you through:
 
 ### Example Training Session
 
-```
+```text
 Main Menu
 ├─ Daily Quests (3 active)
 │  ├─ ✅ Practice: Complete 3 scenarios
@@ -171,9 +170,7 @@ Main Menu
 └─ Statistics
 ```
 
----
-
-## 📚 Commands Supported
+## Commands Supported
 
 | Category | Commands |
 |----------|----------|
@@ -188,18 +185,18 @@ Main Menu
 
 All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
----
-
-## 🎓 Why This Project Exists
+## Why This Project Exists
 
 **Traditional editor tutorials teach commands. Real development requires workflows.**
 
 Most Helix/Vim tutorials:
+
 - Teach `dd` (delete line) in isolation ❌
 - Show `w` (next word) on synthetic text ❌
 - Stop at "congratulations, you know the basics!" ❌
 
 **Real development requires:**
+
 - Navigate to failing test → jump to implementation → fix bug → stage changes → commit ✅
 - Refactor function across 3 files using LSP ✅
 - Debug by jumping between error logs and source code ✅
@@ -228,6 +225,7 @@ Prevents XP farming while ensuring genuine skill development:
 ### 3. Gamification That Works
 
 Duolingo-proven mechanics:
+
 - **Daily quests** with fresh challenges
 - **Streak tracking** with loss aversion
 - **XP & levels** (exponential scaling)
@@ -240,9 +238,7 @@ Duolingo-proven mechanics:
 - No telemetry, tracking, or data collection
 - Your learning stays on your machine
 
----
-
-## 📊 Current Status
+## Current Status
 
 > [!NOTE]
 > **Active Development**: Phase 2.1 (Mini-Games) is complete! The project now includes both deliberate training and arcade modes with full XP/quest integration.
@@ -300,9 +296,7 @@ The flagship feature that makes Helix Trainer unique:
 
 **Why this matters**: Bridges the tutorial → productivity gap that nobody else solves.
 
----
-
-## ⚙️ Technology Stack
+## Technology Stack
 
 | Component | Library | Version |
 |-----------|---------|---------|
@@ -314,6 +308,7 @@ The flagship feature that makes Helix Trainer unique:
 | **Large Text** | [tui-big-text](https://crates.io/crates/tui-big-text) | 0.7 |
 
 **Project Metrics**:
+
 - **Language**: Rust 2024 Edition
 - **MSRV**: 1.85
 - **Lines of Code**: ~18,500 (Rust)
@@ -322,9 +317,7 @@ The flagship feature that makes Helix Trainer unique:
 - **Binary Size**: ~3MB (release mode)
 - **Build Time**: ~1.5-2s (incremental, with sccache)
 
----
-
-## 🤝 Contributing
+## Contributing
 
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
@@ -352,22 +345,19 @@ cargo build --release
 
 With `sccache` configured, rebuilds are 5x faster (~10s incremental).
 
----
-
-## 📄 Documentation
+## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md) — Release history and version notes
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Contribution guidelines
 - [SECURITY.md](SECURITY.md) — Security policy
 
----
-
-## ❓ FAQ
+## FAQ
 
 <details>
 <summary><b>Why not just use <code>:tutor</code> in Helix?</b></summary>
 
 `:tutor` is excellent for one-time learning. Helix Trainer adds:
+
 - Spaced repetition for long-term retention
 - Gamification for daily habit formation
 - Progress tracking and analytics
@@ -400,9 +390,7 @@ After Phase 1 stabilizes (~3 months). We're building the foundation (habits, eng
 Helix-specific. Many commands overlap with Vim, but Helix uses a different selection-first model. For Vim, try OpenVim or VimGenius.
 </details>
 
----
-
-## 🌟 Roadmap
+## Roadmap
 
 > [!NOTE]
 > **Transparent Development**: We prioritize stability over speed. Phase 2's 6-month timeline ensures Phase 1 is battle-tested before adding complexity.
@@ -416,11 +404,10 @@ Helix-specific. Many commands overlap with Vim, but Helix uses a different selec
 | **Phase 3** | 📋 Planned | Workflow simulator (LSP, git, multi-file) |
 | **Phase 4** | 💡 Future | Network effects (multiplayer, scenarios marketplace) |
 
----
-
-## 📈 Success Metrics
+## Success Metrics
 
 We're tracking:
+
 - **80%+ users** practice recommended scenarios (spaced repetition)
 - **70%+ users** complete 1+ quest per day
 - **Average streak**: >7 days
@@ -429,9 +416,7 @@ We're tracking:
 
 Research-backed targets, not arbitrary KPIs.
 
----
-
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Helix Editor](https://helix-editor.com/) — For the amazing modal editor
 - [Ratatui](https://ratatui.rs/) — For the excellent TUI framework
@@ -440,22 +425,6 @@ Research-backed targets, not arbitrary KPIs.
 
 Inspired by vim-tutor, OpenVim, and decades of learning science research.
 
----
-
-## 📝 License
+## License
 
 Licensed under MIT — see [LICENSE](LICENSE) for details.
-
----
-
-## 🚀 Get Started Now
-
-```bash
-# Download and run
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.7-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.7-x86_64-unknown-linux-gnu
-./helix-trainer
-```
-
-The journey from beginner to proficient starts with one practice session. ⌨️

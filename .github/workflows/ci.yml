@@ -284,7 +284,7 @@ jobs:
           cargo bloat --release --crates -n 20 || true
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: helix-trainer-${{ matrix.os }}
           path: |

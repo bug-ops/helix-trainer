@@ -10,6 +10,8 @@
 
 Stop learning commands in isolation. Train real development workflows with FSRS-powered spaced repetition (20-30% faster mastery), daily quests, XP progression, and anti-farming mechanics that ensure genuine skill development.
 
+<img src="assets/main-menu.png" width="600" alt="Main Menu">
+
 > [!IMPORTANT]
 > **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in `~/.config/helix-trainer/`
 
@@ -24,7 +26,11 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 - **Anti-Farming Protection** — Session penalties prevent XP exploitation
 - **Profile & Statistics** — Track your progress, view mastery levels, and see performance analytics
 
+<img src="assets/profile.png" width="600" alt="Player Profile">
+
 ### Mini-Games Mode
+
+<img src="assets/arcade-mode.png" width="600" alt="Arcade Mode">
 
 - **Arcade Training** — 60-second timed sessions with automatic scenario progression
 - **Streak Multiplier** — Build combos up to 5x for consecutive completions
@@ -191,7 +197,7 @@ All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
 Most Helix/Vim tutorials:
 
-- Teach `dd` (delete line) in isolation ❌
+- Teach `xd` (delete line) in isolation ❌
 - Show `w` (next word) on synthetic text ❌
 - Stop at "congratulations, you know the basics!" ❌
 

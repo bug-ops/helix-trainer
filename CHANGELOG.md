@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-01-06
+
+### Added
+
+- **Code Coverage Integration** — Codecov workflow with coverage reports (#93)
+- **UI Screenshots** — Added visual examples to README (#88)
+- **Comprehensive Test Coverage** — 845 tests (up from ~760)
+  - Handler tests: minigame.rs, scenario.rs, navigation.rs, profile.rs
+  - Render module tests: helpers.rs, editor.rs, screen integration tests
+  - Edge case coverage: Unicode, empty content, small/large terminals
+
+### Changed
+
+- **Architecture Refactoring** — 5-phase cleanup for better maintainability
+  - Phase 1: Eliminate `Rc<RefCell<>>` from ProgressState (#91)
+  - Phase 2: Remove GameState.session duplication (#92)
+  - Phase 3: Standardize error handling with `UserError` (#94)
+  - Phase 4: Introduce Game Service Layer (#95)
+  - Phase 5: Migrate minigame handlers to HandlerContext pattern (#96)
+
+- **CI/CD Improvements**
+  - Removed sccache, kept cargo cache for simplicity (#98)
+  - Merged coverage.yml into main ci.yml workflow
+  - Bumped actions: upload-artifact v6, download-artifact v7, cache v5
+  - Increased Miri job timeout to 90 minutes
+
+- **Documentation**
+  - Improved README structure and content
+  - Reformatted keybindings with `<kbd>` tags
+  - Simplified installation section (removed hardcoded version links)
+
+### Dependencies
+
+- `tokio`: 1.48.0 → 1.49.0
+- `tui-big-text`: 0.7.3 → 0.8.1
+- `toml`: 0.9.8 → 0.9.10
+- `tempfile`: 3.23.0 → 3.24.0
+- `serde_json`: 1.0.145 → 1.0.148
+- `tracing`: 0.1.43 → 0.1.44
+- `criterion`: 0.8.0 → 0.8.1
+
+### Quality
+
+- **Tests**: 845 (was ~760, +85 new tests)
+- **Clippy**: Zero warnings
+- **Architecture**: Cleaner separation of concerns with HandlerContext pattern
+
 ## [0.4.7] - 2025-12-03
 
 ### Changed
@@ -24,8 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Match Mode Multi-Key Handling** — Added `m` prefix to multi-key commands (#75)
-  - `mm` now correctly detected as partial command (was incorrectly treating `m` as complete)
+- **Match Mode Multi-Key Handling** — Added <kbd>m</kbd> prefix to multi-key commands (#75)
+  - <kbd>mm</kbd> now correctly detected as partial command (was incorrectly treating <kbd>m</kbd> as complete)
   - Fixes issue where Match Mode was not accessible in certain contexts
 
 ## [0.4.6] - 2025-12-02
@@ -33,23 +80,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Helix-style Menu Navigation** — Navigate scenario list with vim-like commands
-  - `j`/`k` for up/down movement
-  - `gg` to jump to first item, `G` to jump to last
-  - Count prefixes: `5j` moves 5 items down, `10k` moves 10 up
-  - `15G` or `15gg` jumps directly to item 15
+  - <kbd>j</kbd>/<kbd>k</kbd> for up/down movement
+  - <kbd>gg</kbd> to jump to first item, <kbd>G</kbd> to jump to last
+  - Count prefixes: <kbd>5j</kbd> moves 5 items down, <kbd>10k</kbd> moves 10 up
+  - <kbd>15G</kbd> or <kbd>15gg</kbd> jumps directly to item 15
 
 - **Numeric Count Prefixes for Commands** — Execute commands multiple times
-  - `3h` moves left 3 times, `5j` moves down 5 times
-  - `2w` moves forward 2 words
+  - <kbd>3h</kbd> moves left 3 times, <kbd>5j</kbd> moves down 5 times
+  - <kbd>2w</kbd> moves forward 2 words
   - Counts as single action for scoring (not N separate actions)
 
 ### Fixed
 
-- **Match Mode Implementation** — `m` now correctly enters Match Mode
-  - `mm` jumps to matching bracket (was incorrectly just `m`)
+- **Match Mode Implementation** — <kbd>m</kbd> now correctly enters Match Mode
+  - <kbd>mm</kbd> jumps to matching bracket (was incorrectly just <kbd>m</kbd>)
   - Matches official Helix keymap documentation
 
-- **Count Prefix Scoring** — Commands like `3w` now count as 1 action, not 3
+- **Count Prefix Scoring** — Commands like <kbd>3w</kbd> now count as 1 action, not 3
   - Added `record_action_with_count` method for proper scoring
 
 - **Results Screen Progression Panel** — Improved XP and stats display
@@ -57,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Shows earned XP from scenario (+N) next to total
   - Fixed data source (was reading cleared state)
 
-- **Unified Exit Keymap** — `Ctrl-Q` now works consistently across all screens
+- **Unified Exit Keymap** — <kbd>Ctrl</kbd>-<kbd>Q</kbd> now works consistently across all screens
   - Menu/ModeSelection: exits application
   - Task/Results/Profile/Stats/Review/MiniGame: returns to previous screen
 
@@ -68,19 +115,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Command Registry Architecture** — Type-safe O(1) command dispatch system
   - `CommandRegistry<M>` with mode-specific command registration
   - `CommandMetadata` for rich command documentation (name, key, description, category)
-  - `KeyTrie` for efficient multi-key command resolution (gg, ge, gh, gl, gs)
+  - `KeyTrie` for efficient multi-key command resolution (<kbd>gg</kbd>, <kbd>ge</kbd>, <kbd>gh</kbd>, <kbd>gl</kbd>, <kbd>gs</kbd>)
   - Category-based organization (Movement, Editing, Selection, Clipboard)
   - Compile-time mode safety via PhantomData markers
 
 ### Fixed
 
 - **Cursor display on empty lines** — Use block character (█) instead of space to prevent visual line duplication when cursor is on empty line
-- **Append after word movement** — Fix `append()` to handle forward selections correctly (e + a now works properly)
+- **Append after word movement** — Fix `append()` to handle forward selections correctly (<kbd>e</kbd> + <kbd>a</kbd> now works properly)
 - **Scenario corrections**:
   - `append_mode_001`: Fixed expected content from "hello !world" to "hello! world"
-  - Removed non-existent `G` command (Helix uses `ge` for goto last line)
-  - Removed duplicate `document_end_001` scenario (use `goto_last_line_001` with `ge`)
-  - Updated hints to reference correct `ge` command instead of `G`
+  - Removed non-existent <kbd>G</kbd> command (Helix uses <kbd>ge</kbd> for goto last line)
+  - Removed duplicate `document_end_001` scenario (use `goto_last_line_001` with <kbd>ge</kbd>)
+  - Updated hints to reference correct <kbd>ge</kbd> command instead of <kbd>G</kbd>
 
 ### Changed
 
@@ -108,7 +155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Untried essential command suggestions
 
 - **Repeat Command Enhancement** — Full support for insert mode entry commands
-  - Correctly replay `a`, `A`, `I`, `o`, `O` with proper entry point
+  - Correctly replay <kbd>a</kbd>, <kbd>A</kbd>, <kbd>I</kbd>, <kbd>o</kbd>, <kbd>O</kbd> with proper entry point
   - `entry_command` field in `RepeatableAction::InsertSequence`
 
 ### Changed
@@ -128,7 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 23 redundant tests (3.2% reduction, coverage maintained)
 - Phase/Stage/Iteration comments from documentation
-- Invalid `dd` command references (replaced with `x` + `d` pattern)
+- Invalid <kbd>dd</kbd> command references (replaced with <kbd>x</kbd> + <kbd>d</kbd> pattern)
 
 ### Fixed
 
@@ -167,33 +214,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Expanded Commands** (#52)
 
 - **14 New Commands**: Expanded from 31 to 45+ supported commands
-  - Find/till character: `f`, `F`, `t`, `T` (jump to/before character)
-  - Match brackets: `m` (jump to matching bracket)
-  - Goto commands: `gh` (line start), `gl` (line end), `gs` (first non-whitespace), `ge` (last line)
-  - Selection: `x` (select line), `X` (extend to line), `v` (select mode), `;` (collapse selection)
-  - Case switching: `~` (toggle case)
-  - Delete selection: `d` (delete current selection)
+  - Find/till character: <kbd>f</kbd>, <kbd>F</kbd>, <kbd>t</kbd>, <kbd>T</kbd> (jump to/before character)
+  - Match brackets: <kbd>m</kbd> (jump to matching bracket)
+  - Goto commands: <kbd>gh</kbd> (line start), <kbd>gl</kbd> (line end), <kbd>gs</kbd> (first non-whitespace), <kbd>ge</kbd> (last line)
+  - Selection: <kbd>x</kbd> (select line), <kbd>X</kbd> (extend to line), <kbd>v</kbd> (select mode), <kbd>;</kbd> (collapse selection)
+  - Case switching: <kbd>~</kbd> (toggle case)
+  - Delete selection: <kbd>d</kbd> (delete current selection)
 
 - **New Scenario Files**:
-  - `find-till.toml`: f/F/t/T character search (5 scenarios)
-  - `goto-commands.toml`: gh/gl/gs/ge navigation (4 scenarios)
+  - `find-till.toml`: <kbd>f</kbd>/<kbd>F</kbd>/<kbd>t</kbd>/<kbd>T</kbd> character search (5 scenarios)
+  - `goto-commands.toml`: <kbd>gh</kbd>/<kbd>gl</kbd>/<kbd>gs</kbd>/<kbd>ge</kbd> navigation (4 scenarios)
   - `match-brackets.toml`: bracket matching (4 scenarios)
-  - `line-selection.toml`: x/X line selection (3 scenarios)
+  - `line-selection.toml`: <kbd>x</kbd>/<kbd>X</kbd> line selection (3 scenarios)
 
 ### Changed
 
 - **Helix-correct command behavior**:
-  - `d` now executes immediately as delete selection (not waiting for `dd`)
-  - `x` selects current line only (not including next line)
-  - Idiomatic Helix: use `xd` to delete line (select + delete)
+  - <kbd>d</kbd> now executes immediately as delete selection (not waiting for <kbd>dd</kbd>)
+  - <kbd>x</kbd> selects current line only (not including next line)
+  - Idiomatic Helix: use <kbd>xd</kbd> to delete line (select + delete)
 
 - **Selection visualization**: Selected text now highlighted with blue background
 
 ### Fixed
 
 - Selection not being displayed visually after selection commands
-- `d` command waiting for second `d` instead of executing immediately
-- `x` command selecting two lines instead of one
+- <kbd>d</kbd> command waiting for second <kbd>d</kbd> instead of executing immediately
+- <kbd>x</kbd> command selecting two lines instead of one
 - Selection end boundary including next line when it shouldn't
 
 ## [0.4.1] - 2025-11-30
@@ -203,16 +250,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Expanded Content** (#51)
 
 - **Training Scenarios**: Expanded from 25 to 78 scenarios (3.1x increase)
-  - `basic-movement.toml`: h, j, k, l character navigation (9 scenarios)
-  - `word-basics.toml`: w, b word navigation (7 scenarios)
-  - `line-navigation.toml`: 0, gg line/document navigation (7 scenarios)
+  - `basic-movement.toml`: <kbd>h</kbd>, <kbd>j</kbd>, <kbd>k</kbd>, <kbd>l</kbd> character navigation (9 scenarios)
+  - `word-basics.toml`: <kbd>w</kbd>, <kbd>b</kbd> word navigation (7 scenarios)
+  - `line-navigation.toml`: <kbd>0</kbd>, <kbd>gg</kbd> line/document navigation (7 scenarios)
   - `combined.toml`: multi-key navigation challenges (8 scenarios)
   - `precision.toml`: single-step precision movements (8 scenarios)
-  - `deletion.toml`: x, dd deletion operations (8 scenarios)
+  - `deletion.toml`: <kbd>x</kbd>, <kbd>dd</kbd> deletion operations (8 scenarios)
   - `delete-advanced.toml`: advanced deletion patterns (6 scenarios)
 
 - **Daily Quests**: Expanded from 12 to 55 quest templates (4.6x increase)
-  - Easy (14): Movement commands (h, j, k, l, w, b, 0, gg, G), editing (x, dd, yy)
+  - Easy (14): Movement commands (<kbd>h</kbd>, <kbd>j</kbd>, <kbd>k</kbd>, <kbd>l</kbd>, <kbd>w</kbd>, <kbd>b</kbd>, <kbd>0</kbd>, <kbd>gg</kbd>, <kbd>G</kbd>), editing (<kbd>x</kbd>, <kbd>dd</kbd>, <kbd>yy</kbd>)
   - Medium (23): Word navigation, insert/append modes, clipboard, undo/redo
   - Hard (18): Marathons, speed runs, time challenges, exploration quests
 
@@ -346,10 +393,10 @@ This release introduces a complete async architecture overhaul, making the appli
 ### Fixed
 
 **Esc Key Conflict** (#41)
-- Fixed critical conflict where Esc key was used for both abandoning scenarios and exiting Helix insert mode
-- Changed scenario abandonment from Esc to Ctrl+Q
-- Now users can properly use Esc to exit insert mode (native Helix behavior)
-- Updated UI instructions to show Ctrl-Q instead of Esc
+- Fixed critical conflict where <kbd>Esc</kbd> key was used for both abandoning scenarios and exiting Helix insert mode
+- Changed scenario abandonment from <kbd>Esc</kbd> to <kbd>Ctrl</kbd>+<kbd>Q</kbd>
+- Now users can properly use <kbd>Esc</kbd> to exit insert mode (native Helix behavior)
+- Updated UI instructions to show <kbd>Ctrl</kbd>-<kbd>Q</kbd> instead of <kbd>Esc</kbd>
 
 **FSRS Command Tracking** (#40)
 - Fixed Review Session being non-functional due to missing command tracking
@@ -414,12 +461,12 @@ This release completes Phase 1 of the helix-trainer roadmap by implementing the 
 - Review session screen with progress tracking ("Reviewing 3/5 commands")
 - Command mastery display (Beginner → Intermediate → Advanced → Master)
 - Next review date indicator based on FSRS scheduling
-- Simple MVP interaction: `s` (success), `f` (failed), `Esc` (abandon)
+- Simple MVP interaction: <kbd>s</kbd> (success), <kbd>f</kbd> (failed), <kbd>Esc</kbd> (abandon)
 - Menu integration with yellow badge `[N]` showing count of due reviews
 - XP rewards system:
   - Base: 10 XP per command reviewed
   - Success rate bonus: 0-20 XP (Example: 5 reviews at 80% = 66 XP total)
-- Keyboard shortcuts: Press `r` from menu to start review session
+- Keyboard shortcuts: Press <kbd>r</kbd> from menu to start review session
 
 **Technical Implementation**:
 
@@ -478,17 +525,17 @@ With this release, all Phase 1 components are fully implemented:
 **Phase B: Profile & Statistics Menu Integration**
 
 - Main menu integration for Profile and Statistics screens
-  - Added "View Profile (p)" menu item with keyboard shortcut
-  - Added "Statistics (s)" menu item with keyboard shortcut
+  - Added "View Profile (<kbd>p</kbd>)" menu item with keyboard shortcut
+  - Added "Statistics (<kbd>s</kbd>)" menu item with keyboard shortcut
   - Profile and Statistics now accessible from main menu with arrow navigation
   - Visual separator grouping system options (Profile, Statistics, Quit)
   - Keyboard hints displayed in menu items
 
 - Enhanced navigation
-  - Press 'p' for instant Profile screen access (1-keypress shortcut)
-  - Press 's' for instant Statistics screen access (1-keypress shortcut)
-  - Arrow keys / j/k navigation through all menu items
-  - Number keys (1-9) still work for scenario shortcuts
+  - Press <kbd>p</kbd> for instant Profile screen access (1-keypress shortcut)
+  - Press <kbd>s</kbd> for instant Statistics screen access (1-keypress shortcut)
+  - Arrow keys / <kbd>j</kbd>/<kbd>k</kbd> navigation through all menu items
+  - Number keys (<kbd>1</kbd>-<kbd>9</kbd>) still work for scenario shortcuts
 
 ### Changed
 
@@ -517,7 +564,7 @@ With this release, all Phase 1 components are fully implemented:
   - `ScenarioCollection` with six sort modes (alphabetical, difficulty, category, completion, recent, random)
   - Filter by category (Movement, Editing, Clipboard, Advanced)
   - Filter by difficulty (Beginner, Intermediate, Advanced)
-  - Filter by taught commands (e.g., show all scenarios teaching 'w' or 'dd')
+  - Filter by taught commands (e.g., show all scenarios teaching <kbd>w</kbd> or <kbd>dd</kbd>)
   - Filter by completion status (completed vs. uncompleted)
   - Chainable filters for complex queries
   - 100% backward compatible with existing scenarios (metadata optional)
@@ -556,17 +603,17 @@ With this release, all Phase 1 components are fully implemented:
 
 - Fixed command format in scenarios:
   - Changed multi-key commands from arrays to strings (e.g., `["d", "d"]` → `["dd"]`)
-  - Applies to: `dd`, `gg`, `r_`, and other multi-key sequences
+  - Applies to: <kbd>dd</kbd>, <kbd>gg</kbd>, <kbd>r</kbd>_, and other multi-key sequences
 
 - Fixed repeat command repeatability:
   - Made all printable ASCII characters and space repeatable in `is_repeatable_command()`
-  - Allows replace commands like `r_` to work with repeat (`.`)
+  - Allows replace commands like <kbd>r</kbd>_ to work with repeat (<kbd>.</kbd>)
 
 - Fixed indentation in `repeat_indent_001`:
   - Changed from 4-space to 2-space indentation to match simulator behavior
 
 - Fixed append mode behavior in `append_mode_001`:
-  - Adjusted target content to match actual `e` command behavior (cursor after word, not on last char)
+  - Adjusted target content to match actual <kbd>e</kbd> command behavior (cursor after word, not on last char)
 
 ### Performance
 
@@ -594,22 +641,22 @@ With this release, all Phase 1 components are fully implemented:
   - Moved `hints` arrays from `[scenarios.solution]` to `[[scenarios]]` level in all 11 scenario files
   - Fixed 24 scenarios containing 55 total hints
   - Hints now properly deserialize and display when requested
-- **Hint key conflict**: UI showed `[h: Show Hint]` but `h` is Helix left movement command
-  - Added `?` as primary hint key (intuitive, no conflicts)
-  - Kept `F1` as alternative for accessibility
-  - Handles both `Char('?')` and `Char('/')` + `SHIFT` for cross-platform support
+- **Hint key conflict**: UI showed `[h: Show Hint]` but <kbd>h</kbd> is Helix left movement command
+  - Added <kbd>?</kbd> as primary hint key (intuitive, no conflicts)
+  - Kept <kbd>F1</kbd> as alternative for accessibility
+  - Handles both `Char('?')` and `Char('/')` + <kbd>Shift</kbd> for cross-platform support
   - Updated UI to show `[?: Hint | F1]`
 
 ### Added
 
-- **Hint toggle behavior**: Press `?` to open hint, press again to close (improved UX)
+- **Hint toggle behavior**: Press <kbd>?</kbd> to open hint, press again to close (improved UX)
 - **Cross-platform hint key support**: Properly handles different keyboard layouts and modifier keys
 
 ## [0.1.2] - 2025-11-28
 
 ### Fixed
 
-- Indent/dedent commands (`>`, `<`) not working in TUI (#35)
+- Indent/dedent commands (<kbd>></kbd>, <kbd><</kbd>) not working in TUI (#35)
 
 ## [0.1.1] - 2025-11-28
 
@@ -711,10 +758,10 @@ With this release, all Phase 1 components are fully implemented:
   - Keyboard-driven navigation (Vim-style)
 
 - Helix simulator using official helix-core library (v25.07.1)
-  - 30+ commands: h,j,k,l,w,b,e,0,$,x,dd,i,a,I,A,o,O,r,c,y,p,P,u,U,gg,G,J,>,<
-  - Repeat command (.) for efficient editing workflows
-  - Insert mode with text input, Backspace, arrow keys
-  - Multi-key command buffer (dd, gg)
+  - 30+ commands: <kbd>h</kbd>,<kbd>j</kbd>,<kbd>k</kbd>,<kbd>l</kbd>,<kbd>w</kbd>,<kbd>b</kbd>,<kbd>e</kbd>,<kbd>0</kbd>,<kbd>$</kbd>,<kbd>x</kbd>,<kbd>dd</kbd>,<kbd>i</kbd>,<kbd>a</kbd>,<kbd>I</kbd>,<kbd>A</kbd>,<kbd>o</kbd>,<kbd>O</kbd>,<kbd>r</kbd>,<kbd>c</kbd>,<kbd>y</kbd>,<kbd>p</kbd>,<kbd>P</kbd>,<kbd>u</kbd>,<kbd>U</kbd>,<kbd>gg</kbd>,<kbd>G</kbd>,<kbd>J</kbd>,<kbd>></kbd>,<kbd><</kbd>
+  - Repeat command (<kbd>.</kbd>) for efficient editing workflows
+  - Insert mode with text input, <kbd>Backspace</kbd>, arrow keys
+  - Multi-key command buffer (<kbd>dd</kbd>, <kbd>gg</kbd>)
   - Yank/paste clipboard support
   - Automatic completion detection
   - Cursor and selection visualization
@@ -725,7 +772,7 @@ With this release, all Phase 1 components are fully implemented:
   - Diff highlighting (red/green) in results
   - Action count indicators
   - Performance rating with emoji (Perfect/Excellent/Good/Fair/Poor)
-  - Hint system (F1 key)
+  - Hint system (<kbd>F1</kbd> key)
 
 - TOML scenario system with security validation
   - 20 training scenarios (basic to intermediate)
@@ -819,7 +866,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.7...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.8...HEAD
+[0.4.8]: https://github.com/bug-ops/helix-trainer/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/bug-ops/helix-trainer/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/bug-ops/helix-trainer/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/bug-ops/helix-trainer/compare/v0.4.4...v0.4.5

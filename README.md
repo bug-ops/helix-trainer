@@ -58,80 +58,30 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 
 Download for your platform from [**Releases**](https://github.com/bug-ops/helix-trainer/releases/latest):
 
-<details>
-<summary><b>Linux (x86_64)</b></summary>
+| Platform | Architecture | Archive |
+|----------|--------------|---------|
+| Linux | x86_64 | `helix-trainer-*-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux | x86_64 (static) | `helix-trainer-*-x86_64-unknown-linux-musl.tar.gz` |
+| Linux | ARM64 | `helix-trainer-*-aarch64-unknown-linux-gnu.tar.gz` |
+| Linux | ARM64 (static) | `helix-trainer-*-aarch64-unknown-linux-musl.tar.gz` |
+| macOS | Apple Silicon | `helix-trainer-*-aarch64-apple-darwin.tar.gz` |
+| macOS | Intel | `helix-trainer-*-x86_64-apple-darwin.tar.gz` |
+| Windows | x86_64 | `helix-trainer-*-x86_64-pc-windows-msvc.zip` |
+| Windows | ARM64 | `helix-trainer-*-aarch64-pc-windows-msvc.zip` |
+
+Extract and run:
 
 ```bash
-# GNU libc (most distributions)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-x86_64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.7-x86_64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.7-x86_64-unknown-linux-gnu
+# Linux/macOS
+tar -xzf helix-trainer-*.tar.gz
+cd helix-trainer-*/
 ./helix-trainer
 
-# musl (Alpine Linux, static binary)
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-x86_64-unknown-linux-musl.tar.gz
-tar -xzf helix-trainer-v0.4.7-x86_64-unknown-linux-musl.tar.gz
-cd helix-trainer-v0.4.7-x86_64-unknown-linux-musl
-./helix-trainer
+# Windows: extract .zip and run helix-trainer.exe
 ```
-
-</details>
-
-<details>
-<summary><b>Linux (ARM64/aarch64)</b></summary>
-
-```bash
-# GNU libc
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-aarch64-unknown-linux-gnu.tar.gz
-tar -xzf helix-trainer-v0.4.7-aarch64-unknown-linux-gnu.tar.gz
-cd helix-trainer-v0.4.7-aarch64-unknown-linux-gnu
-./helix-trainer
-
-# musl
-wget https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-aarch64-unknown-linux-musl.tar.gz
-tar -xzf helix-trainer-v0.4.7-aarch64-unknown-linux-musl.tar.gz
-cd helix-trainer-v0.4.7-aarch64-unknown-linux-musl
-./helix-trainer
-```
-
-</details>
-
-<details>
-<summary><b>macOS</b></summary>
-
-```bash
-# Apple Silicon (M1/M2/M3/M4)
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-aarch64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.4.7-aarch64-apple-darwin.tar.gz
-cd helix-trainer-v0.4.7-aarch64-apple-darwin
-./helix-trainer
-
-# Intel
-curl -LO https://github.com/bug-ops/helix-trainer/releases/latest/download/helix-trainer-v0.4.7-x86_64-apple-darwin.tar.gz
-tar -xzf helix-trainer-v0.4.7-x86_64-apple-darwin.tar.gz
-cd helix-trainer-v0.4.7-x86_64-apple-darwin
-./helix-trainer
-```
-
-</details>
-
-<details>
-<summary><b>Windows</b></summary>
-
-Download from [Releases page](https://github.com/bug-ops/helix-trainer/releases/latest):
-
-- **x86_64**: `helix-trainer-v0.4.7-x86_64-pc-windows-msvc.zip`
-- **ARM64**: `helix-trainer-v0.4.7-aarch64-pc-windows-msvc.zip`
-
-Extract and run `helix-trainer.exe`
-</details>
 
 > [!TIP]
-> **Security**: Verify checksums after download to ensure binary integrity:
->
-> ```bash
-> sha256sum -c helix-trainer-*.sha256
-> ```
+> Verify checksums with `sha256sum -c helix-trainer-*.sha256`
 
 ### Build from Source
 
@@ -248,7 +198,7 @@ Duolingo-proven mechanics:
 ## Current Status
 
 > [!NOTE]
-> **Active Development**: Phase 2.1 (Mini-Games) is complete! 645 passing tests, zero clippy warnings.
+> **Active Development**: Phase 2.1 (Mini-Games) is complete! 845 passing tests, zero clippy warnings.
 
 ### Completed
 
@@ -312,8 +262,6 @@ cargo nextest run
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build --release
 ```
-
-With `sccache` configured, rebuilds are 5x faster (~10s incremental).
 
 ## Documentation
 

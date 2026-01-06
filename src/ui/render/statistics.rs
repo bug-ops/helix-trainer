@@ -54,11 +54,10 @@ fn render_statistics_content(frame: &mut Frame, state: &AppState, area: ratatui:
     let inner_area = content_block.inner(area);
     frame.render_widget(content_block, area);
 
-    // Get profile data with scoped borrow
-    let (scenarios_completed, perfect_scenarios) = {
-        let profile = state.progress.profile.borrow();
-        (profile.scenarios_completed, profile.perfect_scenarios)
-    };
+    // Get profile data
+    let profile = &state.progress.profile;
+    let scenarios_completed = profile.scenarios_completed;
+    let perfect_scenarios = profile.perfect_scenarios;
 
     // Calculate performance breakdown
     // For now, we'll use simplified calculations since we don't track all rating types yet
@@ -154,10 +153,8 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(""));
 
     // Get quest data
-    let completed_today = {
-        let profile = state.progress.profile.borrow();
-        profile.daily_quests.iter().filter(|q| q.completed).count()
-    };
+    let profile = &state.progress.profile;
+    let completed_today = profile.daily_quests.iter().filter(|q| q.completed).count();
 
     lines.push(Line::from(vec![
         Span::raw("  Daily Quests Completed: "),
@@ -168,10 +165,9 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     ]));
 
     // Streak information
-    let (current_streak, longest_streak) = {
-        let profile = state.progress.profile.borrow();
-        (profile.current_streak, profile.longest_streak)
-    };
+    let profile = &state.progress.profile;
+    let current_streak = profile.current_streak;
+    let longest_streak = profile.longest_streak;
 
     lines.push(Line::from(vec![
         Span::raw("  Current Streak: "),
@@ -201,10 +197,9 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(""));
 
     // Calculate average score (placeholder - should be tracked properly)
-    let (scenarios_completed, perfect_scenarios) = {
-        let profile = state.progress.profile.borrow();
-        (profile.scenarios_completed, profile.perfect_scenarios)
-    };
+    let profile = &state.progress.profile;
+    let scenarios_completed = profile.scenarios_completed;
+    let perfect_scenarios = profile.perfect_scenarios;
 
     let avg_score = if scenarios_completed > 0 {
         // Rough estimate: perfect = 100%, others average ~75%

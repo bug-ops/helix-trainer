@@ -90,7 +90,7 @@ fn render_review_content(
 
 /// Render command information panel
 fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command: &str) {
-    let tracker = state.progress.performance_tracker.borrow();
+    let tracker = &state.progress.performance_tracker;
     let perf = tracker.get_performance(command);
 
     let mastery_text = if let Some(p) = perf {

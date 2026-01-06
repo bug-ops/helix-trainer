@@ -70,7 +70,7 @@ fn calculate_xp_breakdown(
 /// Returns list of (description, xp) pairs for quests completed during this scenario
 fn collect_quest_bonuses(ctx: &mut HandlerContext<'_>) -> Vec<(String, u64)> {
     let newly_completed_quest_ids: Vec<String> = {
-        let profile = ctx.progress.profile.borrow();
+        let profile = &ctx.progress.profile;
         profile
             .daily_quests
             .iter()
@@ -81,11 +81,10 @@ fn collect_quest_bonuses(ctx: &mut HandlerContext<'_>) -> Vec<(String, u64)> {
 
     let mut quest_bonuses = Vec::new();
     for quest_id in newly_completed_quest_ids {
-        let profile = ctx.progress.profile.borrow();
+        let profile = &ctx.progress.profile;
         if let Some(quest) = profile.daily_quests.iter().find(|q| q.id == quest_id) {
             let description = super::format_quest_description(&quest.quest_type);
             let xp = quest.xp_reward as u64;
-            drop(profile);
             quest_bonuses.push((description, xp));
             ctx.progress.previously_completed_quests.insert(quest_id);
         }
@@ -104,27 +103,21 @@ fn record_scenario_completion(
     let is_perfect = feedback.score == feedback.max_points;
 
     // Award XP to profile
-    let leveled_up = {
-        let mut profile = ctx.progress.profile.borrow_mut();
-        let leveled_up = profile.add_xp(total_xp);
+    let profile = &mut ctx.progress.profile;
+    let leveled_up = profile.add_xp(total_xp);
 
-        // Update counters
-        profile.scenarios_completed += 1;
-        if is_perfect {
-            profile.perfect_scenarios += 1;
-        }
-
-        leveled_up
-    };
+    // Update counters
+    profile.scenarios_completed += 1;
+    if is_perfect {
+        profile.perfect_scenarios += 1;
+    }
 
     // Save profile if leveled up
     if leveled_up {
-        let profile_ref = ctx.progress.profile.borrow();
         ctx.progress
             .storage
-            .save(&profile_ref)
+            .save(&ctx.progress.profile)
             .map_err(|_| UserError::OperationFailed)?;
-        drop(profile_ref);
         ctx.progress.mark_saved();
     }
 
@@ -132,12 +125,10 @@ fn record_scenario_completion(
 
     // Debounced save
     if ctx.progress.should_save() {
-        let profile_ref = ctx.progress.profile.borrow();
         ctx.progress
             .storage
-            .save(&profile_ref)
+            .save(&ctx.progress.profile)
             .map_err(|_| UserError::OperationFailed)?;
-        drop(profile_ref);
         ctx.progress.mark_saved();
     }
 
@@ -149,6 +140,7 @@ fn record_scenario_completion(
         .collect();
 
     ctx.progress.scheduler.record_scenario_commands(
+        &mut ctx.progress.performance_tracker,
         &commands,
         feedback.duration,
         feedback.score > 0,
@@ -213,20 +205,16 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         calculate_xp_breakdown(&feedback, is_first_today);
 
     // Apply mastery scaling and record completion
-    let (actual_xp, mastery_level, mastery_multiplier) = {
-        let mut profile = ctx.progress.profile.borrow_mut();
-        let actual_xp =
-            profile
-                .scenario_history
-                .record_completion(&scenario_id, feedback.score, total_base_xp);
+    let profile = &mut ctx.progress.profile;
+    let actual_xp =
+        profile
+            .scenario_history
+            .record_completion(&scenario_id, feedback.score, total_base_xp);
 
-        // Get mastery info for UI display
-        let completion = profile.scenario_history.get(&scenario_id).unwrap();
-        let mastery_level = completion.mastery_level;
-        let mastery_multiplier = completion.xp_multiplier();
-
-        (actual_xp, mastery_level, mastery_multiplier)
-    };
+    // Get mastery info for UI display
+    let completion = profile.scenario_history.get(&scenario_id).unwrap();
+    let mastery_level = completion.mastery_level;
+    let mastery_multiplier = completion.xp_multiplier();
 
     // Store mastery info for results display
     ctx.ui.scenario_mastery = Some((mastery_level, mastery_multiplier));

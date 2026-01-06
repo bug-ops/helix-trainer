@@ -352,10 +352,7 @@ impl AppState {
             return Ok(());
         }
 
-        {
-            let profile = self.progress.profile.borrow();
-            self.progress.storage.save(&profile)?;
-        }
+        self.progress.storage.save(&self.progress.profile)?;
         self.progress.mark_saved();
 
         Ok(())
@@ -367,10 +364,7 @@ impl AppState {
     ///
     /// Returns error if save operation fails
     pub fn save_profile_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
-        {
-            let profile = self.progress.profile.borrow();
-            self.progress.storage.save(&profile)?;
-        }
+        self.progress.storage.save(&self.progress.profile)?;
         self.progress.mark_saved();
         Ok(())
     }
@@ -1278,7 +1272,7 @@ mod tests {
 
         // Add a CommandPractice quest to profile
         {
-            let mut profile = state.progress.profile.borrow_mut();
+            let profile = &mut state.progress.profile;
             profile.daily_quests.push(Quest::new(
                 "test_x".to_string(),
                 QuestType::CommandPractice {
@@ -1314,7 +1308,7 @@ mod tests {
 
         // Quest should not be completed yet (2/3)
         {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             assert!(!profile.daily_quests[0].is_completed());
         }
 
@@ -1331,7 +1325,7 @@ mod tests {
 
         // Quest should now be completed and bonus XP awarded
         {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             assert!(profile.daily_quests[0].is_completed());
             // XP should be at least the quest reward
             assert!(profile.total_xp >= 25); // Easy CommandPractice = 25 XP
@@ -1347,7 +1341,7 @@ mod tests {
 
         // Add a ScenarioCompletion quest to profile
         {
-            let mut profile = state.progress.profile.borrow_mut();
+            let profile = &mut state.progress.profile;
             profile.daily_quests.push(Quest::new(
                 "test_scenario".to_string(),
                 QuestType::ScenarioCompletion {
@@ -1375,7 +1369,7 @@ mod tests {
 
         // Quest should not be completed yet (1/2)
         {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             assert!(!profile.daily_quests[0].is_completed());
         }
 
@@ -1392,7 +1386,7 @@ mod tests {
 
         // Quest should now be completed
         {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             assert!(profile.daily_quests[0].is_completed());
             // XP should include quest reward
             assert!(profile.total_xp >= 75); // Medium ScenarioCompletion = 75 XP
@@ -1407,13 +1401,13 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         let initial_xp = {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             profile.total_xp
         };
 
         // Add a quest
         {
-            let mut profile = state.progress.profile.borrow_mut();
+            let profile = &mut state.progress.profile;
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
@@ -1439,7 +1433,7 @@ mod tests {
 
         // Check that XP was awarded
         {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             assert_eq!(profile.total_xp, initial_xp + 25); // Easy CommandPractice = 25 XP
             assert!(profile.daily_quests[0].is_completed());
         }
@@ -1454,13 +1448,13 @@ mod tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         let initial_xp = {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             profile.total_xp
         };
 
         // Add an Exploration quest
         {
-            let mut profile = state.progress.profile.borrow_mut();
+            let profile = &mut state.progress.profile;
             profile.daily_quests.push(Quest::new(
                 "test_exploration".to_string(),
                 QuestType::Exploration {
@@ -1495,7 +1489,7 @@ mod tests {
 
         // Not completed yet (2/3)
         {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             assert!(!profile.daily_quests[0].is_completed());
         }
 
@@ -1512,7 +1506,7 @@ mod tests {
 
         // Should be completed now and bonus XP awarded
         {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             assert!(profile.daily_quests[0].is_completed());
             assert_eq!(profile.total_xp, initial_xp + 160); // Hard Exploration = 160 XP
         }
@@ -1573,7 +1567,7 @@ mod tests {
 
         // Add a quest
         {
-            let mut profile = state.progress.profile.borrow_mut();
+            let profile = &mut state.progress.profile;
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
@@ -1615,7 +1609,7 @@ mod tests {
         // Add a quest that will be completed on first scenario
         // In Helix, use 'x' (select_line) for line-based quests
         {
-            let mut profile = state.progress.profile.borrow_mut();
+            let profile = &mut state.progress.profile;
             profile.daily_quests.push(Quest::new(
                 "test_quest".to_string(),
                 QuestType::CommandPractice {
@@ -1657,7 +1651,7 @@ mod tests {
 
         // Quest should be completed (command was tracked during gameplay)
         {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             let quest = &profile.daily_quests[0];
             assert!(
                 quest.is_completed(),
@@ -1691,7 +1685,7 @@ mod tests {
 
         // Even with recorded attempts, FSRS may not schedule reviews immediately
         {
-            let mut tracker = state.progress.performance_tracker.borrow_mut();
+            let tracker = &mut state.progress.performance_tracker;
             tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         }
 

@@ -126,7 +126,7 @@ fn test_abandon_review_session_mid_way() {
 fn test_complete_all_reviews_successfully() {
     let mut state = create_test_app_state_with_reviews(3);
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -144,7 +144,7 @@ fn test_complete_all_reviews_successfully() {
 
     // Verify XP was awarded
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
     assert!(final_xp > initial_xp, "XP should be awarded");
@@ -272,25 +272,23 @@ fn test_performance_tracker_updated() {
         session.current_command.clone().unwrap()
     };
 
-    let attempts_before = {
-        let tracker = state.progress.performance_tracker.borrow();
-        tracker
-            .get_performance(&command)
-            .map(|p| p.attempts)
-            .unwrap_or(0)
-    };
+    let attempts_before = state
+        .progress
+        .performance_tracker
+        .get_performance(&command)
+        .map(|p| p.attempts)
+        .unwrap_or(0);
 
     // Complete review
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     // Performance tracker should have recorded the attempt
-    let attempts_after = {
-        let tracker = state.progress.performance_tracker.borrow();
-        tracker
-            .get_performance(&command)
-            .map(|p| p.attempts)
-            .unwrap_or(0)
-    };
+    let attempts_after = state
+        .progress
+        .performance_tracker
+        .get_performance(&command)
+        .map(|p| p.attempts)
+        .unwrap_or(0);
 
     assert!(
         attempts_after > attempts_before,
@@ -350,7 +348,7 @@ fn test_xp_calculation_base_only() {
     let mut state = create_test_app_state_with_reviews(1);
 
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -358,7 +356,7 @@ fn test_xp_calculation_base_only() {
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -375,7 +373,7 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
     let mut state = create_test_app_state_with_reviews(5);
 
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -387,7 +385,7 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
     }
 
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -404,7 +402,7 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
     let mut state = create_test_app_state_with_reviews(5);
 
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -420,7 +418,7 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
     }
 
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -437,7 +435,7 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
     let mut state = create_test_app_state_with_reviews(4);
 
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -458,7 +456,7 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
     .unwrap();
 
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -475,7 +473,7 @@ fn test_xp_calculation_always_positive() {
     let mut state = create_test_app_state_with_reviews(1);
 
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -487,7 +485,7 @@ fn test_xp_calculation_always_positive() {
     .unwrap();
 
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -506,7 +504,7 @@ fn test_complete_flow_all_successful() {
     let mut state = create_test_app_state_with_reviews(5);
 
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -529,7 +527,7 @@ fn test_complete_flow_all_successful() {
 
     // XP should be awarded
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
     assert_eq!(final_xp - initial_xp, 70); // 5*10 + 20 bonus
@@ -540,7 +538,7 @@ fn test_complete_flow_all_failed() {
     let mut state = create_test_app_state_with_reviews(3);
 
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -560,7 +558,7 @@ fn test_complete_flow_all_failed() {
     assert!(state.game.review_session.is_none());
 
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
     assert_eq!(final_xp - initial_xp, 30); // 3*10 + 0 bonus
@@ -571,7 +569,7 @@ fn test_complete_flow_abandoned_after_partial() {
     let mut state = create_test_app_state_with_reviews(5);
 
     let initial_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 
@@ -589,7 +587,7 @@ fn test_complete_flow_abandoned_after_partial() {
     assert!(state.game.review_session.is_none());
 
     let final_xp = {
-        let profile = state.progress.profile.borrow();
+        let profile = &state.progress.profile;
         profile.total_xp
     };
 

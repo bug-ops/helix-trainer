@@ -1,8 +1,6 @@
 use super::performance::{CommandPerformance, PerformanceTracker};
 use chrono::{DateTime, Utc};
-use std::cell::RefCell;
 use std::collections::BinaryHeap;
-use std::rc::Rc;
 
 /// Review item with priority information
 #[derive(Debug, Clone)]
@@ -37,14 +35,13 @@ impl PartialOrd for ReviewItem {
 }
 
 /// Scheduler for spaced repetition reviews
-pub struct Scheduler {
-    tracker: Rc<RefCell<PerformanceTracker>>,
-}
+#[derive(Debug, Default)]
+pub struct Scheduler;
 
 impl Scheduler {
-    /// Create a new scheduler with shared performance tracker
-    pub fn new(tracker: Rc<RefCell<PerformanceTracker>>) -> Self {
-        Self { tracker }
+    /// Create a new scheduler
+    pub fn new() -> Self {
+        Self
     }
 
     /// Record commands used in a completed scenario
@@ -53,11 +50,13 @@ impl Scheduler {
     /// performance tracker, which enables spaced repetition reviews.
     ///
     /// # Arguments
+    /// * `tracker` - Mutable reference to performance tracker
     /// * `commands` - List of commands used in the scenario
     /// * `total_duration` - Total time taken to complete the scenario
     /// * `success` - Whether the scenario was completed successfully
     pub fn record_scenario_commands(
         &self,
+        tracker: &mut PerformanceTracker,
         commands: &[String],
         total_duration: std::time::Duration,
         success: bool,
@@ -73,7 +72,6 @@ impl Scheduler {
         let optimal_time = avg_duration.mul_f32(0.8);
 
         // Record each unique command
-        let mut tracker = self.tracker.borrow_mut();
         let unique_commands: std::collections::HashSet<_> = commands.iter().collect();
 
         for command in unique_commands {
@@ -82,9 +80,11 @@ impl Scheduler {
     }
 
     /// Get commands that are due for review now
-    pub fn get_due_reviews(&self) -> Vec<String> {
+    ///
+    /// # Arguments
+    /// * `tracker` - Reference to performance tracker
+    pub fn get_due_reviews(&self, tracker: &PerformanceTracker) -> Vec<String> {
         let now = Utc::now();
-        let tracker = self.tracker.borrow();
 
         tracker
             .all_commands()
@@ -104,9 +104,12 @@ impl Scheduler {
     /// Priority is calculated based on:
     /// - How overdue the review is
     /// - Command difficulty
-    pub fn get_review_queue(&self, limit: usize) -> Vec<ReviewItem> {
+    ///
+    /// # Arguments
+    /// * `tracker` - Reference to performance tracker
+    /// * `limit` - Maximum number of items to return
+    pub fn get_review_queue(&self, tracker: &PerformanceTracker, limit: usize) -> Vec<ReviewItem> {
         let now = Utc::now();
-        let tracker = self.tracker.borrow();
 
         // Build priority queue (BinaryHeap is max-heap by default)
         let heap: BinaryHeap<ReviewItem> = tracker
@@ -154,11 +157,16 @@ impl Scheduler {
     /// (weak commands or commands not yet learned).
     ///
     /// # Arguments
+    /// * `tracker` - Reference to performance tracker
     /// * `duration_minutes` - Target session duration
     ///
     /// # Returns
     /// Command IDs to practice (mix of reviews and new/weak commands)
-    pub fn recommend_practice_session(&self, duration_minutes: u32) -> Vec<String> {
+    pub fn recommend_practice_session(
+        &self,
+        tracker: &PerformanceTracker,
+        duration_minutes: u32,
+    ) -> Vec<String> {
         const AVG_SCENARIO_TIME_MINUTES: u32 = 3;
         let max_items = duration_minutes / AVG_SCENARIO_TIME_MINUTES;
 
@@ -167,10 +175,10 @@ impl Scheduler {
         let new_content_count = (max_items - review_count as u32) as usize;
 
         // Get review items (commands due for practice)
-        let review_items = self.get_review_queue(review_count);
+        let review_items = self.get_review_queue(tracker, review_count);
 
         // Get new content (weak commands + untried commands)
-        let new_content = self.get_new_content(new_content_count);
+        let new_content = self.get_new_content(tracker, new_content_count);
 
         // Combine and return
         let mut session: Vec<String> = review_items.into_iter().map(|item| item.id).collect();
@@ -185,16 +193,15 @@ impl Scheduler {
     /// (not yet practiced). Prioritizes weak commands first.
     ///
     /// # Arguments
+    /// * `tracker` - Reference to performance tracker
     /// * `count` - Maximum number of items to return
     ///
     /// # Returns
     /// Command IDs for new/weak content
-    fn get_new_content(&self, count: usize) -> Vec<String> {
+    fn get_new_content(&self, tracker: &PerformanceTracker, count: usize) -> Vec<String> {
         if count == 0 {
             return Vec::new();
         }
-
-        let tracker = self.tracker.borrow();
 
         // Get weak commands (low mastery, high difficulty, or many lapses)
         let weak_commands = tracker.get_weak_commands();
@@ -237,49 +244,35 @@ mod tests {
     use chrono::Duration as ChronoDuration;
     use std::time::Duration;
 
-    fn create_test_tracker() -> Rc<RefCell<PerformanceTracker>> {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+    fn create_test_tracker() -> PerformanceTracker {
+        let mut tracker = PerformanceTracker::new();
 
         // Add some commands with different due dates and difficulties
-        let mut tracker_mut = tracker.borrow_mut();
-        tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker_mut.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
-        tracker_mut.record_attempt("p", Duration::from_secs(4), true, Duration::from_secs(1));
-        drop(tracker_mut);
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
+        tracker.record_attempt("p", Duration::from_secs(4), true, Duration::from_secs(1));
 
         tracker
     }
 
     #[test]
     fn test_get_due_reviews_empty_when_no_overdue() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let scheduler = Scheduler::new(tracker);
+        let tracker = PerformanceTracker::new();
+        let scheduler = Scheduler::new();
 
-        let due = scheduler.get_due_reviews();
+        let due = scheduler.get_due_reviews(&tracker);
         assert!(due.is_empty());
     }
 
     #[test]
     fn test_get_due_reviews_returns_overdue_commands() {
-        let tracker = create_test_tracker();
+        let mut tracker = create_test_tracker();
 
-        // Make one command overdue by setting its due date to the past
-        {
-            let tracker_ref = tracker.borrow();
-            if let Some(perf) = tracker_ref.get_performance("x") {
-                let mut _perf = perf.clone();
-                _perf.due = Utc::now() - ChronoDuration::days(1);
-            }
-        }
-        tracker.borrow_mut().record_attempt(
-            "x",
-            Duration::from_secs(1),
-            true,
-            Duration::from_secs(1),
-        );
+        // Record another attempt to update the command
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let scheduler = Scheduler::new(tracker);
-        let due = scheduler.get_due_reviews();
+        let scheduler = Scheduler::new();
+        let due = scheduler.get_due_reviews(&tracker);
 
         // Note: The actual behavior depends on FSRS scheduling
         // This test verifies the function runs without errors
@@ -313,9 +306,9 @@ mod tests {
     #[test]
     fn test_get_review_queue_returns_limited_items() {
         let tracker = create_test_tracker();
-        let scheduler = Scheduler::new(tracker);
+        let scheduler = Scheduler::new();
 
-        let queue = scheduler.get_review_queue(2);
+        let queue = scheduler.get_review_queue(&tracker, 2);
 
         // Should return at most 2 items
         assert!(queue.len() <= 2);
@@ -323,22 +316,19 @@ mod tests {
 
     #[test]
     fn test_get_review_queue_orders_by_priority() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+        let mut tracker = PerformanceTracker::new();
 
         // Create commands with different priorities
-        {
-            let mut tracker_mut = tracker.borrow_mut();
-            tracker_mut.record_attempt("low", Duration::from_secs(1), true, Duration::from_secs(1));
-            tracker_mut.record_attempt(
-                "high",
-                Duration::from_secs(10),
-                false,
-                Duration::from_secs(1),
-            );
-        }
+        tracker.record_attempt("low", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            "high",
+            Duration::from_secs(10),
+            false,
+            Duration::from_secs(1),
+        );
 
-        let scheduler = Scheduler::new(tracker);
-        let queue = scheduler.get_review_queue(10);
+        let scheduler = Scheduler::new();
+        let queue = scheduler.get_review_queue(&tracker, 10);
 
         // Verify descending priority order
         for i in 1..queue.len() {
@@ -352,9 +342,9 @@ mod tests {
     #[test]
     fn test_recommend_practice_session() {
         let tracker = create_test_tracker();
-        let scheduler = Scheduler::new(tracker);
+        let scheduler = Scheduler::new();
 
-        let session = scheduler.recommend_practice_session(15); // 15 minute session
+        let session = scheduler.recommend_practice_session(&tracker, 15); // 15 minute session
 
         // Should return some items (exact count depends on reviews available)
         assert!(session.len() <= 5); // 15 / 3 = 5 max items
@@ -362,19 +352,16 @@ mod tests {
 
     #[test]
     fn test_recommend_practice_session_mixes_reviews_and_new_content() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+        let mut tracker = PerformanceTracker::new();
 
         // Add some commands with reviews due
-        {
-            let mut tracker_mut = tracker.borrow_mut();
-            tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-            tracker_mut.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
-        }
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
 
-        let scheduler = Scheduler::new(tracker.clone());
+        let scheduler = Scheduler::new();
 
         // Request a 12-minute session (4 items max)
-        let session = scheduler.recommend_practice_session(12);
+        let session = scheduler.recommend_practice_session(&tracker, 12);
 
         // Should have a mix of reviews and new content
         // Max 4 items: 2 reviews + 2 new content
@@ -390,26 +377,17 @@ mod tests {
 
     #[test]
     fn test_get_new_content_returns_weak_and_untried_commands() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+        let mut tracker = PerformanceTracker::new();
 
-        // Add some weak commands (low success rate)
-        {
-            let mut tracker_mut = tracker.borrow_mut();
-            // Make "x" weak by failing it multiple times
-            for _ in 0..5 {
-                tracker_mut.record_attempt(
-                    "x",
-                    Duration::from_secs(10),
-                    false,
-                    Duration::from_secs(1),
-                );
-            }
+        // Make "x" weak by failing it multiple times
+        for _ in 0..5 {
+            tracker.record_attempt("x", Duration::from_secs(10), false, Duration::from_secs(1));
         }
 
-        let scheduler = Scheduler::new(tracker.clone());
+        let scheduler = Scheduler::new();
 
         // Get new content
-        let new_content = scheduler.get_new_content(5);
+        let new_content = scheduler.get_new_content(&tracker, 5);
 
         // Should have up to 5 items
         assert!(new_content.len() <= 5);
@@ -430,10 +408,10 @@ mod tests {
 
     #[test]
     fn test_get_new_content_empty_when_count_zero() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let scheduler = Scheduler::new(tracker);
+        let tracker = PerformanceTracker::new();
+        let scheduler = Scheduler::new();
 
-        let new_content = scheduler.get_new_content(0);
+        let new_content = scheduler.get_new_content(&tracker, 0);
         assert!(new_content.is_empty());
     }
 

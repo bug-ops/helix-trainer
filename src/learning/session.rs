@@ -54,7 +54,7 @@ impl ReviewSession {
     /// use std::rc::Rc;
     ///
     /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-    /// let scheduler = Scheduler::new(Rc::clone(&tracker));
+    /// let scheduler = Scheduler::new();
     /// let session = ReviewSession::new(&scheduler, tracker, 10);
     /// ```
     pub fn new(
@@ -62,7 +62,7 @@ impl ReviewSession {
         tracker: Rc<RefCell<PerformanceTracker>>,
         max_items: usize,
     ) -> Self {
-        let items = scheduler.get_review_queue(max_items);
+        let items = scheduler.get_review_queue(&tracker.borrow(), max_items);
 
         Self {
             items,
@@ -102,7 +102,7 @@ impl ReviewSession {
     /// tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
     /// drop(tracker_mut);
     ///
-    /// let scheduler = Scheduler::new(Rc::clone(&tracker));
+    /// let scheduler = Scheduler::new();
     /// let mut session = ReviewSession::new(&scheduler, tracker, 10);
     ///
     /// if let Some(item) = session.current_item() {
@@ -176,7 +176,7 @@ impl ReviewSession {
     /// tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
     /// drop(tracker_mut);
     ///
-    /// let scheduler = Scheduler::new(Rc::clone(&tracker));
+    /// let scheduler = Scheduler::new();
     /// let mut session = ReviewSession::new(&scheduler, tracker, 10);
     ///
     /// // Review may or may not be due immediately (FSRS schedules based on performance)
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn test_session_creation() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let session = ReviewSession::new(&scheduler, tracker, 10);
 
         assert_eq!(session.current_index, 0);
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn test_current_item_returns_first_item() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
         if !session.items.is_empty() {
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn test_record_and_next_advances_index() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
         if session.current_item().is_some() {
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_record_and_next_stores_result() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
         if let Some(item) = session.current_item() {
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn test_record_and_next_tracks_mastery_changes() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
         if session.current_item().is_some() {
@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn test_is_complete_false_initially() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let session = ReviewSession::new(&scheduler, tracker, 10);
 
         // Session is complete only if there are no items
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn test_is_complete_true_after_all_items() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
         // Complete all items
@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn test_summary_empty_session() {
         let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let session = ReviewSession::new(&scheduler, tracker, 10);
 
         let summary = session.summary();
@@ -384,7 +384,7 @@ mod tests {
             );
         }
 
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
         // If we have items, process exactly 3 (or however many are available)
@@ -414,7 +414,7 @@ mod tests {
     #[test]
     fn test_summary_tracks_mastery_changes() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
         // Complete all reviews
@@ -431,7 +431,7 @@ mod tests {
     #[should_panic(expected = "Cannot record when session is complete")]
     fn test_record_and_next_panics_when_complete() {
         let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, tracker, 10);
 
         // Force session to be complete
@@ -444,7 +444,7 @@ mod tests {
     #[test]
     fn test_multiple_items_progression() {
         let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new(Rc::clone(&tracker));
+        let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 3);
 
         let mut completed = 0;

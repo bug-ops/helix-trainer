@@ -1,7 +1,5 @@
 use super::performance::{MasteryLevel, PerformanceTracker};
 use chrono::{DateTime, Utc};
-use std::cell::RefCell;
-use std::rc::Rc;
 
 /// Summary of mastery distribution across all commands
 #[derive(Debug, Clone)]
@@ -16,18 +14,15 @@ pub struct MasterySummary {
 }
 
 /// Analytics for learning progress and performance insights
-pub struct Analytics {
-    tracker: Rc<RefCell<PerformanceTracker>>,
-}
+#[derive(Debug, Default)]
+pub struct Analytics;
 
 impl Analytics {
-    pub fn new(tracker: Rc<RefCell<PerformanceTracker>>) -> Self {
-        Self { tracker }
-    }
-
     /// Get overall mastery distribution and averages
-    pub fn get_mastery_summary(&self) -> MasterySummary {
-        let tracker = self.tracker.borrow();
+    ///
+    /// # Arguments
+    /// * `tracker` - Reference to performance tracker
+    pub fn get_mastery_summary(tracker: &PerformanceTracker) -> MasterySummary {
         let all_commands = tracker.all_commands();
         let total_commands = all_commands.len();
 
@@ -76,8 +71,14 @@ impl Analytics {
     }
 
     /// Get all commands at a specific mastery level
-    pub fn get_commands_by_mastery(&self, level: MasteryLevel) -> Vec<String> {
-        let tracker = self.tracker.borrow();
+    ///
+    /// # Arguments
+    /// * `tracker` - Reference to performance tracker
+    /// * `level` - Mastery level to filter by
+    pub fn get_commands_by_mastery(
+        tracker: &PerformanceTracker,
+        level: MasteryLevel,
+    ) -> Vec<String> {
         tracker
             .all_commands()
             .iter()
@@ -97,13 +98,20 @@ impl Analytics {
     ///
     /// Note: Currently simulates historical data based on current state.
     /// In production, this would read from stored historical snapshots.
-    pub fn get_progress_over_time(&self, days: u32) -> Vec<(DateTime<Utc>, f64)> {
+    ///
+    /// # Arguments
+    /// * `tracker` - Reference to performance tracker
+    /// * `days` - Number of days to simulate
+    pub fn get_progress_over_time(
+        tracker: &PerformanceTracker,
+        days: u32,
+    ) -> Vec<(DateTime<Utc>, f64)> {
         if days == 0 {
             return Vec::new();
         }
 
         let now = Utc::now();
-        let summary = self.get_mastery_summary();
+        let summary = Self::get_mastery_summary(tracker);
 
         // Simulate historical progress (linear growth for now)
         // In production, this would be actual historical data
@@ -125,10 +133,12 @@ impl Analytics {
     /// - High number of attempts (>= 5)
     /// - Low stability relative to attempts (stability < attempts / 2.0)
     /// - Not at Master level
-    pub fn identify_plateaus(&self) -> Vec<String> {
+    ///
+    /// # Arguments
+    /// * `tracker` - Reference to performance tracker
+    pub fn identify_plateaus(tracker: &PerformanceTracker) -> Vec<String> {
         const MIN_ATTEMPTS: u32 = 5;
 
-        let tracker = self.tracker.borrow();
         tracker
             .all_commands()
             .iter()
@@ -150,13 +160,18 @@ impl Analytics {
     }
 
     /// Get total number of tracked commands
-    pub fn total_commands(&self) -> usize {
-        self.tracker.borrow().all_commands().len()
+    ///
+    /// # Arguments
+    /// * `tracker` - Reference to performance tracker
+    pub fn total_commands(tracker: &PerformanceTracker) -> usize {
+        tracker.all_commands().len()
     }
 
     /// Get average success rate across all commands
-    pub fn avg_success_rate(&self) -> f64 {
-        let tracker = self.tracker.borrow();
+    ///
+    /// # Arguments
+    /// * `tracker` - Reference to performance tracker
+    pub fn avg_success_rate(tracker: &PerformanceTracker) -> f64 {
         let all_commands = tracker.all_commands();
         if all_commands.is_empty() {
             return 0.0;
@@ -178,40 +193,35 @@ mod tests {
     use crate::learning::performance::PerformanceTracker;
     use std::time::Duration;
 
-    fn create_test_tracker() -> Rc<RefCell<PerformanceTracker>> {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+    fn setup_tracker_with_varied_mastery() -> PerformanceTracker {
+        let mut tracker = PerformanceTracker::new();
 
-        // Create commands at different mastery levels
-        {
-            let mut tracker_mut = tracker.borrow_mut();
+        // Beginner: new command, no practice
+        tracker.record_attempt(
+            "beginner1",
+            Duration::from_secs(5),
+            false,
+            Duration::from_secs(1),
+        );
 
-            // Beginner: new command, no practice
-            tracker_mut.record_attempt(
-                "beginner1",
-                Duration::from_secs(5),
-                false,
+        // Intermediate: moderate stability
+        for _ in 0..3 {
+            tracker.record_attempt(
+                "intermediate1",
+                Duration::from_secs(2),
+                true,
                 Duration::from_secs(1),
             );
+        }
 
-            // Intermediate: moderate stability
-            for _ in 0..3 {
-                tracker_mut.record_attempt(
-                    "intermediate1",
-                    Duration::from_secs(2),
-                    true,
-                    Duration::from_secs(1),
-                );
-            }
-
-            // Advanced: high stability
-            for _ in 0..10 {
-                tracker_mut.record_attempt(
-                    "advanced1",
-                    Duration::from_secs(1),
-                    true,
-                    Duration::from_secs(1),
-                );
-            }
+        // Advanced: high stability
+        for _ in 0..10 {
+            tracker.record_attempt(
+                "advanced1",
+                Duration::from_secs(1),
+                true,
+                Duration::from_secs(1),
+            );
         }
 
         tracker
@@ -219,10 +229,9 @@ mod tests {
 
     #[test]
     fn test_mastery_summary_empty_tracker() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let analytics = Analytics::new(tracker);
+        let tracker = PerformanceTracker::new();
 
-        let summary = analytics.get_mastery_summary();
+        let summary = Analytics::get_mastery_summary(&tracker);
         assert_eq!(summary.total_commands, 0);
         assert_eq!(summary.master, 0);
         assert_eq!(summary.advanced, 0);
@@ -234,10 +243,9 @@ mod tests {
 
     #[test]
     fn test_mastery_summary_counts() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
-        let summary = analytics.get_mastery_summary();
+        let summary = Analytics::get_mastery_summary(&tracker);
         assert_eq!(summary.total_commands, 3);
 
         // At least one beginner should exist
@@ -252,10 +260,9 @@ mod tests {
 
     #[test]
     fn test_mastery_summary_averages() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
-        let summary = analytics.get_mastery_summary();
+        let summary = Analytics::get_mastery_summary(&tracker);
 
         // Averages should be within valid ranges
         assert!(summary.avg_stability >= 0.0);
@@ -265,13 +272,13 @@ mod tests {
 
     #[test]
     fn test_get_commands_by_mastery() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
-        let beginners = analytics.get_commands_by_mastery(MasteryLevel::Beginner);
-        let intermediates = analytics.get_commands_by_mastery(MasteryLevel::Intermediate);
-        let advanced = analytics.get_commands_by_mastery(MasteryLevel::Advanced);
-        let masters = analytics.get_commands_by_mastery(MasteryLevel::Master);
+        let beginners = Analytics::get_commands_by_mastery(&tracker, MasteryLevel::Beginner);
+        let intermediates =
+            Analytics::get_commands_by_mastery(&tracker, MasteryLevel::Intermediate);
+        let advanced = Analytics::get_commands_by_mastery(&tracker, MasteryLevel::Advanced);
+        let masters = Analytics::get_commands_by_mastery(&tracker, MasteryLevel::Master);
 
         // Should have at least one beginner
         assert!(!beginners.is_empty());
@@ -283,10 +290,9 @@ mod tests {
 
     #[test]
     fn test_get_commands_by_mastery_specific_level() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
-        let beginners = analytics.get_commands_by_mastery(MasteryLevel::Beginner);
+        let beginners = Analytics::get_commands_by_mastery(&tracker, MasteryLevel::Beginner);
 
         // Verify beginner1 is in the list
         assert!(beginners.contains(&"beginner1".to_string()));
@@ -294,20 +300,18 @@ mod tests {
 
     #[test]
     fn test_progress_over_time_zero_days() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
-        let progress = analytics.get_progress_over_time(0);
+        let progress = Analytics::get_progress_over_time(&tracker, 0);
         assert!(progress.is_empty());
     }
 
     #[test]
     fn test_progress_over_time_generates_points() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
         let days = 7;
-        let progress = analytics.get_progress_over_time(days);
+        let progress = Analytics::get_progress_over_time(&tracker, days);
 
         // Should have days+1 points (including day 0)
         assert_eq!(progress.len(), (days + 1) as usize);
@@ -325,16 +329,15 @@ mod tests {
 
     #[test]
     fn test_progress_over_time_growth() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
-        let progress = analytics.get_progress_over_time(5);
+        let progress = Analytics::get_progress_over_time(&tracker, 5);
 
         // First point should be 0 (simulated start)
         assert_eq!(progress[0].1, 0.0);
 
         // Last point should match current avg stability
-        let summary = analytics.get_mastery_summary();
+        let summary = Analytics::get_mastery_summary(&tracker);
         assert_eq!(progress.last().unwrap().1, summary.avg_stability as f64);
 
         // Values should increase monotonically
@@ -345,43 +348,37 @@ mod tests {
 
     #[test]
     fn test_identify_plateaus_no_plateaus() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let analytics = Analytics::new(tracker);
+        let tracker = PerformanceTracker::new();
 
-        let plateaus = analytics.identify_plateaus();
+        let plateaus = Analytics::identify_plateaus(&tracker);
         assert!(plateaus.is_empty());
     }
 
     #[test]
     fn test_identify_plateaus_detects_stuck_commands() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+        let mut tracker = PerformanceTracker::new();
 
-        {
-            let mut tracker_mut = tracker.borrow_mut();
-
-            // Create a plateau: many attempts but low stability
-            for _ in 0..10 {
-                tracker_mut.record_attempt(
-                    "plateau_cmd",
-                    Duration::from_secs(4), // Hard rating
-                    true,
-                    Duration::from_secs(1),
-                );
-            }
-
-            // Create a good command: many attempts with high stability
-            for _ in 0..10 {
-                tracker_mut.record_attempt(
-                    "good_cmd",
-                    Duration::from_secs(1), // Easy rating
-                    true,
-                    Duration::from_secs(1),
-                );
-            }
+        // Create a plateau: many attempts but low stability
+        for _ in 0..10 {
+            tracker.record_attempt(
+                "plateau_cmd",
+                Duration::from_secs(4), // Hard rating
+                true,
+                Duration::from_secs(1),
+            );
         }
 
-        let analytics = Analytics::new(tracker);
-        let plateaus = analytics.identify_plateaus();
+        // Create a good command: many attempts with high stability
+        for _ in 0..10 {
+            tracker.record_attempt(
+                "good_cmd",
+                Duration::from_secs(1), // Easy rating
+                true,
+                Duration::from_secs(1),
+            );
+        }
+
+        let plateaus = Analytics::identify_plateaus(&tracker);
 
         // plateau_cmd should be detected (struggling despite attempts)
         assert!(plateaus.contains(&"plateau_cmd".to_string()));
@@ -389,24 +386,19 @@ mod tests {
 
     #[test]
     fn test_identify_plateaus_min_attempts() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+        let mut tracker = PerformanceTracker::new();
 
-        {
-            let mut tracker_mut = tracker.borrow_mut();
-
-            // Command with < 5 attempts should not be considered plateau
-            for _ in 0..3 {
-                tracker_mut.record_attempt(
-                    "few_attempts",
-                    Duration::from_secs(10),
-                    false,
-                    Duration::from_secs(1),
-                );
-            }
+        // Command with < 5 attempts should not be considered plateau
+        for _ in 0..3 {
+            tracker.record_attempt(
+                "few_attempts",
+                Duration::from_secs(10),
+                false,
+                Duration::from_secs(1),
+            );
         }
 
-        let analytics = Analytics::new(tracker);
-        let plateaus = analytics.identify_plateaus();
+        let plateaus = Analytics::identify_plateaus(&tracker);
 
         // Should not be detected (too few attempts)
         assert!(plateaus.is_empty());
@@ -414,26 +406,23 @@ mod tests {
 
     #[test]
     fn test_total_commands() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
-        assert_eq!(analytics.total_commands(), 3);
+        assert_eq!(Analytics::total_commands(&tracker), 3);
     }
 
     #[test]
     fn test_avg_success_rate_empty() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let analytics = Analytics::new(tracker);
+        let tracker = PerformanceTracker::new();
 
-        assert_eq!(analytics.avg_success_rate(), 0.0);
+        assert_eq!(Analytics::avg_success_rate(&tracker), 0.0);
     }
 
     #[test]
     fn test_avg_success_rate_calculation() {
-        let tracker = create_test_tracker();
-        let analytics = Analytics::new(tracker);
+        let tracker = setup_tracker_with_varied_mastery();
 
-        let avg_rate = analytics.avg_success_rate();
+        let avg_rate = Analytics::avg_success_rate(&tracker);
 
         // Should be within valid range
         assert!(avg_rate >= 0.0);

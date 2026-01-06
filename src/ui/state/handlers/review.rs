@@ -17,7 +17,10 @@ pub fn handle_start_review_session(
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
     // Get due commands from scheduler
-    let due_commands = ctx.progress.scheduler.get_due_reviews();
+    let due_commands = ctx
+        .progress
+        .scheduler
+        .get_due_reviews(&ctx.progress.performance_tracker);
 
     if due_commands.is_empty() {
         // No reviews due, stay on current screen
@@ -61,10 +64,8 @@ pub fn handle_complete_review_command(
         });
 
         // Update performance tracker
-        {
-            let mut tracker = ctx.progress.performance_tracker.borrow_mut();
-            tracker.record_attempt(command, duration, success, OPTIMAL_REVIEW_TIME);
-        }
+        let tracker = &mut ctx.progress.performance_tracker;
+        tracker.record_attempt(command, duration, success, OPTIMAL_REVIEW_TIME);
     }
 
     // Delegate to next review handler for screen transition logic
@@ -96,10 +97,8 @@ pub fn handle_next_review_command(
 
             // Award XP for review session
             let xp = (completed as u64 * 10) + (success_rate * 20.0) as u64;
-            {
-                let mut profile = ctx.progress.profile.borrow_mut();
-                profile.add_xp(xp);
-            }
+            let profile = &mut ctx.progress.profile;
+            profile.add_xp(xp);
 
             // Clear review session
             ctx.game.review_session = None;

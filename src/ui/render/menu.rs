@@ -41,7 +41,7 @@ fn calculate_menu_scroll(
 /// Returns list of menu items with proper styling and indicators
 fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>> {
     let filtered_scenarios = state.game.scenario_collection.get_filtered();
-    let profile = state.progress.profile.borrow();
+    let profile = &state.progress.profile;
 
     let mut menu_items: Vec<ListItem> = filtered_scenarios
         .iter()
@@ -95,7 +95,11 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
     // Add Review Commands option
     let review_index = scenario_count;
     let review_selected = review_index == selected_item;
-    let due_count = state.progress.scheduler.get_due_reviews().len();
+    let due_count = state
+        .progress
+        .scheduler
+        .get_due_reviews(&state.progress.performance_tracker)
+        .len();
     let review_style = if review_selected {
         Style::default()
             .bg(super::SELECTION_BG_COLOR)
@@ -326,7 +330,7 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
     use crate::gamification::XPCalculator;
 
-    let profile = state.progress.profile.borrow();
+    let profile = &state.progress.profile;
 
     // Calculate XP progress within current level
     let current_level_xp = XPCalculator::xp_for_level(profile.level);
@@ -353,7 +357,7 @@ fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: 
 
 /// Render the quest panel showing daily quests
 fn render_quest_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
-    let profile = state.progress.profile.borrow();
+    let profile = &state.progress.profile;
     let quests = &profile.daily_quests;
 
     let completed_count = quests.iter().filter(|q| q.is_completed()).count();

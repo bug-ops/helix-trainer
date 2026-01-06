@@ -10,6 +10,7 @@
 //! at compile time. See the `mode` module for details.
 
 pub mod commands;
+pub mod find_state;
 mod insert_mode;
 mod mode;
 pub mod search_state;
@@ -29,6 +30,7 @@ use std::marker::PhantomData;
 pub use mode::{EditorMode, InsertMode, NormalMode};
 
 // Re-export state types
+pub use find_state::{FindDirection, FindState, FindType};
 pub use search_state::{SearchDirection, SearchState};
 pub use view_state::ViewState;
 
@@ -91,6 +93,9 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
 
     /// View state for z, zt, zb, zm, zj, zk commands
     pub(super) view_state: ViewState,
+
+    /// Find state for f/F/t/T and Alt-./Alt-, commands
+    pub(super) find_state: FindState,
 
     /// Phantom data for typestate mode marker (zero-cost)
     _mode: PhantomData<M>,
@@ -186,6 +191,7 @@ impl HelixSimulator<NormalMode> {
             repeat_depth: 0,
             search_state: SearchState::new(),
             view_state: ViewState::new(),
+            find_state: FindState::new(),
             _mode: PhantomData,
         }
     }
@@ -230,6 +236,7 @@ impl HelixSimulator<NormalMode> {
             repeat_depth: 0,
             search_state: SearchState::new(),
             view_state: ViewState::new(),
+            find_state: FindState::new(),
             _mode: PhantomData,
         }
     }
@@ -246,6 +253,7 @@ impl HelixSimulator<NormalMode> {
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
             view_state: self.view_state,
+            find_state: self.find_state,
             _mode: PhantomData,
         }
     }
@@ -285,6 +293,7 @@ impl HelixSimulator<InsertMode> {
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
             view_state: self.view_state,
+            find_state: self.find_state,
             _mode: PhantomData,
         }
     }

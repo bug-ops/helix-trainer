@@ -23,6 +23,9 @@ pub const CMD_PAGE_UP: &str = "Ctrl-b";
 pub const CMD_PAGE_DOWN: &str = "Ctrl-f";
 pub const CMD_HALF_PAGE_UP: &str = "Ctrl-u";
 pub const CMD_HALF_PAGE_DOWN: &str = "Ctrl-d";
+pub const CMD_GOTO_PREV_PARAGRAPH: &str = "{";
+pub const CMD_GOTO_NEXT_PARAGRAPH: &str = "}";
+pub const CMD_GOTO_FIRST_NONBLANK: &str = "^";
 
 // Editing commands
 pub const CMD_DELETE_SELECTION: &str = "d";
@@ -60,6 +63,8 @@ pub const CMD_FIND_CHAR: &str = "f";
 pub const CMD_FIND_CHAR_REVERSE: &str = "F";
 pub const CMD_TILL_CHAR: &str = "t";
 pub const CMD_TILL_CHAR_REVERSE: &str = "T";
+pub const CMD_REPEAT_LAST_MOTION: &str = "Alt-.";
+pub const CMD_REPEAT_LAST_MOTION_REVERSE: &str = "Alt-,";
 
 // Selection mode
 pub const CMD_SELECT_MODE: &str = "v";
@@ -112,6 +117,7 @@ pub const CMD_SEARCH_BACKWARD: &str = "?";
 pub const CMD_SEARCH_NEXT: &str = "n";
 pub const CMD_SEARCH_PREV: &str = "N";
 pub const CMD_SEARCH_WORD: &str = "*";
+pub const CMD_SEARCH_WORD_BACKWARD: &str = "#";
 pub const CMD_SEARCH_SELECTION: &str = "Alt-*";
 
 // View mode commands

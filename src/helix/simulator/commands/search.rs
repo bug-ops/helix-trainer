@@ -208,6 +208,63 @@ pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
     Ok(())
 }
 
+/// Search word under cursor backward (# command)
+///
+/// Gets the word at the cursor position and searches backward for it with word boundaries.
+pub fn search_word_under_cursor_backward<M: crate::helix::simulator::EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let slice = sim.doc.slice(..);
+
+    // Find word boundaries around cursor
+    let mut start = head;
+    let mut end = head;
+
+    // Move start backward to word start
+    while start > 0 {
+        if let Some(ch) = slice.get_char(start.saturating_sub(1)) {
+            if ch.is_alphanumeric() || ch == '_' {
+                start -= 1;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    // Move end forward to word end
+    let doc_len = sim.doc.len_chars();
+    while end < doc_len {
+        if let Some(ch) = slice.get_char(end) {
+            if ch.is_alphanumeric() || ch == '_' {
+                end += 1;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    // Extract the word
+    if start < end {
+        let word: String = slice.slice(start..end).chars().collect();
+
+        // Set the search pattern with word boundaries and backward direction
+        if sim
+            .search_state
+            .set_word_pattern(&word, SearchDirection::Backward)
+            .is_ok()
+        {
+            search_prev_match(sim)?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Search selection text (Alt-* command)
 ///
 /// Uses the current selection text as the search pattern without word boundaries.

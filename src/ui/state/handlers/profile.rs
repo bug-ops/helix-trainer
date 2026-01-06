@@ -57,7 +57,7 @@ pub fn handle_award_xp(ctx: &mut HandlerContext<'_>, amount: u64) -> Result<(), 
         ctx.progress
             .storage
             .save(&ctx.progress.profile)
-            .map_err(|_| UserError::OperationFailed)?;
+            .map_err(UserError::from)?;
         ctx.progress.mark_saved();
     }
     Ok(())

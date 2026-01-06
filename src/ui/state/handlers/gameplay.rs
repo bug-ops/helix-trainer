@@ -24,7 +24,7 @@ fn process_session_result(
             Ok(false)
         }
         SessionAfterAction::Completed(s) => {
-            let feedback = s.feedback().map_err(|_| UserError::OperationFailed)?;
+            let feedback = s.feedback().map_err(UserError::from)?;
             state.ui.last_feedback = Some(feedback.clone());
             // Start success animation - keep Task screen, just mark completion time
             // The event loop will transition to Results after 1.5s delay

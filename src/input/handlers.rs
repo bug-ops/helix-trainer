@@ -4,20 +4,23 @@
 //!
 //! # Mode-Safe Key Mapping
 //!
-//! This module uses the typestate-based key mapping system from [`super::modes`].
-//! The legacy wrapper functions (`map_key_to_helix_command`, `handle_insert_mode_input`)
-//! delegate to the type-safe implementations, providing backward compatibility.
+//! This module uses the typestate-based key mapping system from [`super::typestate`].
+//! The convenience functions (`map_key_to_helix_command`, `handle_insert_mode_input`)
+//! provide simple key-to-command mapping.
 //!
-//! For new code that needs explicit mode safety, use the `KeyMapper` trait directly:
+//! For advanced input handling with multi-key sequences, use `InputStateMachine`:
 //!
 //! ```ignore
-//! use super::mapping::{KeyMapping, KeyMapper, NormalModeKeys, InsertModeKeys};
+//! use super::typestate::{InputStateMachine, HandlerResult};
 //!
-//! // Type-safe normal mode mapping
-//! let cmd = <KeyMapping as KeyMapper<NormalModeKeys>>::map_key(key);
-//!
-//! // Type-safe insert mode mapping
-//! let text = <KeyMapping as KeyMapper<InsertModeKeys>>::map_key(key);
+//! let mut state_machine = InputStateMachine::new();
+//! let result = state_machine.process_key(key);
+//! match result {
+//!     HandlerResult::Execute(cmd) => { /* execute command */ }
+//!     HandlerResult::Transition(_) => { /* waiting for more input */ }
+//!     HandlerResult::Cancel => { /* cancelled */ }
+//!     HandlerResult::Stay => { /* no change */ }
+//! }
 //! ```
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -26,7 +29,7 @@ use std::borrow::Cow;
 use helix_trainer::ui::state::CommandBufferAccess;
 use helix_trainer::ui::{AppState, Message, state::TypedScreen};
 
-use super::mapping::{handle_insert_mode_input, map_key_to_helix_command};
+use super::typestate::{handle_insert_mode_input, map_key_to_helix_command};
 
 /// Check if the command buffer is waiting for a character argument
 ///

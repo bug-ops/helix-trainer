@@ -2,18 +2,23 @@
 //!
 //! Converts keyboard events into application messages based on current screen state.
 //!
-//! # Typestate-Based Key Mapping
+//! # Architecture
 //!
-//! This module provides compile-time safe key mapping through the typestate pattern.
-//! Each editor mode has its own marker type, ensuring that key mappings are only
-//! used in the correct context.
+//! Input handling is split into two layers:
 //!
-//! See [`modes`] for the mode marker types and [`mapping`] for the key mapping
-//! implementations.
+//! 1. **Screen handlers** ([`handlers`]) - Route input to the correct screen
+//! 2. **Typestate handlers** ([`typestate`]) - Handle key-to-command mapping with state machine
+//!
+//! # Typestate-Based Input Handling
+//!
+//! The [`typestate`] module provides compile-time guarantees about input state
+//! transitions. It encodes the current input context (base state, waiting for
+//! character argument, building count prefix, etc.) at the type level.
+//!
+//! See [`typestate`] for the state machine implementation.
 
 pub mod handlers;
-pub mod mapping;
-pub mod modes;
+pub mod typestate;
 
 use crossterm::event::KeyEvent;
 

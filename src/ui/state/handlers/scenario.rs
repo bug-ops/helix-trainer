@@ -24,8 +24,8 @@ pub fn handle_start_scenario(
         .cloned()
     {
         let session = GameSession::new(scenario)?;
-        // Create TaskData with the new session
-        let task_data = TaskData::new(session);
+        // Create TaskData with the new session and scenario index for navigation
+        let task_data = TaskData::with_index(session, index);
 
         // Update UI state
         ctx.ui.show_key_history = false;
@@ -249,9 +249,13 @@ pub fn handle_retry_scenario(
         crate::ui::state::CompletedOrAbandoned::Abandoned(session) => session.scenario().clone(),
     };
 
+    // Preserve scenario index for navigation
+    let scenario_index = results_data.scenario_index;
+
     // Create new session with same scenario
     let new_session = GameSession::new(scenario)?;
-    let task_data = TaskData::new(new_session);
+    let mut task_data = TaskData::new(new_session);
+    task_data.scenario_index = scenario_index;
 
     // Reset UI state
     ctx.ui.show_key_history = false;

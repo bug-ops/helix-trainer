@@ -9,6 +9,7 @@ pub mod command_context;
 pub mod editor_state;
 pub mod scenario_state;
 pub mod scorer;
+pub mod services;
 pub mod session;
 
 pub use command_context::{

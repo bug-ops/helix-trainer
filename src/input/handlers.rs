@@ -1,6 +1,24 @@
 //! Screen-specific keyboard event handlers
 //!
 //! Each handler function processes keyboard input for a specific screen.
+//!
+//! # Mode-Safe Key Mapping
+//!
+//! This module uses the typestate-based key mapping system from [`super::modes`].
+//! The legacy wrapper functions (`map_key_to_helix_command`, `handle_insert_mode_input`)
+//! delegate to the type-safe implementations, providing backward compatibility.
+//!
+//! For new code that needs explicit mode safety, use the `KeyMapper` trait directly:
+//!
+//! ```ignore
+//! use super::mapping::{KeyMapping, KeyMapper, NormalModeKeys, InsertModeKeys};
+//!
+//! // Type-safe normal mode mapping
+//! let cmd = <KeyMapping as KeyMapper<NormalModeKeys>>::map_key(key);
+//!
+//! // Type-safe insert mode mapping
+//! let text = <KeyMapping as KeyMapper<InsertModeKeys>>::map_key(key);
+//! ```
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;

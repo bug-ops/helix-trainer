@@ -91,3 +91,34 @@ pub const CMD_ARROW_LEFT: &str = "Left";
 pub const CMD_ARROW_RIGHT: &str = "Right";
 pub const CMD_ARROW_UP: &str = "Up";
 pub const CMD_ARROW_DOWN: &str = "Down";
+
+// Selection commands
+pub const CMD_SELECT_REGEX: &str = "s";
+pub const CMD_SPLIT_SELECTION: &str = "S";
+pub const CMD_SPLIT_SELECTION_NEWLINES: &str = "Alt-s";
+pub const CMD_ALIGN_SELECTIONS: &str = "&";
+pub const CMD_TRIM_SELECTIONS: &str = "_";
+pub const CMD_MERGE_SELECTIONS: &str = "Alt--";
+pub const CMD_MERGE_CONSECUTIVE: &str = "Alt-_";
+pub const CMD_COPY_SELECTION_NEXT: &str = "C";
+pub const CMD_COPY_SELECTION_PREV: &str = "Alt-C";
+pub const CMD_KEEP_MATCHING: &str = "K";
+pub const CMD_REMOVE_MATCHING: &str = "Alt-K";
+pub const CMD_TOGGLE_COMMENTS: &str = "Ctrl-c";
+
+// Search commands
+pub const CMD_SEARCH_FORWARD: &str = "/";
+pub const CMD_SEARCH_BACKWARD: &str = "?";
+pub const CMD_SEARCH_NEXT: &str = "n";
+pub const CMD_SEARCH_PREV: &str = "N";
+pub const CMD_SEARCH_WORD: &str = "*";
+pub const CMD_SEARCH_SELECTION: &str = "Alt-*";
+
+// View mode commands
+pub const CMD_VIEW_MODE: &str = "z";
+pub const CMD_VIEW_CENTER: &str = "zz";
+pub const CMD_VIEW_TOP: &str = "zt";
+pub const CMD_VIEW_BOTTOM: &str = "zb";
+pub const CMD_VIEW_CENTER_HORIZONTAL: &str = "zm";
+pub const CMD_SCROLL_DOWN: &str = "zj";
+pub const CMD_SCROLL_UP: &str = "zk";

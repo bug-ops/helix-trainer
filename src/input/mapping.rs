@@ -1,123 +1,103 @@
 //! Keyboard to Helix command mapping
 //!
-//! Maps keyboard events to Helix editor commands.
+//! Maps keyboard events to Helix editor commands with compile-time mode safety.
+//!
+//! # Typestate Pattern
+//!
+//! This module uses the typestate pattern to ensure key mappings are only used
+//! for the correct editor mode at compile time:
+//!
+//! ```ignore
+//! use helix_trainer::input::mapping::{KeyMapping, KeyMapper, NormalModeKeys, InsertModeKeys};
+//!
+//! // Type-safe normal mode mapping
+//! let cmd = <KeyMapping as KeyMapper<NormalModeKeys>>::map_key(key);
+//!
+//! // Type-safe insert mode mapping
+//! let text = <KeyMapping as KeyMapper<InsertModeKeys>>::map_key(key);
+//! ```
+//!
+//! # Backward Compatibility
+//!
+//! The legacy functions `map_key_to_helix_command` and `handle_insert_mode_input`
+//! are still available and delegate to the type-safe implementations.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 use std::borrow::Cow;
 
-use helix_trainer::helix::commands::*;
+// Re-export mode types and KeyMapper trait from modes module for public API
+// These are intentionally re-exported even if not used locally, to provide
+// a unified import path for consumers of this module.
+#[allow(unused_imports)]
+pub use super::modes::GotoModeKeys;
+#[allow(unused_imports)]
+pub use super::modes::InputMode;
+pub use super::modes::InsertModeKeys;
+pub use super::modes::KeyMapper;
+pub use super::modes::KeyMapping;
+#[allow(unused_imports)]
+pub use super::modes::MatchModeKeys;
+pub use super::modes::NormalModeKeys;
+#[allow(unused_imports)]
+pub use super::modes::SearchModeKeys;
+#[allow(unused_imports)]
+pub use super::modes::ViewModeKeys;
 
 /// Map key to Helix command (Normal mode)
 ///
 /// Returns the command string for valid Helix commands, None for unknown keys.
+///
+/// # Backward Compatibility
+///
+/// This function is provided for backward compatibility. New code should use
+/// the type-safe `KeyMapper` trait:
+///
+/// ```ignore
+/// use helix_trainer::input::mapping::{KeyMapping, KeyMapper, NormalModeKeys};
+///
+/// let cmd = <KeyMapping as KeyMapper<NormalModeKeys>>::map_key(key);
+/// ```
+///
+/// # Type Safety
+///
+/// While this function works at runtime, it provides no compile-time guarantee
+/// that the caller is in Normal mode. For compile-time safety, use the
+/// `KeyMapper<NormalModeKeys>` implementation instead.
+#[inline]
 pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
-    match (key.code, key.modifiers) {
-        // Movement commands
-        (KeyCode::Char('h'), KeyModifiers::NONE) => Some(CMD_MOVE_LEFT),
-        (KeyCode::Char('j'), KeyModifiers::NONE) => Some(CMD_MOVE_DOWN),
-        (KeyCode::Char('k'), KeyModifiers::NONE) => Some(CMD_MOVE_UP),
-        (KeyCode::Char('l'), KeyModifiers::NONE) => Some(CMD_MOVE_RIGHT),
-
-        // Word movement
-        (KeyCode::Char('w'), KeyModifiers::NONE) => Some(CMD_MOVE_WORD_FORWARD),
-        (KeyCode::Char('b'), KeyModifiers::NONE) => Some(CMD_MOVE_WORD_BACKWARD),
-        (KeyCode::Char('e'), KeyModifiers::NONE) => Some(CMD_MOVE_WORD_END),
-
-        // WORD movement (whitespace-delimited)
-        (KeyCode::Char('W'), KeyModifiers::SHIFT) => Some(CMD_MOVE_LONG_WORD_FORWARD),
-        (KeyCode::Char('B'), KeyModifiers::SHIFT) => Some(CMD_MOVE_LONG_WORD_BACKWARD),
-        (KeyCode::Char('E'), KeyModifiers::SHIFT) => Some(CMD_MOVE_LONG_WORD_END),
-
-        // Line movement
-        // Note: '0' is NOT a command in Helix - use 'gh' for goto line start
-        // Note: '$' is NOT a line end command in Helix - use 'gl' for goto line end
-        // In Helix, '$' is shell_keep_pipe (pipe selection into shell)
-
-        // Selection commands
-        (KeyCode::Char('X'), KeyModifiers::SHIFT) => Some(CMD_EXTEND_LINE),
-        (KeyCode::Char('%'), KeyModifiers::NONE) => Some(CMD_SELECT_ALL),
-        (KeyCode::Char(';'), KeyModifiers::NONE) => Some(CMD_COLLAPSE_SELECTION),
-
-        // Case switching
-        (KeyCode::Char('~'), KeyModifiers::NONE) => Some(CMD_SWITCH_CASE),
-        (KeyCode::Char('`'), KeyModifiers::NONE) => Some(CMD_SWITCH_CASE_ALT),
-
-        // Selection and deletion commands
-        (KeyCode::Char('x'), KeyModifiers::NONE) => Some(CMD_SELECT_LINE),
-        (KeyCode::Char('d'), KeyModifiers::NONE) => Some(CMD_DELETE_SELECTION),
-        (KeyCode::Char('c'), KeyModifiers::NONE) => Some(CMD_CHANGE),
-        (KeyCode::Char('J'), KeyModifiers::SHIFT) => Some(CMD_JOIN_LINES),
-
-        // Indentation
-        (KeyCode::Char('>'), KeyModifiers::NONE) => Some(CMD_INDENT),
-        (KeyCode::Char('<'), KeyModifiers::NONE) => Some(CMD_DEDENT),
-
-        // Yank and paste
-        (KeyCode::Char('y'), KeyModifiers::NONE) => Some(CMD_YANK),
-        (KeyCode::Char('p'), KeyModifiers::NONE) => Some(CMD_PASTE_AFTER),
-        (KeyCode::Char('P'), KeyModifiers::SHIFT) => Some(CMD_PASTE_BEFORE),
-
-        // Mode changes and editing
-        (KeyCode::Char('i'), KeyModifiers::NONE) => Some(CMD_INSERT),
-        (KeyCode::Char('a'), KeyModifiers::NONE) => Some(CMD_APPEND),
-        (KeyCode::Char('I'), KeyModifiers::SHIFT) => Some(CMD_INSERT_LINE_START),
-        (KeyCode::Char('A'), KeyModifiers::SHIFT) => Some(CMD_APPEND_LINE_END),
-        (KeyCode::Char('o'), KeyModifiers::NONE) => Some(CMD_OPEN_BELOW),
-        (KeyCode::Char('O'), KeyModifiers::SHIFT) => Some(CMD_OPEN_ABOVE),
-
-        // Replace character
-        (KeyCode::Char('r'), KeyModifiers::NONE) => Some(CMD_REPLACE),
-
-        // Find/till character (prefix commands - need second char)
-        (KeyCode::Char('f'), KeyModifiers::NONE) => Some(CMD_FIND_CHAR),
-        (KeyCode::Char('F'), KeyModifiers::SHIFT) => Some(CMD_FIND_CHAR_REVERSE),
-        (KeyCode::Char('t'), KeyModifiers::NONE) => Some(CMD_TILL_CHAR),
-        (KeyCode::Char('T'), KeyModifiers::SHIFT) => Some(CMD_TILL_CHAR_REVERSE),
-
-        // Match mode (prefix for mm)
-        (KeyCode::Char('m'), KeyModifiers::NONE) => Some(CMD_MATCH_MODE),
-
-        // Select mode
-        (KeyCode::Char('v'), KeyModifiers::NONE) => Some(CMD_SELECT_MODE),
-
-        // Flip selection direction
-        (KeyCode::Char(';'), KeyModifiers::ALT) => Some(CMD_FLIP_SELECTIONS),
-
-        // Undo/Redo
-        (KeyCode::Char('u'), KeyModifiers::NONE) => Some(CMD_UNDO),
-        (KeyCode::Char('U'), KeyModifiers::SHIFT) => Some(CMD_REDO),
-        (KeyCode::Char('r'), KeyModifiers::CONTROL) => Some(CMD_CTRL_R),
-
-        // Repeat last action
-        (KeyCode::Char('.'), KeyModifiers::NONE) => Some(CMD_REPEAT),
-
-        // Document movement
-        (KeyCode::Char('g'), KeyModifiers::NONE) => Some("g"), // Note: multi-key 'gg', 'ge' handled elsewhere
-
-        _ => None,
-    }
+    <KeyMapping as KeyMapper<NormalModeKeys>>::map_key(key)
 }
 
 /// Convert key to text input for Insert mode
 ///
 /// Returns the text representation of the key for insertion.
+///
+/// # Backward Compatibility
+///
+/// This function is provided for backward compatibility. New code should use
+/// the type-safe `KeyMapper` trait:
+///
+/// ```ignore
+/// use helix_trainer::input::mapping::{KeyMapping, KeyMapper, InsertModeKeys};
+///
+/// let text = <KeyMapping as KeyMapper<InsertModeKeys>>::map_key(key);
+/// ```
+///
+/// # Type Safety
+///
+/// While this function works at runtime, it provides no compile-time guarantee
+/// that the caller is in Insert mode. For compile-time safety, use the
+/// `KeyMapper<InsertModeKeys>` implementation instead.
+#[inline]
 pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
-    match key.code {
-        KeyCode::Char(c) => Some(Cow::Owned(c.to_string())),
-        KeyCode::Enter => Some(Cow::Borrowed("\n")),
-        KeyCode::Backspace => Some(Cow::Borrowed(CMD_BACKSPACE)),
-        KeyCode::Left => Some(Cow::Borrowed(CMD_ARROW_LEFT)),
-        KeyCode::Right => Some(Cow::Borrowed(CMD_ARROW_RIGHT)),
-        KeyCode::Up => Some(Cow::Borrowed(CMD_ARROW_UP)),
-        KeyCode::Down => Some(Cow::Borrowed(CMD_ARROW_DOWN)),
-        KeyCode::Esc => Some(Cow::Borrowed(CMD_ESCAPE)),
-        _ => None,
-    }
+    <KeyMapping as KeyMapper<InsertModeKeys>>::map_key(key)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::{KeyCode, KeyModifiers};
+    use helix_trainer::helix::commands::*;
 
     // Unit tests for map_key_to_helix_command()
     mod map_key_to_helix_command_tests {
@@ -315,11 +295,17 @@ mod tests {
         // Edge cases
         #[test]
         fn test_map_key_unknown_returns_none() {
+            // 'z' is now a known command (view mode prefix)
             let z = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE);
-            assert_eq!(map_key_to_helix_command(z), None);
+            assert_eq!(map_key_to_helix_command(z), Some(CMD_VIEW_MODE));
 
+            // F1 is still unknown
             let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
             assert_eq!(map_key_to_helix_command(f1), None);
+
+            // Some random letter that's not mapped
+            let q = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+            assert_eq!(map_key_to_helix_command(q), None);
         }
 
         #[test]
@@ -426,6 +412,84 @@ mod tests {
             let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
             let result = handle_insert_mode_input(key);
             assert_eq!(result, None);
+        }
+    }
+
+    // Unit tests for typestate-based KeyMapper API
+    mod typestate_api_tests {
+        use super::*;
+
+        #[test]
+        fn test_normal_mode_keymapper_type_safety() {
+            // Demonstrate that NormalModeKeys returns &'static str
+            let h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+            let cmd: Option<&'static str> = <KeyMapping as KeyMapper<NormalModeKeys>>::map_key(h);
+            assert_eq!(cmd, Some(CMD_MOVE_LEFT));
+        }
+
+        #[test]
+        fn test_insert_mode_keymapper_type_safety() {
+            // Demonstrate that InsertModeKeys returns Cow<'static, str>
+            let a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+            let text: Option<Cow<'static, str>> =
+                <KeyMapping as KeyMapper<InsertModeKeys>>::map_key(a);
+            assert_eq!(text, Some(Cow::Owned("a".to_string())));
+        }
+
+        #[test]
+        fn test_view_mode_keymapper() {
+            let z = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE);
+            let cmd = <KeyMapping as KeyMapper<ViewModeKeys>>::map_key(z);
+            assert_eq!(cmd, Some(CMD_VIEW_CENTER));
+
+            let t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE);
+            let cmd = <KeyMapping as KeyMapper<ViewModeKeys>>::map_key(t);
+            assert_eq!(cmd, Some(CMD_VIEW_TOP));
+        }
+
+        #[test]
+        fn test_goto_mode_keymapper() {
+            let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
+            let cmd = <KeyMapping as KeyMapper<GotoModeKeys>>::map_key(g);
+            assert_eq!(cmd, Some(CMD_GOTO_FILE_START));
+
+            let h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+            let cmd = <KeyMapping as KeyMapper<GotoModeKeys>>::map_key(h);
+            assert_eq!(cmd, Some(CMD_GOTO_LINE_START));
+        }
+
+        #[test]
+        fn test_match_mode_keymapper() {
+            let m = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE);
+            let cmd = <KeyMapping as KeyMapper<MatchModeKeys>>::map_key(m);
+            assert_eq!(cmd, Some(CMD_MATCH_BRACKETS));
+        }
+
+        #[test]
+        fn test_search_mode_keymapper() {
+            let a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+            let text = <KeyMapping as KeyMapper<SearchModeKeys>>::map_key(a);
+            assert_eq!(text, Some(Cow::Owned("a".to_string())));
+
+            let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            let text = <KeyMapping as KeyMapper<SearchModeKeys>>::map_key(esc);
+            assert_eq!(text, Some(Cow::Borrowed(CMD_ESCAPE)));
+        }
+
+        #[test]
+        fn test_backward_compat_delegates_to_typestate() {
+            // Verify that legacy functions produce same results as typestate API
+            let h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+            assert_eq!(
+                map_key_to_helix_command(h),
+                <KeyMapping as KeyMapper<NormalModeKeys>>::map_key(h)
+            );
+
+            let a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+            assert_eq!(
+                handle_insert_mode_input(a),
+                <KeyMapping as KeyMapper<InsertModeKeys>>::map_key(a)
+            );
         }
     }
 }

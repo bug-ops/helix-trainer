@@ -10,7 +10,7 @@ pub enum Category {
     Movement,
     /// Editing commands (d, c, J, etc.)
     Editing,
-    /// Selection commands (x, X, %, ;, v)
+    /// Selection commands (x, X, %, ;, v, s, S, C, K, etc.)
     Selection,
     /// Clipboard commands (y, p, P)
     Clipboard,
@@ -18,6 +18,10 @@ pub enum Category {
     ModeChange,
     /// Undo/redo commands (u, U)
     Undo,
+    /// Search commands (/, ?, n, N, *, Alt-*)
+    Search,
+    /// View/viewport commands (z, zt, zb, zm, zj, zk)
+    View,
 }
 
 impl Category {
@@ -30,6 +34,8 @@ impl Category {
             Category::Clipboard => "Clipboard",
             Category::ModeChange => "Mode Change",
             Category::Undo => "Undo/Redo",
+            Category::Search => "Search",
+            Category::View => "View",
         }
     }
 }
@@ -100,6 +106,8 @@ mod tests {
         assert_eq!(Category::Clipboard.display_name(), "Clipboard");
         assert_eq!(Category::ModeChange.display_name(), "Mode Change");
         assert_eq!(Category::Undo.display_name(), "Undo/Redo");
+        assert_eq!(Category::Search.display_name(), "Search");
+        assert_eq!(Category::View.display_name(), "View");
     }
 
     #[test]

@@ -5,7 +5,9 @@
 pub mod clipboard;
 pub mod editing;
 pub mod movement;
+pub mod search;
 pub mod selection;
+pub mod view;
 
 use crate::helix::registry::command_registry::CommandRegistry;
 use crate::helix::simulator::NormalMode;
@@ -17,6 +19,8 @@ pub fn register_all(registry: &mut CommandRegistry<NormalMode>) {
     editing::register(registry);
     clipboard::register(registry);
     selection::register(registry);
+    search::register(registry);
+    view::register(registry);
 }
 
 #[cfg(test)]

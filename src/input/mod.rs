@@ -1,9 +1,19 @@
 //! User input handling
 //!
 //! Converts keyboard events into application messages based on current screen state.
+//!
+//! # Typestate-Based Key Mapping
+//!
+//! This module provides compile-time safe key mapping through the typestate pattern.
+//! Each editor mode has its own marker type, ensuring that key mappings are only
+//! used in the correct context.
+//!
+//! See [`modes`] for the mode marker types and [`mapping`] for the key mapping
+//! implementations.
 
 pub mod handlers;
 pub mod mapping;
+pub mod modes;
 
 use crossterm::event::KeyEvent;
 

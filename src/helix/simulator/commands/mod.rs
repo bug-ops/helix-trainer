@@ -3,6 +3,9 @@
 pub mod clipboard;
 pub mod editing;
 pub mod movement;
+pub mod search;
+pub mod selection;
+pub mod view;
 
 use super::{AnyModeSimulator, HelixSimulator, InsertMode, Mode, NormalMode};
 use crate::helix::commands::*;

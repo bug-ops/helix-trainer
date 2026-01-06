@@ -2,62 +2,29 @@
 //!
 //! Each handler function processes keyboard input for a specific screen.
 //!
-//! # Mode-Safe Key Mapping
+//! # Key Mapping Architecture
 //!
-//! This module uses the typestate-based key mapping system from [`super::typestate`].
-//! The convenience functions (`map_key_to_helix_command`, `handle_insert_mode_input`)
-//! provide simple key-to-command mapping.
+//! This module converts `KeyEvent` to `Message` for the Elm Architecture.
+//! Multi-key command handling (gg, dd, fx, rx, 3j) is delegated to
+//! `InputStateMachine` in the command handlers (`gameplay.rs`, `minigame.rs`).
 //!
-//! For advanced input handling with multi-key sequences, use `InputStateMachine`:
+//! ## Data Flow
 //!
-//! ```ignore
-//! use super::typestate::{InputStateMachine, HandlerResult};
-//!
-//! let mut state_machine = InputStateMachine::new();
-//! let result = state_machine.process_key(key);
-//! match result {
-//!     HandlerResult::Execute(cmd) => { /* execute command */ }
-//!     HandlerResult::Transition(_) => { /* waiting for more input */ }
-//!     HandlerResult::Cancel => { /* cancelled */ }
-//!     HandlerResult::Stay => { /* no change */ }
-//! }
+//! ```text
+//! KeyEvent -> handle_*_keys() -> Message::ExecuteCommand
+//!          -> update() -> handle_execute_command()
+//!          -> InputStateMachine::process_key() -> execute
 //! ```
+//!
+//! For menu navigation, a separate command buffer pattern is used
+//! (see `MenuData::command_buffer`).
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 
-use crate::helix::commands::CMD_CANCEL;
-use crate::ui::state::InputStateAccess;
 use crate::ui::{AppState, Message, state::TypedScreen};
 
-use super::typestate::{handle_insert_mode_input, map_key_to_helix_command};
-
-/// Check if the input state machine is waiting for a character argument
-///
-/// Uses the typestate-based `InputStateMachine` to determine if we're in a
-/// state that expects character input (FindCharPending, ReplaceCharPending)
-/// or waiting for the second key in a multi-key sequence (GotoPending, etc.).
-fn is_waiting_for_char_arg(state: &AppState) -> bool {
-    match &state.screen {
-        TypedScreen::Task(task_data) => task_data.input_state().is_prefix_state(),
-        TypedScreen::MiniGame(minigame_data) => minigame_data.input_state().is_prefix_state(),
-        _ => false,
-    }
-}
-
-/// Check if the input state machine is building a count prefix (digits like "3", "12")
-///
-/// Uses the typestate-based `InputStateMachine` to check if we're in
-/// CountPending state (building a numeric prefix for a command).
-fn is_building_count_prefix(state: &AppState) -> bool {
-    match &state.screen {
-        TypedScreen::Task(task_data) => task_data.input_state().state().is_count_pending(),
-        TypedScreen::MiniGame(minigame_data) => {
-            minigame_data.input_state().state().is_count_pending()
-        }
-        _ => false,
-    }
-}
+use super::typestate::handle_insert_mode_input;
 
 /// Handle keyboard events on profile and statistics screens
 pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
@@ -309,68 +276,40 @@ fn is_gameplay_insert_mode(state: &AppState) -> bool {
 /// Handle gameplay input (insert mode or normal mode command)
 ///
 /// Shared logic for both training and arcade modes.
-/// Returns the command wrapped in the provided message constructor.
+/// In normal mode, passes keys directly to the message handler where
+/// `InputStateMachine` processes multi-key sequences (gg, dd, fx, rx, 3j).
 fn handle_gameplay_input<F>(key: KeyEvent, state: &AppState, make_message: F) -> Option<Message>
 where
     F: FnOnce(Cow<'static, str>) -> Message,
 {
     if is_gameplay_insert_mode(state) {
+        // Insert mode: use dedicated handler
         handle_insert_mode_input(key).map(make_message)
     } else {
-        // Check if we're waiting for a character argument (e.g., after 'r', 'f', 't')
-        if is_waiting_for_char_arg(state) {
-            match key.code {
-                // Accept any printable character as the argument
-                KeyCode::Char(c) => {
-                    return Some(make_message(Cow::Owned(c.to_string())));
-                }
-                // Esc or non-char keys cancel the pending command
-                // Send a marker that will make the buffer invalid, triggering clear
-                KeyCode::Esc
-                | KeyCode::Left
-                | KeyCode::Right
-                | KeyCode::Up
-                | KeyCode::Down
-                | KeyCode::Backspace
-                | KeyCode::Enter => {
-                    return Some(make_message(Cow::Borrowed(CMD_CANCEL)));
-                }
-                _ => {}
-            }
-        }
+        // Normal mode: convert key to string for InputStateMachine
+        // State machine handles multi-key commands in gameplay.rs/minigame.rs
+        key_to_command_string(key).map(make_message)
+    }
+}
 
-        // Check if we're building a count prefix (e.g., "3", "12")
-        // Accept digits to continue building the count, or a command to complete
-        if is_building_count_prefix(state) {
-            if let KeyCode::Char(c) = key.code {
-                // Accept more digits or a command character
-                return Some(make_message(Cow::Owned(c.to_string())));
-            }
-            // Non-char keys cancel the pending count
-            if matches!(
-                key.code,
-                KeyCode::Esc
-                    | KeyCode::Left
-                    | KeyCode::Right
-                    | KeyCode::Up
-                    | KeyCode::Down
-                    | KeyCode::Backspace
-                    | KeyCode::Enter
-            ) {
-                return Some(make_message(Cow::Borrowed(CMD_CANCEL)));
-            }
-        }
-
-        // Handle digit keys (1-9) to start count prefix
-        // Note: '0' is a command (goto line start), not a count prefix start
-        if let KeyCode::Char(c) = key.code
-            && c.is_ascii_digit()
-            && c != '0'
-        {
-            return Some(make_message(Cow::Owned(c.to_string())));
-        }
-
-        map_key_to_helix_command(key).map(|cmd| make_message(Cow::Borrowed(cmd)))
+/// Convert a key event to a command string for the state machine
+///
+/// In normal mode, all keys are passed to `InputStateMachine` which handles:
+/// - Multi-key commands (gg, dd)
+/// - Character arguments (fx, rx)
+/// - Count prefixes (3j, 10k)
+fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
+    match key.code {
+        KeyCode::Char(c) => Some(Cow::Owned(c.to_string())),
+        KeyCode::Esc => Some(Cow::Borrowed("Escape")),
+        KeyCode::Backspace => Some(Cow::Borrowed("Backspace")),
+        KeyCode::Left => Some(Cow::Borrowed("Left")),
+        KeyCode::Right => Some(Cow::Borrowed("Right")),
+        KeyCode::Up => Some(Cow::Borrowed("Up")),
+        KeyCode::Down => Some(Cow::Borrowed("Down")),
+        KeyCode::Enter => Some(Cow::Borrowed("Enter")),
+        KeyCode::Tab => Some(Cow::Borrowed("Tab")),
+        _ => None,
     }
 }
 
@@ -873,6 +812,88 @@ mod tests {
         fn test_handle_task_special_keys_escape() {
             let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
             assert_eq!(handle_task_special_keys(key), None);
+        }
+    }
+
+    // Unit tests for key_to_command_string()
+    mod key_to_command_string_tests {
+        use super::*;
+
+        #[test]
+        fn test_char_key() {
+            let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+            assert_eq!(
+                key_to_command_string(key),
+                Some(Cow::Owned("h".to_string()))
+            );
+        }
+
+        #[test]
+        fn test_uppercase_char_key() {
+            let key = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT);
+            assert_eq!(
+                key_to_command_string(key),
+                Some(Cow::Owned("G".to_string()))
+            );
+        }
+
+        #[test]
+        fn test_escape_key() {
+            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Escape")));
+        }
+
+        #[test]
+        fn test_backspace_key() {
+            let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
+            assert_eq!(
+                key_to_command_string(key),
+                Some(Cow::Borrowed("Backspace"))
+            );
+        }
+
+        #[test]
+        fn test_arrow_keys() {
+            assert_eq!(
+                key_to_command_string(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)),
+                Some(Cow::Borrowed("Left"))
+            );
+            assert_eq!(
+                key_to_command_string(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)),
+                Some(Cow::Borrowed("Right"))
+            );
+            assert_eq!(
+                key_to_command_string(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
+                Some(Cow::Borrowed("Up"))
+            );
+            assert_eq!(
+                key_to_command_string(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
+                Some(Cow::Borrowed("Down"))
+            );
+        }
+
+        #[test]
+        fn test_enter_key() {
+            let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Enter")));
+        }
+
+        #[test]
+        fn test_tab_key() {
+            let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Tab")));
+        }
+
+        #[test]
+        fn test_unknown_key_returns_none() {
+            let key = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
+            assert_eq!(key_to_command_string(key), None);
+        }
+
+        #[test]
+        fn test_home_key_returns_none() {
+            let key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
+            assert_eq!(key_to_command_string(key), None);
         }
     }
 }

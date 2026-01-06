@@ -109,12 +109,11 @@ fn record_scenario_completion(
         profile.perfect_scenarios += 1;
     }
 
-    // Save profile if leveled up
     if leveled_up {
         ctx.progress
             .storage
             .save(&ctx.progress.profile)
-            .map_err(|_| UserError::OperationFailed)?;
+            .map_err(UserError::from)?;
         ctx.progress.mark_saved();
     }
 
@@ -125,7 +124,7 @@ fn record_scenario_completion(
         ctx.progress
             .storage
             .save(&ctx.progress.profile)
-            .map_err(|_| UserError::OperationFailed)?;
+            .map_err(UserError::from)?;
         ctx.progress.mark_saved();
     }
 
@@ -158,11 +157,9 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         let session = state.game.pending_completed_session.take();
         (feedback.clone(), session)
     } else {
-        // No feedback available, transition to results anyway with placeholder
         let results_data = if let Some(session) = state.game.pending_completed_session.take() {
-            let feedback = session.feedback().map_err(|_| UserError::OperationFailed)?;
-            ResultsData::from_completed(session, feedback)
-                .map_err(|_| UserError::OperationFailed)?
+            let feedback = session.feedback().map_err(UserError::from)?;
+            ResultsData::from_completed(session, feedback).map_err(UserError::from)?
         } else {
             // No session either, just go to menu
             return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
@@ -209,10 +206,11 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
             .scenario_history
             .record_completion(&scenario_id, feedback.score, total_base_xp);
 
-    // Get mastery info for UI display
-    let completion = profile.scenario_history.get(&scenario_id).unwrap();
-    let mastery_level = completion.mastery_level;
-    let mastery_multiplier = completion.xp_multiplier();
+    let (mastery_level, mastery_multiplier) = profile
+        .scenario_history
+        .get(&scenario_id)
+        .map(|c| (c.mastery_level, c.xp_multiplier()))
+        .unwrap_or((crate::learning::ScenarioMastery::Learning, 1.0));
 
     // Store mastery info for results display
     ctx.ui.scenario_mastery = Some((mastery_level, mastery_multiplier));
@@ -245,8 +243,8 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         ))));
     };
 
-    let mut results_data = ResultsData::from_completed(session, feedback.clone())
-        .map_err(|_| UserError::OperationFailed)?;
+    let mut results_data =
+        ResultsData::from_completed(session, feedback.clone()).map_err(UserError::from)?;
     // Populate with XP breakdown and quest changes
     results_data.xp_breakdown = ctx.ui.xp_breakdown.clone();
     results_data.quest_changes = ctx.ui.quest_progress_changes.clone();

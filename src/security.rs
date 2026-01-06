@@ -132,10 +132,8 @@ impl UserError {
 
 impl From<SecurityError> for UserError {
     fn from(err: SecurityError) -> Self {
-        // Log the detailed error internally
         tracing::error!("Security error occurred: {:?}", err);
 
-        // Return sanitized error to user
         match err {
             SecurityError::PathTraversal
             | SecurityError::InvalidPath
@@ -155,6 +153,38 @@ impl From<SecurityError> for UserError {
             SecurityError::InvalidState(msg) => UserError::InvalidState { message: msg },
 
             _ => UserError::OperationFailed,
+        }
+    }
+}
+
+impl From<crate::gamification::GamificationError> for UserError {
+    fn from(err: crate::gamification::GamificationError) -> Self {
+        use crate::gamification::GamificationError;
+        tracing::error!("Gamification error occurred: {:?}", err);
+
+        match err {
+            GamificationError::StorageError(_) => UserError::OperationFailed,
+            GamificationError::QuestNotFound(_) => UserError::OperationFailed,
+            GamificationError::InvalidLevel(_) => UserError::invalid_state("Invalid level"),
+            GamificationError::StreakFreezeUnavailable => UserError::OperationFailed,
+            GamificationError::AchievementAlreadyUnlocked(_) => UserError::OperationFailed,
+        }
+    }
+}
+
+impl From<crate::learning::LearningError> for UserError {
+    fn from(err: crate::learning::LearningError) -> Self {
+        use crate::learning::LearningError;
+        tracing::error!("Learning error occurred: {:?}", err);
+
+        match err {
+            LearningError::InvalidStability(_) | LearningError::InvalidDifficulty(_) => {
+                UserError::invalid_state("Invalid learning parameters")
+            }
+            LearningError::CommandNotFound(_) => {
+                UserError::command_failed("Command not found in registry")
+            }
+            LearningError::FsrsError(_) => UserError::OperationFailed,
         }
     }
 }

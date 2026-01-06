@@ -124,9 +124,8 @@ impl<M: EditorMode> HelixSimulator<M> {
             };
 
             Some(crate::game::Selection::new(
-                CursorPosition::new(start_line, start_col)
-                    .map_err(|_| UserError::OperationFailed)?,
-                CursorPosition::new(end_line, end_col).map_err(|_| UserError::OperationFailed)?,
+                CursorPosition::new(start_line, start_col).map_err(UserError::from)?,
+                CursorPosition::new(end_line, end_col).map_err(UserError::from)?,
             ))
         } else {
             None
@@ -134,10 +133,10 @@ impl<M: EditorMode> HelixSimulator<M> {
 
         EditorState::new(
             self.doc.to_string(),
-            CursorPosition::new(line, col).map_err(|_| UserError::OperationFailed)?,
+            CursorPosition::new(line, col).map_err(UserError::from)?,
             selection,
         )
-        .map_err(|_| UserError::OperationFailed)
+        .map_err(UserError::from)
     }
 
     /// Convert simulator state to EditorState (alias for get_state)

@@ -1,6 +1,6 @@
-//! Find state for f/F/t/T commands and Alt-./Alt-, repeat
+//! Find state for f/F/t/T commands and Alt-. repeat
 //!
-//! Tracks the last find/till motion to enable repeating with Alt-. and Alt-,
+//! Tracks the last find/till motion to enable repeating with Alt-.
 
 /// Type of find motion
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

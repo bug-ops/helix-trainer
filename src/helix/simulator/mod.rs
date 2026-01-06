@@ -94,7 +94,7 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// View state for z, zt, zb, zm, zj, zk commands
     pub(super) view_state: ViewState,
 
-    /// Find state for f/F/t/T and Alt-./Alt-, commands
+    /// Find state for f/F/t/T and Alt-. commands
     pub(super) find_state: FindState,
 
     /// Phantom data for typestate mode marker (zero-cost)

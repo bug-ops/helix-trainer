@@ -1,6 +1,6 @@
 //! Selection command definitions
 //!
-//! Registers selection commands (x, X, %, ;, s, S, Alt-s, &, _, Alt--, Alt-_, C, Alt-C, K, Alt-K, Ctrl-c)
+//! Registers selection commands (x, X, %, ;, s, S, Alt-s, &, _, Alt--, Alt-_, C, Alt-C, K, Alt-K, Ctrl-c, ,, Alt-,)
 
 use crate::helix::commands::*;
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
@@ -219,5 +219,45 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             None,
         ),
         selection::toggle_comments,
+    ));
+
+    // Primary selection management
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "keep_primary_selection",
+            CMD_KEEP_PRIMARY_SELECTION,
+            "Keep primary",
+            "Keep only the primary selection, discarding all others.",
+            Category::Selection,
+            false,
+            None,
+        ),
+        selection::keep_primary_selection,
+    ));
+
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "remove_primary_selection",
+            CMD_REMOVE_PRIMARY_SELECTION,
+            "Remove primary",
+            "Remove the primary selection, keeping other selections.",
+            Category::Selection,
+            false,
+            None,
+        ),
+        selection::remove_primary_selection,
+    ));
+
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "shrink_to_line_bounds",
+            CMD_SHRINK_TO_LINE_BOUNDS,
+            "Shrink to line",
+            "Shrink selection to line bounds for line-oriented editing.",
+            Category::Selection,
+            false,
+            None,
+        ),
+        selection::shrink_to_line_bounds,
     ));
 }

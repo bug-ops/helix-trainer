@@ -208,3 +208,166 @@ pub fn collapse_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
     sim.selection = Selection::point(head);
     Ok(())
 }
+
+/// Switch selected text to uppercase (Helix 'Alt-`' command)
+pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
+        let start = range.from();
+        let end = range.to();
+
+        if start >= end || start >= sim.doc.len_chars() {
+            return (start, end, None);
+        }
+
+        // Get the text and convert to uppercase
+        let slice = sim.doc.slice(start..end);
+        let uppercase: String = slice.chars().flat_map(|c| c.to_uppercase()).collect();
+
+        (start, end, Some(uppercase.into()))
+    });
+
+    sim.apply_transaction(transaction);
+    Ok(())
+}
+
+/// Replace selection with yanked text (Helix 'R' command)
+///
+/// Replaces the current selection with the content of the clipboard.
+/// For training, we use the simulator's clipboard.
+pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let Some(yanked) = &sim.clipboard else {
+        return Ok(()); // Nothing yanked
+    };
+
+    if yanked.is_empty() {
+        return Ok(()); // Nothing to paste
+    }
+
+    let yanked = yanked.clone();
+    let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
+        let start = range.from();
+        let end = range.to();
+        (start, end, Some(yanked.clone().into()))
+    });
+
+    sim.apply_transaction(transaction);
+    Ok(())
+}
+
+/// Join lines in selection with space (Helix 'Alt-J' command)
+///
+/// Like J but joins all selected lines and selects the inserted space.
+pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let range = sim.selection.primary();
+    let start_line = sim.doc.char_to_line(range.from());
+    let end_line = sim
+        .doc
+        .char_to_line(range.to().saturating_sub(1).max(range.from()));
+
+    // If only one line, nothing to join
+    if start_line >= end_line {
+        return Ok(());
+    }
+
+    // Join lines from end to start to avoid position shifting issues
+    for line in (start_line..end_line).rev() {
+        if line + 1 >= sim.doc.len_lines() {
+            continue;
+        }
+
+        // Find the newline character at the end of current line
+        let line_end = sim.doc.line_to_char(line + 1) - 1;
+
+        // Replace newline with space
+        let transaction = Transaction::change(
+            &sim.doc,
+            [(line_end, line_end + 1, Some(" ".into()))].into_iter(),
+        );
+
+        sim.apply_transaction(transaction);
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::helix::simulator::NormalMode;
+
+    #[test]
+    fn test_switch_to_uppercase() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+        sim.selection = Selection::single(0, 5);
+
+        switch_to_uppercase(&mut sim).unwrap();
+
+        assert_eq!(sim.doc.to_string(), "HELLO");
+    }
+
+    #[test]
+    fn test_switch_to_uppercase_partial() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::single(0, 5);
+
+        switch_to_uppercase(&mut sim).unwrap();
+
+        assert_eq!(sim.doc.to_string(), "HELLO world");
+    }
+
+    #[test]
+    fn test_switch_to_uppercase_empty_selection() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+        sim.selection = Selection::point(2);
+
+        switch_to_uppercase(&mut sim).unwrap();
+
+        // Empty selection, no change
+        assert_eq!(sim.doc.to_string(), "hello");
+    }
+
+    #[test]
+    fn test_replace_with_yanked() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.clipboard = Some("REPLACED".to_string());
+        sim.selection = Selection::single(0, 5);
+
+        replace_with_yanked(&mut sim).unwrap();
+
+        assert_eq!(sim.doc.to_string(), "REPLACED world");
+    }
+
+    #[test]
+    fn test_replace_with_yanked_no_clipboard() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.clipboard = None;
+        sim.selection = Selection::single(0, 5);
+
+        replace_with_yanked(&mut sim).unwrap();
+
+        // No change when clipboard is empty
+        assert_eq!(sim.doc.to_string(), "hello world");
+    }
+
+    #[test]
+    fn test_join_selections_space() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("line 1\nline 2\nline 3".to_string());
+        sim.selection = Selection::single(0, 13); // Select first two lines
+
+        join_selections_space(&mut sim).unwrap();
+
+        assert_eq!(sim.doc.to_string(), "line 1 line 2\nline 3");
+    }
+
+    #[test]
+    fn test_join_selections_space_single_line() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("single line".to_string());
+        sim.selection = Selection::single(0, 11);
+
+        join_selections_space(&mut sim).unwrap();
+
+        // No change for single line
+        assert_eq!(sim.doc.to_string(), "single line");
+    }
+}

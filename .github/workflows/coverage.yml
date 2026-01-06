@@ -57,22 +57,13 @@ jobs:
       - name: Generate coverage report
         run: |
           cargo llvm-cov --all-features --workspace --lcov \
-            --output-path lcov.info nextest --lib --verbose
-
-      - name: Generate doc test coverage
-        run: |
-          cargo llvm-cov --all-features --workspace --lcov \
-            --output-path lcov-doctests.info --doc --verbose
-
-      - name: Merge coverage reports
-        run: |
-          cargo llvm-cov --no-run --lcov --output-path lcov-merged.info
+            --output-path lcov.info nextest --verbose
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov.info,lcov-doctests.info
+          files: lcov.info
           fail_ci_if_error: true
           verbose: true
           flags: unittests
@@ -82,9 +73,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: coverage-report
-          path: |
-            lcov.info
-            lcov-doctests.info
+          path: lcov.info
           retention-days: 30
 
       - name: Show sccache statistics

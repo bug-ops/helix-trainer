@@ -13,7 +13,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  CARGO_INCREMENTAL: 0  # Disable incremental compilation for better sccache performance
 
 # Cancel previous release workflows if a new tag is pushed
 concurrency:
@@ -78,9 +77,6 @@ jobs:
     needs: validate
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -147,9 +143,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
       # Install musl tools for Linux musl builds
       - name: Install musl tools (Linux musl only)
         if: matrix.target == 'x86_64-unknown-linux-musl'
@@ -170,10 +163,6 @@ jobs:
       - name: Build release binary (native)
         if: matrix.use_cross != true
         run: cargo build --release --target ${{ matrix.target }} --locked --verbose
-
-      - name: Show sccache statistics
-        shell: bash
-        run: sccache --show-stats
 
       - name: Create archive directory
         shell: bash

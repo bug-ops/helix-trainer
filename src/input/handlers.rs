@@ -325,6 +325,15 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
 }
 
 /// Handle keyboard events on the results screen
+///
+/// Key bindings:
+/// - `r` - Retry current scenario
+/// - `n` - Navigate to next lesson in filtered list
+/// - `l` - Navigate to scenario list (Menu screen)
+/// - `m` - Return to mode selection (main menu)
+/// - `p` - Show profile
+/// - `q` - Quit application
+/// - `Ctrl-Q` - Return to mode selection
 pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q returns to menu (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -334,6 +343,8 @@ pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
     match key.code {
         KeyCode::Char('q') => Some(Message::QuitApp),
         KeyCode::Char('r') => Some(Message::RetryScenario),
+        KeyCode::Char('n') => Some(Message::NextLesson),
+        KeyCode::Char('l') => Some(Message::GoToScenarioList),
         KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('p') => Some(Message::ShowProfile),
         _ => None,
@@ -542,6 +553,27 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
         let msg = handle_results_keys(key);
         assert_eq!(msg, Some(Message::BackToMenu));
+    }
+
+    #[test]
+    fn test_results_key_n_next_lesson() {
+        let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::NextLesson));
+    }
+
+    #[test]
+    fn test_results_key_l_goes_to_list() {
+        let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::GoToScenarioList));
+    }
+
+    #[test]
+    fn test_results_key_p_shows_profile() {
+        let key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::ShowProfile));
     }
 
     #[test]

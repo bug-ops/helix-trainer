@@ -33,8 +33,8 @@ pub(super) use review::{
     handle_start_review_session,
 };
 pub(super) use scenario::{
-    handle_abandon_scenario, handle_complete_scenario, handle_next_scenario, handle_retry_scenario,
-    handle_start_scenario,
+    handle_abandon_scenario, handle_complete_scenario, handle_go_to_scenario_list,
+    handle_next_lesson, handle_next_scenario, handle_retry_scenario, handle_start_scenario,
 };
 
 mod filters;

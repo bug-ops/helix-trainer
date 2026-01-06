@@ -202,6 +202,12 @@ pub enum Message {
     /// Move to next scenario
     NextScenario,
 
+    /// Navigate to next lesson from results screen (sequential navigation)
+    NextLesson,
+
+    /// Navigate to scenario list (Menu screen) from results screen
+    GoToScenarioList,
+
     /// Return to main menu
     BackToMenu,
 
@@ -718,6 +724,40 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             let outcome = handlers::handle_next_scenario(&mut ctx)?;
             apply_outcome(state, outcome);
             Ok(())
+        }
+        Message::NextLesson => {
+            if let TypedScreen::Results(ref results_data) = state.screen {
+                let mut ctx = HandlerContext::new(
+                    &mut state.ui,
+                    &mut state.game,
+                    &mut state.progress,
+                    &state.config,
+                );
+                let outcome = handlers::handle_next_lesson(results_data, &mut ctx)?;
+                apply_outcome(state, outcome);
+                Ok(())
+            } else {
+                Err(UserError::invalid_state(
+                    "Expected Results screen for NextLesson",
+                ))
+            }
+        }
+        Message::GoToScenarioList => {
+            if let TypedScreen::Results(ref results_data) = state.screen {
+                let mut ctx = HandlerContext::new(
+                    &mut state.ui,
+                    &mut state.game,
+                    &mut state.progress,
+                    &state.config,
+                );
+                let outcome = handlers::handle_go_to_scenario_list(results_data, &mut ctx)?;
+                apply_outcome(state, outcome);
+                Ok(())
+            } else {
+                Err(UserError::invalid_state(
+                    "Expected Results screen for GoToScenarioList",
+                ))
+            }
         }
 
         // Gameplay messages

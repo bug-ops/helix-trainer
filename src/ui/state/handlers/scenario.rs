@@ -112,6 +112,13 @@ fn record_scenario_completion(
 ///
 /// Note: This handler needs full AppState access to call update() for quest progress
 pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, UserError> {
+    // Extract scenario_index from current TaskData before any transitions
+    let scenario_index = if let TypedScreen::Task(ref task_data) = state.screen {
+        task_data.scenario_index
+    } else {
+        None
+    };
+
     // Get feedback and completed session from state
     let (feedback, completed_session) = if let Some(ref feedback) = state.ui.last_feedback {
         // Extract completed session from pending storage
@@ -120,7 +127,8 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     } else {
         let results_data = if let Some(session) = state.game.pending_completed_session.take() {
             let feedback = session.feedback().map_err(UserError::from)?;
-            ResultsData::from_completed(session, feedback).map_err(UserError::from)?
+            ResultsData::from_completed(session, feedback, scenario_index)
+                .map_err(UserError::from)?
         } else {
             // No session either, just go to menu
             return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
@@ -196,8 +204,8 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         ))));
     };
 
-    let mut results_data =
-        ResultsData::from_completed(session, feedback.clone()).map_err(UserError::from)?;
+    let mut results_data = ResultsData::from_completed(session, feedback.clone(), scenario_index)
+        .map_err(UserError::from)?;
     // Populate with XP breakdown and quest changes
     results_data.xp_breakdown = ctx.ui.xp_breakdown.clone();
     results_data.quest_changes = ctx.ui.quest_progress_changes.clone();
@@ -219,8 +227,8 @@ pub fn handle_abandon_scenario(task_data: TaskData) -> Result<TypedScreen, UserE
     let abandoned = task_data.session.abandon();
     let feedback = abandoned.feedback();
 
-    // Create ResultsData from abandoned session
-    let results_data = ResultsData::from_abandoned(abandoned, feedback);
+    // Create ResultsData from abandoned session, preserving scenario index
+    let results_data = ResultsData::from_abandoned(abandoned, feedback, task_data.scenario_index);
 
     // Return new screen directly
     Ok(TypedScreen::Results(results_data))
@@ -395,7 +403,7 @@ mod tests {
         };
 
         let feedback = completed.feedback().unwrap();
-        let results_data = ResultsData::from_completed(completed, feedback).unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, None).unwrap();
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,
@@ -419,7 +427,7 @@ mod tests {
         let abandoned = session.abandon();
         let feedback = abandoned.feedback();
 
-        let results_data = ResultsData::from_abandoned(abandoned, feedback);
+        let results_data = ResultsData::from_abandoned(abandoned, feedback, None);
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,

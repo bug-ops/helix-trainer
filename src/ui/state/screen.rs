@@ -168,10 +168,17 @@ pub struct TaskData {
 
     /// Last command executed (for display)
     pub last_command: Option<String>,
+
+    /// Index of current scenario in filtered list (for next/prev navigation)
+    /// None if scenario was started from outside the normal list flow
+    pub scenario_index: Option<usize>,
 }
 
 impl TaskData {
     /// Create new TaskData with an active session
+    ///
+    /// # Arguments
+    /// * `session` - Active game session
     pub fn new(session: GameSession<Active>) -> Self {
         Self {
             session,
@@ -180,6 +187,24 @@ impl TaskData {
             current_hint: None,
             show_hint_panel: false,
             last_command: None,
+            scenario_index: None,
+        }
+    }
+
+    /// Create new TaskData with an active session and scenario index
+    ///
+    /// # Arguments
+    /// * `session` - Active game session
+    /// * `index` - Index of scenario in filtered list
+    pub fn with_index(session: GameSession<Active>, index: usize) -> Self {
+        Self {
+            session,
+            key_history: KeyHistory::new(),
+            current_hint: None,
+            show_hint_panel: false,
+            command_buffer: String::new(),
+            last_command: None,
+            scenario_index: Some(index),
         }
     }
 
@@ -211,13 +236,23 @@ pub struct ResultsData {
 
     /// Scenario mastery info (mastery level, multiplier)
     pub scenario_mastery: Option<(ScenarioMastery, f64)>,
+
+    /// Index of current scenario in filtered list (for next/prev navigation)
+    /// None if scenario was started from outside the normal list flow
+    pub scenario_index: Option<usize>,
 }
 
 impl ResultsData {
     /// Create new ResultsData from a completed session
+    ///
+    /// # Arguments
+    /// * `session` - Completed game session
+    /// * `feedback` - Performance feedback
+    /// * `scenario_index` - Index of scenario in filtered list (for navigation)
     pub fn from_completed(
         session: GameSession<Completed>,
         feedback: Feedback,
+        scenario_index: Option<usize>,
     ) -> Result<Self, crate::security::SecurityError> {
         Ok(Self {
             session: CompletedOrAbandoned::Completed(session),
@@ -225,17 +260,28 @@ impl ResultsData {
             xp_breakdown: None,
             quest_changes: Vec::new(),
             scenario_mastery: None,
+            scenario_index,
         })
     }
 
     /// Create new ResultsData from an abandoned session
-    pub fn from_abandoned(session: GameSession<Abandoned>, feedback: Feedback) -> Self {
+    ///
+    /// # Arguments
+    /// * `session` - Abandoned game session
+    /// * `feedback` - Performance feedback
+    /// * `scenario_index` - Index of scenario in filtered list (for navigation)
+    pub fn from_abandoned(
+        session: GameSession<Abandoned>,
+        feedback: Feedback,
+        scenario_index: Option<usize>,
+    ) -> Self {
         Self {
             session: CompletedOrAbandoned::Abandoned(session),
             feedback,
             xp_breakdown: None,
             quest_changes: Vec::new(),
             scenario_mastery: None,
+            scenario_index,
         }
     }
 }

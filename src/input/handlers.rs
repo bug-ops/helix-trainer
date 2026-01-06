@@ -556,6 +556,27 @@ mod tests {
     }
 
     #[test]
+    fn test_results_key_n_next_lesson() {
+        let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::NextLesson));
+    }
+
+    #[test]
+    fn test_results_key_l_goes_to_list() {
+        let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::GoToScenarioList));
+    }
+
+    #[test]
+    fn test_results_key_p_shows_profile() {
+        let key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::ShowProfile));
+    }
+
+    #[test]
     fn test_menu_key_ctrl_q_quits() {
         let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
         let mut state = create_test_app_state();

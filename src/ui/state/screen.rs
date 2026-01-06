@@ -199,10 +199,10 @@ impl TaskData {
     pub fn with_index(session: GameSession<Active>, index: usize) -> Self {
         Self {
             session,
+            input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
             current_hint: None,
             show_hint_panel: false,
-            command_buffer: String::new(),
             last_command: None,
             scenario_index: Some(index),
         }

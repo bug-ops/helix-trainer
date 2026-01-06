@@ -726,4 +726,272 @@ mod tests {
             panic!("Expected Transition outcome");
         }
     }
+
+    // ============================================================================
+    // LESSON NAVIGATION TESTS
+    // ============================================================================
+
+    fn create_multi_scenario_state() -> AppState {
+        let scenarios = vec![
+            create_test_scenario_with_id("scenario_1"),
+            create_test_scenario_with_id("scenario_2"),
+            create_test_scenario_with_id("scenario_3"),
+        ];
+        AppState {
+            screen: TypedScreen::Menu(MenuData::default()),
+            ui: UIState::new(),
+            game: GameState::new(scenarios),
+            progress: ProgressState::new(
+                UserProfile::new(),
+                PerformanceTracker::new(),
+                ProfileStorage::new(),
+            ),
+            config: ConfigState::default(),
+        }
+    }
+
+    fn create_test_scenario_with_id(id: &str) -> Scenario {
+        Scenario {
+            id: id.to_string(),
+            name: format!("Test Scenario {}", id),
+            description: "Test description".to_string(),
+            setup: Setup {
+                file_content: "line 1\nline 2\nline 3\n".to_string(),
+                cursor_position: (1, 0),
+            },
+            target: TargetState {
+                file_content: "line 1\nline 3\n".to_string(),
+                cursor_position: (1, 0),
+                selection: None,
+            },
+            solution: Solution {
+                commands: vec!["x".to_string(), "d".to_string()],
+                description: "Delete line".to_string(),
+            },
+            alternatives: vec![],
+            hints: vec!["Hint 1".to_string()],
+            scoring: ScoringConfig {
+                optimal_count: 2,
+                max_points: 100,
+                tolerance: 1,
+            },
+            metadata: Some(ScenarioMetadata {
+                difficulty: Some(Difficulty::Beginner),
+                ..Default::default()
+            }),
+        }
+    }
+
+    fn create_results_data_with_index(scenario_index: Option<usize>) -> ResultsData {
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+        let abandoned = session.abandon();
+        let feedback = abandoned.feedback();
+        ResultsData::from_abandoned(abandoned, feedback, scenario_index)
+    }
+
+    #[test]
+    fn test_handle_next_lesson_navigates_to_next_scenario() {
+        let mut state = create_multi_scenario_state();
+        let results_data = create_results_data_with_index(Some(0));
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_next_lesson(&results_data, &mut ctx).unwrap();
+
+        // Should transition to Task screen with next scenario (index 1)
+        if let HandlerOutcome::Transition(screen) = outcome {
+            if let TypedScreen::Task(task_data) = *screen {
+                assert_eq!(task_data.scenario_index, Some(1));
+            } else {
+                panic!("Expected Task screen, got {:?}", screen.screen_type());
+            }
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_handle_next_lesson_at_end_of_list_stays() {
+        let mut state = create_multi_scenario_state();
+        // Index 2 is the last scenario (0, 1, 2 for 3 scenarios)
+        let results_data = create_results_data_with_index(Some(2));
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_next_lesson(&results_data, &mut ctx).unwrap();
+
+        // Should stay on results screen
+        assert!(
+            matches!(outcome, HandlerOutcome::Stay),
+            "Expected Stay outcome at end of list"
+        );
+    }
+
+    #[test]
+    fn test_handle_next_lesson_without_index_goes_to_menu() {
+        let mut state = create_multi_scenario_state();
+        let results_data = create_results_data_with_index(None);
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_next_lesson(&results_data, &mut ctx).unwrap();
+
+        // Should transition to Menu screen
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(
+                matches!(*screen, TypedScreen::Menu(_)),
+                "Expected Menu screen"
+            );
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_handle_go_to_scenario_list_transitions_to_menu() {
+        let mut state = create_multi_scenario_state();
+        let results_data = create_results_data_with_index(Some(1));
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+
+        // Should always transition to Menu screen
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(
+                matches!(*screen, TypedScreen::Menu(_)),
+                "Expected Menu screen"
+            );
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_handle_go_to_scenario_list_without_index_transitions_to_menu() {
+        let mut state = create_multi_scenario_state();
+        let results_data = create_results_data_with_index(None);
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+
+        // Should always transition to Menu screen regardless of scenario_index
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(
+                matches!(*screen, TypedScreen::Menu(_)),
+                "Expected Menu screen"
+            );
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    // ============================================================================
+    // INDEX PROPAGATION TESTS
+    // ============================================================================
+
+    #[test]
+    fn test_start_scenario_stores_index() {
+        let mut state = create_multi_scenario_state();
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_start_scenario(&mut ctx, 1).unwrap();
+
+        if let HandlerOutcome::Transition(screen) = outcome {
+            if let TypedScreen::Task(task_data) = *screen {
+                assert_eq!(
+                    task_data.scenario_index,
+                    Some(1),
+                    "TaskData should store scenario index"
+                );
+            } else {
+                panic!("Expected Task screen");
+            }
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_retry_scenario_preserves_index() {
+        let mut state = create_multi_scenario_state();
+
+        // Create ResultsData with scenario_index = Some(1)
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+        let abandoned = session.abandon();
+        let feedback = abandoned.feedback();
+        let results_data = ResultsData::from_abandoned(abandoned, feedback, Some(1));
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let screen = handle_retry_scenario(results_data, &mut ctx).unwrap();
+
+        if let TypedScreen::Task(task_data) = screen {
+            assert_eq!(
+                task_data.scenario_index,
+                Some(1),
+                "Retry should preserve scenario_index"
+            );
+        } else {
+            panic!("Expected Task screen after retry");
+        }
+    }
+
+    #[test]
+    fn test_abandon_scenario_preserves_index() {
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+        let mut task_data = TaskData::new(session);
+        task_data.scenario_index = Some(2);
+
+        let screen = handle_abandon_scenario(task_data).unwrap();
+
+        if let TypedScreen::Results(results_data) = screen {
+            assert_eq!(
+                results_data.scenario_index,
+                Some(2),
+                "Abandon should preserve scenario_index in ResultsData"
+            );
+        } else {
+            panic!("Expected Results screen after abandon");
+        }
+    }
 }

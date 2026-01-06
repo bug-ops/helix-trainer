@@ -27,7 +27,11 @@ optimal_actions = "Optimal"
 score = "Score"
 performance = "Performance"
 hints_title = "Hints"
-instructions = "(r) Retry | (m) Main Menu | (q) Quit"
+instructions = "(r) Retry | (n) Next | (l) List | (m) Menu | (p) Profile | (q) Quit"
+
+# Navigation feedback
+no_more_scenarios = "No more scenarios in the list"
+no_scenario_index = "Returning to scenario list..."
 
 # Performance ratings
 rating_perfect = "Perfect"

@@ -493,7 +493,11 @@ mod tests {
 
         assert_eq!(bonuses.len(), 1);
         assert_eq!(bonuses[0].1, 100);
-        assert!(ctx.progress.previously_completed_quests.contains("test_quest"));
+        assert!(
+            ctx.progress
+                .previously_completed_quests
+                .contains("test_quest")
+        );
     }
 
     #[test]
@@ -512,7 +516,10 @@ mod tests {
             completed: true,
         }];
 
-        state.progress.previously_completed_quests.insert("test_quest".to_string());
+        state
+            .progress
+            .previously_completed_quests
+            .insert("test_quest".to_string());
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,

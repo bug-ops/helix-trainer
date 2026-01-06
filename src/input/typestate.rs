@@ -48,17 +48,12 @@
 //! The types are currently used in tests and will be integrated into the
 //! main event loop in a future update.
 
-// Allow unused items as this module provides the foundation for future integration.
-// The types are currently used in tests and will be used in the main code path
-// when the handlers module is updated to use the typestate pattern.
-#![allow(dead_code)]
-
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use helix_trainer::helix::commands::*;
+use crate::helix::commands::*;
 
 // ============================================================================
 // Handler state marker types (zero-sized)
@@ -827,8 +822,8 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
         KeyCode::Char(c) => Some(Cow::Owned(c.to_string())),
         KeyCode::Esc => Some(Cow::Borrowed(CMD_ESCAPE)),
         KeyCode::Backspace => Some(Cow::Borrowed(CMD_BACKSPACE)),
-        KeyCode::Enter => Some(Cow::Owned("\n".to_string())),
-        KeyCode::Tab => Some(Cow::Owned("\t".to_string())),
+        KeyCode::Enter => Some(Cow::Borrowed("\n")),
+        KeyCode::Tab => Some(Cow::Borrowed("\t")),
         KeyCode::Left => Some(Cow::Borrowed(CMD_ARROW_LEFT)),
         KeyCode::Right => Some(Cow::Borrowed(CMD_ARROW_RIGHT)),
         KeyCode::Up => Some(Cow::Borrowed(CMD_ARROW_UP)),
@@ -1000,6 +995,55 @@ impl TypestateHandlerState {
             Self::FindCharPending(_, _) => FindCharPending::state_name(),
             Self::ReplaceCharPending(_) => ReplaceCharPending::state_name(),
             Self::CountPending(_, _) => CountPending::state_name(),
+        }
+    }
+}
+
+// ============================================================================
+// Utility functions
+// ============================================================================
+
+/// Convert a command string to a KeyEvent for the input state machine
+///
+/// This is a helper function to bridge the gap between command strings
+/// coming from the input layer and the KeyEvent-based state machine.
+///
+/// # Examples
+///
+/// ```ignore
+/// use helix_trainer::input::typestate::command_to_key_event;
+///
+/// let key = command_to_key_event("h");
+/// assert_eq!(key.code, KeyCode::Char('h'));
+///
+/// let key = command_to_key_event("Escape");
+/// assert_eq!(key.code, KeyCode::Esc);
+/// ```
+pub fn command_to_key_event(command: &str) -> KeyEvent {
+    // Handle single character commands
+    if command.len() == 1 {
+        let c = command.chars().next().unwrap();
+        // Check if it's an uppercase letter (implies Shift)
+        let modifiers = if c.is_ascii_uppercase() {
+            KeyModifiers::SHIFT
+        } else {
+            KeyModifiers::NONE
+        };
+        return KeyEvent::new(KeyCode::Char(c), modifiers);
+    }
+
+    // Handle special command strings
+    match command {
+        "Escape" => KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+        "Left" => KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+        "Right" => KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+        "Up" => KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+        "Down" => KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+        "Backspace" => KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
+        _ => {
+            // Default: treat first char as the key
+            let c = command.chars().next().unwrap_or(' ');
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
         }
     }
 }

@@ -6,6 +6,7 @@
 //! an active GameSession.
 
 use crate::game::{Abandoned, Active, Completed, Feedback, GameSession};
+use crate::input::typestate::InputStateMachine;
 use crate::learning::ScenarioMastery;
 use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 
@@ -150,6 +151,12 @@ pub struct TaskData {
     /// Active game session (guaranteed to exist)
     pub session: GameSession<Active>,
 
+    /// Typestate-based input state machine for multi-key commands
+    ///
+    /// Replaces the old `command_buffer: String` with a compile-time safe
+    /// state machine that tracks pending input states (goto, find, count, etc.)
+    pub input_state: InputStateMachine,
+
     /// History of recent keypresses (shared KeyHistory struct)
     pub key_history: KeyHistory,
 
@@ -158,9 +165,6 @@ pub struct TaskData {
 
     /// Whether to show hint panel
     pub show_hint_panel: bool,
-
-    /// Command buffer for multi-key commands (e.g., "d" waiting for "d")
-    pub command_buffer: String,
 
     /// Last command executed (for display)
     pub last_command: Option<String>,
@@ -171,10 +175,10 @@ impl TaskData {
     pub fn new(session: GameSession<Active>) -> Self {
         Self {
             session,
+            input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
             current_hint: None,
             show_hint_panel: false,
-            command_buffer: String::new(),
             last_command: None,
         }
     }
@@ -314,8 +318,11 @@ pub struct ModeSelectionData {
 /// Data required for mini-game screen
 #[derive(Debug, Clone, Default)]
 pub struct MiniGameData {
-    /// Command buffer for multi-key commands (e.g., "g" waiting for "g")
-    pub command_buffer: String,
+    /// Typestate-based input state machine for multi-key commands
+    ///
+    /// Replaces the old `command_buffer: String` with a compile-time safe
+    /// state machine that tracks pending input states (goto, find, count, etc.)
+    pub input_state: InputStateMachine,
     /// Last XP earned (for popup display during transition)
     pub last_xp_earned: Option<u64>,
     /// History of recent keypresses (shared KeyHistory struct)
@@ -336,8 +343,8 @@ impl MiniGameData {
 
 /// Trait for types that manage a command buffer for multi-key commands
 ///
-/// Both training mode (TaskData) and arcade mode (MiniGameData) use command
-/// buffers to handle multi-key sequences like `gg`, `rx`, and `fa`.
+/// Used by MenuData for menu navigation commands like `gg`, `5j`, `G`.
+/// For gameplay screens (TaskData, MiniGameData), use [`InputStateAccess`] instead.
 pub trait CommandBufferAccess {
     /// Get reference to the command buffer
     fn command_buffer(&self) -> &str;
@@ -356,43 +363,67 @@ pub trait CommandBufferAccess {
     }
 }
 
-impl CommandBufferAccess for TaskData {
-    fn command_buffer(&self) -> &str {
-        &self.command_buffer
+/// Trait for types that use typestate-based input state machine
+///
+/// TaskData and MiniGameData use `InputStateMachine` for handling multi-key
+/// Helix commands with compile-time safety. This trait provides uniform
+/// access to the input state machine.
+///
+/// # Examples
+///
+/// ```ignore
+/// use helix_trainer::ui::state::InputStateAccess;
+///
+/// fn check_waiting_for_char<T: InputStateAccess>(data: &T) -> bool {
+///     data.input_state().is_waiting_for_char()
+/// }
+/// ```
+pub trait InputStateAccess {
+    /// Get reference to the input state machine
+    fn input_state(&self) -> &InputStateMachine;
+
+    /// Get mutable reference to the input state machine
+    fn input_state_mut(&mut self) -> &mut InputStateMachine;
+
+    /// Reset the input state machine to base state
+    fn reset_input_state(&mut self) {
+        self.input_state_mut().reset();
     }
 
-    fn command_buffer_mut(&mut self) -> &mut String {
-        &mut self.command_buffer
+    /// Check if waiting for character input (e.g., after 'f', 'r')
+    fn is_waiting_for_char(&self) -> bool {
+        self.input_state().is_waiting_for_char()
+    }
+
+    /// Check if in a prefix state (building multi-key command)
+    fn is_prefix_state(&self) -> bool {
+        self.input_state().is_prefix_state()
     }
 }
 
-impl crate::game::CommandContext for TaskData {
-    fn command_buffer(&self) -> &str {
-        &self.command_buffer
+impl InputStateAccess for TaskData {
+    fn input_state(&self) -> &InputStateMachine {
+        &self.input_state
     }
 
-    fn is_insert_mode(&self) -> bool {
-        self.session.is_insert_mode()
-    }
-
-    fn last_command(&self) -> Option<&str> {
-        self.last_command.as_deref()
+    fn input_state_mut(&mut self) -> &mut InputStateMachine {
+        &mut self.input_state
     }
 }
 
-impl CommandBufferAccess for MiniGameData {
-    fn command_buffer(&self) -> &str {
-        &self.command_buffer
+impl InputStateAccess for MiniGameData {
+    fn input_state(&self) -> &InputStateMachine {
+        &self.input_state
     }
 
-    fn command_buffer_mut(&mut self) -> &mut String {
-        &mut self.command_buffer
+    fn input_state_mut(&mut self) -> &mut InputStateMachine {
+        &mut self.input_state
     }
 }
 
-// Implement game::CommandBuffer for all types that implement CommandBufferAccess
-// This enables using process_command_input() with TaskData and MiniGameData
-impl<T: CommandBufferAccess> crate::game::CommandBuffer for T {
+// Implement game::CommandBuffer for MenuData only
+// (TaskData and MiniGameData now use InputStateMachine)
+impl crate::game::CommandBuffer for MenuData {
     fn buffer(&self) -> &str {
         self.command_buffer()
     }

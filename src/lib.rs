@@ -29,6 +29,7 @@ pub mod data_loader;
 pub mod game;
 pub mod gamification;
 pub mod helix;
+pub mod input;
 pub mod learning;
 pub mod minigame;
 pub mod security;

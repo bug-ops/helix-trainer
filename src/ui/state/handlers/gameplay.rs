@@ -2,11 +2,14 @@
 //!
 //! Handles command execution and hint display
 
+use std::borrow::Cow;
+use std::time::Duration;
+
 use crate::game::format_key_for_display;
 use crate::helix::commands::CMD_ESCAPE;
+use crate::input::typestate::{HandlerResult, command_to_key_event};
 use crate::security::UserError;
-use crate::ui::state::{AppState, HandlerOutcome, Message, TypedScreen, update};
-use std::time::Duration;
+use crate::ui::state::{AppState, HandlerOutcome, InputStateAccess, Message, TypedScreen, update};
 
 /// Process session result and update state accordingly
 ///
@@ -64,13 +67,14 @@ pub fn handle_show_hint(state: &mut AppState) -> Result<HandlerOutcome, UserErro
 
 /// Handle ExecuteCommand message
 ///
-/// Processes user commands in normal or insert mode, tracks for quests
+/// Processes user commands in normal or insert mode, tracks for quests.
+/// Uses the typestate-based `InputStateMachine` for multi-key command handling.
 ///
 /// Note: This handler operates on TaskData screen and calls update() for quest progress,
 /// so it requires full AppState access
 pub fn handle_execute_command(
     state: &mut AppState,
-    command: std::borrow::Cow<'static, str>,
+    command: Cow<'static, str>,
 ) -> Result<HandlerOutcome, UserError> {
     // Only handle if we're on Task screen
     if !matches!(state.screen, TypedScreen::Task(_)) {
@@ -93,56 +97,76 @@ pub fn handle_execute_command(
     // Show key history popup after first keypress
     state.ui.show_key_history = true;
 
-    // Use unified command input processing
-    use crate::game::{CommandInputResult, process_command_input};
-
     let is_insert_mode = task_data.session.is_insert_mode();
-    let input_result = process_command_input(&mut task_data, &command, is_insert_mode);
 
     // Track command for quest progress (only execute once per complete command)
     let mut executed_command: Option<String> = None;
     let mut session_completed = false;
 
-    match input_result {
-        CommandInputResult::Execute(cmd) => {
-            // Store last command for display
-            if is_insert_mode {
-                if command.as_ref() == CMD_ESCAPE {
-                    task_data.last_command = Some(command.to_string());
-                }
-            } else {
-                task_data.last_command = Some(cmd.clone());
-                executed_command = Some(cmd.clone());
+    if is_insert_mode {
+        // In insert mode, execute command directly (bypass input state machine)
+        // Use into_owned() to avoid allocation when Cow is already Owned
+        let cmd = command.into_owned();
+
+        // Store last command for display (only for Escape)
+        if cmd == CMD_ESCAPE {
+            task_data.last_command = Some(cmd.clone());
+        }
+
+        // Execute the command
+        let scenario = task_data.session.scenario().clone();
+        let session = std::mem::replace(
+            &mut task_data.session,
+            crate::game::GameSession::new(scenario)?,
+        );
+        let result = session.record_action(cmd)?;
+        session_completed = process_session_result(result, &mut task_data, state)?;
+        state.screen = TypedScreen::Task(task_data);
+    } else {
+        // Normal mode - use InputStateMachine for multi-key command handling
+        // Convert the command string to a KeyEvent for the state machine
+        let key_event = command_to_key_event(&command);
+
+        // Process through the input state machine
+        let handler_result = task_data.input_state_mut().process_key(key_event);
+
+        match handler_result {
+            HandlerResult::Execute(cmd) => {
+                let cmd_str = cmd.to_string();
+
+                // Store last command for display
+                task_data.last_command = Some(cmd_str.clone());
+                executed_command = Some(cmd_str.clone());
+
+                // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
+                let (count, base_cmd) = crate::game::extract_count_and_command(&cmd_str);
+                let base_cmd = base_cmd.to_string();
+
+                // Clone scenario before taking session (to avoid borrow conflict)
+                let scenario = task_data.session.scenario().clone();
+
+                // Take session for state transition
+                let session = std::mem::replace(
+                    &mut task_data.session,
+                    crate::game::GameSession::new(scenario)?,
+                );
+
+                // Execute command with count - records as ONE action
+                let result = session.record_action_with_count(cmd_str, &base_cmd, count)?;
+                session_completed = process_session_result(result, &mut task_data, state)?;
+
+                // Always restore Task screen - even when completed, we show success popup
+                state.screen = TypedScreen::Task(task_data);
             }
-
-            // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
-            let (count, base_cmd) = crate::game::extract_count_and_command(&cmd);
-            let base_cmd = base_cmd.to_string();
-
-            // Clone scenario before taking session (to avoid borrow conflict)
-            let scenario = task_data.session.scenario().clone();
-
-            // Take session for state transition
-            let session = std::mem::replace(
-                &mut task_data.session,
-                crate::game::GameSession::new(scenario)?,
-            );
-
-            // Execute command with count - records as ONE action
-            let result = session.record_action_with_count(cmd, &base_cmd, count)?;
-            session_completed = process_session_result(result, &mut task_data, state)?;
-
-            // Always restore Task screen - even when completed, we show success popup
-            state.screen = TypedScreen::Task(task_data);
-        }
-        CommandInputResult::Invalid => {
-            // Invalid sequence - buffer already cleared by process_command_input
-            state.screen = TypedScreen::Task(task_data);
-            return Ok(HandlerOutcome::Stay);
-        }
-        CommandInputResult::Partial => {
-            // Waiting for more keys
-            state.screen = TypedScreen::Task(task_data);
+            HandlerResult::Transition(_) => {
+                // Waiting for more keys - state machine already updated
+                state.screen = TypedScreen::Task(task_data);
+            }
+            HandlerResult::Cancel | HandlerResult::Stay => {
+                // Cancelled or unknown key - restore screen and stay
+                state.screen = TypedScreen::Task(task_data);
+                return Ok(HandlerOutcome::Stay);
+            }
         }
     }
 

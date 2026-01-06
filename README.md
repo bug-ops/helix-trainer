@@ -180,14 +180,14 @@ Main Menu
 
 | Category | Commands |
 |----------|----------|
-| **Movement** | `h, j, k, l, w, b, e, 0, $, gg, ge, gh, gl, gs` |
-| **Match Mode** | `mm` (jump to matching bracket) |
-| **Editing** | `i, a, I, A, o, O, r, c, x, d, J, >, <` |
-| **Clipboard** | `y, p, P` |
-| **Undo/Redo** | `u, U` |
-| **Repeat** | `.` (repeat last action) |
-| **Count Prefix** | `3h, 5j, 2w` (execute N times) |
-| **Insert Mode** | Text input, Backspace, arrow keys, Esc |
+| **Movement** | <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd> <kbd>0</kbd> <kbd>$</kbd> <kbd>gg</kbd> <kbd>ge</kbd> <kbd>gh</kbd> <kbd>gl</kbd> <kbd>gs</kbd> |
+| **Match Mode** | <kbd>mm</kbd> (jump to matching bracket) |
+| **Editing** | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>r</kbd> <kbd>c</kbd> <kbd>x</kbd> <kbd>d</kbd> <kbd>J</kbd> <kbd>></kbd> <kbd><</kbd> |
+| **Clipboard** | <kbd>y</kbd> <kbd>p</kbd> <kbd>P</kbd> |
+| **Undo/Redo** | <kbd>u</kbd> <kbd>U</kbd> |
+| **Repeat** | <kbd>.</kbd> (repeat last action) |
+| **Count Prefix** | <kbd>3h</kbd> <kbd>5j</kbd> <kbd>2w</kbd> (execute N times) |
+| **Insert Mode** | Text input, <kbd>Backspace</kbd>, arrow keys, <kbd>Esc</kbd> |
 
 All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
@@ -197,8 +197,8 @@ All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
 Most Helix/Vim tutorials:
 
-- Teach `xd` (delete line) in isolation ❌
-- Show `w` (next word) on synthetic text ❌
+- Teach <kbd>x</kbd><kbd>d</kbd> (delete line) in isolation ❌
+- Show <kbd>w</kbd> (next word) on synthetic text ❌
 - Stop at "congratulations, you know the basics!" ❌
 
 **Real development requires:**
@@ -247,58 +247,31 @@ Duolingo-proven mechanics:
 ## Current Status
 
 > [!NOTE]
-> **Active Development**: Phase 2.1 (Mini-Games) is complete! The project now includes both deliberate training and arcade modes with full XP/quest integration.
+> **Active Development**: Phase 2.1 (Mini-Games) is complete! 645 passing tests, zero clippy warnings.
 
-### ✅ Phase 1: Smart Learning & Gamification (COMPLETE - v0.1.3)
+### Completed
 
-- FSRS spaced repetition system
-- Daily quest system
-- XP/leveling with scenario mastery
-- Profile & statistics tracking
-- Anti-farming protection
-- Repeat command (`.`) for efficient workflows
-- 164 passing tests, zero clippy warnings
-
-### ✅ Phase 1.5: Scenario Metadata & Discovery (COMPLETE - v0.3.0)
-
-- Rich metadata system (category, difficulty, tags, taught commands)
-- Flexible filtering (category, difficulty, commands, completion status)
-- Six sort modes (alphabetical, difficulty, category, completion, recent, random)
-- Visual indicators (🟢 Beginner / 🟡 Intermediate / 🔴 Advanced + ✅ completed)
-- 25 fully categorized scenarios (Movement: 5, Editing: 11, Clipboard: 3, Advanced: 6)
-- Performance benchmarks for filtering/sorting (<1ms for 1000 scenarios)
-- Automated scenario validation tests
-
-### ✅ Phase 2.1: Mini-Games Mode (COMPLETE - v0.4.1)
-
-Arcade-style training with time pressure:
-
-- **Mode Selection** — Choose between Training (deliberate practice) and Arcade (fast-paced)
-- **Timed Sessions** — 60-second games with 5-10 seconds per scenario
-- **Lives System** — Start with 3 lives, earn bonus at 1000/2500/5000 points
-- **Score Multiplier** — Build streaks up to x5.0 for consecutive completions
-- **XP Integration** — Per-scenario rewards (15 base + streak bonus)
-- **Pause Menu** — Access profile/stats mid-game with proper navigation
-- **Key History** — Visual display of last 5 keys pressed
-- 645 passing tests, zero clippy warnings
-
-**Why this matters**: Build muscle memory through fast-paced repetition while having fun.
+| Phase | Version | Highlights |
+|-------|---------|------------|
+| **Phase 1** | v0.1.3 | FSRS spaced repetition, daily quests, XP/mastery system, anti-farming |
+| **Phase 1.5** | v0.3.0 | Scenario metadata, filtering/sorting, 78 categorized scenarios |
+| **Phase 2.1** | v0.4.1 | Arcade mode (60s sessions, lives, streak multiplier, XP integration) |
 
 ### 🔄 Phase 2.2: Mini-Games Enhancements (Planned)
 
-- Adaptive difficulty based on performance
-- Sound effects with volume control
-- Leaderboards (local)
-- More game modes (survival, challenge)
+- **Adaptive Difficulty** — Auto-adjust based on performance metrics
+- **Audio Feedback** — Sound effects with volume control
+- **Local Leaderboards** — Track personal bests and high scores
+- **New Game Modes** — Survival (endless), Challenge (daily puzzles)
 
 ### 🔄 Phase 3: Workflow Simulator (Planned)
 
 The flagship feature that makes Helix Trainer unique:
 
-- Mock LSP server for realistic scenarios
-- Git repository state simulation
-- Multi-file navigation training
-- Real development workflow scenarios (CI debugging, refactoring, etc.)
+- **Mock LSP Server** — Realistic goto-definition, find-references, rename scenarios
+- **Git State Simulation** — Stage, commit, diff workflows without real repo
+- **Multi-File Navigation** — Jump between related files in simulated projects
+- **Real Workflows** — CI debugging, refactoring, code review scenarios
 
 **Why this matters**: Bridges the tutorial → productivity gap that nobody else solves.
 
@@ -398,17 +371,14 @@ Helix-specific. Many commands overlap with Vim, but Helix uses a different selec
 
 ## Roadmap
 
-> [!NOTE]
-> **Transparent Development**: We prioritize stability over speed. Phase 2's 6-month timeline ensures Phase 1 is battle-tested before adding complexity.
-
 | Phase | Status | Focus |
-|-------|--------|-------|
-| **Phase A** | ✅ Complete | Foundation (30+ commands, 20 scenarios, TUI) |
-| **Phase 1** | ✅ Complete | Smart learning (FSRS, quests, mastery) |
-| **Phase 2.1** | ✅ Complete | Mini-Games mode (arcade, time pressure, lives) |
-| **Phase 2.2** | 📋 Planned | Mini-Games enhancements (sound, adaptive difficulty) |
-| **Phase 3** | 📋 Planned | Workflow simulator (LSP, git, multi-file) |
-| **Phase 4** | 💡 Future | Network effects (multiplayer, scenarios marketplace) |
+|-------|:------:|-------|
+| Phase A | ✅ | Foundation (30+ commands, 78 scenarios, TUI) |
+| Phase 1 | ✅ | Smart learning (FSRS, quests, mastery) |
+| Phase 2.1 | ✅ | Mini-Games mode (arcade, lives, streaks) |
+| Phase 2.2 | 📋 | Mini-Games enhancements (sound, adaptive difficulty) |
+| Phase 3 | 📋 | Workflow simulator (LSP, git, multi-file) |
+| Phase 4 | 💡 | Network effects (multiplayer, scenarios marketplace) |
 
 ## Success Metrics
 

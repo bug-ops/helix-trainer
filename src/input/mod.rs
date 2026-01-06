@@ -22,7 +22,7 @@ pub mod typestate;
 
 use crossterm::event::KeyEvent;
 
-use helix_trainer::ui::{AppState, Message};
+use crate::ui::{AppState, Message};
 
 use handlers::*;
 
@@ -34,7 +34,7 @@ use handlers::*;
 /// Note: Some handlers (like menu) need mutable access to state
 /// for command buffer management.
 pub fn handle_key_event(key: KeyEvent, state: &mut AppState) -> Option<Message> {
-    use helix_trainer::ui::state::TypedScreen;
+    use crate::ui::state::TypedScreen;
 
     match &state.screen {
         TypedScreen::ModeSelection(_) => handle_mode_selection_keys(key),

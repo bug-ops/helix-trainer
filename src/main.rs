@@ -17,7 +17,6 @@ use tokio::sync::mpsc;
 
 mod data_handling;
 mod event_loop;
-mod input;
 mod logging;
 mod terminal;
 

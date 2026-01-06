@@ -26,8 +26,9 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 
-use helix_trainer::ui::state::CommandBufferAccess;
-use helix_trainer::ui::{AppState, Message, state::TypedScreen};
+use crate::helix::commands::CMD_CANCEL;
+use crate::ui::state::CommandBufferAccess;
+use crate::ui::{AppState, Message, state::TypedScreen};
 
 use super::typestate::{handle_insert_mode_input, map_key_to_helix_command};
 
@@ -345,7 +346,7 @@ where
                 | KeyCode::Down
                 | KeyCode::Backspace
                 | KeyCode::Enter => {
-                    return Some(make_message(Cow::Borrowed("<cancel>")));
+                    return Some(make_message(Cow::Borrowed(CMD_CANCEL)));
                 }
                 _ => {}
             }
@@ -369,7 +370,7 @@ where
                     | KeyCode::Backspace
                     | KeyCode::Enter
             ) {
-                return Some(make_message(Cow::Borrowed("<cancel>")));
+                return Some(make_message(Cow::Borrowed(CMD_CANCEL)));
             }
         }
 
@@ -502,7 +503,7 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
 #[allow(unused_variables)]
 mod tests {
     use super::*;
-    use helix_trainer::{
+    use crate::{
         config::Scenario,
         game::GameSession,
         gamification::{ProfileStorage, UserProfile},
@@ -571,7 +572,7 @@ mod tests {
 
     #[test]
     fn test_task_key_h_moves_left() {
-        use helix_trainer::helix::commands::CMD_MOVE_LEFT;
+        use crate::helix::commands::CMD_MOVE_LEFT;
         let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
@@ -810,7 +811,7 @@ mod tests {
 
         #[test]
         fn test_is_gameplay_insert_mode_on_task_screen_normal_mode() {
-            use helix_trainer::config::{ScoringConfig, Setup, Solution, TargetState};
+            use crate::config::{ScoringConfig, Setup, Solution, TargetState};
 
             let mut state = create_test_app_state();
 

@@ -15,7 +15,8 @@ use helix_trainer::{
     ui::{self, AppState, Message},
 };
 
-use crate::{data_handling::handle_data_message, input::handle_key_event};
+use crate::data_handling::handle_data_message;
+use helix_trainer::input::handle_key_event;
 
 /// Check if mini-game is in countdown state
 fn is_minigame_countdown(state: &AppState) -> bool {

@@ -122,3 +122,6 @@ pub const CMD_VIEW_BOTTOM: &str = "zb";
 pub const CMD_VIEW_CENTER_HORIZONTAL: &str = "zm";
 pub const CMD_SCROLL_DOWN: &str = "zj";
 pub const CMD_SCROLL_UP: &str = "zk";
+
+// Special markers (not actual Helix commands)
+pub const CMD_CANCEL: &str = "<cancel>";

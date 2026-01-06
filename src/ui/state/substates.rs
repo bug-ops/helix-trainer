@@ -80,9 +80,6 @@ pub struct GameState {
     /// All available scenarios with filtering and sorting
     pub scenario_collection: ScenarioCollection,
 
-    /// Legacy session field (session is now stored in TypedScreen::Task)
-    pub session: Option<GameSession<crate::game::session::Active>>,
-
     /// Active review session (Some if reviewing)
     pub review_session: Option<ReviewSessionState>,
 
@@ -98,16 +95,10 @@ impl GameState {
     pub fn new(scenarios: Vec<crate::config::Scenario>) -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(scenarios),
-            session: None,
             review_session: None,
             pending_completed_session: None,
             minigame_session: None,
         }
-    }
-
-    /// Check if actively playing a scenario
-    pub fn is_playing(&self) -> bool {
-        self.session.is_some()
     }
 
     /// Check if in review session
@@ -125,7 +116,6 @@ impl Default for GameState {
     fn default() -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(vec![]),
-            session: None,
             review_session: None,
             pending_completed_session: None,
             minigame_session: None,
@@ -137,8 +127,11 @@ impl std::fmt::Debug for GameState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GameState")
             .field("scenario_count", &self.scenario_collection.count())
-            .field("session", &self.session.is_some())
             .field("review_session", &self.review_session.is_some())
+            .field(
+                "pending_completed_session",
+                &self.pending_completed_session.is_some(),
+            )
             .field("minigame_session", &self.minigame_session.is_some())
             .finish()
     }
@@ -311,15 +304,9 @@ mod tests {
     fn test_game_state_default() {
         let game = GameState::default();
         assert_eq!(game.scenario_collection.count(), 0);
-        assert!(game.session.is_none());
         assert!(game.review_session.is_none());
-    }
-
-    #[test]
-    fn test_game_state_is_playing() {
-        let game = GameState::default();
-        assert!(!game.is_playing());
-        // Note: Testing with actual session requires GameSession setup
+        assert!(game.pending_completed_session.is_none());
+        assert!(game.minigame_session.is_none());
     }
 
     #[test]

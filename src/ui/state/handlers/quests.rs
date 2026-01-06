@@ -107,6 +107,7 @@ pub fn handle_update_quest_progress(
     state: &mut AppState,
     command: Option<String>,
     scenario_completed: bool,
+    scenario_id: Option<String>,
     duration: Duration,
 ) -> Result<(), UserError> {
     // Clear previous progress changes
@@ -131,15 +132,11 @@ pub fn handle_update_quest_progress(
     }
 
     // Update scenario completion quests and speed run quests
-    if scenario_completed {
-        let scenario_id = state
-            .game
-            .session
-            .as_ref()
-            .map(|s| s.scenario().id.clone())
-            .unwrap_or_default();
-
-        track_scenario_completion_for_quests(state, &scenario_id, duration);
+    if scenario_completed
+        && let Some(id) = scenario_id
+        && crate::learning::is_valid_scenario_id(&id)
+    {
+        track_scenario_completion_for_quests(state, &id, duration);
     }
 
     // Update time invested quests

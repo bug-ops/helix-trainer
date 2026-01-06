@@ -153,6 +153,7 @@ pub fn handle_execute_command(
             Message::UpdateQuestProgress {
                 command: Some(cmd),
                 scenario_completed: session_completed,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )?;

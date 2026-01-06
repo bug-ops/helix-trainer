@@ -48,7 +48,7 @@ pub fn handle_navigate_to(screen: Screen) -> Result<HandlerOutcome, UserError> {
 /// - Otherwise: returns to mode selection screen (the main menu)
 pub fn handle_back_to_menu(
     current_screen: &TypedScreen,
-    ctx: &mut HandlerContext<'_>,
+    _ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
     // Check if we should return to paused mini-game instead of mode selection
     let return_to_minigame = match current_screen {
@@ -65,7 +65,6 @@ pub fn handle_back_to_menu(
     }
 
     // Default: return to mode selection (the main menu)
-    ctx.game.session = None;
     Ok(HandlerOutcome::Transition(Box::new(
         TypedScreen::ModeSelection(ModeSelectionData::default()),
     )))

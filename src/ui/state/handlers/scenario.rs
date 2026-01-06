@@ -30,9 +30,6 @@ pub fn handle_start_scenario(
         ctx.ui.show_key_history = false;
         ctx.ui.completion_time = None;
 
-        // Clear old session from game state
-        ctx.game.session = None;
-
         // Transition to Task screen with data
         return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Task(
             task_data,
@@ -187,6 +184,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         Message::UpdateQuestProgress {
             command: None,
             scenario_completed: true,
+            scenario_id: Some(scenario_id.clone()),
             duration,
         },
     )?;
@@ -306,10 +304,7 @@ pub fn handle_retry_scenario(
 /// Handle NextScenario message
 ///
 /// Completes the current scenario flow and returns to menu
-pub fn handle_next_scenario(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
-    // Clear session
-    ctx.game.session = None;
-
+pub fn handle_next_scenario(_ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
     // Preserve menu state if possible
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
         MenuData::default(),

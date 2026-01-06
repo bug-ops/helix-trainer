@@ -975,7 +975,10 @@ mod tests {
     #[test]
     fn test_page_down() {
         // Create content with many lines
-        let content = (0..50).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let content = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let mut sim = HelixSimulator::new(content);
 
         // Start at beginning
@@ -992,7 +995,10 @@ mod tests {
     #[test]
     fn test_page_up() {
         // Create content with many lines
-        let content = (0..50).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let content = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let mut sim = HelixSimulator::new(content);
 
         // Start near the end
@@ -1009,7 +1015,10 @@ mod tests {
 
     #[test]
     fn test_half_page_down() {
-        let content = (0..50).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let content = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let mut sim = HelixSimulator::new(content);
 
         half_page_down(&mut sim, 1).unwrap();
@@ -1020,7 +1029,10 @@ mod tests {
 
     #[test]
     fn test_half_page_up() {
-        let content = (0..50).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let content = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let mut sim = HelixSimulator::new(content);
 
         let line_30_start = sim.doc.line_to_char(30);

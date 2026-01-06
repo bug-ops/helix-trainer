@@ -846,10 +846,7 @@ mod tests {
         #[test]
         fn test_backspace_key() {
             let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
-            assert_eq!(
-                key_to_command_string(key),
-                Some(Cow::Borrowed("Backspace"))
-            );
+            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Backspace")));
         }
 
         #[test]

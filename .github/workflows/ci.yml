@@ -14,7 +14,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  CARGO_INCREMENTAL: 0  # Disable incremental compilation for better sccache performance
 
 jobs:
   test:
@@ -24,9 +23,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable]
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -47,9 +43,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
@@ -63,10 +56,6 @@ jobs:
       - name: Check benchmarks compile
         if: matrix.os == 'ubuntu-latest'
         run: cargo bench --no-run
-
-      - name: Show sccache statistics
-        shell: bash
-        run: sccache --show-stats
 
   fmt:
     name: Rustfmt
@@ -86,9 +75,6 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -109,15 +95,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Show sccache statistics
-        shell: bash
-        run: sccache --show-stats
 
   security:
     name: Security Audit
@@ -133,9 +112,6 @@ jobs:
     name: Check MSRV
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -164,15 +140,8 @@ jobs:
             ${{ runner.os }}-cargo-msrv-
             ${{ runner.os }}-cargo-
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
       - name: Check with MSRV
         run: cargo check --all-features --verbose
-
-      - name: Show sccache statistics
-        shell: bash
-        run: sccache --show-stats
 
   build:
     name: Build
@@ -180,9 +149,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -200,9 +166,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Install cargo-bloat (Linux only)
         if: matrix.os == 'ubuntu-latest'
@@ -293,6 +256,55 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: Show sccache statistics
-        shell: bash
-        run: sccache --show-stats
+  coverage:
+    name: Generate Coverage Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+            ${{ runner.os }}-cargo-
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Generate coverage report
+        run: |
+          cargo llvm-cov --all-features --workspace --lcov \
+            --output-path lcov.info nextest --verbose
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
+          verbose: true
+          flags: unittests
+          name: helix-trainer-coverage
+
+      - name: Archive coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: lcov.info
+          retention-days: 30

@@ -106,6 +106,45 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         editing::switch_case,
     ));
 
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "switch_to_uppercase",
+            CMD_SWITCH_TO_UPPERCASE,
+            "Switch to uppercase",
+            "Convert the selected text to uppercase.",
+            Category::Editing,
+            true,
+            None,
+        ),
+        editing::switch_to_uppercase,
+    ));
+
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "replace_with_yanked",
+            CMD_REPLACE_WITH_YANKED,
+            "Replace with yanked",
+            "Replace the current selection with yanked text.",
+            Category::Editing,
+            true,
+            None,
+        ),
+        editing::replace_with_yanked,
+    ));
+
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "join_selections_space",
+            CMD_JOIN_SELECTIONS_SPACE,
+            "Join with space",
+            "Join lines in selection with spaces.",
+            Category::Editing,
+            true,
+            None,
+        ),
+        editing::join_selections_space,
+    ));
+
     // Replace character (metadata only, handler in dispatcher)
     registry.register(Command::new(
         CommandMetadata::new(

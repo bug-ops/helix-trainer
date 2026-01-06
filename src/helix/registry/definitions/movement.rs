@@ -371,17 +371,56 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
         movement::repeat_last_motion,
     ));
 
-    // Repeat last f/F/t/T motion in reverse
+    // Page movement commands
     registry.register(Command::new(
         CommandMetadata::new(
-            "repeat_last_motion_reverse",
-            CMD_REPEAT_LAST_MOTION_REVERSE,
-            "Repeat motion reverse",
-            "Repeat the last f/F/t/T motion in the opposite direction.",
+            "page_up",
+            CMD_PAGE_UP,
+            "Page up",
+            "Move the cursor up by a full page.",
             Category::Movement,
             false,
             None,
         ),
-        movement::repeat_last_motion_reverse,
+        |sim| movement::page_up(sim, 1),
+    ));
+
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "page_down",
+            CMD_PAGE_DOWN,
+            "Page down",
+            "Move the cursor down by a full page.",
+            Category::Movement,
+            false,
+            None,
+        ),
+        |sim| movement::page_down(sim, 1),
+    ));
+
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "half_page_up",
+            CMD_HALF_PAGE_UP,
+            "Half page up",
+            "Move the cursor up by half a page.",
+            Category::Movement,
+            false,
+            None,
+        ),
+        |sim| movement::half_page_up(sim, 1),
+    ));
+
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "half_page_down",
+            CMD_HALF_PAGE_DOWN,
+            "Half page down",
+            "Move the cursor down by half a page.",
+            Category::Movement,
+            false,
+            None,
+        ),
+        |sim| movement::half_page_down(sim, 1),
     ));
 }

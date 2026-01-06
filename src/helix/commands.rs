@@ -37,10 +37,14 @@ pub const CMD_OPEN_BELOW: &str = "o";
 pub const CMD_OPEN_ABOVE: &str = "O";
 pub const CMD_CHANGE: &str = "c";
 pub const CMD_JOIN_LINES: &str = "J";
+pub const CMD_JOIN_SELECTIONS_SPACE: &str = "Alt-J";
 pub const CMD_INDENT: &str = ">";
 pub const CMD_DEDENT: &str = "<";
 pub const CMD_SWITCH_CASE: &str = "~";
 pub const CMD_SWITCH_CASE_ALT: &str = "`";
+pub const CMD_SWITCH_TO_UPPERCASE: &str = "Alt-`";
+pub const CMD_REPLACE_WITH_YANKED: &str = "R";
+pub const CMD_SHRINK_TO_LINE_BOUNDS: &str = "Alt-x";
 
 // Clipboard commands
 pub const CMD_YANK: &str = "y";
@@ -64,7 +68,10 @@ pub const CMD_FIND_CHAR_REVERSE: &str = "F";
 pub const CMD_TILL_CHAR: &str = "t";
 pub const CMD_TILL_CHAR_REVERSE: &str = "T";
 pub const CMD_REPEAT_LAST_MOTION: &str = "Alt-.";
-pub const CMD_REPEAT_LAST_MOTION_REVERSE: &str = "Alt-,";
+
+// Selection management commands
+pub const CMD_KEEP_PRIMARY_SELECTION: &str = ",";
+pub const CMD_REMOVE_PRIMARY_SELECTION: &str = "Alt-,";
 
 // Selection mode
 pub const CMD_SELECT_MODE: &str = "v";

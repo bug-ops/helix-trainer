@@ -709,99 +709,117 @@ pub fn repeat_last_motion<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
     Ok(())
 }
 
-/// Repeat last f/F/t/T motion in the opposite direction (Helix 'Alt-,' command)
-pub fn repeat_last_motion_reverse<M: EditorMode>(
+/// Default number of lines to move for page movement
+const PAGE_SIZE: usize = 20;
+
+/// Page up movement (Ctrl-b command)
+///
+/// Moves the cursor up by a full page (PAGE_SIZE lines).
+pub fn page_up<M: EditorMode>(sim: &mut HelixSimulator<M>, count: usize) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let current_line = sim.doc.char_to_line(head);
+    let line_start = sim.doc.line_to_char(current_line);
+    let col = head - line_start;
+
+    let lines_to_move = PAGE_SIZE.saturating_mul(count.max(1));
+    let target_line = current_line.saturating_sub(lines_to_move);
+
+    let target_line_start = sim.doc.line_to_char(target_line);
+    let target_line_len = if target_line + 1 < sim.doc.len_lines() {
+        sim.doc.line_to_char(target_line + 1) - target_line_start - 1
+    } else {
+        sim.doc.len_chars() - target_line_start
+    };
+
+    let new_col = col.min(target_line_len);
+    sim.selection = Selection::point(target_line_start + new_col);
+
+    Ok(())
+}
+
+/// Page down movement (Ctrl-f command)
+///
+/// Moves the cursor down by a full page (PAGE_SIZE lines).
+pub fn page_down<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
+    count: usize,
 ) -> Result<(), UserError> {
-    if let Some((ch, find_type, direction)) = sim.find_state.get() {
-        let reversed = direction.reverse();
-        match (find_type, reversed) {
-            (FindType::Find, FindDirection::Forward) => {
-                let head = sim.selection.primary().head;
-                let line = sim.doc.char_to_line(head);
-                let line_end = if line + 1 < sim.doc.len_lines() {
-                    sim.doc.line_to_char(line + 1)
-                } else {
-                    sim.doc.len_chars()
-                };
-                let slice = sim.doc.slice(..);
-                let mut pos = head + 1;
-                while pos < line_end {
-                    if let Some(c) = slice.get_char(pos)
-                        && c == ch
-                    {
-                        sim.selection = Selection::point(pos);
-                        return Ok(());
-                    }
-                    pos += 1;
-                }
-            }
-            (FindType::Find, FindDirection::Backward) => {
-                let head = sim.selection.primary().head;
-                let line = sim.doc.char_to_line(head);
-                let line_start = sim.doc.line_to_char(line);
-                let slice = sim.doc.slice(..);
-                if head > line_start {
-                    let mut pos = head - 1;
-                    loop {
-                        if let Some(c) = slice.get_char(pos)
-                            && c == ch
-                        {
-                            sim.selection = Selection::point(pos);
-                            return Ok(());
-                        }
-                        if pos == line_start {
-                            break;
-                        }
-                        pos -= 1;
-                    }
-                }
-            }
-            (FindType::Till, FindDirection::Forward) => {
-                let head = sim.selection.primary().head;
-                let line = sim.doc.char_to_line(head);
-                let line_end = if line + 1 < sim.doc.len_lines() {
-                    sim.doc.line_to_char(line + 1)
-                } else {
-                    sim.doc.len_chars()
-                };
-                let slice = sim.doc.slice(..);
-                let mut pos = head + 1;
-                while pos < line_end {
-                    if let Some(c) = slice.get_char(pos)
-                        && c == ch
-                    {
-                        if pos > head + 1 {
-                            sim.selection = Selection::point(pos - 1);
-                        }
-                        return Ok(());
-                    }
-                    pos += 1;
-                }
-            }
-            (FindType::Till, FindDirection::Backward) => {
-                let head = sim.selection.primary().head;
-                let line = sim.doc.char_to_line(head);
-                let line_start = sim.doc.line_to_char(line);
-                let slice = sim.doc.slice(..);
-                if head > line_start {
-                    let mut pos = head - 1;
-                    loop {
-                        if let Some(c) = slice.get_char(pos)
-                            && c == ch
-                        {
-                            sim.selection = Selection::point(pos + 1);
-                            return Ok(());
-                        }
-                        if pos == line_start {
-                            break;
-                        }
-                        pos -= 1;
-                    }
-                }
-            }
-        }
-    }
+    let head = sim.selection.primary().head;
+    let current_line = sim.doc.char_to_line(head);
+    let line_start = sim.doc.line_to_char(current_line);
+    let col = head - line_start;
+
+    let total_lines = sim.doc.len_lines();
+    let lines_to_move = PAGE_SIZE.saturating_mul(count.max(1));
+    let target_line = (current_line + lines_to_move).min(total_lines.saturating_sub(1));
+
+    let target_line_start = sim.doc.line_to_char(target_line);
+    let target_line_len = if target_line + 1 < sim.doc.len_lines() {
+        sim.doc.line_to_char(target_line + 1) - target_line_start - 1
+    } else {
+        sim.doc.len_chars() - target_line_start
+    };
+
+    let new_col = col.min(target_line_len);
+    sim.selection = Selection::point(target_line_start + new_col);
+
+    Ok(())
+}
+
+/// Half page up movement (Ctrl-u command)
+///
+/// Moves the cursor up by half a page (PAGE_SIZE / 2 lines).
+pub fn half_page_up<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let current_line = sim.doc.char_to_line(head);
+    let line_start = sim.doc.line_to_char(current_line);
+    let col = head - line_start;
+
+    let lines_to_move = (PAGE_SIZE / 2).saturating_mul(count.max(1));
+    let target_line = current_line.saturating_sub(lines_to_move);
+
+    let target_line_start = sim.doc.line_to_char(target_line);
+    let target_line_len = if target_line + 1 < sim.doc.len_lines() {
+        sim.doc.line_to_char(target_line + 1) - target_line_start - 1
+    } else {
+        sim.doc.len_chars() - target_line_start
+    };
+
+    let new_col = col.min(target_line_len);
+    sim.selection = Selection::point(target_line_start + new_col);
+
+    Ok(())
+}
+
+/// Half page down movement (Ctrl-d command)
+///
+/// Moves the cursor down by half a page (PAGE_SIZE / 2 lines).
+pub fn half_page_down<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let current_line = sim.doc.char_to_line(head);
+    let line_start = sim.doc.line_to_char(current_line);
+    let col = head - line_start;
+
+    let total_lines = sim.doc.len_lines();
+    let lines_to_move = (PAGE_SIZE / 2).saturating_mul(count.max(1));
+    let target_line = (current_line + lines_to_move).min(total_lines.saturating_sub(1));
+
+    let target_line_start = sim.doc.line_to_char(target_line);
+    let target_line_len = if target_line + 1 < sim.doc.len_lines() {
+        sim.doc.line_to_char(target_line + 1) - target_line_start - 1
+    } else {
+        sim.doc.len_chars() - target_line_start
+    };
+
+    let new_col = col.min(target_line_len);
+    sim.selection = Selection::point(target_line_start + new_col);
+
     Ok(())
 }
 
@@ -874,20 +892,6 @@ mod tests {
 
         // Repeat should find next 'b'
         repeat_last_motion(&mut sim).unwrap();
-        assert_eq!(sim.selection.primary().head, 4);
-    }
-
-    #[test]
-    fn test_repeat_last_motion_reverse() {
-        let mut sim = HelixSimulator::new("abcabc".to_string());
-        // Move to end, find 'b' backward
-        sim.selection = Selection::point(5);
-        find_prev_char(&mut sim, 'b', 1).unwrap();
-        assert_eq!(sim.selection.primary().head, 4);
-
-        // Repeat reverse should find 'b' forward direction
-        repeat_last_motion_reverse(&mut sim).unwrap();
-        // No 'b' after position 4, should stay
         assert_eq!(sim.selection.primary().head, 4);
     }
 
@@ -966,5 +970,102 @@ mod tests {
         goto_next_paragraph(&mut sim, 1).unwrap();
         // Should be at or past current position (end of doc)
         assert!(sim.selection.primary().head <= doc_len);
+    }
+
+    #[test]
+    fn test_page_down() {
+        // Create content with many lines
+        let content = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut sim = HelixSimulator::new(content);
+
+        // Start at beginning
+        assert_eq!(sim.selection.primary().head, 0);
+
+        // Page down should move cursor down by PAGE_SIZE lines
+        page_down(&mut sim, 1).unwrap();
+
+        // Should be on a later line
+        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
+        assert!(new_line > 0);
+    }
+
+    #[test]
+    fn test_page_up() {
+        // Create content with many lines
+        let content = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut sim = HelixSimulator::new(content);
+
+        // Start near the end
+        let last_line_start = sim.doc.line_to_char(40);
+        sim.selection = Selection::point(last_line_start);
+
+        // Page up should move cursor up
+        page_up(&mut sim, 1).unwrap();
+
+        // Should be on an earlier line
+        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
+        assert!(new_line < 40);
+    }
+
+    #[test]
+    fn test_half_page_down() {
+        let content = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut sim = HelixSimulator::new(content);
+
+        half_page_down(&mut sim, 1).unwrap();
+
+        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
+        assert!(new_line > 0);
+    }
+
+    #[test]
+    fn test_half_page_up() {
+        let content = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut sim = HelixSimulator::new(content);
+
+        let line_30_start = sim.doc.line_to_char(30);
+        sim.selection = Selection::point(line_30_start);
+
+        half_page_up(&mut sim, 1).unwrap();
+
+        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
+        assert!(new_line < 30);
+    }
+
+    #[test]
+    fn test_page_up_at_top() {
+        let mut sim = HelixSimulator::new("line 1\nline 2".to_string());
+        sim.selection = Selection::point(0);
+
+        // Page up at top should stay at top
+        page_up(&mut sim, 1).unwrap();
+
+        assert_eq!(sim.selection.primary().head, 0);
+    }
+
+    #[test]
+    fn test_page_down_at_bottom() {
+        let mut sim = HelixSimulator::new("line 1\nline 2".to_string());
+        let last_line_start = sim.doc.line_to_char(1);
+        sim.selection = Selection::point(last_line_start);
+
+        // Page down at bottom should stay near bottom
+        page_down(&mut sim, 1).unwrap();
+
+        // Should be on last line
+        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
+        assert_eq!(new_line, 1);
     }
 }

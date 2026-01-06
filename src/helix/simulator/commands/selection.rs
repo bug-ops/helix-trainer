@@ -318,6 +318,53 @@ pub fn remove_selections_matching<M: EditorMode>(
     Ok(())
 }
 
+/// Keep only the primary selection (, command)
+///
+/// Discards all non-primary selections, keeping only the main cursor.
+/// For single-selection training, this is a no-op since there's only one selection.
+pub fn keep_primary_selection<M: EditorMode>(
+    _sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
+    // For single selection, this is a no-op - we already have only the primary
+    // In multi-cursor mode, this would discard all but the primary selection
+    Ok(())
+}
+
+/// Remove the primary selection (Alt-, command)
+///
+/// Removes the primary selection while keeping other selections active.
+/// For single-selection training, this is a no-op since removing the only
+/// selection would leave no cursor.
+pub fn remove_primary_selection<M: EditorMode>(
+    _sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
+    // For single selection, this is a no-op - we can't remove the only selection
+    // In multi-cursor mode, this would remove the primary and make another primary
+    Ok(())
+}
+
+/// Shrink selection to line bounds (Alt-x command)
+///
+/// Reduces the selection to fit within line boundaries for line-oriented editing.
+/// If selection spans multiple lines, shrinks to current line only.
+pub fn shrink_to_line_bounds<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let range = sim.selection.primary();
+    let head = range.head;
+    let line = sim.doc.char_to_line(head);
+
+    let line_start = sim.doc.line_to_char(line);
+    let line_end = if line + 1 < sim.doc.len_lines() {
+        sim.doc.line_to_char(line + 1) - 1 // Exclude newline
+    } else {
+        sim.doc.len_chars()
+    };
+
+    // Create selection from line start to line end (before newline)
+    sim.selection = Selection::single(line_start, line_end);
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -665,5 +712,64 @@ mod tests {
         let head = sim.selection.primary().head;
         let line = sim.doc.char_to_line(head);
         assert_eq!(line, 1);
+    }
+
+    #[test]
+    fn test_keep_primary_selection() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+
+        // Set a selection
+        sim.selection = Selection::point(5);
+
+        // For single selection, this is a no-op
+        keep_primary_selection(&mut sim).unwrap();
+
+        // Selection should be unchanged
+        assert_eq!(sim.selection.primary().head, 5);
+    }
+
+    #[test]
+    fn test_remove_primary_selection() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+
+        // Set a selection
+        sim.selection = Selection::point(3);
+
+        // For single selection, this is a no-op (can't remove the only cursor)
+        remove_primary_selection(&mut sim).unwrap();
+
+        // Selection should be unchanged
+        assert_eq!(sim.selection.primary().head, 3);
+    }
+
+    #[test]
+    fn test_shrink_to_line_bounds() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("hello world\nsecond line".to_string());
+
+        // Set cursor in the middle of first line
+        sim.selection = Selection::point(5);
+
+        shrink_to_line_bounds(&mut sim).unwrap();
+
+        // Selection should be the entire first line (excluding newline)
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 11); // "hello world" without newline
+    }
+
+    #[test]
+    fn test_shrink_to_line_bounds_last_line() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("first\nlast line".to_string());
+
+        // Move to last line
+        sim.selection = Selection::point(10);
+
+        shrink_to_line_bounds(&mut sim).unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 6); // Start of "last line"
+        assert_eq!(range.to(), 15); // End of file
     }
 }

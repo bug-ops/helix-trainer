@@ -8,9 +8,7 @@ use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
-use std::cell::RefCell;
 use std::collections::HashSet;
-use std::rc::Rc;
 use std::time::Instant;
 
 use super::{QuestProgressChange, ReviewSessionState, XPBreakdown};
@@ -149,10 +147,10 @@ impl std::fmt::Debug for GameState {
 /// User progress (profile, learning, achievements)
 pub struct ProgressState {
     /// User profile with XP, level, achievements
-    pub profile: Rc<RefCell<UserProfile>>,
+    pub profile: UserProfile,
 
     /// Performance tracker for spaced repetition
-    pub performance_tracker: Rc<RefCell<PerformanceTracker>>,
+    pub performance_tracker: PerformanceTracker,
 
     /// Scheduler for review sessions
     pub scheduler: Scheduler,
@@ -183,14 +181,10 @@ impl ProgressState {
         performance_tracker: PerformanceTracker,
         storage: ProfileStorage,
     ) -> Self {
-        let profile = Rc::new(RefCell::new(profile));
-        let tracker_rc = Rc::new(RefCell::new(performance_tracker));
-        let scheduler = Scheduler::new(Rc::clone(&tracker_rc));
-
         Self {
             profile,
-            performance_tracker: tracker_rc,
-            scheduler,
+            performance_tracker,
+            scheduler: Scheduler::new(),
             storage,
             scenarios_completed_today: 0,
             commands_used_today: HashSet::new(),
@@ -217,8 +211,8 @@ impl ProgressState {
 impl std::fmt::Debug for ProgressState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ProgressState")
-            .field("profile", &"<Rc<RefCell<UserProfile>>>")
-            .field("performance_tracker", &"<Rc<RefCell<PerformanceTracker>>>")
+            .field("profile", &self.profile)
+            .field("performance_tracker", &"<PerformanceTracker>")
             .field("scenarios_completed_today", &self.scenarios_completed_today)
             .field("commands_used_today", &self.commands_used_today.len())
             .finish()

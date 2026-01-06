@@ -2,8 +2,8 @@
 //!
 //! Handles starting, completing, retrying, and abandoning scenarios
 
-use crate::game::services::ScenarioCompletionService;
 use crate::game::GameSession;
+use crate::game::services::ScenarioCompletionService;
 use crate::security::UserError;
 use crate::ui::state::{
     AppState, HandlerContext, HandlerOutcome, MenuData, Message, ResultsData, TaskData,
@@ -38,7 +38,6 @@ pub fn handle_start_scenario(
     }
     Ok(HandlerOutcome::Stay)
 }
-
 
 /// Collect quest bonuses for newly completed quests
 ///
@@ -262,4 +261,3 @@ pub fn handle_next_scenario(_ctx: &mut HandlerContext<'_>) -> Result<HandlerOutc
         MenuData::default(),
     ))))
 }
-

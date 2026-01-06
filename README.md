@@ -277,24 +277,14 @@ The flagship feature that makes Helix Trainer unique:
 
 ## Technology Stack
 
-| Component | Library | Version |
-|-----------|---------|---------|
-| **TUI Framework** | [ratatui](https://ratatui.rs/) | 0.29 |
-| **Terminal I/O** | [crossterm](https://github.com/crossterm-rs/crossterm) | 0.29 |
-| **Async Runtime** | [tokio](https://tokio.rs/) | 1.48 |
-| **Editor Core** | [helix-core](https://github.com/helix-editor/helix) | 25.07.1 |
-| **Spaced Repetition** | [fsrs](https://crates.io/crates/fsrs) | 5.2 |
-| **Large Text** | [tui-big-text](https://crates.io/crates/tui-big-text) | 0.7 |
-
-**Project Metrics**:
-
-- **Language**: Rust 2024 Edition
-- **MSRV**: 1.85
-- **Lines of Code**: ~18,500 (Rust)
-- **Tests**: 645 (all passing)
-- **Scenarios**: 25 (fully categorized with metadata)
-- **Binary Size**: ~3MB (release mode)
-- **Build Time**: ~1.5-2s (incremental, with sccache)
+| Component | Library |
+|-----------|---------|
+| **TUI Framework** | [ratatui](https://ratatui.rs/) |
+| **Terminal I/O** | [crossterm](https://github.com/crossterm-rs/crossterm) |
+| **Async Runtime** | [tokio](https://tokio.rs/) |
+| **Editor Core** | [helix-core](https://github.com/helix-editor/helix) |
+| **Spaced Repetition** | [fsrs](https://crates.io/crates/fsrs) |
+| **Large Text** | [tui-big-text](https://crates.io/crates/tui-big-text) |
 
 ## Contributing
 
@@ -379,18 +369,6 @@ Helix-specific. Many commands overlap with Vim, but Helix uses a different selec
 | Phase 2.2 | 📋 | Mini-Games enhancements (sound, adaptive difficulty) |
 | Phase 3 | 📋 | Workflow simulator (LSP, git, multi-file) |
 | Phase 4 | 💡 | Network effects (multiplayer, scenarios marketplace) |
-
-## Success Metrics
-
-We're tracking:
-
-- **80%+ users** practice recommended scenarios (spaced repetition)
-- **70%+ users** complete 1+ quest per day
-- **Average streak**: >7 days
-- **D7 retention**: >40%
-- **Review efficiency**: 20-30% fewer reviews vs random practice
-
-Research-backed targets, not arbitrary KPIs.
 
 ## Acknowledgments
 

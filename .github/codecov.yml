@@ -1,0 +1,32 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 70%        # Minimum coverage threshold
+        threshold: 2%      # Allow 2% drop from baseline
+    patch:
+      default:
+        target: 75%        # New code should be well-tested
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "tests/"           # Exclude test files
+  - "benches/"         # Exclude benchmark files
+  - "examples/"        # Exclude example code
+  - "target/"          # Exclude build artifacts
+  - ".github/"         # Exclude CI configuration
+
+flags:
+  unittests:
+    paths:
+      - src/
+
+# Show coverage for all files in PR comments
+codecov:
+  require_ci_to_pass: yes
+  notify:
+    wait_for_ci: yes

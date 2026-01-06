@@ -1,9 +1,24 @@
 //! User input handling
 //!
 //! Converts keyboard events into application messages based on current screen state.
+//!
+//! # Architecture
+//!
+//! Input handling is split into two layers:
+//!
+//! 1. **Screen handlers** ([`handlers`]) - Route input to the correct screen
+//! 2. **Typestate handlers** ([`typestate`]) - Handle key-to-command mapping with state machine
+//!
+//! # Typestate-Based Input Handling
+//!
+//! The [`typestate`] module provides compile-time guarantees about input state
+//! transitions. It encodes the current input context (base state, waiting for
+//! character argument, building count prefix, etc.) at the type level.
+//!
+//! See [`typestate`] for the state machine implementation.
 
 pub mod handlers;
-pub mod mapping;
+pub mod typestate;
 
 use crossterm::event::KeyEvent;
 

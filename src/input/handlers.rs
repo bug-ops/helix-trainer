@@ -1,6 +1,27 @@
 //! Screen-specific keyboard event handlers
 //!
 //! Each handler function processes keyboard input for a specific screen.
+//!
+//! # Mode-Safe Key Mapping
+//!
+//! This module uses the typestate-based key mapping system from [`super::typestate`].
+//! The convenience functions (`map_key_to_helix_command`, `handle_insert_mode_input`)
+//! provide simple key-to-command mapping.
+//!
+//! For advanced input handling with multi-key sequences, use `InputStateMachine`:
+//!
+//! ```ignore
+//! use super::typestate::{InputStateMachine, HandlerResult};
+//!
+//! let mut state_machine = InputStateMachine::new();
+//! let result = state_machine.process_key(key);
+//! match result {
+//!     HandlerResult::Execute(cmd) => { /* execute command */ }
+//!     HandlerResult::Transition(_) => { /* waiting for more input */ }
+//!     HandlerResult::Cancel => { /* cancelled */ }
+//!     HandlerResult::Stay => { /* no change */ }
+//! }
+//! ```
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
@@ -8,7 +29,7 @@ use std::borrow::Cow;
 use helix_trainer::ui::state::CommandBufferAccess;
 use helix_trainer::ui::{AppState, Message, state::TypedScreen};
 
-use super::mapping::{handle_insert_mode_input, map_key_to_helix_command};
+use super::typestate::{handle_insert_mode_input, map_key_to_helix_command};
 
 /// Check if the command buffer is waiting for a character argument
 ///

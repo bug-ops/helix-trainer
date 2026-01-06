@@ -12,7 +12,9 @@
 pub mod commands;
 mod insert_mode;
 mod mode;
+pub mod search_state;
 mod undo;
+pub mod view_state;
 
 #[cfg(test)]
 mod tests;
@@ -25,6 +27,10 @@ use std::marker::PhantomData;
 
 // Re-export mode typestate markers
 pub use mode::{EditorMode, InsertMode, NormalMode};
+
+// Re-export state types
+pub use search_state::{SearchDirection, SearchState};
+pub use view_state::ViewState;
 
 // Re-export old Mode enum for backward compatibility during migration
 pub use Mode::*;
@@ -79,6 +85,12 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
 
     /// Current recursion depth for repeat command (protects against infinite loops)
     pub(super) repeat_depth: usize,
+
+    /// Search state for /, ?, n, N, *, Alt-* commands
+    pub(super) search_state: SearchState,
+
+    /// View state for z, zt, zb, zm, zj, zk commands
+    pub(super) view_state: ViewState,
 
     /// Phantom data for typestate mode marker (zero-cost)
     _mode: PhantomData<M>,
@@ -172,6 +184,8 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
             repeat_depth: 0,
+            search_state: SearchState::new(),
+            view_state: ViewState::new(),
             _mode: PhantomData,
         }
     }
@@ -214,6 +228,8 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
             repeat_depth: 0,
+            search_state: SearchState::new(),
+            view_state: ViewState::new(),
             _mode: PhantomData,
         }
     }
@@ -228,8 +244,30 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: self.repeat_buffer,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
+            search_state: self.search_state,
+            view_state: self.view_state,
             _mode: PhantomData,
         }
+    }
+
+    /// Get a reference to the search state
+    pub fn search_state(&self) -> &SearchState {
+        &self.search_state
+    }
+
+    /// Get a mutable reference to the search state
+    pub fn search_state_mut(&mut self) -> &mut SearchState {
+        &mut self.search_state
+    }
+
+    /// Get a reference to the view state
+    pub fn view_state(&self) -> &ViewState {
+        &self.view_state
+    }
+
+    /// Get a mutable reference to the view state
+    pub fn view_state_mut(&mut self) -> &mut ViewState {
+        &mut self.view_state
     }
 }
 
@@ -245,6 +283,8 @@ impl HelixSimulator<InsertMode> {
             repeat_buffer: self.repeat_buffer,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
+            search_state: self.search_state,
+            view_state: self.view_state,
             _mode: PhantomData,
         }
     }

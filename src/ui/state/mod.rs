@@ -218,6 +218,7 @@ pub enum Message {
     UpdateQuestProgress {
         command: Option<String>,
         scenario_completed: bool,
+        scenario_id: Option<String>,
         duration: Duration,
     },
 
@@ -704,8 +705,15 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::UpdateQuestProgress {
             command,
             scenario_completed,
+            scenario_id,
             duration,
-        } => handlers::handle_update_quest_progress(state, command, scenario_completed, duration),
+        } => handlers::handle_update_quest_progress(
+            state,
+            command,
+            scenario_completed,
+            scenario_id,
+            duration,
+        ),
 
         // Filter messages
         Message::SetSortMode(mode) => {
@@ -877,7 +885,8 @@ mod tests {
             panic!("Should be on ModeSelection screen");
         }
         assert!(state.ui.running);
-        assert!(state.game.session.is_none());
+        assert!(state.game.review_session.is_none());
+        assert!(state.game.pending_completed_session.is_none());
     }
 
     #[test]
@@ -1106,8 +1115,8 @@ mod tests {
 
         update(&mut state, Message::StartScenario(999)).unwrap();
 
-        // Should still have None session
-        assert!(state.game.session.is_none());
+        // Should stay on current screen (not transition to Task)
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     }
 
     #[test]
@@ -1291,6 +1300,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("x".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1301,6 +1311,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("x".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1318,6 +1329,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("x".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1362,6 +1374,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: None,
                 scenario_completed: true,
+                scenario_id: Some("test_scenario".to_string()),
                 duration: Duration::from_secs(5),
             },
         )
@@ -1379,6 +1392,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: None,
                 scenario_completed: true,
+                scenario_id: Some("test_scenario".to_string()),
                 duration: Duration::from_secs(5),
             },
         )
@@ -1426,6 +1440,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("x".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1472,6 +1487,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("x".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1482,6 +1498,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("yy".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1499,6 +1516,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("p".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1525,6 +1543,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("x".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1535,6 +1554,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("yy".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1546,6 +1566,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("x".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )
@@ -1586,6 +1607,7 @@ mod tests {
             Message::UpdateQuestProgress {
                 command: Some("x".to_string()),
                 scenario_completed: false,
+                scenario_id: None,
                 duration: Duration::from_secs(0),
             },
         )

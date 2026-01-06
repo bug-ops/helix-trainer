@@ -11,7 +11,9 @@ pub mod traits;
 
 pub use analytics::{Analytics, MasterySummary};
 pub use performance::{CardState, CommandPerformance, MasteryLevel, PerformanceTracker};
-pub use scenario_history::{MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery};
+pub use scenario_history::{
+    MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery, is_valid_scenario_id,
+};
 pub use scheduler::{ReviewItem, Scheduler};
 pub use session::{ReviewResult, ReviewSession, SessionSummary};
 pub use traits::{Modifier, ProgressTracker, ProgressionTier};

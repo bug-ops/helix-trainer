@@ -21,7 +21,7 @@ const MAX_SCENARIO_ID_LENGTH: usize = 100;
 ///
 /// Defense in depth - scenario IDs are already validated at TOML load time,
 /// but this provides an additional safety check at the storage boundary.
-fn is_valid_scenario_id(id: &str) -> bool {
+pub fn is_valid_scenario_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= MAX_SCENARIO_ID_LENGTH
         && id

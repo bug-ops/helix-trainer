@@ -14,7 +14,7 @@
 //!
 //! This ensures:
 //! - All state changes go through the update function
-//! - No hixen side effects in state changes
+//! - No hidden side effects in state changes
 //! - State transitions are testable and reproducible
 //! - UI rendering is pure (no side effects)
 
@@ -536,17 +536,81 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             apply_outcome(state, outcome);
             Ok(())
         }
-        Message::StartMiniGame => handlers::handle_start_minigame(state),
+        Message::StartMiniGame => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_start_minigame(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
 
-        // Mini-game messages (not refactored yet)
-        Message::PauseMiniGame => handlers::handle_pause_minigame(state),
-        Message::ResumeMiniGame => handlers::handle_resume_minigame(state),
-        Message::MiniGameTick => handlers::handle_minigame_tick(state),
+        // Mini-game messages
+        Message::PauseMiniGame => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_pause_minigame(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::ResumeMiniGame => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_resume_minigame(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::MiniGameTick => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_minigame_tick(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
         Message::MiniGameCommand(command) => handlers::handle_minigame_command(state, command),
         Message::MiniGameTimeout => handlers::handle_minigame_timeout(state),
-        Message::MiniGameScenarioComplete => handlers::handle_minigame_scenario_complete(state),
-        Message::MiniGameNextScenario => handlers::handle_minigame_next_scenario(state),
-        Message::MiniGameBackToMenu => handlers::handle_minigame_back_to_menu(state),
+        Message::MiniGameScenarioComplete => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_minigame_scenario_complete(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::MiniGameNextScenario => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_minigame_next_scenario(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::MiniGameBackToMenu => {
+            let outcome = handlers::handle_minigame_back_to_menu(state)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
 
         // Menu messages
         Message::MenuUp => {

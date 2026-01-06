@@ -5,7 +5,10 @@ use crate::constants::{MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER}
 use crate::game::format_key_for_display;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
-use crate::ui::state::{AppState, GameState, MiniGameData, ModeSelectionData, TypedScreen};
+use crate::ui::state::{
+    AppState, GameState, HandlerContext, HandlerOutcome, MiniGameData, ModeSelectionData,
+    TypedScreen,
+};
 use std::sync::Arc;
 
 /// Create and start a new mini-game session from available scenarios
@@ -32,43 +35,45 @@ pub(in crate::ui::state) fn create_minigame_session(game: &mut GameState) -> boo
 }
 
 /// Handle starting a mini-game session
-pub(in crate::ui::state) fn handle_start_minigame(state: &mut AppState) -> Result<(), UserError> {
-    // Navigate to mini-game screen first (renderer will show error if no scenarios)
-    state.screen = TypedScreen::MiniGame(MiniGameData::default());
-
-    // Use shared session creation
-    create_minigame_session(&mut state.game);
-
-    Ok(())
+pub(in crate::ui::state) fn handle_start_minigame(
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    create_minigame_session(ctx.game);
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
+        MiniGameData::default(),
+    ))))
 }
 
 /// Handle pausing mini-game
-pub(in crate::ui::state) fn handle_pause_minigame(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(ref mut session) = state.game.minigame_session {
+pub(in crate::ui::state) fn handle_pause_minigame(
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    if let Some(ref mut session) = ctx.game.minigame_session {
         session.pause();
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Handle resuming mini-game
-pub(in crate::ui::state) fn handle_resume_minigame(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(ref mut session) = state.game.minigame_session {
+pub(in crate::ui::state) fn handle_resume_minigame(
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    if let Some(ref mut session) = ctx.game.minigame_session {
         session.resume();
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Handle mini-game timer tick (100ms)
-///
-/// Checks for timeouts and updates countdown.
-pub(in crate::ui::state) fn handle_minigame_tick(state: &mut AppState) -> Result<(), UserError> {
-    if let Some(ref mut session) = state.game.minigame_session {
-        // Tick countdown if in countdown state
-        if session.state().is_countdown() {
-            session.tick_countdown();
-        }
+pub(in crate::ui::state) fn handle_minigame_tick(
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    if let Some(ref mut session) = ctx.game.minigame_session
+        && session.state().is_countdown()
+    {
+        session.tick_countdown();
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Execute a command in the mini-game session
@@ -181,12 +186,8 @@ pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) -> Res
     if let Some(ref mut session) = state.game.minigame_session {
         session.handle_timeout();
 
-        // Check if game is over
         if session.state().is_game_over() {
-            // Process game over (calculate XP, save progress)
             handle_minigame_game_over(state)?;
-            // Game over - stay on screen to show final score
-            // User must press a key to return to menu
         }
     }
     Ok(())
@@ -194,29 +195,24 @@ pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) -> Res
 
 /// Handle scenario completion (user triggered)
 pub(in crate::ui::state) fn handle_minigame_scenario_complete(
-    state: &mut AppState,
-) -> Result<(), UserError> {
-    if let Some(ref mut session) = state.game.minigame_session {
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    if let Some(ref mut session) = ctx.game.minigame_session {
         session.advance_to_next();
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Handle advancing to next scenario (after transition delay)
-///
-/// If scenario loading fails (e.g., empty queue), logs error but continues.
-/// This prevents crash when scenario pool is exhausted.
 pub(in crate::ui::state) fn handle_minigame_next_scenario(
-    state: &mut AppState,
-) -> Result<(), UserError> {
-    if let Some(ref mut session) = state.game.minigame_session
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    if let Some(ref mut session) = ctx.game.minigame_session
         && let Err(e) = session.complete_transition()
     {
-        // Log error but don't crash - user can still see current state
         tracing::warn!("Failed to load next mini-game scenario: {:?}", e);
-        // The game will continue in its current state
     }
-    Ok(())
+    Ok(HandlerOutcome::Stay)
 }
 
 /// Handle game over - calculate XP, update profile, save progress
@@ -282,23 +278,16 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
 }
 
 /// Handle returning to mode selection from mini-game
-///
-/// Awards XP for current progress before exiting.
 pub(in crate::ui::state) fn handle_minigame_back_to_menu(
     state: &mut AppState,
-) -> Result<(), UserError> {
-    // Award XP for progress before exiting (if session exists)
+) -> Result<HandlerOutcome, UserError> {
     if state.game.minigame_session.is_some() {
         handle_minigame_game_over(state)?;
     }
-
-    // Clear mini-game session
     state.game.minigame_session = None;
-
-    // Navigate to mode selection
-    state.screen = TypedScreen::ModeSelection(ModeSelectionData::default());
-
-    Ok(())
+    Ok(HandlerOutcome::Transition(Box::new(
+        TypedScreen::ModeSelection(ModeSelectionData::default()),
+    )))
 }
 
 #[cfg(test)]
@@ -363,16 +352,25 @@ mod tests {
         }
     }
 
+    fn start_minigame(state: &mut AppState) {
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_start_minigame(&mut ctx).unwrap();
+        crate::ui::state::apply_outcome(state, outcome);
+    }
+
     #[test]
     fn test_start_minigame() {
         let mut state = create_test_state();
-
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         assert!(state.game.minigame_session.is_some());
         assert!(matches!(state.screen, TypedScreen::MiniGame(_)));
 
-        // Session should be in countdown state
         if let Some(ref session) = state.game.minigame_session {
             assert!(session.state().is_countdown());
         }
@@ -383,31 +381,45 @@ mod tests {
         let mut state = create_test_state();
         state.game.scenario_collection = crate::config::ScenarioCollection::new(vec![]);
 
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
-        // Should not create session without scenarios
         assert!(state.game.minigame_session.is_none());
     }
 
     #[test]
     fn test_pause_resume_minigame() {
         let mut state = create_test_state();
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
-        // Transition to playing state
         if let Some(ref mut session) = state.game.minigame_session {
             session.tick_countdown();
             session.tick_countdown();
             session.tick_countdown();
         }
 
-        handle_pause_minigame(&mut state).unwrap();
+        {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            handle_pause_minigame(&mut ctx).unwrap();
+        }
 
         if let Some(ref session) = state.game.minigame_session {
             assert!(session.state().is_paused());
         }
 
-        handle_resume_minigame(&mut state).unwrap();
+        {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            handle_resume_minigame(&mut ctx).unwrap();
+        }
 
         if let Some(ref session) = state.game.minigame_session {
             assert!(session.state().is_playing());
@@ -417,11 +429,12 @@ mod tests {
     #[test]
     fn test_minigame_back_to_menu() {
         let mut state = create_test_state();
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         assert!(state.game.minigame_session.is_some());
 
-        handle_minigame_back_to_menu(&mut state).unwrap();
+        let outcome = handle_minigame_back_to_menu(&mut state).unwrap();
+        crate::ui::state::apply_outcome(&mut state, outcome);
 
         assert!(state.game.minigame_session.is_none());
         assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
@@ -430,14 +443,21 @@ mod tests {
     #[test]
     fn test_minigame_tick_countdown() {
         let mut state = create_test_state();
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
-        // Should be in countdown with 3 remaining
         if let Some(ref session) = state.game.minigame_session {
             assert_eq!(session.state().countdown_remaining(), Some(3));
         }
 
-        handle_minigame_tick(&mut state).unwrap();
+        {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            handle_minigame_tick(&mut ctx).unwrap();
+        }
 
         if let Some(ref session) = state.game.minigame_session {
             assert_eq!(session.state().countdown_remaining(), Some(2));
@@ -449,7 +469,7 @@ mod tests {
         use crate::gamification::XPCalculator;
 
         let mut state = create_test_state();
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         // Transition to playing state
         if let Some(ref mut session) = state.game.minigame_session {
@@ -481,7 +501,7 @@ mod tests {
     #[test]
     fn test_minigame_updates_high_score() {
         let mut state = create_test_state();
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         // Set initial high score
         state.progress.profile.minigame_high_score = 1000;
@@ -569,7 +589,7 @@ mod tests {
     #[test]
     fn test_minigame_timeout_to_game_over() {
         let mut state = create_test_state();
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         // Transition to playing state
         if let Some(ref mut session) = state.game.minigame_session {
@@ -618,7 +638,7 @@ mod tests {
         use ratatui::{Terminal, backend::TestBackend};
 
         let mut state = create_test_state();
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         // Progress to playing
         if let Some(ref mut session) = state.game.minigame_session {
@@ -654,7 +674,7 @@ mod tests {
         // Test that game over handler doesn't return error even if save fails
         // (uses test storage that doesn't actually persist, so save succeeds)
         let mut state = create_test_state();
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         // Progress to playing
         if let Some(ref mut session) = state.game.minigame_session {

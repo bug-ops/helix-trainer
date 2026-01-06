@@ -128,6 +128,17 @@ mod tests {
         }
     }
 
+    fn start_minigame(state: &mut AppState) {
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_start_minigame(&mut ctx).unwrap();
+        crate::ui::state::apply_outcome(state, outcome);
+    }
+
     #[test]
     fn test_show_profile_from_menu() {
         let mut state = create_test_state();
@@ -179,7 +190,7 @@ mod tests {
         let mut state = create_test_state();
 
         // Start minigame properly
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         // Transition to playing then pause
         if let Some(ref mut session) = state.game.minigame_session {
@@ -215,7 +226,7 @@ mod tests {
         let mut state = create_test_state();
 
         // Start minigame properly
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         // Transition to playing then pause
         if let Some(ref mut session) = state.game.minigame_session {
@@ -248,7 +259,7 @@ mod tests {
         let mut state = create_test_state();
 
         // Start minigame properly
-        handle_start_minigame(&mut state).unwrap();
+        start_minigame(&mut state);
 
         // Transition to playing but don't pause
         if let Some(ref mut session) = state.game.minigame_session {

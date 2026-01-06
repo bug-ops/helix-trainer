@@ -207,4 +207,60 @@ mod tests {
             assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
         }
     }
+
+    #[test]
+    fn test_navigate_to_main_menu() {
+        let outcome = handle_navigate_to(Screen::MainMenu).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::Menu(_)));
+        }
+    }
+
+    #[test]
+    fn test_navigate_to_statistics() {
+        let outcome = handle_navigate_to(Screen::Statistics).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::Statistics(_)));
+        }
+    }
+
+    #[test]
+    fn test_navigate_to_minigame() {
+        let outcome = handle_navigate_to(Screen::MiniGame).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::MiniGame(_)));
+        }
+    }
+
+    #[test]
+    fn test_navigate_to_results_stays_on_current() {
+        let outcome = handle_navigate_to(Screen::Results).unwrap();
+        assert!(outcome.is_stay());
+    }
+
+    #[test]
+    fn test_navigate_to_review_stays_on_current() {
+        let outcome = handle_navigate_to(Screen::Review).unwrap();
+        assert!(outcome.is_stay());
+    }
+
+    #[test]
+    fn test_back_to_menu_from_menu_returns_to_mode_selection() {
+        let screen = TypedScreen::Menu(MenuData::default());
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let outcome = handle_back_to_menu(&screen, &mut ctx).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(new_screen) = outcome {
+            assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+        }
+    }
 }

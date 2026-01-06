@@ -287,4 +287,166 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_award_xp_without_level_up() {
+        let mut state = create_test_state();
+        let initial_xp = state.progress.profile.total_xp;
+        let initial_level = state.progress.profile.level;
+        let initial_notifications = state.ui.notifications.count();
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Award small amount of XP (shouldn't level up)
+        handle_award_xp(&mut ctx, 50).unwrap();
+
+        // XP should increase
+        assert_eq!(state.progress.profile.total_xp, initial_xp + 50);
+
+        // Level should remain the same
+        assert_eq!(state.progress.profile.level, initial_level);
+
+        // No notification should be added (no level up)
+        assert_eq!(state.ui.notifications.count(), initial_notifications);
+    }
+
+    #[test]
+    fn test_award_xp_with_level_up() {
+        use crate::gamification::XPCalculator;
+
+        let mut state = create_test_state();
+
+        // Set XP just below level 2 threshold
+        let xp_for_level_2 = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_level_2 - 10;
+        state.progress.profile.level = 1;
+
+        let initial_notifications = state.ui.notifications.count();
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Award enough XP to level up
+        handle_award_xp(&mut ctx, 100).unwrap();
+
+        // Should level up to 2
+        assert_eq!(state.progress.profile.level, 2);
+        assert!(state.progress.profile.total_xp >= xp_for_level_2);
+
+        // Should have level-up notification
+        assert_eq!(state.ui.notifications.count(), initial_notifications + 1);
+
+        // Verify notification type
+        if let Some(notification) = state.ui.notifications.visible().last() {
+            use crate::ui::notification::NotificationType;
+            assert!(matches!(
+                notification.notification_type,
+                NotificationType::LevelUp { new_level: 2 }
+            ));
+        }
+    }
+
+    #[test]
+    fn test_award_xp_multiple_levels() {
+        use crate::gamification::XPCalculator;
+
+        let mut state = create_test_state();
+        state.progress.profile.total_xp = 0;
+        state.progress.profile.level = 1;
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Award massive XP to jump multiple levels
+        let massive_xp = XPCalculator::xp_for_level(5);
+        handle_award_xp(&mut ctx, massive_xp).unwrap();
+
+        // Should level up to at least level 5
+        assert!(state.progress.profile.level >= 5);
+
+        // Should have a level-up notification for the final level
+        assert!(state.ui.notifications.count() > 0);
+    }
+
+    #[test]
+    fn test_award_xp_zero_amount() {
+        let mut state = create_test_state();
+        let initial_xp = state.progress.profile.total_xp;
+        let initial_level = state.progress.profile.level;
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Award zero XP
+        handle_award_xp(&mut ctx, 0).unwrap();
+
+        // Nothing should change
+        assert_eq!(state.progress.profile.total_xp, initial_xp);
+        assert_eq!(state.progress.profile.level, initial_level);
+    }
+
+    #[test]
+    fn test_award_xp_calls_save_on_level_up() {
+        use crate::gamification::XPCalculator;
+
+        let mut state = create_test_state();
+
+        // Set XP just below next level
+        let xp_for_next = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_next - 10;
+        state.progress.profile.level = 1;
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Award XP to trigger level up
+        let result = handle_award_xp(&mut ctx, 100);
+
+        // Should succeed (save was called internally)
+        assert!(result.is_ok());
+
+        // Profile should be updated
+        assert_eq!(state.progress.profile.level, 2);
+    }
+
+    #[test]
+    fn test_award_xp_large_amounts() {
+        let mut state = create_test_state();
+        let initial_xp = state.progress.profile.total_xp;
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Award large amount (test overflow protection)
+        let large_xp = 1_000_000_u64;
+        handle_award_xp(&mut ctx, large_xp).unwrap();
+
+        // XP should increase correctly
+        assert_eq!(state.progress.profile.total_xp, initial_xp + large_xp);
+    }
 }

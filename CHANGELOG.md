@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-01-06
+
+### Added
+
+- **Code Coverage Integration** — Codecov workflow with coverage reports (#93)
+- **UI Screenshots** — Added visual examples to README (#88)
+- **Comprehensive Test Coverage** — 845 tests (up from ~760)
+  - Handler tests: minigame.rs, scenario.rs, navigation.rs, profile.rs
+  - Render module tests: helpers.rs, editor.rs, screen integration tests
+  - Edge case coverage: Unicode, empty content, small/large terminals
+
+### Changed
+
+- **Architecture Refactoring** — 5-phase cleanup for better maintainability
+  - Phase 1: Eliminate `Rc<RefCell<>>` from ProgressState (#91)
+  - Phase 2: Remove GameState.session duplication (#92)
+  - Phase 3: Standardize error handling with `UserError` (#94)
+  - Phase 4: Introduce Game Service Layer (#95)
+  - Phase 5: Migrate minigame handlers to HandlerContext pattern (#96)
+
+- **CI/CD Improvements**
+  - Removed sccache, kept cargo cache for simplicity (#98)
+  - Merged coverage.yml into main ci.yml workflow
+  - Bumped actions: upload-artifact v6, download-artifact v7, cache v5
+  - Increased Miri job timeout to 90 minutes
+
+- **Documentation**
+  - Improved README structure and content
+  - Reformatted keybindings with `<kbd>` tags
+  - Simplified installation section (removed hardcoded version links)
+
+### Dependencies
+
+- `tokio`: 1.48.0 → 1.49.0
+- `tui-big-text`: 0.7.3 → 0.8.1
+- `toml`: 0.9.8 → 0.9.10
+- `tempfile`: 3.23.0 → 3.24.0
+- `serde_json`: 1.0.145 → 1.0.148
+- `tracing`: 0.1.43 → 0.1.44
+- `criterion`: 0.8.0 → 0.8.1
+
+### Quality
+
+- **Tests**: 845 (was ~760, +85 new tests)
+- **Clippy**: Zero warnings
+- **Architecture**: Cleaner separation of concerns with HandlerContext pattern
+
 ## [0.4.7] - 2025-12-03
 
 ### Changed
@@ -819,7 +866,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.7...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.8...HEAD
+[0.4.8]: https://github.com/bug-ops/helix-trainer/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/bug-ops/helix-trainer/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/bug-ops/helix-trainer/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/bug-ops/helix-trainer/compare/v0.4.4...v0.4.5

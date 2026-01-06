@@ -1,15 +1,17 @@
 //! Message handlers for mini-game mode (Arcade Mode)
 
+use std::sync::Arc;
+
 use crate::config::Scenario;
 use crate::constants::{MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER};
 use crate::game::format_key_for_display;
+use crate::input::typestate::{HandlerResult, command_to_key_event};
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
 use crate::ui::state::{
-    AppState, GameState, HandlerContext, HandlerOutcome, MiniGameData, ModeSelectionData,
-    TypedScreen,
+    AppState, GameState, HandlerContext, HandlerOutcome, InputStateAccess, MiniGameData,
+    ModeSelectionData, TypedScreen,
 };
-use std::sync::Arc;
 
 /// Create and start a new mini-game session from available scenarios
 ///
@@ -151,17 +153,19 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
 
 /// Handle executing a Helix command during mini-game
 ///
-/// Uses unified command input processing for multi-key commands (dd, gg, rx).
+/// Uses typestate-based InputStateMachine for multi-key commands (dd, gg, rx).
 pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
-    use crate::game::{CommandInputResult, process_command_input};
-
-    // Get minigame data for command buffer
+    // Get minigame data for input state machine
     let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
         return Ok(());
     };
+
+    // Add key to history for display
+    let display_key = format_key_for_display(&command);
+    minigame_data.add_key_to_history(display_key);
 
     // Check if we're in insert mode
     let is_insert_mode = state
@@ -171,13 +175,27 @@ pub(in crate::ui::state) fn handle_minigame_command(
         .map(|s| s.is_insert_mode())
         .unwrap_or(false);
 
-    // Use unified command input processing
-    let input_result = process_command_input(minigame_data, &command, is_insert_mode);
+    if is_insert_mode {
+        // In insert mode, execute command directly (bypass input state machine)
+        return execute_minigame_command(state, &command);
+    }
 
-    match input_result {
-        CommandInputResult::Execute(cmd) => execute_minigame_command(state, &cmd),
-        CommandInputResult::Invalid => Ok(()), // Buffer already cleared
-        CommandInputResult::Partial => Ok(()), // Waiting for more keys
+    // Normal mode - use InputStateMachine for multi-key command handling
+    // Convert the command string to a KeyEvent for the state machine
+    let key_event = command_to_key_event(&command);
+
+    // Need to re-borrow minigame_data after getting is_insert_mode
+    let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
+        return Ok(());
+    };
+
+    // Process through the input state machine
+    let handler_result = minigame_data.input_state_mut().process_key(key_event);
+
+    match handler_result {
+        HandlerResult::Execute(cmd) => execute_minigame_command(state, cmd.as_ref()),
+        HandlerResult::Transition(_) => Ok(()), // Waiting for more keys
+        HandlerResult::Cancel | HandlerResult::Stay => Ok(()), // Cancelled or unknown
     }
 }
 

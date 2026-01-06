@@ -1,12 +1,12 @@
 //! Integration tests for UI state with multi-key command handling
 //!
 //! These tests verify that the UI layer correctly handles multi-key commands
-//! like 'dd', 'gg', 'r<char>' through the command buffer mechanism.
+//! like 'dd', 'gg', 'r<char>' through the typestate-based InputStateMachine.
 
 use helix_trainer::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::learning::PerformanceTracker;
-use helix_trainer::ui::state::TypedScreen;
+use helix_trainer::ui::state::{InputStateAccess, TypedScreen};
 use helix_trainer::ui::{AppState, Message, update};
 use std::borrow::Cow;
 
@@ -70,12 +70,16 @@ fn test_replace_command_multi_key() {
     // Start the scenario
     update(&mut state, Message::StartScenario(0)).unwrap();
 
-    // First key: 'r' - should be stored in command buffer
+    // First key: 'r' - should transition to ReplaceCharPending state
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("r"))).unwrap();
 
-    // Check that command buffer contains 'r' and command hasn't executed yet
+    // Check that input state is ReplaceCharPending and command hasn't executed yet
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "r");
+        assert!(
+            task_data.input_state().state().is_replace_char_pending(),
+            "Expected ReplaceCharPending state after 'r', got {:?}",
+            task_data.input_state().state()
+        );
         // Content should still be "Hxllo" - nothing changed yet
         assert_eq!(task_data.session.current_state().content(), "Hxllo");
     } else {
@@ -92,8 +96,12 @@ fn test_replace_command_multi_key() {
     // - After delay, CompleteScenario transitions to Results
     match &state.screen {
         TypedScreen::Task(task_data) => {
-            // Buffer should be cleared
-            assert_eq!(task_data.command_buffer, "");
+            // Input state should be back to Base after command execution
+            assert!(
+                task_data.input_state().state().is_base(),
+                "Expected Base state after command, got {:?}",
+                task_data.input_state().state()
+            );
             // Check completion via pending session or completion_time
             if state.ui.completion_time.is_some() {
                 // Scenario completed - check pending session has correct content
@@ -132,7 +140,8 @@ fn test_xd_command_line_delete() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("x"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "");
+        // Input state should be Base (single-key command executes immediately)
+        assert!(task_data.input_state().state().is_base());
         // Content unchanged after x (selection only)
         assert_eq!(
             task_data.session.current_state().content(),
@@ -151,7 +160,8 @@ fn test_xd_command_line_delete() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "");
+        // Input state should be Base
+        assert!(task_data.input_state().state().is_base());
         assert_eq!(task_data.session.current_state().content(), "line1\nline3");
     } else {
         panic!("Should be on Task screen after xd (scenario incomplete)");
@@ -172,20 +182,25 @@ fn test_gg_command_multi_key() {
     let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
-    // First 'g'
+    // First 'g' - should transition to GotoPending state
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("g"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "g");
+        assert!(
+            task_data.input_state().state().is_goto_pending(),
+            "Expected GotoPending state after 'g', got {:?}",
+            task_data.input_state().state()
+        );
     } else {
         panic!("Should be on Task screen");
     }
 
-    // Second 'g' - executes command but doesn't complete scenario
+    // Second 'g' - executes 'gg' command but doesn't complete scenario
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("g"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "");
+        // Input state should be back to Base
+        assert!(task_data.input_state().state().is_base());
         let cursor = task_data.session.current_state().cursor_position();
         assert_eq!((cursor.row, cursor.col), (0, 0));
     } else {
@@ -202,11 +217,15 @@ fn test_replace_command_valid_sequence() {
     let mut state = create_test_app_state(vec![scenario.clone()]);
     update(&mut state, Message::StartScenario(0)).unwrap();
 
-    // Press 'r'
+    // Press 'r' - should transition to ReplaceCharPending state
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("r"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "r");
+        assert!(
+            task_data.input_state().state().is_replace_char_pending(),
+            "Expected ReplaceCharPending state after 'r', got {:?}",
+            task_data.input_state().state()
+        );
     } else {
         panic!("Should be on Task screen");
     }
@@ -214,9 +233,9 @@ fn test_replace_command_valid_sequence() {
     // Press 'r' again - this completes 'rr' (replace 't' with 'r')
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("r"))).unwrap();
 
-    // Buffer should be cleared after command executes
+    // Input state should be back to Base after command executes
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "");
+        assert!(task_data.input_state().state().is_base());
         // Content should be "rest" (replaced 't' with 'r')
         assert_eq!(task_data.session.current_state().content(), "rest");
     } else {
@@ -242,9 +261,9 @@ fn test_single_key_command_immediate_execution() {
     // Press 'l' (move right) - should execute immediately
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("l"))).unwrap();
 
-    // Buffer should be empty (command executed)
+    // Input state should be Base (single-key command executes immediately)
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.command_buffer, "");
+        assert!(task_data.input_state().state().is_base());
         // Cursor should have moved
         assert_eq!(task_data.session.current_state().cursor_position().col, 1);
     } else {

@@ -27,49 +27,36 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 
 use crate::helix::commands::CMD_CANCEL;
-use crate::ui::state::CommandBufferAccess;
+use crate::ui::state::InputStateAccess;
 use crate::ui::{AppState, Message, state::TypedScreen};
 
 use super::typestate::{handle_insert_mode_input, map_key_to_helix_command};
 
-/// Check if the command buffer is waiting for a character argument
+/// Check if the input state machine is waiting for a character argument
 ///
-/// Commands like `r`, `f`, `F`, `t`, `T` expect a character to follow.
-/// The `g` prefix expects a second character for goto commands (gg, ge, gh, gl, gs).
-/// The `m` prefix expects a second character for match mode commands (mm).
-/// When the buffer contains one of these, we should accept any printable character.
+/// Uses the typestate-based `InputStateMachine` to determine if we're in a
+/// state that expects character input (FindCharPending, ReplaceCharPending)
+/// or waiting for the second key in a multi-key sequence (GotoPending, etc.).
 fn is_waiting_for_char_arg(state: &AppState) -> bool {
     match &state.screen {
-        TypedScreen::Task(task_data) => {
-            let buffer = task_data.command_buffer();
-            matches!(buffer, "r" | "f" | "F" | "t" | "T" | "g" | "m")
-        }
-        TypedScreen::MiniGame(minigame_data) => {
-            let buffer = minigame_data.command_buffer();
-            matches!(buffer, "r" | "f" | "F" | "t" | "T" | "g" | "m")
-        }
+        TypedScreen::Task(task_data) => task_data.input_state().is_prefix_state(),
+        TypedScreen::MiniGame(minigame_data) => minigame_data.input_state().is_prefix_state(),
         _ => false,
     }
 }
 
-/// Check if the command buffer contains a count prefix (digits like "3", "12")
+/// Check if the input state machine is building a count prefix (digits like "3", "12")
 ///
-/// When the buffer is building a count prefix, we should accept more digits
-/// or a command character to complete the sequence.
+/// Uses the typestate-based `InputStateMachine` to check if we're in
+/// CountPending state (building a numeric prefix for a command).
 fn is_building_count_prefix(state: &AppState) -> bool {
-    let buffer = match &state.screen {
-        TypedScreen::Task(task_data) => task_data.command_buffer(),
-        TypedScreen::MiniGame(minigame_data) => minigame_data.command_buffer(),
-        _ => return false,
-    };
-
-    // Check if buffer starts with a non-zero digit and contains only digits
-    if buffer.is_empty() {
-        return false;
+    match &state.screen {
+        TypedScreen::Task(task_data) => task_data.input_state().state().is_count_pending(),
+        TypedScreen::MiniGame(minigame_data) => {
+            minigame_data.input_state().state().is_count_pending()
+        }
+        _ => false,
     }
-
-    let first_char = buffer.chars().next().unwrap();
-    first_char.is_ascii_digit() && first_char != '0' && buffer.chars().all(|c| c.is_ascii_digit())
 }
 
 /// Handle keyboard events on profile and statistics screens

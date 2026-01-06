@@ -63,12 +63,12 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                     QuestGenerator::generate_quests(&updated_profile, &tracker, &quest_registry);
             }
 
-            *state.progress.profile.borrow_mut() = updated_profile;
+            state.progress.profile = updated_profile;
             tracing::info!("Profile loaded");
         }
 
         DataLoadMessage::ProfileError { error, fallback } => {
-            *state.progress.profile.borrow_mut() = fallback;
+            state.progress.profile = fallback;
             tracing::warn!("Profile load failed, using default: {}", error);
         }
 
@@ -183,7 +183,7 @@ mod tests {
         let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(result.is_ok());
-        let loaded_profile = state.progress.profile.borrow();
+        let loaded_profile = &state.progress.profile;
         assert_eq!(loaded_profile.total_xp, 500);
         assert_eq!(loaded_profile.level, 3);
     }
@@ -203,7 +203,7 @@ mod tests {
         );
 
         assert!(result.is_ok());
-        let loaded_profile = state.progress.profile.borrow();
+        let loaded_profile = &state.progress.profile;
         assert_eq!(loaded_profile.total_xp, 100); // Fallback was used
     }
 

@@ -108,9 +108,8 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
         // Record to FSRS before advancing (only if we have actions)
         if let Some(scenario) = session.current_scenario() {
             if !scenario.actions().is_empty() {
-                let mut tracker = state.progress.performance_tracker.borrow_mut();
-                session.record_to_fsrs(&mut tracker, true); // Success!
-                drop(tracker);
+                let tracker = &mut state.progress.performance_tracker;
+                session.record_to_fsrs(tracker, true); // Success!
             }
 
             // Update quest progress for scenario completion (shared function)
@@ -123,10 +122,8 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
         // Base XP per scenario + bonus per streak level (encourages maintaining streaks)
         let scenario_xp = MINIGAME_SCENARIO_BASE_XP
             + (current_streak.saturating_sub(1) as u64 * MINIGAME_STREAK_XP_MULTIPLIER);
-        {
-            let mut profile = state.progress.profile.borrow_mut();
-            profile.add_xp(scenario_xp);
-        }
+        let profile = &mut state.progress.profile;
+        profile.add_xp(scenario_xp);
 
         // Award XP for newly completed quests (this function adds XP internally)
         let quest_xp = super::award_quest_completion_xp(state, &was_completed);
@@ -237,16 +234,15 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
         let stats = session.stats();
 
         // 1. Record final scenario to FSRS (if applicable)
-        let mut tracker = state.progress.performance_tracker.borrow_mut();
-        session.record_to_fsrs(&mut tracker, false); // Game over = failure on current scenario
-        drop(tracker);
+        let tracker = &mut state.progress.performance_tracker;
+        session.record_to_fsrs(tracker, false); // Game over = failure on current scenario
 
         // 2. Calculate XP earned
         use crate::gamification::XPCalculator;
         let xp = XPCalculator::minigame_xp(stats.score, stats.level, stats.best_streak);
 
         // 3. Update profile with XP and high scores
-        let mut profile = state.progress.profile.borrow_mut();
+        let profile = &mut state.progress.profile;
         let leveled_up = profile.add_xp(xp);
 
         // Update high scores if beaten
@@ -271,13 +267,8 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
             "Mini-game session completed"
         );
 
-        drop(profile);
-
         // 4. Persist profile to disk (non-fatal error - log but continue)
-        let save_result = {
-            let profile_borrowed = state.progress.profile.borrow();
-            state.progress.storage.save(&profile_borrowed)
-        };
+        let save_result = state.progress.storage.save(&state.progress.profile);
 
         if let Err(e) = save_result {
             tracing::error!("Failed to save profile after mini-game: {:?}", e);
@@ -468,7 +459,7 @@ mod tests {
         }
 
         // Get initial XP
-        let initial_xp = state.progress.profile.borrow().total_xp;
+        let initial_xp = state.progress.profile.total_xp;
 
         // Manually set some stats for testing
         if let Some(ref mut session) = state.game.minigame_session {
@@ -482,7 +473,7 @@ mod tests {
         handle_minigame_game_over(&mut state).unwrap();
 
         // Check XP was awarded
-        let final_xp = state.progress.profile.borrow().total_xp;
+        let final_xp = state.progress.profile.total_xp;
         let expected_xp = XPCalculator::minigame_xp(5000, 3, 10);
         assert_eq!(final_xp - initial_xp, expected_xp);
     }
@@ -493,7 +484,7 @@ mod tests {
         handle_start_minigame(&mut state).unwrap();
 
         // Set initial high score
-        state.progress.profile.borrow_mut().minigame_high_score = 1000;
+        state.progress.profile.minigame_high_score = 1000;
 
         // Transition to playing and set higher score
         if let Some(ref mut session) = state.game.minigame_session {
@@ -506,7 +497,7 @@ mod tests {
         handle_minigame_game_over(&mut state).unwrap();
 
         // Check high score was updated
-        assert_eq!(state.progress.profile.borrow().minigame_high_score, 5000);
+        assert_eq!(state.progress.profile.minigame_high_score, 5000);
     }
 
     #[test]
@@ -517,7 +508,7 @@ mod tests {
 
         // Initialize with sample quests
         {
-            let mut profile = state.progress.profile.borrow_mut();
+            let profile = &mut state.progress.profile;
             profile.daily_quests = vec![Quest {
                 id: "cmd_practice".to_string(),
                 quest_type: QuestType::CommandPractice {
@@ -534,7 +525,7 @@ mod tests {
 
         // Check initial quest progress
         let initial_cmd_progress = {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             if let QuestType::CommandPractice { current, .. } = &profile.daily_quests[0].quest_type
             {
                 *current
@@ -550,7 +541,7 @@ mod tests {
 
         // Check that command quest was updated
         let cmd_progress_after = {
-            let profile = state.progress.profile.borrow();
+            let profile = &state.progress.profile;
             if let QuestType::CommandPractice { current, .. } = &profile.daily_quests[0].quest_type
             {
                 *current

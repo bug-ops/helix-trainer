@@ -13,8 +13,8 @@ pub fn handle_set_sort_mode(
     ctx: &mut HandlerContext<'_>,
     mode: SortMode,
 ) -> Result<HandlerOutcome, UserError> {
-    let profile = ctx.progress.profile.borrow();
-    ctx.game.scenario_collection.sort(mode, Some(&profile));
+    let profile = &ctx.progress.profile;
+    ctx.game.scenario_collection.sort(mode, Some(profile));
     Ok(HandlerOutcome::Stay)
 }
 
@@ -25,7 +25,7 @@ pub fn handle_toggle_category_filter(
     ctx: &mut HandlerContext<'_>,
     category: ScenarioCategory,
 ) -> Result<HandlerOutcome, UserError> {
-    let profile = ctx.progress.profile.borrow();
+    let profile = &ctx.progress.profile;
     let current_filter = ctx.game.scenario_collection.active_filter();
     let mut new_filter = current_filter.clone();
 
@@ -43,7 +43,7 @@ pub fn handle_toggle_category_filter(
 
     ctx.game
         .scenario_collection
-        .apply_filter(&new_filter, Some(&profile));
+        .apply_filter(&new_filter, Some(profile));
     Ok(HandlerOutcome::Stay)
 }
 
@@ -54,7 +54,7 @@ pub fn handle_toggle_difficulty_filter(
     ctx: &mut HandlerContext<'_>,
     difficulty: Difficulty,
 ) -> Result<HandlerOutcome, UserError> {
-    let profile = ctx.progress.profile.borrow();
+    let profile = &ctx.progress.profile;
     let current_filter = ctx.game.scenario_collection.active_filter();
     let mut new_filter = current_filter.clone();
 
@@ -72,7 +72,7 @@ pub fn handle_toggle_difficulty_filter(
 
     ctx.game
         .scenario_collection
-        .apply_filter(&new_filter, Some(&profile));
+        .apply_filter(&new_filter, Some(profile));
     Ok(HandlerOutcome::Stay)
 }
 
@@ -84,7 +84,7 @@ pub fn handle_toggle_difficulty_filter(
 pub fn handle_toggle_completed_filter(
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    let profile = ctx.progress.profile.borrow();
+    let profile = &ctx.progress.profile;
     let current_filter = ctx.game.scenario_collection.active_filter();
     let mut new_filter = current_filter.clone();
 
@@ -114,7 +114,7 @@ pub fn handle_toggle_completed_filter(
 
     ctx.game
         .scenario_collection
-        .apply_filter(&new_filter, Some(&profile));
+        .apply_filter(&new_filter, Some(profile));
     Ok(HandlerOutcome::Stay)
 }
 

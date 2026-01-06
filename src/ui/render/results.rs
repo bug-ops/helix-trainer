@@ -291,22 +291,16 @@ fn render_progression_panel(
     )]));
     lines.push(Line::from(""));
 
-    let (level, xp_in_level, xp_needed_for_level, total_xp, scenarios, perfect, streak) = {
-        let profile = state.progress.profile.borrow();
-        let current_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level);
-        let next_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level + 1);
-        let xp_in_level = profile.total_xp.saturating_sub(current_level_xp);
-        let xp_needed = next_level_xp.saturating_sub(current_level_xp);
-        (
-            profile.level,
-            xp_in_level,
-            xp_needed,
-            profile.total_xp,
-            profile.scenarios_completed,
-            profile.perfect_scenarios,
-            profile.current_streak,
-        )
-    };
+    let profile = &state.progress.profile;
+    let current_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level);
+    let next_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level + 1);
+    let xp_in_level = profile.total_xp.saturating_sub(current_level_xp);
+    let xp_needed_for_level = next_level_xp.saturating_sub(current_level_xp);
+    let level = profile.level;
+    let total_xp = profile.total_xp;
+    let scenarios = profile.scenarios_completed;
+    let perfect = profile.perfect_scenarios;
+    let streak = profile.current_streak;
 
     // Level with XP progress
     lines.push(Line::from(vec![

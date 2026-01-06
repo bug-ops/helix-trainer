@@ -35,6 +35,7 @@ impl PartialOrd for ReviewItem {
 }
 
 /// Scheduler for spaced repetition reviews
+#[derive(Debug, Default)]
 pub struct Scheduler;
 
 impl Scheduler {

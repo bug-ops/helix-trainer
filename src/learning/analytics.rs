@@ -14,6 +14,7 @@ pub struct MasterySummary {
 }
 
 /// Analytics for learning progress and performance insights
+#[derive(Debug, Default)]
 pub struct Analytics;
 
 impl Analytics {
@@ -192,7 +193,7 @@ mod tests {
     use crate::learning::performance::PerformanceTracker;
     use std::time::Duration;
 
-    fn create_test_tracker() -> PerformanceTracker {
+    fn setup_tracker_with_varied_mastery() -> PerformanceTracker {
         let mut tracker = PerformanceTracker::new();
 
         // Beginner: new command, no practice
@@ -242,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_mastery_summary_counts() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         let summary = Analytics::get_mastery_summary(&tracker);
         assert_eq!(summary.total_commands, 3);
@@ -259,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_mastery_summary_averages() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         let summary = Analytics::get_mastery_summary(&tracker);
 
@@ -271,7 +272,7 @@ mod tests {
 
     #[test]
     fn test_get_commands_by_mastery() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         let beginners = Analytics::get_commands_by_mastery(&tracker, MasteryLevel::Beginner);
         let intermediates =
@@ -289,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_get_commands_by_mastery_specific_level() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         let beginners = Analytics::get_commands_by_mastery(&tracker, MasteryLevel::Beginner);
 
@@ -299,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_progress_over_time_zero_days() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         let progress = Analytics::get_progress_over_time(&tracker, 0);
         assert!(progress.is_empty());
@@ -307,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_progress_over_time_generates_points() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         let days = 7;
         let progress = Analytics::get_progress_over_time(&tracker, days);
@@ -328,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_progress_over_time_growth() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         let progress = Analytics::get_progress_over_time(&tracker, 5);
 
@@ -405,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_total_commands() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         assert_eq!(Analytics::total_commands(&tracker), 3);
     }
@@ -419,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_avg_success_rate_calculation() {
-        let tracker = create_test_tracker();
+        let tracker = setup_tracker_with_varied_mastery();
 
         let avg_rate = Analytics::avg_success_rate(&tracker);
 

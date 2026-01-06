@@ -53,18 +53,14 @@ fn render_profile_content(frame: &mut Frame, state: &AppState, area: ratatui::la
     let inner_area = content_block.inner(area);
     frame.render_widget(content_block, area);
 
-    // Get profile data with scoped borrow
-    let (level, total_xp, xp_progress, xp_for_next, scenarios_completed, perfect_scenarios) = {
-        let profile = state.progress.profile.borrow();
-        (
-            profile.level,
-            profile.total_xp,
-            profile.xp_progress(),
-            profile.xp_for_next_level(),
-            profile.scenarios_completed,
-            profile.perfect_scenarios,
-        )
-    };
+    // Get profile data
+    let profile = &state.progress.profile;
+    let level = profile.level;
+    let total_xp = profile.total_xp;
+    let xp_progress = profile.xp_progress();
+    let xp_for_next = profile.xp_for_next_level();
+    let scenarios_completed = profile.scenarios_completed;
+    let perfect_scenarios = profile.perfect_scenarios;
 
     // Calculate current XP in level
     let current_level_xp = crate::gamification::XPCalculator::xp_for_level(level);
@@ -187,12 +183,9 @@ fn render_stats_section(
     lines.push(Line::from(""));
 
     // Quest section
-    let (active_quests, completed_today) = {
-        let profile = state.progress.profile.borrow();
-        let active = profile.daily_quests.len();
-        let completed = profile.daily_quests.iter().filter(|q| q.completed).count();
-        (active, completed)
-    };
+    let profile = &state.progress.profile;
+    let active_quests = profile.daily_quests.len();
+    let completed_today = profile.daily_quests.iter().filter(|q| q.completed).count();
 
     lines.push(Line::from(vec![Span::styled(
         "🎯 Daily Quests:",

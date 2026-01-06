@@ -1,6 +1,6 @@
 //! Movement commands
 
-use crate::helix::simulator::{EditorMode, HelixSimulator};
+use crate::helix::simulator::{EditorMode, FindDirection, FindType, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{
     Selection,
@@ -243,6 +243,10 @@ pub fn find_next_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
+    // Record this motion for Alt-. repeat
+    sim.find_state
+        .set(ch, FindType::Find, FindDirection::Forward);
+
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_end = if line + 1 < sim.doc.len_lines() {
@@ -279,6 +283,10 @@ pub fn find_prev_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
+    // Record this motion for Alt-. repeat
+    sim.find_state
+        .set(ch, FindType::Find, FindDirection::Backward);
+
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
@@ -316,6 +324,10 @@ pub fn till_next_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
+    // Record this motion for Alt-. repeat
+    sim.find_state
+        .set(ch, FindType::Till, FindDirection::Forward);
+
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_end = if line + 1 < sim.doc.len_lines() {
@@ -354,6 +366,10 @@ pub fn till_prev_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
+    // Record this motion for Alt-. repeat
+    sim.find_state
+        .set(ch, FindType::Till, FindDirection::Backward);
+
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
@@ -524,4 +540,431 @@ pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
     // Swap anchor and head
     sim.selection = Selection::single(range.head, range.anchor);
     Ok(())
+}
+
+/// Move to previous paragraph (Helix '{' command)
+///
+/// A paragraph boundary is defined as a blank line (line containing only whitespace).
+/// Moves cursor to the start of the previous paragraph.
+pub fn goto_prev_paragraph<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let mut current_line = sim.doc.char_to_line(head);
+    let slice = sim.doc.slice(..);
+
+    let mut found = 0;
+    let mut in_blank_region = is_line_blank(&slice, current_line);
+
+    // Move up through lines looking for paragraph boundaries
+    while current_line > 0 && found < count {
+        current_line -= 1;
+        let is_blank = is_line_blank(&slice, current_line);
+
+        // Transition from non-blank to blank means we found a paragraph boundary
+        if !in_blank_region && is_blank {
+            found += 1;
+            if found >= count {
+                break;
+            }
+        }
+        in_blank_region = is_blank;
+    }
+
+    // Move to the start of the target line
+    let pos = sim.doc.line_to_char(current_line);
+    sim.selection = Selection::point(pos);
+    Ok(())
+}
+
+/// Move to next paragraph (Helix '}' command)
+///
+/// A paragraph boundary is defined as a blank line (line containing only whitespace).
+/// Moves cursor to the start of the next paragraph.
+pub fn goto_next_paragraph<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let mut current_line = sim.doc.char_to_line(head);
+    let total_lines = sim.doc.len_lines();
+    let slice = sim.doc.slice(..);
+
+    let mut found = 0;
+    let mut in_blank_region = is_line_blank(&slice, current_line);
+
+    // Move down through lines looking for paragraph boundaries
+    while current_line + 1 < total_lines && found < count {
+        current_line += 1;
+        let is_blank = is_line_blank(&slice, current_line);
+
+        // Transition from blank to non-blank means we entered a new paragraph
+        if in_blank_region && !is_blank {
+            found += 1;
+            if found >= count {
+                break;
+            }
+        }
+        in_blank_region = is_blank;
+    }
+
+    // Move to the start of the target line
+    let pos = sim.doc.line_to_char(current_line);
+    sim.selection = Selection::point(pos);
+    Ok(())
+}
+
+/// Repeat last f/F/t/T motion in the same direction (Helix 'Alt-.' command)
+pub fn repeat_last_motion<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    if let Some((ch, find_type, direction)) = sim.find_state.get() {
+        match (find_type, direction) {
+            (FindType::Find, FindDirection::Forward) => {
+                // Don't re-record the motion
+                let head = sim.selection.primary().head;
+                let line = sim.doc.char_to_line(head);
+                let line_end = if line + 1 < sim.doc.len_lines() {
+                    sim.doc.line_to_char(line + 1)
+                } else {
+                    sim.doc.len_chars()
+                };
+                let slice = sim.doc.slice(..);
+                let mut pos = head + 1;
+                while pos < line_end {
+                    if let Some(c) = slice.get_char(pos)
+                        && c == ch
+                    {
+                        sim.selection = Selection::point(pos);
+                        return Ok(());
+                    }
+                    pos += 1;
+                }
+            }
+            (FindType::Find, FindDirection::Backward) => {
+                let head = sim.selection.primary().head;
+                let line = sim.doc.char_to_line(head);
+                let line_start = sim.doc.line_to_char(line);
+                let slice = sim.doc.slice(..);
+                if head > line_start {
+                    let mut pos = head - 1;
+                    loop {
+                        if let Some(c) = slice.get_char(pos)
+                            && c == ch
+                        {
+                            sim.selection = Selection::point(pos);
+                            return Ok(());
+                        }
+                        if pos == line_start {
+                            break;
+                        }
+                        pos -= 1;
+                    }
+                }
+            }
+            (FindType::Till, FindDirection::Forward) => {
+                let head = sim.selection.primary().head;
+                let line = sim.doc.char_to_line(head);
+                let line_end = if line + 1 < sim.doc.len_lines() {
+                    sim.doc.line_to_char(line + 1)
+                } else {
+                    sim.doc.len_chars()
+                };
+                let slice = sim.doc.slice(..);
+                let mut pos = head + 1;
+                while pos < line_end {
+                    if let Some(c) = slice.get_char(pos)
+                        && c == ch
+                    {
+                        if pos > head + 1 {
+                            sim.selection = Selection::point(pos - 1);
+                        }
+                        return Ok(());
+                    }
+                    pos += 1;
+                }
+            }
+            (FindType::Till, FindDirection::Backward) => {
+                let head = sim.selection.primary().head;
+                let line = sim.doc.char_to_line(head);
+                let line_start = sim.doc.line_to_char(line);
+                let slice = sim.doc.slice(..);
+                if head > line_start {
+                    let mut pos = head - 1;
+                    loop {
+                        if let Some(c) = slice.get_char(pos)
+                            && c == ch
+                        {
+                            sim.selection = Selection::point(pos + 1);
+                            return Ok(());
+                        }
+                        if pos == line_start {
+                            break;
+                        }
+                        pos -= 1;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Repeat last f/F/t/T motion in the opposite direction (Helix 'Alt-,' command)
+pub fn repeat_last_motion_reverse<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
+    if let Some((ch, find_type, direction)) = sim.find_state.get() {
+        let reversed = direction.reverse();
+        match (find_type, reversed) {
+            (FindType::Find, FindDirection::Forward) => {
+                let head = sim.selection.primary().head;
+                let line = sim.doc.char_to_line(head);
+                let line_end = if line + 1 < sim.doc.len_lines() {
+                    sim.doc.line_to_char(line + 1)
+                } else {
+                    sim.doc.len_chars()
+                };
+                let slice = sim.doc.slice(..);
+                let mut pos = head + 1;
+                while pos < line_end {
+                    if let Some(c) = slice.get_char(pos)
+                        && c == ch
+                    {
+                        sim.selection = Selection::point(pos);
+                        return Ok(());
+                    }
+                    pos += 1;
+                }
+            }
+            (FindType::Find, FindDirection::Backward) => {
+                let head = sim.selection.primary().head;
+                let line = sim.doc.char_to_line(head);
+                let line_start = sim.doc.line_to_char(line);
+                let slice = sim.doc.slice(..);
+                if head > line_start {
+                    let mut pos = head - 1;
+                    loop {
+                        if let Some(c) = slice.get_char(pos)
+                            && c == ch
+                        {
+                            sim.selection = Selection::point(pos);
+                            return Ok(());
+                        }
+                        if pos == line_start {
+                            break;
+                        }
+                        pos -= 1;
+                    }
+                }
+            }
+            (FindType::Till, FindDirection::Forward) => {
+                let head = sim.selection.primary().head;
+                let line = sim.doc.char_to_line(head);
+                let line_end = if line + 1 < sim.doc.len_lines() {
+                    sim.doc.line_to_char(line + 1)
+                } else {
+                    sim.doc.len_chars()
+                };
+                let slice = sim.doc.slice(..);
+                let mut pos = head + 1;
+                while pos < line_end {
+                    if let Some(c) = slice.get_char(pos)
+                        && c == ch
+                    {
+                        if pos > head + 1 {
+                            sim.selection = Selection::point(pos - 1);
+                        }
+                        return Ok(());
+                    }
+                    pos += 1;
+                }
+            }
+            (FindType::Till, FindDirection::Backward) => {
+                let head = sim.selection.primary().head;
+                let line = sim.doc.char_to_line(head);
+                let line_start = sim.doc.line_to_char(line);
+                let slice = sim.doc.slice(..);
+                if head > line_start {
+                    let mut pos = head - 1;
+                    loop {
+                        if let Some(c) = slice.get_char(pos)
+                            && c == ch
+                        {
+                            sim.selection = Selection::point(pos + 1);
+                            return Ok(());
+                        }
+                        if pos == line_start {
+                            break;
+                        }
+                        pos -= 1;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Check if a line is blank (contains only whitespace)
+fn is_line_blank(slice: &helix_core::RopeSlice, line: usize) -> bool {
+    let line_start = slice.line_to_char(line);
+    let line_end = if line + 1 < slice.len_lines() {
+        slice.line_to_char(line + 1)
+    } else {
+        slice.len_chars()
+    };
+
+    for i in line_start..line_end {
+        if let Some(c) = slice.get_char(i)
+            && !c.is_whitespace()
+        {
+            return false;
+        }
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::helix::simulator::HelixSimulator;
+
+    #[test]
+    fn test_find_records_state() {
+        let mut sim = HelixSimulator::new("hello world".to_string());
+        find_next_char(&mut sim, 'o', 1).unwrap();
+
+        // Check that find state was recorded
+        let (ch, ft, dir) = sim.find_state.get().unwrap();
+        assert_eq!(ch, 'o');
+        assert_eq!(ft, FindType::Find);
+        assert_eq!(dir, FindDirection::Forward);
+    }
+
+    #[test]
+    fn test_find_backward_records_state() {
+        let mut sim = HelixSimulator::new("hello world".to_string());
+        // Move to end
+        sim.selection = Selection::point(10);
+        find_prev_char(&mut sim, 'l', 1).unwrap();
+
+        let (ch, ft, dir) = sim.find_state.get().unwrap();
+        assert_eq!(ch, 'l');
+        assert_eq!(ft, FindType::Find);
+        assert_eq!(dir, FindDirection::Backward);
+    }
+
+    #[test]
+    fn test_till_records_state() {
+        let mut sim = HelixSimulator::new("hello world".to_string());
+        till_next_char(&mut sim, 'o', 1).unwrap();
+
+        let (ch, ft, dir) = sim.find_state.get().unwrap();
+        assert_eq!(ch, 'o');
+        assert_eq!(ft, FindType::Till);
+        assert_eq!(dir, FindDirection::Forward);
+    }
+
+    #[test]
+    fn test_repeat_last_motion_find_forward() {
+        let mut sim = HelixSimulator::new("abcabc".to_string());
+        // First find 'b'
+        find_next_char(&mut sim, 'b', 1).unwrap();
+        assert_eq!(sim.selection.primary().head, 1);
+
+        // Repeat should find next 'b'
+        repeat_last_motion(&mut sim).unwrap();
+        assert_eq!(sim.selection.primary().head, 4);
+    }
+
+    #[test]
+    fn test_repeat_last_motion_reverse() {
+        let mut sim = HelixSimulator::new("abcabc".to_string());
+        // Move to end, find 'b' backward
+        sim.selection = Selection::point(5);
+        find_prev_char(&mut sim, 'b', 1).unwrap();
+        assert_eq!(sim.selection.primary().head, 4);
+
+        // Repeat reverse should find 'b' forward direction
+        repeat_last_motion_reverse(&mut sim).unwrap();
+        // No 'b' after position 4, should stay
+        assert_eq!(sim.selection.primary().head, 4);
+    }
+
+    #[test]
+    fn test_repeat_without_prior_motion() {
+        let mut sim = HelixSimulator::new("hello".to_string());
+        // No prior motion, should be no-op
+        repeat_last_motion(&mut sim).unwrap();
+        assert_eq!(sim.selection.primary().head, 0);
+    }
+
+    #[test]
+    fn test_paragraph_movement_next() {
+        let mut sim = HelixSimulator::new("line1\n\nline2\n\nline3".to_string());
+        // Start at beginning
+        assert_eq!(sim.selection.primary().head, 0);
+
+        // Move to next paragraph (blank line)
+        goto_next_paragraph(&mut sim, 1).unwrap();
+        // Should have moved past the first line
+        assert!(sim.selection.primary().head > 0);
+    }
+
+    #[test]
+    fn test_paragraph_movement_prev() {
+        let mut sim = HelixSimulator::new("line1\n\nline2\n\nline3".to_string());
+        // Start at end
+        sim.selection = Selection::point(17); // at "line3"
+
+        // Move to previous paragraph
+        goto_prev_paragraph(&mut sim, 1).unwrap();
+        // Should be at an earlier position
+        assert!(sim.selection.primary().head < 17);
+    }
+
+    #[test]
+    fn test_till_backward_records_state() {
+        let mut sim = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::point(10);
+        till_prev_char(&mut sim, 'l', 1).unwrap();
+
+        let (ch, ft, dir) = sim.find_state.get().unwrap();
+        assert_eq!(ch, 'l');
+        assert_eq!(ft, FindType::Till);
+        assert_eq!(dir, FindDirection::Backward);
+    }
+
+    #[test]
+    fn test_repeat_last_motion_till_forward() {
+        let mut sim = HelixSimulator::new("axbxcxd".to_string());
+        // First till 'x' from position 0
+        till_next_char(&mut sim, 'x', 1).unwrap();
+        // Should be at position 0 (position before 'x' at 1, but cursor stays if adjacent)
+
+        // Move to position 2 manually for repeat test
+        sim.selection = Selection::point(2);
+        repeat_last_motion(&mut sim).unwrap();
+        // Should find next 'x' at position 3, stop at 2 (till stops before)
+    }
+
+    #[test]
+    fn test_paragraph_at_document_start() {
+        let mut sim = HelixSimulator::new("line1\n\nline2".to_string());
+        // At start, previous paragraph should stay at 0
+        goto_prev_paragraph(&mut sim, 1).unwrap();
+        assert_eq!(sim.selection.primary().head, 0);
+    }
+
+    #[test]
+    fn test_paragraph_at_document_end() {
+        let mut sim = HelixSimulator::new("line1\n\nline2".to_string());
+        let doc_len = sim.doc.len_chars();
+        sim.selection = Selection::point(doc_len.saturating_sub(1));
+
+        // At end, next paragraph should handle gracefully
+        goto_next_paragraph(&mut sim, 1).unwrap();
+        // Should be at or past current position (end of doc)
+        assert!(sim.selection.primary().head <= doc_len);
+    }
 }

@@ -315,4 +315,73 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
         ),
         |_sim| Ok(()),
     ));
+
+    // Paragraph movement
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "goto_prev_paragraph",
+            CMD_GOTO_PREV_PARAGRAPH,
+            "Previous paragraph",
+            "Move to the start of the previous paragraph (blank line boundary).",
+            Category::Movement,
+            false,
+            None,
+        ),
+        |sim| movement::goto_prev_paragraph(sim, 1),
+    ));
+
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "goto_next_paragraph",
+            CMD_GOTO_NEXT_PARAGRAPH,
+            "Next paragraph",
+            "Move to the start of the next paragraph (blank line boundary).",
+            Category::Movement,
+            false,
+            None,
+        ),
+        |sim| movement::goto_next_paragraph(sim, 1),
+    ));
+
+    // First non-blank (alias for gs behavior with ^ key)
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "goto_first_nonblank",
+            CMD_GOTO_FIRST_NONBLANK,
+            "First non-blank",
+            "Move to the first non-whitespace character on the current line.",
+            Category::Movement,
+            false,
+            None,
+        ),
+        movement::goto_first_nonwhitespace,
+    ));
+
+    // Repeat last f/F/t/T motion
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "repeat_last_motion",
+            CMD_REPEAT_LAST_MOTION,
+            "Repeat last motion",
+            "Repeat the last f/F/t/T motion in the same direction.",
+            Category::Movement,
+            false,
+            None,
+        ),
+        movement::repeat_last_motion,
+    ));
+
+    // Repeat last f/F/t/T motion in reverse
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "repeat_last_motion_reverse",
+            CMD_REPEAT_LAST_MOTION_REVERSE,
+            "Repeat motion reverse",
+            "Repeat the last f/F/t/T motion in the opposite direction.",
+            Category::Movement,
+            false,
+            None,
+        ),
+        movement::repeat_last_motion_reverse,
+    ));
 }

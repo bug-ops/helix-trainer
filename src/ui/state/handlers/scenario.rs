@@ -270,6 +270,49 @@ pub fn handle_next_scenario(_ctx: &mut HandlerContext<'_>) -> Result<HandlerOutc
     ))))
 }
 
+/// Handle NextLesson message
+///
+/// Navigates to the next scenario in the filtered list.
+/// If at the end of the list, stays on Results screen.
+/// If no scenario_index is available, returns to Menu screen.
+pub fn handle_next_lesson(
+    results_data: &ResultsData,
+    ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    // Get current scenario index
+    let Some(current_index) = results_data.scenario_index else {
+        // No index context - navigate to menu (scenario list)
+        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+            MenuData::default(),
+        ))));
+    };
+
+    let next_index = current_index + 1;
+    let scenario_count = ctx.game.scenario_collection.count();
+
+    // Check if at end of list
+    if next_index >= scenario_count {
+        // Stay on results screen - notification will be handled in Phase 6
+        return Ok(HandlerOutcome::Stay);
+    }
+
+    // Start next scenario using existing handler
+    handle_start_scenario(ctx, next_index)
+}
+
+/// Handle GoToScenarioList message
+///
+/// Navigates directly to the Menu screen (scenario list).
+/// Unlike BackToMenu which goes to ModeSelection, this goes directly to Menu.
+pub fn handle_go_to_scenario_list(
+    _results_data: &ResultsData,
+    _ctx: &mut HandlerContext<'_>,
+) -> Result<HandlerOutcome, UserError> {
+    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+        MenuData::default(),
+    ))))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

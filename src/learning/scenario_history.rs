@@ -211,20 +211,27 @@ impl ScenarioCompletion {
     /// assert_eq!(completion.xp_multiplier(), 0.7); // Second attempt today (after construction)
     /// ```
     pub fn xp_multiplier(&self) -> f64 {
+        self.mastery_factor() * self.repeat_penalty()
+    }
+
+    /// Get XP multiplier from mastery level only
+    ///
+    /// Returns factor based on mastery: Learning = 1.0, Proficient = 0.5, Mastered = 0.2
+    pub fn mastery_factor(&self) -> f64 {
         use super::traits::Modifier;
+        self.mastery_level.factor()
+    }
 
-        // Base multiplier from mastery (uses Modifier trait)
-        let mastery_mult = self.mastery_level.factor();
-
-        // Session repeat penalty (anti-spam)
-        let session_mult = match self.attempts_today {
+    /// Get XP multiplier from session repeat penalty only
+    ///
+    /// Returns factor based on attempts today: 1st = 1.0, 2nd-3rd = 0.7, 4th+ = 0.3
+    pub fn repeat_penalty(&self) -> f64 {
+        match self.attempts_today {
             0 => 1.0, // First today (before current attempt)
             1 => 0.7, // Second attempt today
             2 => 0.7, // Third attempt today
-            _ => 0.3, // Heavy reduction (3rd+ repeat)
-        };
-
-        mastery_mult * session_mult
+            _ => 0.3, // Heavy reduction (4th+ repeat)
+        }
     }
 
     /// Update mastery level based on current stats

@@ -166,7 +166,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     let is_first_today = ctx.progress.scenarios_completed_today == 0;
     let xp = ScenarioCompletionService::calculate_xp_components(&feedback, is_first_today);
 
-    let (actual_xp, mastery_level, mastery_multiplier) =
+    let (actual_xp, mastery_level, mastery_multiplier, mastery_factor, repeat_penalty) =
         ScenarioCompletionService::record_and_scale_xp(
             &mut ctx.progress.profile,
             &scenario_id,
@@ -187,6 +187,8 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         perfect_bonus: xp.perfect_bonus,
         first_today_bonus: xp.first_today_bonus,
         mastery_multiplier,
+        mastery_factor,
+        repeat_penalty,
         quest_bonuses,
         total_xp,
     });

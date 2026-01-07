@@ -201,17 +201,29 @@ fn render_progression_panel(
             ]));
         }
 
-        // Mastery scaling
-        if xp.mastery_multiplier < 1.0 {
+        // Mastery level factor (only show if < 1.0, i.e., Proficient or Mastered)
+        if xp.mastery_factor < 1.0 {
             let mastery_text = if let Some((mastery, _)) = &results_data.scenario_mastery {
                 format!("  {} {}: ", mastery.emoji(), mastery.display_name())
             } else {
                 "  Mastery: ".to_string()
             };
 
-            let reduction_pct = ((1.0 - xp.mastery_multiplier) * 100.0) as u32;
+            let reduction_pct = ((1.0 - xp.mastery_factor) * 100.0) as u32;
             lines.push(Line::from(vec![
                 Span::raw(mastery_text),
+                Span::styled(
+                    format!("-{}%", reduction_pct),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ]));
+        }
+
+        // Repeat penalty (only show if < 1.0, i.e., 2nd+ attempt today)
+        if xp.repeat_penalty < 1.0 {
+            let reduction_pct = ((1.0 - xp.repeat_penalty) * 100.0) as u32;
+            lines.push(Line::from(vec![
+                Span::raw("  🔄 Repeat: "),
                 Span::styled(
                     format!("-{}%", reduction_pct),
                     Style::default().fg(Color::Red),

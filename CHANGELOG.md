@@ -7,6 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-07
+
+### Added
+
+**Major Feature: 45+ New Commands with Typestate Input Architecture**
+
+This release significantly expands command coverage with a complete typestate-based input system for handling multi-key sequences.
+
+- **Selection Commands (12 new)** (#100)
+  - <kbd>s</kbd> select_regex: Select regex matches in selection
+  - <kbd>S</kbd> split_selection: Split selection on regex
+  - <kbd>Alt</kbd>-<kbd>s</kbd> split_selection_newlines: Split on newlines
+  - <kbd>&</kbd> align_selections: Align selections to columns
+  - <kbd>_</kbd> trim_selections: Trim whitespace from selections
+  - <kbd>Alt</kbd>-<kbd>-</kbd> merge_selections: Merge all selections
+  - <kbd>Alt</kbd>-<kbd>_</kbd> merge_consecutive: Merge adjacent selections
+  - <kbd>C</kbd> copy_selection_next_line: Copy selection down
+  - <kbd>Alt</kbd>-<kbd>C</kbd> copy_selection_prev_line: Copy selection up
+  - <kbd>K</kbd> keep_selections_matching: Keep matching selections
+  - <kbd>Alt</kbd>-<kbd>K</kbd> remove_selections_matching: Remove matching
+  - <kbd>Ctrl</kbd>-<kbd>c</kbd> toggle_comments: Toggle line comments
+
+- **Search Commands (7 new)** (#100)
+  - <kbd>/</kbd> search_forward: Search forward with regex
+  - <kbd>?</kbd> search_backward: Search backward with regex
+  - <kbd>n</kbd> search_next: Jump to next match
+  - <kbd>N</kbd> search_prev: Jump to previous match
+  - <kbd>*</kbd> search_word_under_cursor: Search word forward
+  - <kbd>#</kbd> search_word_backward: Search word backward (#105)
+  - <kbd>Alt</kbd>-<kbd>*</kbd> search_selection: Search selection text
+
+- **View Commands (6 new)** (#100)
+  - <kbd>z</kbd>/<kbd>zz</kbd> view_center: Center view on cursor
+  - <kbd>zt</kbd> view_top: Scroll cursor to top
+  - <kbd>zb</kbd> view_bottom: Scroll cursor to bottom
+  - <kbd>zm</kbd> view_center_horizontal: Center horizontally
+  - <kbd>zj</kbd> scroll_down: Scroll view down
+  - <kbd>zk</kbd> scroll_up: Scroll view up
+
+- **Movement Commands (8 new)** (#105, #106)
+  - <kbd>{</kbd> goto_prev_paragraph: Jump to previous paragraph
+  - <kbd>}</kbd> goto_next_paragraph: Jump to next paragraph
+  - <kbd>^</kbd> goto_first_nonblank: Alias for <kbd>gs</kbd>
+  - <kbd>Ctrl</kbd>-<kbd>b</kbd> page_up: Scroll page up
+  - <kbd>Ctrl</kbd>-<kbd>f</kbd> page_down: Scroll page down
+  - <kbd>Ctrl</kbd>-<kbd>u</kbd> half_page_up: Scroll half page up
+  - <kbd>Ctrl</kbd>-<kbd>d</kbd> half_page_down: Scroll half page down
+  - <kbd>Alt</kbd>-<kbd>.</kbd> repeat_last_motion: Repeat last f/F/t/T
+
+- **Editing Commands (3 new)** (#106)
+  - <kbd>Alt</kbd>-<kbd>`</kbd> switch_to_uppercase: Convert to uppercase
+  - <kbd>R</kbd> replace_with_yanked: Replace selection with yanked text
+  - <kbd>Alt</kbd>-<kbd>J</kbd> join_selections_space: Join with spaces
+
+- **Selection Management (3 new)** (#106)
+  - <kbd>,</kbd> keep_primary_selection: Keep only primary selection
+  - <kbd>Alt</kbd>-<kbd>,</kbd> remove_primary_selection: Remove primary selection
+  - <kbd>Alt</kbd>-<kbd>x</kbd> shrink_to_line_bounds: Shrink selection to line bounds
+
+- **Surround Commands (Match Mode)** (#107)
+  - <kbd>ms</kbd> + char: Add surround (wrap selection with brackets/quotes)
+  - <kbd>md</kbd> + char: Delete surround (remove enclosing pair)
+  - <kbd>mr</kbd> + char + char: Replace surround (change pair type)
+
+- **Text Object Selection** (#108)
+  - <kbd>ma</kbd> + object: Select around (includes delimiters)
+  - <kbd>mi</kbd> + object: Select inside (excludes delimiters)
+  - Supported objects: `w`, `W`, `(`, `[`, `{`, `<`, `"`, `'`, `` ` ``, `p`
+
+- **Lesson Navigation** (#103)
+  - Next/Previous scenario navigation after completion
+  - <kbd>n</kbd> to go to next lesson from Results screen
+  - <kbd>p</kbd> to go to previous lesson
+  - <kbd>l</kbd> to return to scenario list
+
+### Changed
+
+- **Typestate Input Architecture** (#100, #102)
+  - Replaced `command_buffer: String` with `InputStateMachine`
+  - Added `InputStateAccess` trait for uniform state access
+  - 8 pending states: `FindCharPending`, `TillCharPending`, `SurroundAddPending`, `SurroundDeletePending`, `SurroundReplacePending`, `TextObjectAroundPending`, `TextObjectInsidePending`, `ViewPending`
+  - Type-safe state transitions at compile time
+  - `FindState` module to track last find/till motion for repeat
+
+- **Command System**
+  - Extended command constants for all new commands
+  - Extended `cmd_to_key_events()` for multi-key command sequences
+  - Unified handler pattern across all pending states
+
+### Fixed
+
+- **Alt-, Command** (#106)
+  - Fixed `Alt-,` to correctly call `remove_primary_selection`
+  - Was incorrectly mapped to `repeat_last_motion_reverse` (Vim feature, not Helix)
+
+- **Empty Document Handling** (#108)
+  - Fixed panic in `find_surrounding_pair()` when document is empty
+  - Fixed panic in `select_around_paragraph()` / `select_inside_paragraph()` for empty documents
+  - Added early returns with safe defaults for edge cases
+
+### Quality
+
+- **Tests**: 1116 (was 845, +271 new tests)
+- **Clippy**: Zero warnings
+- **Commands**: 45+ new commands (total ~90 commands supported)
+- **Architecture**: Complete typestate input system for all multi-key sequences
+
 ## [0.4.8] - 2026-01-06
 
 ### Added
@@ -866,7 +973,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.4.8...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/bug-ops/helix-trainer/compare/v0.4.8...v0.5.0
 [0.4.8]: https://github.com/bug-ops/helix-trainer/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/bug-ops/helix-trainer/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/bug-ops/helix-trainer/compare/v0.4.5...v0.4.6

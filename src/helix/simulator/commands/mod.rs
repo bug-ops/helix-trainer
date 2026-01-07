@@ -118,6 +118,25 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
+    // Text object commands (e.g., "maw" -> m + a + w, "mi(" -> m + i + '(')
+    if cmd.starts_with("ma") && cmd.len() == 3 {
+        let obj = cmd.chars().nth(2).unwrap();
+        return vec![
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char(obj), KeyModifiers::NONE),
+        ];
+    }
+
+    if cmd.starts_with("mi") && cmd.len() == 3 {
+        let obj = cmd.chars().nth(2).unwrap();
+        return vec![
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char(obj), KeyModifiers::NONE),
+        ];
+    }
+
     // Alt-; for flip selections
     if cmd == CMD_FLIP_SELECTIONS {
         return vec![KeyEvent::new(KeyCode::Char(';'), KeyModifiers::ALT)];
@@ -280,6 +299,19 @@ pub(super) fn execute_normal_mode_command_internal(
         let from_char = cmd.chars().nth(2).unwrap();
         let to_char = cmd.chars().nth(3).unwrap();
         editing::replace_surround(sim, from_char, to_char)?;
+        return Ok(());
+    }
+
+    // Special handling for text object commands (ma{obj}, mi{obj})
+    if cmd.len() == 3 && cmd.starts_with("ma") {
+        let obj = cmd.chars().nth(2).unwrap();
+        editing::select_around_textobject(sim, obj)?;
+        return Ok(());
+    }
+
+    if cmd.len() == 3 && cmd.starts_with("mi") {
+        let obj = cmd.chars().nth(2).unwrap();
+        editing::select_inside_textobject(sim, obj)?;
         return Ok(());
     }
 
@@ -567,6 +599,69 @@ mod tests {
             let events = cmd_to_key_events("a");
             assert_eq!(events.len(), 1);
             assert_eq!(events[0].modifiers, KeyModifiers::NONE);
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_text_object_around_word() {
+            let events = cmd_to_key_events("maw");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('m'));
+            assert_eq!(events[1].code, KeyCode::Char('a'));
+            assert_eq!(events[2].code, KeyCode::Char('w'));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_text_object_inside_word() {
+            let events = cmd_to_key_events("miw");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('m'));
+            assert_eq!(events[1].code, KeyCode::Char('i'));
+            assert_eq!(events[2].code, KeyCode::Char('w'));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_text_object_around_big_word() {
+            let events = cmd_to_key_events("maW");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('m'));
+            assert_eq!(events[1].code, KeyCode::Char('a'));
+            assert_eq!(events[2].code, KeyCode::Char('W'));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_text_object_around_paren() {
+            let events = cmd_to_key_events("ma(");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('m'));
+            assert_eq!(events[1].code, KeyCode::Char('a'));
+            assert_eq!(events[2].code, KeyCode::Char('('));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_text_object_inside_bracket() {
+            let events = cmd_to_key_events("mi[");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('m'));
+            assert_eq!(events[1].code, KeyCode::Char('i'));
+            assert_eq!(events[2].code, KeyCode::Char('['));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_text_object_around_quote() {
+            let events = cmd_to_key_events("ma\"");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('m'));
+            assert_eq!(events[1].code, KeyCode::Char('a'));
+            assert_eq!(events[2].code, KeyCode::Char('"'));
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_text_object_inside_paragraph() {
+            let events = cmd_to_key_events("mip");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('m'));
+            assert_eq!(events[1].code, KeyCode::Char('i'));
+            assert_eq!(events[2].code, KeyCode::Char('p'));
         }
     }
 }

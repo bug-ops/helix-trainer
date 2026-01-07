@@ -389,6 +389,11 @@ fn find_surrounding_pair<M: EditorMode>(
     let slice = sim.doc.slice(..);
     let len = sim.doc.len_chars();
 
+    // Handle empty document
+    if len == 0 {
+        return None;
+    }
+
     // For same-char pairs (quotes), find nearest on each side
     if open == close {
         // Search backwards for opening quote
@@ -450,6 +455,329 @@ fn find_surrounding_pair<M: EditorMode>(
 
         close_pos.map(|c| (open_idx, c))
     }
+}
+
+// ============================================================================
+// Text Object Selection Functions
+// ============================================================================
+
+/// Select around text object (Helix 'ma{obj}' command)
+///
+/// Selects text around the specified text object, including delimiters.
+pub fn select_around_textobject<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    obj: char,
+) -> Result<(), UserError> {
+    match obj {
+        'w' => select_around_word(sim, false),
+        'W' => select_around_word(sim, true),
+        '(' | ')' => select_around_bracket(sim, '(', ')'),
+        '[' | ']' => select_around_bracket(sim, '[', ']'),
+        '{' | '}' => select_around_bracket(sim, '{', '}'),
+        '<' | '>' => select_around_bracket(sim, '<', '>'),
+        '"' => select_around_quote(sim, '"'),
+        '\'' => select_around_quote(sim, '\''),
+        '`' => select_around_quote(sim, '`'),
+        'p' => select_around_paragraph(sim),
+        _ => Ok(()), // Unknown text object - no-op
+    }
+}
+
+/// Select inside text object (Helix 'mi{obj}' command)
+///
+/// Selects text inside the specified text object, excluding delimiters.
+pub fn select_inside_textobject<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    obj: char,
+) -> Result<(), UserError> {
+    match obj {
+        'w' => select_inside_word(sim, false),
+        'W' => select_inside_word(sim, true),
+        '(' | ')' => select_inside_bracket(sim, '(', ')'),
+        '[' | ']' => select_inside_bracket(sim, '[', ']'),
+        '{' | '}' => select_inside_bracket(sim, '{', '}'),
+        '<' | '>' => select_inside_bracket(sim, '<', '>'),
+        '"' => select_inside_quote(sim, '"'),
+        '\'' => select_inside_quote(sim, '\''),
+        '`' => select_inside_quote(sim, '`'),
+        'p' => select_inside_paragraph(sim),
+        _ => Ok(()), // Unknown text object - no-op
+    }
+}
+
+/// Select around word (small word or WORD)
+fn select_around_word<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    big_word: bool,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let slice = sim.doc.slice(..);
+    let len = sim.doc.len_chars();
+
+    if len == 0 {
+        return Ok(());
+    }
+
+    let head = head.min(len.saturating_sub(1));
+
+    // Find word boundaries
+    let is_word_char = |c: char| {
+        if big_word {
+            !c.is_whitespace()
+        } else {
+            c.is_alphanumeric() || c == '_'
+        }
+    };
+
+    let current_char = slice.char(head);
+    let in_word = is_word_char(current_char);
+
+    if !in_word {
+        // Cursor on whitespace - select the whitespace
+        let mut start = head;
+        let mut end = head;
+
+        // Expand backwards through whitespace
+        while start > 0 && slice.char(start.saturating_sub(1)).is_whitespace() {
+            start -= 1;
+        }
+
+        // Expand forwards through whitespace
+        while end < len && slice.char(end).is_whitespace() {
+            end += 1;
+        }
+
+        sim.selection = Selection::single(start, end);
+    } else {
+        // Cursor in word - select word plus trailing whitespace
+        let mut start = head;
+        let mut end = head;
+
+        // Expand backwards to word start
+        while start > 0 && is_word_char(slice.char(start.saturating_sub(1))) {
+            start -= 1;
+        }
+
+        // Expand forwards to word end
+        while end < len && is_word_char(slice.char(end)) {
+            end += 1;
+        }
+
+        // Include trailing whitespace for "around"
+        while end < len && slice.char(end).is_whitespace() && slice.char(end) != '\n' {
+            end += 1;
+        }
+
+        sim.selection = Selection::single(start, end);
+    }
+
+    Ok(())
+}
+
+/// Select inside word (small word or WORD)
+fn select_inside_word<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    big_word: bool,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+    let slice = sim.doc.slice(..);
+    let len = sim.doc.len_chars();
+
+    if len == 0 {
+        return Ok(());
+    }
+
+    let head = head.min(len.saturating_sub(1));
+
+    let is_word_char = |c: char| {
+        if big_word {
+            !c.is_whitespace()
+        } else {
+            c.is_alphanumeric() || c == '_'
+        }
+    };
+
+    let current_char = slice.char(head);
+    if !is_word_char(current_char) {
+        // Not on a word - no selection
+        return Ok(());
+    }
+
+    let mut start = head;
+    let mut end = head;
+
+    // Expand backwards to word start
+    while start > 0 && is_word_char(slice.char(start.saturating_sub(1))) {
+        start -= 1;
+    }
+
+    // Expand forwards to word end
+    while end < len && is_word_char(slice.char(end)) {
+        end += 1;
+    }
+
+    sim.selection = Selection::single(start, end);
+    Ok(())
+}
+
+/// Select around bracket pair
+fn select_around_bracket<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    open: char,
+    close: char,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+
+    let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, open, close) else {
+        return Ok(());
+    };
+
+    // Include the brackets
+    sim.selection = Selection::single(open_pos, close_pos + 1);
+    Ok(())
+}
+
+/// Select inside bracket pair
+fn select_inside_bracket<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    open: char,
+    close: char,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+
+    let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, open, close) else {
+        return Ok(());
+    };
+
+    // Exclude the brackets
+    if open_pos + 1 < close_pos {
+        sim.selection = Selection::single(open_pos + 1, close_pos);
+    } else {
+        // Empty inside - select nothing (point at opening bracket)
+        sim.selection = Selection::point(open_pos + 1);
+    }
+    Ok(())
+}
+
+/// Select around quote pair
+fn select_around_quote<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    quote: char,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+
+    let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, quote, quote) else {
+        return Ok(());
+    };
+
+    // Include the quotes
+    sim.selection = Selection::single(open_pos, close_pos + 1);
+    Ok(())
+}
+
+/// Select inside quote pair
+fn select_inside_quote<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    quote: char,
+) -> Result<(), UserError> {
+    let head = sim.selection.primary().head;
+
+    let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, quote, quote) else {
+        return Ok(());
+    };
+
+    // Exclude the quotes
+    if open_pos + 1 < close_pos {
+        sim.selection = Selection::single(open_pos + 1, close_pos);
+    } else {
+        // Empty inside - select nothing (point after opening quote)
+        sim.selection = Selection::point(open_pos + 1);
+    }
+    Ok(())
+}
+
+/// Select around paragraph
+fn select_around_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    // Handle empty document
+    if sim.doc.len_chars() == 0 {
+        return Ok(());
+    }
+
+    let head = sim.selection.primary().head;
+    let current_line = sim.doc.char_to_line(head);
+    let total_lines = sim.doc.len_lines();
+
+    // Find paragraph start (first non-empty line going backwards)
+    let mut para_start_line = current_line;
+    while para_start_line > 0 {
+        let line = sim.doc.line(para_start_line.saturating_sub(1));
+        if line.len_chars() == 0 || (line.len_chars() == 1 && line.char(0) == '\n') {
+            break;
+        }
+        para_start_line -= 1;
+    }
+
+    // Find paragraph end (first empty line going forwards)
+    let mut para_end_line = current_line;
+    while para_end_line < total_lines {
+        let line = sim.doc.line(para_end_line);
+        if line.len_chars() == 0 || (line.len_chars() == 1 && line.char(0) == '\n') {
+            para_end_line += 1; // Include the empty line for "around"
+            break;
+        }
+        para_end_line += 1;
+    }
+
+    let start = sim.doc.line_to_char(para_start_line);
+    let end = if para_end_line < total_lines {
+        sim.doc.line_to_char(para_end_line)
+    } else {
+        sim.doc.len_chars()
+    };
+
+    sim.selection = Selection::single(start, end);
+    Ok(())
+}
+
+/// Select inside paragraph
+fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    // Handle empty document
+    if sim.doc.len_chars() == 0 {
+        return Ok(());
+    }
+
+    let head = sim.selection.primary().head;
+    let current_line = sim.doc.char_to_line(head);
+    let total_lines = sim.doc.len_lines();
+
+    // Find paragraph start (first non-empty line going backwards)
+    let mut para_start_line = current_line;
+    while para_start_line > 0 {
+        let line = sim.doc.line(para_start_line.saturating_sub(1));
+        if line.len_chars() == 0 || (line.len_chars() == 1 && line.char(0) == '\n') {
+            break;
+        }
+        para_start_line -= 1;
+    }
+
+    // Find paragraph end (last non-empty line going forwards)
+    let mut para_end_line = current_line;
+    while para_end_line + 1 < total_lines {
+        let line = sim.doc.line(para_end_line + 1);
+        if line.len_chars() == 0 || (line.len_chars() == 1 && line.char(0) == '\n') {
+            break;
+        }
+        para_end_line += 1;
+    }
+
+    let start = sim.doc.line_to_char(para_start_line);
+    // End at the end of the last line (not including trailing newline for "inside")
+    let end_line_start = sim.doc.line_to_char(para_end_line);
+    let end_line_len = sim.doc.line(para_end_line).len_chars();
+    let end = end_line_start + end_line_len;
+
+    sim.selection = Selection::single(start, end);
+    Ok(())
 }
 
 /// Join lines in selection with space (Helix 'Alt-J' command)
@@ -685,5 +1013,594 @@ mod tests {
         delete_surround(&mut sim, '(').unwrap();
 
         assert_eq!(sim.doc.to_string(), "hello world");
+    }
+
+    // Text object tests
+    #[test]
+    fn test_select_around_word() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("hello world test".to_string());
+        sim.selection = Selection::point(7); // Cursor on 'o' in "world"
+
+        select_around_textobject(&mut sim, 'w').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select "world " (including trailing space)
+        assert_eq!(range.from(), 6);
+        assert_eq!(range.to(), 12);
+    }
+
+    #[test]
+    fn test_select_inside_word() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("hello world test".to_string());
+        sim.selection = Selection::point(7); // Cursor on 'o' in "world"
+
+        select_inside_textobject(&mut sim, 'w').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select "world" (excluding trailing space)
+        assert_eq!(range.from(), 6);
+        assert_eq!(range.to(), 11);
+    }
+
+    #[test]
+    fn test_select_around_big_word() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("hello-world test".to_string());
+        sim.selection = Selection::point(7); // Cursor on 'w' in "hello-world"
+
+        select_around_textobject(&mut sim, 'W').unwrap();
+
+        let range = sim.selection.primary();
+        // WORD includes hyphen
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 12); // "hello-world "
+    }
+
+    #[test]
+    fn test_select_inside_big_word() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("hello-world test".to_string());
+        sim.selection = Selection::point(7);
+
+        select_inside_textobject(&mut sim, 'W').unwrap();
+
+        let range = sim.selection.primary();
+        // WORD includes hyphen
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 11); // "hello-world"
+    }
+
+    #[test]
+    fn test_select_around_parens() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("fn(arg1, arg2)".to_string());
+        sim.selection = Selection::point(5); // Cursor on 'g' in "arg1"
+
+        select_around_textobject(&mut sim, '(').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select "(arg1, arg2)" including parens
+        assert_eq!(range.from(), 2);
+        assert_eq!(range.to(), 14);
+    }
+
+    #[test]
+    fn test_select_inside_parens() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("fn(arg1, arg2)".to_string());
+        sim.selection = Selection::point(5);
+
+        select_inside_textobject(&mut sim, '(').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select "arg1, arg2" excluding parens
+        assert_eq!(range.from(), 3);
+        assert_eq!(range.to(), 13);
+    }
+
+    #[test]
+    fn test_select_around_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("[1, 2, 3]".to_string());
+        sim.selection = Selection::point(4); // Cursor on '2'
+
+        select_around_textobject(&mut sim, '[').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 9);
+    }
+
+    #[test]
+    fn test_select_inside_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("[1, 2, 3]".to_string());
+        sim.selection = Selection::point(4);
+
+        select_inside_textobject(&mut sim, '[').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 1);
+        assert_eq!(range.to(), 8);
+    }
+
+    #[test]
+    fn test_select_around_braces() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("{ x: 1, y: 2 }".to_string());
+        sim.selection = Selection::point(5); // Cursor on '1'
+
+        select_around_textobject(&mut sim, '{').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 14);
+    }
+
+    #[test]
+    fn test_select_inside_braces() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("{ x: 1, y: 2 }".to_string());
+        sim.selection = Selection::point(5);
+
+        select_inside_textobject(&mut sim, '{').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 1);
+        assert_eq!(range.to(), 13);
+    }
+
+    #[test]
+    fn test_select_around_angle_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("Vec<T>".to_string());
+        sim.selection = Selection::point(4); // Cursor on 'T'
+
+        select_around_textobject(&mut sim, '<').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 3);
+        assert_eq!(range.to(), 6);
+    }
+
+    #[test]
+    fn test_select_inside_angle_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("Vec<T>".to_string());
+        sim.selection = Selection::point(4);
+
+        select_inside_textobject(&mut sim, '<').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 4);
+        assert_eq!(range.to(), 5);
+    }
+
+    #[test]
+    fn test_select_around_double_quotes() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("let s = \"hello\";".to_string());
+        sim.selection = Selection::point(10); // Cursor on 'e' in "hello"
+
+        select_around_textobject(&mut sim, '"').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select "\"hello\"" including quotes
+        assert_eq!(range.from(), 8);
+        assert_eq!(range.to(), 15);
+    }
+
+    #[test]
+    fn test_select_inside_double_quotes() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("let s = \"hello\";".to_string());
+        sim.selection = Selection::point(10);
+
+        select_inside_textobject(&mut sim, '"').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select "hello" excluding quotes
+        assert_eq!(range.from(), 9);
+        assert_eq!(range.to(), 14);
+    }
+
+    #[test]
+    fn test_select_around_single_quotes() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("let c = 'x';".to_string());
+        sim.selection = Selection::point(9); // Cursor on 'x'
+
+        select_around_textobject(&mut sim, '\'').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 8);
+        assert_eq!(range.to(), 11);
+    }
+
+    #[test]
+    fn test_select_inside_single_quotes() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("let c = 'x';".to_string());
+        sim.selection = Selection::point(9);
+
+        select_inside_textobject(&mut sim, '\'').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 9);
+        assert_eq!(range.to(), 10);
+    }
+
+    #[test]
+    fn test_select_around_backticks() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("run `ls -la`".to_string());
+        sim.selection = Selection::point(6); // Cursor on 's'
+
+        select_around_textobject(&mut sim, '`').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 4);
+        assert_eq!(range.to(), 12);
+    }
+
+    #[test]
+    fn test_select_inside_backticks() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("run `ls -la`".to_string());
+        sim.selection = Selection::point(6);
+
+        select_inside_textobject(&mut sim, '`').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 5);
+        assert_eq!(range.to(), 11);
+    }
+
+    #[test]
+    fn test_select_around_paragraph() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("line 1\nline 2\n\nline 3".to_string());
+        sim.selection = Selection::point(8); // Cursor on line 2
+
+        select_around_textobject(&mut sim, 'p').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select first paragraph including the blank line separator
+        // "line 1\nline 2\n\n" = positions 0-14 (Selection end is exclusive)
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 15);
+    }
+
+    #[test]
+    fn test_select_inside_paragraph() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("line 1\nline 2\n\nline 3".to_string());
+        sim.selection = Selection::point(8); // Cursor on line 2
+
+        select_inside_textobject(&mut sim, 'p').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select first paragraph content including line newlines
+        // "line 1\nline 2\n" = positions 0-13 (Selection end is exclusive)
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 14);
+    }
+
+    #[test]
+    fn test_select_inside_word_on_whitespace() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello   world".to_string());
+        sim.selection = Selection::point(6); // Cursor on whitespace
+
+        select_inside_textobject(&mut sim, 'w').unwrap();
+
+        // When on whitespace, inside word does nothing
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 6);
+        assert_eq!(range.to(), 6);
+    }
+
+    #[test]
+    fn test_select_around_word_on_whitespace() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello   world".to_string());
+        sim.selection = Selection::point(6); // Cursor on whitespace
+
+        select_around_textobject(&mut sim, 'w').unwrap();
+
+        let range = sim.selection.primary();
+        // Around on whitespace selects the whitespace
+        assert_eq!(range.from(), 5);
+        assert_eq!(range.to(), 8);
+    }
+
+    #[test]
+    fn test_select_textobject_unknown() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+        sim.selection = Selection::point(2);
+
+        // Unknown text object should do nothing
+        select_around_textobject(&mut sim, 'z').unwrap();
+        assert_eq!(sim.selection.primary().head, 2);
+
+        select_inside_textobject(&mut sim, 'z').unwrap();
+        assert_eq!(sim.selection.primary().head, 2);
+    }
+
+    #[test]
+    fn test_select_inside_empty_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("foo()".to_string());
+        sim.selection = Selection::point(4); // Cursor after '('
+
+        select_inside_textobject(&mut sim, '(').unwrap();
+
+        // Empty inside - should be a point selection
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 4);
+        assert_eq!(range.to(), 4);
+    }
+
+    #[test]
+    fn test_select_around_nested_parens() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("fn(a, (b, c))".to_string());
+        sim.selection = Selection::point(8); // Cursor on 'b'
+
+        select_around_textobject(&mut sim, '(').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select innermost "(b, c)"
+        assert_eq!(range.from(), 6);
+        assert_eq!(range.to(), 12);
+    }
+
+    // Critical: Empty document tests
+    #[test]
+    fn test_select_textobject_empty_document() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new(String::new());
+        sim.selection = Selection::point(0);
+
+        // Should not panic on any text object
+        select_around_textobject(&mut sim, 'w').unwrap();
+        select_inside_textobject(&mut sim, 'w').unwrap();
+        select_around_textobject(&mut sim, '(').unwrap();
+        select_inside_textobject(&mut sim, '"').unwrap();
+        select_around_textobject(&mut sim, 'p').unwrap();
+    }
+
+    // Critical: Boundary position tests
+    #[test]
+    fn test_select_around_word_at_document_start() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::point(0);
+
+        select_around_textobject(&mut sim, 'w').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 6); // "hello "
+    }
+
+    #[test]
+    fn test_select_around_word_at_document_end() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::point(10); // On 'd' in "world"
+
+        select_around_textobject(&mut sim, 'w').unwrap();
+
+        let range = sim.selection.primary();
+        // "world" at end has no trailing space
+        assert_eq!(range.from(), 6);
+        assert_eq!(range.to(), 11);
+    }
+
+    // High: Closing bracket variants
+    #[test]
+    fn test_select_around_closing_paren() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("fn(arg)".to_string());
+        sim.selection = Selection::point(4);
+
+        // Use closing paren ')' instead of opening '('
+        select_around_textobject(&mut sim, ')').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 2);
+        assert_eq!(range.to(), 7);
+    }
+
+    #[test]
+    fn test_select_inside_closing_bracket() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("[1, 2]".to_string());
+        sim.selection = Selection::point(2);
+
+        // Use closing bracket ']'
+        select_inside_textobject(&mut sim, ']').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 1);
+        assert_eq!(range.to(), 5);
+    }
+
+    #[test]
+    fn test_select_around_closing_brace() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("{x}".to_string());
+        sim.selection = Selection::point(1);
+
+        select_around_textobject(&mut sim, '}').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 3);
+    }
+
+    #[test]
+    fn test_select_inside_closing_angle() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("<T>".to_string());
+        sim.selection = Selection::point(1);
+
+        select_inside_textobject(&mut sim, '>').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 1);
+        assert_eq!(range.to(), 2);
+    }
+
+    // High: Unmatched brackets
+    #[test]
+    fn test_select_inside_unmatched_bracket() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("(hello world".to_string());
+        sim.selection = Selection::point(3);
+
+        // No matching closing bracket - should do nothing
+        select_inside_textobject(&mut sim, '(').unwrap();
+
+        // Selection should remain unchanged
+        let range = sim.selection.primary();
+        assert_eq!(range.head, 3);
+    }
+
+    #[test]
+    fn test_select_around_unmatched_quote() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("let s = \"hello".to_string());
+        sim.selection = Selection::point(10);
+
+        // No matching closing quote - should do nothing
+        select_around_textobject(&mut sim, '"').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.head, 10);
+    }
+
+    // High: Deeply nested brackets
+    #[test]
+    fn test_select_around_deeply_nested() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("(((deep)))".to_string());
+        sim.selection = Selection::point(4); // On 'e'
+
+        select_around_textobject(&mut sim, '(').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select innermost "(deep)"
+        assert_eq!(range.from(), 2);
+        assert_eq!(range.to(), 8);
+    }
+
+    #[test]
+    fn test_select_inside_triple_nested() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("[[[inner]]]".to_string());
+        sim.selection = Selection::point(4); // On 'n'
+
+        select_inside_textobject(&mut sim, '[').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select "inner" from innermost brackets
+        assert_eq!(range.from(), 3);
+        assert_eq!(range.to(), 8);
+    }
+
+    // High: Paragraph on blank line
+    #[test]
+    fn test_select_paragraph_cursor_on_blank_line() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("para1\n\npara2".to_string());
+        sim.selection = Selection::point(6); // On blank line (the \n)
+
+        select_around_textobject(&mut sim, 'p').unwrap();
+
+        // Should select something (the blank line itself or adjacent paragraph)
+        let range = sim.selection.primary();
+        // Exact behavior may vary; ensure no panic
+        assert!(range.to() > range.from());
+    }
+
+    #[test]
+    fn test_select_paragraph_single_line_document() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("single line".to_string());
+        sim.selection = Selection::point(5);
+
+        select_around_textobject(&mut sim, 'p').unwrap();
+
+        let range = sim.selection.primary();
+        // Should select entire document
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 11);
+    }
+
+    // Medium: Empty quotes
+    #[test]
+    fn test_select_inside_empty_double_quotes() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("x = \"\"".to_string());
+        sim.selection = Selection::point(5); // Between the quotes
+
+        select_inside_textobject(&mut sim, '"').unwrap();
+
+        // Empty inside - should be point selection
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), range.to());
+    }
+
+    #[test]
+    fn test_select_inside_empty_single_quotes() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("c = ''".to_string());
+        sim.selection = Selection::point(5);
+
+        select_inside_textobject(&mut sim, '\'').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), range.to());
+    }
+
+    // Medium: Single character word
+    #[test]
+    fn test_select_around_single_char_word() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("a b c".to_string());
+        sim.selection = Selection::point(2); // On 'b'
+
+        select_around_textobject(&mut sim, 'w').unwrap();
+
+        let range = sim.selection.primary();
+        // "b " including trailing space
+        assert_eq!(range.from(), 2);
+        assert_eq!(range.to(), 4);
+    }
+
+    #[test]
+    fn test_select_inside_single_char_word() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("a b c".to_string());
+        sim.selection = Selection::point(2);
+
+        select_inside_textobject(&mut sim, 'w').unwrap();
+
+        let range = sim.selection.primary();
+        // Just "b"
+        assert_eq!(range.from(), 2);
+        assert_eq!(range.to(), 3);
+    }
+
+    // Medium: WORD with special characters
+    #[test]
+    fn test_select_around_big_word_with_symbols() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("foo@bar.com test".to_string());
+        sim.selection = Selection::point(5); // On 'a' in bar
+
+        select_around_textobject(&mut sim, 'W').unwrap();
+
+        let range = sim.selection.primary();
+        // "foo@bar.com " is one WORD
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 12);
+    }
+
+    // Medium: Multiline brackets
+    #[test]
+    fn test_select_around_multiline_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("{\n  x: 1\n}".to_string());
+        sim.selection = Selection::point(5); // On 'x'
+
+        select_around_textobject(&mut sim, '{').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 10);
+    }
+
+    #[test]
+    fn test_select_inside_multiline_parens() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("(\n  arg\n)".to_string());
+        sim.selection = Selection::point(4); // On 'a'
+
+        select_inside_textobject(&mut sim, '(').unwrap();
+
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 1);
+        assert_eq!(range.to(), 8);
     }
 }

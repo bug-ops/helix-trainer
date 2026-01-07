@@ -94,6 +94,14 @@ pub struct SurroundReplaceToPending {
     pub from_char: char,
 }
 
+/// Waiting for text object after 'ma' (select around)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextObjectAroundPending;
+
+/// Waiting for text object after 'mi' (select inside)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextObjectInsidePending;
+
 /// Waiting for character after 'f'/'F'/'t'/'T' (find/till commands)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FindCharPending {
@@ -153,6 +161,8 @@ impl private::Sealed for SurroundAddPending {}
 impl private::Sealed for SurroundDeletePending {}
 impl private::Sealed for SurroundReplaceFromPending {}
 impl private::Sealed for SurroundReplaceToPending {}
+impl private::Sealed for TextObjectAroundPending {}
+impl private::Sealed for TextObjectInsidePending {}
 impl private::Sealed for FindCharPending {}
 impl private::Sealed for ReplaceCharPending {}
 impl private::Sealed for CountPending {}
@@ -210,6 +220,18 @@ impl HandlerState for SurroundReplaceFromPending {
 impl HandlerState for SurroundReplaceToPending {
     fn state_name() -> &'static str {
         "SURROUND_REPLACE_TO_PENDING"
+    }
+}
+
+impl HandlerState for TextObjectAroundPending {
+    fn state_name() -> &'static str {
+        "TEXT_OBJECT_AROUND_PENDING"
+    }
+}
+
+impl HandlerState for TextObjectInsidePending {
+    fn state_name() -> &'static str {
+        "TEXT_OBJECT_INSIDE_PENDING"
     }
 }
 
@@ -308,6 +330,10 @@ pub enum InputState {
     SurroundReplaceFromPending,
     /// After 'mr{char}' - waiting for surround replace to character
     SurroundReplaceToPending { from_char: char },
+    /// After 'ma' - waiting for text object (around)
+    TextObjectAroundPending,
+    /// After 'mi' - waiting for text object (inside)
+    TextObjectInsidePending,
     /// After 'f'/'F'/'t'/'T' - waiting for character
     FindCharPending { find_type: FindType },
     /// After 'r' - waiting for replacement character
@@ -381,6 +407,14 @@ impl InputState {
         )
     }
 
+    /// Check if this is a text object pending state (waiting for text object type)
+    pub fn is_text_object_pending(&self) -> bool {
+        matches!(
+            self,
+            Self::TextObjectAroundPending | Self::TextObjectInsidePending
+        )
+    }
+
     /// Get the state name for display
     pub fn name(&self) -> &'static str {
         match self {
@@ -392,6 +426,8 @@ impl InputState {
             Self::SurroundDeletePending => "SURROUND_DELETE_PENDING",
             Self::SurroundReplaceFromPending => "SURROUND_REPLACE_FROM_PENDING",
             Self::SurroundReplaceToPending { .. } => "SURROUND_REPLACE_TO_PENDING",
+            Self::TextObjectAroundPending => "TEXT_OBJECT_AROUND_PENDING",
+            Self::TextObjectInsidePending => "TEXT_OBJECT_INSIDE_PENDING",
             Self::FindCharPending { .. } => "FIND_CHAR_PENDING",
             Self::ReplaceCharPending => "REPLACE_CHAR_PENDING",
             Self::CountPending { .. } => "COUNT_PENDING",
@@ -561,6 +597,10 @@ impl InputHandler<MatchPending> for KeyHandler {
             KeyCode::Char('d') => HandlerResult::Transition(InputState::SurroundDeletePending),
             // 'mr' - surround replace (transition to SurroundReplaceFromPending)
             KeyCode::Char('r') => HandlerResult::Transition(InputState::SurroundReplaceFromPending),
+            // 'ma' - text object around (transition to TextObjectAroundPending)
+            KeyCode::Char('a') => HandlerResult::Transition(InputState::TextObjectAroundPending),
+            // 'mi' - text object inside (transition to TextObjectInsidePending)
+            KeyCode::Char('i') => HandlerResult::Transition(InputState::TextObjectInsidePending),
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
             // Invalid second key - cancel
@@ -643,6 +683,52 @@ impl InputHandler<SurroundReplaceToPending> for KeyHandler {
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
             // Other keys - cancel
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+// ============================================================================
+// Text object around pending state handler (after 'ma')
+// ============================================================================
+
+impl InputHandler<TextObjectAroundPending> for KeyHandler {
+    fn handle_key(_state: &TextObjectAroundPending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            // Valid text objects: w, W, (, ), [, ], {, }, <, >, ", ', `, p
+            KeyCode::Char(
+                c @ ('w' | 'W' | '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | '`'
+                | 'p'),
+            ) => {
+                let cmd = format!("ma{}", c);
+                HandlerResult::Execute(Cow::Owned(cmd))
+            }
+            // Escape - cancel
+            KeyCode::Esc => HandlerResult::Cancel,
+            // Invalid text object - cancel
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+// ============================================================================
+// Text object inside pending state handler (after 'mi')
+// ============================================================================
+
+impl InputHandler<TextObjectInsidePending> for KeyHandler {
+    fn handle_key(_state: &TextObjectInsidePending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            // Valid text objects: w, W, (, ), [, ], {, }, <, >, ", ', `, p
+            KeyCode::Char(
+                c @ ('w' | 'W' | '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | '`'
+                | 'p'),
+            ) => {
+                let cmd = format!("mi{}", c);
+                HandlerResult::Execute(Cow::Owned(cmd))
+            }
+            // Escape - cancel
+            KeyCode::Esc => HandlerResult::Cancel,
+            // Invalid text object - cancel
             _ => HandlerResult::Cancel,
         }
     }
@@ -793,6 +879,12 @@ impl InputStateMachine {
                 },
                 key,
             ),
+            InputState::TextObjectAroundPending => {
+                KeyHandler::handle_key(&TextObjectAroundPending, key)
+            }
+            InputState::TextObjectInsidePending => {
+                KeyHandler::handle_key(&TextObjectInsidePending, key)
+            }
             InputState::FindCharPending { find_type } => KeyHandler::handle_key(
                 &FindCharPending {
                     find_type: *find_type,
@@ -1092,6 +1184,8 @@ pub enum TypestateHandlerState {
     SurroundDeletePending(TypestateHandler<SurroundDeletePending>),
     SurroundReplaceFromPending(TypestateHandler<SurroundReplaceFromPending>),
     SurroundReplaceToPending(TypestateHandler<SurroundReplaceToPending>, char),
+    TextObjectAroundPending(TypestateHandler<TextObjectAroundPending>),
+    TextObjectInsidePending(TypestateHandler<TextObjectInsidePending>),
     FindCharPending(TypestateHandler<FindCharPending>, FindType),
     ReplaceCharPending(TypestateHandler<ReplaceCharPending>),
     CountPending(TypestateHandler<CountPending>, usize),
@@ -1142,6 +1236,12 @@ impl TypestateHandlerState {
                     HandlerResult::Transition(InputState::SurroundReplaceFromPending) => {
                         Self::SurroundReplaceFromPending(TypestateHandler::new())
                     }
+                    HandlerResult::Transition(InputState::TextObjectAroundPending) => {
+                        Self::TextObjectAroundPending(TypestateHandler::new())
+                    }
+                    HandlerResult::Transition(InputState::TextObjectInsidePending) => {
+                        Self::TextObjectInsidePending(TypestateHandler::new())
+                    }
                     _ => Self::Base(TypestateHandler::new()),
                 };
                 (result, next)
@@ -1181,6 +1281,22 @@ impl TypestateHandlerState {
                     HandlerResult::Stay => {
                         Self::SurroundReplaceToPending(TypestateHandler::new(), from_char)
                     }
+                    _ => Self::Base(TypestateHandler::new()),
+                };
+                (result, next)
+            }
+            Self::TextObjectAroundPending(_) => {
+                let result = KeyHandler::handle_key(&TextObjectAroundPending, key);
+                let next = match &result {
+                    HandlerResult::Stay => Self::TextObjectAroundPending(TypestateHandler::new()),
+                    _ => Self::Base(TypestateHandler::new()),
+                };
+                (result, next)
+            }
+            Self::TextObjectInsidePending(_) => {
+                let result = KeyHandler::handle_key(&TextObjectInsidePending, key);
+                let next = match &result {
+                    HandlerResult::Stay => Self::TextObjectInsidePending(TypestateHandler::new()),
                     _ => Self::Base(TypestateHandler::new()),
                 };
                 (result, next)
@@ -1233,6 +1349,8 @@ impl TypestateHandlerState {
             Self::SurroundDeletePending(_) => SurroundDeletePending::state_name(),
             Self::SurroundReplaceFromPending(_) => SurroundReplaceFromPending::state_name(),
             Self::SurroundReplaceToPending(_, _) => SurroundReplaceToPending::state_name(),
+            Self::TextObjectAroundPending(_) => TextObjectAroundPending::state_name(),
+            Self::TextObjectInsidePending(_) => TextObjectInsidePending::state_name(),
             Self::FindCharPending(_, _) => FindCharPending::state_name(),
             Self::ReplaceCharPending(_) => ReplaceCharPending::state_name(),
             Self::CountPending(_, _) => CountPending::state_name(),
@@ -1693,6 +1811,30 @@ mod tests {
         }
 
         #[test]
+        fn test_match_pending_ma_transitions_to_text_object_around() {
+            let result = KeyHandler::handle_key(
+                &MatchPending,
+                KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+            );
+            assert!(matches!(
+                result,
+                HandlerResult::Transition(InputState::TextObjectAroundPending)
+            ));
+        }
+
+        #[test]
+        fn test_match_pending_mi_transitions_to_text_object_inside() {
+            let result = KeyHandler::handle_key(
+                &MatchPending,
+                KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
+            );
+            assert!(matches!(
+                result,
+                HandlerResult::Transition(InputState::TextObjectInsidePending)
+            ));
+        }
+
+        #[test]
         fn test_match_pending_invalid_cancels() {
             let result = KeyHandler::handle_key(
                 &MatchPending,
@@ -1822,6 +1964,140 @@ mod tests {
             let state = SurroundReplaceToPending { from_char: '(' };
             let result =
                 KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+    }
+
+    mod text_object_around_pending_handler_tests {
+        use super::*;
+
+        #[test]
+        fn test_text_object_around_word() {
+            let result = KeyHandler::handle_key(
+                &TextObjectAroundPending,
+                KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "maw"));
+        }
+
+        #[test]
+        fn test_text_object_around_word_big() {
+            let result = KeyHandler::handle_key(
+                &TextObjectAroundPending,
+                KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "maW"));
+        }
+
+        #[test]
+        fn test_text_object_around_parens() {
+            let result = KeyHandler::handle_key(
+                &TextObjectAroundPending,
+                KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ma("));
+        }
+
+        #[test]
+        fn test_text_object_around_quotes() {
+            let result = KeyHandler::handle_key(
+                &TextObjectAroundPending,
+                KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ma\""));
+        }
+
+        #[test]
+        fn test_text_object_around_paragraph() {
+            let result = KeyHandler::handle_key(
+                &TextObjectAroundPending,
+                KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "map"));
+        }
+
+        #[test]
+        fn test_text_object_around_escape_cancels() {
+            let result = KeyHandler::handle_key(
+                &TextObjectAroundPending,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+
+        #[test]
+        fn test_text_object_around_invalid_cancels() {
+            let result = KeyHandler::handle_key(
+                &TextObjectAroundPending,
+                KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+    }
+
+    mod text_object_inside_pending_handler_tests {
+        use super::*;
+
+        #[test]
+        fn test_text_object_inside_word() {
+            let result = KeyHandler::handle_key(
+                &TextObjectInsidePending,
+                KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "miw"));
+        }
+
+        #[test]
+        fn test_text_object_inside_brackets() {
+            let result = KeyHandler::handle_key(
+                &TextObjectInsidePending,
+                KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi["));
+        }
+
+        #[test]
+        fn test_text_object_inside_braces() {
+            let result = KeyHandler::handle_key(
+                &TextObjectInsidePending,
+                KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi{"));
+        }
+
+        #[test]
+        fn test_text_object_inside_angle_brackets() {
+            let result = KeyHandler::handle_key(
+                &TextObjectInsidePending,
+                KeyEvent::new(KeyCode::Char('<'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi<"));
+        }
+
+        #[test]
+        fn test_text_object_inside_single_quote() {
+            let result = KeyHandler::handle_key(
+                &TextObjectInsidePending,
+                KeyEvent::new(KeyCode::Char('\''), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi'"));
+        }
+
+        #[test]
+        fn test_text_object_inside_backtick() {
+            let result = KeyHandler::handle_key(
+                &TextObjectInsidePending,
+                KeyEvent::new(KeyCode::Char('`'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi`"));
+        }
+
+        #[test]
+        fn test_text_object_inside_escape_cancels() {
+            let result = KeyHandler::handle_key(
+                &TextObjectInsidePending,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            );
             assert!(matches!(result, HandlerResult::Cancel));
         }
     }
@@ -2176,6 +2452,71 @@ mod tests {
             assert!(InputState::SurroundReplaceToPending { from_char: '(' }.is_surround_pending());
             assert!(!InputState::Base.is_surround_pending());
             assert!(!InputState::MatchPending.is_surround_pending());
+        }
+
+        #[test]
+        fn test_state_machine_text_object_around_sequence() {
+            let mut sm = InputStateMachine::new();
+
+            // Press 'm' - transition to MatchPending
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+            assert!(result.is_transition());
+            assert!(sm.state().is_match_pending());
+
+            // Press 'a' - transition to TextObjectAroundPending
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+            assert!(result.is_transition());
+            assert!(matches!(sm.state(), InputState::TextObjectAroundPending));
+
+            // Press 'w' - execute "maw"
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE));
+            assert!(result.is_execute());
+            assert_eq!(result.command(), Some("maw"));
+            assert!(sm.state().is_base());
+        }
+
+        #[test]
+        fn test_state_machine_text_object_inside_sequence() {
+            let mut sm = InputStateMachine::new();
+
+            // Press 'm' - transition to MatchPending
+            sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+            assert!(sm.state().is_match_pending());
+
+            // Press 'i' - transition to TextObjectInsidePending
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
+            assert!(result.is_transition());
+            assert!(matches!(sm.state(), InputState::TextObjectInsidePending));
+
+            // Press '(' - execute "mi("
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
+            assert!(result.is_execute());
+            assert_eq!(result.command(), Some("mi("));
+            assert!(sm.state().is_base());
+        }
+
+        #[test]
+        fn test_state_machine_text_object_escape_cancels() {
+            let mut sm = InputStateMachine::new();
+
+            // Go to TextObjectAroundPending
+            sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+            sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+            assert!(matches!(sm.state(), InputState::TextObjectAroundPending));
+
+            // Press Escape - should cancel
+            let result = sm.process_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+            assert!(result.is_cancel());
+            assert!(sm.state().is_base());
+        }
+
+        #[test]
+        fn test_text_object_pending_predicates() {
+            assert!(InputState::TextObjectAroundPending.is_text_object_pending());
+            assert!(InputState::TextObjectInsidePending.is_text_object_pending());
+            assert!(!InputState::Base.is_text_object_pending());
+            assert!(!InputState::MatchPending.is_text_object_pending());
+            assert!(!InputState::SurroundAddPending.is_text_object_pending());
         }
     }
 

@@ -107,32 +107,48 @@ pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
     Ok(())
 }
 
-/// Switch case of character under cursor
+/// Switch case of selected text (Helix '~' command)
+///
+/// Toggles case of all characters in the selection. Cursor stays at selection start.
 pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    // Capture cursor position (start of selection) before transaction
+    let cursor_pos = sim.selection.primary().from();
+
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
-        let end = start.saturating_add(1).min(sim.doc.len_chars());
+        let end = range
+            .to()
+            .max(start.saturating_add(1))
+            .min(sim.doc.len_chars());
 
         if start >= sim.doc.len_chars() {
             return (start, end, None);
         }
 
-        let ch = sim.doc.char(start);
-        let new_ch = if ch.is_uppercase() {
-            ch.to_lowercase().next().unwrap_or(ch)
-        } else if ch.is_lowercase() {
-            ch.to_uppercase().next().unwrap_or(ch)
-        } else {
-            ch
-        };
+        // Toggle case of all characters in the range
+        let text: String = sim
+            .doc
+            .slice(start..end)
+            .chars()
+            .map(|ch| {
+                if ch.is_uppercase() {
+                    ch.to_lowercase().next().unwrap_or(ch)
+                } else if ch.is_lowercase() {
+                    ch.to_uppercase().next().unwrap_or(ch)
+                } else {
+                    ch
+                }
+            })
+            .collect();
 
-        (start, end, Some(new_ch.to_string().into()))
+        (start, end, Some(text.into()))
     });
 
     sim.apply_transaction(transaction);
 
-    let head = sim.selection.primary().head;
-    sim.selection = Selection::point(head.saturating_add(1).min(sim.doc.len_chars()));
+    // Keep cursor at selection start (Helix behavior)
+    let safe_pos = cursor_pos.min(sim.doc.len_chars().saturating_sub(1));
+    sim.selection = Selection::point(safe_pos);
 
     Ok(())
 }

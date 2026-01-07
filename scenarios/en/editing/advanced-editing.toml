@@ -205,7 +205,7 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "Hello"
-cursor_position = [0, 1]
+cursor_position = [0, 0]
 
 [scenarios.solution]
 commands = ["~"]
@@ -225,37 +225,38 @@ estimated_time_seconds = 10
 
 [[scenarios]]
 id = "switch_case_002"
-name = "Toggle multiple characters"
-description = "Toggle case of several characters using '~'"
+name = "Toggle selected text case"
+description = "Select text and toggle case using '~'"
 
 hints = [
-    "Repeat '~' to toggle more characters",
-    "'~' advances the cursor after each toggle",
+    "First select the text you want to toggle",
+    "'~' toggles case of all selected characters",
 ]
 
 [scenarios.setup]
 file_content = "abc"
 cursor_position = [0, 0]
+selection = [0, 0, 0, 3]
 
 [scenarios.target]
 file_content = "ABC"
-cursor_position = [0, 3]
+cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["~", "~", "~"]
-description = "Press '~' three times to toggle all characters"
+commands = ["~"]
+description = "Press '~' to toggle case of selected text"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
-tags = ["case", "toggle", "editing"]
+tags = ["case", "toggle", "editing", "selection"]
 commands_taught = ["~"]
-estimated_time_seconds = 15
+estimated_time_seconds = 10
 
 [[scenarios]]
 id = "switch_case_alt_001"
@@ -273,7 +274,7 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "world"
-cursor_position = [0, 1]
+cursor_position = [0, 0]
 
 [scenarios.solution]
 commands = ["`"]

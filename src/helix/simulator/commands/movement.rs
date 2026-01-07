@@ -384,9 +384,6 @@ pub fn goto_first_nonwhitespace<M: EditorMode>(
 }
 
 /// Go to last line of document (Helix 'ge' command)
-///
-/// Moves cursor to the start of the last line with content.
-/// If the document ends with a newline, goes to the line before the empty final line.
 pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let total_lines = sim.doc.len_lines();
     let doc_len = sim.doc.len_chars();
@@ -440,75 +437,26 @@ pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
 }
 
 /// Move to previous paragraph (Helix '{' command)
-///
-/// A paragraph boundary is defined as a blank line (line containing only whitespace).
-/// Moves cursor to the start of the previous paragraph.
 pub fn goto_prev_paragraph<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let mut current_line = sim.doc.char_to_line(head);
     let slice = sim.doc.slice(..);
-
-    let mut found = 0;
-    let mut in_blank_region = is_line_blank(&slice, current_line);
-
-    // Move up through lines looking for paragraph boundaries
-    while current_line > 0 && found < count {
-        current_line -= 1;
-        let is_blank = is_line_blank(&slice, current_line);
-
-        // Transition from non-blank to blank means we found a paragraph boundary
-        if !in_blank_region && is_blank {
-            found += 1;
-            if found >= count {
-                break;
-            }
-        }
-        in_blank_region = is_blank;
-    }
-
-    // Move to the start of the target line
-    let pos = sim.doc.line_to_char(current_line);
-    sim.selection = Selection::point(pos);
+    let range =
+        movement::move_prev_paragraph(slice, sim.selection.primary(), count, Movement::Move);
+    sim.selection = Selection::single(range.anchor, range.head);
     Ok(())
 }
 
 /// Move to next paragraph (Helix '}' command)
-///
-/// A paragraph boundary is defined as a blank line (line containing only whitespace).
-/// Moves cursor to the start of the next paragraph.
 pub fn goto_next_paragraph<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let mut current_line = sim.doc.char_to_line(head);
-    let total_lines = sim.doc.len_lines();
     let slice = sim.doc.slice(..);
-
-    let mut found = 0;
-    let mut in_blank_region = is_line_blank(&slice, current_line);
-
-    // Move down through lines looking for paragraph boundaries
-    while current_line + 1 < total_lines && found < count {
-        current_line += 1;
-        let is_blank = is_line_blank(&slice, current_line);
-
-        // Transition from blank to non-blank means we entered a new paragraph
-        if in_blank_region && !is_blank {
-            found += 1;
-            if found >= count {
-                break;
-            }
-        }
-        in_blank_region = is_blank;
-    }
-
-    // Move to the start of the target line
-    let pos = sim.doc.line_to_char(current_line);
-    sim.selection = Selection::point(pos);
+    let range =
+        movement::move_next_paragraph(slice, sim.selection.primary(), count, Movement::Move);
+    sim.selection = Selection::single(range.anchor, range.head);
     Ok(())
 }
 
@@ -579,8 +527,6 @@ pub fn repeat_last_motion<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 const PAGE_SIZE: usize = 20;
 
 /// Page up movement (Ctrl-b command)
-///
-/// Moves the cursor up by a full page (PAGE_SIZE lines).
 pub fn page_up<M: EditorMode>(sim: &mut HelixSimulator<M>, count: usize) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
@@ -604,8 +550,6 @@ pub fn page_up<M: EditorMode>(sim: &mut HelixSimulator<M>, count: usize) -> Resu
 }
 
 /// Page down movement (Ctrl-f command)
-///
-/// Moves the cursor down by a full page (PAGE_SIZE lines).
 pub fn page_down<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
@@ -633,8 +577,6 @@ pub fn page_down<M: EditorMode>(
 }
 
 /// Half page up movement (Ctrl-u command)
-///
-/// Moves the cursor up by half a page (PAGE_SIZE / 2 lines).
 pub fn half_page_up<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
@@ -661,8 +603,6 @@ pub fn half_page_up<M: EditorMode>(
 }
 
 /// Half page down movement (Ctrl-d command)
-///
-/// Moves the cursor down by half a page (PAGE_SIZE / 2 lines).
 pub fn half_page_down<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
@@ -687,25 +627,6 @@ pub fn half_page_down<M: EditorMode>(
     sim.selection = Selection::point(target_line_start + new_col);
 
     Ok(())
-}
-
-/// Check if a line is blank (contains only whitespace)
-fn is_line_blank(slice: &helix_core::RopeSlice, line: usize) -> bool {
-    let line_start = slice.line_to_char(line);
-    let line_end = if line + 1 < slice.len_lines() {
-        slice.line_to_char(line + 1)
-    } else {
-        slice.len_chars()
-    };
-
-    for i in line_start..line_end {
-        if let Some(c) = slice.get_char(i)
-            && !c.is_whitespace()
-        {
-            return false;
-        }
-    }
-    true
 }
 
 #[cfg(test)]

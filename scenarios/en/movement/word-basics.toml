@@ -18,6 +18,7 @@ cursor_position = [0, 0]
 [scenarios.target]
 file_content = "Hello World"
 cursor_position = [0, 6]
+selection = [0, 0, 0, 6]
 
 [scenarios.solution]
 commands = ["w"]
@@ -52,6 +53,7 @@ cursor_position = [0, 0]
 [scenarios.target]
 file_content = "one two three"
 cursor_position = [0, 8]
+selection = [0, 4, 0, 8]
 
 [scenarios.solution]
 commands = ["w", "w"]
@@ -86,6 +88,7 @@ cursor_position = [0, 6]
 [scenarios.target]
 file_content = "Hello World"
 cursor_position = [0, 0]
+selection = [0, 0, 0, 6]
 
 [scenarios.solution]
 commands = ["b"]
@@ -120,6 +123,7 @@ cursor_position = [0, 8]
 [scenarios.target]
 file_content = "one two three"
 cursor_position = [0, 0]
+selection = [0, 0, 0, 4]
 
 [scenarios.solution]
 commands = ["b", "b"]
@@ -154,6 +158,7 @@ cursor_position = [0, 6]
 [scenarios.target]
 file_content = "alpha beta gamma"
 cursor_position = [0, 11]
+selection = [0, 6, 0, 11]
 
 [scenarios.solution]
 commands = ["w"]
@@ -188,6 +193,7 @@ cursor_position = [0, 0]
 [scenarios.target]
 file_content = "let x = 10"
 cursor_position = [0, 4]
+selection = [0, 0, 0, 4]
 
 [scenarios.solution]
 commands = ["w"]
@@ -222,6 +228,7 @@ cursor_position = [0, 0]
 [scenarios.target]
 file_content = "The quick fox"
 cursor_position = [0, 10]
+selection = [0, 4, 0, 10]
 
 [scenarios.solution]
 commands = ["w", "w"]

@@ -19,6 +19,7 @@ cursor_position = [0, 0]
 [scenarios.target]
 file_content = "The quick brown fox jumps"
 cursor_position = [0, 16]
+selection = [0, 10, 0, 16]
 
 [scenarios.solution]
 commands = ["w", "w", "w"]

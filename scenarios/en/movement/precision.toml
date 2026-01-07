@@ -154,6 +154,7 @@ cursor_position = [0, 0]
 [scenarios.target]
 file_content = "one two three"
 cursor_position = [0, 4]
+selection = [0, 0, 0, 4]
 
 [scenarios.solution]
 commands = ["w"]
@@ -188,6 +189,7 @@ cursor_position = [0, 8]
 [scenarios.target]
 file_content = "one two three"
 cursor_position = [0, 4]
+selection = [0, 4, 0, 8]
 
 [scenarios.solution]
 commands = ["b"]

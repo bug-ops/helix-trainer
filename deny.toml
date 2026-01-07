@@ -8,6 +8,9 @@ ignore = [
     # paste is unmaintained but it's a transitive dependency of ratatui
     # ratatui is actively maintained and will update paste or replace it when needed
     "RUSTSEC-2024-0436",
+    # bincode is unmaintained but it's a transitive dependency of fsrs → burn
+    # fsrs is actively maintained and will update when burn updates their deps
+    "RUSTSEC-2025-0141",
 ]
 
 [licenses]

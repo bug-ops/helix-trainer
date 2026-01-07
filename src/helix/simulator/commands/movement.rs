@@ -5,6 +5,7 @@ use crate::security::UserError;
 use helix_core::{
     Selection,
     doc_formatter::TextFormat,
+    match_brackets::find_matching_bracket_plaintext,
     movement::{self, Movement},
     search::{find_nth_next, find_nth_prev},
     text_annotations::TextAnnotations,
@@ -418,67 +419,13 @@ pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), 
     Ok(())
 }
 
-/// Match brackets - find matching bracket pair (Helix 'm' command)
+/// Match brackets - find matching bracket pair (Helix 'mm' command)
 pub fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let slice = sim.doc.slice(..);
 
-    // Get character at cursor
-    let Some(ch) = slice.get_char(head) else {
-        return Ok(());
-    };
-
-    // Determine bracket type and direction
-    let (open, close, forward) = match ch {
-        '(' => ('(', ')', true),
-        ')' => ('(', ')', false),
-        '[' => ('[', ']', true),
-        ']' => ('[', ']', false),
-        '{' => ('{', '}', true),
-        '}' => ('{', '}', false),
-        '<' => ('<', '>', true),
-        '>' => ('<', '>', false),
-        _ => return Ok(()), // Not on a bracket
-    };
-
-    let doc_len = sim.doc.len_chars();
-    let mut depth = 1;
-
-    if forward {
-        let mut pos = head + 1;
-        while pos < doc_len && depth > 0 {
-            if let Some(c) = slice.get_char(pos) {
-                if c == close {
-                    depth -= 1;
-                } else if c == open {
-                    depth += 1;
-                }
-            }
-            if depth == 0 {
-                sim.selection = Selection::point(pos);
-                return Ok(());
-            }
-            pos += 1;
-        }
-    } else if head > 0 {
-        let mut pos = head - 1;
-        loop {
-            if let Some(c) = slice.get_char(pos) {
-                if c == open {
-                    depth -= 1;
-                } else if c == close {
-                    depth += 1;
-                }
-            }
-            if depth == 0 {
-                sim.selection = Selection::point(pos);
-                return Ok(());
-            }
-            if pos == 0 {
-                break;
-            }
-            pos -= 1;
-        }
+    if let Some(matching_pos) = find_matching_bracket_plaintext(slice, head) {
+        sim.selection = Selection::point(matching_pos);
     }
 
     Ok(())

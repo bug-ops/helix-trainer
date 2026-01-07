@@ -4,7 +4,8 @@
 
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
-use helix_core::{Selection, Transaction};
+use helix_core::Selection;
+use helix_core::comment::toggle_line_comments;
 
 /// Trim whitespace from selections (_ command)
 ///
@@ -149,93 +150,9 @@ pub fn copy_selection_prev_line<M: EditorMode>(
 }
 
 /// Toggle line comments (Ctrl-c command)
-///
-/// Toggles comment prefix on selected lines.
-/// Uses "//" for code-like content.
-///
-/// Performance: Uses Rope slice operations to minimize String allocations.
 pub fn toggle_comments<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let range = sim.selection.primary();
-    let start_line = sim.doc.char_to_line(range.from());
-    let end_line = sim
-        .doc
-        .char_to_line(range.to().saturating_sub(1).max(range.from()));
-
-    let comment_prefix = "// ";
-
-    // Check if all lines are already commented using Rope slice (avoids allocation)
-    let slice = sim.doc.slice(..);
-    let mut all_commented = true;
-
-    for line_num in start_line..=end_line {
-        let line_slice = sim.doc.line(line_num);
-        // Skip leading whitespace by iterating chars
-        let mut found_comment = false;
-        let mut chars = line_slice.chars();
-        while let Some(ch) = chars.next() {
-            if ch.is_whitespace() && ch != '\n' {
-                continue;
-            }
-            // Check if line starts with "//"
-            if ch == '/'
-                && let Some(next_ch) = chars.next()
-                && next_ch == '/'
-            {
-                found_comment = true;
-            }
-            break;
-        }
-        if !found_comment {
-            all_commented = false;
-            break;
-        }
-    }
-
-    // Build changes
-    let mut changes: Vec<(usize, usize, Option<helix_core::Tendril>)> = Vec::new();
-
-    for line_num in start_line..=end_line {
-        let line_start = sim.doc.line_to_char(line_num);
-
-        if all_commented {
-            // Find leading whitespace count by iterating (avoids allocation)
-            let line_slice = sim.doc.line(line_num);
-            let mut trimmed_start = 0;
-            for ch in line_slice.chars() {
-                if ch.is_whitespace() && ch != '\n' {
-                    trimmed_start += 1;
-                } else {
-                    break;
-                }
-            }
-            let comment_start = line_start + trimmed_start;
-
-            // Find the comment prefix length to remove
-            if slice.get_char(comment_start) == Some('/')
-                && slice.get_char(comment_start + 1) == Some('/')
-            {
-                let remove_len = if slice.get_char(comment_start + 2) == Some(' ') {
-                    3 // "// "
-                } else {
-                    2 // "//"
-                };
-                changes.push((comment_start, comment_start + remove_len, None));
-            }
-        } else {
-            // Add comment at line start
-            changes.push((line_start, line_start, Some(comment_prefix.into())));
-        }
-    }
-
-    // Sort changes by position (ascending) as required by Transaction::change
-    changes.sort_by(|a, b| a.0.cmp(&b.0));
-
-    // Apply changes
-    if !changes.is_empty() {
-        let transaction = Transaction::change(&sim.doc, changes.into_iter());
-        sim.apply_transaction(transaction);
-    }
-
+    let transaction = toggle_line_comments(&sim.doc, &sim.selection, Some("//"));
+    sim.apply_transaction(transaction);
     Ok(())
 }
 
@@ -551,8 +468,8 @@ mod tests {
         let mut sim: HelixSimulator<NormalMode> =
             HelixSimulator::new("// commented\nuncommented".to_string());
 
-        // Select all lines
-        sim.selection = Selection::single(0, 25);
+        // Select all lines (string is 24 chars: 12 + 1 newline + 11)
+        sim.selection = Selection::single(0, 24);
 
         toggle_comments(&mut sim).unwrap();
 

@@ -1,0 +1,351 @@
+# Surround Commands
+# Scenarios for md (delete surround) and mr (replace surround)
+# Note: ms (add surround) is not yet implemented
+
+# ============================================================================
+# DELETE SURROUND (md{char})
+# ============================================================================
+
+[[scenarios]]
+id = "surround_delete_parens_001"
+name = "Delete surrounding parentheses"
+description = "Use 'md(' to remove the parentheses around text"
+
+hints = [
+    "'md' enters surround delete mode, then type the character to delete",
+    "Cursor must be inside the pair to delete",
+]
+
+[scenarios.setup]
+file_content = "(hello) world"
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = "hello world"
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["md("]
+description = "Press 'md(' to delete the parentheses"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "delete", "parentheses"]
+commands_taught = ["md"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "surround_delete_brackets_001"
+name = "Delete surrounding brackets"
+description = "Use 'md[' to remove square brackets around array content"
+
+hints = [
+    "'md[' removes the [ and ] pair",
+    "Great for converting arrays to other structures",
+]
+
+[scenarios.setup]
+file_content = "let arr = [1, 2, 3];"
+cursor_position = [0, 13]
+
+[scenarios.target]
+file_content = "let arr = 1, 2, 3;"
+cursor_position = [0, 12]
+
+[scenarios.solution]
+commands = ["md["]
+description = "Press 'md[' to delete the brackets"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "delete", "brackets"]
+commands_taught = ["md"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "surround_delete_braces_001"
+name = "Delete surrounding braces"
+description = "Use 'md{' to remove curly braces"
+
+hints = [
+    "'md{' removes the { and } pair",
+    "Useful for unwrapping blocks",
+]
+
+[scenarios.setup]
+file_content = "{ value }"
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = " value "
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["md{"]
+description = "Press 'md{' to delete the braces"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "delete", "braces"]
+commands_taught = ["md"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "surround_delete_quotes_001"
+name = "Delete surrounding double quotes"
+description = "Use 'md\"' to unquote a string"
+
+hints = [
+    "md followed by a quote character removes quotes",
+    "Works with both \" and ' quotes",
+]
+
+[scenarios.setup]
+file_content = "let s = \"hello\";"
+cursor_position = [0, 10]
+
+[scenarios.target]
+file_content = "let s = hello;"
+cursor_position = [0, 9]
+
+[scenarios.solution]
+commands = ["md\""]
+description = "Press 'md\"' to remove the quotes"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "delete", "quotes"]
+commands_taught = ["md"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "surround_delete_nested_001"
+name = "Delete inner nested parentheses"
+description = "Delete the innermost pair when cursor is inside nested parens"
+
+hints = [
+    "With nested pairs, 'md' deletes the closest pair",
+    "Cursor position determines which pair is deleted",
+]
+
+[scenarios.setup]
+file_content = "((inner))"
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = "(inner)"
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["md("]
+description = "Press 'md(' to delete the inner parentheses"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "advanced"
+tags = ["surround", "delete", "nested"]
+commands_taught = ["md"]
+estimated_time_seconds = 15
+
+# ============================================================================
+# REPLACE SURROUND (mr{from}{to})
+# ============================================================================
+
+[[scenarios]]
+id = "surround_replace_parens_to_brackets_001"
+name = "Replace parentheses with brackets"
+description = "Use 'mr([' to change () to []"
+
+hints = [
+    "'mr' enters replace mode, then type FROM and TO characters",
+    "'mr([' replaces ( ) with [ ]",
+]
+
+[scenarios.setup]
+file_content = "(arg1, arg2)"
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = "[arg1, arg2]"
+cursor_position = [0, 5]
+
+[scenarios.solution]
+commands = ["mr(["]
+description = "Press 'mr([' to change parens to brackets"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "replace", "conversion"]
+commands_taught = ["mr"]
+estimated_time_seconds = 15
+
+[[scenarios]]
+id = "surround_replace_brackets_to_braces_001"
+name = "Replace brackets with braces"
+description = "Use 'mr[{' to change [] to {}"
+
+hints = [
+    "Handy for converting arrays to objects in JSON-like code",
+    "Works with any pair characters",
+]
+
+[scenarios.setup]
+file_content = "let x = [1, 2];"
+cursor_position = [0, 10]
+
+[scenarios.target]
+file_content = "let x = {1, 2};"
+cursor_position = [0, 10]
+
+[scenarios.solution]
+commands = ["mr[{"]
+description = "Press 'mr[{' to change brackets to braces"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "replace", "conversion"]
+commands_taught = ["mr"]
+estimated_time_seconds = 15
+
+[[scenarios]]
+id = "surround_replace_quotes_001"
+name = "Replace double quotes with single quotes"
+description = "Use 'mr\"\\'' to change quote style"
+
+hints = [
+    "Quickly convert between quote styles",
+    "Common operation when changing string delimiters",
+]
+
+[scenarios.setup]
+file_content = "let s = \"hello\";"
+cursor_position = [0, 12]
+
+[scenarios.target]
+file_content = "let s = 'hello';"
+cursor_position = [0, 12]
+
+[scenarios.solution]
+commands = ["mr\"'"]
+description = "Press 'mr\"\\'' to change double to single quotes"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "replace", "quotes"]
+commands_taught = ["mr"]
+estimated_time_seconds = 15
+
+[[scenarios]]
+id = "surround_replace_braces_to_parens_001"
+name = "Replace braces with parentheses"
+description = "Use 'mr{(' to change {} to ()"
+
+hints = [
+    "Useful for refactoring block expressions",
+    "Changes both opening and closing characters",
+]
+
+[scenarios.setup]
+file_content = "fn(){ body }"
+cursor_position = [0, 6]
+
+[scenarios.target]
+file_content = "fn()( body )"
+cursor_position = [0, 6]
+
+[scenarios.solution]
+commands = ["mr{("]
+description = "Press 'mr{(' to change braces to parens"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "replace", "conversion"]
+commands_taught = ["mr"]
+estimated_time_seconds = 15
+
+[[scenarios]]
+id = "surround_replace_angle_to_parens_001"
+name = "Replace angle brackets with parentheses"
+description = "Use 'mr<(' to change <> to ()"
+
+hints = [
+    "Useful for converting generics to function calls",
+    "Works with any matched pairs",
+]
+
+[scenarios.setup]
+file_content = "Vec<i32>"
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = "Vec(i32)"
+cursor_position = [0, 5]
+
+[scenarios.solution]
+commands = ["mr<("]
+description = "Press 'mr<(' to change angle brackets to parens"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["surround", "replace", "generics"]
+commands_taught = ["mr"]
+estimated_time_seconds = 15

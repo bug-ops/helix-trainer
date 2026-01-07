@@ -75,6 +75,25 @@ pub struct ViewPending;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MatchPending;
 
+/// Waiting for character after 'ms' (surround add)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurroundAddPending;
+
+/// Waiting for character after 'md' (surround delete)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurroundDeletePending;
+
+/// Waiting for first character after 'mr' (surround replace from char)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurroundReplaceFromPending;
+
+/// Waiting for second character after 'mr{from}' (surround replace to char)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurroundReplaceToPending {
+    /// The character to replace from
+    pub from_char: char,
+}
+
 /// Waiting for character after 'f'/'F'/'t'/'T' (find/till commands)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FindCharPending {
@@ -130,6 +149,10 @@ impl private::Sealed for BaseState {}
 impl private::Sealed for GotoPending {}
 impl private::Sealed for ViewPending {}
 impl private::Sealed for MatchPending {}
+impl private::Sealed for SurroundAddPending {}
+impl private::Sealed for SurroundDeletePending {}
+impl private::Sealed for SurroundReplaceFromPending {}
+impl private::Sealed for SurroundReplaceToPending {}
 impl private::Sealed for FindCharPending {}
 impl private::Sealed for ReplaceCharPending {}
 impl private::Sealed for CountPending {}
@@ -163,6 +186,30 @@ impl HandlerState for ViewPending {
 impl HandlerState for MatchPending {
     fn state_name() -> &'static str {
         "MATCH_PENDING"
+    }
+}
+
+impl HandlerState for SurroundAddPending {
+    fn state_name() -> &'static str {
+        "SURROUND_ADD_PENDING"
+    }
+}
+
+impl HandlerState for SurroundDeletePending {
+    fn state_name() -> &'static str {
+        "SURROUND_DELETE_PENDING"
+    }
+}
+
+impl HandlerState for SurroundReplaceFromPending {
+    fn state_name() -> &'static str {
+        "SURROUND_REPLACE_FROM_PENDING"
+    }
+}
+
+impl HandlerState for SurroundReplaceToPending {
+    fn state_name() -> &'static str {
+        "SURROUND_REPLACE_TO_PENDING"
     }
 }
 
@@ -253,6 +300,14 @@ pub enum InputState {
     ViewPending,
     /// After 'm' - waiting for match command second key
     MatchPending,
+    /// After 'ms' - waiting for surround add character
+    SurroundAddPending,
+    /// After 'md' - waiting for surround delete character
+    SurroundDeletePending,
+    /// After 'mr' - waiting for surround replace from character
+    SurroundReplaceFromPending,
+    /// After 'mr{char}' - waiting for surround replace to character
+    SurroundReplaceToPending { from_char: char },
     /// After 'f'/'F'/'t'/'T' - waiting for character
     FindCharPending { find_type: FindType },
     /// After 'r' - waiting for replacement character
@@ -301,13 +356,29 @@ impl InputState {
     pub fn is_waiting_for_char(&self) -> bool {
         matches!(
             self,
-            Self::FindCharPending { .. } | Self::ReplaceCharPending
+            Self::FindCharPending { .. }
+                | Self::ReplaceCharPending
+                | Self::SurroundAddPending
+                | Self::SurroundDeletePending
+                | Self::SurroundReplaceFromPending
+                | Self::SurroundReplaceToPending { .. }
         )
     }
 
     /// Check if this state is a prefix state (waiting for more input)
     pub fn is_prefix_state(&self) -> bool {
         !matches!(self, Self::Base)
+    }
+
+    /// Check if this is a surround pending state
+    pub fn is_surround_pending(&self) -> bool {
+        matches!(
+            self,
+            Self::SurroundAddPending
+                | Self::SurroundDeletePending
+                | Self::SurroundReplaceFromPending
+                | Self::SurroundReplaceToPending { .. }
+        )
     }
 
     /// Get the state name for display
@@ -317,6 +388,10 @@ impl InputState {
             Self::GotoPending => "GOTO_PENDING",
             Self::ViewPending => "VIEW_PENDING",
             Self::MatchPending => "MATCH_PENDING",
+            Self::SurroundAddPending => "SURROUND_ADD_PENDING",
+            Self::SurroundDeletePending => "SURROUND_DELETE_PENDING",
+            Self::SurroundReplaceFromPending => "SURROUND_REPLACE_FROM_PENDING",
+            Self::SurroundReplaceToPending { .. } => "SURROUND_REPLACE_TO_PENDING",
             Self::FindCharPending { .. } => "FIND_CHAR_PENDING",
             Self::ReplaceCharPending => "REPLACE_CHAR_PENDING",
             Self::CountPending { .. } => "COUNT_PENDING",
@@ -480,9 +555,94 @@ impl InputHandler<MatchPending> for KeyHandler {
         match key.code {
             // 'mm' - match brackets
             KeyCode::Char('m') => HandlerResult::Execute(Cow::Borrowed(CMD_MATCH_BRACKETS)),
+            // 'ms' - surround add (transition to SurroundAddPending)
+            KeyCode::Char('s') => HandlerResult::Transition(InputState::SurroundAddPending),
+            // 'md' - surround delete (transition to SurroundDeletePending)
+            KeyCode::Char('d') => HandlerResult::Transition(InputState::SurroundDeletePending),
+            // 'mr' - surround replace (transition to SurroundReplaceFromPending)
+            KeyCode::Char('r') => HandlerResult::Transition(InputState::SurroundReplaceFromPending),
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
             // Invalid second key - cancel
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+// ============================================================================
+// Surround add pending state handler (after 'ms')
+// ============================================================================
+
+impl InputHandler<SurroundAddPending> for KeyHandler {
+    fn handle_key(_state: &SurroundAddPending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            // Accept any printable character for surrounding
+            KeyCode::Char(c) => {
+                let cmd = format!("ms{}", c);
+                HandlerResult::Execute(Cow::Owned(cmd))
+            }
+            // Escape - cancel
+            KeyCode::Esc => HandlerResult::Cancel,
+            // Other keys - cancel
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+// ============================================================================
+// Surround delete pending state handler (after 'md')
+// ============================================================================
+
+impl InputHandler<SurroundDeletePending> for KeyHandler {
+    fn handle_key(_state: &SurroundDeletePending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            // Accept any printable character for deletion target
+            KeyCode::Char(c) => {
+                let cmd = format!("md{}", c);
+                HandlerResult::Execute(Cow::Owned(cmd))
+            }
+            // Escape - cancel
+            KeyCode::Esc => HandlerResult::Cancel,
+            // Other keys - cancel
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+// ============================================================================
+// Surround replace from pending state handler (after 'mr')
+// ============================================================================
+
+impl InputHandler<SurroundReplaceFromPending> for KeyHandler {
+    fn handle_key(_state: &SurroundReplaceFromPending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            // Accept any printable character as "from" character
+            KeyCode::Char(c) => {
+                HandlerResult::Transition(InputState::SurroundReplaceToPending { from_char: c })
+            }
+            // Escape - cancel
+            KeyCode::Esc => HandlerResult::Cancel,
+            // Other keys - cancel
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+// ============================================================================
+// Surround replace to pending state handler (after 'mr{from}')
+// ============================================================================
+
+impl InputHandler<SurroundReplaceToPending> for KeyHandler {
+    fn handle_key(state: &SurroundReplaceToPending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            // Accept any printable character as "to" character
+            KeyCode::Char(c) => {
+                let cmd = format!("mr{}{}", state.from_char, c);
+                HandlerResult::Execute(Cow::Owned(cmd))
+            }
+            // Escape - cancel
+            KeyCode::Esc => HandlerResult::Cancel,
+            // Other keys - cancel
             _ => HandlerResult::Cancel,
         }
     }
@@ -620,6 +780,19 @@ impl InputStateMachine {
             InputState::GotoPending => KeyHandler::handle_key(&GotoPending, key),
             InputState::ViewPending => KeyHandler::handle_key(&ViewPending, key),
             InputState::MatchPending => KeyHandler::handle_key(&MatchPending, key),
+            InputState::SurroundAddPending => KeyHandler::handle_key(&SurroundAddPending, key),
+            InputState::SurroundDeletePending => {
+                KeyHandler::handle_key(&SurroundDeletePending, key)
+            }
+            InputState::SurroundReplaceFromPending => {
+                KeyHandler::handle_key(&SurroundReplaceFromPending, key)
+            }
+            InputState::SurroundReplaceToPending { from_char } => KeyHandler::handle_key(
+                &SurroundReplaceToPending {
+                    from_char: *from_char,
+                },
+                key,
+            ),
             InputState::FindCharPending { find_type } => KeyHandler::handle_key(
                 &FindCharPending {
                     find_type: *find_type,
@@ -879,6 +1052,18 @@ impl TypestateHandler<BaseState> {
             HandlerResult::Transition(InputState::MatchPending) => {
                 TypestateHandlerState::MatchPending(TypestateHandler::new())
             }
+            HandlerResult::Transition(InputState::SurroundAddPending) => {
+                TypestateHandlerState::SurroundAddPending(TypestateHandler::new())
+            }
+            HandlerResult::Transition(InputState::SurroundDeletePending) => {
+                TypestateHandlerState::SurroundDeletePending(TypestateHandler::new())
+            }
+            HandlerResult::Transition(InputState::SurroundReplaceFromPending) => {
+                TypestateHandlerState::SurroundReplaceFromPending(TypestateHandler::new())
+            }
+            HandlerResult::Transition(InputState::SurroundReplaceToPending { from_char }) => {
+                TypestateHandlerState::SurroundReplaceToPending(TypestateHandler::new(), *from_char)
+            }
             HandlerResult::Transition(InputState::FindCharPending { find_type }) => {
                 TypestateHandlerState::FindCharPending(TypestateHandler::new(), *find_type)
             }
@@ -903,6 +1088,10 @@ pub enum TypestateHandlerState {
     GotoPending(TypestateHandler<GotoPending>),
     ViewPending(TypestateHandler<ViewPending>),
     MatchPending(TypestateHandler<MatchPending>),
+    SurroundAddPending(TypestateHandler<SurroundAddPending>),
+    SurroundDeletePending(TypestateHandler<SurroundDeletePending>),
+    SurroundReplaceFromPending(TypestateHandler<SurroundReplaceFromPending>),
+    SurroundReplaceToPending(TypestateHandler<SurroundReplaceToPending>, char),
     FindCharPending(TypestateHandler<FindCharPending>, FindType),
     ReplaceCharPending(TypestateHandler<ReplaceCharPending>),
     CountPending(TypestateHandler<CountPending>, usize),
@@ -944,6 +1133,54 @@ impl TypestateHandlerState {
                 let result = KeyHandler::handle_key(&MatchPending, key);
                 let next = match &result {
                     HandlerResult::Stay => Self::MatchPending(TypestateHandler::new()),
+                    HandlerResult::Transition(InputState::SurroundAddPending) => {
+                        Self::SurroundAddPending(TypestateHandler::new())
+                    }
+                    HandlerResult::Transition(InputState::SurroundDeletePending) => {
+                        Self::SurroundDeletePending(TypestateHandler::new())
+                    }
+                    HandlerResult::Transition(InputState::SurroundReplaceFromPending) => {
+                        Self::SurroundReplaceFromPending(TypestateHandler::new())
+                    }
+                    _ => Self::Base(TypestateHandler::new()),
+                };
+                (result, next)
+            }
+            Self::SurroundAddPending(_) => {
+                let result = KeyHandler::handle_key(&SurroundAddPending, key);
+                let next = match &result {
+                    HandlerResult::Stay => Self::SurroundAddPending(TypestateHandler::new()),
+                    _ => Self::Base(TypestateHandler::new()),
+                };
+                (result, next)
+            }
+            Self::SurroundDeletePending(_) => {
+                let result = KeyHandler::handle_key(&SurroundDeletePending, key);
+                let next = match &result {
+                    HandlerResult::Stay => Self::SurroundDeletePending(TypestateHandler::new()),
+                    _ => Self::Base(TypestateHandler::new()),
+                };
+                (result, next)
+            }
+            Self::SurroundReplaceFromPending(_) => {
+                let result = KeyHandler::handle_key(&SurroundReplaceFromPending, key);
+                let next = match &result {
+                    HandlerResult::Stay => {
+                        Self::SurroundReplaceFromPending(TypestateHandler::new())
+                    }
+                    HandlerResult::Transition(InputState::SurroundReplaceToPending {
+                        from_char,
+                    }) => Self::SurroundReplaceToPending(TypestateHandler::new(), *from_char),
+                    _ => Self::Base(TypestateHandler::new()),
+                };
+                (result, next)
+            }
+            Self::SurroundReplaceToPending(_, from_char) => {
+                let result = KeyHandler::handle_key(&SurroundReplaceToPending { from_char }, key);
+                let next = match &result {
+                    HandlerResult::Stay => {
+                        Self::SurroundReplaceToPending(TypestateHandler::new(), from_char)
+                    }
                     _ => Self::Base(TypestateHandler::new()),
                 };
                 (result, next)
@@ -992,6 +1229,10 @@ impl TypestateHandlerState {
             Self::GotoPending(_) => GotoPending::state_name(),
             Self::ViewPending(_) => ViewPending::state_name(),
             Self::MatchPending(_) => MatchPending::state_name(),
+            Self::SurroundAddPending(_) => SurroundAddPending::state_name(),
+            Self::SurroundDeletePending(_) => SurroundDeletePending::state_name(),
+            Self::SurroundReplaceFromPending(_) => SurroundReplaceFromPending::state_name(),
+            Self::SurroundReplaceToPending(_, _) => SurroundReplaceToPending::state_name(),
             Self::FindCharPending(_, _) => FindCharPending::state_name(),
             Self::ReplaceCharPending(_) => ReplaceCharPending::state_name(),
             Self::CountPending(_, _) => CountPending::state_name(),
@@ -1416,11 +1657,171 @@ mod tests {
         }
 
         #[test]
+        fn test_match_pending_ms_transitions_to_surround_add() {
+            let result = KeyHandler::handle_key(
+                &MatchPending,
+                KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
+            );
+            assert!(matches!(
+                result,
+                HandlerResult::Transition(InputState::SurroundAddPending)
+            ));
+        }
+
+        #[test]
+        fn test_match_pending_md_transitions_to_surround_delete() {
+            let result = KeyHandler::handle_key(
+                &MatchPending,
+                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
+            );
+            assert!(matches!(
+                result,
+                HandlerResult::Transition(InputState::SurroundDeletePending)
+            ));
+        }
+
+        #[test]
+        fn test_match_pending_mr_transitions_to_surround_replace() {
+            let result = KeyHandler::handle_key(
+                &MatchPending,
+                KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
+            );
+            assert!(matches!(
+                result,
+                HandlerResult::Transition(InputState::SurroundReplaceFromPending)
+            ));
+        }
+
+        #[test]
         fn test_match_pending_invalid_cancels() {
             let result = KeyHandler::handle_key(
                 &MatchPending,
                 KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
             );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+    }
+
+    mod surround_add_pending_handler_tests {
+        use super::*;
+
+        #[test]
+        fn test_surround_add_pending_accept_char() {
+            let result = KeyHandler::handle_key(
+                &SurroundAddPending,
+                KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ms("));
+        }
+
+        #[test]
+        fn test_surround_add_pending_accept_bracket() {
+            let result = KeyHandler::handle_key(
+                &SurroundAddPending,
+                KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ms["));
+        }
+
+        #[test]
+        fn test_surround_add_pending_accept_quote() {
+            let result = KeyHandler::handle_key(
+                &SurroundAddPending,
+                KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ms\""));
+        }
+
+        #[test]
+        fn test_surround_add_pending_escape_cancels() {
+            let result = KeyHandler::handle_key(
+                &SurroundAddPending,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+    }
+
+    mod surround_delete_pending_handler_tests {
+        use super::*;
+
+        #[test]
+        fn test_surround_delete_pending_accept_char() {
+            let result = KeyHandler::handle_key(
+                &SurroundDeletePending,
+                KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "md("));
+        }
+
+        #[test]
+        fn test_surround_delete_pending_accept_bracket() {
+            let result = KeyHandler::handle_key(
+                &SurroundDeletePending,
+                KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "md{"));
+        }
+
+        #[test]
+        fn test_surround_delete_pending_escape_cancels() {
+            let result = KeyHandler::handle_key(
+                &SurroundDeletePending,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+    }
+
+    mod surround_replace_pending_handler_tests {
+        use super::*;
+
+        #[test]
+        fn test_surround_replace_from_transitions_to_to() {
+            let result = KeyHandler::handle_key(
+                &SurroundReplaceFromPending,
+                KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
+            );
+            assert!(matches!(
+                result,
+                HandlerResult::Transition(InputState::SurroundReplaceToPending { from_char: '(' })
+            ));
+        }
+
+        #[test]
+        fn test_surround_replace_from_escape_cancels() {
+            let result = KeyHandler::handle_key(
+                &SurroundReplaceFromPending,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+
+        #[test]
+        fn test_surround_replace_to_completes() {
+            let state = SurroundReplaceToPending { from_char: '(' };
+            let result = KeyHandler::handle_key(
+                &state,
+                KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mr(["));
+        }
+
+        #[test]
+        fn test_surround_replace_to_quotes() {
+            let state = SurroundReplaceToPending { from_char: '"' };
+            let result = KeyHandler::handle_key(
+                &state,
+                KeyEvent::new(KeyCode::Char('\''), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mr\"'"));
+        }
+
+        #[test]
+        fn test_surround_replace_to_escape_cancels() {
+            let state = SurroundReplaceToPending { from_char: '(' };
+            let result =
+                KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
             assert!(matches!(result, HandlerResult::Cancel));
         }
     }
@@ -1681,6 +2082,100 @@ mod tests {
 
             sm.reset();
             assert!(sm.state().is_base());
+        }
+
+        #[test]
+        fn test_state_machine_surround_add_sequence() {
+            let mut sm = InputStateMachine::new();
+
+            // Press 'm' - transition to MatchPending
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+            assert!(result.is_transition());
+            assert!(sm.state().is_match_pending());
+
+            // Press 's' - transition to SurroundAddPending
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
+            assert!(result.is_transition());
+            assert!(matches!(sm.state(), InputState::SurroundAddPending));
+
+            // Press '(' - execute "ms("
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
+            assert!(result.is_execute());
+            assert_eq!(result.command(), Some("ms("));
+            assert!(sm.state().is_base());
+        }
+
+        #[test]
+        fn test_state_machine_surround_delete_sequence() {
+            let mut sm = InputStateMachine::new();
+
+            // Press 'm' - transition to MatchPending
+            sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+            assert!(sm.state().is_match_pending());
+
+            // Press 'd' - transition to SurroundDeletePending
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+            assert!(result.is_transition());
+            assert!(matches!(sm.state(), InputState::SurroundDeletePending));
+
+            // Press '{' - execute "md{"
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE));
+            assert!(result.is_execute());
+            assert_eq!(result.command(), Some("md{"));
+            assert!(sm.state().is_base());
+        }
+
+        #[test]
+        fn test_state_machine_surround_replace_sequence() {
+            let mut sm = InputStateMachine::new();
+
+            // Press 'm' - transition to MatchPending
+            sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+            assert!(sm.state().is_match_pending());
+
+            // Press 'r' - transition to SurroundReplaceFromPending
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+            assert!(result.is_transition());
+            assert!(matches!(sm.state(), InputState::SurroundReplaceFromPending));
+
+            // Press '(' - transition to SurroundReplaceToPending
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
+            assert!(result.is_transition());
+            assert!(matches!(
+                sm.state(),
+                InputState::SurroundReplaceToPending { from_char: '(' }
+            ));
+
+            // Press '[' - execute "mr(["
+            let result = sm.process_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
+            assert!(result.is_execute());
+            assert_eq!(result.command(), Some("mr(["));
+            assert!(sm.state().is_base());
+        }
+
+        #[test]
+        fn test_state_machine_surround_escape_cancels() {
+            let mut sm = InputStateMachine::new();
+
+            // Go to SurroundAddPending
+            sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+            sm.process_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
+            assert!(matches!(sm.state(), InputState::SurroundAddPending));
+
+            // Press Escape - should cancel
+            let result = sm.process_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+            assert!(result.is_cancel());
+            assert!(sm.state().is_base());
+        }
+
+        #[test]
+        fn test_surround_pending_predicates() {
+            assert!(InputState::SurroundAddPending.is_surround_pending());
+            assert!(InputState::SurroundDeletePending.is_surround_pending());
+            assert!(InputState::SurroundReplaceFromPending.is_surround_pending());
+            assert!(InputState::SurroundReplaceToPending { from_char: '(' }.is_surround_pending());
+            assert!(!InputState::Base.is_surround_pending());
+            assert!(!InputState::MatchPending.is_surround_pending());
         }
     }
 

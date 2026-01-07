@@ -254,6 +254,204 @@ pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
     Ok(())
 }
 
+/// Surround selection with character pair (Helix 'ms{char}' command)
+///
+/// Wraps the current selection with the specified character and its pair.
+/// For brackets, the opening/closing pairs are: (), [], {}, <>.
+/// For quotes, the same character is used on both sides.
+pub fn surround_selection<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    surround_char: char,
+) -> Result<(), UserError> {
+    let (open, close) = get_surround_pair(surround_char);
+
+    let range = sim.selection.primary();
+    let start = range.from();
+    let end = range.to();
+
+    // Insert closing bracket first (at higher position) to preserve start position
+    let close_str: String = close.into();
+    let open_str: String = open.into();
+
+    // Build the changes: insert open at start, close at end
+    let transaction = Transaction::change(
+        &sim.doc,
+        [(start, start, Some(open_str.into()))].into_iter(),
+    );
+    sim.apply_transaction(transaction);
+
+    // After inserting open char, positions shift by 1
+    let new_end = end + 1;
+    let transaction = Transaction::change(
+        &sim.doc,
+        [(new_end, new_end, Some(close_str.into()))].into_iter(),
+    );
+    sim.apply_transaction(transaction);
+
+    // Update selection to include the surrounded text (excluding delimiters)
+    sim.selection = Selection::single(start + 1, new_end);
+
+    Ok(())
+}
+
+/// Delete surrounding pair (Helix 'md{char}' command)
+///
+/// Removes the innermost pair of the specified character around the cursor.
+pub fn delete_surround<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    surround_char: char,
+) -> Result<(), UserError> {
+    let (open, close) = get_surround_pair(surround_char);
+    let head = sim.selection.primary().head;
+
+    // Find the surrounding pair around cursor
+    let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, open, close) else {
+        return Ok(()); // No surrounding pair found
+    };
+
+    // Delete close first (higher position) to preserve open position
+    let transaction = Transaction::change(&sim.doc, [(close_pos, close_pos + 1, None)].into_iter());
+    sim.apply_transaction(transaction);
+
+    // Delete open
+    let transaction = Transaction::change(&sim.doc, [(open_pos, open_pos + 1, None)].into_iter());
+    sim.apply_transaction(transaction);
+
+    // Adjust cursor position
+    let new_head = if head > close_pos {
+        head.saturating_sub(2)
+    } else if head > open_pos {
+        head.saturating_sub(1)
+    } else {
+        head
+    };
+    sim.selection = Selection::point(new_head.min(sim.doc.len_chars().saturating_sub(1)));
+
+    Ok(())
+}
+
+/// Replace surrounding pair (Helix 'mr{from}{to}' command)
+///
+/// Replaces the innermost pair of `from_char` with `to_char`.
+pub fn replace_surround<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    from_char: char,
+    to_char: char,
+) -> Result<(), UserError> {
+    let (from_open, from_close) = get_surround_pair(from_char);
+    let (to_open, to_close) = get_surround_pair(to_char);
+    let head = sim.selection.primary().head;
+
+    // Find the surrounding pair around cursor
+    let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, from_open, from_close)
+    else {
+        return Ok(()); // No surrounding pair found
+    };
+
+    // Replace close first to preserve open position
+    let close_str: String = to_close.into();
+    let transaction = Transaction::change(
+        &sim.doc,
+        [(close_pos, close_pos + 1, Some(close_str.into()))].into_iter(),
+    );
+    sim.apply_transaction(transaction);
+
+    // Replace open
+    let open_str: String = to_open.into();
+    let transaction = Transaction::change(
+        &sim.doc,
+        [(open_pos, open_pos + 1, Some(open_str.into()))].into_iter(),
+    );
+    sim.apply_transaction(transaction);
+
+    Ok(())
+}
+
+/// Get the opening and closing characters for a surround pair
+fn get_surround_pair(ch: char) -> (char, char) {
+    match ch {
+        '(' | ')' => ('(', ')'),
+        '[' | ']' => ('[', ']'),
+        '{' | '}' => ('{', '}'),
+        '<' | '>' => ('<', '>'),
+        // For quotes and other characters, use the same char on both sides
+        _ => (ch, ch),
+    }
+}
+
+/// Find the innermost surrounding pair around a position
+fn find_surrounding_pair<M: EditorMode>(
+    sim: &HelixSimulator<M>,
+    pos: usize,
+    open: char,
+    close: char,
+) -> Option<(usize, usize)> {
+    let slice = sim.doc.slice(..);
+    let len = sim.doc.len_chars();
+
+    // For same-char pairs (quotes), find nearest on each side
+    if open == close {
+        // Search backwards for opening quote
+        let mut open_pos = None;
+        for i in (0..pos).rev() {
+            if slice.char(i) == open {
+                open_pos = Some(i);
+                break;
+            }
+        }
+
+        // Search forwards for closing quote
+        let mut close_pos = None;
+        for i in pos..len {
+            if slice.char(i) == close && Some(i) != open_pos {
+                close_pos = Some(i);
+                break;
+            }
+        }
+
+        open_pos.and_then(|o| close_pos.map(|c| (o, c)))
+    } else {
+        // For bracket pairs, need to track nesting
+        let mut open_pos = None;
+        let mut depth = 0;
+
+        // Search backwards for matching open bracket
+        for i in (0..=pos).rev() {
+            let ch = slice.char(i);
+            if ch == close {
+                depth += 1;
+            } else if ch == open {
+                if depth == 0 {
+                    open_pos = Some(i);
+                    break;
+                }
+                depth -= 1;
+            }
+        }
+
+        let open_idx = open_pos?;
+
+        // Search forwards for matching close bracket
+        let mut close_pos = None;
+        depth = 0;
+
+        for i in open_idx + 1..len {
+            let ch = slice.char(i);
+            if ch == open {
+                depth += 1;
+            } else if ch == close {
+                if depth == 0 {
+                    close_pos = Some(i);
+                    break;
+                }
+                depth -= 1;
+            }
+        }
+
+        close_pos.map(|c| (open_idx, c))
+    }
+}
+
 /// Join lines in selection with space (Helix 'Alt-J' command)
 ///
 /// Like J but joins all selected lines and selects the inserted space.
@@ -369,5 +567,123 @@ mod tests {
 
         // No change for single line
         assert_eq!(sim.doc.to_string(), "single line");
+    }
+
+    // Surround command tests
+    #[test]
+    fn test_surround_selection_parens() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::single(0, 5); // Select "hello"
+
+        surround_selection(&mut sim, '(').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "(hello) world");
+    }
+
+    #[test]
+    fn test_surround_selection_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::single(0, 5);
+
+        surround_selection(&mut sim, '[').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "[hello] world");
+    }
+
+    #[test]
+    fn test_surround_selection_quotes() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::single(0, 5);
+
+        surround_selection(&mut sim, '"').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "\"hello\" world");
+    }
+
+    #[test]
+    fn test_delete_surround_parens() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("(hello) world".to_string());
+        sim.selection = Selection::point(3); // Cursor inside parens
+
+        delete_surround(&mut sim, '(').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "hello world");
+    }
+
+    #[test]
+    fn test_delete_surround_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("[hello] world".to_string());
+        sim.selection = Selection::point(3);
+
+        delete_surround(&mut sim, '[').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "hello world");
+    }
+
+    #[test]
+    fn test_delete_surround_quotes() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("\"hello\" world".to_string());
+        sim.selection = Selection::point(3);
+
+        delete_surround(&mut sim, '"').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "hello world");
+    }
+
+    #[test]
+    fn test_delete_surround_nested() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("((inner))".to_string());
+        sim.selection = Selection::point(3); // Cursor on 'n'
+
+        delete_surround(&mut sim, '(').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "(inner)");
+    }
+
+    #[test]
+    fn test_replace_surround_parens_to_brackets() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("(hello) world".to_string());
+        sim.selection = Selection::point(3);
+
+        replace_surround(&mut sim, '(', '[').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "[hello] world");
+    }
+
+    #[test]
+    fn test_replace_surround_quotes_to_single() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("\"hello\" world".to_string());
+        sim.selection = Selection::point(3);
+
+        replace_surround(&mut sim, '"', '\'').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "'hello' world");
+    }
+
+    #[test]
+    fn test_surround_pair_mapping() {
+        assert_eq!(get_surround_pair('('), ('(', ')'));
+        assert_eq!(get_surround_pair(')'), ('(', ')'));
+        assert_eq!(get_surround_pair('['), ('[', ']'));
+        assert_eq!(get_surround_pair(']'), ('[', ']'));
+        assert_eq!(get_surround_pair('{'), ('{', '}'));
+        assert_eq!(get_surround_pair('}'), ('{', '}'));
+        assert_eq!(get_surround_pair('<'), ('<', '>'));
+        assert_eq!(get_surround_pair('>'), ('<', '>'));
+        assert_eq!(get_surround_pair('"'), ('"', '"'));
+        assert_eq!(get_surround_pair('\''), ('\'', '\''));
+    }
+
+    #[test]
+    fn test_delete_surround_no_pair_found() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::point(3);
+
+        // Should not error, just do nothing
+        delete_surround(&mut sim, '(').unwrap();
+
+        assert_eq!(sim.doc.to_string(), "hello world");
     }
 }

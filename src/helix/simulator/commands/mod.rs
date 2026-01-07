@@ -79,6 +79,45 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
+    // Match mode surround commands (e.g., "ms(" -> m + s + '(', "md(" -> m + d + '(')
+    if cmd.starts_with("ms") && cmd.len() == 3 {
+        let ch = cmd.chars().nth(2).unwrap();
+        return vec![
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
+        ];
+    }
+
+    if cmd.starts_with("md") && cmd.len() == 3 {
+        let ch = cmd.chars().nth(2).unwrap();
+        return vec![
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
+        ];
+    }
+
+    // Match mode surround replace (e.g., "mr()" -> m + r + '(' + ')')
+    if cmd.starts_with("mr") && cmd.len() == 4 {
+        let from_ch = cmd.chars().nth(2).unwrap();
+        let to_ch = cmd.chars().nth(3).unwrap();
+        return vec![
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char(from_ch), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char(to_ch), KeyModifiers::NONE),
+        ];
+    }
+
+    // Match mode match brackets (e.g., "mm" -> m + m)
+    if cmd == CMD_MATCH_BRACKETS {
+        return vec![
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+        ];
+    }
+
     // Alt-; for flip selections
     if cmd == CMD_FLIP_SELECTIONS {
         return vec![KeyEvent::new(KeyCode::Char(';'), KeyModifiers::ALT)];
@@ -221,6 +260,27 @@ pub(super) fn execute_normal_mode_command_internal(
                 // Not a parametric command, try registry below
             }
         }
+    }
+
+    // Special handling for surround commands (ms{char}, md{char})
+    if cmd.len() == 3 && cmd.starts_with("ms") {
+        let surround_char = cmd.chars().nth(2).unwrap();
+        editing::surround_selection(sim, surround_char)?;
+        return Ok(());
+    }
+
+    if cmd.len() == 3 && cmd.starts_with("md") {
+        let surround_char = cmd.chars().nth(2).unwrap();
+        editing::delete_surround(sim, surround_char)?;
+        return Ok(());
+    }
+
+    // Special handling for surround replace (mr{from}{to})
+    if cmd.len() == 4 && cmd.starts_with("mr") {
+        let from_char = cmd.chars().nth(2).unwrap();
+        let to_char = cmd.chars().nth(3).unwrap();
+        editing::replace_surround(sim, from_char, to_char)?;
+        return Ok(());
     }
 
     // Special cases that need manual handling

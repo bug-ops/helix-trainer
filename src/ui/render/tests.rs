@@ -13,6 +13,7 @@ fn create_test_scenario() -> crate::config::Scenario {
         setup: Setup {
             file_content: "line 1\n".to_string(),
             cursor_position: (0, 0),
+            selection: None,
         },
         target: TargetState {
             file_content: "line 2\n".to_string(),
@@ -769,6 +770,7 @@ fn create_test_scenario_with_id(id: &str) -> crate::config::Scenario {
         setup: Setup {
             file_content: "line 1\n".to_string(),
             cursor_position: (0, 0),
+            selection: None,
         },
         target: TargetState {
             file_content: "line 2\n".to_string(),

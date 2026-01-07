@@ -18,6 +18,7 @@ fn create_scenario(
         setup: Setup {
             file_content: "test".to_string(),
             cursor_position: (0, 0),
+            selection: None,
         },
         target: TargetState {
             file_content: "test".to_string(),
@@ -544,6 +545,7 @@ fn test_scenarios_without_metadata() {
         setup: Setup {
             file_content: "test".to_string(),
             cursor_position: (0, 0),
+            selection: None,
         },
         target: TargetState {
             file_content: "test".to_string(),

@@ -198,37 +198,49 @@ impl HelixSimulator<NormalMode> {
 
     /// Create a new simulator from an EditorState (starts in Normal mode)
     ///
-    /// Initializes the simulator with the content and cursor position from the EditorState.
-    /// This is useful when starting from a scenario setup.
+    /// Initializes the simulator with the content, cursor position, and optional selection
+    /// from the EditorState. This is useful when starting from a scenario setup.
     pub fn from_editor_state(state: &EditorState) -> Self {
         let rope = Rope::from(state.content());
+        let lines: Vec<&str> = state.content().lines().collect();
 
-        // Convert (row, col) to absolute char position
-        let cursor = state.cursor_position();
-        let char_pos = if cursor.row == 0 {
-            cursor.col
-        } else {
-            // Find the character position by navigating through lines
-            let mut pos = 0;
-            let lines: Vec<&str> = state.content().lines().collect();
-
-            // Add characters from all previous lines (including newlines)
-            for line_idx in 0..cursor.row {
-                if line_idx < lines.len() {
-                    pos += lines[line_idx].chars().count() + 1; // +1 for newline
+        // Helper to convert (row, col) to absolute char position
+        let pos_to_char = |row: usize, col: usize| -> usize {
+            if row == 0 {
+                col
+            } else {
+                let mut pos = 0;
+                for line_idx in 0..row {
+                    if line_idx < lines.len() {
+                        pos += lines[line_idx].chars().count() + 1; // +1 for newline
+                    }
                 }
+                pos + col
             }
-            // Add column offset in current line
-            pos + cursor.col
         };
+
+        // Convert cursor position
+        let cursor = state.cursor_position();
+        let char_pos = pos_to_char(cursor.row, cursor.col);
 
         // Ensure position is within bounds
         let max_pos = rope.len_chars().saturating_sub(1);
         let safe_pos = char_pos.min(max_pos);
 
+        // Handle selection if present
+        let selection = if let Some(sel) = state.selection() {
+            let anchor = pos_to_char(sel.start.row, sel.start.col);
+            let head = pos_to_char(sel.end.row, sel.end.col);
+            let safe_anchor = anchor.min(rope.len_chars());
+            let safe_head = head.min(rope.len_chars());
+            Selection::single(safe_anchor, safe_head)
+        } else {
+            Selection::point(safe_pos)
+        };
+
         Self {
             doc: rope,
-            selection: Selection::point(safe_pos),
+            selection,
             history: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),

@@ -25,11 +25,22 @@ fn test_cursor_column_out_of_bounds() {
 
 #[test]
 fn test_from_setup() {
-    let state = EditorState::from_setup("line 1\nline 2\n", [1, 0]);
+    let state = EditorState::from_setup("line 1\nline 2\n", [1, 0], None);
     assert!(state.is_ok());
     let state = state.unwrap();
     assert_eq!(state.cursor_position().row, 1);
     assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_from_setup_with_selection() {
+    let state = EditorState::from_setup("hello world", [0, 0], Some([0, 0, 0, 5]));
+    assert!(state.is_ok());
+    let state = state.unwrap();
+    assert!(state.selection().is_some());
+    let sel = state.selection().unwrap();
+    assert_eq!(sel.start.col, 0);
+    assert_eq!(sel.end.col, 5);
 }
 
 #[test]

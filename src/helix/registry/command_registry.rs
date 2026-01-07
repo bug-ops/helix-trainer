@@ -12,6 +12,11 @@ use crate::security::UserError;
 use super::keytrie::KeyTrie;
 use super::metadata::{Category, CommandMetadata, ModeTransition};
 
+/// Check if a key string represents a modifier key command (Alt-*, Ctrl-*)
+fn is_modifier_key(key: &str) -> bool {
+    key.starts_with("Alt-") || key.starts_with("Ctrl-")
+}
+
 /// Command handler function type
 pub type CommandHandler<M> = fn(&mut HelixSimulator<M>) -> Result<(), UserError>;
 
@@ -70,8 +75,9 @@ impl<M: EditorMode> CommandRegistry<M> {
         // Add to category grouping
         self.by_category.entry(category).or_default().push(key);
 
-        // Register in KeyTrie for single-key commands
-        if key.len() == 1 {
+        // Register in KeyTrie for single-key commands (including modifier keys)
+        // Modifier keys like "Alt-x", "Ctrl-c" are considered single commands
+        if key.len() == 1 || is_modifier_key(key) {
             self.key_trie.register_single(key);
         }
 

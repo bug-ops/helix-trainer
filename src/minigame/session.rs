@@ -662,6 +662,7 @@ mod tests {
             setup: Setup {
                 file_content: "line 1\nline 2\n".to_string(),
                 cursor_position: (1, 0),
+                selection: None,
             },
             target: TargetState {
                 file_content: "line 1\n".to_string(),
@@ -822,6 +823,7 @@ mod tests {
             setup: Setup {
                 file_content: "line 1\nline 2\nline 3\n".to_string(), // With trailing newline
                 cursor_position: (0, 0),
+                selection: None,
             },
             target: TargetState {
                 file_content: "line 1\nline 2\nline 3\n".to_string(),

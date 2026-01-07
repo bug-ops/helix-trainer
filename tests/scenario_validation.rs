@@ -96,6 +96,12 @@ const SPECIAL_KEY_COMMANDS: &[&str] = &[
     "ArrowDown",  // Cursor movement in insert mode
 ];
 
+/// Helper to check if command is a modifier key command (Alt-*, Ctrl-*)
+/// These are received as single key events, not character by character
+fn is_modifier_key_command(cmd: &str) -> bool {
+    cmd.starts_with("Alt-") || cmd.starts_with("Ctrl-")
+}
+
 /// Commands that enter insert mode
 const INSERT_MODE_COMMANDS: &[&str] = &["i", "a", "I", "A", "o", "O", "c"];
 
@@ -120,6 +126,12 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
             if cmd == "Escape" {
                 in_insert_mode = false;
             }
+            continue;
+        }
+
+        // Handle modifier key commands (Alt-*, Ctrl-*) - these are single key events
+        // They bypass character-by-character parsing since they're received atomically
+        if is_modifier_key_command(cmd) {
             continue;
         }
 

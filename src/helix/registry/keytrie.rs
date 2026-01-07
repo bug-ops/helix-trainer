@@ -92,9 +92,14 @@ impl KeyTrie {
         trie
     }
 
-    /// Register a single-key command
+    /// Register a single-key command (including modifier keys like Alt-x, Ctrl-c)
     pub fn register_single(&mut self, key: &'static str) {
         self.single_key.insert(key);
+    }
+
+    /// Check if a key string is a registered single-key command (including modifiers)
+    pub fn is_registered_single(&self, key: &str) -> bool {
+        self.single_key.contains(key)
     }
 
     /// Resolve a command buffer to a KeyMatch
@@ -109,6 +114,12 @@ impl KeyTrie {
     pub fn resolve(&self, buffer: &str) -> KeyMatch {
         if buffer.is_empty() {
             return KeyMatch::Invalid;
+        }
+
+        // Check for modifier key commands first (Alt-*, Ctrl-*)
+        // These are registered as single commands but have longer strings
+        if self.single_key.contains(buffer) && buffer.len() > 1 {
+            return KeyMatch::Complete(buffer.to_string());
         }
 
         // Check for count prefix (e.g., "3h", "12j", "10w")

@@ -261,16 +261,27 @@ impl EditorState {
     /// ```ignore
     /// use helix_trainer::game::EditorState;
     ///
-    /// let state = EditorState::from_setup("line 1\nline 2\n", [1, 0])?;
+    /// let state = EditorState::from_setup("line 1\nline 2\n", [1, 0], None)?;
     /// assert_eq!(state.cursor_position().row, 1);
     /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
     pub fn from_setup(
         file_content: &str,
         cursor_position: [usize; 2],
+        selection: Option<[usize; 4]>,
     ) -> Result<Self, SecurityError> {
         let cursor = CursorPosition::from_array(cursor_position)?;
-        Self::new(file_content.to_string(), cursor, None)
+        let sel = selection.map(|s| Selection {
+            start: CursorPosition {
+                row: s[0],
+                col: s[1],
+            },
+            end: CursorPosition {
+                row: s[2],
+                col: s[3],
+            },
+        });
+        Self::new(file_content.to_string(), cursor, sel)
     }
 
     /// Create EditorState from target configuration with optional selection

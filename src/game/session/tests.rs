@@ -11,6 +11,7 @@ fn create_test_scenario() -> Scenario {
         setup: Setup {
             file_content: "line 1\nline 2\nline 3\n".to_string(),
             cursor_position: (0, 0),
+            selection: None,
         },
         target: TargetState {
             file_content: "line 2\nline 3\n".to_string(),

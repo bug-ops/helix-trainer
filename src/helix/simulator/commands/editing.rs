@@ -2,6 +2,7 @@
 
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
+use helix_core::surround::find_nth_pairs_pos;
 use helix_core::textobject::{TextObject, textobject_paragraph, textobject_word};
 use helix_core::{Selection, Transaction};
 
@@ -155,8 +156,6 @@ pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 }
 
 /// Select current line (Helix 'x' command)
-/// In Helix, 'x' selects the line including the trailing newline.
-/// Selection goes from line start to end of line (including \n).
 pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
@@ -176,7 +175,6 @@ pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 }
 
 /// Extend selection to line bounds (Helix 'X' command)
-/// In Helix, 'X' extends selection to full lines with cursor at selection start.
 pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let range = sim.selection.primary();
     let start_line = sim.doc.char_to_line(range.from());
@@ -232,9 +230,6 @@ pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
 }
 
 /// Replace selection with yanked text (Helix 'R' command)
-///
-/// Replaces the current selection with the content of the clipboard.
-/// For training, we use the simulator's clipboard.
 pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let Some(yanked) = &sim.clipboard else {
         return Ok(()); // Nothing yanked
@@ -256,10 +251,6 @@ pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
 }
 
 /// Surround selection with character pair (Helix 'ms{char}' command)
-///
-/// Wraps the current selection with the specified character and its pair.
-/// For brackets, the opening/closing pairs are: (), [], {}, <>.
-/// For quotes, the same character is used on both sides.
 pub fn surround_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     surround_char: char,
@@ -296,8 +287,6 @@ pub fn surround_selection<M: EditorMode>(
 }
 
 /// Delete surrounding pair (Helix 'md{char}' command)
-///
-/// Removes the innermost pair of the specified character around the cursor.
 pub fn delete_surround<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     surround_char: char,
@@ -332,8 +321,6 @@ pub fn delete_surround<M: EditorMode>(
 }
 
 /// Replace surrounding pair (Helix 'mr{from}{to}' command)
-///
-/// Replaces the innermost pair of `from_char` with `to_char`.
 pub fn replace_surround<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     from_char: char,
@@ -380,82 +367,18 @@ fn get_surround_pair(ch: char) -> (char, char) {
     }
 }
 
-/// Find the innermost surrounding pair around a position
+/// Find the innermost surrounding pair around cursor position
 fn find_surrounding_pair<M: EditorMode>(
     sim: &HelixSimulator<M>,
-    pos: usize,
+    _pos: usize, // Not used - helix-core uses Range directly
     open: char,
-    close: char,
+    _close: char, // Not used - helix-core derives it from open
 ) -> Option<(usize, usize)> {
     let slice = sim.doc.slice(..);
-    let len = sim.doc.len_chars();
+    let range = sim.selection.primary();
 
-    // Handle empty document
-    if len == 0 {
-        return None;
-    }
-
-    // For same-char pairs (quotes), find nearest on each side
-    if open == close {
-        // Search backwards for opening quote
-        let mut open_pos = None;
-        for i in (0..pos).rev() {
-            if slice.char(i) == open {
-                open_pos = Some(i);
-                break;
-            }
-        }
-
-        // Search forwards for closing quote
-        let mut close_pos = None;
-        for i in pos..len {
-            if slice.char(i) == close && Some(i) != open_pos {
-                close_pos = Some(i);
-                break;
-            }
-        }
-
-        open_pos.and_then(|o| close_pos.map(|c| (o, c)))
-    } else {
-        // For bracket pairs, need to track nesting
-        let mut open_pos = None;
-        let mut depth = 0;
-
-        // Search backwards for matching open bracket
-        for i in (0..=pos).rev() {
-            let ch = slice.char(i);
-            if ch == close {
-                depth += 1;
-            } else if ch == open {
-                if depth == 0 {
-                    open_pos = Some(i);
-                    break;
-                }
-                depth -= 1;
-            }
-        }
-
-        let open_idx = open_pos?;
-
-        // Search forwards for matching close bracket
-        let mut close_pos = None;
-        depth = 0;
-
-        for i in open_idx + 1..len {
-            let ch = slice.char(i);
-            if ch == open {
-                depth += 1;
-            } else if ch == close {
-                if depth == 0 {
-                    close_pos = Some(i);
-                    break;
-                }
-                depth -= 1;
-            }
-        }
-
-        close_pos.map(|c| (open_idx, c))
-    }
+    // helix-core's find_nth_pairs_pos returns Result, convert to Option
+    find_nth_pairs_pos(slice, open, range, 1).ok()
 }
 
 // ============================================================================
@@ -463,8 +386,6 @@ fn find_surrounding_pair<M: EditorMode>(
 // ============================================================================
 
 /// Select around text object (Helix 'ma{obj}' command)
-///
-/// Selects text around the specified text object, including delimiters.
 pub fn select_around_textobject<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     obj: char,

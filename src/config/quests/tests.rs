@@ -181,7 +181,7 @@ fn test_load_daily_quests_toml() {
     assert!(result.is_ok(), "Failed to load daily quests: {:?}", result);
 
     let quests = result.unwrap();
-    assert_eq!(quests.len(), 55, "Expected 55 quest templates");
+    assert_eq!(quests.len(), 70, "Expected 70 quest templates");
 
     // Verify we have expected quest IDs across all difficulty levels
     let ids: Vec<_> = quests.iter().map(|q| q.id.as_str()).collect();
@@ -590,12 +590,17 @@ fn test_validate_all_quest_templates() {
     // 8. Validate referenced commands are valid Helix commands
     let valid_commands: HashSet<&str> = [
         // Movement
-        "h", "j", "k", "l", "w", "b", "e", "0", "$", "gg", "G", // Editing
-        "x", "x", "i", "a", "I", "A", "o", "O", "c", "J", ">", "<", // Clipboard
+        "h", "j", "k", "l", "w", "b", "e", "0", "$", "gg", "G", // Paragraph movement
+        "{", "}", // Editing
+        "x", "i", "a", "I", "A", "o", "O", "c", "J", ">", "<", "~", // Clipboard
         "y", "yy", "p", "P", // Undo/Redo
         "u", "U", // Repeat
         ".", // Replace (r + char is handled specially)
-        "r",
+        "r", // Selection
+        "_", "C", // Search
+        "*", "n", "N", "#", // Text objects (match mode prefix + object)
+        "miw", "maw", "mip", "map", // Surround (match mode prefix + surround command)
+        "ms", "md", "mr",
     ]
     .iter()
     .copied()

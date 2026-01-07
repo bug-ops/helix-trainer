@@ -1,0 +1,301 @@
+# Advanced Editing Commands
+# Scenarios for J, Alt-J, >, <, ~, `, Alt-`, R
+
+# ============================================================================
+# JOIN LINES (J command)
+# ============================================================================
+
+[[scenarios]]
+id = "join_lines_001"
+name = "Join two lines"
+description = "Use 'J' to join the current line with the next line"
+
+hints = [
+    "'J' joins lines by removing the newline",
+    "The lines are concatenated directly without adding space",
+]
+
+[scenarios.setup]
+file_content = "hello\nworld"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "hello world"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["J"]
+description = "Press 'J' to join lines (adds space)"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["join", "lines", "editing"]
+commands_taught = ["J"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "join_lines_002"
+name = "Join multiple lines"
+description = "Use 'J' twice to join three lines into one"
+
+hints = [
+    "Repeat 'J' to join more lines",
+    "Each 'J' joins with a space between",
+]
+
+[scenarios.setup]
+file_content = "a\nb\nc"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "a b c"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["J", "J"]
+description = "Press 'J' twice to join all three lines"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["join", "lines", "editing"]
+commands_taught = ["J"]
+estimated_time_seconds = 15
+
+# ============================================================================
+# JOIN WITH SPACE (Alt-J command)
+# ============================================================================
+
+[[scenarios]]
+id = "join_space_001"
+name = "Join lines with space"
+description = "Use 'Alt-J' to join lines with a space between them"
+
+hints = [
+    "'Alt-J' joins lines and inserts a space",
+    "Unlike 'J', this adds a separator",
+]
+
+[scenarios.setup]
+file_content = "hello\nworld"
+cursor_position = [0, 0]
+selection = [0, 0, 1, 5]
+
+[scenarios.target]
+file_content = "hello world"
+cursor_position = [0, 5]
+selection = [0, 5, 0, 6]
+
+[scenarios.solution]
+commands = ["Alt-J"]
+description = "Press 'Alt-J' to join with space"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["join", "space", "editing"]
+commands_taught = ["Alt-J"]
+estimated_time_seconds = 10
+
+# ============================================================================
+# INDENT / DEDENT (> and < commands)
+# ============================================================================
+
+[[scenarios]]
+id = "indent_001"
+name = "Indent a line"
+description = "Use '>' to add indentation to the current line"
+
+hints = [
+    "'>' adds leading whitespace (typically spaces or tab)",
+    "Useful for formatting code blocks",
+]
+
+[scenarios.setup]
+file_content = "code"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "  code"
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = [">"]
+description = "Press '>' to indent the line (adds 2 spaces)"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["indent", "formatting", "editing"]
+commands_taught = [">"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "dedent_001"
+name = "Remove indentation"
+description = "Use '<' to remove indentation from the current line"
+
+hints = [
+    "'<' removes leading whitespace",
+    "Opposite of '>' command",
+]
+
+[scenarios.setup]
+file_content = "  code"
+cursor_position = [0, 2]
+
+[scenarios.target]
+file_content = "code"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["<"]
+description = "Press '<' to dedent the line (removes 2 spaces)"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["dedent", "formatting", "editing"]
+commands_taught = ["<"]
+estimated_time_seconds = 10
+
+# ============================================================================
+# SWITCH CASE (~ and ` commands)
+# ============================================================================
+
+[[scenarios]]
+id = "switch_case_001"
+name = "Toggle character case"
+description = "Use '~' to toggle the case of selected character"
+
+hints = [
+    "'~' toggles between upper and lower case",
+    "Works on the character under cursor",
+]
+
+[scenarios.setup]
+file_content = "hello"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "Hello"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["~"]
+description = "Press '~' to toggle the first character's case"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["case", "toggle", "editing"]
+commands_taught = ["~"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "switch_case_002"
+name = "Toggle selected text case"
+description = "Select text and toggle case using '~'"
+
+hints = [
+    "First select the text you want to toggle",
+    "'~' toggles case of all selected characters",
+]
+
+[scenarios.setup]
+file_content = "abc"
+cursor_position = [0, 0]
+selection = [0, 0, 0, 3]
+
+[scenarios.target]
+file_content = "ABC"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["~"]
+description = "Press '~' to toggle case of selected text"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["case", "toggle", "editing", "selection"]
+commands_taught = ["~"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "switch_case_alt_001"
+name = "Switch case with backtick"
+description = "Use '`' to toggle case (alternative to '~')"
+
+hints = [
+    "'`' is an alternative to '~' for case toggling",
+    "Both commands work the same way",
+]
+
+[scenarios.setup]
+file_content = "World"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "world"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["`"]
+description = "Press '`' to toggle the first character's case"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["case", "toggle", "editing"]
+commands_taught = ["`"]
+estimated_time_seconds = 10
+
+# ============================================================================
+# REPLACE WITH YANKED (R command)
+# ============================================================================
+
+# Note: Replace with yanked (R) scenario removed - complex yank/paste interaction
+# requires more sophisticated setup. To be addressed in future updates.
+

@@ -65,9 +65,12 @@ pub enum SortMode {
     /// Uncompleted → Completed (requires profile)
     ByProgress,
 
-    /// Category groups, then difficulty within each (recommended default)
-    #[default]
+    /// Category groups, then difficulty within each
     ByCategoryThenDifficulty,
+
+    /// Difficulty first, then category within each (recommended for training)
+    #[default]
+    ByDifficultyThenCategory,
 
     /// Weak (low mastery) → Strong (requires profile)
     ByMastery,
@@ -75,16 +78,22 @@ pub enum SortMode {
 
 impl ScenarioCollection {
     /// Create a new collection from a vector of scenarios
+    ///
+    /// Applies the default sort mode (ByDifficultyThenCategory) on creation.
     pub fn new(scenarios: Vec<Scenario>) -> Self {
         let count = scenarios.len();
         let filtered_indices: Vec<usize> = (0..count).collect();
 
-        Self {
+        let mut collection = Self {
             scenarios,
             filtered_indices,
             active_filter: ScenarioFilter::default(),
             active_sort: SortMode::default(),
-        }
+        };
+
+        // Apply default sort on creation
+        collection.sort(SortMode::default(), None);
+        collection
     }
 
     /// Apply a filter to the collection
@@ -157,6 +166,20 @@ impl ScenarioCollection {
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner);
                     (category, difficulty)
+                });
+            }
+
+            SortMode::ByDifficultyThenCategory => {
+                self.filtered_indices.sort_by_key(|&idx| {
+                    let metadata = self.scenarios[idx].metadata.as_ref();
+                    let difficulty = metadata
+                        .and_then(|m| m.difficulty)
+                        .unwrap_or(Difficulty::Beginner);
+                    let category = metadata
+                        .and_then(|m| m.category)
+                        .map(|c| c as u8)
+                        .unwrap_or(255);
+                    (difficulty, category)
                 });
             }
 

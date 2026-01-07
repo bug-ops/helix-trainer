@@ -18,6 +18,7 @@ fn create_scenario(
         setup: Setup {
             file_content: "test".to_string(),
             cursor_position: (0, 0),
+            selection: None,
         },
         target: TargetState {
             file_content: "test".to_string(),
@@ -383,6 +384,52 @@ fn test_sort_by_category_then_difficulty() {
 }
 
 #[test]
+fn test_sort_by_difficulty_then_category() {
+    let scenarios = vec![
+        create_scenario(
+            "001",
+            "Movement Advanced",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Advanced),
+            vec!["w"],
+        ),
+        create_scenario(
+            "002",
+            "Editing Beginner",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["x"],
+        ),
+        create_scenario(
+            "003",
+            "Movement Beginner",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "004",
+            "Editing Advanced",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Advanced),
+            vec!["c"],
+        ),
+    ];
+
+    let mut collection = ScenarioCollection::new(scenarios);
+    collection.sort(SortMode::ByDifficultyThenCategory, None);
+
+    let sorted = collection.get_filtered();
+    // Should sort by difficulty first, then by category within each difficulty level
+    // Beginner: Movement, Editing (category order)
+    // Advanced: Movement, Editing (category order)
+    assert_eq!(sorted[0].name, "Movement Beginner");
+    assert_eq!(sorted[1].name, "Editing Beginner");
+    assert_eq!(sorted[2].name, "Movement Advanced");
+    assert_eq!(sorted[3].name, "Editing Advanced");
+}
+
+#[test]
 fn test_reset_filter() {
     let scenarios = vec![
         create_scenario(
@@ -544,6 +591,7 @@ fn test_scenarios_without_metadata() {
         setup: Setup {
             file_content: "test".to_string(),
             cursor_position: (0, 0),
+            selection: None,
         },
         target: TargetState {
             file_content: "test".to_string(),
@@ -602,8 +650,8 @@ fn test_active_filter_and_sort() {
 
     let mut collection = ScenarioCollection::new(scenarios);
 
-    // Check initial state
-    assert_eq!(collection.active_sort(), SortMode::ByCategoryThenDifficulty);
+    // Check initial state (default is ByDifficultyThenCategory)
+    assert_eq!(collection.active_sort(), SortMode::ByDifficultyThenCategory);
 
     // Apply filter and sort
     let filter = ScenarioFilter {

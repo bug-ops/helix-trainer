@@ -18,6 +18,8 @@ pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError>
 }
 
 /// Paste clipboard content after cursor
+///
+/// In Helix, cursor stays on the last pasted character
 pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     if let Some(text) = &sim.clipboard {
         let head = sim.selection.primary().head;
@@ -31,13 +33,16 @@ pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
         sim.apply_transaction(transaction);
 
-        let new_pos = insert_pos + text_len;
-        sim.selection = Selection::point(new_pos.min(sim.doc.len_chars()));
+        // Cursor stays on last pasted character (Helix behavior)
+        let new_pos = insert_pos + text_len.saturating_sub(1);
+        sim.selection = Selection::point(new_pos.min(sim.doc.len_chars().saturating_sub(1)));
     }
     Ok(())
 }
 
 /// Paste clipboard content before cursor
+///
+/// In Helix, cursor stays on the last pasted character
 pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     if let Some(text) = &sim.clipboard {
         let head = sim.selection.primary().head;
@@ -50,8 +55,9 @@ pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Us
 
         sim.apply_transaction(transaction);
 
-        let new_pos = head + text_len;
-        sim.selection = Selection::point(new_pos.min(sim.doc.len_chars()));
+        // Cursor stays on last pasted character (Helix behavior)
+        let new_pos = head + text_len.saturating_sub(1);
+        sim.selection = Selection::point(new_pos.min(sim.doc.len_chars().saturating_sub(1)));
     }
     Ok(())
 }

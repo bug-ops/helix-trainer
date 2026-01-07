@@ -261,16 +261,27 @@ impl EditorState {
     /// ```ignore
     /// use helix_trainer::game::EditorState;
     ///
-    /// let state = EditorState::from_setup("line 1\nline 2\n", [1, 0])?;
+    /// let state = EditorState::from_setup("line 1\nline 2\n", [1, 0], None)?;
     /// assert_eq!(state.cursor_position().row, 1);
     /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
     pub fn from_setup(
         file_content: &str,
         cursor_position: [usize; 2],
+        selection: Option<[usize; 4]>,
     ) -> Result<Self, SecurityError> {
         let cursor = CursorPosition::from_array(cursor_position)?;
-        Self::new(file_content.to_string(), cursor, None)
+        let sel = selection.map(|s| Selection {
+            start: CursorPosition {
+                row: s[0],
+                col: s[1],
+            },
+            end: CursorPosition {
+                row: s[2],
+                col: s[3],
+            },
+        });
+        Self::new(file_content.to_string(), cursor, sel)
     }
 
     /// Create EditorState from target configuration with optional selection
@@ -511,7 +522,9 @@ impl EditorState {
 
     /// Check if this state matches another state (for completion checking).
     ///
-    /// Compares both content and cursor position. Selection is not compared.
+    /// Compares content, cursor position, and selection (if target has one).
+    /// When the target state has a selection, both content and selection must match.
+    /// When the target has no selection, only content and cursor are compared.
     ///
     /// # Examples
     ///
@@ -525,7 +538,18 @@ impl EditorState {
     /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
     pub fn matches(&self, other: &EditorState) -> bool {
-        self.content == other.content && self.cursor_pos == other.cursor_pos
+        // Content must always match
+        if self.content != other.content {
+            return false;
+        }
+
+        // If target has selection, check selection matches (ignore cursor)
+        if let Some(target_sel) = other.selection {
+            return self.selection.is_some_and(|sel| sel == target_sel);
+        }
+
+        // If target has no selection, check cursor position
+        self.cursor_pos == other.cursor_pos
     }
 
     /// Check if content matches another state (ignoring cursor and selection).

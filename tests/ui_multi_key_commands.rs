@@ -33,6 +33,7 @@ fn create_test_scenario(
         setup: Setup {
             file_content: setup_content.to_string(),
             cursor_position: setup_cursor,
+            selection: None,
         },
         target: TargetState {
             file_content: target_content.to_string(),

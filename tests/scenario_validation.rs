@@ -96,6 +96,12 @@ const SPECIAL_KEY_COMMANDS: &[&str] = &[
     "ArrowDown",  // Cursor movement in insert mode
 ];
 
+/// Helper to check if command is a modifier key command (Alt-*, Ctrl-*)
+/// These are received as single key events, not character by character
+fn is_modifier_key_command(cmd: &str) -> bool {
+    cmd.starts_with("Alt-") || cmd.starts_with("Ctrl-")
+}
+
 /// Commands that enter insert mode
 const INSERT_MODE_COMMANDS: &[&str] = &["i", "a", "I", "A", "o", "O", "c"];
 
@@ -120,6 +126,12 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
             if cmd == "Escape" {
                 in_insert_mode = false;
             }
+            continue;
+        }
+
+        // Handle modifier key commands (Alt-*, Ctrl-*) - these are single key events
+        // They bypass character-by-character parsing since they're received atomically
+        if is_modifier_key_command(cmd) {
             continue;
         }
 
@@ -311,14 +323,18 @@ fn test_all_scenarios_execute_solution() {
                         }
                         SessionAfterAction::StillActive(s) => {
                             if !s.check_completion() {
+                                let current = s.current_state();
+                                let target = s.target_state();
                                 failed_scenarios.push((
                                     scenario.id.clone(),
                                     format!(
-                                        "Solution did not complete scenario. Current state:\n  Content: '{}'\n  Cursor: {:?}\n  Target content: '{}'\n  Target cursor: {:?}",
-                                        s.current_state().content(),
-                                        s.current_state().cursor_position(),
-                                        s.target_state().content(),
-                                        s.target_state().cursor_position()
+                                        "Solution did not complete scenario.\n  Current: content='{}', cursor={:?}, selection={:?}\n  Target:  content='{}', cursor={:?}, selection={:?}",
+                                        current.content(),
+                                        current.cursor_position(),
+                                        current.selection(),
+                                        target.content(),
+                                        target.cursor_position(),
+                                        target.selection()
                                     ),
                                 ));
                             }

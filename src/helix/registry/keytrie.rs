@@ -92,9 +92,14 @@ impl KeyTrie {
         trie
     }
 
-    /// Register a single-key command
+    /// Register a single-key command (including modifier keys like Alt-x, Ctrl-c)
     pub fn register_single(&mut self, key: &'static str) {
         self.single_key.insert(key);
+    }
+
+    /// Check if a key string is a registered single-key command (including modifiers)
+    pub fn is_registered_single(&self, key: &str) -> bool {
+        self.single_key.contains(key)
     }
 
     /// Resolve a command buffer to a KeyMatch
@@ -109,6 +114,12 @@ impl KeyTrie {
     pub fn resolve(&self, buffer: &str) -> KeyMatch {
         if buffer.is_empty() {
             return KeyMatch::Invalid;
+        }
+
+        // Check for modifier key commands first (Alt-*, Ctrl-*)
+        // These are registered as single commands but have longer strings
+        if self.single_key.contains(buffer) && buffer.len() > 1 {
+            return KeyMatch::Complete(buffer.to_string());
         }
 
         // Check for count prefix (e.g., "3h", "12j", "10w")
@@ -163,8 +174,45 @@ impl KeyTrie {
                 return KeyMatch::Complete(buffer.to_string());
             }
 
+            // Match mode text object prefixes (ma, mi) - waiting for object char
+            if buffer == "ma" || buffer == "mi" {
+                return KeyMatch::Partial;
+            }
+
+            // Match mode surround prefixes (ms, md) - waiting for char
+            if buffer == "ms" || buffer == "md" {
+                return KeyMatch::Partial;
+            }
+
+            // Match mode surround replace prefix (mr) - waiting for from/to chars
+            if buffer == "mr" {
+                return KeyMatch::Partial;
+            }
+
             // Invalid 2-char sequence
             return KeyMatch::Invalid;
+        }
+
+        // Check for 3-char match mode commands
+        if len == 3 && first_char == 'm' {
+            let second_char = buffer.chars().nth(1).unwrap();
+            // Text object commands: ma{obj} or mi{obj}
+            if second_char == 'a' || second_char == 'i' {
+                return KeyMatch::Complete(buffer.to_string());
+            }
+            // Surround add/delete: ms{char} or md{char}
+            if second_char == 's' || second_char == 'd' {
+                return KeyMatch::Complete(buffer.to_string());
+            }
+            // Surround replace: mr{from} - still waiting for {to}
+            if second_char == 'r' {
+                return KeyMatch::Partial;
+            }
+        }
+
+        // Check for 4-char surround replace command: mr{from}{to}
+        if len == 4 && buffer.starts_with("mr") {
+            return KeyMatch::Complete(buffer.to_string());
         }
 
         // Single character
@@ -366,5 +414,72 @@ mod tests {
         assert_eq!(trie.resolve("3gg"), KeyMatch::Invalid);
         assert_eq!(trie.resolve("3mm"), KeyMatch::Invalid);
         assert_eq!(trie.resolve("3fx"), KeyMatch::Invalid);
+    }
+
+    // Match mode text object tests (Phase 1)
+
+    #[test]
+    fn test_match_mode_text_object_prefixes_partial() {
+        let trie = KeyTrie::new();
+        // ma and mi are partial - waiting for object char
+        assert_eq!(trie.resolve("ma"), KeyMatch::Partial);
+        assert_eq!(trie.resolve("mi"), KeyMatch::Partial);
+    }
+
+    #[test]
+    fn test_match_mode_text_object_commands_complete() {
+        let trie = KeyTrie::new();
+        // 3-char text object commands are complete
+        assert_eq!(trie.resolve("miw"), KeyMatch::Complete("miw".to_string()));
+        assert_eq!(trie.resolve("maw"), KeyMatch::Complete("maw".to_string()));
+        assert_eq!(trie.resolve("mi("), KeyMatch::Complete("mi(".to_string()));
+        assert_eq!(trie.resolve("ma("), KeyMatch::Complete("ma(".to_string()));
+        assert_eq!(trie.resolve("mi["), KeyMatch::Complete("mi[".to_string()));
+        assert_eq!(trie.resolve("ma["), KeyMatch::Complete("ma[".to_string()));
+        assert_eq!(trie.resolve("mi{"), KeyMatch::Complete("mi{".to_string()));
+        assert_eq!(trie.resolve("ma{"), KeyMatch::Complete("ma{".to_string()));
+        assert_eq!(trie.resolve("mip"), KeyMatch::Complete("mip".to_string()));
+        assert_eq!(trie.resolve("map"), KeyMatch::Complete("map".to_string()));
+        assert_eq!(trie.resolve("mi\""), KeyMatch::Complete("mi\"".to_string()));
+        assert_eq!(trie.resolve("ma'"), KeyMatch::Complete("ma'".to_string()));
+    }
+
+    #[test]
+    fn test_match_mode_surround_prefixes_partial() {
+        let trie = KeyTrie::new();
+        // ms, md, mr are partial - waiting for char(s)
+        assert_eq!(trie.resolve("ms"), KeyMatch::Partial);
+        assert_eq!(trie.resolve("md"), KeyMatch::Partial);
+        assert_eq!(trie.resolve("mr"), KeyMatch::Partial);
+    }
+
+    #[test]
+    fn test_match_mode_surround_add_delete_complete() {
+        let trie = KeyTrie::new();
+        // ms{char} and md{char} are complete
+        assert_eq!(trie.resolve("ms("), KeyMatch::Complete("ms(".to_string()));
+        assert_eq!(trie.resolve("ms["), KeyMatch::Complete("ms[".to_string()));
+        assert_eq!(trie.resolve("md("), KeyMatch::Complete("md(".to_string()));
+        assert_eq!(trie.resolve("md{"), KeyMatch::Complete("md{".to_string()));
+    }
+
+    #[test]
+    fn test_match_mode_surround_replace_partial_then_complete() {
+        let trie = KeyTrie::new();
+        // mr{from} is partial - waiting for 'to' char
+        assert_eq!(trie.resolve("mr("), KeyMatch::Partial);
+        assert_eq!(trie.resolve("mr["), KeyMatch::Partial);
+        // mr{from}{to} is complete
+        assert_eq!(trie.resolve("mr()"), KeyMatch::Complete("mr()".to_string()));
+        assert_eq!(trie.resolve("mr(["), KeyMatch::Complete("mr([".to_string()));
+        assert_eq!(trie.resolve("mr{("), KeyMatch::Complete("mr{(".to_string()));
+    }
+
+    #[test]
+    fn test_match_mode_invalid_fourth_char() {
+        let trie = KeyTrie::new();
+        // 4-char sequences that don't start with 'mr' are invalid
+        assert_eq!(trie.resolve("miwa"), KeyMatch::Invalid);
+        assert_eq!(trie.resolve("mawx"), KeyMatch::Invalid);
     }
 }

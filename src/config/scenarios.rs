@@ -101,6 +101,9 @@ pub struct Scenario {
 pub struct Setup {
     pub file_content: String,
     pub cursor_position: (usize, usize),
+    /// Optional selection range: [start_line, start_col, end_line, end_col]
+    #[serde(default)]
+    pub selection: Option<[usize; 4]>,
 }
 
 /// Target state to achieve

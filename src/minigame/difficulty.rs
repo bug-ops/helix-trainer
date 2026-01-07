@@ -355,6 +355,7 @@ mod tests {
             setup: Setup {
                 file_content: "test".to_string(),
                 cursor_position: (0, 0),
+                selection: None,
             },
             target: TargetState {
                 file_content: "test".to_string(),

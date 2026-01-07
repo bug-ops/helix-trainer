@@ -50,7 +50,9 @@ pub struct XPBreakdown {
     pub base_xp: u64,
     pub perfect_bonus: u64,
     pub first_today_bonus: u64,
-    pub mastery_multiplier: f64,           // Mastery-based XP scaling
+    pub mastery_multiplier: f64, // Combined XP scaling (mastery * repeat)
+    pub mastery_factor: f64,     // Just mastery level factor
+    pub repeat_penalty: f64,     // Just session repeat penalty
     pub quest_bonuses: Vec<(String, u64)>, // (quest description, bonus xp)
     pub total_xp: u64,
 }
@@ -952,6 +954,7 @@ mod tests {
             setup: Setup {
                 file_content: "line 1\nline 2\nline 3\n".to_string(),
                 cursor_position: (0, 0),
+                selection: None,
             },
             target: TargetState {
                 file_content: "line 2\nline 3\n".to_string(),

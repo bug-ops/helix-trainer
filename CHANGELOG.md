@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-01-07
+
+### Added
+
+- **141 new training scenarios** covering all command categories:
+  - Movement: basic, word, line, paragraph, search, text objects
+  - Editing: insert, delete, change, replace, case toggle, surround
+  - Selection: expand, shrink, line selection, text object selection
+  - Clipboard: yank, paste, registers
+  - Advanced: macros, multiple cursors, search & replace
+
+- **Quest system** with 5 quest types:
+  - Command practice, scenario completion, speed runs
+  - Time invested, exploration quests
+
+### Fixed
+
+- **Helix behavior accuracy improvements**
+  - `~` (switch_case) now keeps cursor in place and toggles entire selection
+  - `p`/`P` (paste) now keeps cursor on last pasted character, not after it
+  - `i` (insert mode) now collapses selection when entering insert mode
+  - Word movements (`w`, `b`) now correctly create selections in target state
+
+- **XP breakdown display**
+  - Separated mastery factor and repeat penalty in results screen
+  - Fixed misleading "Learning: -30%" display (was showing combined reduction)
+
+- **Scenario fixes**
+  - Fixed scenario sorting to sort by difficulty first
+  - Added missing selection fields to 13 movement scenarios
+  - Fixed switch_case scenarios to match new cursor behavior
+  - Fixed clipboard scenarios cursor positions
+
+### Changed
+
+- Security: Added ignore for RUSTSEC-2025-0141 (bincode unmaintained, transitive dep)
+
 ## [0.5.1] - 2026-01-07
 
 ### Changed

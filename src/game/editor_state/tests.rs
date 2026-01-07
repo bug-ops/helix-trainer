@@ -25,11 +25,22 @@ fn test_cursor_column_out_of_bounds() {
 
 #[test]
 fn test_from_setup() {
-    let state = EditorState::from_setup("line 1\nline 2\n", [1, 0]);
+    let state = EditorState::from_setup("line 1\nline 2\n", [1, 0], None);
     assert!(state.is_ok());
     let state = state.unwrap();
     assert_eq!(state.cursor_position().row, 1);
     assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_from_setup_with_selection() {
+    let state = EditorState::from_setup("hello world", [0, 0], Some([0, 0, 0, 5]));
+    assert!(state.is_ok());
+    let state = state.unwrap();
+    assert!(state.selection().is_some());
+    let sel = state.selection().unwrap();
+    assert_eq!(sel.start.col, 0);
+    assert_eq!(sel.end.col, 5);
 }
 
 #[test]
@@ -169,4 +180,79 @@ fn test_default_editor_state() {
     assert_eq!(state.cursor_position().row, 0);
     assert_eq!(state.cursor_position().col, 0);
     assert!(state.selection().is_none());
+}
+
+// Tests for matches() with selection comparison (Phase 1 text objects)
+
+#[test]
+fn test_matches_with_target_selection() {
+    // Current state has selection matching target - should match
+    let cursor = CursorPosition::new(0, 5).unwrap();
+    let sel = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let state1 = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+    let state2 = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+
+    assert!(state1.matches(&state2));
+}
+
+#[test]
+fn test_matches_selection_mismatch() {
+    // Same content, same cursor, different selections - should NOT match
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 3).unwrap(),
+    );
+    let state1 = EditorState::new("hello world".to_string(), cursor, Some(sel1)).unwrap();
+    let state2 = EditorState::new("hello world".to_string(), cursor, Some(sel2)).unwrap();
+
+    assert!(!state1.matches(&state2));
+}
+
+#[test]
+fn test_matches_target_has_selection_current_does_not() {
+    // Target has selection, current doesn't - should NOT match
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let state1 = EditorState::new("hello world".to_string(), cursor, None).unwrap();
+    let state2 = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+
+    assert!(!state1.matches(&state2));
+}
+
+#[test]
+fn test_matches_current_has_selection_target_does_not() {
+    // Current has selection, target doesn't - checks cursor only, should match
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let state1 = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+    let state2 = EditorState::new("hello world".to_string(), cursor, None).unwrap();
+
+    // When target has no selection, only cursor is checked
+    assert!(state1.matches(&state2));
+}
+
+#[test]
+fn test_from_target_with_selection() {
+    let state = EditorState::from_target("hello world", [0, 5], Some([0, 0, 0, 5])).unwrap();
+
+    assert!(state.selection().is_some());
+    let sel = state.selection().unwrap();
+    assert_eq!(sel.start.row, 0);
+    assert_eq!(sel.start.col, 0);
+    assert_eq!(sel.end.row, 0);
+    assert_eq!(sel.end.col, 5);
 }

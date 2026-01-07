@@ -48,13 +48,14 @@ impl ScenarioState {
     /// assert_eq!(state.current_state, state.initial_state);
     /// ```
     pub fn from_scenario(scenario: &Scenario) -> Result<Self, UserError> {
-        // Create initial state from scenario setup
+        // Create initial state from scenario setup (with optional selection)
         let initial_state = EditorState::from_setup(
             &scenario.setup.file_content,
             [
                 scenario.setup.cursor_position.0,
                 scenario.setup.cursor_position.1,
             ],
+            scenario.setup.selection,
         )
         .map_err(|_| UserError::ScenarioTooComplex)?;
 
@@ -119,6 +120,7 @@ mod tests {
             setup: Setup {
                 file_content: "hello".to_string(),
                 cursor_position: (0, 0),
+                selection: None,
             },
             target: TargetState {
                 file_content: "world".to_string(),

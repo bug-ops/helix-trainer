@@ -644,3 +644,184 @@ difficulty = "hard"
 
 [quests.params]
 target_commands = 20
+
+# ============================================================================
+# NEW COMMAND QUESTS (v0.5.1)
+# ============================================================================
+
+# --- Text Object Commands ---
+
+[[quests]]
+id = "cmd_miw_medium"
+name = "Inner Word Selection"
+description = "Select inner word 5 times using 'miw'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "miw"
+target = 5
+
+[[quests]]
+id = "cmd_maw_medium"
+name = "Around Word Selection"
+description = "Select around word 5 times using 'maw'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "maw"
+target = 5
+
+[[quests]]
+id = "cmd_mip_hard"
+name = "Inner Paragraph"
+description = "Select inner paragraph 3 times using 'mip'"
+type = "command_practice"
+difficulty = "hard"
+
+[quests.params]
+command = "mip"
+target = 3
+
+# --- Surround Commands ---
+
+[[quests]]
+id = "cmd_ms_medium"
+name = "Add Surround"
+description = "Add surrounding pairs 3 times using 'ms'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "ms"
+target = 3
+
+[[quests]]
+id = "cmd_md_medium"
+name = "Delete Surround"
+description = "Delete surrounding pairs 3 times using 'md'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "md"
+target = 3
+
+[[quests]]
+id = "cmd_mr_hard"
+name = "Replace Surround"
+description = "Replace surrounding pairs 3 times using 'mr'"
+type = "command_practice"
+difficulty = "hard"
+
+[quests.params]
+command = "mr"
+target = 3
+
+# --- Paragraph Movement ---
+
+[[quests]]
+id = "cmd_brace_open_medium"
+name = "Previous Paragraph"
+description = "Jump to previous paragraph 5 times using '{'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "{"
+target = 5
+
+[[quests]]
+id = "cmd_brace_close_medium"
+name = "Next Paragraph"
+description = "Jump to next paragraph 5 times using '}'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "}"
+target = 5
+
+# --- Advanced Selection ---
+
+[[quests]]
+id = "cmd_underscore_medium"
+name = "Trim Selection"
+description = "Trim whitespace from selection 3 times using '_'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "_"
+target = 3
+
+[[quests]]
+id = "cmd_C_hard"
+name = "Copy Selection Next"
+description = "Copy selection to next line 3 times using 'C'"
+type = "command_practice"
+difficulty = "hard"
+
+[quests.params]
+command = "C"
+target = 3
+
+# --- Advanced Editing ---
+
+[[quests]]
+id = "cmd_tilde_medium"
+name = "Toggle Case"
+description = "Toggle character case 10 times using '~'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "~"
+target = 10
+
+[[quests]]
+id = "cmd_indent_medium"
+name = "Indent Lines"
+description = "Indent lines 5 times using '>'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = ">"
+target = 5
+
+[[quests]]
+id = "cmd_dedent_medium"
+name = "Dedent Lines"
+description = "Remove indentation 5 times using '<'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "<"
+target = 5
+
+# --- Search Commands ---
+
+[[quests]]
+id = "cmd_star_medium"
+name = "Word Search"
+description = "Search for word under cursor 5 times using '*'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "*"
+target = 5
+
+[[quests]]
+id = "cmd_n_medium"
+name = "Next Match Navigation"
+description = "Navigate to next search match 10 times using 'n'"
+type = "command_practice"
+difficulty = "medium"
+
+[quests.params]
+command = "n"
+target = 10

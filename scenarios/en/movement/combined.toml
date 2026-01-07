@@ -71,12 +71,12 @@ estimated_time_seconds = 10
 
 [[scenarios]]
 id = "combined_move_003"
-name = "Word and character movement"
-description = "Use 'w' and character commands"
+name = "Jump to second word"
+description = "Use 'w' to navigate to next word"
 
 hints = [
-    "'w' jumps to next word",
-    "Then fine-tune with 'h' or 'l'",
+    "'w' jumps to next word start",
+    "Efficient for word navigation",
 ]
 
 [scenarios.setup]
@@ -85,14 +85,15 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "one two three"
-cursor_position = [0, 5]
+cursor_position = [0, 4]
+selection = [0, 0, 0, 4]
 
 [scenarios.solution]
-commands = ["w", "l", "l"]
-description = "Jump word then move right twice"
+commands = ["w"]
+description = "Jump to next word"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -100,8 +101,8 @@ tolerance = 0
 category = "movement"
 difficulty = "beginner"
 tags = ["combined", "word"]
-commands_taught = ["w", "l"]
-estimated_time_seconds = 10
+commands_taught = ["w"]
+estimated_time_seconds = 5
 
 [[scenarios]]
 id = "combined_move_004"
@@ -222,6 +223,7 @@ cursor_position = [0, 14]
 [scenarios.target]
 file_content = "one two three four"
 cursor_position = [0, 4]
+selection = [0, 4, 0, 8]
 
 [scenarios.solution]
 commands = ["b", "b"]
@@ -256,6 +258,7 @@ cursor_position = [0, 0]
 [scenarios.target]
 file_content = "alpha beta gamma delta"
 cursor_position = [0, 17]
+selection = [0, 11, 0, 17]
 
 [scenarios.solution]
 commands = ["w", "w", "w"]

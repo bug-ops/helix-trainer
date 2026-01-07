@@ -13,12 +13,7 @@ use crate::helix::repeat::is_repeatable_command;
 use crate::security::UserError;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-/// Convert a command string to KeyEvents
-///
-/// This helper converts string commands (like "x", "gg") back into
-/// the KeyEvent sequence that would have generated them.
 fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
-    // Multi-key sequences
     if cmd == CMD_GOTO_FILE_START {
         return vec![
             KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
@@ -26,7 +21,6 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
-    // Special keys
     if cmd == CMD_ESCAPE {
         return vec![KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)];
     }
@@ -46,7 +40,6 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         return vec![KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)];
     }
 
-    // Replace command (e.g., "rx" -> r + x)
     if cmd.starts_with('r') && cmd.len() == 2 {
         let ch = cmd.chars().nth(1).unwrap();
         return vec![
@@ -55,7 +48,6 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
-    // Find/till commands (e.g., "fx" -> f + x)
     if (cmd.starts_with('f')
         || cmd.starts_with('t')
         || cmd.starts_with('F')
@@ -70,7 +62,6 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
-    // Goto mode commands (e.g., "gh" -> g + h)
     if cmd.starts_with('g') && cmd.len() == 2 {
         let ch = cmd.chars().nth(1).unwrap();
         return vec![
@@ -79,7 +70,6 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
-    // Match mode surround commands (e.g., "ms(" -> m + s + '(', "md(" -> m + d + '(')
     if cmd.starts_with("ms") && cmd.len() == 3 {
         let ch = cmd.chars().nth(2).unwrap();
         return vec![
@@ -98,7 +88,6 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
-    // Match mode surround replace (e.g., "mr()" -> m + r + '(' + ')')
     if cmd.starts_with("mr") && cmd.len() == 4 {
         let from_ch = cmd.chars().nth(2).unwrap();
         let to_ch = cmd.chars().nth(3).unwrap();
@@ -110,7 +99,6 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
-    // Match mode match brackets (e.g., "mm" -> m + m)
     if cmd == CMD_MATCH_BRACKETS {
         return vec![
             KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
@@ -118,7 +106,6 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
-    // Text object commands (e.g., "maw" -> m + a + w, "mi(" -> m + i + '(')
     if cmd.starts_with("ma") && cmd.len() == 3 {
         let obj = cmd.chars().nth(2).unwrap();
         return vec![
@@ -137,26 +124,19 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         ];
     }
 
-    // Alt-; for flip selections
     if cmd == CMD_FLIP_SELECTIONS {
         return vec![KeyEvent::new(KeyCode::Char(';'), KeyModifiers::ALT)];
     }
 
-    // Single character commands
-    // Check length first for performance (cheaper than iterator operations)
     if cmd.len() == 1
         && let Some(ch) = cmd.chars().next()
     {
         vec![KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE)]
     } else {
-        // Unknown or complex command - return empty
         Vec::new()
     }
 }
 
-/// Check if a command is an insert mode entry command
-///
-/// Returns true for commands that transition from Normal to Insert mode.
 fn is_insert_command(cmd: &str) -> bool {
     cmd == CMD_INSERT
         || cmd == CMD_APPEND
@@ -167,21 +147,15 @@ fn is_insert_command(cmd: &str) -> bool {
         || cmd == CMD_CHANGE
 }
 
-/// Execute a command in Insert mode (internal)
-///
-/// Handles text input, special keys (Escape, Backspace), and arrow key navigation.
-/// Records actions in the insert mode recorder unless we're currently repeating.
 fn execute_insert_mode_command_internal(
     sim: &mut HelixSimulator<InsertMode>,
     cmd: &str,
 ) -> Result<(), UserError> {
     if cmd == CMD_ESCAPE {
-        // Finish insert mode recording before exiting (unless repeating)
         if !sim.is_repeating {
             let action = sim.repeat_buffer.insert_recorder_mut().finish();
             sim.repeat_buffer.set_last_action(action);
         }
-        // Mode transition handled by caller
         Ok(())
     } else if cmd == CMD_BACKSPACE {
         sim.backspace()
@@ -218,10 +192,8 @@ fn execute_insert_mode_command_internal(
         }
         result
     } else {
-        // Regular text input
         let result = sim.insert_text(cmd);
         if result.is_ok() && !sim.is_repeating {
-            // Record each character
             for ch in cmd.chars() {
                 sim.repeat_buffer.insert_recorder_mut().record_char(ch);
             }
@@ -230,58 +202,43 @@ fn execute_insert_mode_command_internal(
     }
 }
 
-/// Execute a command in Normal mode (internal, public for repeat functionality)
-///
-/// Routes commands to appropriate handlers via the Command Registry (O(1) dispatch).
-/// Returns an error for unknown commands. Does NOT handle mode transitions.
 pub(super) fn execute_normal_mode_command_internal(
     sim: &mut HelixSimulator<NormalMode>,
     cmd: &str,
 ) -> Result<(), UserError> {
     use crate::helix::registry::normal_registry;
 
-    // Get the global command registry
     let registry = normal_registry();
 
-    // Special handling for parametric commands (r/f/F/t/T + character)
-    // These need character extraction before dispatch
     if cmd.len() == 2 {
         let first = cmd.chars().next().unwrap();
         let second = cmd.chars().nth(1).unwrap();
 
         match first {
             'r' => {
-                // Replace character command
                 sim.replace_char(second)?;
                 return Ok(());
             }
             'f' => {
-                // Find next character
                 movement::find_next_char(sim, second, 1)?;
                 return Ok(());
             }
             'F' => {
-                // Find previous character
                 movement::find_prev_char(sim, second, 1)?;
                 return Ok(());
             }
             't' => {
-                // Till next character
                 movement::till_next_char(sim, second, 1)?;
                 return Ok(());
             }
             'T' => {
-                // Till previous character
                 movement::till_prev_char(sim, second, 1)?;
                 return Ok(());
             }
-            _ => {
-                // Not a parametric command, try registry below
-            }
+            _ => {}
         }
     }
 
-    // Special handling for surround commands (ms{char}, md{char})
     if cmd.len() == 3 && cmd.starts_with("ms") {
         let surround_char = cmd.chars().nth(2).unwrap();
         editing::surround_selection(sim, surround_char)?;
@@ -294,7 +251,6 @@ pub(super) fn execute_normal_mode_command_internal(
         return Ok(());
     }
 
-    // Special handling for surround replace (mr{from}{to})
     if cmd.len() == 4 && cmd.starts_with("mr") {
         let from_char = cmd.chars().nth(2).unwrap();
         let to_char = cmd.chars().nth(3).unwrap();
@@ -302,7 +258,6 @@ pub(super) fn execute_normal_mode_command_internal(
         return Ok(());
     }
 
-    // Special handling for text object commands (ma{obj}, mi{obj})
     if cmd.len() == 3 && cmd.starts_with("ma") {
         let obj = cmd.chars().nth(2).unwrap();
         editing::select_around_textobject(sim, obj)?;
@@ -315,35 +270,19 @@ pub(super) fn execute_normal_mode_command_internal(
         return Ok(());
     }
 
-    // Special cases that need manual handling
     if cmd == CMD_ESCAPE {
-        // No-op in normal mode
         return Ok(());
     }
 
     if cmd == CMD_REPEAT {
-        // Repeat is handled specially by execute_command_any_mode
-        // If we reach here, something is wrong but don't error
         return Ok(());
     }
 
-    // Try to execute via registry (O(1) HashMap lookup)
-    // The registry returns Err if command not found or execution failed
     registry.execute(sim, cmd)?;
 
-    // Mode transition information is returned but not used at this level
-    // Mode transitions are handled by the caller in execute_command_any_mode
     Ok(())
 }
 
-/// Record command in repeat buffer if needed (Normal mode)
-///
-/// Records normal mode commands if:
-/// - Command has valid key events
-/// - We're not currently repeating
-/// - All keys are repeatable
-///
-/// Also starts insert mode recording if entering insert mode.
 fn record_command_if_needed_normal(
     sim: &mut HelixSimulator<NormalMode>,
     key_events: &[KeyEvent],
@@ -351,8 +290,6 @@ fn record_command_if_needed_normal(
     entering_insert: bool,
     entry_command: Option<String>,
 ) {
-    // Determine if we should record this command
-    // Only record for repeatable commands, and NOT during repeat
     let should_record =
         !key_events.is_empty() && !sim.is_repeating && key_events.iter().all(is_repeatable_command);
 
@@ -361,45 +298,31 @@ fn record_command_if_needed_normal(
             .record_command(key_events.to_vec(), mode_before);
     }
 
-    // If we just entered insert mode, start recording with the entry command
     if entering_insert {
         sim.repeat_buffer.insert_recorder_mut().start(entry_command);
     }
 }
 
-/// Execute a Helix command on AnyModeSimulator (main entry point)
-///
-/// Routes commands to appropriate handlers based on mode and command type.
-/// Handles mode transitions and repeat buffer recording.
 pub(super) fn execute_command_any_mode(
     sim: &mut AnyModeSimulator,
     cmd: &str,
 ) -> Result<(), UserError> {
-    // Handle repeat command specially at the wrapper level
     if cmd == CMD_REPEAT {
         return sim.execute_repeat();
     }
 
-    // For commands that might trigger mode transitions, we need to use take/replace
-    // Take the current simulator out, process it, and put back the result
     let placeholder = AnyModeSimulator::Normal(HelixSimulator::new(String::new()));
     let old_sim = std::mem::replace(sim, placeholder);
 
     let (result, new_sim) = match old_sim {
         AnyModeSimulator::Normal(mut normal_sim) => {
-            // Execute in normal mode
             let key_events = cmd_to_key_events(cmd);
-
-            // Determine if this is an insert command
             let is_insert_cmd = is_insert_command(cmd);
-
-            // Only start recording if NOT repeating
             let should_start_recording = !normal_sim.is_repeating && is_insert_cmd;
 
             let result = execute_normal_mode_command_internal(&mut normal_sim, cmd);
 
             if result.is_ok() {
-                // If entering insert mode, capture the command used for repeat
                 let entry_cmd = if should_start_recording {
                     Some(cmd.to_string())
                 } else {
@@ -414,8 +337,6 @@ pub(super) fn execute_command_any_mode(
                     entry_cmd,
                 );
 
-                // Transition to insert mode if this is an insert command
-                // (even during repeat - we need to actually enter insert mode)
                 if is_insert_cmd {
                     (
                         result,

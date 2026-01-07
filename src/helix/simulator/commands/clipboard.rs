@@ -6,7 +6,6 @@ use helix_core::{Selection, Transaction};
 
 /// Yank (copy) current character to clipboard
 pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Copy current character to clipboard
     let head = sim.selection.primary().head;
 
     if head >= sim.doc.len_chars() {
@@ -20,7 +19,6 @@ pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError>
 
 /// Paste clipboard content after cursor
 pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Paste clipboard content after cursor
     if let Some(text) = &sim.clipboard {
         let head = sim.selection.primary().head;
         let insert_pos = (head + 1).min(sim.doc.len_chars());
@@ -33,7 +31,6 @@ pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
         sim.apply_transaction(transaction);
 
-        // Move cursor to the end of pasted text
         let new_pos = insert_pos + text_len;
         sim.selection = Selection::point(new_pos.min(sim.doc.len_chars()));
     }
@@ -42,7 +39,6 @@ pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
 /// Paste clipboard content before cursor
 pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Paste clipboard content before cursor
     if let Some(text) = &sim.clipboard {
         let head = sim.selection.primary().head;
         let text_len = text.chars().count();
@@ -54,7 +50,6 @@ pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Us
 
         sim.apply_transaction(transaction);
 
-        // Move cursor to the end of pasted text
         let new_pos = head + text_len;
         sim.selection = Selection::point(new_pos.min(sim.doc.len_chars()));
     }

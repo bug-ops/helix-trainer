@@ -1,6 +1,4 @@
 //! View commands (z, zt, zb, zm, zj, zk)
-//!
-//! Provides viewport control for the Helix simulator.
 
 use crate::helix::simulator::HelixSimulator;
 use crate::security::UserError;
@@ -49,8 +47,6 @@ pub fn view_center_horizontal<M: crate::helix::simulator::EditorMode>(
     let cursor_line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(cursor_line);
     let cursor_col = head - line_start;
-
-    // Get line width (approximate)
     let line_end = if cursor_line + 1 < sim.doc.len_lines() {
         sim.doc.line_to_char(cursor_line + 1)
     } else {

@@ -65,9 +65,12 @@ pub enum SortMode {
     /// Uncompleted → Completed (requires profile)
     ByProgress,
 
-    /// Category groups, then difficulty within each (recommended default)
-    #[default]
+    /// Category groups, then difficulty within each
     ByCategoryThenDifficulty,
+
+    /// Difficulty first, then category within each (recommended for training)
+    #[default]
+    ByDifficultyThenCategory,
 
     /// Weak (low mastery) → Strong (requires profile)
     ByMastery,
@@ -157,6 +160,20 @@ impl ScenarioCollection {
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner);
                     (category, difficulty)
+                });
+            }
+
+            SortMode::ByDifficultyThenCategory => {
+                self.filtered_indices.sort_by_key(|&idx| {
+                    let metadata = self.scenarios[idx].metadata.as_ref();
+                    let difficulty = metadata
+                        .and_then(|m| m.difficulty)
+                        .unwrap_or(Difficulty::Beginner);
+                    let category = metadata
+                        .and_then(|m| m.category)
+                        .map(|c| c as u8)
+                        .unwrap_or(255);
+                    (difficulty, category)
                 });
             }
 

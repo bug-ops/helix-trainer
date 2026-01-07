@@ -254,10 +254,16 @@ impl HelixSimulator<NormalMode> {
     }
 
     /// Transition to Insert mode
+    ///
+    /// Collapses the selection to cursor position, matching Helix behavior
     pub fn enter_insert_mode(self) -> HelixSimulator<InsertMode> {
+        // Collapse selection to cursor position (head of primary range)
+        let cursor_pos = self.selection.primary().head;
+        let collapsed_selection = Selection::single(cursor_pos, cursor_pos);
+
         HelixSimulator {
             doc: self.doc,
-            selection: self.selection,
+            selection: collapsed_selection,
             history: self.history,
             clipboard: self.clipboard,
             repeat_buffer: self.repeat_buffer,

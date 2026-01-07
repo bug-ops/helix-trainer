@@ -446,7 +446,8 @@ fn test_yank_and_paste_after() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "abac");
-    assert_eq!(state.cursor_position().col, 3); // Cursor after pasted 'a'
+    // In Helix, cursor stays on last pasted character
+    assert_eq!(state.cursor_position().col, 2); // Cursor on pasted 'a'
 }
 
 #[test]
@@ -471,7 +472,8 @@ fn test_yank_and_paste_before() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "cabc");
-    assert_eq!(state.cursor_position().col, 1); // Cursor after pasted 'c'
+    // In Helix, cursor stays on last pasted character
+    assert_eq!(state.cursor_position().col, 0); // Cursor on pasted 'c'
 }
 
 #[test]
@@ -1466,12 +1468,11 @@ fn test_paste_before_cursor_scenario() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "xzyz", "Content should be 'xzyz'");
-    // After paste_before, cursor moves to end of pasted text
-    // Pasted at position 1, length 1, so cursor should be at 1+1=2
+    // In Helix, cursor stays on last pasted character (position 1)
     assert_eq!(
         state.cursor_position().col,
-        2,
-        "Cursor should be at position 2 (after pasted 'z')"
+        1,
+        "Cursor should be at position 1 (on pasted 'z')"
     );
 }
 

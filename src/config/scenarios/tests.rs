@@ -27,6 +27,13 @@ description = "Change 'World' to 'Rust'"
 optimal_count = 4
 max_points = 100
 tolerance = 1
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["test"]
+commands_taught = ["w", "cw"]
+estimated_time_seconds = 10
         "#
     .to_string()
 }

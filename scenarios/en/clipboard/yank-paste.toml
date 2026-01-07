@@ -17,7 +17,7 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "abac"
-cursor_position = [0, 3]
+cursor_position = [0, 2]
 
 [scenarios.solution]
 commands = ["y", "l", "p"]
@@ -50,7 +50,7 @@ cursor_position = [0, 2]
 
 [scenarios.target]
 file_content = "xzyz"
-cursor_position = [0, 2]
+cursor_position = [0, 1]
 
 [scenarios.solution]
 commands = ["y", "h", "P"]

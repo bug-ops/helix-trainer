@@ -83,6 +83,11 @@ pub const CMD_FLIP_SELECTIONS: &str = "Alt-;";
 pub const CMD_MATCH_MODE: &str = "m";
 pub const CMD_MATCH_BRACKETS: &str = "mm";
 
+// Match mode surround commands (ms{char}, mr{from}{to}, md{char})
+pub const CMD_SURROUND_ADD_PREFIX: &str = "ms";
+pub const CMD_SURROUND_REPLACE_PREFIX: &str = "mr";
+pub const CMD_SURROUND_DELETE_PREFIX: &str = "md";
+
 // Goto mode (prefix for goto commands)
 pub const CMD_GOTO_MODE: &str = "g";
 pub const CMD_GOTO_LINE_START: &str = "gh";

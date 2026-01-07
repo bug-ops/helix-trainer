@@ -42,7 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Security: Added ignore for RUSTSEC-2025-0141 (bincode unmaintained, transitive dep)
+- CI: Switched to `Swatinem/rust-cache@v2` for proper target directory caching (faster builds)
+
+### Security
+
+- Updated `lru` crate to 0.16.3 (RUSTSEC-2026-0002 soundness fix)
+- Added ignore for RUSTSEC-2025-0141 (bincode unmaintained, transitive dep)
 
 ## [0.5.1] - 2026-01-07
 

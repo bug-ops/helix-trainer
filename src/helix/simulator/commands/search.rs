@@ -1,22 +1,67 @@
 //! Search commands (/, ?, n, N, *, Alt-*)
-//!
-//! Provides search functionality for the Helix simulator.
 
 use crate::helix::simulator::HelixSimulator;
 use crate::helix::simulator::search_state::SearchDirection;
 use crate::security::UserError;
 use helix_core::Selection;
+use helix_core::ropey::RopeSlice;
 use std::hash::{Hash, Hasher};
 
-/// Compute a simple document version hash for cache invalidation
-///
-/// Uses document length and a sample of content to create a fast version identifier.
-/// This is not cryptographically secure but sufficient for change detection.
+#[inline]
+fn is_word_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '_'
+}
+
+fn extract_word_at_cursor(slice: RopeSlice, cursor: usize) -> Option<(usize, usize)> {
+    let doc_len = slice.len_chars();
+
+    if cursor >= doc_len {
+        return None;
+    }
+
+    let ch_at_cursor = slice.get_char(cursor)?;
+    if !is_word_char(ch_at_cursor) {
+        return None;
+    }
+
+    let mut start = cursor;
+    let mut end = cursor;
+
+    while start > 0 {
+        if let Some(ch) = slice.get_char(start.saturating_sub(1)) {
+            if is_word_char(ch) {
+                start -= 1;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    while end < doc_len {
+        if let Some(ch) = slice.get_char(end) {
+            if is_word_char(ch) {
+                end += 1;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    if start < end {
+        Some((start, end))
+    } else {
+        None
+    }
+}
+
 fn compute_doc_version(doc: &helix_core::Rope) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     doc.len_bytes().hash(&mut hasher);
     doc.len_chars().hash(&mut hasher);
-    // Sample first and last few chars for quick change detection
     if doc.len_chars() > 0 {
         doc.slice(..doc.len_chars().min(64))
             .to_string()
@@ -26,36 +71,20 @@ fn compute_doc_version(doc: &helix_core::Rope) -> u64 {
 }
 
 /// Search forward from cursor position
-///
-/// Sets the search pattern and direction, updates matches, and selects the first match.
-/// The pattern should be provided before calling this function via `sim.search_state_mut().set_pattern()`.
-///
-/// Performance optimizations:
-/// - Uses Rope's byte_to_char for O(log n) byte-to-char conversion
-/// - Uses document versioning to skip re-scanning unchanged documents
 pub fn search_next_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
-
-    // Get content as Cow<str> for regex matching (avoids allocation when possible)
-    // Note: For ASCII content this is zero-copy, for non-ASCII it allocates
     let content = sim.doc.slice(..).to_string();
     let doc_version = compute_doc_version(&sim.doc);
 
-    // Update matches in search state (skips re-scan if document unchanged)
     sim.search_state
         .update_matches_with_version(&content, doc_version);
 
-    // Find next match from current position (byte position for search state)
-    // Convert char position to byte position for lookup
     let head_byte = sim.doc.char_to_byte(head);
     if let Some((_, range)) = sim.search_state.find_next(head_byte) {
-        // Convert byte range to char position using Rope's O(log n) method
         let start_chars = sim.doc.byte_to_char(range.start);
         let end_chars = sim.doc.byte_to_char(range.end);
-
-        // Select the match (anchor at start, head at end)
         sim.selection = Selection::single(start_chars, end_chars);
     }
 
@@ -63,34 +92,20 @@ pub fn search_next_match<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Search backward from cursor position
-///
-/// Similar to search_next_match but searches in reverse direction.
-///
-/// Performance optimizations:
-/// - Uses Rope's byte_to_char for O(log n) byte-to-char conversion
-/// - Uses document versioning to skip re-scanning unchanged documents
 pub fn search_prev_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
-
-    // Get content for regex matching
     let content = sim.doc.slice(..).to_string();
     let doc_version = compute_doc_version(&sim.doc);
 
-    // Update matches in search state (skips re-scan if document unchanged)
     sim.search_state
         .update_matches_with_version(&content, doc_version);
 
-    // Find previous match from current position
-    // Convert char position to byte position for lookup
     let head_byte = sim.doc.char_to_byte(head);
     if let Some((_, range)) = sim.search_state.find_prev(head_byte) {
-        // Convert byte range to char position using Rope's O(log n) method
         let start_chars = sim.doc.byte_to_char(range.start);
         let end_chars = sim.doc.byte_to_char(range.end);
-
-        // Select the match (anchor at start, head at end)
         sim.selection = Selection::single(start_chars, end_chars);
     }
 
@@ -98,14 +113,9 @@ pub fn search_prev_match<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Search forward (/) command
-///
-/// In a real implementation, this would prompt for a pattern.
-/// For the trainer, we simulate by setting a pattern via the search state.
 pub fn search_forward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    // In the trainer context, this is typically used after setting a pattern
-    // For now, just ensure direction is forward and search for next match
     sim.search_state.set_current_match(None);
     search_next_match(sim)
 }
@@ -114,19 +124,16 @@ pub fn search_forward<M: crate::helix::simulator::EditorMode>(
 pub fn search_backward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    // Ensure direction is backward and search for previous match
     sim.search_state.set_current_match(None);
     search_prev_match(sim)
 }
 
 /// Go to next match (n command)
-///
-/// Jumps to the next match based on the current search direction.
 pub fn goto_next_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     if !sim.search_state.has_pattern() {
-        return Ok(()); // No active search
+        return Ok(());
     }
 
     match sim.search_state.direction() {
@@ -136,13 +143,11 @@ pub fn goto_next_match<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Go to previous match (N command)
-///
-/// Jumps to the previous match (opposite of current search direction).
 pub fn goto_prev_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     if !sim.search_state.has_pattern() {
-        return Ok(()); // No active search
+        return Ok(());
     }
 
     match sim.search_state.direction() {
@@ -152,122 +157,54 @@ pub fn goto_prev_match<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Search word under cursor (* command)
-///
-/// Gets the word at the cursor position and searches for it with word boundaries.
 pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let slice = sim.doc.slice(..);
 
-    // Find word boundaries around cursor
-    let mut start = head;
-    let mut end = head;
+    let Some((start, end)) = extract_word_at_cursor(slice, head) else {
+        return Ok(());
+    };
 
-    // Move start backward to word start
-    while start > 0 {
-        if let Some(ch) = slice.get_char(start.saturating_sub(1)) {
-            if ch.is_alphanumeric() || ch == '_' {
-                start -= 1;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
+    let word: String = slice.slice(start..end).chars().collect();
 
-    // Move end forward to word end
-    let doc_len = sim.doc.len_chars();
-    while end < doc_len {
-        if let Some(ch) = slice.get_char(end) {
-            if ch.is_alphanumeric() || ch == '_' {
-                end += 1;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-
-    // Extract the word
-    if start < end {
-        let word: String = slice.slice(start..end).chars().collect();
-
-        // Set the search pattern with word boundaries
-        if sim
-            .search_state
-            .set_word_pattern(&word, SearchDirection::Forward)
-            .is_ok()
-        {
-            search_next_match(sim)?;
-        }
+    if sim
+        .search_state
+        .set_word_pattern(&word, SearchDirection::Forward)
+        .is_ok()
+    {
+        search_next_match(sim)?;
     }
 
     Ok(())
 }
 
 /// Search word under cursor backward (# command)
-///
-/// Gets the word at the cursor position and searches backward for it with word boundaries.
 pub fn search_word_under_cursor_backward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     let head = sim.selection.primary().head;
     let slice = sim.doc.slice(..);
 
-    // Find word boundaries around cursor
-    let mut start = head;
-    let mut end = head;
+    let Some((start, end)) = extract_word_at_cursor(slice, head) else {
+        return Ok(());
+    };
 
-    // Move start backward to word start
-    while start > 0 {
-        if let Some(ch) = slice.get_char(start.saturating_sub(1)) {
-            if ch.is_alphanumeric() || ch == '_' {
-                start -= 1;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
+    let word: String = slice.slice(start..end).chars().collect();
 
-    // Move end forward to word end
-    let doc_len = sim.doc.len_chars();
-    while end < doc_len {
-        if let Some(ch) = slice.get_char(end) {
-            if ch.is_alphanumeric() || ch == '_' {
-                end += 1;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-
-    // Extract the word
-    if start < end {
-        let word: String = slice.slice(start..end).chars().collect();
-
-        // Set the search pattern with word boundaries and backward direction
-        if sim
-            .search_state
-            .set_word_pattern(&word, SearchDirection::Backward)
-            .is_ok()
-        {
-            search_prev_match(sim)?;
-        }
+    if sim
+        .search_state
+        .set_word_pattern(&word, SearchDirection::Backward)
+        .is_ok()
+    {
+        search_prev_match(sim)?;
     }
 
     Ok(())
 }
 
 /// Search selection text (Alt-* command)
-///
-/// Uses the current selection text as the search pattern without word boundaries.
 pub fn search_selection<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -275,16 +212,13 @@ pub fn search_selection<M: crate::helix::simulator::EditorMode>(
     let start = range.from();
     let end = range.to();
 
-    // If selection is empty, use word under cursor behavior
     if start == end {
         return search_word_under_cursor(sim);
     }
 
-    // Extract selection text
     let slice = sim.doc.slice(..);
     let selection_text: String = slice.slice(start..end).chars().collect();
 
-    // Set the search pattern without word boundaries
     if sim
         .search_state
         .set_selection_pattern(&selection_text, SearchDirection::Forward)
@@ -584,5 +518,235 @@ mod tests {
 
         // Should navigate through different matches
         assert_ne!(first_match, second_match);
+    }
+
+    // ========== Helper function tests ==========
+
+    #[test]
+    fn test_is_word_char() {
+        // Alphabetic characters
+        assert!(is_word_char('a'));
+        assert!(is_word_char('z'));
+        assert!(is_word_char('A'));
+        assert!(is_word_char('Z'));
+
+        // Numeric characters
+        assert!(is_word_char('0'));
+        assert!(is_word_char('9'));
+
+        // Underscore
+        assert!(is_word_char('_'));
+
+        // Non-word characters
+        assert!(!is_word_char(' '));
+        assert!(!is_word_char('-'));
+        assert!(!is_word_char('.'));
+        assert!(!is_word_char('\n'));
+        assert!(!is_word_char('\t'));
+        assert!(!is_word_char('!'));
+        assert!(!is_word_char('@'));
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_basic() {
+        let rope = helix_core::Rope::from("hello world");
+        let slice = rope.slice(..);
+
+        // Cursor at start of "hello"
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, Some((0, 5)));
+
+        // Cursor at middle of "hello"
+        let result = extract_word_at_cursor(slice, 2);
+        assert_eq!(result, Some((0, 5)));
+
+        // Cursor at end of "hello"
+        let result = extract_word_at_cursor(slice, 4);
+        assert_eq!(result, Some((0, 5)));
+
+        // Cursor at start of "world"
+        let result = extract_word_at_cursor(slice, 6);
+        assert_eq!(result, Some((6, 11)));
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_underscore() {
+        let rope = helix_core::Rope::from("my_variable_name foo");
+        let slice = rope.slice(..);
+
+        // Cursor at start
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, Some((0, 16)));
+
+        // Cursor at first underscore
+        let result = extract_word_at_cursor(slice, 2);
+        assert_eq!(result, Some((0, 16)));
+
+        // Cursor at middle
+        let result = extract_word_at_cursor(slice, 8);
+        assert_eq!(result, Some((0, 16)));
+
+        // Cursor at last char before space
+        let result = extract_word_at_cursor(slice, 15);
+        assert_eq!(result, Some((0, 16)));
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_start_of_doc() {
+        let rope = helix_core::Rope::from("word");
+        let slice = rope.slice(..);
+
+        // Cursor at position 0
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, Some((0, 4)));
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_end_of_doc() {
+        let rope = helix_core::Rope::from("word");
+        let slice = rope.slice(..);
+
+        // Cursor at last character
+        let result = extract_word_at_cursor(slice, 3);
+        assert_eq!(result, Some((0, 4)));
+
+        // Cursor past end of document
+        let result = extract_word_at_cursor(slice, 4);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_on_whitespace() {
+        let rope = helix_core::Rope::from("hello world");
+        let slice = rope.slice(..);
+
+        // Cursor on space
+        let result = extract_word_at_cursor(slice, 5);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_single_char() {
+        let rope = helix_core::Rope::from("a b c");
+        let slice = rope.slice(..);
+
+        // Single char word at start
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, Some((0, 1)));
+
+        // Single char word in middle
+        let result = extract_word_at_cursor(slice, 2);
+        assert_eq!(result, Some((2, 3)));
+
+        // Single char word at end
+        let result = extract_word_at_cursor(slice, 4);
+        assert_eq!(result, Some((4, 5)));
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_empty_doc() {
+        let rope = helix_core::Rope::from("");
+        let slice = rope.slice(..);
+
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_with_numbers() {
+        let rope = helix_core::Rope::from("var123 test2go 456");
+        let slice = rope.slice(..);
+
+        // Word starting with letter, containing numbers
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, Some((0, 6)));
+
+        // Cursor on digit within word
+        let result = extract_word_at_cursor(slice, 4);
+        assert_eq!(result, Some((0, 6)));
+
+        // Word with numbers in middle
+        let result = extract_word_at_cursor(slice, 7);
+        assert_eq!(result, Some((7, 14)));
+
+        // Pure number
+        let result = extract_word_at_cursor(slice, 15);
+        assert_eq!(result, Some((15, 18)));
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_punctuation() {
+        let rope = helix_core::Rope::from("hello, world! test");
+        let slice = rope.slice(..);
+
+        // Cursor on comma
+        let result = extract_word_at_cursor(slice, 5);
+        assert_eq!(result, None);
+
+        // Cursor on exclamation mark
+        let result = extract_word_at_cursor(slice, 12);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_newlines() {
+        let rope = helix_core::Rope::from("hello\nworld");
+        let slice = rope.slice(..);
+
+        // Word before newline
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, Some((0, 5)));
+
+        // Cursor on newline
+        let result = extract_word_at_cursor(slice, 5);
+        assert_eq!(result, None);
+
+        // Word after newline
+        let result = extract_word_at_cursor(slice, 6);
+        assert_eq!(result, Some((6, 11)));
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_tabs() {
+        let rope = helix_core::Rope::from("hello\tworld");
+        let slice = rope.slice(..);
+
+        // Word before tab
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, Some((0, 5)));
+
+        // Cursor on tab
+        let result = extract_word_at_cursor(slice, 5);
+        assert_eq!(result, None);
+
+        // Word after tab
+        let result = extract_word_at_cursor(slice, 6);
+        assert_eq!(result, Some((6, 11)));
+    }
+
+    #[test]
+    fn test_extract_word_at_cursor_unicode() {
+        let rope = helix_core::Rope::from("cafe resume naive");
+        let slice = rope.slice(..);
+
+        // ASCII word
+        let result = extract_word_at_cursor(slice, 0);
+        assert_eq!(result, Some((0, 4)));
+
+        // Unicode is_alphanumeric includes accented chars if present
+        let result = extract_word_at_cursor(slice, 5);
+        assert_eq!(result, Some((5, 11)));
+    }
+
+    #[test]
+    fn test_is_word_char_unicode() {
+        // Unicode letters are alphanumeric
+        assert!(is_word_char('e')); // ASCII e with accent in some representations
+        assert!(is_word_char('a'));
+
+        // CJK characters are alphanumeric per Unicode
+        // Note: This tests the actual behavior of is_alphanumeric()
+        assert!(!is_word_char(' '));
+        assert!(!is_word_char('-'));
     }
 }

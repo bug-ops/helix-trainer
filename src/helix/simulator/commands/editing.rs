@@ -8,19 +8,14 @@ use helix_core::{Selection, Transaction};
 
 /// Join current line with next line
 pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Join current line with next line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
 
-    // Can't join if on last line
     if current_line + 1 >= sim.doc.len_lines() {
         return Ok(());
     }
 
-    // Find the newline character at the end of current line
     let line_end = sim.doc.line_to_char(current_line + 1) - 1;
-
-    // Replace newline with space
     let transaction = Transaction::change(
         &sim.doc,
         [(line_end, line_end + 1, Some(" ".into()))].into_iter(),
@@ -33,12 +28,10 @@ pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), User
 
 /// Indent current line (add 2 spaces)
 pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Add indentation (2 spaces) at the beginning of current line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(current_line);
 
-    // Insert 2 spaces at line start
     let transaction = Transaction::change(
         &sim.doc,
         [(line_start, line_start, Some("  ".into()))].into_iter(),
@@ -46,7 +39,6 @@ pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
     sim.apply_transaction(transaction);
 
-    // Move cursor to maintain relative position
     let new_head = head + 2;
     sim.selection = Selection::point(new_head.min(sim.doc.len_chars()));
 
@@ -55,12 +47,10 @@ pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
 /// Dedent current line (remove up to 2 spaces)
 pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Remove indentation (up to 2 spaces) from the beginning of current line
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(current_line);
 
-    // Check how many spaces to remove (max 2)
     let slice = sim.doc.slice(..);
     let mut spaces_to_remove = 0;
 
@@ -77,7 +67,6 @@ pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
         return Ok(());
     }
 
-    // Remove the spaces
     let transaction = Transaction::change(
         &sim.doc,
         [(line_start, line_start + spaces_to_remove, None)].into_iter(),
@@ -85,9 +74,6 @@ pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
     sim.apply_transaction(transaction);
 
-    // Move cursor to maintain relative position
-    // If cursor is within the removed spaces, keep it at line start
-    // Otherwise, shift it left by the number of removed spaces
     let new_head = if head <= line_start + spaces_to_remove {
         line_start
     } else {
@@ -100,13 +86,11 @@ pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
 /// Delete selection (single 'd' - deletes current selection)
 pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Get the start position before deletion
     let start_pos = sim.selection.primary().from();
 
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = range.to();
-        // Ensure we delete at least one character
         let end = if start == end {
             start.saturating_add(1).min(sim.doc.len_chars())
         } else {
@@ -117,7 +101,6 @@ pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 
     sim.apply_transaction(transaction);
 
-    // Reset selection to point at start position (clamped to doc bounds)
     let new_pos = start_pos.min(sim.doc.len_chars().saturating_sub(1));
     sim.selection = Selection::point(new_pos);
 
@@ -148,7 +131,6 @@ pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
     sim.apply_transaction(transaction);
 
-    // Move cursor right after switch
     let head = sim.selection.primary().head;
     sim.selection = Selection::point(head.saturating_add(1).min(sim.doc.len_chars()));
 
@@ -160,16 +142,10 @@ pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
-
-    // Get line content to find the actual end position
     let line_content = sim.doc.line(line);
     let line_len = line_content.len_chars();
-
-    // line_end is line_start + line length (includes \n if present)
     let line_end = line_start + line_len;
 
-    // Selection::single(anchor, head) - head is where cursor appears
-    // In Helix 'x', cursor stays at line start, anchor is at line end
     sim.selection = Selection::single(line_end, line_start);
     Ok(())
 }
@@ -189,8 +165,6 @@ pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
         sim.doc.len_chars()
     };
 
-    // Selection::single(anchor, head) - head is where cursor appears
-    // In Helix 'X', cursor stays at line start, anchor is at line end
     sim.selection = Selection::single(line_end, line_start);
     Ok(())
 }
@@ -218,7 +192,6 @@ pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
             return (start, end, None);
         }
 
-        // Get the text and convert to uppercase
         let slice = sim.doc.slice(start..end);
         let uppercase: String = slice.chars().flat_map(|c| c.to_uppercase()).collect();
 
@@ -261,18 +234,15 @@ pub fn surround_selection<M: EditorMode>(
     let start = range.from();
     let end = range.to();
 
-    // Insert closing bracket first (at higher position) to preserve start position
     let close_str: String = close.into();
     let open_str: String = open.into();
 
-    // Build the changes: insert open at start, close at end
     let transaction = Transaction::change(
         &sim.doc,
         [(start, start, Some(open_str.into()))].into_iter(),
     );
     sim.apply_transaction(transaction);
 
-    // After inserting open char, positions shift by 1
     let new_end = end + 1;
     let transaction = Transaction::change(
         &sim.doc,
@@ -280,7 +250,6 @@ pub fn surround_selection<M: EditorMode>(
     );
     sim.apply_transaction(transaction);
 
-    // Update selection to include the surrounded text (excluding delimiters)
     sim.selection = Selection::single(start + 1, new_end);
 
     Ok(())
@@ -294,20 +263,16 @@ pub fn delete_surround<M: EditorMode>(
     let (open, close) = get_surround_pair(surround_char);
     let head = sim.selection.primary().head;
 
-    // Find the surrounding pair around cursor
     let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, open, close) else {
-        return Ok(()); // No surrounding pair found
+        return Ok(());
     };
 
-    // Delete close first (higher position) to preserve open position
     let transaction = Transaction::change(&sim.doc, [(close_pos, close_pos + 1, None)].into_iter());
     sim.apply_transaction(transaction);
 
-    // Delete open
     let transaction = Transaction::change(&sim.doc, [(open_pos, open_pos + 1, None)].into_iter());
     sim.apply_transaction(transaction);
 
-    // Adjust cursor position
     let new_head = if head > close_pos {
         head.saturating_sub(2)
     } else if head > open_pos {
@@ -330,13 +295,11 @@ pub fn replace_surround<M: EditorMode>(
     let (to_open, to_close) = get_surround_pair(to_char);
     let head = sim.selection.primary().head;
 
-    // Find the surrounding pair around cursor
     let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, from_open, from_close)
     else {
-        return Ok(()); // No surrounding pair found
+        return Ok(());
     };
 
-    // Replace close first to preserve open position
     let close_str: String = to_close.into();
     let transaction = Transaction::change(
         &sim.doc,
@@ -344,7 +307,6 @@ pub fn replace_surround<M: EditorMode>(
     );
     sim.apply_transaction(transaction);
 
-    // Replace open
     let open_str: String = to_open.into();
     let transaction = Transaction::change(
         &sim.doc,
@@ -355,35 +317,26 @@ pub fn replace_surround<M: EditorMode>(
     Ok(())
 }
 
-/// Get the opening and closing characters for a surround pair
 fn get_surround_pair(ch: char) -> (char, char) {
     match ch {
         '(' | ')' => ('(', ')'),
         '[' | ']' => ('[', ']'),
         '{' | '}' => ('{', '}'),
         '<' | '>' => ('<', '>'),
-        // For quotes and other characters, use the same char on both sides
         _ => (ch, ch),
     }
 }
 
-/// Find the innermost surrounding pair around cursor position
 fn find_surrounding_pair<M: EditorMode>(
     sim: &HelixSimulator<M>,
-    _pos: usize, // Not used - helix-core uses Range directly
+    _pos: usize,
     open: char,
-    _close: char, // Not used - helix-core derives it from open
+    _close: char,
 ) -> Option<(usize, usize)> {
     let slice = sim.doc.slice(..);
     let range = sim.selection.primary();
-
-    // helix-core's find_nth_pairs_pos returns Result, convert to Option
     find_nth_pairs_pos(slice, open, range, 1).ok()
 }
-
-// ============================================================================
-// Text Object Selection Functions
-// ============================================================================
 
 /// Select around text object (Helix 'ma{obj}' command)
 pub fn select_around_textobject<M: EditorMode>(
@@ -401,13 +354,11 @@ pub fn select_around_textobject<M: EditorMode>(
         '\'' => select_around_quote(sim, '\''),
         '`' => select_around_quote(sim, '`'),
         'p' => select_around_paragraph(sim),
-        _ => Ok(()), // Unknown text object - no-op
+        _ => Ok(()),
     }
 }
 
 /// Select inside text object (Helix 'mi{obj}' command)
-///
-/// Selects text inside the specified text object, excluding delimiters.
 pub fn select_inside_textobject<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     obj: char,
@@ -423,13 +374,10 @@ pub fn select_inside_textobject<M: EditorMode>(
         '\'' => select_inside_quote(sim, '\''),
         '`' => select_inside_quote(sim, '`'),
         'p' => select_inside_paragraph(sim),
-        _ => Ok(()), // Unknown text object - no-op
+        _ => Ok(()),
     }
 }
 
-/// Select around word (small word or WORD)
-///
-/// Uses helix-core textobject_word for accurate Helix behavior.
 fn select_around_word<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     big_word: bool,
@@ -447,9 +395,6 @@ fn select_around_word<M: EditorMode>(
     Ok(())
 }
 
-/// Select inside word (small word or WORD)
-///
-/// Uses helix-core textobject_word for accurate Helix behavior.
 fn select_inside_word<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     big_word: bool,
@@ -467,7 +412,6 @@ fn select_inside_word<M: EditorMode>(
     Ok(())
 }
 
-/// Select around bracket pair
 fn select_around_bracket<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     open: char,
@@ -479,12 +423,10 @@ fn select_around_bracket<M: EditorMode>(
         return Ok(());
     };
 
-    // Include the brackets
     sim.selection = Selection::single(open_pos, close_pos + 1);
     Ok(())
 }
 
-/// Select inside bracket pair
 fn select_inside_bracket<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     open: char,
@@ -496,17 +438,14 @@ fn select_inside_bracket<M: EditorMode>(
         return Ok(());
     };
 
-    // Exclude the brackets
     if open_pos + 1 < close_pos {
         sim.selection = Selection::single(open_pos + 1, close_pos);
     } else {
-        // Empty inside - select nothing (point at opening bracket)
         sim.selection = Selection::point(open_pos + 1);
     }
     Ok(())
 }
 
-/// Select around quote pair
 fn select_around_quote<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     quote: char,
@@ -517,12 +456,10 @@ fn select_around_quote<M: EditorMode>(
         return Ok(());
     };
 
-    // Include the quotes
     sim.selection = Selection::single(open_pos, close_pos + 1);
     Ok(())
 }
 
-/// Select inside quote pair
 fn select_inside_quote<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     quote: char,
@@ -533,17 +470,14 @@ fn select_inside_quote<M: EditorMode>(
         return Ok(());
     };
 
-    // Exclude the quotes
     if open_pos + 1 < close_pos {
         sim.selection = Selection::single(open_pos + 1, close_pos);
     } else {
-        // Empty inside - select nothing (point after opening quote)
         sim.selection = Selection::point(open_pos + 1);
     }
     Ok(())
 }
 
-/// Select around paragraph
 fn select_around_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     if sim.doc.len_chars() == 0 {
         return Ok(());
@@ -558,7 +492,6 @@ fn select_around_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
     Ok(())
 }
 
-/// Select inside paragraph
 fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     if sim.doc.len_chars() == 0 {
         return Ok(());
@@ -575,8 +508,7 @@ fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
 
 /// Join lines in selection with space (Helix 'Alt-J' command)
 ///
-/// Like J but joins all selected lines and **selects the inserted spaces**.
-/// This is the key difference from J: the cursor ends up selecting the space(s).
+/// Like J but joins all selected lines and selects the inserted spaces.
 pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let range = sim.selection.primary();
     let start_line = sim.doc.char_to_line(range.from());
@@ -584,14 +516,10 @@ pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
         .doc
         .char_to_line(range.to().saturating_sub(1).max(range.from()));
 
-    // If only one line, nothing to join
     if start_line >= end_line {
         return Ok(());
     }
 
-    // Join lines from end to start to avoid position shifting issues
-    // Track the position of the FIRST space (which will be at a stable position
-    // since we join from bottom to top)
     let mut first_space_pos = None;
 
     for line in (start_line..end_line).rev() {
@@ -599,10 +527,7 @@ pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
             continue;
         }
 
-        // Find the newline character at the end of current line
         let line_end = sim.doc.line_to_char(line + 1) - 1;
-
-        // Replace newline with space
         let transaction = Transaction::change(
             &sim.doc,
             [(line_end, line_end + 1, Some(" ".into()))].into_iter(),
@@ -610,18 +535,10 @@ pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
 
         sim.apply_transaction(transaction);
 
-        // Record position of first space (this is actually the last join we do,
-        // which corresponds to the first line break in the original selection)
         first_space_pos = Some(line_end);
     }
 
-    // Select the inserted spaces
-    // After joining, spaces are at consecutive positions starting from first_space_pos
     if let Some(first_pos) = first_space_pos {
-        // Create selection covering all inserted spaces
-        // Each join inserts one space, so we have num_joins spaces total
-        // But they're not consecutive - each space is separated by the content of the joined line
-        // Actually, we should select just the first inserted space (like original Helix)
         sim.selection = Selection::single(first_pos, first_pos + 1);
     }
 

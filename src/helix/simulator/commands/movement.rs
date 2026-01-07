@@ -11,7 +11,7 @@ use helix_core::{
     text_annotations::TextAnnotations,
 };
 
-/// Move left by count characters (works in any mode)
+/// Move left by count characters
 pub fn move_left<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
@@ -245,7 +245,6 @@ pub fn find_next_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
-    // Record this motion for Alt-. repeat
     sim.find_state
         .set(ch, FindType::Find, FindDirection::Forward);
 
@@ -274,7 +273,6 @@ pub fn find_prev_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
-    // Record this motion for Alt-. repeat
     sim.find_state
         .set(ch, FindType::Find, FindDirection::Backward);
 
@@ -300,7 +298,6 @@ pub fn till_next_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
-    // Record this motion for Alt-. repeat
     sim.find_state
         .set(ch, FindType::Till, FindDirection::Forward);
 
@@ -330,7 +327,6 @@ pub fn till_prev_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
-    // Record this motion for Alt-. repeat
     sim.find_state
         .set(ch, FindType::Till, FindDirection::Backward);
 
@@ -340,8 +336,6 @@ pub fn till_prev_char<M: EditorMode>(
 
     let slice = sim.doc.slice(..);
 
-    // Use head (not head-1) because find_nth_prev's first .prev() call
-    // moves to head-1, which is where we want to start searching
     if head > line_start
         && let Some(found_pos) = find_nth_prev(slice, ch, head, count)
         && found_pos >= line_start
@@ -388,17 +382,13 @@ pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), 
     let total_lines = sim.doc.len_lines();
     let doc_len = sim.doc.len_chars();
 
-    // If document is empty, stay at position 0
     if doc_len == 0 {
         sim.selection = Selection::point(0);
         return Ok(());
     }
 
-    // Find the last line with content
-    // If the last line is empty (document ends with newline), go to the line before it
     let mut last_line = total_lines.saturating_sub(1);
 
-    // Check if the last line is empty
     let last_line_start = sim.doc.line_to_char(last_line);
     let last_line_len = if last_line + 1 < total_lines {
         sim.doc.line_to_char(last_line + 1) - last_line_start
@@ -406,7 +396,6 @@ pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), 
         doc_len - last_line_start
     };
 
-    // If the last line is empty (0 characters or just a newline position at end), go to previous line
     if last_line_len == 0 && last_line > 0 {
         last_line = last_line.saturating_sub(1);
     }
@@ -431,7 +420,6 @@ pub fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), 
 /// Flip selection direction (swap anchor and head) - Helix 'Alt-;' command
 pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let range = sim.selection.primary();
-    // Swap anchor and head
     sim.selection = Selection::single(range.head, range.anchor);
     Ok(())
 }
@@ -523,7 +511,6 @@ pub fn repeat_last_motion<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
     Ok(())
 }
 
-/// Default number of lines to move for page movement
 const PAGE_SIZE: usize = 20;
 
 /// Page up movement (Ctrl-b command)

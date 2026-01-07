@@ -1,6 +1,4 @@
 //! Selection commands (s, S, Alt-s, &, _, Alt--, Alt-_, C, Alt-C, K, Alt-K, Ctrl-c)
-//!
-//! Provides advanced selection manipulation for the Helix simulator.
 
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
@@ -9,22 +7,19 @@ use helix_core::comment::toggle_line_comments;
 use helix_core::selection::split_on_newline;
 
 /// Trim whitespace from selections (_ command)
-///
-/// Removes leading and trailing whitespace from the current selection.
 pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let range = sim.selection.primary();
     let start = range.from();
     let end = range.to();
 
     if start >= end {
-        return Ok(()); // Empty selection, nothing to trim
+        return Ok(());
     }
 
     let slice = sim.doc.slice(..);
     let mut new_start = start;
     let mut new_end = end;
 
-    // Trim leading whitespace
     while new_start < new_end {
         if let Some(ch) = slice.get_char(new_start) {
             if ch.is_whitespace() && ch != '\n' {
@@ -37,7 +32,6 @@ pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
         }
     }
 
-    // Trim trailing whitespace
     while new_end > new_start {
         if let Some(ch) = slice.get_char(new_end - 1) {
             if ch.is_whitespace() && ch != '\n' {
@@ -50,11 +44,9 @@ pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
         }
     }
 
-    // Update selection
     if new_start < new_end {
         sim.selection = Selection::single(new_start, new_end);
     } else {
-        // Collapsed to a point
         sim.selection = Selection::point(new_start);
     }
 
@@ -62,40 +54,29 @@ pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
 }
 
 /// Merge all selections into one (Alt-- command)
-///
-/// Creates a single selection spanning from the start of the first selection
-/// to the end of the last selection.
 pub fn merge_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // For single selection, this is a no-op
     let range = sim.selection.primary();
     let start = range.from();
     let end = range.to();
-
-    // Create single selection spanning all
     sim.selection = Selection::single(start, end);
 
     Ok(())
 }
 
 /// Copy selection to next line (C command)
-///
-/// Duplicates the current selection to the line below.
 pub fn copy_selection_next_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     let range = sim.selection.primary();
     let head = range.head;
 
-    // Get current line
     let current_line = sim.doc.char_to_line(head);
     let total_lines = sim.doc.len_lines();
 
-    // Can't copy if on last line
     if current_line + 1 >= total_lines {
         return Ok(());
     }
 
-    // Calculate position on next line with same column
     let line_start = sim.doc.line_to_char(current_line);
     let col = head - line_start;
 
@@ -106,45 +87,33 @@ pub fn copy_selection_next_line<M: EditorMode>(
         sim.doc.len_chars() - next_line_start
     };
 
-    // Clamp column to next line length
     let new_col = col.min(next_line_len);
     let new_head = next_line_start + new_col;
-
-    // Move cursor to next line
     sim.selection = Selection::point(new_head.min(sim.doc.len_chars()));
 
     Ok(())
 }
 
 /// Copy selection to previous line (Alt-C command)
-///
-/// Duplicates the current selection to the line above.
 pub fn copy_selection_prev_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
     let range = sim.selection.primary();
     let head = range.head;
-
-    // Get current line
     let current_line = sim.doc.char_to_line(head);
 
-    // Can't copy if on first line
     if current_line == 0 {
         return Ok(());
     }
 
-    // Calculate position on previous line with same column
     let line_start = sim.doc.line_to_char(current_line);
     let col = head - line_start;
 
     let prev_line_start = sim.doc.line_to_char(current_line - 1);
-    let prev_line_len = line_start - prev_line_start - 1; // -1 for newline
+    let prev_line_len = line_start - prev_line_start - 1;
 
-    // Clamp column to previous line length
     let new_col = col.min(prev_line_len);
     let new_head = prev_line_start + new_col;
-
-    // Move cursor to previous line
     sim.selection = Selection::point(new_head);
 
     Ok(())
@@ -158,9 +127,6 @@ pub fn toggle_comments<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
 }
 
 /// Split selection on newlines (Alt-s command)
-///
-/// Splits the current selection into multiple selections, one per line.
-/// Uses helix-core's `split_on_newline` for proper multi-selection behavior.
 pub fn split_selection_newlines<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -170,91 +136,56 @@ pub fn split_selection_newlines<M: EditorMode>(
 }
 
 /// Align selections to columns (& command)
-///
-/// For training purposes, this is a placeholder that maintains current selection.
-/// Full implementation would require multi-cursor support.
 pub fn align_selections<M: EditorMode>(_sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Placeholder - alignment requires multi-cursor which the trainer simplifies
     Ok(())
 }
 
 /// Merge consecutive selections (Alt-_ command)
-///
-/// For single selection, this is equivalent to merge_selections.
 pub fn merge_consecutive_selections<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    // For single selection, same as merge_selections
     merge_selections(sim)
 }
 
 /// Select regex matches (s command)
-///
-/// This is a placeholder that requires pattern input in the real implementation.
-/// For training, we provide a simplified version.
 pub fn select_regex<M: EditorMode>(_sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Placeholder - in real Helix, this would prompt for a pattern
-    // For training scenarios, the pattern would be provided separately
     Ok(())
 }
 
 /// Split selection on regex (S command)
-///
-/// This is a placeholder that requires pattern input in the real implementation.
 pub fn split_selection<M: EditorMode>(_sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Placeholder - in real Helix, this would prompt for a pattern
     Ok(())
 }
 
 /// Keep selections matching pattern (K command)
-///
-/// This is a placeholder that requires pattern input in the real implementation.
 pub fn keep_selections_matching<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    // Placeholder - requires multi-cursor and pattern input
     Ok(())
 }
 
 /// Remove selections matching pattern (Alt-K command)
-///
-/// This is a placeholder that requires pattern input in the real implementation.
 pub fn remove_selections_matching<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    // Placeholder - requires multi-cursor and pattern input
     Ok(())
 }
 
 /// Keep only the primary selection (, command)
-///
-/// Discards all non-primary selections, keeping only the main cursor.
-/// For single-selection training, this is a no-op since there's only one selection.
 pub fn keep_primary_selection<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    // For single selection, this is a no-op - we already have only the primary
-    // In multi-cursor mode, this would discard all but the primary selection
     Ok(())
 }
 
 /// Remove the primary selection (Alt-, command)
-///
-/// Removes the primary selection while keeping other selections active.
-/// For single-selection training, this is a no-op since removing the only
-/// selection would leave no cursor.
 pub fn remove_primary_selection<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    // For single selection, this is a no-op - we can't remove the only selection
-    // In multi-cursor mode, this would remove the primary and make another primary
     Ok(())
 }
 
 /// Shrink selection to line bounds (Alt-x command)
-///
-/// Reduces the selection to fit within line boundaries for line-oriented editing.
-/// If selection spans multiple lines, shrinks to current line only.
 pub fn shrink_to_line_bounds<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let range = sim.selection.primary();
     let head = range.head;
@@ -262,12 +193,11 @@ pub fn shrink_to_line_bounds<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
 
     let line_start = sim.doc.line_to_char(line);
     let line_end = if line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(line + 1) - 1 // Exclude newline
+        sim.doc.line_to_char(line + 1) - 1
     } else {
         sim.doc.len_chars()
     };
 
-    // Create selection from line start to line end (before newline)
     sim.selection = Selection::single(line_start, line_end);
 
     Ok(())

@@ -2,6 +2,7 @@
 
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
+use helix_core::textobject::{TextObject, textobject_paragraph, textobject_word};
 use helix_core::{Selection, Transaction};
 
 /// Join current line with next line
@@ -506,117 +507,42 @@ pub fn select_inside_textobject<M: EditorMode>(
 }
 
 /// Select around word (small word or WORD)
+///
+/// Uses helix-core textobject_word for accurate Helix behavior.
 fn select_around_word<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     big_word: bool,
 ) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let slice = sim.doc.slice(..);
-    let len = sim.doc.len_chars();
-
-    if len == 0 {
+    if sim.doc.len_chars() == 0 {
         return Ok(());
     }
 
-    let head = head.min(len.saturating_sub(1));
+    let slice = sim.doc.slice(..);
+    let range = sim.selection.primary();
 
-    // Find word boundaries
-    let is_word_char = |c: char| {
-        if big_word {
-            !c.is_whitespace()
-        } else {
-            c.is_alphanumeric() || c == '_'
-        }
-    };
+    let new_range = textobject_word(slice, range, TextObject::Around, 1, big_word);
 
-    let current_char = slice.char(head);
-    let in_word = is_word_char(current_char);
-
-    if !in_word {
-        // Cursor on whitespace - select the whitespace
-        let mut start = head;
-        let mut end = head;
-
-        // Expand backwards through whitespace
-        while start > 0 && slice.char(start.saturating_sub(1)).is_whitespace() {
-            start -= 1;
-        }
-
-        // Expand forwards through whitespace
-        while end < len && slice.char(end).is_whitespace() {
-            end += 1;
-        }
-
-        sim.selection = Selection::single(start, end);
-    } else {
-        // Cursor in word - select word plus trailing whitespace
-        let mut start = head;
-        let mut end = head;
-
-        // Expand backwards to word start
-        while start > 0 && is_word_char(slice.char(start.saturating_sub(1))) {
-            start -= 1;
-        }
-
-        // Expand forwards to word end
-        while end < len && is_word_char(slice.char(end)) {
-            end += 1;
-        }
-
-        // Include trailing whitespace for "around"
-        while end < len && slice.char(end).is_whitespace() && slice.char(end) != '\n' {
-            end += 1;
-        }
-
-        sim.selection = Selection::single(start, end);
-    }
-
+    sim.selection = Selection::single(new_range.anchor, new_range.head);
     Ok(())
 }
 
 /// Select inside word (small word or WORD)
+///
+/// Uses helix-core textobject_word for accurate Helix behavior.
 fn select_inside_word<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     big_word: bool,
 ) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
+    if sim.doc.len_chars() == 0 {
+        return Ok(());
+    }
+
     let slice = sim.doc.slice(..);
-    let len = sim.doc.len_chars();
+    let range = sim.selection.primary();
 
-    if len == 0 {
-        return Ok(());
-    }
+    let new_range = textobject_word(slice, range, TextObject::Inside, 1, big_word);
 
-    let head = head.min(len.saturating_sub(1));
-
-    let is_word_char = |c: char| {
-        if big_word {
-            !c.is_whitespace()
-        } else {
-            c.is_alphanumeric() || c == '_'
-        }
-    };
-
-    let current_char = slice.char(head);
-    if !is_word_char(current_char) {
-        // Not on a word - no selection
-        return Ok(());
-    }
-
-    let mut start = head;
-    let mut end = head;
-
-    // Expand backwards to word start
-    while start > 0 && is_word_char(slice.char(start.saturating_sub(1))) {
-        start -= 1;
-    }
-
-    // Expand forwards to word end
-    while end < len && is_word_char(slice.char(end)) {
-        end += 1;
-    }
-
-    sim.selection = Selection::single(start, end);
+    sim.selection = Selection::single(new_range.anchor, new_range.head);
     Ok(())
 }
 
@@ -698,85 +624,31 @@ fn select_inside_quote<M: EditorMode>(
 
 /// Select around paragraph
 fn select_around_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Handle empty document
     if sim.doc.len_chars() == 0 {
         return Ok(());
     }
 
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
-    let total_lines = sim.doc.len_lines();
+    let slice = sim.doc.slice(..);
+    let range = sim.selection.primary();
 
-    // Find paragraph start (first non-empty line going backwards)
-    let mut para_start_line = current_line;
-    while para_start_line > 0 {
-        let line = sim.doc.line(para_start_line.saturating_sub(1));
-        if line.len_chars() == 0 || (line.len_chars() == 1 && line.char(0) == '\n') {
-            break;
-        }
-        para_start_line -= 1;
-    }
+    let new_range = textobject_paragraph(slice, range, TextObject::Around, 1);
 
-    // Find paragraph end (first empty line going forwards)
-    let mut para_end_line = current_line;
-    while para_end_line < total_lines {
-        let line = sim.doc.line(para_end_line);
-        if line.len_chars() == 0 || (line.len_chars() == 1 && line.char(0) == '\n') {
-            para_end_line += 1; // Include the empty line for "around"
-            break;
-        }
-        para_end_line += 1;
-    }
-
-    let start = sim.doc.line_to_char(para_start_line);
-    let end = if para_end_line < total_lines {
-        sim.doc.line_to_char(para_end_line)
-    } else {
-        sim.doc.len_chars()
-    };
-
-    sim.selection = Selection::single(start, end);
+    sim.selection = Selection::single(new_range.anchor, new_range.head);
     Ok(())
 }
 
 /// Select inside paragraph
 fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Handle empty document
     if sim.doc.len_chars() == 0 {
         return Ok(());
     }
 
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
-    let total_lines = sim.doc.len_lines();
+    let slice = sim.doc.slice(..);
+    let range = sim.selection.primary();
 
-    // Find paragraph start (first non-empty line going backwards)
-    let mut para_start_line = current_line;
-    while para_start_line > 0 {
-        let line = sim.doc.line(para_start_line.saturating_sub(1));
-        if line.len_chars() == 0 || (line.len_chars() == 1 && line.char(0) == '\n') {
-            break;
-        }
-        para_start_line -= 1;
-    }
+    let new_range = textobject_paragraph(slice, range, TextObject::Inside, 1);
 
-    // Find paragraph end (last non-empty line going forwards)
-    let mut para_end_line = current_line;
-    while para_end_line + 1 < total_lines {
-        let line = sim.doc.line(para_end_line + 1);
-        if line.len_chars() == 0 || (line.len_chars() == 1 && line.char(0) == '\n') {
-            break;
-        }
-        para_end_line += 1;
-    }
-
-    let start = sim.doc.line_to_char(para_start_line);
-    // End at the end of the last line (not including trailing newline for "inside")
-    let end_line_start = sim.doc.line_to_char(para_end_line);
-    let end_line_len = sim.doc.line(para_end_line).len_chars();
-    let end = end_line_start + end_line_len;
-
-    sim.selection = Selection::single(start, end);
+    sim.selection = Selection::single(new_range.anchor, new_range.head);
     Ok(())
 }
 
@@ -1292,14 +1164,15 @@ mod tests {
     #[test]
     fn test_select_around_word_on_whitespace() {
         let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello   world".to_string());
-        sim.selection = Selection::point(6); // Cursor on whitespace
+        sim.selection = Selection::point(6); // Cursor on whitespace (second space)
 
         select_around_textobject(&mut sim, 'w').unwrap();
 
         let range = sim.selection.primary();
-        // Around on whitespace selects the whitespace
-        assert_eq!(range.from(), 5);
-        assert_eq!(range.to(), 8);
+        // helix-core behavior: around on pure whitespace returns same position (no change)
+        // This is consistent with Helix editor behavior where maw on whitespace does nothing
+        assert_eq!(range.from(), 6);
+        assert_eq!(range.to(), 6);
     }
 
     #[test]
@@ -1376,8 +1249,9 @@ mod tests {
         select_around_textobject(&mut sim, 'w').unwrap();
 
         let range = sim.selection.primary();
-        // "world" at end has no trailing space
-        assert_eq!(range.from(), 6);
+        // helix-core behavior: "around" word at document end includes leading space
+        // " world" = positions 5-11
+        assert_eq!(range.from(), 5);
         assert_eq!(range.to(), 11);
     }
 

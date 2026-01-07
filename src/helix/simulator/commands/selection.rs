@@ -6,6 +6,7 @@ use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::Selection;
 use helix_core::comment::toggle_line_comments;
+use helix_core::selection::split_on_newline;
 
 /// Trim whitespace from selections (_ command)
 ///
@@ -159,22 +160,12 @@ pub fn toggle_comments<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
 /// Split selection on newlines (Alt-s command)
 ///
 /// Splits the current selection into multiple selections, one per line.
-/// For training purposes, this moves to the next line within the selection.
+/// Uses helix-core's `split_on_newline` for proper multi-selection behavior.
 pub fn split_selection_newlines<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    let range = sim.selection.primary();
-    let start_line = sim.doc.char_to_line(range.from());
-    let end_line = sim
-        .doc
-        .char_to_line(range.to().saturating_sub(1).max(range.from()));
-
-    // For single-selection training, just move to next line start within selection
-    if start_line < end_line {
-        let next_line_start = sim.doc.line_to_char(start_line + 1);
-        sim.selection = Selection::point(next_line_start);
-    }
-
+    let slice = sim.doc.slice(..);
+    sim.selection = split_on_newline(slice, &sim.selection);
     Ok(())
 }
 
@@ -438,14 +429,22 @@ mod tests {
         let mut sim: HelixSimulator<NormalMode> =
             HelixSimulator::new("line 1\nline 2\nline 3".to_string());
 
-        // Select multiple lines
+        // Select multiple lines (0 to 20 covers all three lines)
         sim.selection = Selection::single(0, 20);
 
         split_selection_newlines(&mut sim).unwrap();
 
-        // Should move to start of line 2
-        let head = sim.selection.primary().head;
-        assert_eq!(head, 7); // Start of "line 2"
+        // Should create multiple selections, one per line (excluding newlines)
+        // "line 1" (0-6), "line 2" (7-13), "line 3" (14-20)
+        assert_eq!(sim.selection.len(), 3);
+
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[0].from(), 0);
+        assert_eq!(ranges[0].to(), 6); // "line 1"
+        assert_eq!(ranges[1].from(), 7);
+        assert_eq!(ranges[1].to(), 13); // "line 2"
+        assert_eq!(ranges[2].from(), 14);
+        assert_eq!(ranges[2].to(), 20); // "line 3"
     }
 
     #[test]

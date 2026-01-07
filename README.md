@@ -131,10 +131,15 @@ Main Menu
 
 | Category | Commands |
 |----------|----------|
-| **Movement** | <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd> <kbd>0</kbd> <kbd>$</kbd> <kbd>gg</kbd> <kbd>ge</kbd> <kbd>gh</kbd> <kbd>gl</kbd> <kbd>gs</kbd> |
-| **Match Mode** | <kbd>mm</kbd> (jump to matching bracket) |
-| **Editing** | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>r</kbd> <kbd>c</kbd> <kbd>x</kbd> <kbd>d</kbd> <kbd>J</kbd> <kbd>></kbd> <kbd><</kbd> |
+| **Movement** | <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd> <kbd>0</kbd> <kbd>$</kbd> <kbd>gg</kbd> <kbd>ge</kbd> <kbd>gh</kbd> <kbd>gl</kbd> <kbd>gs</kbd> <kbd>{</kbd> <kbd>}</kbd> <kbd>^</kbd> |
+| **Find/Till** | <kbd>f</kbd> <kbd>F</kbd> <kbd>t</kbd> <kbd>T</kbd> <kbd>Alt</kbd>+<kbd>.</kbd> |
+| **Match Mode** | <kbd>mm</kbd> (brackets) <kbd>ms</kbd> (surround) <kbd>md</kbd> (delete surround) <kbd>mr</kbd> (replace surround) |
+| **Text Objects** | <kbd>ma</kbd>/<kbd>mi</kbd> + <kbd>w</kbd> <kbd>W</kbd> <kbd>(</kbd> <kbd>[</kbd> <kbd>{</kbd> <kbd><</kbd> <kbd>"</kbd> <kbd>'</kbd> <kbd>`</kbd> <kbd>p</kbd> |
+| **Selection** | <kbd>x</kbd> <kbd>X</kbd> <kbd>v</kbd> <kbd>;</kbd> <kbd>,</kbd> <kbd>%</kbd> <kbd>s</kbd> <kbd>S</kbd> <kbd>C</kbd> <kbd>K</kbd> |
+| **Editing** | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>r</kbd> <kbd>c</kbd> <kbd>d</kbd> <kbd>J</kbd> <kbd>></kbd> <kbd><</kbd> <kbd>~</kbd> <kbd>R</kbd> |
 | **Clipboard** | <kbd>y</kbd> <kbd>p</kbd> <kbd>P</kbd> |
+| **Search** | <kbd>/</kbd> <kbd>?</kbd> <kbd>n</kbd> <kbd>N</kbd> <kbd>*</kbd> <kbd>#</kbd> |
+| **View** | <kbd>z</kbd> <kbd>zz</kbd> <kbd>zt</kbd> <kbd>zb</kbd> <kbd>zm</kbd> <kbd>zj</kbd> <kbd>zk</kbd> |
 | **Undo/Redo** | <kbd>u</kbd> <kbd>U</kbd> |
 | **Repeat** | <kbd>.</kbd> (repeat last action) |
 | **Count Prefix** | <kbd>3h</kbd> <kbd>5j</kbd> <kbd>2w</kbd> (execute N times) |
@@ -198,7 +203,7 @@ Duolingo-proven mechanics:
 ## Current Status
 
 > [!NOTE]
-> **Active Development**: Phase 2.1 (Mini-Games) is complete! 845 passing tests, zero clippy warnings.
+> **Active Development**: Typestate input expansion (Phase 4) is complete! 1116 passing tests, zero clippy warnings.
 
 ### Completed
 
@@ -207,6 +212,7 @@ Duolingo-proven mechanics:
 | **Phase 1** | v0.1.3 | FSRS spaced repetition, daily quests, XP/mastery system, anti-farming |
 | **Phase 1.5** | v0.3.0 | Scenario metadata, filtering/sorting, 78 categorized scenarios |
 | **Phase 2.1** | v0.4.1 | Arcade mode (60s sessions, lives, streak multiplier, XP integration) |
+| **Phase 4** | v0.5.0 | Typestate input system: surround commands (ms/mr/md), text objects (ma/mi) |
 
 ### 🔄 Phase 2.2: Mini-Games Enhancements (Planned)
 
@@ -315,6 +321,7 @@ Helix-specific. Many commands overlap with Vim, but Helix uses a different selec
 | Phase A | ✅ | Foundation (30+ commands, 78 scenarios, TUI) |
 | Phase 1 | ✅ | Smart learning (FSRS, quests, mastery) |
 | Phase 2.1 | ✅ | Mini-Games mode (arcade, lives, streaks) |
+| Typestate | ✅ | Input expansion (surround ms/mr/md, text objects ma/mi) |
 | Phase 2.2 | 📋 | Mini-Games enhancements (sound, adaptive difficulty) |
 | Phase 3 | 📋 | Workflow simulator (LSP, git, multi-file) |
 | Phase 4 | 💡 | Network effects (multiplayer, scenarios marketplace) |

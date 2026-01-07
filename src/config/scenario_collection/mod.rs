@@ -78,16 +78,22 @@ pub enum SortMode {
 
 impl ScenarioCollection {
     /// Create a new collection from a vector of scenarios
+    ///
+    /// Applies the default sort mode (ByDifficultyThenCategory) on creation.
     pub fn new(scenarios: Vec<Scenario>) -> Self {
         let count = scenarios.len();
         let filtered_indices: Vec<usize> = (0..count).collect();
 
-        Self {
+        let mut collection = Self {
             scenarios,
             filtered_indices,
             active_filter: ScenarioFilter::default(),
             active_sort: SortMode::default(),
-        }
+        };
+
+        // Apply default sort on creation
+        collection.sort(SortMode::default(), None);
+        collection
     }
 
     /// Apply a filter to the collection

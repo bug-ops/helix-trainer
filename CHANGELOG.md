@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-01-07
+
+### Changed
+
+- **Refactored to helix-core primitives** (#110)
+  - Migrated text objects (`miw`, `maw`, `mip`, `map`) to `helix_core::textobject`
+  - Migrated character search (`f`, `F`, `t`, `T`) to `helix_core::search`
+  - Migrated surround helpers to `helix_core::surround::find_nth_pairs_pos`
+  - Migrated bracket matching (`mm`) to `helix_core::match_brackets`
+  - Migrated paragraph movement (`{`, `}`) to `helix_core::movement`
+  - Migrated toggle comments (`Ctrl-c`) to `helix_core::comment`
+  - Migrated split selection on newlines (`Alt-s`) to `helix_core::selection`
+
+- **Code cleanup and deduplication** (#111)
+  - Extracted `extract_word_at_cursor` helper for search commands
+  - Removed ~400 lines of excessive comments and documentation
+  - Added 14 new unit tests for helper functions
+
+### Fixed
+
+- `join_selections_space` (`Alt-J`) now correctly selects inserted space (#110)
+
 ## [0.5.0] - 2026-01-07
 
 ### Added

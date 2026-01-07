@@ -1,0 +1,303 @@
+# Basic Search Commands
+# Scenarios for *, #, n, N search commands
+
+# ============================================================================
+# SEARCH WORD UNDER CURSOR (* command)
+# ============================================================================
+
+[[scenarios]]
+id = "search_word_001"
+name = "Search word forward"
+description = "Use '*' to search for the word under cursor"
+
+hints = [
+    "'*' searches forward for word under cursor",
+    "The search includes word boundaries",
+]
+
+[scenarios.setup]
+file_content = "hello world hello there"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "hello world hello there"
+cursor_position = [0, 12]
+selection = [0, 12, 0, 17]
+
+[scenarios.solution]
+commands = ["*"]
+description = "Press '*' to jump to next occurrence of 'hello'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "beginner"
+tags = ["search", "word", "forward"]
+commands_taught = ["*"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "search_word_002"
+name = "Search word multiple times"
+description = "Use '*' and 'n' to navigate through matches"
+
+hints = [
+    "'*' starts the search for word under cursor",
+    "'n' jumps to the next match",
+]
+
+[scenarios.setup]
+file_content = "foo bar foo baz foo"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "foo bar foo baz foo"
+cursor_position = [0, 16]
+selection = [0, 16, 0, 19]
+
+[scenarios.solution]
+commands = ["*", "n"]
+description = "Press '*' then 'n' to reach the third 'foo'"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "beginner"
+tags = ["search", "word", "next"]
+commands_taught = ["*", "n"]
+estimated_time_seconds = 15
+
+# ============================================================================
+# SEARCH WORD BACKWARD (# command)
+# ============================================================================
+
+[[scenarios]]
+id = "search_word_backward_001"
+name = "Search word backward"
+description = "Use '#' to search backward for word under cursor"
+
+hints = [
+    "'#' searches backward for word under cursor",
+    "Like '*' but in reverse direction",
+]
+
+[scenarios.setup]
+file_content = "test one test two test"
+cursor_position = [0, 18]
+
+[scenarios.target]
+file_content = "test one test two test"
+cursor_position = [0, 9]
+selection = [0, 9, 0, 13]
+
+[scenarios.solution]
+commands = ["#"]
+description = "Press '#' to jump to previous occurrence of 'test'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "beginner"
+tags = ["search", "word", "backward"]
+commands_taught = ["#"]
+estimated_time_seconds = 10
+
+# ============================================================================
+# NEXT MATCH (n command)
+# ============================================================================
+
+[[scenarios]]
+id = "search_next_001"
+name = "Go to next match"
+description = "Use 'n' to navigate to next search match"
+
+hints = [
+    "'n' goes to the next match in search direction",
+    "First use '*' or '/' to set a search pattern",
+]
+
+[scenarios.setup]
+file_content = "abc 123 abc 456 abc"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "abc 123 abc 456 abc"
+cursor_position = [0, 8]
+selection = [0, 8, 0, 11]
+
+[scenarios.solution]
+commands = ["*"]
+description = "Press '*' to find next 'abc'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "beginner"
+tags = ["search", "next", "match"]
+commands_taught = ["*"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "search_next_002"
+name = "Chain next matches"
+description = "Use 'n' multiple times to navigate through matches"
+
+hints = [
+    "After setting pattern with '*', use 'n' repeatedly",
+    "Each 'n' advances to the next match",
+]
+
+[scenarios.setup]
+file_content = "word more word text word"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "word more word text word"
+cursor_position = [0, 20]
+selection = [0, 20, 0, 24]
+
+[scenarios.solution]
+commands = ["*", "n"]
+description = "Press '*' then 'n' to reach the last 'word'"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "intermediate"
+tags = ["search", "next", "chain"]
+commands_taught = ["*", "n"]
+estimated_time_seconds = 15
+
+# ============================================================================
+# PREVIOUS MATCH (N command)
+# ============================================================================
+
+[[scenarios]]
+id = "search_prev_001"
+name = "Go to previous match"
+description = "Use 'N' to navigate to previous search match"
+
+hints = [
+    "'N' goes to the previous match (opposite of 'n')",
+    "Useful for reversing search direction",
+]
+
+[scenarios.setup]
+file_content = "cat dog cat bird cat"
+cursor_position = [0, 17]
+
+[scenarios.target]
+file_content = "cat dog cat bird cat"
+cursor_position = [0, 8]
+selection = [0, 8, 0, 11]
+
+[scenarios.solution]
+commands = ["#"]
+description = "Press '#' to search backward for 'cat'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "intermediate"
+tags = ["search", "previous", "match"]
+commands_taught = ["#"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "search_prev_002"
+name = "Navigate back with N"
+description = "Use '*' then 'N' to go back to previous match"
+
+hints = [
+    "'*' finds next match, 'N' reverses direction",
+    "Combine commands to navigate flexibly",
+]
+
+[scenarios.setup]
+file_content = "item one item two item"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "item one item two item"
+cursor_position = [0, 9]
+selection = [0, 9, 0, 13]
+
+[scenarios.solution]
+commands = ["*", "N"]
+description = "Press '*' then 'N' to go back to middle 'item'"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "intermediate"
+tags = ["search", "previous", "reverse"]
+commands_taught = ["*", "N"]
+estimated_time_seconds = 15
+
+# ============================================================================
+# SEARCH WRAP AROUND
+# ============================================================================
+
+[[scenarios]]
+id = "search_wrap_001"
+name = "Search wraps around"
+description = "Search wraps from end to beginning of document"
+
+hints = [
+    "When at the last match, '*' or 'n' wraps to the first",
+    "Search is circular within the document",
+]
+
+[scenarios.setup]
+file_content = "first middle last first"
+cursor_position = [0, 19]
+
+[scenarios.target]
+file_content = "first middle last first"
+cursor_position = [0, 0]
+selection = [0, 0, 0, 5]
+
+[scenarios.solution]
+commands = ["*"]
+description = "Press '*' to wrap around to first 'first'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "intermediate"
+tags = ["search", "wrap", "circular"]
+commands_taught = ["*"]
+estimated_time_seconds = 15
+

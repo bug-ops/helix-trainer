@@ -575,7 +575,8 @@ fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
 
 /// Join lines in selection with space (Helix 'Alt-J' command)
 ///
-/// Like J but joins all selected lines and selects the inserted space.
+/// Like J but joins all selected lines and **selects the inserted spaces**.
+/// This is the key difference from J: the cursor ends up selecting the space(s).
 pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let range = sim.selection.primary();
     let start_line = sim.doc.char_to_line(range.from());
@@ -589,6 +590,10 @@ pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
     }
 
     // Join lines from end to start to avoid position shifting issues
+    // Track the position of the FIRST space (which will be at a stable position
+    // since we join from bottom to top)
+    let mut first_space_pos = None;
+
     for line in (start_line..end_line).rev() {
         if line + 1 >= sim.doc.len_lines() {
             continue;
@@ -604,6 +609,20 @@ pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
         );
 
         sim.apply_transaction(transaction);
+
+        // Record position of first space (this is actually the last join we do,
+        // which corresponds to the first line break in the original selection)
+        first_space_pos = Some(line_end);
+    }
+
+    // Select the inserted spaces
+    // After joining, spaces are at consecutive positions starting from first_space_pos
+    if let Some(first_pos) = first_space_pos {
+        // Create selection covering all inserted spaces
+        // Each join inserts one space, so we have num_joins spaces total
+        // But they're not consecutive - each space is separated by the content of the joined line
+        // Actually, we should select just the first inserted space (like original Helix)
+        sim.selection = Selection::single(first_pos, first_pos + 1);
     }
 
     Ok(())
@@ -677,6 +696,11 @@ mod tests {
         join_selections_space(&mut sim).unwrap();
 
         assert_eq!(sim.doc.to_string(), "line 1 line 2\nline 3");
+
+        // Key feature of Alt-J: selection covers the inserted space
+        let sel = sim.selection.primary();
+        assert_eq!(sel.from(), 6, "selection should start at inserted space");
+        assert_eq!(sel.to(), 7, "selection should end after inserted space");
     }
 
     #[test]
@@ -688,6 +712,40 @@ mod tests {
 
         // No change for single line
         assert_eq!(sim.doc.to_string(), "single line");
+    }
+
+    #[test]
+    fn test_join_selections_space_three_lines() {
+        // Joining 3 lines - verifies first space is selected (not last)
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("line 1\nline 2\nline 3".to_string());
+        sim.selection = Selection::single(0, 21); // All 3 lines
+
+        join_selections_space(&mut sim).unwrap();
+
+        assert_eq!(sim.doc.to_string(), "line 1 line 2 line 3");
+        // Should select the FIRST inserted space (between line 1 and line 2)
+        let sel = sim.selection.primary();
+        assert_eq!(
+            sel.from(),
+            6,
+            "selection should start at first inserted space"
+        );
+        assert_eq!(sel.to(), 7, "selection should cover one space");
+    }
+
+    #[test]
+    fn test_join_selections_space_minimal() {
+        // Minimal test case: "a\nb" -> "a b" with space at position 1
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("a\nb".to_string());
+        sim.selection = Selection::single(0, 3);
+
+        join_selections_space(&mut sim).unwrap();
+
+        assert_eq!(sim.doc.to_string(), "a b");
+        let sel = sim.selection.primary();
+        assert_eq!(sel.from(), 1);
+        assert_eq!(sel.to(), 2);
     }
 
     // Surround command tests

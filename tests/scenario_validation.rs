@@ -323,14 +323,18 @@ fn test_all_scenarios_execute_solution() {
                         }
                         SessionAfterAction::StillActive(s) => {
                             if !s.check_completion() {
+                                let current = s.current_state();
+                                let target = s.target_state();
                                 failed_scenarios.push((
                                     scenario.id.clone(),
                                     format!(
-                                        "Solution did not complete scenario. Current state:\n  Content: '{}'\n  Cursor: {:?}\n  Target content: '{}'\n  Target cursor: {:?}",
-                                        s.current_state().content(),
-                                        s.current_state().cursor_position(),
-                                        s.target_state().content(),
-                                        s.target_state().cursor_position()
+                                        "Solution did not complete scenario.\n  Current: content='{}', cursor={:?}, selection={:?}\n  Target:  content='{}', cursor={:?}, selection={:?}",
+                                        current.content(),
+                                        current.cursor_position(),
+                                        current.selection(),
+                                        target.content(),
+                                        target.cursor_position(),
+                                        target.selection()
                                     ),
                                 ));
                             }

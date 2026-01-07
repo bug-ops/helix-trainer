@@ -511,7 +511,9 @@ impl EditorState {
 
     /// Check if this state matches another state (for completion checking).
     ///
-    /// Compares both content and cursor position. Selection is not compared.
+    /// Compares content, cursor position, and selection (if target has one).
+    /// When the target state has a selection, both content and selection must match.
+    /// When the target has no selection, only content and cursor are compared.
     ///
     /// # Examples
     ///
@@ -525,7 +527,18 @@ impl EditorState {
     /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
     pub fn matches(&self, other: &EditorState) -> bool {
-        self.content == other.content && self.cursor_pos == other.cursor_pos
+        // Content must always match
+        if self.content != other.content {
+            return false;
+        }
+
+        // If target has selection, check selection matches (ignore cursor)
+        if let Some(target_sel) = other.selection {
+            return self.selection.is_some_and(|sel| sel == target_sel);
+        }
+
+        // If target has no selection, check cursor position
+        self.cursor_pos == other.cursor_pos
     }
 
     /// Check if content matches another state (ignoring cursor and selection).

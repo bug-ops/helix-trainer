@@ -1,0 +1,662 @@
+# Text Object Commands
+# Scenarios for mi*/ma* (match inside/around) text objects
+# Commands: miw, maw, mip, map, mi(, ma(, mi[, ma[, mi{, ma{, mi", ma", mi', ma'
+
+# ============================================================================
+# WORD OBJECTS (miw, maw)
+# ============================================================================
+
+[[scenarios]]
+id = "text_object_miw_001"
+name = "Select inside word - basic"
+description = "Use 'miw' to select the word under cursor (without surrounding whitespace)"
+
+hints = [
+    "'mi' starts match-inside, followed by the object type",
+    "'w' is the word object",
+    "'miw' selects just the word characters, not surrounding spaces",
+]
+
+[scenarios.setup]
+file_content = "hello beautiful world"
+cursor_position = [0, 6]
+
+[scenarios.target]
+file_content = "hello beautiful world"
+cursor_position = [0, 6]
+selection = [0, 6, 0, 15]
+
+[scenarios.solution]
+commands = ["miw"]
+description = "Press 'miw' to select 'beautiful'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "word", "selection"]
+commands_taught = ["miw"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "text_object_miw_002"
+name = "Select inside word - at word start"
+description = "Select word when cursor is at the beginning of the word"
+
+hints = [
+    "'miw' works regardless of cursor position within the word",
+    "Cursor can be at start, middle, or end of word",
+]
+
+[scenarios.setup]
+file_content = "let value = 42"
+cursor_position = [0, 4]
+
+[scenarios.target]
+file_content = "let value = 42"
+cursor_position = [0, 4]
+selection = [0, 4, 0, 9]
+
+[scenarios.solution]
+commands = ["miw"]
+description = "Press 'miw' to select 'value'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "word", "selection"]
+commands_taught = ["miw"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "text_object_maw_001"
+name = "Select around word - basic"
+description = "Use 'maw' to select word including surrounding whitespace"
+
+hints = [
+    "'ma' starts match-around, including delimiters/whitespace",
+    "'maw' includes trailing whitespace (or leading if at end)",
+]
+
+[scenarios.setup]
+file_content = "hello beautiful world"
+cursor_position = [0, 8]
+
+[scenarios.target]
+file_content = "hello beautiful world"
+cursor_position = [0, 16]
+selection = [0, 6, 0, 16]
+
+[scenarios.solution]
+commands = ["maw"]
+description = "Press 'maw' to select 'beautiful ' (word with trailing space)"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "word", "selection"]
+commands_taught = ["maw"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "text_object_maw_002"
+name = "Select around word - delete word"
+description = "Use 'maw' then 'd' to delete a word with its surrounding space"
+
+hints = [
+    "'maw' + 'd' is efficient for removing a word cleanly",
+    "Leaves no double spaces behind",
+]
+
+[scenarios.setup]
+file_content = "one two three"
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = "one three"
+cursor_position = [0, 4]
+
+[scenarios.solution]
+commands = ["maw", "d"]
+description = "Press 'maw' to select 'two ' then 'd' to delete"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "word", "delete"]
+commands_taught = ["maw", "d"]
+estimated_time_seconds = 15
+
+# ============================================================================
+# PARAGRAPH OBJECTS (mip, map)
+# ============================================================================
+
+[[scenarios]]
+id = "text_object_mip_001"
+name = "Select inside paragraph - basic"
+description = "Use 'mip' to select the current paragraph content"
+
+hints = [
+    "'mip' selects the current paragraph (text between blank lines)",
+    "A paragraph is a block of non-empty lines",
+]
+
+[scenarios.setup]
+file_content = "First line.\nSecond line.\n\nAnother paragraph."
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = "First line.\nSecond line.\n\nAnother paragraph."
+cursor_position = [0, 0]
+selection = [0, 0, 2, 0]
+
+[scenarios.solution]
+commands = ["mip"]
+description = "Press 'mip' to select first paragraph"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "paragraph", "selection"]
+commands_taught = ["mip"]
+estimated_time_seconds = 15
+
+[[scenarios]]
+id = "text_object_mip_002"
+name = "Select inside paragraph - multi-line"
+description = "Select a code block using paragraph object"
+
+hints = [
+    "In code, paragraphs are often separated by blank lines",
+    "Great for selecting function bodies or blocks",
+]
+
+[scenarios.setup]
+file_content = "fn main() {\n    println!(\"Hello\");\n    println!(\"World\");\n}\n\nfn other() {\n    todo!();\n}"
+cursor_position = [1, 4]
+
+[scenarios.target]
+file_content = "fn main() {\n    println!(\"Hello\");\n    println!(\"World\");\n}\n\nfn other() {\n    todo!();\n}"
+cursor_position = [4, 0]
+selection = [0, 0, 4, 0]
+
+[scenarios.solution]
+commands = ["mip"]
+description = "Press 'mip' to select the first function block"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "paragraph", "code"]
+commands_taught = ["mip"]
+estimated_time_seconds = 15
+
+[[scenarios]]
+id = "text_object_map_001"
+name = "Select around paragraph - basic"
+description = "Use 'map' to select paragraph including surrounding blank lines"
+
+hints = [
+    "'map' includes the trailing blank line(s)",
+    "Useful for moving or deleting entire paragraphs",
+]
+
+[scenarios.setup]
+file_content = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
+cursor_position = [2, 0]
+
+[scenarios.target]
+file_content = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
+cursor_position = [4, 0]
+selection = [2, 0, 4, 0]
+
+[scenarios.solution]
+commands = ["map"]
+description = "Press 'map' to select second paragraph (with trailing blank line)"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "paragraph", "selection"]
+commands_taught = ["map"]
+estimated_time_seconds = 15
+
+[[scenarios]]
+id = "text_object_map_002"
+name = "Select around paragraph - delete"
+description = "Delete an entire paragraph including blank lines"
+
+hints = [
+    "'map' + 'd' cleanly removes a paragraph",
+    "No orphan blank lines left behind",
+]
+
+[scenarios.setup]
+file_content = "Keep this.\n\nDelete this.\n\nKeep this too."
+cursor_position = [2, 0]
+
+[scenarios.target]
+file_content = "Keep this.\n\nKeep this too."
+cursor_position = [2, 0]
+
+[scenarios.solution]
+commands = ["map", "d"]
+description = "Press 'map' to select paragraph, then 'd' to delete"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "paragraph", "delete"]
+commands_taught = ["map", "d"]
+estimated_time_seconds = 15
+
+# ============================================================================
+# PARENTHESES OBJECTS (mi(, ma()
+# ============================================================================
+
+[[scenarios]]
+id = "text_object_mi_paren_001"
+name = "Select inside parentheses"
+description = "Use 'mi(' to select content inside parentheses"
+
+hints = [
+    "'mi(' selects everything INSIDE the parentheses",
+    "The parentheses themselves are NOT included",
+    "Cursor must be inside or on the parentheses",
+]
+
+[scenarios.setup]
+file_content = "fn calculate(x + y * 2)"
+cursor_position = [0, 15]
+
+[scenarios.target]
+file_content = "fn calculate(x + y * 2)"
+cursor_position = [0, 13]
+selection = [0, 13, 0, 22]
+
+[scenarios.solution]
+commands = ["mi("]
+description = "Press 'mi(' to select 'x + y * 2'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "parentheses", "selection"]
+commands_taught = ["mi("]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "text_object_ma_paren_001"
+name = "Select around parentheses"
+description = "Use 'ma(' to select content including the parentheses"
+
+hints = [
+    "'ma(' includes the parentheses in the selection",
+    "Useful for replacing entire function arguments",
+]
+
+[scenarios.setup]
+file_content = "call(arg1, arg2)"
+cursor_position = [0, 7]
+
+[scenarios.target]
+file_content = "call(arg1, arg2)"
+cursor_position = [0, 4]
+selection = [0, 4, 0, 16]
+
+[scenarios.solution]
+commands = ["ma("]
+description = "Press 'ma(' to select '(arg1, arg2)'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "parentheses", "selection"]
+commands_taught = ["ma("]
+estimated_time_seconds = 10
+
+# ============================================================================
+# SQUARE BRACKET OBJECTS (mi[, ma[)
+# ============================================================================
+
+[[scenarios]]
+id = "text_object_mi_bracket_001"
+name = "Select inside square brackets"
+description = "Use 'mi[' to select content inside square brackets"
+
+hints = [
+    "'mi[' selects array/index content",
+    "Brackets are NOT included in selection",
+]
+
+[scenarios.setup]
+file_content = "let arr = [1, 2, 3];"
+cursor_position = [0, 12]
+
+[scenarios.target]
+file_content = "let arr = [1, 2, 3];"
+cursor_position = [0, 11]
+selection = [0, 11, 0, 18]
+
+[scenarios.solution]
+commands = ["mi["]
+description = "Press 'mi[' to select '1, 2, 3'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "brackets", "selection"]
+commands_taught = ["mi["]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "text_object_ma_bracket_001"
+name = "Select around square brackets"
+description = "Use 'ma[' to select content including the brackets"
+
+hints = [
+    "'ma[' includes the brackets in selection",
+    "Useful for replacing entire array literals",
+]
+
+[scenarios.setup]
+file_content = "data[index]"
+cursor_position = [0, 6]
+
+[scenarios.target]
+file_content = "data[index]"
+cursor_position = [0, 4]
+selection = [0, 4, 0, 11]
+
+[scenarios.solution]
+commands = ["ma["]
+description = "Press 'ma[' to select '[index]'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "brackets", "selection"]
+commands_taught = ["ma["]
+estimated_time_seconds = 10
+
+# ============================================================================
+# CURLY BRACE OBJECTS (mi{, ma{)
+# ============================================================================
+
+[[scenarios]]
+id = "text_object_mi_brace_001"
+name = "Select inside curly braces"
+description = "Use 'mi{' to select content inside curly braces"
+
+hints = [
+    "'mi{' selects block content",
+    "Braces are NOT included",
+    "Great for selecting function/block bodies",
+]
+
+[scenarios.setup]
+file_content = "if true { return 42; }"
+cursor_position = [0, 12]
+
+[scenarios.target]
+file_content = "if true { return 42; }"
+cursor_position = [0, 21]
+selection = [0, 9, 0, 21]
+
+[scenarios.solution]
+commands = ["mi{"]
+description = "Press 'mi{' to select ' return 42; '"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "braces", "selection"]
+commands_taught = ["mi{"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "text_object_ma_brace_001"
+name = "Select around curly braces"
+description = "Use 'ma{' to select block including braces"
+
+hints = [
+    "'ma{' includes the braces in selection",
+    "Useful for deleting or replacing entire blocks",
+]
+
+[scenarios.setup]
+file_content = "fn test() { body(); }"
+cursor_position = [0, 14]
+
+[scenarios.target]
+file_content = "fn test() { body(); }"
+cursor_position = [0, 10]
+selection = [0, 10, 0, 21]
+
+[scenarios.solution]
+commands = ["ma{"]
+description = "Press 'ma{' to select '{ body(); }'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "braces", "selection"]
+commands_taught = ["ma{"]
+estimated_time_seconds = 10
+
+# ============================================================================
+# DOUBLE QUOTE OBJECTS (mi", ma")
+# ============================================================================
+
+[[scenarios]]
+id = "text_object_mi_dquote_001"
+name = "Select inside double quotes"
+description = "Use 'mi\"' to select content inside double quotes"
+
+hints = [
+    "'mi\"' selects string content without the quotes",
+    "Useful for editing string literals",
+]
+
+[scenarios.setup]
+file_content = "let msg = \"Hello World\";"
+cursor_position = [0, 15]
+
+[scenarios.target]
+file_content = "let msg = \"Hello World\";"
+cursor_position = [0, 11]
+selection = [0, 11, 0, 22]
+
+[scenarios.solution]
+commands = ["mi\""]
+description = "Press 'mi\"' to select 'Hello World'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "quotes", "selection"]
+commands_taught = ["mi\""]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "text_object_ma_dquote_001"
+name = "Select around double quotes"
+description = "Use 'ma\"' to select string including quotes"
+
+hints = [
+    "'ma\"' includes the quote characters",
+    "Useful for replacing entire string literals",
+]
+
+[scenarios.setup]
+file_content = "print(\"old text\")"
+cursor_position = [0, 10]
+
+[scenarios.target]
+file_content = "print(\"old text\")"
+cursor_position = [0, 6]
+selection = [0, 6, 0, 16]
+
+[scenarios.solution]
+commands = ["ma\""]
+description = "Press 'ma\"' to select '\"old text\"'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "quotes", "selection"]
+commands_taught = ["ma\""]
+estimated_time_seconds = 10
+
+# ============================================================================
+# SINGLE QUOTE OBJECTS (mi', ma')
+# ============================================================================
+
+[[scenarios]]
+id = "text_object_mi_squote_001"
+name = "Select inside single quotes"
+description = "Use \"mi'\" to select content inside single quotes"
+
+hints = [
+    "\"mi'\" selects character/string content without quotes",
+    "Works like mi\" but for single quotes",
+]
+
+[scenarios.setup]
+file_content = "let c = 'x';"
+cursor_position = [0, 9]
+
+[scenarios.target]
+file_content = "let c = 'x';"
+cursor_position = [0, 9]
+selection = [0, 9, 0, 10]
+
+[scenarios.solution]
+commands = ["mi'"]
+description = "Press \"mi'\" to select 'x'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "quotes", "selection"]
+commands_taught = ["mi'"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "text_object_ma_squote_001"
+name = "Select around single quotes"
+description = "Use \"ma'\" to select content including single quotes"
+
+hints = [
+    "\"ma'\" includes the quote characters",
+    "Useful for char literal manipulation",
+]
+
+[scenarios.setup]
+file_content = "match 'a' =>"
+cursor_position = [0, 7]
+
+[scenarios.target]
+file_content = "match 'a' =>"
+cursor_position = [0, 6]
+selection = [0, 6, 0, 9]
+
+[scenarios.solution]
+commands = ["ma'"]
+description = "Press \"ma'\" to select \"'a'\""
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["text-object", "quotes", "selection"]
+commands_taught = ["ma'"]
+estimated_time_seconds = 10

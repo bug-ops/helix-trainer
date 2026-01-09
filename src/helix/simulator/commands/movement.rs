@@ -424,7 +424,7 @@ pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
     Ok(())
 }
 
-/// Move to previous paragraph (Helix '{' command)
+/// Move to previous paragraph (Helix '[p' command)
 pub fn goto_prev_paragraph<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
@@ -436,7 +436,7 @@ pub fn goto_prev_paragraph<M: EditorMode>(
     Ok(())
 }
 
-/// Move to next paragraph (Helix '}' command)
+/// Move to next paragraph (Helix ']p' command)
 pub fn goto_next_paragraph<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,

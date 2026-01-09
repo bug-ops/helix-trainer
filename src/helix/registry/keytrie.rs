@@ -82,6 +82,10 @@ impl KeyTrie {
         // Register multi-key match mode commands
         trie.multi_key.insert("mm", "mm");
 
+        // Register multi-key bracket navigation commands
+        trie.multi_key.insert("[p", "[p");
+        trie.multi_key.insert("]p", "]p");
+
         // Register character-input prefixes
         trie.char_input_prefixes.insert('f');
         trie.char_input_prefixes.insert('F');
@@ -222,8 +226,8 @@ impl KeyTrie {
                 return KeyMatch::Partial;
             }
 
-            // Check if this is a goto prefix or match mode prefix
-            if first_char == 'g' || first_char == 'm' {
+            // Check if this is a goto prefix, match mode prefix, or bracket prefix
+            if first_char == 'g' || first_char == 'm' || first_char == '[' || first_char == ']' {
                 return KeyMatch::Partial;
             }
 
@@ -247,7 +251,7 @@ impl KeyTrie {
 
     /// Check if a character starts a multi-key sequence
     pub fn is_multi_key_prefix(&self, ch: char) -> bool {
-        ch == 'g' || self.char_input_prefixes.contains(&ch)
+        ch == 'g' || ch == '[' || ch == ']' || self.char_input_prefixes.contains(&ch)
     }
 }
 

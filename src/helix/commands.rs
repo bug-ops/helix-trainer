@@ -23,8 +23,8 @@ pub const CMD_PAGE_UP: &str = "Ctrl-b";
 pub const CMD_PAGE_DOWN: &str = "Ctrl-f";
 pub const CMD_HALF_PAGE_UP: &str = "Ctrl-u";
 pub const CMD_HALF_PAGE_DOWN: &str = "Ctrl-d";
-pub const CMD_GOTO_PREV_PARAGRAPH: &str = "{";
-pub const CMD_GOTO_NEXT_PARAGRAPH: &str = "}";
+pub const CMD_GOTO_PREV_PARAGRAPH: &str = "[p";
+pub const CMD_GOTO_NEXT_PARAGRAPH: &str = "]p";
 pub const CMD_GOTO_FIRST_NONBLANK: &str = "^";
 
 // Editing commands

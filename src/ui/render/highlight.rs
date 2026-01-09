@@ -256,8 +256,9 @@ pub fn highlight_code_with_cursor(
                     current_byte = text_end;
                 }
 
-                // Handle empty line cursor
-                if line_text.is_empty() {
+                // Handle cursor at end of line (past last character) or empty line
+                let line_char_count = line_text.chars().count();
+                if cursor_col >= line_char_count {
                     spans.push(Span::styled(
                         "\u{2588}".to_string(),
                         Style::default()

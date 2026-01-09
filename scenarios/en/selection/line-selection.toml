@@ -12,11 +12,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Line 1\nLine 2\nLine 3"
-cursor_position = [1, 2]
+file_content = """fn main() {
+    let x = 1;
+    let y = 2;
+}"""
+cursor_position = [1, 6]
 
 [scenarios.target]
-file_content = "Line 1\nLine 2\nLine 3"
+file_content = """fn main() {
+    let x = 1;
+    let y = 2;
+}"""
 cursor_position = [1, 0]
 selection = [1, 0, 2, 0]
 
@@ -47,11 +53,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello World\nSecond line"
-cursor_position = [0, 5]
+file_content = """use std::io;
+fn main() {
+    println!("Hello");
+}"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "Hello World\nSecond line"
+file_content = """use std::io;
+fn main() {
+    println!("Hello");
+}"""
 cursor_position = [0, 0]
 selection = [0, 0, 1, 0]
 
@@ -82,14 +94,20 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "ABCDEF\nGHIJKL"
-cursor_position = [0, 2]
-selection = [0, 2, 0, 4]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+}"""
+cursor_position = [1, 6]
+selection = [1, 6, 1, 10]
 
 [scenarios.target]
-file_content = "ABCDEF\nGHIJKL"
-cursor_position = [0, 0]
-selection = [0, 0, 1, 0]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+}"""
+cursor_position = [1, 0]
+selection = [1, 0, 2, 0]
 
 [scenarios.solution]
 commands = ["X"]

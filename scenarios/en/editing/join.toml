@@ -12,12 +12,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello\nWorld"
-cursor_position = [0, 0]
+file_content = """fn main() {
+    let msg = "Hello"
+        .to_string();
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "Hello World"
-cursor_position = [0, 0]
+file_content = """fn main() {
+    let msg = "Hello"         .to_string();
+}"""
+cursor_position = [1, 4]
 
 [scenarios.solution]
 commands = ["J"]
@@ -27,9 +32,10 @@ description = "Press 'J' to join lines"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
 tags = ["join", "lines"]
 commands_taught = ["J"]
-estimated_time_seconds = 20
+estimated_time_seconds = 10

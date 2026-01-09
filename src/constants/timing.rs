@@ -20,14 +20,6 @@ pub const DEFAULT_NOTIFICATION_DURATION: Duration = Duration::from_secs(3);
 /// Debounce interval for profile saves (5 seconds)
 pub const PROFILE_SAVE_DEBOUNCE: Duration = Duration::from_secs(5);
 
-// Security/session timing
-/// Command execution timeout (30 seconds)
-pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
-/// Session timeout (1 hour)
-pub const SESSION_TIMEOUT: Duration = Duration::from_secs(3600);
-/// Minimum interval between scenario loads (100ms)
-pub const MIN_LOAD_INTERVAL: Duration = Duration::from_millis(100);
-
 // Data loading
 /// Timeout for async data loading operations (5 seconds)
 pub const DATA_LOADING_TIMEOUT: Duration = Duration::from_secs(5);

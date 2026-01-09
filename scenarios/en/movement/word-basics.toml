@@ -8,17 +8,35 @@ description = "Use 'w' to jump to next word start"
 
 hints = [
     "'w' moves to the start of the next word",
-    "Spaces separate words",
+    "Spaces and punctuation separate words",
 ]
 
 [scenarios.setup]
-file_content = "Hello World"
-cursor_position = [0, 0]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "Hello World"
-cursor_position = [0, 6]
-selection = [0, 0, 0, 6]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [1, 8]
+selection = [1, 4, 1, 8]
 
 [scenarios.solution]
 commands = ["w"]
@@ -47,13 +65,31 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one two three"
-cursor_position = [0, 0]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "one two three"
-cursor_position = [0, 8]
-selection = [0, 4, 0, 8]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [1, 13]
+selection = [1, 8, 1, 13]
 
 [scenarios.solution]
 commands = ["w", "w"]
@@ -82,13 +118,31 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello World"
-cursor_position = [0, 6]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 12]
 
 [scenarios.target]
-file_content = "Hello World"
-cursor_position = [0, 0]
-selection = [0, 0, 0, 6]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 8]
+selection = [1, 8, 1, 12]
 
 [scenarios.solution]
 commands = ["b"]
@@ -117,13 +171,31 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one two three"
-cursor_position = [0, 8]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [1, 20]
 
 [scenarios.target]
-file_content = "one two three"
-cursor_position = [0, 0]
-selection = [0, 0, 0, 4]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [1, 8]
+selection = [1, 8, 1, 12]
 
 [scenarios.solution]
 commands = ["b", "b"]
@@ -152,17 +224,25 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "alpha beta gamma"
-cursor_position = [0, 6]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}"""
+cursor_position = [2, 4]
 
 [scenarios.target]
-file_content = "alpha beta gamma"
-cursor_position = [0, 11]
-selection = [0, 6, 0, 11]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}"""
+cursor_position = [2, 11]
+selection = [2, 4, 2, 11]
 
 [scenarios.solution]
 commands = ["w"]
-description = "Press 'w' to go to 'gamma'"
+description = "Press 'w' to go to type annotation"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -187,17 +267,35 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "let x = 10"
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "let x = 10"
-cursor_position = [0, 4]
-selection = [0, 0, 0, 4]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [0, 3]
+selection = [0, 0, 0, 3]
 
 [scenarios.solution]
 commands = ["w"]
-description = "Move to variable name"
+description = "Move to function name"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -213,22 +311,40 @@ estimated_time_seconds = 5
 
 [[scenarios]]
 id = "word_sentence_001"
-name = "Navigate in sentence"
-description = "Move through words in a sentence"
+name = "Navigate in multi-line code"
+description = "Move through words across lines"
 
 hints = [
     "Use 'w' to move word by word",
-    "Count words to reach target",
+    "'w' wraps to next line at line end",
 ]
 
 [scenarios.setup]
-file_content = "The quick fox"
-cursor_position = [0, 0]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [4, 4]
 
 [scenarios.target]
-file_content = "The quick fox"
-cursor_position = [0, 10]
-selection = [0, 4, 0, 10]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [4, 12]
+selection = [4, 8, 4, 12]
 
 [scenarios.solution]
 commands = ["w", "w"]

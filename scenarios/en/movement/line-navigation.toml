@@ -1,5 +1,5 @@
 # Line Navigation
-# Scenarios for 0, $, gg, G commands
+# Scenarios for gh, gl, gg, ge commands
 
 [[scenarios]]
 id = "line_start_basic_001"
@@ -12,12 +12,30 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello World"
-cursor_position = [0, 6]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [1, 20]
 
 [scenarios.target]
-file_content = "Hello World"
-cursor_position = [0, 0]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [1, 0]
 
 [scenarios.solution]
 commands = ["gh"]
@@ -46,12 +64,30 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "The quick brown fox"
-cursor_position = [0, 15]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [4, 22]
 
 [scenarios.target]
-file_content = "The quick brown fox"
-cursor_position = [0, 0]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [4, 0]
 
 [scenarios.solution]
 commands = ["gh"]
@@ -80,12 +116,20 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "First line\nSecond line"
-cursor_position = [1, 7]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}"""
+cursor_position = [2, 10]
 
 [scenarios.target]
-file_content = "First line\nSecond line"
-cursor_position = [1, 0]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}"""
+cursor_position = [2, 0]
 
 [scenarios.solution]
 commands = ["gh"]
@@ -114,11 +158,29 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Line 1\nLine 2\nLine 3"
-cursor_position = [2, 0]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [8, 4]
 
 [scenarios.target]
-file_content = "Line 1\nLine 2\nLine 3"
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
 cursor_position = [0, 0]
 
 [scenarios.solution]
@@ -148,11 +210,29 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "First\nSecond\nThird\nFourth\nFifth"
-cursor_position = [2, 3]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [5, 8]
 
 [scenarios.target]
-file_content = "First\nSecond\nThird\nFourth\nFifth"
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
 cursor_position = [0, 0]
 
 [scenarios.solution]
@@ -174,24 +254,42 @@ estimated_time_seconds = 5
 [[scenarios]]
 id = "line_nav_combined_001"
 name = "Navigate to line start"
-description = "Use '0' to navigate within line"
+description = "Use 'gh' to navigate within line"
 
 hints = [
-    "'0' goes to start of current line",
+    "'gh' goes to start of current line",
     "Quick way to reach line beginning",
 ]
 
 [scenarios.setup]
-file_content = "abcdefghij"
-cursor_position = [0, 5]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [5, 20]
 
 [scenarios.target]
-file_content = "abcdefghij"
-cursor_position = [0, 0]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [5, 0]
 
 [scenarios.solution]
 commands = ["gh"]
-description = "Press '0' to go to start"
+description = "Press 'gh' to go to start"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -216,11 +314,39 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Start\nMiddle\nEnd"
-cursor_position = [1, 0]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}
+
+impl Config {
+    fn new() -> Self {
+        Self {
+            name: String::new(),
+            value: 0,
+            enabled: false,
+        }
+    }
+}"""
+cursor_position = [8, 8]
 
 [scenarios.target]
-file_content = "Start\nMiddle\nEnd"
+file_content = """struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}
+
+impl Config {
+    fn new() -> Self {
+        Self {
+            name: String::new(),
+            value: 0,
+            enabled: false,
+        }
+    }
+}"""
 cursor_position = [0, 0]
 
 [scenarios.solution]

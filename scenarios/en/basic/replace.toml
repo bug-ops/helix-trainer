@@ -12,17 +12,35 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "The quick brown fox"
-cursor_position = [0, 4]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 12]
 
 [scenarios.target]
-file_content = "The quick brown fox"
-cursor_position = [0, 4]
-selection = [0, 4, 0, 9]             # "quick" selected
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 12]
+selection = [1, 12, 1, 19]
 
 [scenarios.solution]
 commands = ["e"]
-description = "Press 'e' to select to the end of the current word"
+description = "Press 'e' to select to the end of 'counter'"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -47,16 +65,34 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hxllo world"
-cursor_position = [0, 1]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mur total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [1, 8]
 
 [scenarios.target]
-file_content = "Hello world"
-cursor_position = [0, 1]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [1, 8]
 
 [scenarios.solution]
-commands = ["re"]
-description = "Press 'r' then 'e' to replace 'x' with 'e'"
+commands = ["rt"]
+description = "Press 'r' then 't' to replace 'r' with 't' (mur -> mut)"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -77,24 +113,34 @@ description = "Delete character under cursor and enter insert mode"
 
 hints = [
     "'c' deletes the selection and enters insert mode",
-    "It's like 'x' followed by 'i'",
+    "It's like 'd' followed by 'i'",
     "Don't forget to press Escape to exit insert mode",
 ]
 
 [scenarios.setup]
-file_content = "test"
-cursor_position = [0, 0]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name");
+    let id = data.id;
+
+    name.len() > 0
+}"""
+cursor_position = [2, 8]
 
 [scenarios.target]
-file_content = "best"
-cursor_position = [0, 1]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name");
+    let key = data.id;
+
+    name.len() > 0
+}"""
+cursor_position = [2, 11]
 
 [scenarios.solution]
-commands = ["c", "b", "Escape"]
-description = "Press 'c' to delete and enter insert mode, 'b' to insert, Escape to exit"
+commands = ["e", "c", "k", "e", "y", "Escape"]
+description = "Press 'e' to select 'id', 'c' to change, type 'key', then Escape"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 6
 max_points = 100
 tolerance = 1
 

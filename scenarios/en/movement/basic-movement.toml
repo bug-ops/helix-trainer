@@ -12,12 +12,30 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello"
-cursor_position = [0, 3]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 12]
 
 [scenarios.target]
-file_content = "Hello"
-cursor_position = [0, 2]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 11]
 
 [scenarios.solution]
 commands = ["h"]
@@ -46,12 +64,30 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello"
-cursor_position = [0, 0]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 8]
 
 [scenarios.target]
-file_content = "Hello"
-cursor_position = [0, 1]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 9]
 
 [scenarios.solution]
 commands = ["l"]
@@ -80,12 +116,30 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "First\nSecond"
-cursor_position = [0, 0]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [1, 8]
 
 [scenarios.target]
-file_content = "First\nSecond"
-cursor_position = [1, 0]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [2, 8]
 
 [scenarios.solution]
 commands = ["j"]
@@ -114,12 +168,30 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "First\nSecond"
-cursor_position = [1, 0]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [2, 8]
 
 [scenarios.target]
-file_content = "First\nSecond"
-cursor_position = [0, 0]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [1, 8]
 
 [scenarios.solution]
 commands = ["k"]
@@ -148,12 +220,30 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello World"
-cursor_position = [0, 5]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [1, 15]
 
 [scenarios.target]
-file_content = "Hello World"
-cursor_position = [0, 2]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [1, 12]
 
 [scenarios.solution]
 commands = ["3h"]
@@ -182,12 +272,30 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello World"
-cursor_position = [0, 0]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [1, 8]
 
 [scenarios.target]
-file_content = "Hello World"
-cursor_position = [0, 3]
+file_content = """fn validate(data: &Data) -> bool {
+    let name = data.get("name").unwrap_or("default");
+    let items = [1, 2, 3, 4, 5];
+
+    if name.len() > 0 && items.contains(&data.id) {
+        println!("Valid: {}", name);
+        return true;
+    }
+    false
+}"""
+cursor_position = [1, 11]
 
 [scenarios.solution]
 commands = ["l", "l", "l"]
@@ -212,16 +320,34 @@ description = "Move cursor down through multiple lines"
 
 hints = [
     "'j' moves down one line at a time",
-    "Or use 'G' to go to end",
+    "Or use count prefix '2j' for efficiency",
 ]
 
 [scenarios.setup]
-file_content = "One\nTwo\nThree"
-cursor_position = [0, 0]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "One\nTwo\nThree"
-cursor_position = [2, 0]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [3, 4]
 
 [scenarios.solution]
 commands = ["j", "j"]
@@ -246,16 +372,34 @@ description = "Move cursor up through multiple lines"
 
 hints = [
     "'k' moves up one line at a time",
-    "Or use 'gg' to go to start",
+    "Or use count prefix '2k' for efficiency",
 ]
 
 [scenarios.setup]
-file_content = "One\nTwo\nThree"
-cursor_position = [2, 0]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [4, 4]
 
 [scenarios.target]
-file_content = "One\nTwo\nThree"
-cursor_position = [0, 0]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [2, 4]
 
 [scenarios.solution]
 commands = ["k", "k"]
@@ -284,12 +428,20 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "ABC\nDEF\nGHI"
-cursor_position = [0, 0]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "ABC\nDEF\nGHI"
-cursor_position = [1, 1]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+    enabled: bool,
+}"""
+cursor_position = [2, 5]
 
 [scenarios.solution]
 commands = ["j", "l"]

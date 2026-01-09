@@ -16,12 +16,21 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "First paragraph.\nMore text here.\n\nSecond paragraph.\nAnother line."
+file_content = """fn first() {
+    todo!();
+}
+
+fn second() {}"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "First paragraph.\nMore text here.\n\nSecond paragraph.\nAnother line."
-cursor_position = [3, 0]
+file_content = """fn first() {
+    todo!();
+}
+
+fn second() {}"""
+cursor_position = [4, 0]
+selection = [0, 0, 4, 0]
 
 [scenarios.solution]
 commands = ["]p"]
@@ -50,12 +59,25 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "fn first() {\n    // code\n}\n\nfn second() {\n    // more\n}"
-cursor_position = [0, 0]
+file_content = """fn add(a: i32) {
+    a + 1
+}
+
+fn sub(b: i32) {
+    b - 1
+}"""
+cursor_position = [0, 3]
 
 [scenarios.target]
-file_content = "fn first() {\n    // code\n}\n\nfn second() {\n    // more\n}"
+file_content = """fn add(a: i32) {
+    a + 1
+}
+
+fn sub(b: i32) {
+    b - 1
+}"""
 cursor_position = [4, 0]
+selection = [0, 3, 4, 0]
 
 [scenarios.solution]
 commands = ["]p"]
@@ -88,12 +110,21 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "First para.\n\nSecond para.\n\nThird para."
-cursor_position = [4, 5]
+file_content = """fn one() {}
+
+fn two() {}
+
+fn three() {}"""
+cursor_position = [4, 6]
 
 [scenarios.target]
-file_content = "First para.\n\nSecond para.\n\nThird para."
+file_content = """fn one() {}
+
+fn two() {}
+
+fn three() {}"""
 cursor_position = [4, 0]
+selection = [4, 0, 4, 6]
 
 [scenarios.solution]
 commands = ["[p"]
@@ -122,12 +153,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Para 1.\n\nPara 2."
+file_content = """let x = 1;
+
+let y = 2;"""
 cursor_position = [1, 0]
 
 [scenarios.target]
-file_content = "Para 1.\n\nPara 2."
+file_content = """let x = 1;
+
+let y = 2;"""
 cursor_position = [0, 0]
+selection = [0, 0, 1, 0]
 
 [scenarios.solution]
 commands = ["[p"]

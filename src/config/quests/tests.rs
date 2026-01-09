@@ -591,7 +591,7 @@ fn test_validate_all_quest_templates() {
     let valid_commands: HashSet<&str> = [
         // Movement
         "h", "j", "k", "l", "w", "b", "e", "0", "$", "gg", "G", // Paragraph movement
-        "{", "}", // Editing
+        "[p", "]p", // Editing
         "x", "i", "a", "I", "A", "o", "O", "c", "J", ">", "<", "~", // Clipboard
         "y", "yy", "p", "P", // Undo/Redo
         "u", "U", // Repeat

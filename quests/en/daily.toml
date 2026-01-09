@@ -722,25 +722,25 @@ target = 3
 # --- Paragraph Movement ---
 
 [[quests]]
-id = "cmd_brace_open_medium"
+id = "cmd_prev_paragraph_medium"
 name = "Previous Paragraph"
-description = "Jump to previous paragraph 5 times using '{'"
+description = "Jump to previous paragraph 5 times using '[p'"
 type = "command_practice"
 difficulty = "medium"
 
 [quests.params]
-command = "{"
+command = "[p"
 target = 5
 
 [[quests]]
-id = "cmd_brace_close_medium"
+id = "cmd_next_paragraph_medium"
 name = "Next Paragraph"
-description = "Jump to next paragraph 5 times using '}'"
+description = "Jump to next paragraph 5 times using ']p'"
 type = "command_practice"
 difficulty = "medium"
 
 [quests.params]
-command = "}"
+command = "]p"
 target = 5
 
 # --- Advanced Selection ---

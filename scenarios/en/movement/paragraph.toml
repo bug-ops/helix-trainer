@@ -1,17 +1,17 @@
 # Paragraph Movement Commands
-# Scenarios for { and } paragraph navigation
+# Scenarios for [p and ]p paragraph navigation
 
 # ============================================================================
-# NEXT PARAGRAPH (})
+# NEXT PARAGRAPH (]p)
 # ============================================================================
 
 [[scenarios]]
 id = "paragraph_next_001"
 name = "Jump to next paragraph"
-description = "Use '}' to move to the start of the next paragraph"
+description = "Use ']p' to move to the start of the next paragraph"
 
 hints = [
-    "'}' jumps to the start of the next paragraph",
+    "']p' jumps to the start of the next paragraph",
     "Skips over blank lines to the next content",
 ]
 
@@ -24,8 +24,8 @@ file_content = "First paragraph.\nMore text here.\n\nSecond paragraph.\nAnother 
 cursor_position = [3, 0]
 
 [scenarios.solution]
-commands = ["}"]
-description = "Press '}' to jump to next paragraph start"
+commands = ["]p"]
+description = "Press ']p' to jump to next paragraph start"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -36,17 +36,17 @@ tolerance = 0
 category = "movement"
 difficulty = "intermediate"
 tags = ["paragraph", "navigation"]
-commands_taught = ["}"]
+commands_taught = ["]p"]
 estimated_time_seconds = 10
 
 [[scenarios]]
 id = "paragraph_next_002"
 name = "Navigate code blocks"
-description = "Use '}' to navigate between code blocks separated by blank lines"
+description = "Use ']p' to navigate between code blocks separated by blank lines"
 
 hints = [
     "In code, paragraphs are often functions or blocks",
-    "'}' efficiently jumps between logical sections",
+    "']p' efficiently jumps between logical sections",
 ]
 
 [scenarios.setup]
@@ -58,8 +58,8 @@ file_content = "fn first() {\n    // code\n}\n\nfn second() {\n    // more\n}"
 cursor_position = [4, 0]
 
 [scenarios.solution]
-commands = ["}"]
-description = "Press '}' to jump to the next function"
+commands = ["]p"]
+description = "Press ']p' to jump to the next function"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -70,20 +70,20 @@ tolerance = 0
 category = "movement"
 difficulty = "intermediate"
 tags = ["paragraph", "navigation", "code"]
-commands_taught = ["}"]
+commands_taught = ["]p"]
 estimated_time_seconds = 10
 
 # ============================================================================
-# PREVIOUS PARAGRAPH ({)
+# PREVIOUS PARAGRAPH ([p)
 # ============================================================================
 
 [[scenarios]]
 id = "paragraph_prev_001"
 name = "Jump to previous paragraph"
-description = "Use '{' to move backward to the previous paragraph start"
+description = "Use '[p' to move backward to the previous paragraph start"
 
 hints = [
-    "'{' moves backward to the start of the previous paragraph",
+    "'[p' moves backward to the start of the previous paragraph",
     "Useful for navigating back through documents",
 ]
 
@@ -96,8 +96,8 @@ file_content = "First para.\n\nSecond para.\n\nThird para."
 cursor_position = [4, 0]
 
 [scenarios.solution]
-commands = ["{"]
-description = "Press '{' to move to paragraph start"
+commands = ["[p"]
+description = "Press '[p' to move to paragraph start"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -108,17 +108,17 @@ tolerance = 0
 category = "movement"
 difficulty = "intermediate"
 tags = ["paragraph", "navigation"]
-commands_taught = ["{"]
+commands_taught = ["[p"]
 estimated_time_seconds = 10
 
 [[scenarios]]
 id = "paragraph_prev_002"
 name = "Navigate back across paragraphs"
-description = "Use '{' from a blank line to go to previous paragraph"
+description = "Use '[p' from a blank line to go to previous paragraph"
 
 hints = [
-    "'{' from a blank line goes to the previous paragraph",
-    "Combined with '}' for efficient bidirectional navigation",
+    "'[p' from a blank line goes to the previous paragraph",
+    "Combined with ']p' for efficient bidirectional navigation",
 ]
 
 [scenarios.setup]
@@ -130,8 +130,8 @@ file_content = "Para 1.\n\nPara 2."
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["{"]
-description = "Press '{' to go back to previous paragraph"
+commands = ["[p"]
+description = "Press '[p' to go back to previous paragraph"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -142,5 +142,5 @@ tolerance = 0
 category = "movement"
 difficulty = "intermediate"
 tags = ["paragraph", "navigation"]
-commands_taught = ["{"]
+commands_taught = ["[p"]
 estimated_time_seconds = 10

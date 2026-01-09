@@ -145,6 +145,14 @@ pub struct CountPending {
     pub count: usize,
 }
 
+/// Waiting for second key after '[' (unmatched previous commands)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnmatchedPrevPending;
+
+/// Waiting for second key after ']' (unmatched next commands)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnmatchedNextPending;
+
 // ============================================================================
 // Sealed trait for handler states
 // ============================================================================
@@ -166,6 +174,8 @@ impl private::Sealed for TextObjectInsidePending {}
 impl private::Sealed for FindCharPending {}
 impl private::Sealed for ReplaceCharPending {}
 impl private::Sealed for CountPending {}
+impl private::Sealed for UnmatchedPrevPending {}
+impl private::Sealed for UnmatchedNextPending {}
 
 /// Marker trait for handler state types
 ///
@@ -250,6 +260,18 @@ impl HandlerState for ReplaceCharPending {
 impl HandlerState for CountPending {
     fn state_name() -> &'static str {
         "COUNT_PENDING"
+    }
+}
+
+impl HandlerState for UnmatchedPrevPending {
+    fn state_name() -> &'static str {
+        "UNMATCHED_PREV_PENDING"
+    }
+}
+
+impl HandlerState for UnmatchedNextPending {
+    fn state_name() -> &'static str {
+        "UNMATCHED_NEXT_PENDING"
     }
 }
 
@@ -340,6 +362,10 @@ pub enum InputState {
     ReplaceCharPending,
     /// After digit 1-9 - building count prefix
     CountPending { count: usize },
+    /// After '[' - waiting for unmatched previous command second key
+    UnmatchedPrevPending,
+    /// After ']' - waiting for unmatched next command second key
+    UnmatchedNextPending,
 }
 
 impl InputState {
@@ -415,6 +441,16 @@ impl InputState {
         )
     }
 
+    /// Check if this is unmatched prev pending state
+    pub fn is_unmatched_prev_pending(&self) -> bool {
+        matches!(self, Self::UnmatchedPrevPending)
+    }
+
+    /// Check if this is unmatched next pending state
+    pub fn is_unmatched_next_pending(&self) -> bool {
+        matches!(self, Self::UnmatchedNextPending)
+    }
+
     /// Get the state name for display
     pub fn name(&self) -> &'static str {
         match self {
@@ -431,6 +467,8 @@ impl InputState {
             Self::FindCharPending { .. } => "FIND_CHAR_PENDING",
             Self::ReplaceCharPending => "REPLACE_CHAR_PENDING",
             Self::CountPending { .. } => "COUNT_PENDING",
+            Self::UnmatchedPrevPending => "UNMATCHED_PREV_PENDING",
+            Self::UnmatchedNextPending => "UNMATCHED_NEXT_PENDING",
         }
     }
 }
@@ -480,6 +518,12 @@ impl InputHandler<BaseState> for KeyHandler {
             (KeyCode::Char('g'), false) => HandlerResult::Transition(InputState::GotoPending),
             (KeyCode::Char('z'), false) => HandlerResult::Transition(InputState::ViewPending),
             (KeyCode::Char('m'), false) => HandlerResult::Transition(InputState::MatchPending),
+            (KeyCode::Char('['), false) => {
+                HandlerResult::Transition(InputState::UnmatchedPrevPending)
+            }
+            (KeyCode::Char(']'), false) => {
+                HandlerResult::Transition(InputState::UnmatchedNextPending)
+            }
 
             // Find/till commands - transition to find char pending
             (KeyCode::Char('f'), false) => HandlerResult::Transition(InputState::FindCharPending {
@@ -827,6 +871,40 @@ impl InputHandler<CountPending> for KeyHandler {
 }
 
 // ============================================================================
+// Unmatched prev pending state handler (after '[')
+// ============================================================================
+
+impl InputHandler<UnmatchedPrevPending> for KeyHandler {
+    fn handle_key(_state: &UnmatchedPrevPending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            // '[p' - goto previous paragraph
+            KeyCode::Char('p') => HandlerResult::Execute(Cow::Borrowed(CMD_GOTO_PREV_PARAGRAPH)),
+            // Escape - cancel
+            KeyCode::Esc => HandlerResult::Cancel,
+            // Other keys - cancel (not recognized)
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+// ============================================================================
+// Unmatched next pending state handler (after ']')
+// ============================================================================
+
+impl InputHandler<UnmatchedNextPending> for KeyHandler {
+    fn handle_key(_state: &UnmatchedNextPending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            // ']p' - goto next paragraph
+            KeyCode::Char('p') => HandlerResult::Execute(Cow::Borrowed(CMD_GOTO_NEXT_PARAGRAPH)),
+            // Escape - cancel
+            KeyCode::Esc => HandlerResult::Cancel,
+            // Other keys - cancel (not recognized)
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+// ============================================================================
 // Input state machine
 // ============================================================================
 
@@ -895,6 +973,8 @@ impl InputStateMachine {
             InputState::CountPending { count } => {
                 KeyHandler::handle_key(&CountPending { count: *count }, key)
             }
+            InputState::UnmatchedPrevPending => KeyHandler::handle_key(&UnmatchedPrevPending, key),
+            InputState::UnmatchedNextPending => KeyHandler::handle_key(&UnmatchedNextPending, key),
         };
 
         // Update state based on result - move values instead of cloning
@@ -1165,6 +1245,12 @@ impl TypestateHandler<BaseState> {
             HandlerResult::Transition(InputState::CountPending { count }) => {
                 TypestateHandlerState::CountPending(TypestateHandler::new(), *count)
             }
+            HandlerResult::Transition(InputState::UnmatchedPrevPending) => {
+                TypestateHandlerState::UnmatchedPrevPending(TypestateHandler::new())
+            }
+            HandlerResult::Transition(InputState::UnmatchedNextPending) => {
+                TypestateHandlerState::UnmatchedNextPending(TypestateHandler::new())
+            }
             _ => TypestateHandlerState::Base(TypestateHandler::new()),
         };
         (result, next_state)
@@ -1189,6 +1275,8 @@ pub enum TypestateHandlerState {
     FindCharPending(TypestateHandler<FindCharPending>, FindType),
     ReplaceCharPending(TypestateHandler<ReplaceCharPending>),
     CountPending(TypestateHandler<CountPending>, usize),
+    UnmatchedPrevPending(TypestateHandler<UnmatchedPrevPending>),
+    UnmatchedNextPending(TypestateHandler<UnmatchedNextPending>),
 }
 
 impl Default for TypestateHandlerState {
@@ -1330,6 +1418,22 @@ impl TypestateHandlerState {
                 };
                 (result, next)
             }
+            Self::UnmatchedPrevPending(_) => {
+                let result = KeyHandler::handle_key(&UnmatchedPrevPending, key);
+                let next = match &result {
+                    HandlerResult::Stay => Self::UnmatchedPrevPending(TypestateHandler::new()),
+                    _ => Self::Base(TypestateHandler::new()),
+                };
+                (result, next)
+            }
+            Self::UnmatchedNextPending(_) => {
+                let result = KeyHandler::handle_key(&UnmatchedNextPending, key);
+                let next = match &result {
+                    HandlerResult::Stay => Self::UnmatchedNextPending(TypestateHandler::new()),
+                    _ => Self::Base(TypestateHandler::new()),
+                };
+                (result, next)
+            }
         }
     }
 
@@ -1354,6 +1458,8 @@ impl TypestateHandlerState {
             Self::FindCharPending(_, _) => FindCharPending::state_name(),
             Self::ReplaceCharPending(_) => ReplaceCharPending::state_name(),
             Self::CountPending(_, _) => CountPending::state_name(),
+            Self::UnmatchedPrevPending(_) => UnmatchedPrevPending::state_name(),
+            Self::UnmatchedNextPending(_) => UnmatchedNextPending::state_name(),
         }
     }
 }
@@ -1757,6 +1863,90 @@ mod tests {
             let result = KeyHandler::handle_key(
                 &ViewPending,
                 KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+    }
+
+    mod unmatched_prev_pending_handler_tests {
+        use super::*;
+
+        #[test]
+        fn test_unmatched_prev_pending_p_produces_goto_prev_paragraph() {
+            let result = KeyHandler::handle_key(
+                &UnmatchedPrevPending,
+                KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
+            );
+            assert!(
+                matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_PREV_PARAGRAPH)
+            );
+        }
+
+        #[test]
+        fn test_unmatched_prev_pending_escape_cancels() {
+            let result = KeyHandler::handle_key(
+                &UnmatchedPrevPending,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+
+        #[test]
+        fn test_unmatched_prev_pending_other_key_cancels() {
+            let result = KeyHandler::handle_key(
+                &UnmatchedPrevPending,
+                KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+
+        #[test]
+        fn test_unmatched_prev_pending_digit_cancels() {
+            let result = KeyHandler::handle_key(
+                &UnmatchedPrevPending,
+                KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+    }
+
+    mod unmatched_next_pending_handler_tests {
+        use super::*;
+
+        #[test]
+        fn test_unmatched_next_pending_p_produces_goto_next_paragraph() {
+            let result = KeyHandler::handle_key(
+                &UnmatchedNextPending,
+                KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
+            );
+            assert!(
+                matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_NEXT_PARAGRAPH)
+            );
+        }
+
+        #[test]
+        fn test_unmatched_next_pending_escape_cancels() {
+            let result = KeyHandler::handle_key(
+                &UnmatchedNextPending,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+
+        #[test]
+        fn test_unmatched_next_pending_other_key_cancels() {
+            let result = KeyHandler::handle_key(
+                &UnmatchedNextPending,
+                KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            );
+            assert!(matches!(result, HandlerResult::Cancel));
+        }
+
+        #[test]
+        fn test_unmatched_next_pending_digit_cancels() {
+            let result = KeyHandler::handle_key(
+                &UnmatchedNextPending,
+                KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
             );
             assert!(matches!(result, HandlerResult::Cancel));
         }

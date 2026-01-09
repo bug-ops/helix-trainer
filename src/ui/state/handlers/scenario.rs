@@ -5,6 +5,7 @@
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
 use crate::security::UserError;
+use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
     AppState, HandlerContext, HandlerOutcome, MenuData, Message, ResultsData, TaskData,
     TypedScreen, XPBreakdown, update,
@@ -95,13 +96,23 @@ fn record_scenario_completion(
     }
 
     let commands = ScenarioCompletionService::extract_commands(feedback);
-    ScenarioCompletionService::record_fsrs_data(
+    let mastery_changes = ScenarioCompletionService::record_fsrs_data_with_mastery(
         &mut ctx.progress.scheduler,
         &mut ctx.progress.performance_tracker,
         &commands,
         feedback.duration,
         feedback.score > 0,
     );
+
+    // Generate notifications for mastery level ups
+    for (command, new_level) in mastery_changes {
+        ctx.ui
+            .notifications
+            .push(Notification::new(NotificationType::MasteryLevelUp {
+                command,
+                new_level,
+            }));
+    }
 
     Ok(())
 }

@@ -35,6 +35,9 @@ pub enum NotificationType {
         success_count: usize,
         xp_earned: u64,
     },
+
+    /// Command mastery level increased
+    MasteryLevelUp { command: String, new_level: String },
 }
 
 /// A notification to display in the UI
@@ -121,6 +124,9 @@ impl Notification {
             NotificationType::StreakMilestone { streak } => format!("{} Day Streak!", streak),
             NotificationType::Info { .. } => "Info".to_string(),
             NotificationType::ReviewSessionComplete { .. } => "Review Complete!".to_string(),
+            NotificationType::MasteryLevelUp { command, .. } => {
+                format!("Mastery Up: {}", command)
+            }
         }
     }
 
@@ -151,6 +157,9 @@ impl Notification {
                     success_count, completed, xp_earned
                 )
             }
+            NotificationType::MasteryLevelUp { new_level, .. } => {
+                format!("Reached {} level!", new_level)
+            }
         }
     }
 
@@ -164,6 +173,7 @@ impl Notification {
             NotificationType::StreakMilestone { .. } => Color::Cyan,
             NotificationType::Info { .. } => Color::Blue,
             NotificationType::ReviewSessionComplete { .. } => Color::Green,
+            NotificationType::MasteryLevelUp { .. } => Color::Yellow,
         }
     }
 }
@@ -373,6 +383,13 @@ mod tests {
         });
         assert_eq!(review_complete.title(), "Review Complete!");
         assert_eq!(review_complete.message(), "4/5 correct (+60 XP)");
+
+        let mastery_up = Notification::new(NotificationType::MasteryLevelUp {
+            command: "dd".to_string(),
+            new_level: "Intermediate".to_string(),
+        });
+        assert_eq!(mastery_up.title(), "Mastery Up: dd");
+        assert_eq!(mastery_up.message(), "Reached Intermediate level!");
     }
 
     #[test]
@@ -408,6 +425,12 @@ mod tests {
             xp_earned: 40,
         });
         assert_eq!(review_complete.color(), Color::Green);
+
+        let mastery_up = Notification::new(NotificationType::MasteryLevelUp {
+            command: "w".to_string(),
+            new_level: "Advanced".to_string(),
+        });
+        assert_eq!(mastery_up.color(), Color::Yellow);
     }
 
     #[test]

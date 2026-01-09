@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
+use super::traits::ProgressionTier;
+
 const DEFAULT_DIFFICULTY: f32 = 5.0; // Mixle difficulty (0-10 scale)
 const DEFAULT_DESIRED_RETENTION: f32 = 0.9; // 90% target retention
 
@@ -337,6 +339,37 @@ impl PerformanceTracker {
 
     pub fn get_performance(&self, command: &str) -> Option<&CommandPerformance> {
         self.stats.get(command)
+    }
+
+    /// Record an attempt and return mastery level change if any
+    ///
+    /// Returns Some((command, old_level, new_level)) if mastery level changed
+    pub fn record_attempt_with_mastery_change(
+        &mut self,
+        command: &str,
+        duration: Duration,
+        success: bool,
+        optimal_time: Duration,
+    ) -> Option<(String, MasteryLevel, MasteryLevel)> {
+        // Get old mastery level (Beginner if new command)
+        let old_level = self
+            .stats
+            .get(command)
+            .map(|p| p.mastery_level)
+            .unwrap_or(MasteryLevel::Beginner);
+
+        // Record the attempt
+        self.record_attempt(command, duration, success, optimal_time);
+
+        // Get new mastery level
+        let new_level = self.stats.get(command).map(|p| p.mastery_level)?;
+
+        // Return change if level improved
+        if new_level.tier_level() > old_level.tier_level() {
+            Some((command.to_string(), old_level, new_level))
+        } else {
+            None
+        }
     }
 
     pub fn get_weak_commands(&self) -> Vec<String> {

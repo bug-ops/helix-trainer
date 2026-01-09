@@ -10,6 +10,112 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, Paragraph, Wrap},
 };
 
+/// Get a human-readable description for a Helix command
+fn get_command_description(command: &str) -> &'static str {
+    match command {
+        // Basic movement
+        "h" => "Move cursor left",
+        "j" => "Move cursor down",
+        "k" => "Move cursor up",
+        "l" => "Move cursor right",
+
+        // Word movement
+        "w" => "Move to next word start",
+        "b" => "Move to previous word start",
+        "e" => "Move to word end",
+        "W" => "Move to next WORD start",
+        "B" => "Move to previous WORD start",
+        "E" => "Move to WORD end",
+
+        // Line movement
+        "0" => "Move to line start",
+        "$" => "Move to line end",
+        "^" => "Move to first non-blank character",
+        "gg" => "Go to first line",
+        "ge" => "Go to last line",
+        "gh" => "Go to line start",
+        "gl" => "Go to line end",
+        "gs" => "Go to first non-whitespace",
+
+        // Editing
+        "d" => "Delete selection",
+        "c" => "Change selection (delete and enter insert mode)",
+        "i" => "Enter insert mode before cursor",
+        "a" => "Enter insert mode after cursor",
+        "I" => "Insert at line start",
+        "A" => "Append at line end",
+        "o" => "Open new line below",
+        "O" => "Open new line above",
+        "J" => "Join lines",
+        "r" => "Replace character under cursor",
+        "~" => "Switch case of selection",
+
+        // Selection
+        "x" => "Select entire line",
+        "X" => "Extend line selection",
+        "%" => "Select entire buffer",
+        ";" => "Collapse selection to cursor",
+        "v" => "Enter select mode",
+
+        // Clipboard
+        "y" => "Yank (copy) selection",
+        "p" => "Paste after selection",
+        "P" => "Paste before selection",
+        "R" => "Replace selection with yanked text",
+
+        // Undo/Redo
+        "u" => "Undo last change",
+        "U" => "Redo last undone change",
+
+        // Search
+        "/" => "Search forward",
+        "?" => "Search backward",
+        "n" => "Go to next search match",
+        "N" => "Go to previous search match",
+        "*" => "Search for word under cursor",
+
+        // Find character
+        "f" => "Find character forward",
+        "F" => "Find character backward",
+        "t" => "Till character forward",
+        "T" => "Till character backward",
+
+        // Indentation
+        ">" => "Indent selection",
+        "<" => "Dedent selection",
+
+        // Match mode
+        "m" => "Enter match mode",
+        "mm" => "Jump to matching bracket",
+
+        // View mode
+        "z" => "Enter view mode",
+        "zz" => "Center view on cursor",
+        "zt" => "Align view top",
+        "zb" => "Align view bottom",
+
+        // Multi-cursor
+        "," => "Keep only primary selection",
+        "C" => "Copy selection to next line",
+
+        // Comments
+        "Ctrl-c" => "Toggle line comments",
+
+        // Page movement
+        "Ctrl-f" => "Page down",
+        "Ctrl-b" => "Page up",
+        "Ctrl-d" => "Half page down",
+        "Ctrl-u" => "Half page up",
+
+        // Other
+        "." => "Repeat last command",
+        "Escape" => "Return to normal mode",
+
+        // Default fallback
+        _ => "Helix command",
+    }
+}
+
 /// Render the review session screen
 pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState) {
     let Some(session) = &state.game.review_session else {
@@ -93,6 +199,9 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
     let tracker = &state.progress.performance_tracker;
     let perf = tracker.get_performance(command);
 
+    // Get command description
+    let description = get_command_description(command);
+
     let mastery_text = if let Some(p) = perf {
         format!("Mastery: {:?} ⭐", p.mastery_level)
     } else {
@@ -127,6 +236,12 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
+        Line::from(vec![Span::styled(
+            description,
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::ITALIC),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled(&mastery_text, Style::default().fg(Color::Yellow)),
@@ -223,4 +338,69 @@ fn render_footer(frame: &mut Frame, area: Rect) {
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_command_description_basic_movement() {
+        assert_eq!(get_command_description("h"), "Move cursor left");
+        assert_eq!(get_command_description("j"), "Move cursor down");
+        assert_eq!(get_command_description("k"), "Move cursor up");
+        assert_eq!(get_command_description("l"), "Move cursor right");
+    }
+
+    #[test]
+    fn test_get_command_description_word_movement() {
+        assert_eq!(get_command_description("w"), "Move to next word start");
+        assert_eq!(get_command_description("b"), "Move to previous word start");
+        assert_eq!(get_command_description("e"), "Move to word end");
+        assert_eq!(get_command_description("W"), "Move to next WORD start");
+        assert_eq!(get_command_description("B"), "Move to previous WORD start");
+        assert_eq!(get_command_description("E"), "Move to WORD end");
+    }
+
+    #[test]
+    fn test_get_command_description_editing() {
+        assert_eq!(get_command_description("d"), "Delete selection");
+        assert_eq!(
+            get_command_description("c"),
+            "Change selection (delete and enter insert mode)"
+        );
+        assert_eq!(
+            get_command_description("i"),
+            "Enter insert mode before cursor"
+        );
+        assert_eq!(
+            get_command_description("a"),
+            "Enter insert mode after cursor"
+        );
+        assert_eq!(get_command_description("o"), "Open new line below");
+        assert_eq!(get_command_description("O"), "Open new line above");
+    }
+
+    #[test]
+    fn test_get_command_description_selection() {
+        assert_eq!(get_command_description("x"), "Select entire line");
+        assert_eq!(get_command_description("X"), "Extend line selection");
+        assert_eq!(get_command_description("%"), "Select entire buffer");
+        assert_eq!(get_command_description(";"), "Collapse selection to cursor");
+        assert_eq!(get_command_description("v"), "Enter select mode");
+    }
+
+    #[test]
+    fn test_get_command_description_clipboard() {
+        assert_eq!(get_command_description("y"), "Yank (copy) selection");
+        assert_eq!(get_command_description("p"), "Paste after selection");
+        assert_eq!(get_command_description("P"), "Paste before selection");
+    }
+
+    #[test]
+    fn test_get_command_description_unknown_command_fallback() {
+        assert_eq!(get_command_description("unknown_cmd"), "Helix command");
+        assert_eq!(get_command_description(""), "Helix command");
+        assert_eq!(get_command_description("xyz123"), "Helix command");
+    }
 }

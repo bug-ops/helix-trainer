@@ -33,6 +33,7 @@
 //! ```
 
 mod difficulty;
+mod scoring;
 mod session;
 mod state;
 mod stats;
@@ -42,6 +43,7 @@ mod tests;
 
 // Re-export public types
 pub use difficulty::{DifficultyController, LevelChange, PerformancePoint};
+pub use scoring::{PerformanceTier, ScoreBreakdown, ScoreCalculator};
 pub use session::{ActiveMiniScenario, MiniGameSession};
 pub use state::MiniGameState;
 pub use stats::MiniGameStats;

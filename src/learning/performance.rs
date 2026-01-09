@@ -214,6 +214,11 @@ mod duration_serde {
     }
 }
 
+/// Performance tracker for command practice using FSRS algorithm.
+///
+/// Tracks attempt history, calculates spaced repetition scheduling,
+/// and determines command mastery levels.
+#[derive(Clone)]
 pub struct PerformanceTracker {
     stats: HashMap<String, CommandPerformance>,
     fsrs: FSRS, // FSRS scheduler instance

@@ -16,15 +16,19 @@ use crate::config::{Difficulty, Scenario};
 use crate::constants::{
     ADVANCED_DIFFICULTY_WEIGHT, ADVANCED_TIME_LIMIT, BEGINNER_DIFFICULTY_WEIGHT,
     BEGINNER_TIME_LIMIT, DEFAULT_PERFORMANCE_SCORE, DIFFICULTY_DECREASE_SCORE,
-    DIFFICULTY_INCREASE_SCORE, FALLBACK_TIME_LIMIT, INTERMEDIATE_DIFFICULTY_WEIGHT,
-    INTERMEDIATE_TIME_LIMIT, LEVEL_1_3_TIME_SCALE, LEVEL_4_6_TIME_SCALE, LEVEL_7_10_TIME_SCALE,
-    LEVEL_ADVANCED_MAX, LEVEL_ADVANCED_MIN, LEVEL_BEGINNER_MAX, LEVEL_BEGINNER_MIN,
-    LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN, MIN_SCENARIOS_FOR_DECREASE,
-    MIN_SCENARIOS_FOR_INCREASE, MIN_TIME_SCALE_MULTIPLIER, PERFORMANCE_EFFICIENCY_WEIGHT,
-    PERFORMANCE_HISTORY_SIZE, PERFORMANCE_SPEED_WEIGHT, PERFORMANCE_SUCCESS_WEIGHT,
-    RECENCY_BASE_WEIGHT, RECENCY_WEIGHT_INCREMENT, RECENT_SUCCESS_RATE_FOR_DECREASE,
-    RECENT_SUCCESS_RATE_FOR_INCREASE, RECENT_TREND_WINDOW,
+    DIFFICULTY_INCREASE_SCORE, FALLBACK_TIME_LIMIT, FSRS_BASE_WEIGHT,
+    INTERMEDIATE_DIFFICULTY_WEIGHT, INTERMEDIATE_TIME_LIMIT, LEVEL_1_3_TIME_SCALE,
+    LEVEL_4_6_TIME_SCALE, LEVEL_7_10_TIME_SCALE, LEVEL_ADVANCED_MAX, LEVEL_ADVANCED_MIN,
+    LEVEL_BEGINNER_MAX, LEVEL_BEGINNER_MIN, LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN,
+    MIN_SCENARIOS_FOR_DECREASE, MIN_SCENARIOS_FOR_INCREASE, MIN_TIME_SCALE_MULTIPLIER,
+    PERFORMANCE_EFFICIENCY_WEIGHT, PERFORMANCE_HISTORY_SIZE, PERFORMANCE_SPEED_WEIGHT,
+    PERFORMANCE_SUCCESS_WEIGHT, RECENCY_BASE_WEIGHT, RECENCY_WEIGHT_INCREMENT,
+    RECENT_SUCCESS_RATE_FOR_DECREASE, RECENT_SUCCESS_RATE_FOR_INCREASE, RECENT_TREND_WINDOW,
 };
+use crate::learning::PerformanceTracker;
+use crate::minigame::ScenarioScorer;
+use rand::distr::weighted::WeightedIndex;
+use rand::prelude::Distribution;
 use std::collections::VecDeque;
 use std::time::Duration;
 
@@ -329,35 +333,56 @@ impl DifficultyController {
         Duration::from_secs_f64(scaled_secs.max(min_secs))
     }
 
-    /// Select next scenario from collection
+    /// Select next scenario from collection with optional FSRS-weighted selection.
     ///
     /// Selection algorithm:
     /// 1. Filter scenarios by appropriate difficulty range for current level
-    /// 2. Randomly select from filtered candidates
+    /// 2. If tracker is provided, use FSRS-weighted selection to prioritize scenarios
+    ///    containing commands that need practice (overdue, weak, or novel)
+    /// 3. If tracker is None, fall back to random selection (backward compatibility)
     ///
     /// Difficulty mapping by level:
     /// - Level 1-3: Beginner only
     /// - Level 4-6: Beginner + Intermediate
     /// - Level 7-10: Intermediate + Advanced
     ///
+    /// # Arguments
+    ///
+    /// * `scenarios` - All available scenarios
+    /// * `tracker` - Optional performance tracker for FSRS-based weighted selection.
+    ///   When `Some`, scenarios with commands needing practice are prioritized.
+    ///   When `None`, random selection is used (backward compatibility).
+    ///
     /// # Returns
     ///
-    /// Returns Some(Scenario) if candidates exist, None if collection is empty
+    /// Returns `Some(Scenario)` if candidates exist, `None` if collection is empty
     /// or no scenarios match the current difficulty level.
     ///
     /// # Examples
     ///
     /// ```ignore
     /// use helix_trainer::minigame::DifficultyController;
+    /// use helix_trainer::learning::PerformanceTracker;
     ///
     /// let mut controller = DifficultyController::new();
     /// let scenarios = load_scenarios();
+    /// let tracker = PerformanceTracker::new();
     ///
-    /// if let Some(scenario) = controller.next_scenario(&scenarios) {
+    /// // With FSRS weighting
+    /// if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+    ///     println!("Selected: {}", scenario.name);
+    /// }
+    ///
+    /// // Without FSRS weighting (backward compat)
+    /// if let Some(scenario) = controller.next_scenario(&scenarios, None) {
     ///     println!("Selected: {}", scenario.name);
     /// }
     /// ```
-    pub fn next_scenario(&mut self, scenarios: &[Scenario]) -> Option<Scenario> {
+    pub fn next_scenario(
+        &mut self,
+        scenarios: &[Scenario],
+        tracker: Option<&PerformanceTracker>,
+    ) -> Option<Scenario> {
         if scenarios.is_empty() {
             return None;
         }
@@ -388,10 +413,51 @@ impl DifficultyController {
             return Some(scenarios[idx].clone());
         }
 
-        // Random selection from candidates
-        use rand::Rng;
+        // Use FSRS-weighted selection if tracker provided, otherwise random
+        match tracker {
+            Some(t) => self.weighted_select(&candidates, t),
+            None => {
+                use rand::Rng;
+                let mut rng = rand::rng();
+                let idx = rng.random_range(0..candidates.len());
+                Some(candidates[idx].clone())
+            }
+        }
+    }
+
+    /// Perform weighted random selection based on FSRS scores.
+    ///
+    /// Scenarios with higher FSRS scores (containing overdue, weak, or novel commands)
+    /// are more likely to be selected. A base weight (`FSRS_BASE_WEIGHT`) is added to
+    /// all scores to ensure even mastered scenarios have a non-zero selection probability.
+    ///
+    /// # Arguments
+    ///
+    /// * `candidates` - Filtered scenarios matching current difficulty
+    /// * `tracker` - Performance tracker containing FSRS data
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(Scenario)` selected via weighted random, or `None` if
+    /// weight distribution construction fails (should not happen with positive base weight).
+    fn weighted_select(
+        &mut self,
+        candidates: &[&Scenario],
+        tracker: &PerformanceTracker,
+    ) -> Option<Scenario> {
+        let scorer = ScenarioScorer::new(tracker);
+
+        // Calculate weights: FSRS score + base weight (ensures non-zero probability)
+        let weights: Vec<f64> = candidates
+            .iter()
+            .map(|s| scorer.score(s) + FSRS_BASE_WEIGHT)
+            .collect();
+
+        // Weighted random selection
+        let dist = WeightedIndex::new(&weights).ok()?;
         let mut rng = rand::rng();
-        let idx = rng.random_range(0..candidates.len());
+        let idx = dist.sample(&mut rng);
+
         Some(candidates[idx].clone())
     }
 
@@ -1010,7 +1076,7 @@ mod tests {
         // Level 1-3: only beginner
         controller.level = 1;
         for _ in 0..10 {
-            let selected = controller.next_scenario(&scenarios).unwrap();
+            let selected = controller.next_scenario(&scenarios, None).unwrap();
             if let Some(ref metadata) = selected.metadata {
                 assert_eq!(metadata.difficulty, Some(Difficulty::Beginner));
             }
@@ -1022,7 +1088,7 @@ mod tests {
         let mut found_advanced = false;
 
         for _ in 0..50 {
-            let selected = controller.next_scenario(&scenarios).unwrap();
+            let selected = controller.next_scenario(&scenarios, None).unwrap();
             if let Some(ref metadata) = selected.metadata
                 && let Some(diff) = metadata.difficulty
             {
@@ -1412,6 +1478,288 @@ mod tests {
         if controller.current_level() > 1 {
             // After level change, counter resets, then we may have added more
             assert!(controller.scenarios_at_level() < 15);
+        }
+    }
+
+    // ========================================
+    // FSRS Weighted Selection Tests
+    // ========================================
+
+    mod fsrs_weighted_selection {
+        use super::*;
+        use std::collections::HashMap;
+        use std::time::Duration as StdDuration;
+
+        /// Creates a test scenario with specific commands for FSRS testing.
+        fn create_scenario_with_commands(id: &str, commands: Vec<&str>) -> Scenario {
+            ScenarioBuilder::new()
+                .id(id)
+                .setup_content("test")
+                .target_content("test")
+                .commands(commands)
+                .command_description("Test")
+                .optimal_count(1)
+                .difficulty(Difficulty::Beginner)
+                .build()
+        }
+
+        #[test]
+        fn test_weighted_selection_favors_high_score_scenarios() {
+            let mut controller = DifficultyController::new();
+            let mut tracker = PerformanceTracker::new();
+
+            // Create scenarios with different commands:
+            // - "mastered_scenario" has command "h" (will be mastered)
+            // - "novel_scenario" has command "dd" (never practiced)
+            let mastered_scenario = create_scenario_with_commands("mastered", vec!["h"]);
+            let novel_scenario = create_scenario_with_commands("novel", vec!["dd"]);
+            let scenarios = vec![mastered_scenario, novel_scenario];
+
+            // Master the "h" command with many successful attempts
+            for _ in 0..10 {
+                tracker.record_attempt(
+                    "h",
+                    StdDuration::from_secs(1),
+                    true,
+                    StdDuration::from_secs(1),
+                );
+            }
+
+            // Count selections over many iterations
+            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let iterations = 1000;
+
+            for _ in 0..iterations {
+                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                }
+            }
+
+            // Novel scenario (dd) should be selected more often than mastered (h)
+            // because novel commands have FSRS_NOVELTY_WEIGHT (0.2) > mastered (nearly 0)
+            let novel_count = selection_counts.get("novel").copied().unwrap_or(0);
+            let mastered_count = selection_counts.get("mastered").copied().unwrap_or(0);
+
+            assert!(
+                novel_count > mastered_count,
+                "Novel scenario should be selected more often. Novel: {}, Mastered: {}",
+                novel_count,
+                mastered_count
+            );
+
+            // Both should be selected sometimes due to FSRS_BASE_WEIGHT
+            assert!(
+                mastered_count > 0,
+                "Mastered scenario should still be selectable due to base weight"
+            );
+        }
+
+        #[test]
+        fn test_fallback_to_random_when_tracker_is_none() {
+            let mut controller = DifficultyController::new();
+
+            let scenario1 = create_scenario_with_commands("s1", vec!["h"]);
+            let scenario2 = create_scenario_with_commands("s2", vec!["l"]);
+            let scenario3 = create_scenario_with_commands("s3", vec!["j"]);
+            let scenarios = vec![scenario1, scenario2, scenario3];
+
+            // Without tracker, should use random selection (backward compatibility)
+            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+
+            for _ in 0..300 {
+                if let Some(scenario) = controller.next_scenario(&scenarios, None) {
+                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                }
+            }
+
+            // All scenarios should be selected (random distribution)
+            assert!(
+                selection_counts.get("s1").copied().unwrap_or(0) > 0,
+                "s1 should be selected"
+            );
+            assert!(
+                selection_counts.get("s2").copied().unwrap_or(0) > 0,
+                "s2 should be selected"
+            );
+            assert!(
+                selection_counts.get("s3").copied().unwrap_or(0) > 0,
+                "s3 should be selected"
+            );
+
+            // Check roughly uniform distribution (each should get ~100 selections)
+            // Allow variance due to randomness
+            for (id, count) in &selection_counts {
+                assert!(
+                    *count > 50 && *count < 200,
+                    "Selection count for {} should be roughly uniform, got {}",
+                    id,
+                    count
+                );
+            }
+        }
+
+        #[test]
+        fn test_base_weight_ensures_all_scenarios_selectable() {
+            let mut controller = DifficultyController::new();
+            let mut tracker = PerformanceTracker::new();
+
+            // Create one scenario with a heavily mastered command
+            // and one with a never-practiced command
+            let mastered = create_scenario_with_commands("mastered", vec!["h"]);
+            let novel = create_scenario_with_commands("novel", vec!["dd"]);
+            let scenarios = vec![mastered, novel];
+
+            // Heavily master "h" command
+            for _ in 0..50 {
+                tracker.record_attempt(
+                    "h",
+                    StdDuration::from_secs(1),
+                    true,
+                    StdDuration::from_secs(1),
+                );
+            }
+
+            // Even with extreme mastery difference, both should be selectable
+            let mut mastered_selected = false;
+            let mut novel_selected = false;
+
+            for _ in 0..500 {
+                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+                    match scenario.id.as_str() {
+                        "mastered" => mastered_selected = true,
+                        "novel" => novel_selected = true,
+                        _ => {}
+                    }
+
+                    if mastered_selected && novel_selected {
+                        break;
+                    }
+                }
+            }
+
+            assert!(
+                mastered_selected,
+                "Mastered scenario should be selectable due to FSRS_BASE_WEIGHT"
+            );
+            assert!(novel_selected, "Novel scenario should be selectable");
+        }
+
+        #[test]
+        fn test_empty_tracker_gives_novelty_weight_to_all() {
+            let mut controller = DifficultyController::new();
+            let tracker = PerformanceTracker::new(); // Empty tracker
+
+            let scenario1 = create_scenario_with_commands("s1", vec!["h"]);
+            let scenario2 = create_scenario_with_commands("s2", vec!["j"]);
+            let scenario3 = create_scenario_with_commands("s3", vec!["k"]);
+            let scenarios = vec![scenario1, scenario2, scenario3];
+
+            // With empty tracker, all commands are novel and should have equal weight
+            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+
+            for _ in 0..300 {
+                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                }
+            }
+
+            // All should have similar selection counts since all have novelty weight
+            let counts: Vec<u32> = selection_counts.values().copied().collect();
+            let min_count = counts.iter().min().copied().unwrap_or(0);
+            let max_count = counts.iter().max().copied().unwrap_or(0);
+
+            // Allow for statistical variance but expect roughly uniform
+            assert!(
+                max_count - min_count < 100,
+                "Selection should be roughly uniform. Min: {}, Max: {}",
+                min_count,
+                max_count
+            );
+        }
+
+        #[test]
+        fn test_weighted_selection_with_single_scenario() {
+            let mut controller = DifficultyController::new();
+            let tracker = PerformanceTracker::new();
+
+            let scenario = create_scenario_with_commands("single", vec!["h"]);
+            let scenarios = vec![scenario];
+
+            // Should always return the single scenario
+            for _ in 0..10 {
+                let result = controller.next_scenario(&scenarios, Some(&tracker));
+                assert!(result.is_some());
+                assert_eq!(result.unwrap().id, "single");
+            }
+        }
+
+        #[test]
+        fn test_weighted_selection_with_empty_scenarios() {
+            let mut controller = DifficultyController::new();
+            let tracker = PerformanceTracker::new();
+
+            let scenarios: Vec<Scenario> = vec![];
+
+            // Should return None for empty scenarios
+            let result = controller.next_scenario(&scenarios, Some(&tracker));
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn test_weighted_selection_respects_difficulty_filter() {
+            let mut controller = DifficultyController::new();
+            let tracker = PerformanceTracker::new();
+
+            // Create scenarios of different difficulties
+            let beginner = ScenarioBuilder::new()
+                .id("beginner")
+                .setup_content("test")
+                .target_content("test")
+                .commands(vec!["h"])
+                .command_description("Test")
+                .optimal_count(1)
+                .difficulty(Difficulty::Beginner)
+                .build();
+
+            let advanced = ScenarioBuilder::new()
+                .id("advanced")
+                .setup_content("test")
+                .target_content("test")
+                .commands(vec!["dd"])
+                .command_description("Test")
+                .optimal_count(1)
+                .difficulty(Difficulty::Advanced)
+                .build();
+
+            let scenarios = vec![beginner, advanced];
+
+            // At level 1, only beginner scenarios should be selected
+            controller.level = 1;
+            for _ in 0..20 {
+                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+                    assert_eq!(
+                        scenario.id, "beginner",
+                        "At level 1, only beginner scenarios should be selected"
+                    );
+                }
+            }
+
+            // At level 7+, intermediate and advanced are available
+            // (but our test only has advanced, so advanced should be selected)
+            controller.level = 7;
+            let mut found_advanced = false;
+            for _ in 0..20 {
+                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker))
+                    && scenario.id == "advanced"
+                {
+                    found_advanced = true;
+                    break;
+                }
+            }
+            assert!(
+                found_advanced,
+                "Advanced scenarios should be available at level 7+"
+            );
         }
     }
 }

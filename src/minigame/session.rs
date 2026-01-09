@@ -7,6 +7,7 @@ use crate::config::{Difficulty, Scenario};
 use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
 use crate::game::{CommandExecutor, EditorState};
 use crate::helix::AnyModeSimulator;
+use crate::learning::PerformanceTracker;
 use crate::minigame::{
     DifficultyController, LevelChange, MiniGameState, MiniGameStats, MultiplierChange,
     MultiplierState, PerformancePoint, ScoreBreakdown, ScoreCalculator,
@@ -165,6 +166,7 @@ impl CommandExecutor for ActiveMiniScenario {
 /// - Score and statistics tracking
 /// - Difficulty adaptation
 /// - State machine management
+/// - FSRS-based weighted scenario selection
 pub struct MiniGameSession {
     /// Current active scenario being played
     current: Option<ActiveMiniScenario>,
@@ -195,21 +197,41 @@ pub struct MiniGameSession {
 
     /// When transition state started (for auto-advance)
     transition_started_at: Option<Instant>,
+
+    /// Performance tracker for FSRS-based scenario selection (read-only clone)
+    ///
+    /// When present, scenarios with commands needing practice are prioritized.
+    /// This is a snapshot of the tracker at session creation time.
+    tracker: Option<PerformanceTracker>,
 }
 
 impl MiniGameSession {
-    /// Create a new mini-game session with scenario collection
+    /// Create a new mini-game session with scenario collection and optional FSRS tracker.
+    ///
+    /// # Arguments
+    ///
+    /// * `scenarios` - Arc reference to available scenarios
+    /// * `tracker` - Optional performance tracker for FSRS-based weighted selection.
+    ///   When `Some`, scenarios with commands needing practice are prioritized.
+    ///   When `None`, random selection is used (backward compatibility).
     ///
     /// # Examples
     ///
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::learning::PerformanceTracker;
     /// use std::sync::Arc;
     ///
     /// let scenarios = Arc::new(vec![/* scenarios */]);
-    /// let session = MiniGameSession::new(scenarios);
+    /// let tracker = PerformanceTracker::new();
+    ///
+    /// // With FSRS weighting
+    /// let session = MiniGameSession::new(scenarios.clone(), Some(tracker));
+    ///
+    /// // Without FSRS weighting (backward compat)
+    /// let session = MiniGameSession::new(scenarios, None);
     /// ```
-    pub fn new(scenarios: Arc<Vec<Scenario>>) -> Self {
+    pub fn new(scenarios: Arc<Vec<Scenario>>, tracker: Option<PerformanceTracker>) -> Self {
         let mut session = Self {
             current: None,
             queue: VecDeque::with_capacity(QUEUE_SIZE),
@@ -221,6 +243,7 @@ impl MiniGameSession {
             state: MiniGameState::default(),
             scenarios,
             transition_started_at: None,
+            tracker,
         };
 
         // Pre-fill queue
@@ -238,7 +261,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.start();
     /// assert!(session.state().is_countdown());
     /// ```
@@ -256,7 +279,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.start();
     ///
     /// session.tick_countdown();
@@ -294,7 +317,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.start();
     /// session.handle_command("x")?; // select line
     /// session.handle_command("d")?; // delete
@@ -320,7 +343,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// if session.check_completion() {
     ///     session.advance_to_next();
     /// }
@@ -342,7 +365,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.advance_to_next();
     /// ```
     pub fn advance_to_next(&mut self) {
@@ -445,7 +468,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.handle_timeout();
     /// ```
     pub fn handle_timeout(&mut self) {
@@ -505,7 +528,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let session = MiniGameSession::new(scenarios);
+    /// let session = MiniGameSession::new(scenarios, None);
     /// if let Some(time) = session.remaining_time() {
     ///     println!("Time left: {:?}", time);
     /// }
@@ -529,7 +552,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.pause();
     /// assert!(session.state().is_paused());
     /// ```
@@ -546,7 +569,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::MiniGameSession;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.pause();
     /// session.resume();
     /// assert!(session.state().is_playing());
@@ -596,7 +619,7 @@ impl MiniGameSession {
     /// ```ignore
     /// use helix_trainer::minigame::{MiniGameSession, LevelChange};
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// // ... gameplay ...
     ///
     /// if let Some(change) = session.take_level_change() {
@@ -696,7 +719,7 @@ impl MiniGameSession {
     /// use helix_trainer::minigame::MiniGameSession;
     /// use helix_trainer::learning::PerformanceTracker;
     ///
-    /// let mut session = MiniGameSession::new(scenarios);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// let mut tracker = PerformanceTracker::new();
     ///
     /// // After scenario completion
@@ -774,9 +797,15 @@ impl MiniGameSession {
     }
 
     /// Refill queue to maintain QUEUE_SIZE
+    ///
+    /// Uses FSRS-weighted selection if a performance tracker is available,
+    /// otherwise falls back to random selection.
     fn refill_queue(&mut self) {
         while self.queue.len() < QUEUE_SIZE {
-            if let Some(scenario) = self.difficulty.next_scenario(&self.scenarios) {
+            if let Some(scenario) = self
+                .difficulty
+                .next_scenario(&self.scenarios, self.tracker.as_ref())
+            {
                 self.queue.push_back(scenario);
             } else {
                 break; // No more scenarios available
@@ -811,7 +840,7 @@ mod tests {
             create_test_scenario("s3", Difficulty::Beginner),
         ]);
 
-        let session = MiniGameSession::new(scenarios);
+        let session = MiniGameSession::new(scenarios, None);
 
         assert_eq!(session.stats.lives, 3);
         assert_eq!(session.stats.score, 0);
@@ -822,7 +851,7 @@ mod tests {
     #[test]
     fn test_countdown_progression() {
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
-        let mut session = MiniGameSession::new(scenarios);
+        let mut session = MiniGameSession::new(scenarios, None);
 
         session.start();
         assert_eq!(session.state.countdown_remaining(), Some(3));
@@ -840,7 +869,7 @@ mod tests {
     #[test]
     fn test_timeout_loses_life() {
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
-        let mut session = MiniGameSession::new(scenarios);
+        let mut session = MiniGameSession::new(scenarios, None);
         session.state = MiniGameState::Playing;
         let _ = session.load_next_scenario();
 
@@ -860,7 +889,7 @@ mod tests {
     #[test]
     fn test_pause_resume() {
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
-        let mut session = MiniGameSession::new(scenarios);
+        let mut session = MiniGameSession::new(scenarios, None);
         session.state = MiniGameState::Playing;
 
         session.pause();
@@ -890,7 +919,7 @@ mod tests {
             create_test_scenario("s1", Difficulty::Beginner),
             create_test_scenario("s2", Difficulty::Beginner),
         ]);
-        let mut session = MiniGameSession::new(scenarios);
+        let mut session = MiniGameSession::new(scenarios, None);
 
         // Start and countdown
         session.start();
@@ -915,7 +944,7 @@ mod tests {
             create_test_scenario("s5", Difficulty::Beginner),
         ]);
 
-        let mut session = MiniGameSession::new(scenarios);
+        let mut session = MiniGameSession::new(scenarios, None);
         assert_eq!(session.queue().len(), QUEUE_SIZE);
 
         // Start and countdown
@@ -946,7 +975,7 @@ mod tests {
             .build();
 
         let scenarios = Arc::new(vec![scenario]);
-        let mut session = MiniGameSession::new(scenarios);
+        let mut session = MiniGameSession::new(scenarios, None);
 
         // Start and countdown
         session.start();

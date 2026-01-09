@@ -20,7 +20,7 @@
 //! use std::sync::Arc;
 //!
 //! let scenarios = Arc::new(ScenarioCollection::load()?);
-//! let mut session = MiniGameSession::new(scenarios);
+//! let mut session = MiniGameSession::new(scenarios, None);
 //!
 //! session.start();
 //! session.handle_command("x")?; // select line
@@ -33,6 +33,7 @@
 //! ```
 
 mod difficulty;
+mod scorer;
 mod scoring;
 mod session;
 mod state;
@@ -43,6 +44,7 @@ mod tests;
 
 // Re-export public types
 pub use difficulty::{DifficultyController, LevelChange, PerformancePoint};
+pub use scorer::ScenarioScorer;
 pub use scoring::{PerformanceTier, ScoreBreakdown, ScoreCalculator};
 pub use session::{ActiveMiniScenario, MiniGameSession};
 pub use state::MiniGameState;

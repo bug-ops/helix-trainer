@@ -6,6 +6,7 @@ use crate::config::Scenario;
 use crate::constants::{MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER};
 use crate::game::format_key_for_display;
 use crate::input::typestate::{HandlerResult, command_to_key_event};
+use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
 use crate::ui::state::{
@@ -13,11 +14,25 @@ use crate::ui::state::{
     ModeSelectionData, TypedScreen,
 };
 
-/// Create and start a new mini-game session from available scenarios
+/// Create and start a new mini-game session from available scenarios.
 ///
 /// Shared initialization logic used by both mode selection and direct start.
-/// Returns true if session was created successfully, false if no scenarios available.
-pub(in crate::ui::state) fn create_minigame_session(game: &mut GameState) -> bool {
+/// When a tracker is provided, scenarios containing commands that need practice
+/// (overdue, weak, or novel) will be prioritized via FSRS-weighted selection.
+///
+/// # Arguments
+///
+/// * `game` - Mutable reference to game state
+/// * `tracker` - Optional reference to performance tracker for FSRS weighting.
+///   If provided, a clone is taken for the session's internal use.
+///
+/// # Returns
+///
+/// Returns `true` if session was created successfully, `false` if no scenarios available.
+pub(in crate::ui::state) fn create_minigame_session(
+    game: &mut GameState,
+    tracker: Option<&PerformanceTracker>,
+) -> bool {
     let scenarios: Vec<Scenario> = game
         .scenario_collection
         .get_filtered()
@@ -30,7 +45,9 @@ pub(in crate::ui::state) fn create_minigame_session(game: &mut GameState) -> boo
         return false;
     }
 
-    let mut session = MiniGameSession::new(Arc::new(scenarios));
+    // Clone tracker for session's internal weighted selection
+    let tracker_clone = tracker.cloned();
+    let mut session = MiniGameSession::new(Arc::new(scenarios), tracker_clone);
     session.start(); // Begin countdown
     game.minigame_session = Some(session);
     true
@@ -40,7 +57,8 @@ pub(in crate::ui::state) fn create_minigame_session(game: &mut GameState) -> boo
 pub(in crate::ui::state) fn handle_start_minigame(
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    create_minigame_session(ctx.game);
+    // Pass performance tracker for FSRS-weighted scenario selection
+    create_minigame_session(ctx.game, Some(&ctx.progress.performance_tracker));
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
         MiniGameData::default(),
     ))))
@@ -773,7 +791,23 @@ mod tests {
     #[test]
     fn test_create_minigame_session_with_scenarios() {
         let mut state = create_test_state();
-        let result = create_minigame_session(&mut state.game);
+        // Test without tracker (backward compatibility)
+        let result = create_minigame_session(&mut state.game, None);
+
+        assert!(result);
+        assert!(state.game.minigame_session.is_some());
+
+        if let Some(ref session) = state.game.minigame_session {
+            assert!(session.state().is_countdown());
+        }
+    }
+
+    #[test]
+    fn test_create_minigame_session_with_tracker() {
+        let mut state = create_test_state();
+        // Test with tracker for FSRS-weighted selection
+        let result =
+            create_minigame_session(&mut state.game, Some(&state.progress.performance_tracker));
 
         assert!(result);
         assert!(state.game.minigame_session.is_some());
@@ -788,7 +822,7 @@ mod tests {
         let mut state = create_test_state();
         state.game.scenario_collection = crate::config::ScenarioCollection::new(vec![]);
 
-        let result = create_minigame_session(&mut state.game);
+        let result = create_minigame_session(&mut state.game, None);
 
         assert!(!result);
         assert!(state.game.minigame_session.is_none());

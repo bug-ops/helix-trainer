@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-01-09
+
+### Added
+
+- **Syntax highlighting for scenario code** — Rust code in scenarios now displays with full syntax highlighting using syntect
+- **Adaptive difficulty system** — Mini-game difficulty adjusts based on player performance metrics
+
+### Changed
+
+- **136 scenarios with realistic Rust code** — All scenarios updated from minimal synthetic text to real, idiomatic Rust code snippets
+- **Paragraph commands use Helix keybindings** — Changed from Vim-style `{`/`}` to Helix-style `[p`/`]p` paragraph navigation
+
+### Fixed
+
+- **Paragraph scenario selection visibility** — Target states now correctly show selection range for `]p`/`[p` commands
+- **Cursor rendering at end-of-line** — Cursor now displays correctly when positioned at the end of a line
+
+### Quality
+
+- **Tests**: 1239+ (up from 1116)
+- **Clippy**: Zero warnings
+- **Scenarios**: 136 total (realistic Rust code content)
+
 ## [0.5.2] - 2026-01-07
 
 ### Added
@@ -1037,7 +1060,10 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/bug-ops/helix-trainer/compare/v0.5.2...v0.5.3
+[0.5.2]: https://github.com/bug-ops/helix-trainer/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/bug-ops/helix-trainer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/bug-ops/helix-trainer/compare/v0.4.8...v0.5.0
 [0.4.8]: https://github.com/bug-ops/helix-trainer/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/bug-ops/helix-trainer/compare/v0.4.6...v0.4.7

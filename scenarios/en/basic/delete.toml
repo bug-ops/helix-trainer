@@ -13,12 +13,31 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "first line\nsecond line\nthird line"
-cursor_position = [1, 0]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+    let debug = true;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [3, 4]
 
 [scenarios.target]
-file_content = "first line\nthird line"
-cursor_position = [1, 0]
+file_content = """fn calculate_total(prices: &[f64]) -> f64 {
+    let mut total = 0.0;
+    let discount = 0.1;
+
+    for price in prices {
+        total += price;
+    }
+
+    total * (1.0 - discount)
+}"""
+cursor_position = [3, 0]
 
 [scenarios.solution]
 commands = ["x", "d"]

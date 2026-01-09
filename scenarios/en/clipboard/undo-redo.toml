@@ -13,14 +13,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """Keep this
-Delete this
-Keep this too"""
-cursor_position = [1, 0]
+file_content = """fn main() {
+    let x = 1;
+    let y = 2;
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = """Keep this
-Keep this too"""
+file_content = """fn main() {
+    let y = 2;
+}"""
 cursor_position = [1, 0]
 
 [scenarios.solution]
@@ -31,9 +33,10 @@ description = "Press 'x' to select line, 'd' to delete, 'u' to undo, 'U' to redo
 optimal_count = 4
 max_points = 100
 tolerance = 2
+
 [scenarios.metadata]
 category = "clipboard"
 difficulty = "beginner"
 tags = ["undo", "redo"]
 commands_taught = ["u", "U"]
-estimated_time_seconds = 25
+estimated_time_seconds = 15

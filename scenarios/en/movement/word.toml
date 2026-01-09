@@ -13,13 +13,31 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "The quick brown fox jumps"
-cursor_position = [0, 0]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "The quick brown fox jumps"
-cursor_position = [0, 16]
-selection = [0, 10, 0, 16]
+file_content = """fn process_data(input: &str) -> Result<i32, Error> {
+    let mut counter = 0;
+    let items: Vec<_> = input.lines().collect();
+
+    for line in items.iter() {
+        counter += 1;
+    }
+
+    Ok(counter)
+}"""
+cursor_position = [1, 20]
+selection = [1, 12, 1, 20]
 
 [scenarios.solution]
 commands = ["w", "w", "w"]

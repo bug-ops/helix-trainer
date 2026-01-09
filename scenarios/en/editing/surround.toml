@@ -17,12 +17,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "(hello) world"
-cursor_position = [0, 3]
+file_content = """let result = (x + y);"""
+cursor_position = [0, 15]
 
 [scenarios.target]
-file_content = "hello world"
-cursor_position = [0, 2]
+file_content = """let result = x + y;"""
+cursor_position = [0, 14]
 
 [scenarios.solution]
 commands = ["md("]
@@ -51,11 +51,11 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "let arr = [1, 2, 3];"
+file_content = """let arr = [1, 2, 3];"""
 cursor_position = [0, 13]
 
 [scenarios.target]
-file_content = "let arr = 1, 2, 3;"
+file_content = """let arr = 1, 2, 3;"""
 cursor_position = [0, 12]
 
 [scenarios.solution]
@@ -85,12 +85,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "{ value }"
-cursor_position = [0, 3]
+file_content = """fn test() { x }"""
+cursor_position = [0, 12]
 
 [scenarios.target]
-file_content = " value "
-cursor_position = [0, 2]
+file_content = """fn test()  x """
+cursor_position = [0, 11]
 
 [scenarios.solution]
 commands = ["md{"]
@@ -119,11 +119,11 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "let s = \"hello\";"
+file_content = """let s = "hello";"""
 cursor_position = [0, 10]
 
 [scenarios.target]
-file_content = "let s = hello;"
+file_content = """let s = hello;"""
 cursor_position = [0, 9]
 
 [scenarios.solution]
@@ -153,12 +153,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "((inner))"
-cursor_position = [0, 3]
+file_content = """let x = ((inner));"""
+cursor_position = [0, 11]
 
 [scenarios.target]
-file_content = "(inner)"
-cursor_position = [0, 2]
+file_content = """let x = (inner);"""
+cursor_position = [0, 10]
 
 [scenarios.solution]
 commands = ["md("]
@@ -191,12 +191,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "(arg1, arg2)"
-cursor_position = [0, 5]
+file_content = """fn call(x, y)"""
+cursor_position = [0, 9]
 
 [scenarios.target]
-file_content = "[arg1, arg2]"
-cursor_position = [0, 5]
+file_content = """fn call[x, y]"""
+cursor_position = [0, 9]
 
 [scenarios.solution]
 commands = ["mr(["]
@@ -225,11 +225,11 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "let x = [1, 2];"
+file_content = """let x = [1, 2];"""
 cursor_position = [0, 10]
 
 [scenarios.target]
-file_content = "let x = {1, 2};"
+file_content = """let x = {1, 2};"""
 cursor_position = [0, 10]
 
 [scenarios.solution]
@@ -259,11 +259,11 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "let s = \"hello\";"
+file_content = """let s = "hello";"""
 cursor_position = [0, 12]
 
 [scenarios.target]
-file_content = "let s = 'hello';"
+file_content = """let s = 'hello';"""
 cursor_position = [0, 12]
 
 [scenarios.solution]
@@ -293,12 +293,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "fn(){ body }"
-cursor_position = [0, 6]
+file_content = """let f = |x| { x + 1 };"""
+cursor_position = [0, 15]
 
 [scenarios.target]
-file_content = "fn()( body )"
-cursor_position = [0, 6]
+file_content = """let f = |x| ( x + 1 );"""
+cursor_position = [0, 15]
 
 [scenarios.solution]
 commands = ["mr{("]
@@ -327,11 +327,11 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Vec<i32>"
+file_content = """Vec<i32>"""
 cursor_position = [0, 5]
 
 [scenarios.target]
-file_content = "Vec(i32)"
+file_content = """Vec(i32)"""
 cursor_position = [0, 5]
 
 [scenarios.solution]

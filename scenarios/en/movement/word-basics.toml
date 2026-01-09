@@ -8,17 +8,23 @@ description = "Use 'w' to jump to next word start"
 
 hints = [
     "'w' moves to the start of the next word",
-    "Spaces separate words",
+    "Spaces and punctuation separate words",
 ]
 
 [scenarios.setup]
-file_content = "Hello World"
-cursor_position = [0, 0]
+file_content = """fn main() {
+    let value = 42;
+    println!("{}", value);
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "Hello World"
-cursor_position = [0, 6]
-selection = [0, 0, 0, 6]
+file_content = """fn main() {
+    let value = 42;
+    println!("{}", value);
+}"""
+cursor_position = [1, 8]
+selection = [1, 4, 1, 8]
 
 [scenarios.solution]
 commands = ["w"]
@@ -47,13 +53,19 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one two three"
-cursor_position = [0, 0]
+file_content = """struct Point {
+    x: i32,
+    y: i32,
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "one two three"
-cursor_position = [0, 8]
-selection = [0, 4, 0, 8]
+file_content = """struct Point {
+    x: i32,
+    y: i32,
+}"""
+cursor_position = [1, 7]
+selection = [1, 5, 1, 7]
 
 [scenarios.solution]
 commands = ["w", "w"]
@@ -82,13 +94,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Hello World"
-cursor_position = [0, 6]
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
+}"""
+cursor_position = [1, 6]
 
 [scenarios.target]
-file_content = "Hello World"
-cursor_position = [0, 0]
-selection = [0, 0, 0, 6]
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
+}"""
+cursor_position = [1, 4]
+selection = [1, 4, 1, 6]
 
 [scenarios.solution]
 commands = ["b"]
@@ -117,13 +133,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one two three"
-cursor_position = [0, 8]
+file_content = """fn main() {
+    let result = 0;
+}"""
+cursor_position = [1, 15]
 
 [scenarios.target]
-file_content = "one two three"
-cursor_position = [0, 0]
-selection = [0, 0, 0, 4]
+file_content = """fn main() {
+    let result = 0;
+}"""
+cursor_position = [1, 4]
+selection = [1, 4, 1, 8]
 
 [scenarios.solution]
 commands = ["b", "b"]
@@ -152,17 +172,23 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "alpha beta gamma"
-cursor_position = [0, 6]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "alpha beta gamma"
-cursor_position = [0, 11]
-selection = [0, 6, 0, 11]
+file_content = """struct Config {
+    name: String,
+    value: i32,
+}"""
+cursor_position = [1, 8]
+selection = [1, 4, 1, 8]
 
 [scenarios.solution]
 commands = ["w"]
-description = "Press 'w' to go to 'gamma'"
+description = "Press 'w' to go to type annotation"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -187,17 +213,21 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "let x = 10"
+file_content = """fn test() {
+    return true;
+}"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "let x = 10"
-cursor_position = [0, 4]
-selection = [0, 0, 0, 4]
+file_content = """fn test() {
+    return true;
+}"""
+cursor_position = [0, 3]
+selection = [0, 0, 0, 3]
 
 [scenarios.solution]
 commands = ["w"]
-description = "Move to variable name"
+description = "Move to function name"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -213,22 +243,24 @@ estimated_time_seconds = 5
 
 [[scenarios]]
 id = "word_sentence_001"
-name = "Navigate in sentence"
-description = "Move through words in a sentence"
+name = "Navigate in multi-line code"
+description = "Move through words across lines"
 
 hints = [
     "Use 'w' to move word by word",
-    "Count words to reach target",
+    "'w' wraps to next line at line end",
 ]
 
 [scenarios.setup]
-file_content = "The quick fox"
-cursor_position = [0, 0]
+file_content = """let x = 1;
+let y = 2;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "The quick fox"
-cursor_position = [0, 10]
-selection = [0, 4, 0, 10]
+file_content = """let x = 1;
+let y = 2;"""
+cursor_position = [0, 8]
+selection = [0, 6, 0, 8]
 
 [scenarios.solution]
 commands = ["w", "w"]

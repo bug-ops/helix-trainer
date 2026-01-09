@@ -12,12 +12,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "abcdef"
-cursor_position = [0, 3]
+file_content = """let x = 10;"""
+cursor_position = [0, 6]
 
 [scenarios.target]
-file_content = "abcdef"
-cursor_position = [0, 2]
+file_content = """let x = 10;"""
+cursor_position = [0, 5]
 
 [scenarios.solution]
 commands = ["h"]
@@ -46,12 +46,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "abcdef"
-cursor_position = [0, 2]
+file_content = """let y = 20;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "abcdef"
-cursor_position = [0, 3]
+file_content = """let y = 20;"""
+cursor_position = [0, 5]
 
 [scenarios.solution]
 commands = ["l"]
@@ -80,12 +80,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "aaa\nbbb\nccc"
-cursor_position = [0, 1]
+file_content = """let a = 1;
+let b = 2;
+let c = 3;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "aaa\nbbb\nccc"
-cursor_position = [1, 1]
+file_content = """let a = 1;
+let b = 2;
+let c = 3;"""
+cursor_position = [1, 4]
 
 [scenarios.solution]
 commands = ["j"]
@@ -114,12 +118,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "aaa\nbbb\nccc"
-cursor_position = [2, 1]
+file_content = """fn foo() {}
+fn bar() {}
+fn baz() {}"""
+cursor_position = [2, 3]
 
 [scenarios.target]
-file_content = "aaa\nbbb\nccc"
-cursor_position = [1, 1]
+file_content = """fn foo() {}
+fn bar() {}
+fn baz() {}"""
+cursor_position = [1, 3]
 
 [scenarios.solution]
 commands = ["k"]
@@ -148,11 +156,11 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one two three"
+file_content = """let count = 0;"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "one two three"
+file_content = """let count = 0;"""
 cursor_position = [0, 4]
 selection = [0, 0, 0, 4]
 
@@ -183,13 +191,13 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one two three"
-cursor_position = [0, 8]
+file_content = """let value = 42;"""
+cursor_position = [0, 12]
 
 [scenarios.target]
-file_content = "one two three"
-cursor_position = [0, 4]
-selection = [0, 4, 0, 8]
+file_content = """let value = 42;"""
+cursor_position = [0, 10]
+selection = [0, 10, 0, 12]
 
 [scenarios.solution]
 commands = ["b"]
@@ -213,21 +221,21 @@ name = "Jump to line start"
 description = "Navigate to beginning of line"
 
 hints = [
-    "'0' goes to column zero",
+    "'gh' goes to line start",
     "Fastest way to line start",
 ]
 
 [scenarios.setup]
-file_content = "hello world"
-cursor_position = [0, 8]
+file_content = """println!("Hello");"""
+cursor_position = [0, 12]
 
 [scenarios.target]
-file_content = "hello world"
+file_content = """println!("Hello");"""
 cursor_position = [0, 0]
 
 [scenarios.solution]
 commands = ["gh"]
-description = "Press '0' to go to line start"
+description = "Press 'gh' to go to line start"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -252,11 +260,15 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one\ntwo\nthree\nfour"
-cursor_position = [3, 2]
+file_content = """fn one() {}
+fn two() {}
+fn three() {}"""
+cursor_position = [2, 3]
 
 [scenarios.target]
-file_content = "one\ntwo\nthree\nfour"
+file_content = """fn one() {}
+fn two() {}
+fn three() {}"""
 cursor_position = [0, 0]
 
 [scenarios.solution]

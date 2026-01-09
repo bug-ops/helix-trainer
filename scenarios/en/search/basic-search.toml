@@ -1,10 +1,6 @@
 # Basic Search Commands
 # Scenarios for *, #, n, N search commands
 
-# ============================================================================
-# SEARCH WORD UNDER CURSOR (* command)
-# ============================================================================
-
 [[scenarios]]
 id = "search_word_001"
 name = "Search word forward"
@@ -16,17 +12,29 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello world hello there"
-cursor_position = [0, 0]
+file_content = """fn main() {
+    let count = 0;
+    for i in 0..10 {
+        count += 1;
+    }
+    println!("{}", count);
+}"""
+cursor_position = [1, 8]
 
 [scenarios.target]
-file_content = "hello world hello there"
-cursor_position = [0, 12]
-selection = [0, 12, 0, 17]
+file_content = """fn main() {
+    let count = 0;
+    for i in 0..10 {
+        count += 1;
+    }
+    println!("{}", count);
+}"""
+cursor_position = [3, 8]
+selection = [3, 8, 3, 13]
 
 [scenarios.solution]
 commands = ["*"]
-description = "Press '*' to jump to next occurrence of 'hello'"
+description = "Press '*' to jump to next occurrence of 'count'"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -51,17 +59,23 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "foo bar foo baz foo"
-cursor_position = [0, 0]
+file_content = """fn process(data: &str) {
+    let data = data.trim();
+    println!("{}", data);
+}"""
+cursor_position = [0, 11]
 
 [scenarios.target]
-file_content = "foo bar foo baz foo"
-cursor_position = [0, 16]
-selection = [0, 16, 0, 19]
+file_content = """fn process(data: &str) {
+    let data = data.trim();
+    println!("{}", data);
+}"""
+cursor_position = [1, 19]
+selection = [1, 15, 1, 19]
 
 [scenarios.solution]
 commands = ["*", "n"]
-description = "Press '*' then 'n' to reach the third 'foo'"
+description = "Press '*' then 'n' to reach the third 'data'"
 
 [scenarios.scoring]
 optimal_count = 2
@@ -75,10 +89,6 @@ tags = ["search", "word", "next"]
 commands_taught = ["*", "n"]
 estimated_time_seconds = 15
 
-# ============================================================================
-# SEARCH WORD BACKWARD (# command)
-# ============================================================================
-
 [[scenarios]]
 id = "search_word_backward_001"
 name = "Search word backward"
@@ -90,17 +100,21 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "test one test two test"
-cursor_position = [0, 18]
+file_content = """let value = 10;
+let other = 20;
+let result = value + other;"""
+cursor_position = [2, 13]
 
 [scenarios.target]
-file_content = "test one test two test"
-cursor_position = [0, 9]
-selection = [0, 9, 0, 13]
+file_content = """let value = 10;
+let other = 20;
+let result = value + other;"""
+cursor_position = [0, 4]
+selection = [0, 4, 0, 9]
 
 [scenarios.solution]
 commands = ["#"]
-description = "Press '#' to jump to previous occurrence of 'test'"
+description = "Press '#' to jump to previous occurrence of 'value'"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -114,32 +128,38 @@ tags = ["search", "word", "backward"]
 commands_taught = ["#"]
 estimated_time_seconds = 10
 
-# ============================================================================
-# NEXT MATCH (n command)
-# ============================================================================
-
 [[scenarios]]
 id = "search_next_001"
 name = "Go to next match"
-description = "Use 'n' to navigate to next search match"
+description = "Use '*' to search for word under cursor"
 
 hints = [
-    "'n' goes to the next match in search direction",
-    "First use '*' or '/' to set a search pattern",
+    "'*' searches for the word under cursor",
+    "Jumps to the next occurrence",
 ]
 
 [scenarios.setup]
-file_content = "abc 123 abc 456 abc"
-cursor_position = [0, 0]
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+fn sub(a: i32, b: i32) -> i32 {
+    a - b
+}"""
+cursor_position = [0, 7]
 
 [scenarios.target]
-file_content = "abc 123 abc 456 abc"
-cursor_position = [0, 8]
-selection = [0, 8, 0, 11]
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+fn sub(a: i32, b: i32) -> i32 {
+    a - b
+}"""
+cursor_position = [1, 5]
+selection = [1, 4, 1, 5]
 
 [scenarios.solution]
 commands = ["*"]
-description = "Press '*' to find next 'abc'"
+description = "Press '*' to find next 'a'"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -154,45 +174,6 @@ commands_taught = ["*"]
 estimated_time_seconds = 10
 
 [[scenarios]]
-id = "search_next_002"
-name = "Chain next matches"
-description = "Use 'n' multiple times to navigate through matches"
-
-hints = [
-    "After setting pattern with '*', use 'n' repeatedly",
-    "Each 'n' advances to the next match",
-]
-
-[scenarios.setup]
-file_content = "word more word text word"
-cursor_position = [0, 0]
-
-[scenarios.target]
-file_content = "word more word text word"
-cursor_position = [0, 20]
-selection = [0, 20, 0, 24]
-
-[scenarios.solution]
-commands = ["*", "n"]
-description = "Press '*' then 'n' to reach the last 'word'"
-
-[scenarios.scoring]
-optimal_count = 2
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "search"
-difficulty = "intermediate"
-tags = ["search", "next", "chain"]
-commands_taught = ["*", "n"]
-estimated_time_seconds = 15
-
-# ============================================================================
-# PREVIOUS MATCH (N command)
-# ============================================================================
-
-[[scenarios]]
 id = "search_prev_001"
 name = "Go to previous match"
 description = "Use 'N' to navigate to previous search match"
@@ -203,17 +184,19 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "cat dog cat bird cat"
-cursor_position = [0, 17]
+file_content = """struct Point { x: i32, y: i32 }
+struct Rect { x: i32, y: i32, w: i32, h: i32 }"""
+cursor_position = [1, 14]
 
 [scenarios.target]
-file_content = "cat dog cat bird cat"
-cursor_position = [0, 8]
-selection = [0, 8, 0, 11]
+file_content = """struct Point { x: i32, y: i32 }
+struct Rect { x: i32, y: i32, w: i32, h: i32 }"""
+cursor_position = [0, 15]
+selection = [0, 15, 0, 16]
 
 [scenarios.solution]
 commands = ["#"]
-description = "Press '#' to search backward for 'cat'"
+description = "Press '#' to search backward for 'x'"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -226,78 +209,3 @@ difficulty = "intermediate"
 tags = ["search", "previous", "match"]
 commands_taught = ["#"]
 estimated_time_seconds = 10
-
-[[scenarios]]
-id = "search_prev_002"
-name = "Navigate back with N"
-description = "Use '*' then 'N' to go back to previous match"
-
-hints = [
-    "'*' finds next match, 'N' reverses direction",
-    "Combine commands to navigate flexibly",
-]
-
-[scenarios.setup]
-file_content = "item one item two item"
-cursor_position = [0, 0]
-
-[scenarios.target]
-file_content = "item one item two item"
-cursor_position = [0, 9]
-selection = [0, 9, 0, 13]
-
-[scenarios.solution]
-commands = ["*", "N"]
-description = "Press '*' then 'N' to go back to middle 'item'"
-
-[scenarios.scoring]
-optimal_count = 2
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "search"
-difficulty = "intermediate"
-tags = ["search", "previous", "reverse"]
-commands_taught = ["*", "N"]
-estimated_time_seconds = 15
-
-# ============================================================================
-# SEARCH WRAP AROUND
-# ============================================================================
-
-[[scenarios]]
-id = "search_wrap_001"
-name = "Search wraps around"
-description = "Search wraps from end to beginning of document"
-
-hints = [
-    "When at the last match, '*' or 'n' wraps to the first",
-    "Search is circular within the document",
-]
-
-[scenarios.setup]
-file_content = "first middle last first"
-cursor_position = [0, 19]
-
-[scenarios.target]
-file_content = "first middle last first"
-cursor_position = [0, 0]
-selection = [0, 0, 0, 5]
-
-[scenarios.solution]
-commands = ["*"]
-description = "Press '*' to wrap around to first 'first'"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "search"
-difficulty = "intermediate"
-tags = ["search", "wrap", "circular"]
-commands_taught = ["*"]
-estimated_time_seconds = 15
-

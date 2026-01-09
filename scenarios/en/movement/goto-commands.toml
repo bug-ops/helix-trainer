@@ -12,19 +12,25 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "    indented text"
-cursor_position = [0, 10]
+file_content = """fn main() {
+    let result = calculate(10, 20);
+    println!("{}", result);
+}"""
+cursor_position = [1, 20]
 
 [scenarios.target]
-file_content = "    indented text"
-cursor_position = [0, 0]
+file_content = """fn main() {
+    let result = calculate(10, 20);
+    println!("{}", result);
+}"""
+cursor_position = [1, 0]
 
 [scenarios.solution]
 commands = ["gh"]
 description = "Press 'gh' to go to line start"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -46,19 +52,23 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello world\n"
-cursor_position = [0, 0]
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
+}"""
+cursor_position = [0, 3]
 
 [scenarios.target]
-file_content = "hello world\n"
-cursor_position = [0, 11]
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
+}"""
+cursor_position = [0, 31]
 
 [scenarios.solution]
 commands = ["gl"]
-description = "Press 'gl' to go to line end (position before newline)"
+description = "Press 'gl' to go to line end"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -80,19 +90,25 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "    fn main() {"
-cursor_position = [0, 10]
+file_content = """fn process() {
+    let value = 42;
+    return value;
+}"""
+cursor_position = [1, 15]
 
 [scenarios.target]
-file_content = "    fn main() {"
-cursor_position = [0, 4]
+file_content = """fn process() {
+    let value = 42;
+    return value;
+}"""
+cursor_position = [1, 4]
 
 [scenarios.solution]
 commands = ["gs"]
 description = "Press 'gs' to go to first non-whitespace"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -114,11 +130,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Line 1\nLine 2\nLine 3\nLast line"
+file_content = """struct Config {
+    name: String,
+    value: i32,
+}"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "Line 1\nLine 2\nLine 3\nLast line"
+file_content = """struct Config {
+    name: String,
+    value: i32,
+}"""
 cursor_position = [3, 0]
 
 [scenarios.solution]
@@ -126,7 +148,7 @@ commands = ["ge"]
 description = "Press 'ge' to go to last line"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 

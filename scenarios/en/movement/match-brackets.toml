@@ -12,12 +12,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "fn foo(x: i32)"
-cursor_position = [0, 6]
+file_content = """fn calculate(x: i32, y: i32) -> i32 {
+    (x + y) * 2
+}"""
+cursor_position = [0, 12]
 
 [scenarios.target]
-file_content = "fn foo(x: i32)"
-cursor_position = [0, 13]
+file_content = """fn calculate(x: i32, y: i32) -> i32 {
+    (x + y) * 2
+}"""
+cursor_position = [0, 27]
 
 [scenarios.solution]
 commands = ["mm"]
@@ -46,12 +50,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "{ let x = (1 + 2); }"
-cursor_position = [0, 16]
+file_content = """fn sum(items: &[i32]) -> i32 {
+    items.iter().sum()
+}"""
+cursor_position = [1, 21]
 
 [scenarios.target]
-file_content = "{ let x = (1 + 2); }"
-cursor_position = [0, 10]
+file_content = """fn sum(items: &[i32]) -> i32 {
+    items.iter().sum()
+}"""
+cursor_position = [1, 20]
 
 [scenarios.solution]
 commands = ["mm"]
@@ -80,12 +88,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "if (a && (b || c)) {"
+file_content = """if (a > 0 && (b < 10)) {
+    println!("valid");
+}"""
 cursor_position = [0, 3]
 
 [scenarios.target]
-file_content = "if (a && (b || c)) {"
-cursor_position = [0, 17]
+file_content = """if (a > 0 && (b < 10)) {
+    println!("valid");
+}"""
+cursor_position = [0, 21]
 
 [scenarios.solution]
 commands = ["mm"]
@@ -114,11 +126,15 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "fn main() {\n    println!(\"Hi\");\n}"
+file_content = """fn main() {
+    let x = 42;
+}"""
 cursor_position = [0, 10]
 
 [scenarios.target]
-file_content = "fn main() {\n    println!(\"Hi\");\n}"
+file_content = """fn main() {
+    let x = 42;
+}"""
 cursor_position = [2, 0]
 
 [scenarios.solution]

@@ -12,19 +12,25 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello world"
-cursor_position = [0, 0]
+file_content = """fn main() {
+    let result = 42;
+    println!("{}", result);
+}"""
+cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = "hello world"
-cursor_position = [0, 4]
+file_content = """fn main() {
+    let result = 42;
+    println!("{}", result);
+}"""
+cursor_position = [1, 15]
 
 [scenarios.solution]
-commands = ["fo"]
-description = "Press 'fo' to find next 'o'"
+commands = ["f="]
+description = "Press 'f=' to find the '=' character"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -46,19 +52,23 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "fn main() { println!(\"Hello\"); }"
+file_content = """fn process(data: &str) -> Result<i32, Error> {
+    Ok(42)
+}"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "fn main() { println!(\"Hello\"); }"
-cursor_position = [0, 10]
+file_content = """fn process(data: &str) -> Result<i32, Error> {
+    Ok(42)
+}"""
+cursor_position = [0, 45]
 
 [scenarios.solution]
 commands = ["f{"]
 description = "Press 'f{' to jump to opening brace"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -80,19 +90,23 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello world"
-cursor_position = [0, 10]
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
+}"""
+cursor_position = [0, 20]
 
 [scenarios.target]
-file_content = "hello world"
-cursor_position = [0, 7]
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
+}"""
+cursor_position = [0, 16]
 
 [scenarios.solution]
-commands = ["Fo"]
-description = "Press 'Fo' to find previous 'o' (at position 7 in 'world')"
+commands = ["F:"]
+description = "Press 'F:' to find previous ':'"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -114,19 +128,21 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello, world"
-cursor_position = [0, 0]
-
-[scenarios.target]
-file_content = "hello, world"
+file_content = """let items = vec![1, 2, 3];
+let sum = items.iter().sum();"""
 cursor_position = [0, 4]
 
+[scenarios.target]
+file_content = """let items = vec![1, 2, 3];
+let sum = items.iter().sum();"""
+cursor_position = [0, 9]
+
 [scenarios.solution]
-commands = ["t,"]
-description = "Press 't,' to move just before the comma"
+commands = ["t="]
+description = "Press 't=' to move just before the '='"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -148,19 +164,23 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello, world"
-cursor_position = [0, 11]
+file_content = """fn calculate(x: i32, y: i32) -> i32 {
+    x * y
+}"""
+cursor_position = [0, 25]
 
 [scenarios.target]
-file_content = "hello, world"
-cursor_position = [0, 6]
+file_content = """fn calculate(x: i32, y: i32) -> i32 {
+    x * y
+}"""
+cursor_position = [0, 20]
 
 [scenarios.solution]
 commands = ["T,"]
-description = "Press 'T,' to move just after the comma (comma at 5, cursor at 6)"
+description = "Press 'T,' to move just after the comma"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 

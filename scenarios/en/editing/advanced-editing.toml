@@ -16,12 +16,13 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello\nworld"
-cursor_position = [0, 0]
+file_content = """let first = 1;
+let second = 2;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "hello world"
-cursor_position = [0, 0]
+file_content = """let first = 1; let second = 2;"""
+cursor_position = [0, 4]
 
 [scenarios.solution]
 commands = ["J"]
@@ -50,12 +51,14 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "a\nb\nc"
-cursor_position = [0, 0]
+file_content = """let a = 1;
+let b = 2;
+let c = 3;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "a b c"
-cursor_position = [0, 0]
+file_content = """let a = 1; let b = 2; let c = 3;"""
+cursor_position = [0, 4]
 
 [scenarios.solution]
 commands = ["J", "J"]
@@ -88,14 +91,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello\nworld"
+file_content = """fn main() {
+    println!("Hi");
+}"""
 cursor_position = [0, 0]
-selection = [0, 0, 1, 5]
+selection = [0, 0, 1, 18]
 
 [scenarios.target]
-file_content = "hello world"
-cursor_position = [0, 5]
-selection = [0, 5, 0, 6]
+file_content = """fn main() {     println!("Hi");
+}"""
+cursor_position = [0, 12]
+selection = [0, 11, 0, 12]
 
 [scenarios.solution]
 commands = ["Alt-J"]
@@ -128,12 +134,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "code"
-cursor_position = [0, 0]
+file_content = """fn main() {
+println!("test");
+}"""
+cursor_position = [1, 0]
 
 [scenarios.target]
-file_content = "  code"
-cursor_position = [0, 2]
+file_content = """fn main() {
+  println!("test");
+}"""
+cursor_position = [1, 2]
 
 [scenarios.solution]
 commands = [">"]
@@ -162,12 +172,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "  code"
-cursor_position = [0, 2]
+file_content = """fn main() {
+      let x = 1;
+}"""
+cursor_position = [1, 6]
 
 [scenarios.target]
-file_content = "code"
-cursor_position = [0, 0]
+file_content = """fn main() {
+    let x = 1;
+}"""
+cursor_position = [1, 4]
 
 [scenarios.solution]
 commands = ["<"]
@@ -200,12 +214,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello"
-cursor_position = [0, 0]
+file_content = """let value = 42;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "Hello"
-cursor_position = [0, 0]
+file_content = """let Value = 42;"""
+cursor_position = [0, 4]
 
 [scenarios.solution]
 commands = ["~"]
@@ -234,13 +248,13 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "abc"
-cursor_position = [0, 0]
-selection = [0, 0, 0, 3]
+file_content = """let msg = "ok";"""
+cursor_position = [0, 11]
+selection = [0, 11, 0, 13]
 
 [scenarios.target]
-file_content = "ABC"
-cursor_position = [0, 0]
+file_content = """let msg = "OK";"""
+cursor_position = [0, 11]
 
 [scenarios.solution]
 commands = ["~"]
@@ -269,12 +283,12 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "World"
-cursor_position = [0, 0]
+file_content = """const MAX = 100;"""
+cursor_position = [0, 6]
 
 [scenarios.target]
-file_content = "world"
-cursor_position = [0, 0]
+file_content = """const mAX = 100;"""
+cursor_position = [0, 6]
 
 [scenarios.solution]
 commands = ["`"]
@@ -298,4 +312,3 @@ estimated_time_seconds = 10
 
 # Note: Replace with yanked (R) scenario removed - complex yank/paste interaction
 # requires more sophisticated setup. To be addressed in future updates.
-

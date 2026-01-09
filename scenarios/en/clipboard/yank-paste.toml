@@ -12,27 +12,32 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "abc"
-cursor_position = [0, 0]
+file_content = """fn main() {
+    let x = 1;
+}"""
+cursor_position = [1, 8]
 
 [scenarios.target]
-file_content = "abac"
-cursor_position = [0, 2]
+file_content = """fn main() {
+    let xx = 1;
+}"""
+cursor_position = [1, 9]
 
 [scenarios.solution]
-commands = ["y", "l", "p"]
-description = "Press 'y' to yank 'a', 'l' to move right, 'p' to paste after"
+commands = ["y", "p"]
+description = "Press 'y' to yank 'x', 'p' to paste after"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 2
 max_points = 100
 tolerance = 1
+
 [scenarios.metadata]
 category = "clipboard"
 difficulty = "beginner"
 tags = ["yank", "paste", "copy"]
 commands_taught = ["y", "p"]
-estimated_time_seconds = 30
+estimated_time_seconds = 10
 
 [[scenarios]]
 id = "paste_before_001"
@@ -45,24 +50,29 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "xyz"
-cursor_position = [0, 2]
+file_content = """fn add(a: i32) {
+    a + a
+}"""
+cursor_position = [0, 7]
 
 [scenarios.target]
-file_content = "xzyz"
-cursor_position = [0, 1]
+file_content = """fn add(aa: i32) {
+    a + a
+}"""
+cursor_position = [0, 7]
 
 [scenarios.solution]
-commands = ["y", "h", "P"]
-description = "Press 'y' to yank 'z', 'h' to move left, 'P' to paste before"
+commands = ["y", "P"]
+description = "Press 'y' to yank 'a', 'P' to paste before"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 2
 max_points = 100
 tolerance = 1
+
 [scenarios.metadata]
 category = "clipboard"
 difficulty = "beginner"
 tags = ["paste"]
 commands_taught = ["P"]
-estimated_time_seconds = 25
+estimated_time_seconds = 10

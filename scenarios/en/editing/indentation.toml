@@ -7,19 +7,21 @@ name = "Indent code line"
 description = "Add indentation to a line of code"
 
 hints = [
-  "'>' adds 2 spaces of indentation at the start of the line",
-  "Use multiple times to add more indentation",
+    "'>' adds 2 spaces of indentation at the start of the line",
+    "Use multiple times to add more indentation",
 ]
 
 [scenarios.setup]
-file_content = """function hello() {
-return 42;
+file_content = """fn main() {
+let x = 42;
+    println!("{}", x);
 }"""
 cursor_position = [1, 0]
 
 [scenarios.target]
-file_content = """function hello() {
-  return 42;
+file_content = """fn main() {
+  let x = 42;
+    println!("{}", x);
 }"""
 cursor_position = [1, 2]
 
@@ -31,12 +33,13 @@ description = "Press '>' to indent the line"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
 tags = ["indent"]
 commands_taught = [">"]
-estimated_time_seconds = 20
+estimated_time_seconds = 10
 
 [[scenarios]]
 id = "dedent_line_001"
@@ -44,19 +47,21 @@ name = "Remove indentation"
 description = "Remove indentation from a line"
 
 hints = [
-  "'<' removes up to 2 spaces of indentation from the start of the line",
-  "Use multiple times to remove more indentation",
+    "'<' removes up to 2 spaces of indentation from the start of the line",
+    "Use multiple times to remove more indentation",
 ]
 
 [scenarios.setup]
-file_content = """function hello() {
-    return 42;
+file_content = """fn process() {
+      let value = 0;
+    return value;
 }"""
 cursor_position = [1, 0]
 
 [scenarios.target]
-file_content = """function hello() {
-  return 42;
+file_content = """fn process() {
+    let value = 0;
+    return value;
 }"""
 cursor_position = [1, 0]
 
@@ -68,9 +73,10 @@ description = "Press '<' to remove indentation"
 optimal_count = 1
 max_points = 100
 tolerance = 0
+
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
 tags = ["dedent", "indent"]
 commands_taught = ["<"]
-estimated_time_seconds = 20
+estimated_time_seconds = 10

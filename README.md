@@ -45,7 +45,7 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 - **Rich Metadata** — Every scenario tagged with category, difficulty, taught commands, and practice focus
 - **Real Helix Accuracy** — Uses official `helix-core` library (v25.07.1)
 - **45+ Commands** — Movement, editing, clipboard, undo/redo, repeat
-- **78 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
+- **136 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
 - **55 Daily Quests** — Easy, medium, and hard challenges across all commands
 - **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
 
@@ -131,7 +131,7 @@ Main Menu
 
 | Category | Commands |
 |----------|----------|
-| **Movement** | <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd> <kbd>0</kbd> <kbd>$</kbd> <kbd>gg</kbd> <kbd>ge</kbd> <kbd>gh</kbd> <kbd>gl</kbd> <kbd>gs</kbd> <kbd>{</kbd> <kbd>}</kbd> <kbd>^</kbd> |
+| **Movement** | <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd> <kbd>0</kbd> <kbd>$</kbd> <kbd>gg</kbd> <kbd>ge</kbd> <kbd>gh</kbd> <kbd>gl</kbd> <kbd>gs</kbd> <kbd>[p</kbd> <kbd>]p</kbd> <kbd>^</kbd> |
 | **Find/Till** | <kbd>f</kbd> <kbd>F</kbd> <kbd>t</kbd> <kbd>T</kbd> <kbd>Alt</kbd>+<kbd>.</kbd> |
 | **Match Mode** | <kbd>mm</kbd> (brackets) <kbd>ms</kbd> (surround) <kbd>md</kbd> (delete surround) <kbd>mr</kbd> (replace surround) |
 | **Text Objects** | <kbd>ma</kbd>/<kbd>mi</kbd> + <kbd>w</kbd> <kbd>W</kbd> <kbd>(</kbd> <kbd>[</kbd> <kbd>{</kbd> <kbd><</kbd> <kbd>"</kbd> <kbd>'</kbd> <kbd>`</kbd> <kbd>p</kbd> |
@@ -151,7 +151,7 @@ All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
 **Traditional editor tutorials teach commands. Real development requires workflows.**
 
-Most Helix/Vim tutorials:
+Most Helix tutorials:
 
 - Teach <kbd>x</kbd><kbd>d</kbd> (delete line) in isolation ❌
 - Show <kbd>w</kbd> (next word) on synthetic text ❌
@@ -203,20 +203,20 @@ Duolingo-proven mechanics:
 ## Current Status
 
 > [!NOTE]
-> **Active Development**: Typestate input expansion (Phase 4) is complete! 1116 passing tests, zero clippy warnings.
+> **Active Development**: Phase 2.2 complete! 136 scenarios with syntax highlighting, 1239+ passing tests, zero clippy warnings.
 
 ### Completed
 
 | Phase | Version | Highlights |
 |-------|---------|------------|
 | **Phase 1** | v0.1.3 | FSRS spaced repetition, daily quests, XP/mastery system, anti-farming |
-| **Phase 1.5** | v0.3.0 | Scenario metadata, filtering/sorting, 78 categorized scenarios |
+| **Phase 1.5** | v0.3.0 | Scenario metadata, filtering/sorting, categorized scenarios |
 | **Phase 2.1** | v0.4.1 | Arcade mode (60s sessions, lives, streak multiplier, XP integration) |
 | **Phase 4** | v0.5.0 | Typestate input system: surround commands (ms/mr/md), text objects (ma/mi) |
+| **Phase 2.2** | v0.5.3 | Adaptive difficulty, syntax highlighting, 136 scenarios with realistic Rust code |
 
-### 🔄 Phase 2.2: Mini-Games Enhancements (Planned)
+### 🔄 Phase 2.3: Mini-Games Polish (Planned)
 
-- **Adaptive Difficulty** — Auto-adjust based on performance metrics
 - **Audio Feedback** — Sound effects with volume control
 - **Local Leaderboards** — Track personal bests and high scores
 - **New Game Modes** — Survival (endless), Challenge (daily puzzles)
@@ -309,20 +309,21 @@ After Phase 1 stabilizes (~3 months). We're building the foundation (habits, eng
 </details>
 
 <details>
-<summary><b>Is this only for Helix, or can I learn Vim/Neovim?</b></summary>
+<summary><b>Is this only for Helix?</b></summary>
 
-Helix-specific. Many commands overlap with Vim, but Helix uses a different selection-first model. For Vim, try OpenVim or VimGenius.
+Yes, Helix-specific. While many commands have similar names, Helix uses a different selection-first model. This trainer is designed specifically for Helix editor workflows.
 </details>
 
 ## Roadmap
 
 | Phase | Status | Focus |
 |-------|:------:|-------|
-| Phase A | ✅ | Foundation (30+ commands, 78 scenarios, TUI) |
+| Phase A | ✅ | Foundation (30+ commands, 136 scenarios, TUI) |
 | Phase 1 | ✅ | Smart learning (FSRS, quests, mastery) |
 | Phase 2.1 | ✅ | Mini-Games mode (arcade, lives, streaks) |
 | Typestate | ✅ | Input expansion (surround ms/mr/md, text objects ma/mi) |
-| Phase 2.2 | 📋 | Mini-Games enhancements (sound, adaptive difficulty) |
+| Phase 2.2 | ✅ | Adaptive difficulty, syntax highlighting, realistic scenarios |
+| Phase 2.3 | 📋 | Mini-Games polish (sound, leaderboards) |
 | Phase 3 | 📋 | Workflow simulator (LSP, git, multi-file) |
 | Phase 4 | 💡 | Network effects (multiplayer, scenarios marketplace) |
 
@@ -333,7 +334,7 @@ Helix-specific. Many commands overlap with Vim, but Helix uses a different selec
 - [FSRS Research Team](https://github.com/open-spaced-repetition) — For the algorithm
 - [Anki](https://apps.ankiweb.net/) — Inspiration for spaced repetition
 
-Inspired by vim-tutor, OpenVim, and decades of learning science research.
+Inspired by Helix's built-in `:tutor` and decades of learning science research.
 
 ## License
 

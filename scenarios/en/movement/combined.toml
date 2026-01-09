@@ -12,21 +12,27 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "ABCDE\nFGHIJ\nKLMNO"
+file_content = """fn main() {
+    let x = 1;
+    let y = 2;
+}"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "ABCDE\nFGHIJ\nKLMNO"
-cursor_position = [1, 2]
+file_content = """fn main() {
+    let x = 1;
+    let y = 2;
+}"""
+cursor_position = [1, 6]
 
 [scenarios.solution]
-commands = ["j", "l", "l"]
-description = "Move down and right twice"
+commands = ["j", "l", "l", "l", "l", "l", "l"]
+description = "Move down and right to 'x'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 7
 max_points = 100
-tolerance = 0
+tolerance = 2
 
 [scenarios.metadata]
 category = "movement"
@@ -46,21 +52,27 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "ABCDE\nFGHIJ\nKLMNO"
-cursor_position = [2, 4]
+file_content = """struct Point {
+    x: i32,
+    y: i32,
+}"""
+cursor_position = [2, 10]
 
 [scenarios.target]
-file_content = "ABCDE\nFGHIJ\nKLMNO"
-cursor_position = [1, 2]
+file_content = """struct Point {
+    x: i32,
+    y: i32,
+}"""
+cursor_position = [1, 4]
 
 [scenarios.solution]
-commands = ["k", "h", "h"]
-description = "Move up and left twice"
+commands = ["k", "h", "h", "h", "h", "h", "h"]
+description = "Move up and left"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 7
 max_points = 100
-tolerance = 0
+tolerance = 2
 
 [scenarios.metadata]
 category = "movement"
@@ -80,11 +92,11 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one two three"
+file_content = """let count = 0;"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "one two three"
+file_content = """let count = 0;"""
 cursor_position = [0, 4]
 selection = [0, 0, 0, 4]
 
@@ -106,7 +118,7 @@ estimated_time_seconds = 5
 
 [[scenarios]]
 id = "combined_move_004"
-name = "Navigate multiline text"
+name = "Navigate multiline code"
 description = "Move across multiple lines"
 
 hints = [
@@ -115,11 +127,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "Line one\nLine two\nLine three"
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "Line one\nLine two\nLine three"
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}"""
 cursor_position = [2, 0]
 
 [scenarios.solution]
@@ -149,27 +167,33 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "ABC\nDEF\nGHI"
-cursor_position = [2, 2]
+file_content = """fn main() {
+    let x = 1;
+    println!("{}", x);
+}"""
+cursor_position = [3, 0]
 
 [scenarios.target]
-file_content = "ABC\nDEF\nGHI"
-cursor_position = [0, 1]
+file_content = """fn main() {
+    let x = 1;
+    println!("{}", x);
+}"""
+cursor_position = [0, 3]
 
 [scenarios.solution]
-commands = ["gg", "l"]
-description = "Jump to start then move right"
+commands = ["gg", "w"]
+description = "Jump to start then next word"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 2
 max_points = 100
-tolerance = 0
+tolerance = 1
 
 [scenarios.metadata]
 category = "movement"
 difficulty = "beginner"
 tags = ["combined", "document"]
-commands_taught = ["gg", "l"]
+commands_taught = ["gg", "w"]
 estimated_time_seconds = 10
 
 [[scenarios]]
@@ -178,16 +202,18 @@ name = "Line start then down"
 description = "Go to line start then navigate"
 
 hints = [
-    "'0' goes to line start",
+    "'gh' goes to line start",
     "'j' moves down",
 ]
 
 [scenarios.setup]
-file_content = "First\nSecond"
-cursor_position = [0, 4]
+file_content = """let x = 1;
+let y = 2;"""
+cursor_position = [0, 8]
 
 [scenarios.target]
-file_content = "First\nSecond"
+file_content = """let x = 1;
+let y = 2;"""
 cursor_position = [1, 0]
 
 [scenarios.solution]
@@ -217,13 +243,13 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "one two three four"
-cursor_position = [0, 14]
+file_content = """fn process(input: &str) -> String {"""
+cursor_position = [0, 30]
 
 [scenarios.target]
-file_content = "one two three four"
-cursor_position = [0, 4]
-selection = [0, 4, 0, 8]
+file_content = """fn process(input: &str) -> String {"""
+cursor_position = [0, 24]
+selection = [0, 24, 0, 27]
 
 [scenarios.solution]
 commands = ["b", "b"]
@@ -252,13 +278,13 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "alpha beta gamma delta"
+file_content = """let result = calculate_sum(values);"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "alpha beta gamma delta"
-cursor_position = [0, 17]
-selection = [0, 11, 0, 17]
+file_content = """let result = calculate_sum(values);"""
+cursor_position = [0, 13]
+selection = [0, 11, 0, 13]
 
 [scenarios.solution]
 commands = ["w", "w", "w"]

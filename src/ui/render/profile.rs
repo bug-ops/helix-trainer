@@ -1,5 +1,6 @@
 //! Profile screen rendering
 
+use crate::learning::Analytics;
 use crate::ui::state::AppState;
 use ratatui::{
     Frame,
@@ -210,6 +211,51 @@ fn render_stats_section(
             Style::default().fg(Color::Green),
         ),
     ]));
+
+    lines.push(Line::from(""));
+
+    // Learning Progress section (FSRS)
+    let tracker = &state.progress.performance_tracker;
+    let scheduler = &state.progress.scheduler;
+    let summary = Analytics::get_mastery_summary(tracker);
+    let due_count = scheduler.get_due_reviews(tracker).len();
+
+    lines.push(Line::from(vec![Span::styled(
+        "Learning Progress:",
+        Style::default()
+            .fg(Color::Blue)
+            .add_modifier(Modifier::BOLD),
+    )]));
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(vec![
+        Span::raw("  Commands Learned: "),
+        Span::styled(
+            format!("{}", summary.total_commands),
+            Style::default().fg(Color::Cyan),
+        ),
+    ]));
+
+    lines.push(Line::from(vec![
+        Span::raw("  Commands Mastered: "),
+        Span::styled(
+            format!("{}", summary.master),
+            Style::default().fg(Color::Yellow),
+        ),
+    ]));
+
+    if due_count > 0 {
+        lines.push(Line::from(vec![
+            Span::raw("  Due for Review: "),
+            Span::styled(format!("{}", due_count), Style::default().fg(Color::Yellow)),
+            Span::styled(" (press 'r' in menu)", Style::default().fg(Color::Gray)),
+        ]));
+    } else {
+        lines.push(Line::from(vec![Span::styled(
+            "  All caught up!",
+            Style::default().fg(Color::Green),
+        )]));
+    }
 
     let stats = Paragraph::new(lines)
         .alignment(Alignment::Left)

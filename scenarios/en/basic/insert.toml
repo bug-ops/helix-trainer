@@ -3,8 +3,8 @@
 
 [[scenarios]]
 id = "append_mode_001"
-name = "Append after word"
-description = "Move to end of word and enter insert mode to append text"
+name = "Append after cursor"
+description = "Enter insert mode after cursor position"
 
 hints = [
     "'a' enters insert mode after the cursor position",
@@ -12,46 +12,34 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn process_data(input: &str) -> Result<i32, Error> {
-    let mut counter = 0;
-    let items: Vec<_> = input.lines().collect();
-
-    for line in items.iter() {
-        counter += 1;
-    }
-
-    Ok(counter)
+file_content = """fn main() {
+    let x = 0;
+    println!("{}", x);
 }"""
 cursor_position = [1, 8]
 
 [scenarios.target]
-file_content = """fn process_data(input: &str) -> Result<i32, Error> {
-    let mut counter: i32 = 0;
-    let items: Vec<_> = input.lines().collect();
-
-    for line in items.iter() {
-        counter += 1;
-    }
-
-    Ok(counter)
+file_content = """fn main() {
+    let xy = 0;
+    println!("{}", x);
 }"""
-cursor_position = [1, 22]
+cursor_position = [1, 10]
 
 [scenarios.solution]
-commands = ["e", "a", ":", " ", "i", "3", "2", "Escape"]
-description = "Press 'e' to move to end of 'counter', 'a' to append, type ': i32', Escape to exit"
+commands = ["a", "y", "Escape"]
+description = "Press 'a' to append, type 'y', Escape to exit"
 
 [scenarios.scoring]
-optimal_count = 8
+optimal_count = 3
 max_points = 100
-tolerance = 2
+tolerance = 1
 
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
-tags = ["insert", "append", "word"]
-commands_taught = ["e", "a"]
-estimated_time_seconds = 25
+tags = ["insert", "append"]
+commands_taught = ["a"]
+estimated_time_seconds = 10
 
 [[scenarios]]
 id = "open_below_001"
@@ -61,45 +49,33 @@ description = "Open a new line below the current line"
 hints = ["'o' inserts a new line below and enters insert mode"]
 
 [scenarios.setup]
-file_content = """fn calculate_total(prices: &[f64]) -> f64 {
-    let mut total = 0.0;
-
-    for price in prices {
-        total += price;
-    }
-
-    total
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
 }"""
-cursor_position = [1, 4]
+cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = """fn calculate_total(prices: &[f64]) -> f64 {
-    let mut total = 0.0;
-    let discount = 0.1;
+file_content = """fn add(a: i32, b: i32) -> i32 {
 
-    for price in prices {
-        total += price;
-    }
-
-    total
+    a + b
 }"""
-cursor_position = [2, 22]
+cursor_position = [1, 0]
 
 [scenarios.solution]
-commands = ["o", " ", " ", " ", " ", "l", "e", "t", " ", "d", "i", "s", "c", "o", "u", "n", "t", " ", "=", " ", "0", ".", "1", ";", "Escape"]
-description = "Press 'o' to open a new line below, type the new variable declaration, then Escape"
+commands = ["o", "Escape"]
+description = "Press 'o' to open line below, then Escape"
 
 [scenarios.scoring]
-optimal_count = 25
+optimal_count = 2
 max_points = 100
-tolerance = 2
+tolerance = 1
 
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
 tags = ["insert", "line", "open"]
 commands_taught = ["o"]
-estimated_time_seconds = 30
+estimated_time_seconds = 10
 
 [[scenarios]]
 id = "open_above_001"
@@ -109,39 +85,33 @@ description = "Open a new line above the current line"
 hints = ["'O' inserts a new line above and enters insert mode"]
 
 [scenarios.setup]
-file_content = """use std::collections::HashMap;
+file_content = """fn main() {
+    println!("Hello");
+}"""
+cursor_position = [1, 4]
 
-fn process_data(input: &str) -> i32 {
-    let counter = 0;
-    counter
+[scenarios.target]
+file_content = """fn main() {
+
+    println!("Hello");
 }"""
 cursor_position = [1, 0]
 
-[scenarios.target]
-file_content = """use std::collections::HashMap;
-use std::io::Result;
-
-fn process_data(input: &str) -> i32 {
-    let counter = 0;
-    counter
-}"""
-cursor_position = [1, 20]
-
 [scenarios.solution]
-commands = ["O", "u", "s", "e", " ", "s", "t", "d", ":", ":", "i", "o", ":", ":", "R", "e", "s", "u", "l", "t", ";", "Escape"]
-description = "Press 'O' to open a new line above, type the use statement, then Escape"
+commands = ["O", "Escape"]
+description = "Press 'O' to open line above, then Escape"
 
 [scenarios.scoring]
-optimal_count = 22
+optimal_count = 2
 max_points = 100
-tolerance = 2
+tolerance = 1
 
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
 tags = ["insert", "line", "open"]
 commands_taught = ["O"]
-estimated_time_seconds = 30
+estimated_time_seconds = 10
 
 [[scenarios]]
 id = "insert_line_start_001"
@@ -149,32 +119,30 @@ name = "Insert at line start"
 description = "Move to start of line and enter insert mode"
 
 hints = [
-    "'I' is like 'i' but moves to the start of the line first",
+    "'I' moves to line start and enters insert mode",
     "Don't forget to press Escape to exit insert mode",
 ]
 
 [scenarios.setup]
-file_content = """fn validate(data: &Data) -> bool {
-    let name = data.get("name");
-    println!("Checking: {}", name);
-    true
+file_content = """fn test() {
+println!("debug");
+    return true;
 }"""
-cursor_position = [2, 20]
+cursor_position = [1, 10]
 
 [scenarios.target]
-file_content = """fn validate(data: &Data) -> bool {
-    let name = data.get("name");
-    // println!("Checking: {}", name);
-    true
+file_content = """fn test() {
+//println!("debug");
+    return true;
 }"""
-cursor_position = [2, 3]
+cursor_position = [1, 2]
 
 [scenarios.solution]
-commands = ["I", "/", "/", " ", "Escape"]
-description = "Press 'I' to move to start of line, type '// ' to comment, then Escape"
+commands = ["I", "/", "/", "Escape"]
+description = "Press 'I' to move to start, type '//', then Escape"
 
 [scenarios.scoring]
-optimal_count = 5
+optimal_count = 4
 max_points = 100
 tolerance = 1
 
@@ -183,7 +151,7 @@ category = "editing"
 difficulty = "beginner"
 tags = ["insert", "line-start"]
 commands_taught = ["I"]
-estimated_time_seconds = 20
+estimated_time_seconds = 10
 
 [[scenarios]]
 id = "append_line_end_001"
@@ -191,27 +159,27 @@ name = "Append at line end"
 description = "Move to end of line and enter insert mode"
 
 hints = [
-    "'A' is like 'a' but moves to the end of the line first",
+    "'A' moves to line end and enters insert mode",
     "Don't forget to press Escape to exit insert mode",
 ]
 
 [scenarios.setup]
-file_content = """struct Config {
-    name: String,
-    value: i32
+file_content = """struct Point {
+    x: i32,
+    y: i32
 }"""
 cursor_position = [2, 4]
 
 [scenarios.target]
-file_content = """struct Config {
-    name: String,
-    value: i32,
+file_content = """struct Point {
+    x: i32,
+    y: i32,
 }"""
-cursor_position = [2, 14]
+cursor_position = [2, 11]
 
 [scenarios.solution]
 commands = ["A", ",", "Escape"]
-description = "Press 'A' to move to end, ',' to add trailing comma, Escape to exit"
+description = "Press 'A' to move to end, ',' to add comma, Escape to exit"
 
 [scenarios.scoring]
 optimal_count = 3
@@ -223,4 +191,4 @@ category = "editing"
 difficulty = "beginner"
 tags = ["insert", "line-end", "append"]
 commands_taught = ["A"]
-estimated_time_seconds = 15
+estimated_time_seconds = 10

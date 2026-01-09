@@ -347,7 +347,7 @@ file_content = """fn process_data(input: &str) -> Result<i32, Error> {
 
     Ok(counter)
 }"""
-cursor_position = [3, 4]
+cursor_position = [3, 0]
 
 [scenarios.solution]
 commands = ["j", "j"]

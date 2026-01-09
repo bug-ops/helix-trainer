@@ -9,36 +9,37 @@ license = "MIT"
 repository = "https://github.com/bug-ops/helix-trainer"
 
 [dependencies]
-ratatui = "0.30"
-crossterm = { version = "0.29", features = ["event-stream"] }
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.9"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 anyhow = "1.0"
-thiserror = "2.0"
-helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
-tui-big-text = "0.8.1"
-rust-i18n = "3"
+crossterm = { version = "0.29", features = ["event-stream"] }
 chrono = { version = "0.4", features = ["serde"] }
-fsrs = "5.2"
-rand = "0.9"
 dirs = "6.0"
+fsrs = "5.2"
+futures = "0.3"
+helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
+rand = "0.9"
+ratatui = "0.30"
+rust-i18n = "3"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+syntect = { version = "5.3", default-features = false, features = ["default-themes", "default-syntaxes", "regex-onig"] }
+thiserror = "2.0"
 tokio = { version = "1.49", features = [
     "rt-multi-thread",
     "sync",
     "time",
     "macros",
 ] }
-futures = "0.3"
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tui-big-text = "0.8.1"
 
 [dev-dependencies]
-tempfile = "3.24"
-proptest = "1.9"
 criterion = { version = "0.8", features = ["html_reports"] }
 dhat = "0.3"
+proptest = "1.9"
 regex = "1.12"
+tempfile = "3.24"
 walkdir = "2.5"
 
 [[bin]]

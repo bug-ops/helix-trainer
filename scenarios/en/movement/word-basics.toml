@@ -12,28 +12,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn calculate_total(prices: &[f64]) -> f64 {
-    let mut total = 0.0;
-    let discount = 0.1;
-
-    for price in prices {
-        total += price;
-    }
-
-    total * (1.0 - discount)
+file_content = """fn main() {
+    let value = 42;
+    println!("{}", value);
 }"""
 cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = """fn calculate_total(prices: &[f64]) -> f64 {
-    let mut total = 0.0;
-    let discount = 0.1;
-
-    for price in prices {
-        total += price;
-    }
-
-    total * (1.0 - discount)
+file_content = """fn main() {
+    let value = 42;
+    println!("{}", value);
 }"""
 cursor_position = [1, 8]
 selection = [1, 4, 1, 8]
@@ -65,31 +53,19 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn validate(data: &Data) -> bool {
-    let name = data.get("name").unwrap_or("default");
-    let items = [1, 2, 3, 4, 5];
-
-    if name.len() > 0 && items.contains(&data.id) {
-        println!("Valid: {}", name);
-        return true;
-    }
-    false
+file_content = """struct Point {
+    x: i32,
+    y: i32,
 }"""
 cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = """fn validate(data: &Data) -> bool {
-    let name = data.get("name").unwrap_or("default");
-    let items = [1, 2, 3, 4, 5];
-
-    if name.len() > 0 && items.contains(&data.id) {
-        println!("Valid: {}", name);
-        return true;
-    }
-    false
+file_content = """struct Point {
+    x: i32,
+    y: i32,
 }"""
-cursor_position = [1, 13]
-selection = [1, 8, 1, 13]
+cursor_position = [1, 7]
+selection = [1, 5, 1, 7]
 
 [scenarios.solution]
 commands = ["w", "w"]
@@ -118,31 +94,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn process_data(input: &str) -> Result<i32, Error> {
-    let mut counter = 0;
-    let items: Vec<_> = input.lines().collect();
-
-    for line in items.iter() {
-        counter += 1;
-    }
-
-    Ok(counter)
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
 }"""
-cursor_position = [1, 12]
+cursor_position = [1, 6]
 
 [scenarios.target]
-file_content = """fn process_data(input: &str) -> Result<i32, Error> {
-    let mut counter = 0;
-    let items: Vec<_> = input.lines().collect();
-
-    for line in items.iter() {
-        counter += 1;
-    }
-
-    Ok(counter)
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
 }"""
-cursor_position = [1, 8]
-selection = [1, 8, 1, 12]
+cursor_position = [1, 4]
+selection = [1, 4, 1, 6]
 
 [scenarios.solution]
 commands = ["b"]
@@ -171,31 +133,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn calculate_total(prices: &[f64]) -> f64 {
-    let mut total = 0.0;
-    let discount = 0.1;
-
-    for price in prices {
-        total += price;
-    }
-
-    total * (1.0 - discount)
+file_content = """fn main() {
+    let result = 0;
 }"""
-cursor_position = [1, 20]
+cursor_position = [1, 15]
 
 [scenarios.target]
-file_content = """fn calculate_total(prices: &[f64]) -> f64 {
-    let mut total = 0.0;
-    let discount = 0.1;
-
-    for price in prices {
-        total += price;
-    }
-
-    total * (1.0 - discount)
+file_content = """fn main() {
+    let result = 0;
 }"""
-cursor_position = [1, 8]
-selection = [1, 8, 1, 12]
+cursor_position = [1, 4]
+selection = [1, 4, 1, 8]
 
 [scenarios.solution]
 commands = ["b", "b"]
@@ -227,18 +175,16 @@ hints = [
 file_content = """struct Config {
     name: String,
     value: i32,
-    enabled: bool,
 }"""
-cursor_position = [2, 4]
+cursor_position = [1, 4]
 
 [scenarios.target]
 file_content = """struct Config {
     name: String,
     value: i32,
-    enabled: bool,
 }"""
-cursor_position = [2, 11]
-selection = [2, 4, 2, 11]
+cursor_position = [1, 8]
+selection = [1, 4, 1, 8]
 
 [scenarios.solution]
 commands = ["w"]
@@ -267,28 +213,14 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn validate(data: &Data) -> bool {
-    let name = data.get("name").unwrap_or("default");
-    let items = [1, 2, 3, 4, 5];
-
-    if name.len() > 0 && items.contains(&data.id) {
-        println!("Valid: {}", name);
-        return true;
-    }
-    false
+file_content = """fn test() {
+    return true;
 }"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = """fn validate(data: &Data) -> bool {
-    let name = data.get("name").unwrap_or("default");
-    let items = [1, 2, 3, 4, 5];
-
-    if name.len() > 0 && items.contains(&data.id) {
-        println!("Valid: {}", name);
-        return true;
-    }
-    false
+file_content = """fn test() {
+    return true;
 }"""
 cursor_position = [0, 3]
 selection = [0, 0, 0, 3]
@@ -320,31 +252,15 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn process_data(input: &str) -> Result<i32, Error> {
-    let mut counter = 0;
-    let items: Vec<_> = input.lines().collect();
-
-    for line in items.iter() {
-        counter += 1;
-    }
-
-    Ok(counter)
-}"""
-cursor_position = [4, 4]
+file_content = """let x = 1;
+let y = 2;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = """fn process_data(input: &str) -> Result<i32, Error> {
-    let mut counter = 0;
-    let items: Vec<_> = input.lines().collect();
-
-    for line in items.iter() {
-        counter += 1;
-    }
-
-    Ok(counter)
-}"""
-cursor_position = [4, 12]
-selection = [4, 8, 4, 12]
+file_content = """let x = 1;
+let y = 2;"""
+cursor_position = [0, 8]
+selection = [0, 6, 0, 8]
 
 [scenarios.solution]
 commands = ["w", "w"]

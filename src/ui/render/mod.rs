@@ -14,6 +14,7 @@ pub(super) const SELECTION_BG_COLOR: Color = Color::Rgb(60, 80, 120);
 
 mod editor;
 mod helpers;
+mod highlight;
 mod menu;
 mod minigame;
 mod mode_selection;

@@ -12,30 +12,18 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn calculate_total(prices: &[f64]) -> f64 {
-    let mut total = 0.0;
-    let discount = 0.1;
-
-    for price in prices {
-        total += price;
-    }
-
-    total * (1.0 - discount)
+file_content = """fn main() {
+    let x = 42;
+    println!("{}", x);
 }"""
 cursor_position = [1, 4]
 
 [scenarios.target]
-file_content = """fn calculate_total(prices: &[f64]) -> f64 {
-    let mut total = 0.0;
-    let discount = 0.1;
-
-    for price in prices {
-        total += price;
-    }
-
-    total * (1.0 - discount)
+file_content = """fn main() {
+    let x = 42;
+    println!("{}", x);
 }"""
-cursor_position = [1, 23]
+cursor_position = [1, 15]
 
 [scenarios.solution]
 commands = ["gl"]
@@ -64,30 +52,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = """fn process_data(input: &str) -> Result<i32, Error> {
-    let mut counter = 0;
-    let items: Vec<_> = input.lines().collect();
-
-    for line in items.iter() {
-        counter += 1;
-    }
-
-    Ok(counter)
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
 }"""
-cursor_position = [2, 35]
+cursor_position = [1, 8]
 
 [scenarios.target]
-file_content = """fn process_data(input: &str) -> Result<i32, Error> {
-    let mut counter = 0;
-    let items: Vec<_> = input.lines().collect();
-
-    for line in items.iter() {
-        counter += 1;
-    }
-
-    Ok(counter)
+file_content = """fn add(a: i32, b: i32) -> i32 {
+    a + b
 }"""
-cursor_position = [2, 0]
+cursor_position = [1, 0]
 
 [scenarios.solution]
 commands = ["gh"]

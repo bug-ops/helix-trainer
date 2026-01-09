@@ -537,19 +537,12 @@ fn test_repeat_insert_scenario_loads_correctly() {
         .expect("Should find repeat_insert_001");
 
     // Verify cursor positions are within bounds
-    assert_eq!(scenario.setup.cursor_position, (0, 5));
-    assert_eq!(
-        scenario.target.cursor_position,
-        (1, 16),
-        "Target cursor should be at column 16, not 17"
-    );
+    assert_eq!(scenario.setup.cursor_position, (0, 0));
+    assert_eq!(scenario.target.cursor_position, (0, 4));
 
-    // Verify content
-    assert_eq!(scenario.setup.file_content, "TODO:\nFIX:\nNOTE:");
-    assert_eq!(
-        scenario.target.file_content,
-        "TODO: Update docs\nFIX: Update docs\nNOTE:"
-    );
+    // Verify content - simplified to minimal text insertion
+    assert_eq!(scenario.setup.file_content, "ab");
+    assert_eq!(scenario.target.file_content, "axbx");
 
     // Try to create a game session - this validates all constraints
     let session_result = GameSession::new(scenario.clone());

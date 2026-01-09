@@ -256,5 +256,4 @@ mod tests {
         assert!(json.contains("\"level\""));
         assert!(json.contains("\"total_xp\""));
     }
-
 }

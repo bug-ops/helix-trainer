@@ -41,7 +41,7 @@ mod stats;
 mod tests;
 
 // Re-export public types
-pub use difficulty::DifficultyController;
+pub use difficulty::{DifficultyController, LevelChange, PerformancePoint};
 pub use session::{ActiveMiniScenario, MiniGameSession};
 pub use state::MiniGameState;
 pub use stats::MiniGameStats;

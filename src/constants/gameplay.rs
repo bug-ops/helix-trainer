@@ -2,6 +2,13 @@
 //!
 //! Streaks, milestones, achievements, and other game mechanics.
 
+// Mini-game scoring
+/// Score milestone for earning an extra life
+pub const EXTRA_LIFE_SCORE_MILESTONE: u64 = 5000;
+
+/// Maximum time bonus multiplier (50% of base points)
+pub const MAX_TIME_BONUS_MULTIPLIER: f64 = 0.5;
+
 // Streak system
 /// Number of quests completed to earn a streak freeze
 pub const QUESTS_FOR_STREAK_FREEZE: u32 = 5;

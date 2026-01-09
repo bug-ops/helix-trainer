@@ -28,7 +28,7 @@ pub fn handle_start_review_session(
         ctx.ui
             .notifications
             .push(Notification::new(NotificationType::Info {
-                message: "No commands due for review. Keep practicing!".to_string(),
+                message: "No reviews due. Keep practicing!".to_string(),
             }));
         return Ok(HandlerOutcome::Stay);
     }

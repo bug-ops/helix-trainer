@@ -530,32 +530,40 @@ Track which commands have been implemented in the simulator:
 | ✅ | <kbd>w</kbd> | Move to next word start |
 | ✅ | <kbd>b</kbd> | Move to previous word start |
 | ✅ | <kbd>e</kbd> | Move to next word end |
-| ❌ | <kbd>W</kbd> <kbd>B</kbd> <kbd>E</kbd> | WORD movement (whitespace-separated) |
-| ❌ | <kbd>f</kbd> <kbd>t</kbd> <kbd>F</kbd> <kbd>T</kbd> | Character finding |
+| ✅ | <kbd>W</kbd> <kbd>B</kbd> <kbd>E</kbd> | WORD movement (whitespace-separated) |
+| ✅ | <kbd>f</kbd> <kbd>t</kbd> <kbd>F</kbd> <kbd>T</kbd> | Character finding |
 | ✅ | <kbd>G</kbd> | Go to line end (or line number with count) |
 | ✅ | <kbd>g</kbd><kbd>g</kbd> | Go to document start |
-| ❌ | <kbd>Alt</kbd>+<kbd>.</kbd> | Repeat motion |
+| ✅ | <kbd>g</kbd><kbd>e</kbd> | Go to document end |
+| ✅ | <kbd>g</kbd><kbd>h</kbd> | Go to line start |
+| ✅ | <kbd>g</kbd><kbd>l</kbd> | Go to line end |
+| ✅ | <kbd>g</kbd><kbd>s</kbd> | Go to first non-whitespace |
+| ✅ | <kbd>Alt</kbd>+<kbd>.</kbd> | Repeat last motion (f/F/t/T) |
 | ✅ | <kbd>0</kbd> | Go to line start |
 | ✅ | <kbd>$</kbd> | Go to line end |
-| ❌ | <kbd>Ctrl</kbd>+<kbd>b</kbd>, <kbd>Ctrl</kbd>+<kbd>f</kbd> | Page up/down |
-| ❌ | <kbd>Ctrl</kbd>+<kbd>u</kbd>, <kbd>Ctrl</kbd>+<kbd>d</kbd> | Half page up/down |
+| ✅ | <kbd>^</kbd> | Go to first non-whitespace (alias for gs) |
+| ✅ | <kbd>Ctrl</kbd>+<kbd>b</kbd>, <kbd>Ctrl</kbd>+<kbd>f</kbd> | Page up/down |
+| ✅ | <kbd>Ctrl</kbd>+<kbd>u</kbd>, <kbd>Ctrl</kbd>+<kbd>d</kbd> | Half page up/down |
 | ❌ | <kbd>Ctrl</kbd>+<kbd>i</kbd>, <kbd>Ctrl</kbd>+<kbd>o</kbd> | Jump forward/backward |
 | ❌ | <kbd>Ctrl</kbd>+<kbd>s</kbd> | Save to jumplist |
+| ✅ | <kbd>[</kbd><kbd>p</kbd>, <kbd>]</kbd><kbd>p</kbd> | Go to previous/next paragraph |
 
 ### Changes (Normal Mode)
 
 | Status | Keys | Description |
 |:------:|------|-------------|
 | ✅ | <kbd>r</kbd> + char | Replace character with another char |
-| ❌ | <kbd>R</kbd> | Replace selection with yanked text |
-| ❌ | <kbd>~</kbd>, <kbd>`</kbd>, <kbd>Alt</kbd>+<kbd>`</kbd> | Case switching |
+| ✅ | <kbd>R</kbd> | Replace selection with yanked text |
+| ✅ | <kbd>~</kbd> | Switch case (toggle) |
+| ✅ | <kbd>`</kbd> | Switch to lowercase |
+| ✅ | <kbd>Alt</kbd>+<kbd>`</kbd> | Switch to uppercase |
 | ✅ | <kbd>i</kbd> | Enter insert mode before selection |
 | ✅ | <kbd>a</kbd> | Enter insert mode after selection (append) |
 | ✅ | <kbd>I</kbd> | Insert at line start |
 | ✅ | <kbd>A</kbd> | Append at line end |
 | ✅ | <kbd>o</kbd> | Open line below and enter insert mode |
 | ✅ | <kbd>O</kbd> | Open line above and enter insert mode |
-| ❌ | <kbd>.</kbd> | Repeat last insert operation |
+| ✅ | <kbd>.</kbd> | Repeat last insert operation |
 | ✅ | <kbd>u</kbd> | Undo last change |
 | ✅ | <kbd>U</kbd> | Redo last undone change |
 | ❌ | <kbd>Alt</kbd>+<kbd>u</kbd>, <kbd>Alt</kbd>+<kbd>U</kbd> | History navigation (earlier/later) |
@@ -566,7 +574,7 @@ Track which commands have been implemented in the simulator:
 | ✅ | <kbd>></kbd> | Indent selection |
 | ✅ | <kbd><</kbd> | Unindent selection |
 | ❌ | <kbd>=</kbd> | Format selection (LSP) |
-| ✅ | <kbd>d</kbd> | Delete selection (only 'dd' for line deletion implemented) |
+| ✅ | <kbd>d</kbd> | Delete selection |
 | ❌ | <kbd>Alt</kbd>+<kbd>d</kbd> | Delete without yanking |
 | ✅ | <kbd>c</kbd> | Change selection (delete and enter insert mode) |
 | ❌ | <kbd>Alt</kbd>+<kbd>c</kbd> | Change without yanking |
@@ -577,19 +585,29 @@ Track which commands have been implemented in the simulator:
 
 | Status | Keys | Description |
 |:------:|------|-------------|
-| ❌ | <kbd>s</kbd>, <kbd>S</kbd> | Select/split by regex |
-| ❌ | <kbd>Alt</kbd>+<kbd>s</kbd> | Split on newlines |
-| ❌ | <kbd>&</kbd>, <kbd>_</kbd> | Align/trim selections |
-| ❌ | <kbd>;</kbd>, <kbd>Alt</kbd>+<kbd>;</kbd> | Collapse/flip selections |
-| ❌ | <kbd>,</kbd>, <kbd>Alt</kbd>+<kbd>,</kbd> | Primary selection operations |
-| ❌ | <kbd>C</kbd>, <kbd>Alt</kbd>+<kbd>C</kbd> | Copy selection to line above/below |
-| ❌ | <kbd>%</kbd> | Select all (entire file) |
-| ✅ | <kbd>x</kbd> | Extend line below (limited implementation) |
-| ❌ | <kbd>X</kbd>, <kbd>Alt</kbd>+<kbd>x</kbd> | Line bounds operations |
+| ✅ | <kbd>s</kbd> | Select regex matches in selection |
+| ✅ | <kbd>S</kbd> | Split selection on regex |
+| ✅ | <kbd>Alt</kbd>+<kbd>s</kbd> | Split selection on newlines |
+| ✅ | <kbd>&</kbd> | Align selections in columns |
+| ✅ | <kbd>_</kbd> | Trim whitespace from selections |
+| ✅ | <kbd>;</kbd> | Collapse selection to cursor |
+| ❌ | <kbd>Alt</kbd>+<kbd>;</kbd> | Flip selection direction |
+| ✅ | <kbd>,</kbd> | Keep only primary selection |
+| ✅ | <kbd>Alt</kbd>+<kbd>,</kbd> | Remove primary selection |
+| ✅ | <kbd>C</kbd> | Copy selection to next line |
+| ✅ | <kbd>Alt</kbd>+<kbd>C</kbd> | Copy selection to previous line |
+| ✅ | <kbd>%</kbd> | Select entire file |
+| ✅ | <kbd>x</kbd> | Extend line below |
+| ✅ | <kbd>X</kbd> | Extend selection to line bounds |
+| ✅ | <kbd>Alt</kbd>+<kbd>x</kbd> | Shrink selection to line bounds |
 | ✅ | <kbd>J</kbd> | Join lines (remove newlines) |
-| ❌ | <kbd>Alt</kbd>+<kbd>J</kbd> | Join lines with space |
-| ❌ | <kbd>K</kbd>, <kbd>Alt</kbd>+<kbd>K</kbd> | Keep/remove selections by regex |
-| ❌ | <kbd>Ctrl</kbd>+<kbd>c</kbd> | Toggle comments |
+| ✅ | <kbd>Alt</kbd>+<kbd>J</kbd> | Join lines with space |
+| ✅ | <kbd>K</kbd> | Keep selections matching regex |
+| ✅ | <kbd>Alt</kbd>+<kbd>K</kbd> | Remove selections matching regex |
+| ✅ | <kbd>Ctrl</kbd>+<kbd>c</kbd> | Toggle line comments |
+| ✅ | <kbd>Alt</kbd>+<kbd>-</kbd> | Merge all selections |
+| ✅ | <kbd>Alt</kbd>+<kbd>_</kbd> | Merge consecutive selections |
+| ✅ | <kbd>v</kbd> | Enter select (extend) mode |
 
 ### Insert Mode Commands
 
@@ -605,40 +623,82 @@ Track which commands have been implemented in the simulator:
 | ❌ | <kbd>Ctrl</kbd>+<kbd>u</kbd> | Kill to line start |
 | ❌ | <kbd>Ctrl</kbd>+<kbd>k</kbd> | Kill to line end |
 
+### Search Commands
+
+| Status | Keys | Description |
+|:------:|------|-------------|
+| ✅ | <kbd>/</kbd> | Search forward with regex |
+| ✅ | <kbd>?</kbd> | Search backward with regex |
+| ✅ | <kbd>n</kbd> | Jump to next match |
+| ✅ | <kbd>N</kbd> | Jump to previous match |
+| ✅ | <kbd>*</kbd> | Search word under cursor forward |
+| ✅ | <kbd>#</kbd> | Search word under cursor backward |
+| ✅ | <kbd>Alt</kbd>+<kbd>*</kbd> | Search selection text |
+
+### View Commands
+
+| Status | Keys | Description |
+|:------:|------|-------------|
+| ✅ | <kbd>z</kbd> / <kbd>zz</kbd> | Center view on cursor |
+| ✅ | <kbd>zt</kbd> | Scroll cursor to top |
+| ✅ | <kbd>zb</kbd> | Scroll cursor to bottom |
+| ✅ | <kbd>zm</kbd> | Center horizontally |
+| ✅ | <kbd>zj</kbd> | Scroll view down |
+| ✅ | <kbd>zk</kbd> | Scroll view up |
+
+### Match Mode Commands
+
+| Status | Keys | Description |
+|:------:|------|-------------|
+| ✅ | <kbd>mm</kbd> | Jump to matching bracket |
+| ✅ | <kbd>ms</kbd> + char | Add surround (wrap selection) |
+| ✅ | <kbd>md</kbd> + char | Delete surround |
+| ✅ | <kbd>mr</kbd> + char + char | Replace surround |
+| ✅ | <kbd>ma</kbd> + object | Select around text object |
+| ✅ | <kbd>mi</kbd> + object | Select inside text object |
+
 ---
 
 ## Implementation Summary
 
-**Phase A Complete: Essential Commands (100%)**
+**Phase 2.2 Complete: 90+ Commands Implemented**
 
-**Implemented:** 30 commands covering all essential Helix operations
+**Implemented:** 90+ commands covering most essential Helix operations
 
 ### By Category
 
 | Category | Count | Commands |
 |----------|:-----:|----------|
-| **Movement** | 11 | <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd> <kbd>0</kbd> <kbd>$</kbd> <kbd>gg</kbd> <kbd>G</kbd> |
-| **Editing** | 13 | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>dd</kbd> <kbd>c</kbd> <kbd>x</kbd> <kbd>r</kbd> <kbd>u</kbd> <kbd>U</kbd> |
+| **Movement** | 23 | <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd> <kbd>W</kbd> <kbd>B</kbd> <kbd>E</kbd> <kbd>0</kbd> <kbd>$</kbd> <kbd>^</kbd> <kbd>gg</kbd> <kbd>ge</kbd> <kbd>gh</kbd> <kbd>gl</kbd> <kbd>gs</kbd> <kbd>G</kbd> <kbd>f</kbd> <kbd>F</kbd> <kbd>t</kbd> <kbd>T</kbd> |
+| **Paragraph** | 2 | <kbd>[p</kbd> <kbd>]p</kbd> |
+| **Page** | 4 | <kbd>Ctrl+b</kbd> <kbd>Ctrl+f</kbd> <kbd>Ctrl+u</kbd> <kbd>Ctrl+d</kbd> |
+| **Editing** | 17 | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>d</kbd> <kbd>c</kbd> <kbd>r</kbd> <kbd>R</kbd> <kbd>~</kbd> <kbd>`</kbd> <kbd>Alt+`</kbd> <kbd>.</kbd> <kbd>u</kbd> <kbd>U</kbd> |
+| **Selection** | 20 | <kbd>x</kbd> <kbd>X</kbd> <kbd>v</kbd> <kbd>;</kbd> <kbd>,</kbd> <kbd>%</kbd> <kbd>s</kbd> <kbd>S</kbd> <kbd>C</kbd> <kbd>K</kbd> <kbd>Alt+C</kbd> <kbd>Alt+K</kbd> <kbd>Alt+s</kbd> <kbd>Alt+x</kbd> <kbd>_</kbd> <kbd>&</kbd> <kbd>Alt+-</kbd> <kbd>Alt+_</kbd> <kbd>Alt+,</kbd> |
+| **Search** | 7 | <kbd>/</kbd> <kbd>?</kbd> <kbd>n</kbd> <kbd>N</kbd> <kbd>*</kbd> <kbd>#</kbd> <kbd>Alt+*</kbd> |
+| **View** | 6 | <kbd>z</kbd> <kbd>zz</kbd> <kbd>zt</kbd> <kbd>zb</kbd> <kbd>zm</kbd> <kbd>zj</kbd> <kbd>zk</kbd> |
+| **Match Mode** | 6 | <kbd>mm</kbd> <kbd>ms</kbd> <kbd>md</kbd> <kbd>mr</kbd> <kbd>ma</kbd> <kbd>mi</kbd> |
 | **Indentation** | 2 | <kbd>></kbd> <kbd><</kbd> |
-| **Line ops** | 1 | <kbd>J</kbd> |
+| **Line ops** | 3 | <kbd>J</kbd> <kbd>Alt+J</kbd> <kbd>Ctrl+c</kbd> |
 | **Clipboard** | 3 | <kbd>y</kbd> <kbd>p</kbd> <kbd>P</kbd> |
+| **Repeat** | 2 | <kbd>.</kbd> <kbd>Alt+.</kbd> |
 
 ### Training Scenarios Coverage
 
-- ✅ 20 scenarios covering all 30 implemented commands
+- ✅ 136 scenarios covering 90+ implemented commands
+- ✅ All scenarios use realistic Rust code
+- ✅ Syntax highlighting for code display
 - ✅ Multiple difficulty levels per command
 - ✅ Hints and alternative solutions provided
 - ✅ Organized in thematic directory structure
 
 ### Not Yet Implemented (Future Phases)
 
-- Selection manipulation (<kbd>s</kbd>, <kbd>S</kbd>, <kbd>%</kbd>, etc.)
-- Search (<kbd>/</kbd>, <kbd>?</kbd>, <kbd>n</kbd>, <kbd>N</kbd>, <kbd>*</kbd>, etc.)
-- Special modes (<kbd>g</kbd>, <kbd>m</kbd>, <kbd>z</kbd>, <kbd>Ctrl</kbd>+<kbd>w</kbd>, <kbd>Space</kbd>, <kbd>v</kbd>)
-- Tree-sitter selections
+- Tree-sitter selections (<kbd>Alt+o</kbd>, <kbd>Alt+i</kbd>, etc.)
 - LSP integration commands
-- Macros and registers
-- Advanced clipboard operations
+- Macros and registers (<kbd>Q</kbd>, <kbd>q</kbd>, <kbd>"</kbd>)
+- Window mode (<kbd>Ctrl+w</kbd>)
+- Space mode (<kbd>Space</kbd>)
+- Jumplist (<kbd>Ctrl+i</kbd>, <kbd>Ctrl+o</kbd>)
 
 ---
 

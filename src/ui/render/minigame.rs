@@ -1,6 +1,10 @@
 //! Mini-game screen rendering (Arcade Mode)
 
 use super::editor::render_editor_pair;
+use crate::constants::difficulty::{
+    LEVEL_ADVANCED_MAX, LEVEL_ADVANCED_MIN, LEVEL_BEGINNER_MAX, LEVEL_BEGINNER_MIN,
+    LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN,
+};
 use crate::game::PlayableScenario;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
@@ -10,6 +14,9 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph, Wrap},
 };
+
+/// Combo count threshold for highlighted display (bold + magenta)
+const COMBO_HIGHLIGHT_THRESHOLD: u32 = 5;
 
 /// Render the mini-game screen
 pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
@@ -235,14 +242,38 @@ fn render_timer_bar(frame: &mut Frame, area: Rect, scenario: &crate::minigame::A
     frame.render_widget(gauge, area);
 }
 
-/// Render stats bar (score, lives, streak, multiplier)
+/// Render stats bar (score, lives, streak, multiplier, combo, grace, difficulty)
 fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGameSession) {
     let stats = session.stats();
+    let combo = session.combo_count();
+    let grace = session.grace_remaining();
+    let level = session.difficulty_level();
+
+    // Difficulty tier name and color based on level
+    let (tier_name, tier_color) = match level {
+        LEVEL_BEGINNER_MIN..=LEVEL_BEGINNER_MAX => ("Beginner", Color::Green),
+        LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => ("Intermediate", Color::Yellow),
+        LEVEL_ADVANCED_MIN..=LEVEL_ADVANCED_MAX => ("Advanced", Color::Red),
+        _ => ("Unknown", Color::Gray),
+    };
 
     // Lives as hearts
     let lives_str: String = (0..5)
         .map(|i| if i < stats.lives { '♥' } else { '♡' })
         .collect();
+
+    // Grace indicator (shield when available)
+    // Using ASCII alternative for better terminal compatibility
+    let grace_str = if grace > 0 { " [G]" } else { "" };
+
+    // Multiplier color based on value
+    let mult_color = match stats.multiplier as u32 {
+        0..=1 => Color::Gray,
+        2 => Color::Green,
+        3 => Color::Yellow,
+        4 => Color::Magenta,
+        _ => Color::Cyan,
+    };
 
     let stats_line = Line::from(vec![
         Span::styled("SCORE: ", Style::default().fg(Color::Gray)),
@@ -252,34 +283,49 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw("    "),
+        Span::raw("  "),
         Span::styled("LIVES: ", Style::default().fg(Color::Gray)),
         Span::styled(lives_str, Style::default().fg(Color::Red)),
-        Span::raw("    "),
+        Span::raw("  "),
         Span::styled("MULT: ", Style::default().fg(Color::Gray)),
         Span::styled(
             format!("x{:.1}", stats.multiplier),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(mult_color).add_modifier(Modifier::BOLD),
         ),
+        Span::styled(grace_str, Style::default().fg(Color::Cyan)),
     ]);
 
     let stats_line2 = Line::from(vec![
+        Span::styled("COMBO: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            format!("{:>2}", combo),
+            Style::default()
+                .fg(if combo >= COMBO_HIGHLIGHT_THRESHOLD {
+                    Color::Magenta
+                } else {
+                    Color::White
+                })
+                .add_modifier(if combo >= COMBO_HIGHLIGHT_THRESHOLD {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
+        ),
+        Span::raw("  "),
         Span::styled("STREAK: ", Style::default().fg(Color::Gray)),
         Span::styled(
-            format!("{}", stats.streak),
+            format!("{:>2}", stats.streak),
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw("       "),
-        Span::styled("LEVEL: ", Style::default().fg(Color::Gray)),
+        Span::raw("  "),
         Span::styled(
-            format!("{}", stats.level),
-            Style::default().fg(Color::Magenta),
+            format!("Lv.{} ", level),
+            Style::default().fg(tier_color).add_modifier(Modifier::BOLD),
         ),
-        Span::raw("      "),
+        Span::styled(tier_name, Style::default().fg(tier_color)),
+        Span::raw("  "),
         Span::styled("BEST: ", Style::default().fg(Color::Gray)),
         Span::styled(
             format!("{}", stats.best_streak),
@@ -400,6 +446,7 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
 
     // Final stats
     let stats = session.stats();
+    let best_combo = session.best_combo();
     let stats_text = vec![
         Line::from(""),
         Line::from(vec![
@@ -418,9 +465,8 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
                 format!("{}", stats.scenarios_completed),
                 Style::default().fg(Color::Green),
             ),
-        ]),
-        Line::from(vec![
-            Span::styled("Scenarios Failed: ", Style::default().fg(Color::Gray)),
+            Span::raw("   "),
+            Span::styled("Failed: ", Style::default().fg(Color::Gray)),
             Span::styled(
                 format!("{}", stats.scenarios_failed),
                 Style::default().fg(Color::Red),
@@ -433,6 +479,14 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
                 format!("{}", stats.best_streak),
                 Style::default()
                     .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("   "),
+            Span::styled("Best Combo: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{}", best_combo),
+                Style::default()
+                    .fg(Color::Magenta)
                     .add_modifier(Modifier::BOLD),
             ),
         ]),

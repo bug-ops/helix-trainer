@@ -537,12 +537,12 @@ fn test_repeat_insert_scenario_loads_correctly() {
         .expect("Should find repeat_insert_001");
 
     // Verify cursor positions are within bounds
-    assert_eq!(scenario.setup.cursor_position, (0, 0));
-    assert_eq!(scenario.target.cursor_position, (0, 4));
+    assert_eq!(scenario.setup.cursor_position, (0, 4));
+    assert_eq!(scenario.target.cursor_position, (0, 8));
 
-    // Verify content - simplified to minimal text insertion
-    assert_eq!(scenario.setup.file_content, "ab");
-    assert_eq!(scenario.target.file_content, "axbx");
+    // Verify content - realistic Rust code
+    assert_eq!(scenario.setup.file_content, "fn f() {}");
+    assert_eq!(scenario.target.file_content, "fn f(x)x {}");
 
     // Try to create a game session - this validates all constraints
     let session_result = GameSession::new(scenario.clone());

@@ -13,16 +13,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "hello world"
-cursor_position = [0, 0]
+file_content = """let xyz = 1;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "llo world"
-cursor_position = [0, 0]
+file_content = """let z = 1;"""
+cursor_position = [0, 4]
 
 [scenarios.solution]
 commands = ["d", "."]
-description = "Press 'd' to delete 'h', then '.' to repeat and delete 'e'"
+description = "Press 'd' to delete 'x', then '.' to repeat and delete 'y'"
 
 [scenarios.scoring]
 optimal_count = 2
@@ -48,11 +48,15 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "line 1\nline 2\nline 3\nline 4"
-cursor_position = [0, 0]
+file_content = """let a = 1;
+let b = 2;
+let c = 3;
+let d = 4;"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "line 3\nline 4"
+file_content = """let c = 3;
+let d = 4;"""
 cursor_position = [0, 0]
 
 [scenarios.solution]
@@ -82,16 +86,16 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "ab"
-cursor_position = [0, 0]
+file_content = """fn f() {}"""
+cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = "axbx"
-cursor_position = [0, 4]
+file_content = """fn f(x)x {}"""
+cursor_position = [0, 8]
 
 [scenarios.solution]
 commands = ["a", "x", "Escape", "."]
-description = "Append 'x' after 'a', then repeat with '.' to add another 'x'"
+description = "Append 'x' after '(', then repeat with '.' to add another 'x'"
 
 [scenarios.scoring]
 optimal_count = 4
@@ -118,11 +122,17 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "def foo():\nprint('hello')\nprint('world')\nreturn"
+file_content = """fn main() {
+println!("a");
+println!("b");
+}"""
 cursor_position = [1, 0]
 
 [scenarios.target]
-file_content = "def foo():\n  print('hello')\n  print('world')\nreturn"
+file_content = """fn main() {
+  println!("a");
+  println!("b");
+}"""
 cursor_position = [2, 4]
 
 [scenarios.solution]
@@ -154,11 +164,11 @@ hints = [
 ]
 
 [scenarios.setup]
-file_content = "foo-bar-baz"
+file_content = """foo-bar-baz"""
 cursor_position = [0, 3]
 
 [scenarios.target]
-file_content = "foo_bar_baz"
+file_content = """foo_bar_baz"""
 cursor_position = [0, 7]
 
 [scenarios.solution]

@@ -3,10 +3,14 @@
 //! Manages the complete mini-game session including scenario queue,
 //! active scenario, timing, and score calculation.
 
-use crate::config::Scenario;
+use crate::config::{Difficulty, Scenario};
+use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
 use crate::game::{CommandExecutor, EditorState};
 use crate::helix::AnyModeSimulator;
-use crate::minigame::{DifficultyController, MiniGameState, MiniGameStats};
+use crate::minigame::{
+    DifficultyController, LevelChange, MiniGameState, MiniGameStats, MultiplierChange,
+    MultiplierState, PerformancePoint, ScoreBreakdown, ScoreCalculator,
+};
 use crate::security::UserError;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -174,6 +178,15 @@ pub struct MiniGameSession {
     /// Difficulty controller
     difficulty: DifficultyController,
 
+    /// Score calculator with combo tracking
+    score_calculator: ScoreCalculator,
+
+    /// Multiplier state with grace mechanics
+    multiplier_state: MultiplierState,
+
+    /// Last score breakdown (for UI display)
+    last_score_breakdown: Option<ScoreBreakdown>,
+
     /// Current game state
     state: MiniGameState,
 
@@ -202,6 +215,9 @@ impl MiniGameSession {
             queue: VecDeque::with_capacity(QUEUE_SIZE),
             stats: MiniGameStats::new(),
             difficulty: DifficultyController::new(),
+            score_calculator: ScoreCalculator::new(),
+            multiplier_state: MultiplierState::new(),
+            last_score_breakdown: None,
             state: MiniGameState::default(),
             scenarios,
             transition_started_at: None,
@@ -331,20 +347,56 @@ impl MiniGameSession {
     /// ```
     pub fn advance_to_next(&mut self) {
         if let Some(ref scenario) = self.current {
-            // Calculate and award points
-            let points = self.calculate_points(scenario);
-            self.stats.add_score(points);
+            // Calculate metrics for scoring
+            let time_ratio = scenario.progress_percent();
+            let optimal_count = scenario.scenario.scoring.optimal_count.max(1);
+            let actual_count = scenario.action_count().max(1);
+            let efficiency = (optimal_count as f64 / actual_count as f64).min(1.0);
+            let scenario_difficulty = scenario
+                .scenario
+                .metadata
+                .as_ref()
+                .and_then(|m| m.difficulty)
+                .unwrap_or(Difficulty::Beginner);
 
-            // Update statistics
-            self.stats.increase_streak();
+            // Update multiplier state (handles streak, grace, milestones)
+            self.multiplier_state.record_success();
+
+            // Sync multiplier to stats for scoring and display
+            self.stats.multiplier = self.multiplier_state.current();
+            self.stats.streak = self.multiplier_state.streak();
+            self.stats.best_streak = self.multiplier_state.best_streak();
+
+            // Calculate score using enhanced ScoreCalculator
+            let base_points = self.base_points_for(scenario);
+            let breakdown = self.score_calculator.calculate(
+                base_points,
+                time_ratio,
+                efficiency,
+                scenario_difficulty,
+                self.multiplier_state.current(),
+            );
+
+            // Store breakdown for UI display
+            self.last_score_breakdown = Some(breakdown.clone());
+
+            // Award points (total already includes difficulty multiplier)
+            self.stats.add_score(breakdown.total);
+
+            // Update completion counter
             self.stats.record_completion();
 
-            // Update difficulty based on success
-            self.difficulty.update_after_result(true);
+            // Create performance point with full data
+            let performance_point =
+                PerformancePoint::new(true, time_ratio, scenario_difficulty, efficiency);
 
-            // Check for extra life milestone (every 5000 points)
-            let prev_milestone = (self.stats.score - points) / 5000;
-            let curr_milestone = self.stats.score / 5000;
+            // Update difficulty with comprehensive performance data
+            self.difficulty.update_after_scenario(performance_point);
+
+            // Check for extra life milestone (every EXTRA_LIFE_SCORE_MILESTONE points)
+            let prev_milestone =
+                (self.stats.score.saturating_sub(breakdown.total)) / EXTRA_LIFE_SCORE_MILESTONE;
+            let curr_milestone = self.stats.score / EXTRA_LIFE_SCORE_MILESTONE;
             if curr_milestone > prev_milestone {
                 self.stats.gain_life();
             }
@@ -397,17 +449,40 @@ impl MiniGameSession {
     /// session.handle_timeout();
     /// ```
     pub fn handle_timeout(&mut self) {
+        // Update multiplier state (handles grace mechanics)
+        self.multiplier_state.record_failure();
+
+        // Sync multiplier to stats
+        self.stats.multiplier = self.multiplier_state.current();
+        self.stats.streak = self.multiplier_state.streak();
+
         // Lose life
         let has_lives = self.stats.lose_life();
-
-        // Reset streak
-        self.stats.reset_streak();
 
         // Update statistics
         self.stats.record_failure();
 
-        // Update difficulty based on failure
-        self.difficulty.update_after_result(false);
+        // Reset combo via score calculator
+        let breakdown = self.score_calculator.calculate_failure();
+        self.last_score_breakdown = Some(breakdown);
+
+        // Create performance point for failure
+        let scenario_difficulty = self
+            .current
+            .as_ref()
+            .and_then(|s| s.scenario.metadata.as_ref())
+            .and_then(|m| m.difficulty)
+            .unwrap_or(Difficulty::Beginner);
+
+        let performance_point = PerformancePoint::new(
+            false, // failure
+            1.0,   // timeout = 100% time used
+            scenario_difficulty,
+            0.0, // no efficiency on failure
+        );
+
+        // Update difficulty with comprehensive performance data
+        self.difficulty.update_after_scenario(performance_point);
 
         if has_lives {
             // Continue to next scenario (failure transition)
@@ -507,12 +582,102 @@ impl MiniGameSession {
         self.difficulty.current_level()
     }
 
+    /// Take level change event (for UI notifications)
+    ///
+    /// Returns the level change event if one occurred, consuming it.
+    /// Subsequent calls return None until another level change occurs.
+    ///
+    /// # Returns
+    ///
+    /// `Some(LevelChange)` if level changed recently, `None` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::minigame::{MiniGameSession, LevelChange};
+    ///
+    /// let mut session = MiniGameSession::new(scenarios);
+    /// // ... gameplay ...
+    ///
+    /// if let Some(change) = session.take_level_change() {
+    ///     match change {
+    ///         LevelChange::Increased { from, to } => println!("Level up!"),
+    ///         LevelChange::Decreased { from, to } => println!("Level down"),
+    ///     }
+    /// }
+    /// ```
+    pub fn take_level_change(&mut self) -> Option<LevelChange> {
+        self.difficulty.take_level_change()
+    }
+
+    /// Get current performance score (0.0 to 1.0)
+    ///
+    /// Returns the weighted performance score based on recent scenarios.
+    /// Higher scores indicate better overall performance.
+    pub fn performance_score(&self) -> f64 {
+        self.difficulty.performance_score()
+    }
+
+    /// Get progress toward next difficulty level (0.0 to 1.0)
+    ///
+    /// Shows how close the player is to leveling up.
+    pub fn level_progress(&self) -> f64 {
+        self.difficulty.level_progress()
+    }
+
+    /// Get scenarios completed at current level
+    pub fn scenarios_at_level(&self) -> u32 {
+        self.difficulty.scenarios_at_level()
+    }
+
     /// Check if current scenario is in Insert mode
     pub fn is_insert_mode(&self) -> bool {
         self.current
             .as_ref()
             .map(|s| s.is_insert_mode())
             .unwrap_or(false)
+    }
+
+    /// Get last score breakdown for UI display
+    ///
+    /// Returns the detailed breakdown from the most recent score calculation.
+    /// Useful for showing bonus details in the UI.
+    pub fn last_score_breakdown(&self) -> Option<&ScoreBreakdown> {
+        self.last_score_breakdown.as_ref()
+    }
+
+    /// Get current combo count from score calculator
+    pub fn combo_count(&self) -> u32 {
+        self.score_calculator.combo_count()
+    }
+
+    /// Get best combo achieved this session
+    pub fn best_combo(&self) -> u32 {
+        self.score_calculator.best_combo()
+    }
+
+    /// Get reference to multiplier state
+    pub fn multiplier_state(&self) -> &MultiplierState {
+        &self.multiplier_state
+    }
+
+    /// Take multiplier change event (for UI animations)
+    ///
+    /// Returns the change event if one occurred since last call.
+    pub fn take_multiplier_change(&mut self) -> Option<MultiplierChange> {
+        self.multiplier_state.take_change()
+    }
+
+    /// Get streak count needed for next multiplier tier
+    ///
+    /// Returns None if already at maximum tier.
+    pub fn streak_for_next_tier(&self) -> Option<u32> {
+        self.multiplier_state.streak_for_next_tier()
+    }
+
+    /// Get grace failures remaining
+    pub fn grace_remaining(&self) -> u8 {
+        self.multiplier_state.grace_remaining()
     }
 
     /// Record commands from completed scenario for FSRS learning
@@ -568,33 +733,6 @@ impl MiniGameSession {
                 }
             }
         }
-    }
-
-    /// Calculate points for completing a scenario
-    ///
-    /// Point calculation:
-    /// - Base points from scenario difficulty
-    /// - Time bonus: faster completion = more points (up to 50% bonus)
-    /// - Efficiency bonus: optimal actions = 25% bonus
-    /// - Multiplier applied based on streak
-    fn calculate_points(&self, scenario: &ActiveMiniScenario) -> u64 {
-        let base_points = self.base_points_for(scenario);
-
-        // Time bonus: faster = more points (max 50% bonus)
-        let time_ratio = 1.0 - scenario.progress_percent();
-        let time_bonus = (base_points as f64 * time_ratio * 0.5) as u64;
-
-        // Efficiency bonus: optimal actions = 25% bonus
-        let optimal = scenario.scenario.scoring.optimal_count;
-        let actual = scenario.action_count();
-        let efficiency_bonus = if actual <= optimal {
-            base_points / 4
-        } else {
-            0
-        };
-
-        // Total before multiplier and return
-        base_points + time_bonus + efficiency_bonus
     }
 
     /// Get base points for a scenario based on difficulty

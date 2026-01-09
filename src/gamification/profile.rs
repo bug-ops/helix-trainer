@@ -65,6 +65,10 @@ pub struct UserProfile {
     /// Best streak achieved in mini-game mode
     #[serde(default)]
     pub minigame_best_streak: u32,
+
+    /// Total number of mini-game sessions played
+    #[serde(default)]
+    pub minigame_games_played: u32,
 }
 
 impl UserProfile {
@@ -99,6 +103,7 @@ impl UserProfile {
             scenario_history: ScenarioHistory::new(),
             minigame_high_score: 0,
             minigame_best_streak: 0,
+            minigame_games_played: 0,
         }
     }
 
@@ -557,5 +562,19 @@ mod tests {
 
         assert_eq!(profile.minigame_high_score, 5000);
         assert_eq!(profile.minigame_best_streak, 15);
+    }
+
+    #[test]
+    fn test_minigame_games_played_default() {
+        let profile = UserProfile::new();
+        assert_eq!(profile.minigame_games_played, 0);
+    }
+
+    #[test]
+    fn test_minigame_games_played_saturates_at_max() {
+        let mut profile = UserProfile::new();
+        profile.minigame_games_played = u32::MAX;
+        profile.minigame_games_played = profile.minigame_games_played.saturating_add(1);
+        assert_eq!(profile.minigame_games_played, u32::MAX);
     }
 }

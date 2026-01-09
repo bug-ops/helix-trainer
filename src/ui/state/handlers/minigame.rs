@@ -270,6 +270,9 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
             profile.minigame_best_streak = stats.best_streak;
         }
 
+        // Increment total games played counter
+        profile.minigame_games_played = profile.minigame_games_played.saturating_add(1);
+
         // Log results
         tracing::info!(
             xp_earned = xp,
@@ -1049,5 +1052,66 @@ mod tests {
 
         assert!(state.game.minigame_session.is_none());
         assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    }
+
+    #[test]
+    fn test_minigame_back_to_menu_increments_games_played() {
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+
+        // Verify initial games_played is 0
+        assert_eq!(state.progress.profile.minigame_games_played, 0);
+
+        // Transition to playing state
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        // Return to menu (should trigger game_over and increment games_played)
+        let outcome = handle_minigame_back_to_menu(&mut state).unwrap();
+        crate::ui::state::apply_outcome(&mut state, outcome);
+
+        // Games played should be incremented
+        assert_eq!(state.progress.profile.minigame_games_played, 1);
+
+        // Session should be cleared
+        assert!(state.game.minigame_session.is_none());
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    }
+
+    #[test]
+    fn test_minigame_game_over_increments_games_played() {
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+
+        // Verify initial games_played is 0
+        assert_eq!(state.progress.profile.minigame_games_played, 0);
+
+        // Transition to playing state
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        // Trigger game over
+        handle_minigame_game_over(&mut state).unwrap();
+
+        // Games played should be incremented
+        assert_eq!(state.progress.profile.minigame_games_played, 1);
+
+        // Simulate another game session
+        start_minigame(&mut state);
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+        handle_minigame_game_over(&mut state).unwrap();
+
+        // Should be 2 now
+        assert_eq!(state.progress.profile.minigame_games_played, 2);
     }
 }

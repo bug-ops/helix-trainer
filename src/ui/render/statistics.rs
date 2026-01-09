@@ -109,6 +109,11 @@ fn render_statistics_content(frame: &mut Frame, state: &AppState, area: ratatui:
     // Session History section
     render_session_history(&mut lines, state);
 
+    lines.push(Line::from(""));
+
+    // Arcade Mode Statistics section
+    render_arcade_statistics(&mut lines, state);
+
     let stats = Paragraph::new(lines)
         .alignment(Alignment::Left)
         .style(Style::default().fg(Color::White));
@@ -230,5 +235,45 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Total Time Played: "),
         Span::styled(time_str, Style::default().fg(Color::Yellow)),
+    ]));
+}
+
+/// Render arcade mode statistics section
+fn render_arcade_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
+    lines.push(Line::from(vec![Span::styled(
+        "🕹️  Arcade Mode:",
+        Style::default()
+            .fg(Color::Magenta)
+            .add_modifier(Modifier::BOLD),
+    )]));
+    lines.push(Line::from(""));
+
+    let profile = &state.progress.profile;
+
+    // High Score
+    lines.push(Line::from(vec![
+        Span::raw("  High Score: "),
+        Span::styled(
+            format!("{}", profile.minigame_high_score),
+            Style::default().fg(Color::Yellow),
+        ),
+    ]));
+
+    // Best Streak
+    lines.push(Line::from(vec![
+        Span::raw("  Best Streak: "),
+        Span::styled(
+            format!("{}", profile.minigame_best_streak),
+            Style::default().fg(Color::Cyan),
+        ),
+    ]));
+
+    // Games Played
+    lines.push(Line::from(vec![
+        Span::raw("  Games Played: "),
+        Span::styled(
+            format!("{}", profile.minigame_games_played),
+            Style::default().fg(Color::Green),
+        ),
     ]));
 }

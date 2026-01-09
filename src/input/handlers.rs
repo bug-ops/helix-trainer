@@ -36,6 +36,7 @@ pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Mess
     match key.code {
         KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Char('r') => Some(Message::StartReviewSession),
         KeyCode::Char('s') if matches!(state.screen, TypedScreen::Profile(_)) => {
             Some(Message::ShowStatistics)
         }
@@ -379,6 +380,9 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Up | KeyCode::Char('k') => Some(Message::ModeSelectionUp),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::ModeSelectionDown),
         KeyCode::Enter => Some(Message::ModeSelectionSelect),
+        KeyCode::Char('r') => Some(Message::StartReviewSession),
+        KeyCode::Char('p') => Some(Message::ShowProfile),
+        KeyCode::Char('s') => Some(Message::ShowStatistics),
         _ => None,
     }
 }

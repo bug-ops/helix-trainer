@@ -8,8 +8,8 @@ use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
 use crate::game::{CommandExecutor, EditorState};
 use crate::helix::AnyModeSimulator;
 use crate::minigame::{
-    DifficultyController, LevelChange, MiniGameState, MiniGameStats, PerformancePoint,
-    ScoreBreakdown, ScoreCalculator,
+    DifficultyController, LevelChange, MiniGameState, MiniGameStats, MultiplierChange,
+    MultiplierState, PerformancePoint, ScoreBreakdown, ScoreCalculator,
 };
 use crate::security::UserError;
 use std::collections::VecDeque;
@@ -181,6 +181,9 @@ pub struct MiniGameSession {
     /// Score calculator with combo tracking
     score_calculator: ScoreCalculator,
 
+    /// Multiplier state with grace mechanics
+    multiplier_state: MultiplierState,
+
     /// Last score breakdown (for UI display)
     last_score_breakdown: Option<ScoreBreakdown>,
 
@@ -213,6 +216,7 @@ impl MiniGameSession {
             stats: MiniGameStats::new(),
             difficulty: DifficultyController::new(),
             score_calculator: ScoreCalculator::new(),
+            multiplier_state: MultiplierState::new(),
             last_score_breakdown: None,
             state: MiniGameState::default(),
             scenarios,
@@ -355,6 +359,14 @@ impl MiniGameSession {
                 .and_then(|m| m.difficulty)
                 .unwrap_or(Difficulty::Beginner);
 
+            // Update multiplier state (handles streak, grace, milestones)
+            self.multiplier_state.record_success();
+
+            // Sync multiplier to stats for scoring and display
+            self.stats.multiplier = self.multiplier_state.current();
+            self.stats.streak = self.multiplier_state.streak();
+            self.stats.best_streak = self.multiplier_state.best_streak();
+
             // Calculate score using enhanced ScoreCalculator
             let base_points = self.base_points_for(scenario);
             let breakdown = self.score_calculator.calculate(
@@ -362,7 +374,7 @@ impl MiniGameSession {
                 time_ratio,
                 efficiency,
                 scenario_difficulty,
-                self.stats.multiplier,
+                self.multiplier_state.current(),
             );
 
             // Store breakdown for UI display
@@ -371,8 +383,7 @@ impl MiniGameSession {
             // Award points (total already includes difficulty multiplier)
             self.stats.add_score(breakdown.total);
 
-            // Update statistics
-            self.stats.increase_streak();
+            // Update completion counter
             self.stats.record_completion();
 
             // Create performance point with full data
@@ -438,11 +449,15 @@ impl MiniGameSession {
     /// session.handle_timeout();
     /// ```
     pub fn handle_timeout(&mut self) {
+        // Update multiplier state (handles grace mechanics)
+        self.multiplier_state.record_failure();
+
+        // Sync multiplier to stats
+        self.stats.multiplier = self.multiplier_state.current();
+        self.stats.streak = self.multiplier_state.streak();
+
         // Lose life
         let has_lives = self.stats.lose_life();
-
-        // Reset streak
-        self.stats.reset_streak();
 
         // Update statistics
         self.stats.record_failure();
@@ -639,6 +654,30 @@ impl MiniGameSession {
     /// Get best combo achieved this session
     pub fn best_combo(&self) -> u32 {
         self.score_calculator.best_combo()
+    }
+
+    /// Get reference to multiplier state
+    pub fn multiplier_state(&self) -> &MultiplierState {
+        &self.multiplier_state
+    }
+
+    /// Take multiplier change event (for UI animations)
+    ///
+    /// Returns the change event if one occurred since last call.
+    pub fn take_multiplier_change(&mut self) -> Option<MultiplierChange> {
+        self.multiplier_state.take_change()
+    }
+
+    /// Get streak count needed for next multiplier tier
+    ///
+    /// Returns None if already at maximum tier.
+    pub fn streak_for_next_tier(&self) -> Option<u32> {
+        self.multiplier_state.streak_for_next_tier()
+    }
+
+    /// Get grace failures remaining
+    pub fn grace_remaining(&self) -> u8 {
+        self.multiplier_state.grace_remaining()
     }
 
     /// Record commands from completed scenario for FSRS learning

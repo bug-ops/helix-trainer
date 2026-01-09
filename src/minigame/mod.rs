@@ -46,4 +46,4 @@ pub use difficulty::{DifficultyController, LevelChange, PerformancePoint};
 pub use scoring::{PerformanceTier, ScoreBreakdown, ScoreCalculator};
 pub use session::{ActiveMiniScenario, MiniGameSession};
 pub use state::MiniGameState;
-pub use stats::MiniGameStats;
+pub use stats::{MiniGameStats, MultiplierChange, MultiplierState};

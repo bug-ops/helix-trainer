@@ -801,41 +801,19 @@ impl Default for DifficultyController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        Difficulty, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-    };
+    use crate::config::{Difficulty, Scenario};
+    use crate::testing::ScenarioBuilder;
 
     fn create_test_scenario(difficulty: Difficulty, id: &str) -> Scenario {
-        Scenario {
-            id: id.to_string(),
-            name: format!("Test {}", id),
-            description: "Test scenario".to_string(),
-            setup: Setup {
-                file_content: "test".to_string(),
-                cursor_position: (0, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "test".to_string(),
-                cursor_position: (0, 0),
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["x".to_string()],
-                description: "Delete".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec![],
-            scoring: ScoringConfig {
-                optimal_count: 1,
-                max_points: 100,
-                tolerance: 0,
-            },
-            metadata: Some(ScenarioMetadata {
-                difficulty: Some(difficulty),
-                ..Default::default()
-            }),
-        }
+        ScenarioBuilder::new()
+            .id(id)
+            .setup_content("test")
+            .target_content("test")
+            .commands(vec!["x"])
+            .command_description("Delete")
+            .optimal_count(1)
+            .difficulty(difficulty)
+            .build()
     }
 
     // Helper to create a performance point for testing

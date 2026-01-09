@@ -110,36 +110,19 @@ impl ScenarioState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+    use crate::testing::ScenarioBuilder;
 
     fn create_test_scenario() -> Scenario {
-        Scenario {
-            id: "test".to_string(),
-            name: "Test".to_string(),
-            description: "Test scenario".to_string(),
-            setup: Setup {
-                file_content: "hello".to_string(),
-                cursor_position: (0, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "world".to_string(),
-                cursor_position: (0, 0),
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["ciw".to_string(), "world".to_string()],
-                description: "Change word".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec![],
-            scoring: ScoringConfig {
-                optimal_count: 1,
-                max_points: 100,
-                tolerance: 0,
-            },
-            metadata: None,
-        }
+        ScenarioBuilder::new()
+            .id("test")
+            .name("Test")
+            .description("Test scenario")
+            .setup_content("hello")
+            .target_content("world")
+            .commands(vec!["ciw", "world"])
+            .command_description("Change word")
+            .optimal_count(1)
+            .build()
     }
 
     #[test]

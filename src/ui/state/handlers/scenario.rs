@@ -322,47 +322,25 @@ pub fn handle_go_to_scenario_list(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        Difficulty, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-    };
+    use crate::config::{Difficulty, Scenario};
     use crate::game::GameSession;
     use crate::gamification::{ProfileStorage, Quest, QuestDifficulty, QuestType, UserProfile};
     use crate::learning::PerformanceTracker;
+    use crate::testing::ScenarioBuilder;
     use crate::ui::state::{
         AppState, ConfigState, GameState, ProgressState, TaskData, TypedScreen, UIState,
     };
 
     fn create_test_scenario() -> Scenario {
-        Scenario {
-            id: "test_scenario".to_string(),
-            name: "Test Scenario".to_string(),
-            description: "Test description".to_string(),
-            setup: Setup {
-                file_content: "line 1\nline 2\nline 3\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "line 1\nline 3\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["x".to_string(), "d".to_string()],
-                description: "Delete line".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec!["Hint 1".to_string()],
-            scoring: ScoringConfig {
-                optimal_count: 2,
-                max_points: 100,
-                tolerance: 1,
-            },
-            metadata: Some(ScenarioMetadata {
-                difficulty: Some(Difficulty::Beginner),
-                ..Default::default()
-            }),
-        }
+        ScenarioBuilder::new()
+            .id("test_scenario")
+            .setup_cursor(1, 0)
+            .target_content("line 1\nline 3\n")
+            .target_cursor(1, 0)
+            .hint("Hint 1")
+            .tolerance(1)
+            .difficulty(Difficulty::Beginner)
+            .build()
     }
 
     fn create_test_state() -> AppState {
@@ -754,36 +732,15 @@ mod tests {
     }
 
     fn create_test_scenario_with_id(id: &str) -> Scenario {
-        Scenario {
-            id: id.to_string(),
-            name: format!("Test Scenario {}", id),
-            description: "Test description".to_string(),
-            setup: Setup {
-                file_content: "line 1\nline 2\nline 3\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "line 1\nline 3\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["x".to_string(), "d".to_string()],
-                description: "Delete line".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec!["Hint 1".to_string()],
-            scoring: ScoringConfig {
-                optimal_count: 2,
-                max_points: 100,
-                tolerance: 1,
-            },
-            metadata: Some(ScenarioMetadata {
-                difficulty: Some(Difficulty::Beginner),
-                ..Default::default()
-            }),
-        }
+        ScenarioBuilder::new()
+            .id(id)
+            .setup_cursor(1, 0)
+            .target_content("line 1\nline 3\n")
+            .target_cursor(1, 0)
+            .hint("Hint 1")
+            .tolerance(1)
+            .difficulty(Difficulty::Beginner)
+            .build()
     }
 
     fn create_results_data_with_index(scenario_index: Option<usize>) -> ResultsData {

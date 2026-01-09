@@ -788,41 +788,19 @@ impl MiniGameSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        Difficulty, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-    };
+    use crate::config::Difficulty;
+    use crate::testing::ScenarioBuilder;
 
     fn create_test_scenario(id: &str, difficulty: Difficulty) -> Scenario {
-        Scenario {
-            id: id.to_string(),
-            name: format!("Test {}", id),
-            description: "Test scenario".to_string(),
-            setup: Setup {
-                file_content: "line 1\nline 2\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "line 1\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["x".to_string(), "d".to_string()],
-                description: "Delete line".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec![],
-            scoring: ScoringConfig {
-                optimal_count: 1,
-                max_points: 100,
-                tolerance: 0,
-            },
-            metadata: Some(ScenarioMetadata {
-                difficulty: Some(difficulty),
-                ..Default::default()
-            }),
-        }
+        ScenarioBuilder::new()
+            .id(id)
+            .setup_content("line 1\nline 2\n")
+            .setup_cursor(1, 0)
+            .target_content("line 1\n")
+            .target_cursor(1, 0)
+            .optimal_count(1)
+            .difficulty(difficulty)
+            .build()
     }
 
     #[test]
@@ -954,36 +932,18 @@ mod tests {
     fn test_handle_command_ge() {
         // Test that 'ge' command works in minigame session
         // This is a regression test for the 'ge' command error
-        let scenario = Scenario {
-            id: "test_ge".to_string(),
-            name: "Test ge command".to_string(),
-            description: "Test goto last line".to_string(),
-            setup: Setup {
-                file_content: "line 1\nline 2\nline 3\n".to_string(), // With trailing newline
-                cursor_position: (0, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "line 1\nline 2\nline 3\n".to_string(),
-                cursor_position: (2, 0), // After ge, cursor should be on last non-empty line (line 3)
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["ge".to_string()],
-                description: "Go to last line".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec![],
-            scoring: ScoringConfig {
-                optimal_count: 1,
-                max_points: 100,
-                tolerance: 0,
-            },
-            metadata: Some(ScenarioMetadata {
-                difficulty: Some(Difficulty::Beginner),
-                ..Default::default()
-            }),
-        };
+        let scenario = ScenarioBuilder::new()
+            .id("test_ge")
+            .name("Test ge command")
+            .description("Test goto last line")
+            .setup_content("line 1\nline 2\nline 3\n")
+            .target_content("line 1\nline 2\nline 3\n")
+            .target_cursor(2, 0)
+            .commands(vec!["ge"])
+            .command_description("Go to last line")
+            .optimal_count(1)
+            .difficulty(Difficulty::Beginner)
+            .build();
 
         let scenarios = Arc::new(vec![scenario]);
         let mut session = MiniGameSession::new(scenarios);

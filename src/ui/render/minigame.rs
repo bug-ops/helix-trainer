@@ -512,47 +512,25 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        Difficulty, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-    };
+    use crate::config::{Difficulty, Scenario};
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::minigame::MiniGameSession;
+    use crate::testing::ScenarioBuilder;
     use crate::ui::state::{MiniGameData, TypedScreen};
     use ratatui::{Terminal, backend::TestBackend};
     use std::sync::Arc;
 
     fn create_test_scenario(id: &str) -> Scenario {
-        Scenario {
-            id: id.to_string(),
-            name: format!("Test {}", id),
-            description: "Test scenario".to_string(),
-            setup: Setup {
-                file_content: "line 1\nline 2\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "line 1\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["x".to_string(), "d".to_string()],
-                description: "Delete line".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec![],
-            scoring: ScoringConfig {
-                optimal_count: 1,
-                max_points: 100,
-                tolerance: 0,
-            },
-            metadata: Some(ScenarioMetadata {
-                difficulty: Some(Difficulty::Beginner),
-                ..Default::default()
-            }),
-        }
+        ScenarioBuilder::new()
+            .id(id)
+            .setup_content("line 1\nline 2\n")
+            .setup_cursor(1, 0)
+            .target_content("line 1\n")
+            .target_cursor(1, 0)
+            .optimal_count(1)
+            .difficulty(Difficulty::Beginner)
+            .build()
     }
 
     #[test]

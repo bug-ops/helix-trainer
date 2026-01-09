@@ -941,46 +941,19 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ScoringConfig, Setup, Solution, TargetState};
-    use crate::gamification::{ProfileStorage, UserProfile};
     use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE};
-    use crate::learning::PerformanceTracker;
+    use crate::testing::{ScenarioBuilder, test_app_state_with_scenarios};
 
     fn create_test_scenario() -> Scenario {
-        Scenario {
-            id: "test_001".to_string(),
-            name: "Test Scenario".to_string(),
-            description: "A test scenario for UI testing".to_string(),
-            setup: Setup {
-                file_content: "line 1\nline 2\nline 3\n".to_string(),
-                cursor_position: (0, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "line 2\nline 3\n".to_string(),
-                cursor_position: (0, 0),
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["x".to_string(), "d".to_string()],
-                description: "Delete first line".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec!["Use x to select line, then d to delete".to_string()],
-            scoring: ScoringConfig {
-                optimal_count: 2,
-                max_points: 100,
-                tolerance: 0,
-            },
-            metadata: None,
-        }
+        ScenarioBuilder::new()
+            .id("test_001")
+            .description("A test scenario for UI testing")
+            .hint("Use x to select line, then d to delete")
+            .build()
     }
 
     fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
-        let profile = UserProfile::new();
-        let storage = ProfileStorage::new();
-        let tracker = PerformanceTracker::new();
-        AppState::new(scenarios, profile, storage, tracker)
+        test_app_state_with_scenarios(scenarios)
     }
 
     #[test]

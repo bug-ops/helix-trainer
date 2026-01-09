@@ -443,16 +443,12 @@ mod tests {
     use crate::{
         config::Scenario,
         game::GameSession,
-        gamification::{ProfileStorage, UserProfile},
-        learning::PerformanceTracker,
+        testing::empty_test_app_state,
         ui::state::{MenuData, TaskData},
     };
 
     fn create_test_app_state() -> AppState {
-        let profile = UserProfile::new();
-        let storage = ProfileStorage::new();
-        let tracker = PerformanceTracker::new();
-        AppState::new(vec![], profile, storage, tracker)
+        empty_test_app_state()
     }
 
     #[test]

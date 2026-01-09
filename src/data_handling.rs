@@ -101,25 +101,27 @@ mod tests {
         gamification::ProfileStorage,
     };
 
-    fn create_test_app_state() -> AppState {
+    // Binary crate tests cannot access the library's #[cfg(test)] modules,
+    // so we define minimal local helpers here
+    fn empty_test_app_state() -> AppState {
         let profile = UserProfile::new();
         let storage = ProfileStorage::new();
         let tracker = PerformanceTracker::new();
         AppState::new(vec![], profile, storage, tracker)
     }
 
-    fn create_test_scenario() -> Scenario {
+    fn default_test_scenario() -> Scenario {
         Scenario {
-            id: "test_001".to_string(),
+            id: "test_scenario".to_string(),
             name: "Test Scenario".to_string(),
-            description: "A test scenario".to_string(),
+            description: "Test scenario".to_string(),
             setup: Setup {
-                file_content: "line 1\nline 2\n".to_string(),
+                file_content: "line 1\nline 2\nline 3\n".to_string(),
                 cursor_position: (0, 0),
                 selection: None,
             },
             target: TargetState {
-                file_content: "line 2\n".to_string(),
+                file_content: "line 2\nline 3\n".to_string(),
                 cursor_position: (0, 0),
                 selection: None,
             },
@@ -130,7 +132,7 @@ mod tests {
             alternatives: vec![],
             hints: vec![],
             scoring: ScoringConfig {
-                optimal_count: 1,
+                optimal_count: 2,
                 max_points: 100,
                 tolerance: 0,
             },
@@ -140,8 +142,8 @@ mod tests {
 
     #[test]
     fn test_handle_scenarios_ready() {
-        let mut state = create_test_app_state();
-        let scenarios = vec![create_test_scenario()];
+        let mut state = empty_test_app_state();
+        let scenarios = vec![default_test_scenario()];
 
         let result = handle_data_message(&mut state, DataLoadMessage::ScenariosReady(scenarios));
 
@@ -151,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_handle_scenarios_ready_empty() {
-        let mut state = create_test_app_state();
+        let mut state = empty_test_app_state();
 
         let result = handle_data_message(&mut state, DataLoadMessage::ScenariosReady(vec![]));
 
@@ -161,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_handle_scenarios_error() {
-        let mut state = create_test_app_state();
+        let mut state = empty_test_app_state();
 
         let result = handle_data_message(
             &mut state,
@@ -176,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_handle_profile_ready() {
-        let mut state = create_test_app_state();
+        let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
         profile.total_xp = 500;
         profile.level = 3;
@@ -191,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_handle_profile_error_uses_fallback() {
-        let mut state = create_test_app_state();
+        let mut state = empty_test_app_state();
         let mut fallback = UserProfile::new();
         fallback.total_xp = 100; // Mark fallback with some XP
 
@@ -210,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_handle_profile_saved() {
-        let mut state = create_test_app_state();
+        let mut state = empty_test_app_state();
 
         let result = handle_data_message(&mut state, DataLoadMessage::ProfileSaved);
 
@@ -219,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_handle_profile_save_error() {
-        let mut state = create_test_app_state();
+        let mut state = empty_test_app_state();
 
         let result = handle_data_message(
             &mut state,
@@ -232,7 +234,7 @@ mod tests {
 
     #[test]
     fn test_handle_quest_registry_ready() {
-        let mut state = create_test_app_state();
+        let mut state = empty_test_app_state();
         let registry = QuestTemplateRegistry::new();
 
         let result = handle_data_message(&mut state, DataLoadMessage::QuestRegistryReady(registry));
@@ -242,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_handle_quest_registry_error() {
-        let mut state = create_test_app_state();
+        let mut state = empty_test_app_state();
 
         let result = handle_data_message(
             &mut state,

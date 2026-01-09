@@ -27,39 +27,3 @@ pub const MINIGAME_STREAK_BONUS_MAX_XP: u64 = 15;
 pub const MINIGAME_SCENARIO_BASE_XP: u64 = 15;
 /// XP multiplier per streak level in arcade mode
 pub const MINIGAME_STREAK_XP_MULTIPLIER: u64 = 2;
-
-// Quest XP rewards by difficulty
-/// Default XP reward for easy quests
-pub const QUEST_DEFAULT_XP_EASY: u64 = 25;
-/// Default XP reward for medium quests
-pub const QUEST_DEFAULT_XP_MEDIUM: u64 = 50;
-/// Default XP reward for hard quests
-pub const QUEST_DEFAULT_XP_HARD: u64 = 100;
-
-// Quest type XP rewards (easy/medium/hard)
-/// XP for easy scenario completion quest
-pub const QUEST_XP_SCENARIO_EASY: u64 = 25;
-/// XP for medium scenario completion quest
-pub const QUEST_XP_SCENARIO_MEDIUM: u64 = 50;
-/// XP for hard scenario completion quest
-pub const QUEST_XP_SCENARIO_HARD: u64 = 100;
-
-/// XP for easy command practice quest
-pub const QUEST_XP_COMMAND_EASY: u64 = 30;
-/// XP for medium command practice quest
-pub const QUEST_XP_COMMAND_MEDIUM: u64 = 75;
-/// XP for hard command practice quest
-pub const QUEST_XP_COMMAND_HARD: u64 = 150;
-
-/// XP for easy exploration quest
-pub const QUEST_XP_EXPLORATION_EASY: u64 = 40;
-/// XP for medium exploration quest
-pub const QUEST_XP_EXPLORATION_MEDIUM: u64 = 80;
-/// XP for hard exploration quest
-pub const QUEST_XP_EXPLORATION_HARD: u64 = 160;
-
-/// XP for speed run quest (medium only)
-pub const QUEST_XP_SPEED_RUN: u64 = 100;
-
-/// XP for time invested quest (hard)
-pub const QUEST_XP_TIME_INVESTED: u64 = 200;

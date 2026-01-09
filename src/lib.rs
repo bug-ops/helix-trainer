@@ -34,3 +34,7 @@ pub mod learning;
 pub mod minigame;
 pub mod security;
 pub mod ui;
+
+// Test utilities - only compiled in test builds
+#[cfg(test)]
+pub mod testing;

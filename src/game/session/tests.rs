@@ -1,36 +1,13 @@
 //! Tests for GameSession
 
 use super::*;
-use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+use crate::testing::ScenarioBuilder;
 
 fn create_test_scenario() -> Scenario {
-    Scenario {
-        id: "test_001".to_string(),
-        name: "Test Scenario".to_string(),
-        description: "A test scenario".to_string(),
-        setup: Setup {
-            file_content: "line 1\nline 2\nline 3\n".to_string(),
-            cursor_position: (0, 0),
-            selection: None,
-        },
-        target: TargetState {
-            file_content: "line 2\nline 3\n".to_string(),
-            cursor_position: (0, 0),
-            selection: None,
-        },
-        solution: Solution {
-            commands: vec!["x".to_string(), "d".to_string()],
-            description: "Delete first line".to_string(),
-        },
-        alternatives: vec![],
-        hints: vec!["Use x to select line, then d to delete".to_string()],
-        scoring: ScoringConfig {
-            optimal_count: 2,
-            max_points: 100,
-            tolerance: 0,
-        },
-        metadata: None,
-    }
+    ScenarioBuilder::new()
+        .id("test_001")
+        .hint("Use x to select line, then d to delete")
+        .build()
 }
 
 #[test]

@@ -38,14 +38,6 @@ pub const LEVEL_ADVANCED_MIN: u8 = 7;
 /// Advanced level range maximum
 pub const LEVEL_ADVANCED_MAX: u8 = 10;
 
-// Difficulty adjustment thresholds (legacy - kept for backwards compatibility)
-/// Minimum results needed before adjusting difficulty
-pub const MIN_RESULTS_FOR_DIFFICULTY_CHANGE: usize = 5;
-/// Success rate threshold for increasing difficulty (90%)
-pub const DIFFICULTY_INCREASE_THRESHOLD: f64 = 0.9;
-/// Success rate threshold for decreasing difficulty (50%)
-pub const DIFFICULTY_DECREASE_THRESHOLD: f64 = 0.5;
-
 // Performance scoring weights
 /// Weight for success component in performance calculation (60%)
 pub const PERFORMANCE_SUCCESS_WEIGHT: f64 = 0.6;

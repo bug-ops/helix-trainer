@@ -66,47 +66,25 @@ pub fn handle_award_xp(ctx: &mut HandlerContext<'_>, amount: u64) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        Difficulty, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-    };
+    use crate::config::{Difficulty, Scenario};
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
+    use crate::testing::ScenarioBuilder;
     use crate::ui::state::handlers::minigame::handle_start_minigame;
     use crate::ui::state::{
         AppState, ConfigState, GameState, MenuData, ModeSelectionData, ProgressState, UIState,
     };
 
     fn create_test_scenario(id: &str) -> Scenario {
-        Scenario {
-            id: id.to_string(),
-            name: format!("Test {}", id),
-            description: "Test scenario".to_string(),
-            setup: Setup {
-                file_content: "line 1\nline 2\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            target: TargetState {
-                file_content: "line 1\n".to_string(),
-                cursor_position: (1, 0),
-                selection: None,
-            },
-            solution: Solution {
-                commands: vec!["x".to_string(), "d".to_string()],
-                description: "Delete line".to_string(),
-            },
-            alternatives: vec![],
-            hints: vec![],
-            scoring: ScoringConfig {
-                optimal_count: 1,
-                max_points: 100,
-                tolerance: 0,
-            },
-            metadata: Some(ScenarioMetadata {
-                difficulty: Some(Difficulty::Beginner),
-                ..Default::default()
-            }),
-        }
+        ScenarioBuilder::new()
+            .id(id)
+            .setup_content("line 1\nline 2\n")
+            .setup_cursor(1, 0)
+            .target_content("line 1\n")
+            .target_cursor(1, 0)
+            .optimal_count(1)
+            .difficulty(Difficulty::Beginner)
+            .build()
     }
 
     fn create_test_state() -> AppState {

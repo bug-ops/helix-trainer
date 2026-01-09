@@ -1,45 +1,22 @@
 //! Tests for rendering functions
 
-use crate::config::{ScoringConfig, Setup, Solution, TargetState};
-use crate::gamification::{ProfileStorage, UserProfile};
-use crate::learning::PerformanceTracker;
+use crate::config::Scenario;
+use crate::testing::{ScenarioBuilder, test_app_state_with_scenarios};
 use crate::ui::state::AppState;
 
-fn create_test_scenario() -> crate::config::Scenario {
-    crate::config::Scenario {
-        id: "test_001".to_string(),
-        name: "Test Scenario".to_string(),
-        description: "A test scenario for rendering".to_string(),
-        setup: Setup {
-            file_content: "line 1\n".to_string(),
-            cursor_position: (0, 0),
-            selection: None,
-        },
-        target: TargetState {
-            file_content: "line 2\n".to_string(),
-            cursor_position: (0, 0),
-            selection: None,
-        },
-        solution: Solution {
-            commands: vec!["x".to_string(), "d".to_string()],
-            description: "Delete line".to_string(),
-        },
-        alternatives: vec![],
-        hints: vec!["Test hint".to_string()],
-        scoring: ScoringConfig {
-            optimal_count: 1,
-            max_points: 100,
-            tolerance: 0,
-        },
-        metadata: None,
-    }
+fn create_test_scenario() -> Scenario {
+    ScenarioBuilder::new()
+        .id("test_001")
+        .description("A test scenario for rendering")
+        .setup_content("line 1\n")
+        .target_content("line 2\n")
+        .hint("Test hint")
+        .optimal_count(1)
+        .build()
 }
 
-fn create_test_app_state(scenarios: Vec<crate::config::Scenario>) -> AppState {
-    let profile = UserProfile::new();
-    let storage = ProfileStorage::new();
-    let tracker = PerformanceTracker::new();
-    AppState::new(scenarios, profile, storage, tracker)
+fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
+    test_app_state_with_scenarios(scenarios)
 }
 
 #[test]
@@ -762,32 +739,13 @@ mod screen_render_tests {
     }
 }
 
-fn create_test_scenario_with_id(id: &str) -> crate::config::Scenario {
-    crate::config::Scenario {
-        id: id.to_string(),
-        name: format!("Test Scenario {}", id),
-        description: "A test scenario for rendering".to_string(),
-        setup: Setup {
-            file_content: "line 1\n".to_string(),
-            cursor_position: (0, 0),
-            selection: None,
-        },
-        target: TargetState {
-            file_content: "line 2\n".to_string(),
-            cursor_position: (0, 0),
-            selection: None,
-        },
-        solution: Solution {
-            commands: vec!["x".to_string(), "d".to_string()],
-            description: "Delete line".to_string(),
-        },
-        alternatives: vec![],
-        hints: vec!["Test hint".to_string()],
-        scoring: ScoringConfig {
-            optimal_count: 1,
-            max_points: 100,
-            tolerance: 0,
-        },
-        metadata: None,
-    }
+fn create_test_scenario_with_id(id: &str) -> Scenario {
+    ScenarioBuilder::new()
+        .id(id)
+        .description("A test scenario for rendering")
+        .setup_content("line 1\n")
+        .target_content("line 2\n")
+        .hint("Test hint")
+        .optimal_count(1)
+        .build()
 }

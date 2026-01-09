@@ -553,56 +553,6 @@ fn execute_key_sequence(
     Ok(())
 }
 
-/// Convert a sequence of KeyEvents back to a command string (legacy, kept for tests)
-///
-/// This reconstructs the original command from the recorded KeyEvent sequence.
-/// Handles both single-key commands (`x`, `i`, etc.) and multi-key sequences (`gg`, `rx`).
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The key sequence is empty
-/// - The key sequence is unrecognized (unsupported multi-key command)
-/// - The key code is not a known command
-#[allow(dead_code)]
-fn key_events_to_cmd(keys: &[crossterm::event::KeyEvent]) -> Result<String, UserError> {
-    use crate::helix::commands::*;
-    use crossterm::event::KeyCode;
-
-    if keys.is_empty() {
-        return Err(UserError::OperationFailed);
-    }
-
-    // Handle multi-key sequences
-    if keys.len() == 2
-        && let (KeyCode::Char(ch1), KeyCode::Char(ch2)) = (keys[0].code, keys[1].code)
-    {
-        // Check for known multi-key commands
-        return match (ch1, ch2) {
-            ('g', 'g') => Ok(CMD_GOTO_FILE_START.to_string()),
-            ('r', _) => Ok(format!("r{}", ch2)), // Replace command
-            _ => Err(UserError::OperationFailed), // Unknown multi-key sequence
-        };
-    }
-
-    // Single key command
-    if keys.len() == 1 {
-        return match keys[0].code {
-            KeyCode::Char(ch) => Ok(ch.to_string()),
-            KeyCode::Esc => Ok(CMD_ESCAPE.to_string()),
-            KeyCode::Backspace => Ok(CMD_BACKSPACE.to_string()),
-            KeyCode::Left => Ok(CMD_ARROW_LEFT.to_string()),
-            KeyCode::Right => Ok(CMD_ARROW_RIGHT.to_string()),
-            KeyCode::Up => Ok(CMD_ARROW_UP.to_string()),
-            KeyCode::Down => Ok(CMD_ARROW_DOWN.to_string()),
-            _ => Err(UserError::OperationFailed), // Unknown key code
-        };
-    }
-
-    // Unsupported key sequence length (3+ keys)
-    Err(UserError::OperationFailed)
-}
-
 // Implement CommandExecutor trait for AnyModeSimulator
 impl super::executor::CommandExecutor for AnyModeSimulator {
     fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {

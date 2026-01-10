@@ -8,6 +8,10 @@ description = "Interactive trainer for learning Helix editor keybindings"
 license = "MIT"
 repository = "https://github.com/bug-ops/helix-trainer"
 
+[features]
+default = ["audio"]
+audio = ["rodio"]
+
 [dependencies]
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
@@ -18,7 +22,7 @@ futures = "0.3"
 helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
 rand = "0.9"
 ratatui = "0.30"
-rodio = { version = "0.21", default-features = false, features = ["vorbis", "playback"] }
+rodio = { version = "0.21", default-features = false, features = ["vorbis", "playback"], optional = true }
 rust-i18n = "3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

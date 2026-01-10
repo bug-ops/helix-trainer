@@ -86,10 +86,11 @@ jobs:
             os: ubuntu-latest
             archive: tar.gz
 
-          # Linux x86_64 (musl - static linking)
+          # Linux x86_64 (musl - static linking, no audio)
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             archive: tar.gz
+            no_audio: true
 
           # macOS x86_64 (Intel)
           - target: x86_64-apple-darwin
@@ -117,11 +118,12 @@ jobs:
             archive: tar.gz
             use_cross: true
 
-          # Linux ARM64 (musl - static linking)
+          # Linux ARM64 (musl - static linking, no audio)
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             archive: tar.gz
             use_cross: true
+            no_audio: true
 
     steps:
       - name: Checkout code
@@ -137,9 +139,9 @@ jobs:
         with:
           shared-key: "release-${{ matrix.target }}"
 
-      # Install Linux dependencies (ALSA for audio)
+      # Install Linux dependencies (ALSA for audio, skip for musl)
       - name: Install Linux dependencies
-        if: runner.os == 'Linux' && matrix.use_cross != true
+        if: runner.os == 'Linux' && matrix.use_cross != true && matrix.no_audio != true
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev
@@ -157,12 +159,20 @@ jobs:
           cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build release binary (with cross)
-        if: matrix.use_cross == true
+        if: matrix.use_cross == true && matrix.no_audio != true
         run: cross build --release --target ${{ matrix.target }} --locked --verbose
 
+      - name: Build release binary (with cross, no audio)
+        if: matrix.use_cross == true && matrix.no_audio == true
+        run: cross build --release --target ${{ matrix.target }} --locked --verbose --no-default-features
+
       - name: Build release binary (native)
-        if: matrix.use_cross != true
+        if: matrix.use_cross != true && matrix.no_audio != true
         run: cargo build --release --target ${{ matrix.target }} --locked --verbose
+
+      - name: Build release binary (native, no audio)
+        if: matrix.use_cross != true && matrix.no_audio == true
+        run: cargo build --release --target ${{ matrix.target }} --locked --verbose --no-default-features
 
       - name: Create archive directory
         shell: bash

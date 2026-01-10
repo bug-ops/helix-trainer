@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-01-10
+
+### Added
+
+- **Embedded Scenarios & Quests** — All 136 scenarios and 55 quests now compiled into binary:
+  - Zero runtime file I/O for scenarios/quests
+  - Instant startup with no file loading
+  - Single-binary distribution (no assets folder needed)
+  - `include_str!` macro for compile-time embedding
+
+- **Menu Position Persistence** — Scenario list remembers position when returning from training:
+  - Selected item and scroll offset preserved
+  - Seamless navigation between training and menu
+  - Session-scoped memory (resets on restart)
+
+- **GitHub Auto Labeler** — Automatic PR labeling in CI:
+  - File-path based labels (ui, helix-core, game, etc.)
+  - Conventional commit prefix labels (feat→enhancement, fix→bug, etc.)
+
+### Changed
+
+- **README** — Added training mode GIF demo in hero section
+
+### Quality
+
+- **Tests**: 1626 (up from 1355)
+- **Coverage**: 91% (up from 86%)
+- **Clippy**: Zero warnings
+
 ## [0.5.5] - 2026-01-10
 
 ### Added

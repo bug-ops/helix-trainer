@@ -11,7 +11,7 @@
 
 Stop learning commands in isolation. Train real development workflows with FSRS-powered spaced repetition (20-30% faster mastery), daily quests, XP progression, and anti-farming mechanics that ensure genuine skill development.
 
-<img src="assets/training-mode.png" width="600" alt="Training Mode">
+<img src="assets/training.gif" width="600" alt="Training Mode Demo">
 
 > [!IMPORTANT]
 > **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in `~/.config/helix-trainer/`

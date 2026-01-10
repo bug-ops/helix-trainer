@@ -749,3 +749,341 @@ fn create_test_scenario_with_id(id: &str) -> Scenario {
         .optimal_count(1)
         .build()
 }
+
+// Note: Results and Review rendering tests require creating complete session state
+// which is covered by existing integration tests. The render functions themselves
+// have complex dependencies on session state that are better tested through
+// the integration test suite.
+
+// ============================================================================
+// Review Screen Tests - using proper session state
+// ============================================================================
+
+mod review_tests {
+    use super::*;
+    use crate::ui::state::{ReviewData, ReviewSessionState, TypedScreen};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use std::time::Instant;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(80, 24);
+        Terminal::new(backend).unwrap()
+    }
+
+    fn create_review_session(commands: Vec<&str>) -> ReviewSessionState {
+        ReviewSessionState {
+            due_commands: commands.into_iter().map(String::from).collect(),
+            current_index: 0,
+            current_command: Some("h".to_string()),
+            session_started_at: Instant::now(),
+            completed_reviews: vec![],
+        }
+    }
+
+    #[test]
+    fn test_render_review_screen_basic() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        let session = create_review_session(vec!["h", "j", "k", "l"]);
+        state.game.review_session = Some(session.clone());
+        state.screen = TypedScreen::Review(ReviewData { session });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_review_screen_single_command() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        let session = create_review_session(vec!["w"]);
+        state.game.review_session = Some(session.clone());
+        state.screen = TypedScreen::Review(ReviewData { session });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_review_screen_progress_midway() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        let mut session = create_review_session(vec!["h", "j", "k", "l"]);
+        session.current_index = 2; // Midway through
+        session.current_command = Some("k".to_string());
+        state.game.review_session = Some(session.clone());
+        state.screen = TypedScreen::Review(ReviewData { session });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+}
+
+// ============================================================================
+// Popup Rendering Tests
+// ============================================================================
+
+mod popup_tests {
+    use super::*;
+    use crate::ui::notification::{Notification, NotificationType};
+    use crate::ui::state::TypedScreen;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(80, 24);
+        Terminal::new(backend).unwrap()
+    }
+
+    #[test]
+    fn test_render_hint_popup() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        // Start scenario and show hint
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_key_history_popup_empty() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+
+        // Key history should be empty initially
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_key_history_popup_with_keys() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+
+        // Add some key history (simulate key presses)
+        if let TypedScreen::Task(ref mut task_data) = state.screen {
+            task_data.key_history.push("h".to_string());
+            task_data.key_history.push("j".to_string());
+            task_data.key_history.push("k".to_string());
+        }
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_level_up() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::LevelUp { new_level: 10 }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_quest_complete() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::QuestComplete {
+                description: "Complete 5 scenarios".to_string(),
+                xp_reward: 200,
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_achievement() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::Achievement {
+                name: "Speed Demon".to_string(),
+                description: "Complete a scenario in under 5 seconds".to_string(),
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_streak_milestone() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::StreakMilestone {
+                streak: 7,
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_mastery_level_up() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::MasteryLevelUp {
+                command: "dd".to_string(),
+                new_level: "Intermediate".to_string(),
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_max_visible() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        // Add more than max visible notifications
+        for i in 0..5 {
+            state
+                .ui
+                .notifications
+                .push(Notification::new(NotificationType::LevelUp { new_level: i }));
+        }
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_info() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::Info {
+                message: "Welcome to the training session!".to_string(),
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_review_session_complete() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::ReviewSessionComplete {
+                completed: 10,
+                success_count: 8,
+                xp_earned: 250,
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_success_popup() {
+        // Success popup is only shown briefly after completing a scenario
+        // This test ensures it doesn't panic when rendered
+        let mut terminal = create_terminal();
+        let _state = create_test_app_state(vec![create_test_scenario()]);
+
+        // The success popup helper can be called directly for testing
+        terminal
+            .draw(|f| {
+                super::super::popups::render_success_popup(f);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_result_popup_custom() {
+        use ratatui::style::Color;
+
+        let mut terminal = create_terminal();
+
+        terminal
+            .draw(|f| {
+                super::super::popups::render_result_popup(f, "TIMEOUT", "Time's up!", Color::Red);
+            })
+            .unwrap();
+    }
+}

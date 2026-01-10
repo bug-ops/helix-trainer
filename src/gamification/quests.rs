@@ -875,4 +875,58 @@ mod tests {
         assert_eq!(completions[0].0, "completed");
         assert_eq!(completions[0].1, 25);
     }
+
+    #[test]
+    fn test_quest_difficulty_progression_tier() {
+        use crate::learning::ProgressionTier;
+
+        // Test Easy
+        assert_eq!(QuestDifficulty::Easy.name(), "Easy");
+        assert_eq!(QuestDifficulty::Easy.emoji(), "🟢");
+        assert_eq!(QuestDifficulty::Easy.tier_level(), 0);
+        assert!(!QuestDifficulty::Easy.is_max_tier());
+
+        // Test Medium
+        assert_eq!(QuestDifficulty::Medium.name(), "Medium");
+        assert_eq!(QuestDifficulty::Medium.emoji(), "🟡");
+        assert_eq!(QuestDifficulty::Medium.tier_level(), 1);
+        assert!(!QuestDifficulty::Medium.is_max_tier());
+
+        // Test Hard
+        assert_eq!(QuestDifficulty::Hard.name(), "Hard");
+        assert_eq!(QuestDifficulty::Hard.emoji(), "🔴");
+        assert_eq!(QuestDifficulty::Hard.tier_level(), 2);
+        assert!(QuestDifficulty::Hard.is_max_tier());
+    }
+
+    #[test]
+    fn test_quest_template_registry_empty() {
+        let registry = QuestTemplateRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+    }
+
+    #[test]
+    fn test_quest_template_registry_default() {
+        let registry = QuestTemplateRegistry::default();
+        assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn test_get_eligible_quests_level_filter() {
+        let registry = test_registry();
+        let commands_used = HashSet::new();
+        let scenarios_completed = HashSet::new();
+
+        // Low level user should get some quests
+        let eligible = registry.get_eligible_quests(1, &commands_used, &scenarios_completed);
+        let low_level_count = eligible.len();
+
+        // Higher level user should get different quests
+        let eligible = registry.get_eligible_quests(15, &commands_used, &scenarios_completed);
+        let high_level_count = eligible.len();
+
+        // Both should get some quests (counts may differ)
+        assert!(low_level_count > 0 || high_level_count > 0);
+    }
 }

@@ -1,0 +1,120 @@
+name: PR Labeler
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # Label PRs based on changed files
+  file-labeler:
+    name: File-based Labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Apply file-based labels
+        uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+          sync-labels: false
+
+  # Label PRs based on title prefix (conventional commits)
+  title-labeler:
+    name: Title-based Labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Apply title-based labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const prNumber = context.payload.pull_request.number;
+
+            // Mapping of conventional commit prefixes to labels
+            const prefixToLabel = {
+              'feat': 'enhancement',
+              'fix': 'bug',
+              'docs': 'documentation',
+              'refactor': 'refactor',
+              'test': 'testing',
+              'ci': 'ci/cd',
+              'perf': 'performance',
+              'chore': 'chore',
+              'style': 'style',
+              'build': 'build',
+              'revert': 'revert'
+            };
+
+            // Extract prefix from title (e.g., "feat: add feature" -> "feat")
+            // Supports optional scope: "feat(ui): add feature" -> "feat"
+            const match = title.match(/^(\w+)(?:\([^)]+\))?:/);
+
+            if (!match) {
+              console.log('No conventional commit prefix found in title:', title);
+              return;
+            }
+
+            const prefix = match[1].toLowerCase();
+            const label = prefixToLabel[prefix];
+
+            if (!label) {
+              console.log('Unknown prefix:', prefix);
+              return;
+            }
+
+            console.log(`Found prefix "${prefix}" -> adding label "${label}"`);
+
+            // Check if label exists, create if not
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                // Label colors for different types
+                const labelColors = {
+                  'enhancement': '0E8A16',
+                  'bug': 'D73A4A',
+                  'documentation': '0075CA',
+                  'refactor': 'FBCA04',
+                  'testing': '1D76DB',
+                  'ci/cd': '5319E7',
+                  'performance': 'F9D0C4',
+                  'chore': 'EDEDED',
+                  'style': 'FEF2C0',
+                  'build': 'BFD4F2',
+                  'revert': 'D93F0B'
+                };
+
+                console.log(`Creating label "${label}"`);
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label,
+                  color: labelColors[label] || 'EDEDED',
+                  description: `PRs with ${prefix}: prefix`
+                });
+              } else {
+                throw error;
+              }
+            }
+
+            // Add label to PR
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: [label]
+            });
+
+            console.log(`Successfully added label "${label}" to PR #${prNumber}`);

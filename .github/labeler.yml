@@ -1,0 +1,91 @@
+# GitHub Labeler Configuration
+# Automatically adds labels to PRs based on changed files
+# https://github.com/actions/labeler
+
+# UI/TUI related changes
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/ui/**/*
+          - src/terminal.rs
+
+# Helix core integration
+helix-core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/helix/**/*
+
+# Game logic
+game:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/game/**/*
+          - src/minigame/**/*
+
+# Gamification system (XP, achievements, quests)
+gamification:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/gamification/**/*
+          - src/learning/**/*
+
+# Scenario files
+scenarios:
+  - changed-files:
+      - any-glob-to-any-file:
+          - scenarios/**/*
+          - src/config/scenario_collection/**/*
+
+# Quest files
+quests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - quests/**/*
+          - src/config/quests/**/*
+
+# CI/CD and GitHub configuration
+ci/cd:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**/*
+
+# Dependency changes
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - Cargo.toml
+          - Cargo.lock
+          - deny.toml
+          - rust-toolchain.toml
+
+# Documentation
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - LICENSE*
+
+# Testing
+testing:
+  - changed-files:
+      - any-glob-to-any-file:
+          - tests/**/*
+          - src/**/tests/**/*
+          - src/**/tests.rs
+          - .nextest/**/*
+          - codecov.yml
+          - .github/codecov.yml
+
+# Input handling
+input:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/input/**/*
+          - src/event_loop.rs
+
+# Configuration
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/config/**/*
+          - src/constants/**/*

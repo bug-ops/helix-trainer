@@ -911,7 +911,9 @@ mod popup_tests {
         state
             .ui
             .notifications
-            .push(Notification::new(NotificationType::LevelUp { new_level: 10 }));
+            .push(Notification::new(NotificationType::LevelUp {
+                new_level: 10,
+            }));
 
         terminal
             .draw(|f| {
@@ -1009,7 +1011,9 @@ mod popup_tests {
             state
                 .ui
                 .notifications
-                .push(Notification::new(NotificationType::LevelUp { new_level: i }));
+                .push(Notification::new(NotificationType::LevelUp {
+                    new_level: i,
+                }));
         }
 
         terminal

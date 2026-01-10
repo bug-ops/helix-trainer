@@ -196,7 +196,15 @@ fn test_all_state_types_debug() {
     assert!(!format!("{:?}", SurroundReplaceToPending { from_char: '(' }).is_empty());
     assert!(!format!("{:?}", TextObjectAroundPending).is_empty());
     assert!(!format!("{:?}", TextObjectInsidePending).is_empty());
-    assert!(!format!("{:?}", FindCharPending { find_type: FindType::FindForward }).is_empty());
+    assert!(
+        !format!(
+            "{:?}",
+            FindCharPending {
+                find_type: FindType::FindForward
+            }
+        )
+        .is_empty()
+    );
     assert!(!format!("{:?}", ReplaceCharPending).is_empty());
     assert!(!format!("{:?}", CountPending { count: 5 }).is_empty());
     assert!(!format!("{:?}", UnmatchedPrevPending).is_empty());

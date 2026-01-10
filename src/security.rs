@@ -822,89 +822,176 @@ mod tests {
     // Security error display tests
     #[test]
     fn test_security_error_display() {
-        assert!(SecurityError::PathTraversal.to_string().contains("Access denied"));
-        assert!(SecurityError::InvalidPath.to_string().contains("Invalid file path"));
-        assert!(SecurityError::SuspiciousPath.to_string().contains("Suspicious"));
-        assert!(SecurityError::FileTooLarge { max: 100, actual: 200 }
+        assert!(
+            SecurityError::PathTraversal
+                .to_string()
+                .contains("Access denied")
+        );
+        assert!(
+            SecurityError::InvalidPath
+                .to_string()
+                .contains("Invalid file path")
+        );
+        assert!(
+            SecurityError::SuspiciousPath
+                .to_string()
+                .contains("Suspicious")
+        );
+        assert!(
+            SecurityError::FileTooLarge {
+                max: 100,
+                actual: 200
+            }
             .to_string()
-            .contains("too large"));
-        assert!(SecurityError::InvalidToml("error".to_string())
+            .contains("too large")
+        );
+        assert!(
+            SecurityError::InvalidToml("error".to_string())
+                .to_string()
+                .contains("TOML")
+        );
+        assert!(
+            SecurityError::TooManyScenarios {
+                max: 10,
+                actual: 20
+            }
             .to_string()
-            .contains("TOML"));
-        assert!(SecurityError::TooManyScenarios { max: 10, actual: 20 }
+            .contains("scenarios")
+        );
+        assert!(
+            SecurityError::InvalidScenarioId
+                .to_string()
+                .contains("scenario ID")
+        );
+        assert!(
+            SecurityError::ContentTooLarge {
+                max: 100,
+                actual: 200
+            }
             .to_string()
-            .contains("scenarios"));
-        assert!(SecurityError::InvalidScenarioId
-            .to_string()
-            .contains("scenario ID"));
-        assert!(SecurityError::ContentTooLarge { max: 100, actual: 200 }
-            .to_string()
-            .contains("Content"));
-        assert!(SecurityError::InvalidCursorPosition
-            .to_string()
-            .contains("cursor"));
-        assert!(SecurityError::TooManyHints { max: 10 }
-            .to_string()
-            .contains("hints"));
-        assert!(SecurityError::TooManyAlternatives { max: 20 }
-            .to_string()
-            .contains("alternatives"));
-        assert!(SecurityError::ProcessSpawnFailed("err".to_string())
-            .to_string()
-            .contains("spawn"));
-        assert!(SecurityError::SessionTimeout(Duration::from_secs(60))
-            .to_string()
-            .contains("timeout"));
-        assert!(SecurityError::InvalidScoringConfig
-            .to_string()
-            .contains("scenario configuration"));
-        assert!(SecurityError::TooManyActions.to_string().contains("actions"));
-        assert!(SecurityError::ScoreOverflow.to_string().contains("overflow"));
-        assert!(SecurityError::InvalidDuration.to_string().contains("duration"));
-        assert!(SecurityError::CommandSequenceTooLong { max: 100 }
-            .to_string()
-            .contains("sequence"));
-        assert!(SecurityError::InvalidCommand.to_string().contains("command"));
-        assert!(SecurityError::TooManySessions { max: 10 }
-            .to_string()
-            .contains("sessions"));
-        assert!(SecurityError::TooManyTempFiles { max: 100 }
-            .to_string()
-            .contains("files"));
-        assert!(SecurityError::RateLimitExceeded(Duration::from_secs(30))
-            .to_string()
-            .contains("Rate limit"));
-        assert!(SecurityError::InvalidContent
-            .to_string()
-            .contains("content"));
+            .contains("Content")
+        );
+        assert!(
+            SecurityError::InvalidCursorPosition
+                .to_string()
+                .contains("cursor")
+        );
+        assert!(
+            SecurityError::TooManyHints { max: 10 }
+                .to_string()
+                .contains("hints")
+        );
+        assert!(
+            SecurityError::TooManyAlternatives { max: 20 }
+                .to_string()
+                .contains("alternatives")
+        );
+        assert!(
+            SecurityError::ProcessSpawnFailed("err".to_string())
+                .to_string()
+                .contains("spawn")
+        );
+        assert!(
+            SecurityError::SessionTimeout(Duration::from_secs(60))
+                .to_string()
+                .contains("timeout")
+        );
+        assert!(
+            SecurityError::InvalidScoringConfig
+                .to_string()
+                .contains("scenario configuration")
+        );
+        assert!(
+            SecurityError::TooManyActions
+                .to_string()
+                .contains("actions")
+        );
+        assert!(
+            SecurityError::ScoreOverflow
+                .to_string()
+                .contains("overflow")
+        );
+        assert!(
+            SecurityError::InvalidDuration
+                .to_string()
+                .contains("duration")
+        );
+        assert!(
+            SecurityError::CommandSequenceTooLong { max: 100 }
+                .to_string()
+                .contains("sequence")
+        );
+        assert!(
+            SecurityError::InvalidCommand
+                .to_string()
+                .contains("command")
+        );
+        assert!(
+            SecurityError::TooManySessions { max: 10 }
+                .to_string()
+                .contains("sessions")
+        );
+        assert!(
+            SecurityError::TooManyTempFiles { max: 100 }
+                .to_string()
+                .contains("files")
+        );
+        assert!(
+            SecurityError::RateLimitExceeded(Duration::from_secs(30))
+                .to_string()
+                .contains("Rate limit")
+        );
+        assert!(
+            SecurityError::InvalidContent
+                .to_string()
+                .contains("content")
+        );
         assert!(SecurityError::InvalidEncoding.to_string().contains("UTF-8"));
-        assert!(SecurityError::InvalidInput("err".to_string())
-            .to_string()
-            .contains("Invalid input"));
-        assert!(SecurityError::InvalidState("err".to_string())
-            .to_string()
-            .contains("Invalid state"));
+        assert!(
+            SecurityError::InvalidInput("err".to_string())
+                .to_string()
+                .contains("Invalid input")
+        );
+        assert!(
+            SecurityError::InvalidState("err".to_string())
+                .to_string()
+                .contains("Invalid state")
+        );
     }
 
     // User error display tests
     #[test]
     fn test_user_error_display() {
-        assert!(UserError::InvalidState { message: "test".to_string() }
+        assert!(
+            UserError::InvalidState {
+                message: "test".to_string()
+            }
             .to_string()
-            .contains("Invalid application state"));
-        assert!(UserError::ScenarioLoadError
-            .to_string()
-            .contains("load scenario"));
-        assert!(UserError::ScenarioTooComplex
-            .to_string()
-            .contains("too large"));
+            .contains("Invalid application state")
+        );
+        assert!(
+            UserError::ScenarioLoadError
+                .to_string()
+                .contains("load scenario")
+        );
+        assert!(
+            UserError::ScenarioTooComplex
+                .to_string()
+                .contains("too large")
+        );
         assert!(UserError::EditorStartFailed.to_string().contains("editor"));
-        assert!(UserError::OperationFailed
+        assert!(
+            UserError::OperationFailed
+                .to_string()
+                .contains("Operation failed")
+        );
+        assert!(
+            UserError::CommandFailed {
+                context: "test".to_string()
+            }
             .to_string()
-            .contains("Operation failed"));
-        assert!(UserError::CommandFailed { context: "test".to_string() }
-            .to_string()
-            .contains("Command"));
+            .contains("Command")
+        );
         assert!(UserError::SessionExpired.to_string().contains("expired"));
     }
 }

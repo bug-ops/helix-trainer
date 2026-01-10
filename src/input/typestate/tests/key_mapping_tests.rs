@@ -315,7 +315,10 @@ fn test_map_key_char() {
     assert_eq!(map_key_to_helix_command(key), Some(CMD_MOVE_LEFT));
 
     let key = KeyEvent::new(KeyCode::Char('W'), KeyModifiers::SHIFT);
-    assert_eq!(map_key_to_helix_command(key), Some(CMD_MOVE_LONG_WORD_FORWARD));
+    assert_eq!(
+        map_key_to_helix_command(key),
+        Some(CMD_MOVE_LONG_WORD_FORWARD)
+    );
 }
 
 #[test]

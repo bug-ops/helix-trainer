@@ -561,16 +561,26 @@ fn test_repeat_insert_scenario_loads_correctly() {
 fn test_available_locales_returns_at_least_en() {
     // available_locales should always return at least "en"
     let locales = ScenarioLoader::available_locales();
-    assert!(locales.contains(&"en".to_string()), "Should include English locale");
+    assert!(
+        locales.contains(&"en".to_string()),
+        "Should include English locale"
+    );
 }
 
 #[test]
 fn test_load_from_embedded_english() {
     let loader = ScenarioLoader::new();
     let result = loader.load_from_embedded("en");
-    assert!(result.is_ok(), "Should load English embedded scenarios: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Should load English embedded scenarios: {:?}",
+        result.err()
+    );
     let scenarios = result.unwrap();
-    assert!(!scenarios.is_empty(), "Should have embedded English scenarios");
+    assert!(
+        !scenarios.is_empty(),
+        "Should have embedded English scenarios"
+    );
 }
 
 #[test]
@@ -588,7 +598,11 @@ fn test_load_directory_success() {
     let path = Path::new("scenarios/en");
 
     let result = loader.load_directory(path);
-    assert!(result.is_ok(), "Should load scenarios from directory: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Should load scenarios from directory: {:?}",
+        result.err()
+    );
 
     let scenarios = result.unwrap();
     assert!(!scenarios.is_empty(), "Should have scenarios in directory");
@@ -692,7 +706,11 @@ tolerance = 0
     let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
 
     let result = loader.load(temp_path);
-    assert!(result.is_ok(), "Should load scenario with selection: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Should load scenario with selection: {:?}",
+        result.err()
+    );
 
     let scenarios = result.unwrap();
     assert_eq!(scenarios.len(), 1);
@@ -773,7 +791,11 @@ locale = "en"
     let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
 
     let result = loader.load(temp_path);
-    assert!(result.is_ok(), "Should load scenario with full metadata: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Should load scenario with full metadata: {:?}",
+        result.err()
+    );
 
     let scenarios = result.unwrap();
     let metadata = scenarios[0].metadata.as_ref().unwrap();
@@ -838,7 +860,10 @@ tolerance = 0
     let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
 
     let result = loader.load(temp_file.path());
-    assert!(result.is_err(), "Should reject invalid target cursor position");
+    assert!(
+        result.is_err(),
+        "Should reject invalid target cursor position"
+    );
 }
 
 #[test]

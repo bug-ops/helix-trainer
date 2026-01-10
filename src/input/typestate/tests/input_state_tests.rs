@@ -87,22 +87,30 @@ fn test_surround_waiting_for_char() {
 #[test]
 fn test_find_type_all_variants() {
     // Test all FindType variants
-    assert!(InputState::FindCharPending {
-        find_type: FindType::FindForward
-    }
-    .is_find_char_pending());
-    assert!(InputState::FindCharPending {
-        find_type: FindType::FindBackward
-    }
-    .is_find_char_pending());
-    assert!(InputState::FindCharPending {
-        find_type: FindType::TillForward
-    }
-    .is_find_char_pending());
-    assert!(InputState::FindCharPending {
-        find_type: FindType::TillBackward
-    }
-    .is_find_char_pending());
+    assert!(
+        InputState::FindCharPending {
+            find_type: FindType::FindForward
+        }
+        .is_find_char_pending()
+    );
+    assert!(
+        InputState::FindCharPending {
+            find_type: FindType::FindBackward
+        }
+        .is_find_char_pending()
+    );
+    assert!(
+        InputState::FindCharPending {
+            find_type: FindType::TillForward
+        }
+        .is_find_char_pending()
+    );
+    assert!(
+        InputState::FindCharPending {
+            find_type: FindType::TillBackward
+        }
+        .is_find_char_pending()
+    );
 }
 
 #[test]
@@ -111,7 +119,10 @@ fn test_name_returns_correct_strings() {
     assert_eq!(InputState::GotoPending.name(), "GOTO_PENDING");
     assert_eq!(InputState::ViewPending.name(), "VIEW_PENDING");
     assert_eq!(InputState::MatchPending.name(), "MATCH_PENDING");
-    assert_eq!(InputState::SurroundAddPending.name(), "SURROUND_ADD_PENDING");
+    assert_eq!(
+        InputState::SurroundAddPending.name(),
+        "SURROUND_ADD_PENDING"
+    );
     assert_eq!(
         InputState::SurroundDeletePending.name(),
         "SURROUND_DELETE_PENDING"
@@ -139,7 +150,10 @@ fn test_name_returns_correct_strings() {
         .name(),
         "FIND_CHAR_PENDING"
     );
-    assert_eq!(InputState::ReplaceCharPending.name(), "REPLACE_CHAR_PENDING");
+    assert_eq!(
+        InputState::ReplaceCharPending.name(),
+        "REPLACE_CHAR_PENDING"
+    );
     assert_eq!(
         InputState::CountPending { count: 5 }.name(),
         "COUNT_PENDING"

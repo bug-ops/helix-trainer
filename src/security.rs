@@ -484,6 +484,20 @@ mod tests {
     }
 
     #[test]
+    fn test_suspicious_path_double_slash() {
+        assert!(path_validator::is_suspicious_path(Path::new(
+            "/var//malicious"
+        )));
+    }
+
+    #[test]
+    fn test_suspicious_path_backtick() {
+        assert!(path_validator::is_suspicious_path(Path::new(
+            "file`command`"
+        )));
+    }
+
+    #[test]
     fn test_content_sanitization() {
         // Valid content
         assert!(sanitizer::sanitize_content("Hello, World!").is_ok());
@@ -497,12 +511,51 @@ mod tests {
     }
 
     #[test]
+    fn test_content_sanitization_valid_unicode() {
+        // Valid Unicode should pass
+        assert!(sanitizer::sanitize_content("Hello, Welt!").is_ok());
+        assert!(sanitizer::sanitize_content("fn main() {}").is_ok());
+    }
+
+    #[test]
     fn test_terminal_output_sanitization() {
         let input = "Hello\x1b[31mWorld\x1b[0m";
         let output = sanitizer::sanitize_terminal_output(input);
 
         // Should not contain escape characters
         assert!(!output.contains('\x1b'));
+    }
+
+    #[test]
+    fn test_terminal_output_sanitization_preserves_valid() {
+        let input = "Hello World\n\tIndented";
+        let output = sanitizer::sanitize_terminal_output(input);
+        assert!(output.contains("Hello World"));
+        assert!(output.contains('\n'));
+        assert!(output.contains('\t'));
+    }
+
+    #[test]
+    fn test_sanitize_path_for_logging() {
+        let path = Path::new("/home/user/secret/file.toml");
+        let sanitized = sanitizer::sanitize_path_for_logging(path);
+        assert_eq!(sanitized, "file.toml");
+    }
+
+    #[test]
+    fn test_sanitize_path_for_logging_no_filename() {
+        let path = Path::new("/");
+        let sanitized = sanitizer::sanitize_path_for_logging(path);
+        assert_eq!(sanitized, "[redacted]");
+    }
+
+    #[test]
+    fn test_remove_ansi_codes() {
+        let input = "Hello\x1bWorld";
+        let output = sanitizer::remove_ansi_codes(input);
+        assert!(!output.contains('\x1b'));
+        assert!(output.contains("Hello"));
+        assert!(output.contains("World"));
     }
 
     #[test]
@@ -513,6 +566,150 @@ mod tests {
             user_err.to_string(),
             "Failed to load scenario file. Please check the file path and format."
         );
+    }
+
+    #[test]
+    fn test_error_conversion_invalid_path() {
+        let err = SecurityError::InvalidPath;
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "Failed to load scenario file. Please check the file path and format."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_suspicious_path() {
+        let err = SecurityError::SuspiciousPath;
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "Failed to load scenario file. Please check the file path and format."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_invalid_toml() {
+        let err = SecurityError::InvalidToml("parse error".to_string());
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "Failed to load scenario file. Please check the file path and format."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_file_too_large() {
+        let err = SecurityError::FileTooLarge {
+            max: 1000,
+            actual: 2000,
+        };
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "The scenario file is too large or complex. Please use a smaller file."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_too_many_scenarios() {
+        let err = SecurityError::TooManyScenarios {
+            max: 100,
+            actual: 200,
+        };
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "The scenario file is too large or complex. Please use a smaller file."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_content_too_large() {
+        let err = SecurityError::ContentTooLarge {
+            max: 1000,
+            actual: 2000,
+        };
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "The scenario file is too large or complex. Please use a smaller file."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_too_many_hints() {
+        let err = SecurityError::TooManyHints { max: 10 };
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "The scenario file is too large or complex. Please use a smaller file."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_too_many_alternatives() {
+        let err = SecurityError::TooManyAlternatives { max: 20 };
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "The scenario file is too large or complex. Please use a smaller file."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_process_spawn_failed() {
+        let err = SecurityError::ProcessSpawnFailed("spawn error".to_string());
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "Failed to start editor. Please ensure Helix is installed."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_session_timeout() {
+        let err = SecurityError::SessionTimeout(Duration::from_secs(3600));
+        let user_err = UserError::from(err);
+        assert_eq!(
+            user_err.to_string(),
+            "Session has expired. Please start a new session."
+        );
+    }
+
+    #[test]
+    fn test_error_conversion_invalid_state() {
+        let err = SecurityError::InvalidState("bad state".to_string());
+        let user_err = UserError::from(err);
+        assert!(user_err.to_string().contains("Invalid application state"));
+    }
+
+    #[test]
+    fn test_error_conversion_others_map_to_operation_failed() {
+        let err = SecurityError::InvalidCursorPosition;
+        let user_err = UserError::from(err);
+        assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
+
+        let err = SecurityError::ScoreOverflow;
+        let user_err = UserError::from(err);
+        assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
+
+        let err = SecurityError::TooManyActions;
+        let user_err = UserError::from(err);
+        assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
+    }
+
+    #[test]
+    fn test_user_error_invalid_state_constructor() {
+        let err = UserError::invalid_state("test message");
+        assert!(err.to_string().contains("Invalid application state"));
+    }
+
+    #[test]
+    fn test_user_error_command_failed_constructor() {
+        let err = UserError::command_failed("test context");
+        assert!(err.to_string().contains("Command execution failed"));
+        assert!(err.to_string().contains("test context"));
     }
 
     // Arithmetic safety tests
@@ -568,6 +765,16 @@ mod tests {
     }
 
     #[test]
+    fn test_score_multiply_boundary() {
+        // Test edge of valid range
+        let result = arithmetic::checked_score_multiply(100, 2.0);
+        assert_eq!(result.unwrap(), 200);
+
+        let result = arithmetic::checked_score_multiply(100, 0.0);
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
     fn test_score_multiply_invalid_multiplier() {
         let result = arithmetic::checked_score_multiply(100, -0.5);
         assert!(result.is_err());
@@ -579,6 +786,12 @@ mod tests {
     #[test]
     fn test_action_count_validation_normal() {
         let result = arithmetic::validate_action_count(1000);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_action_count_validation_boundary() {
+        let result = arithmetic::validate_action_count(1_000_000);
         assert!(result.is_ok());
     }
 
@@ -595,8 +808,190 @@ mod tests {
     }
 
     #[test]
+    fn test_cursor_position_validation_col_excessive() {
+        let result = arithmetic::validate_cursor_position(0, 1_000_000_000, 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_cursor_position_validation_excessive() {
         let result = arithmetic::validate_cursor_position(1_000_000_000, 0, 100);
         assert!(result.is_err());
+    }
+
+    // Security error display tests
+    #[test]
+    fn test_security_error_display() {
+        assert!(
+            SecurityError::PathTraversal
+                .to_string()
+                .contains("Access denied")
+        );
+        assert!(
+            SecurityError::InvalidPath
+                .to_string()
+                .contains("Invalid file path")
+        );
+        assert!(
+            SecurityError::SuspiciousPath
+                .to_string()
+                .contains("Suspicious")
+        );
+        assert!(
+            SecurityError::FileTooLarge {
+                max: 100,
+                actual: 200
+            }
+            .to_string()
+            .contains("too large")
+        );
+        assert!(
+            SecurityError::InvalidToml("error".to_string())
+                .to_string()
+                .contains("TOML")
+        );
+        assert!(
+            SecurityError::TooManyScenarios {
+                max: 10,
+                actual: 20
+            }
+            .to_string()
+            .contains("scenarios")
+        );
+        assert!(
+            SecurityError::InvalidScenarioId
+                .to_string()
+                .contains("scenario ID")
+        );
+        assert!(
+            SecurityError::ContentTooLarge {
+                max: 100,
+                actual: 200
+            }
+            .to_string()
+            .contains("Content")
+        );
+        assert!(
+            SecurityError::InvalidCursorPosition
+                .to_string()
+                .contains("cursor")
+        );
+        assert!(
+            SecurityError::TooManyHints { max: 10 }
+                .to_string()
+                .contains("hints")
+        );
+        assert!(
+            SecurityError::TooManyAlternatives { max: 20 }
+                .to_string()
+                .contains("alternatives")
+        );
+        assert!(
+            SecurityError::ProcessSpawnFailed("err".to_string())
+                .to_string()
+                .contains("spawn")
+        );
+        assert!(
+            SecurityError::SessionTimeout(Duration::from_secs(60))
+                .to_string()
+                .contains("timeout")
+        );
+        assert!(
+            SecurityError::InvalidScoringConfig
+                .to_string()
+                .contains("scenario configuration")
+        );
+        assert!(
+            SecurityError::TooManyActions
+                .to_string()
+                .contains("actions")
+        );
+        assert!(
+            SecurityError::ScoreOverflow
+                .to_string()
+                .contains("overflow")
+        );
+        assert!(
+            SecurityError::InvalidDuration
+                .to_string()
+                .contains("duration")
+        );
+        assert!(
+            SecurityError::CommandSequenceTooLong { max: 100 }
+                .to_string()
+                .contains("sequence")
+        );
+        assert!(
+            SecurityError::InvalidCommand
+                .to_string()
+                .contains("command")
+        );
+        assert!(
+            SecurityError::TooManySessions { max: 10 }
+                .to_string()
+                .contains("sessions")
+        );
+        assert!(
+            SecurityError::TooManyTempFiles { max: 100 }
+                .to_string()
+                .contains("files")
+        );
+        assert!(
+            SecurityError::RateLimitExceeded(Duration::from_secs(30))
+                .to_string()
+                .contains("Rate limit")
+        );
+        assert!(
+            SecurityError::InvalidContent
+                .to_string()
+                .contains("content")
+        );
+        assert!(SecurityError::InvalidEncoding.to_string().contains("UTF-8"));
+        assert!(
+            SecurityError::InvalidInput("err".to_string())
+                .to_string()
+                .contains("Invalid input")
+        );
+        assert!(
+            SecurityError::InvalidState("err".to_string())
+                .to_string()
+                .contains("Invalid state")
+        );
+    }
+
+    // User error display tests
+    #[test]
+    fn test_user_error_display() {
+        assert!(
+            UserError::InvalidState {
+                message: "test".to_string()
+            }
+            .to_string()
+            .contains("Invalid application state")
+        );
+        assert!(
+            UserError::ScenarioLoadError
+                .to_string()
+                .contains("load scenario")
+        );
+        assert!(
+            UserError::ScenarioTooComplex
+                .to_string()
+                .contains("too large")
+        );
+        assert!(UserError::EditorStartFailed.to_string().contains("editor"));
+        assert!(
+            UserError::OperationFailed
+                .to_string()
+                .contains("Operation failed")
+        );
+        assert!(
+            UserError::CommandFailed {
+                context: "test".to_string()
+            }
+            .to_string()
+            .contains("Command")
+        );
+        assert!(UserError::SessionExpired.to_string().contains("expired"));
     }
 }

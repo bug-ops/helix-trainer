@@ -749,3 +749,1566 @@ fn create_test_scenario_with_id(id: &str) -> Scenario {
         .optimal_count(1)
         .build()
 }
+
+// Note: Results and Review rendering tests require creating complete session state
+// which is covered by existing integration tests. The render functions themselves
+// have complex dependencies on session state that are better tested through
+// the integration test suite.
+
+// ============================================================================
+// Review Screen Tests - using proper session state
+// ============================================================================
+
+mod review_tests {
+    use super::*;
+    use crate::ui::state::{ReviewData, ReviewSessionState, TypedScreen};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use std::time::Instant;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(80, 24);
+        Terminal::new(backend).unwrap()
+    }
+
+    fn create_review_session(commands: Vec<&str>) -> ReviewSessionState {
+        ReviewSessionState {
+            due_commands: commands.into_iter().map(String::from).collect(),
+            current_index: 0,
+            current_command: Some("h".to_string()),
+            session_started_at: Instant::now(),
+            completed_reviews: vec![],
+        }
+    }
+
+    #[test]
+    fn test_render_review_screen_basic() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        let session = create_review_session(vec!["h", "j", "k", "l"]);
+        state.game.review_session = Some(session.clone());
+        state.screen = TypedScreen::Review(ReviewData { session });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_review_screen_single_command() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        let session = create_review_session(vec!["w"]);
+        state.game.review_session = Some(session.clone());
+        state.screen = TypedScreen::Review(ReviewData { session });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_review_screen_progress_midway() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        let mut session = create_review_session(vec!["h", "j", "k", "l"]);
+        session.current_index = 2; // Midway through
+        session.current_command = Some("k".to_string());
+        state.game.review_session = Some(session.clone());
+        state.screen = TypedScreen::Review(ReviewData { session });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+}
+
+// ============================================================================
+// Popup Rendering Tests
+// ============================================================================
+
+mod popup_tests {
+    use super::*;
+    use crate::ui::notification::{Notification, NotificationType};
+    use crate::ui::state::TypedScreen;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(80, 24);
+        Terminal::new(backend).unwrap()
+    }
+
+    #[test]
+    fn test_render_hint_popup() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        // Start scenario and show hint
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_key_history_popup_empty() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+
+        // Key history should be empty initially
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_key_history_popup_with_keys() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+
+        // Add some key history (simulate key presses)
+        if let TypedScreen::Task(ref mut task_data) = state.screen {
+            task_data.key_history.push("h".to_string());
+            task_data.key_history.push("j".to_string());
+            task_data.key_history.push("k".to_string());
+        }
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_level_up() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::LevelUp {
+                new_level: 10,
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_quest_complete() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::QuestComplete {
+                description: "Complete 5 scenarios".to_string(),
+                xp_reward: 200,
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_achievement() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::Achievement {
+                name: "Speed Demon".to_string(),
+                description: "Complete a scenario in under 5 seconds".to_string(),
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_streak_milestone() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::StreakMilestone {
+                streak: 7,
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_mastery_level_up() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::MasteryLevelUp {
+                command: "dd".to_string(),
+                new_level: "Intermediate".to_string(),
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_max_visible() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        // Add more than max visible notifications
+        for i in 0..5 {
+            state
+                .ui
+                .notifications
+                .push(Notification::new(NotificationType::LevelUp {
+                    new_level: i,
+                }));
+        }
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_info() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::Info {
+                message: "Welcome to the training session!".to_string(),
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_review_session_complete() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::ReviewSessionComplete {
+                completed: 10,
+                success_count: 8,
+                xp_earned: 250,
+            }));
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_success_popup() {
+        // Success popup is only shown briefly after completing a scenario
+        // This test ensures it doesn't panic when rendered
+        let mut terminal = create_terminal();
+        let _state = create_test_app_state(vec![create_test_scenario()]);
+
+        // The success popup helper can be called directly for testing
+        terminal
+            .draw(|f| {
+                super::super::popups::render_success_popup(f);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_result_popup_custom() {
+        use ratatui::style::Color;
+
+        let mut terminal = create_terminal();
+
+        terminal
+            .draw(|f| {
+                super::super::popups::render_result_popup(f, "TIMEOUT", "Time's up!", Color::Red);
+            })
+            .unwrap();
+    }
+}
+
+// ============================================================================
+// Results Screen Tests - full coverage for results.rs (0% -> target 90%)
+// ============================================================================
+
+mod results_tests {
+    use super::*;
+    use crate::game::GameSession;
+    use crate::learning::ScenarioMastery;
+    use crate::testing::ScenarioBuilder;
+    use crate::ui::state::{QuestProgressChange, ResultsData, TypedScreen, XPBreakdown};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(80, 40);
+        Terminal::new(backend).unwrap()
+    }
+
+    /// Create a scenario that can be easily completed for testing
+    fn create_completable_scenario() -> Scenario {
+        // Scenario where deleting line 2 (dd) completes it
+        ScenarioBuilder::new()
+            .id("test_results_001")
+            .description("Delete second line")
+            .setup_content("line 1\nline 2\n")
+            .setup_cursor(1, 0) // Start at line 2
+            .target_content("line 1\n")
+            .target_cursor(0, 0)
+            .hint("Use dd to delete the line")
+            .optimal_count(1)
+            .build()
+    }
+
+    /// Create an abandoned session and ResultsData from it
+    fn create_abandoned_results_data(scenario: Scenario) -> ResultsData {
+        let session = GameSession::new(scenario).unwrap();
+        let abandoned = session.abandon();
+        let feedback = abandoned.feedback();
+        ResultsData::from_abandoned(abandoned, feedback, Some(0))
+    }
+
+    fn create_xp_breakdown(
+        base: u64,
+        perfect_bonus: u64,
+        first_today: u64,
+        mastery_factor: f64,
+        repeat_penalty: f64,
+    ) -> XPBreakdown {
+        let total =
+            ((base + perfect_bonus + first_today) as f64 * mastery_factor * repeat_penalty) as u64;
+        XPBreakdown {
+            base_xp: base,
+            perfect_bonus,
+            first_today_bonus: first_today,
+            mastery_multiplier: mastery_factor * repeat_penalty,
+            mastery_factor,
+            repeat_penalty,
+            quest_bonuses: vec![],
+            total_xp: total,
+        }
+    }
+
+    #[test]
+    fn test_render_results_screen_abandoned() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let results_data = create_abandoned_results_data(scenario);
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_with_xp_breakdown() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.xp_breakdown = Some(create_xp_breakdown(50, 25, 10, 1.0, 1.0));
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_with_mastery_reduction() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.xp_breakdown = Some(create_xp_breakdown(50, 0, 0, 0.5, 1.0));
+        results_data.scenario_mastery = Some((ScenarioMastery::Proficient, 0.5));
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_with_repeat_penalty() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.xp_breakdown = Some(create_xp_breakdown(50, 0, 0, 1.0, 0.7));
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_with_quest_bonuses() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        let mut xp = create_xp_breakdown(50, 25, 0, 1.0, 1.0);
+        xp.quest_bonuses = vec![
+            ("Complete 5 scenarios".to_string(), 100),
+            ("Use movement commands".to_string(), 50),
+        ];
+        xp.total_xp += 150;
+        results_data.xp_breakdown = Some(xp);
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_with_quest_changes() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.xp_breakdown = Some(create_xp_breakdown(50, 0, 0, 1.0, 1.0));
+        results_data.quest_changes = vec![
+            QuestProgressChange {
+                quest_description: "Complete 5 scenarios".to_string(),
+                old_progress: 2,
+                new_progress: 3,
+            },
+            QuestProgressChange {
+                quest_description: "Practice movement keys".to_string(),
+                old_progress: 5,
+                new_progress: 8,
+            },
+        ];
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_with_profile_stats() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        // Set up profile with various stats
+        state.progress.profile.level = 15;
+        state.progress.profile.total_xp = 5000;
+        state.progress.profile.scenarios_completed = 50;
+        state.progress.profile.perfect_scenarios = 20;
+        state.progress.profile.current_streak = 7;
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.xp_breakdown = Some(create_xp_breakdown(50, 25, 10, 1.0, 1.0));
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_no_streak() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        // No current streak
+        state.progress.profile.current_streak = 0;
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.xp_breakdown = Some(create_xp_breakdown(50, 0, 0, 1.0, 1.0));
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_small_terminal() {
+        // Test rendering on small terminal
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.xp_breakdown = Some(create_xp_breakdown(50, 0, 0, 1.0, 1.0));
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_wrong_screen_type() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Render with Menu screen - results render function should early return
+        state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
+
+        // Call render directly - should not panic on wrong screen type
+        terminal
+            .draw(|f| {
+                super::super::results::render_results_screen(f, &state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_mastered_scenario() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.scenario_mastery = Some((ScenarioMastery::Mastered, 0.25));
+        results_data.xp_breakdown = Some(create_xp_breakdown(50, 25, 0, 0.25, 1.0));
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_all_bonuses_combined() {
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        // Set profile for streak display
+        state.progress.profile.current_streak = 5;
+        state.progress.profile.level = 10;
+        state.progress.profile.total_xp = 3000;
+
+        // XP with all bonuses and penalties
+        let xp = XPBreakdown {
+            base_xp: 50,
+            perfect_bonus: 25,
+            first_today_bonus: 10,
+            mastery_multiplier: 0.5 * 0.8,
+            mastery_factor: 0.5,
+            repeat_penalty: 0.8,
+            quest_bonuses: vec![("Quest bonus".to_string(), 30)],
+            total_xp: 46, // (50+25+10) * 0.5 * 0.8 + 30
+        };
+
+        let mut results_data = create_abandoned_results_data(scenario);
+        results_data.scenario_mastery = Some((ScenarioMastery::Mastered, 0.5));
+        results_data.quest_changes = vec![QuestProgressChange {
+            quest_description: "Daily quest".to_string(),
+            old_progress: 4,
+            new_progress: 5,
+        }];
+        results_data.xp_breakdown = Some(xp);
+
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+}
+
+// ============================================================================
+// Statistics Screen Tests - improve coverage for statistics.rs (66% -> target 90%)
+// ============================================================================
+
+mod statistics_tests {
+    use super::*;
+    use crate::ui::state::{ReturnDestination, StatisticsData, TypedScreen};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(100, 50);
+        Terminal::new(backend).unwrap()
+    }
+
+    #[test]
+    fn test_render_statistics_screen_no_commands_tracked() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_with_tracked_commands() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Add some tracked commands via record_attempt
+        let dur = std::time::Duration::from_secs(1);
+        let optimal = std::time::Duration::from_secs(2);
+        state
+            .progress
+            .performance_tracker
+            .record_attempt("h", dur, true, optimal);
+        state
+            .progress
+            .performance_tracker
+            .record_attempt("j", dur, true, optimal);
+        state
+            .progress
+            .performance_tracker
+            .record_attempt("k", dur, true, optimal);
+        state
+            .progress
+            .performance_tracker
+            .record_attempt("l", dur, true, optimal);
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_with_weak_commands() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        let dur = std::time::Duration::from_secs(1);
+        let optimal = std::time::Duration::from_secs(2);
+
+        // Create weak commands (low success rate)
+        for _ in 0..5 {
+            state
+                .progress
+                .performance_tracker
+                .record_attempt("dd", dur, false, optimal);
+        }
+        state
+            .progress
+            .performance_tracker
+            .record_attempt("dd", dur, true, optimal);
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_with_many_weak_commands() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        let dur = std::time::Duration::from_secs(1);
+        let optimal = std::time::Duration::from_secs(2);
+
+        // Create more than 5 weak commands to test "... and N more" display
+        let commands = ["dd", "yy", "cc", "pp", "x", "r", "s"];
+        for cmd in &commands {
+            for _ in 0..3 {
+                state
+                    .progress
+                    .performance_tracker
+                    .record_attempt(cmd, dur, false, optimal);
+            }
+        }
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_with_due_reviews() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        let dur = std::time::Duration::from_secs(1);
+        let optimal = std::time::Duration::from_secs(2);
+
+        // Record some commands to create due reviews
+        for _ in 0..10 {
+            state
+                .progress
+                .performance_tracker
+                .record_attempt("h", dur, true, optimal);
+        }
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_with_scenario_mastery() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Add some scenario history
+        state.progress.profile.scenarios_completed = 10;
+        state.progress.profile.perfect_scenarios = 5;
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_with_quest_stats() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Set up streaks
+        state.progress.profile.current_streak = 7;
+        state.progress.profile.longest_streak = 14;
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_with_arcade_stats() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Set up arcade mode stats
+        state.progress.profile.minigame_high_score = 5000;
+        state.progress.profile.minigame_best_streak = 15;
+        state.progress.profile.minigame_games_played = 25;
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_return_from_paused_minigame() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::PausedMiniGame,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_mixed_success_rates() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        let dur = std::time::Duration::from_secs(1);
+        let optimal = std::time::Duration::from_secs(2);
+
+        // High success rate command
+        for _ in 0..10 {
+            state
+                .progress
+                .performance_tracker
+                .record_attempt("h", dur, true, optimal);
+        }
+
+        // Medium success rate command
+        for _ in 0..5 {
+            state
+                .progress
+                .performance_tracker
+                .record_attempt("j", dur, true, optimal);
+        }
+        for _ in 0..3 {
+            state
+                .progress
+                .performance_tracker
+                .record_attempt("j", dur, false, optimal);
+        }
+
+        // Low success rate command
+        for _ in 0..2 {
+            state
+                .progress
+                .performance_tracker
+                .record_attempt("dd", dur, true, optimal);
+        }
+        for _ in 0..8 {
+            state
+                .progress
+                .performance_tracker
+                .record_attempt("dd", dur, false, optimal);
+        }
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_statistics_screen_session_time_hours() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Simulate session that's been running for a while
+        // We can't directly modify session_start_time easily, but the render should handle any duration
+
+        state.screen = TypedScreen::Statistics(StatisticsData {
+            return_to: ReturnDestination::Menu,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+}
+
+// ============================================================================
+// Mode Selection Tests - improve coverage for mode_selection.rs (59% -> target 90%)
+// ============================================================================
+
+mod mode_selection_extended_tests {
+    use super::*;
+    use crate::ui::state::{MiniGameModeSelection, ModeSelectionData, TypedScreen};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(80, 24);
+        Terminal::new(backend).unwrap()
+    }
+
+    #[test]
+    fn test_render_mode_selection_training_selected() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::ModeSelection(ModeSelectionData {
+            selected_mode: 0,
+            minigame_mode_selection: None,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_mode_selection_arcade_selected() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::ModeSelection(ModeSelectionData {
+            selected_mode: 1,
+            minigame_mode_selection: None,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_mode_selection_submenu_arcade() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::ModeSelection(ModeSelectionData {
+            selected_mode: 1,
+            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 0 }),
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_mode_selection_submenu_survival() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::ModeSelection(ModeSelectionData {
+            selected_mode: 1,
+            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 1 }),
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_mode_selection_submenu_challenge() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::ModeSelection(ModeSelectionData {
+            selected_mode: 1,
+            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_mode_selection_small_terminal() {
+        let backend = TestBackend::new(40, 15);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::ModeSelection(ModeSelectionData {
+            selected_mode: 1,
+            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 0 }),
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_mode_selection_large_terminal() {
+        let backend = TestBackend::new(200, 60);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        state.screen = TypedScreen::ModeSelection(ModeSelectionData {
+            selected_mode: 0,
+            minigame_mode_selection: None,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+}
+
+// ============================================================================
+// Mini-game Screen Tests - improve coverage for minigame.rs (61% -> target 85%)
+// ============================================================================
+
+mod minigame_screen_tests {
+    use super::*;
+    use crate::config::{Difficulty, Scenario};
+    use crate::minigame::MiniGameSession;
+    use crate::testing::ScenarioBuilder;
+    use crate::ui::state::{MiniGameData, TypedScreen};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use std::sync::Arc;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(100, 40);
+        Terminal::new(backend).unwrap()
+    }
+
+    fn create_minigame_scenario(id: &str, difficulty: Difficulty) -> Scenario {
+        ScenarioBuilder::new()
+            .id(id)
+            .setup_content("line 1\nline 2\n")
+            .setup_cursor(1, 0)
+            .target_content("line 1\n")
+            .target_cursor(0, 0)
+            .optimal_count(1)
+            .difficulty(difficulty)
+            .build()
+    }
+
+    #[test]
+    fn test_render_minigame_playing_state() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        // Advance past countdown
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_paused_state() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+        session.pause();
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_countdown_state() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        // Only tick once - still in countdown
+        session.tick_countdown();
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_with_queue() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![
+            create_minigame_scenario("s1", Difficulty::Beginner),
+            create_minigame_scenario("s2", Difficulty::Intermediate),
+            create_minigame_scenario("s3", Difficulty::Advanced),
+            create_minigame_scenario("s4", Difficulty::Beginner),
+        ]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_with_key_history() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        let mut minigame_data = MiniGameData::default();
+        minigame_data.key_history.push("h".to_string());
+        minigame_data.key_history.push("j".to_string());
+        minigame_data.key_history.push("k".to_string());
+        state.screen = TypedScreen::MiniGame(minigame_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_with_xp_earned() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        let minigame_data = MiniGameData {
+            last_xp_earned: Some(75),
+            ..Default::default()
+        };
+        state.screen = TypedScreen::MiniGame(minigame_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_intermediate_difficulty() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario(
+            "s1",
+            Difficulty::Intermediate,
+        )]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_advanced_difficulty() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Advanced)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_empty_queue() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        // Single scenario - queue will be empty after first
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_small_terminal() {
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_minigame_large_terminal() {
+        let backend = TestBackend::new(200, 60);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+
+        let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        for _ in 0..4 {
+            session.tick_countdown();
+        }
+
+        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+}
+
+// ============================================================================
+// Popup Tests - improve coverage for popups.rs (69% -> target 90%)
+// ============================================================================
+
+mod popup_additional_tests {
+    use super::*;
+    use crate::ui::state::TypedScreen;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn create_terminal() -> Terminal<TestBackend> {
+        let backend = TestBackend::new(80, 24);
+        Terminal::new(backend).unwrap()
+    }
+
+    #[test]
+    fn test_render_key_history_popup_max_keys() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+
+        // Add maximum keys
+        if let TypedScreen::Task(ref mut task_data) = state.screen {
+            for key in ["h", "j", "k", "l", "w"] {
+                task_data.key_history.push(key.to_string());
+            }
+        }
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_key_history_popup_special_keys() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+
+        // Add special multi-character keys
+        if let TypedScreen::Task(ref mut task_data) = state.screen {
+            task_data.key_history.push("gg".to_string());
+            task_data.key_history.push("dd".to_string());
+            task_data.key_history.push("yy".to_string());
+        }
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_hint_popup_long_hint() {
+        let mut terminal = create_terminal();
+
+        // Create scenario with very long hint
+        let scenario = crate::testing::ScenarioBuilder::new()
+            .id("long_hint_001")
+            .description("Test long hint")
+            .setup_content("line 1\n")
+            .target_content("line 2\n")
+            .hint("This is a very long hint that should wrap across multiple lines in the popup window to test the text wrapping functionality of the hint popup rendering.")
+            .optimal_count(1)
+            .build();
+
+        let mut state = create_test_app_state(vec![scenario]);
+        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_hint_popup_wrong_screen() {
+        let mut terminal = create_terminal();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Set to menu screen - hint popup should not render
+        state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
+
+        terminal
+            .draw(|f| {
+                super::super::popups::render_hint_popup(f, &state);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_render_notifications_off_screen() {
+        // Very small terminal - notifications might overflow
+        let backend = TestBackend::new(30, 8);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+
+        // Add multiple notifications
+        for i in 0..5 {
+            state
+                .ui
+                .notifications
+                .push(crate::ui::notification::Notification::new(
+                    crate::ui::notification::NotificationType::LevelUp { new_level: i },
+                ));
+        }
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+}

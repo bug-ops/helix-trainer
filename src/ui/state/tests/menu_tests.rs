@@ -177,3 +177,142 @@ fn test_menu_with_zero_scenarios() {
     update(&mut state, Message::MenuSelect).unwrap();
     assert!(!state.ui.running);
 }
+
+#[test]
+fn test_menu_up_by() {
+    let scenarios = vec![
+        create_test_scenario(),
+        create_test_scenario(),
+        create_test_scenario(),
+    ];
+    let mut state = create_test_app_state(scenarios);
+    // Navigate to menu first
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // Set to item 5
+    if let TypedScreen::Menu(menu_data) = &mut state.screen {
+        menu_data.selected_item = 5;
+    }
+
+    // Move up by 3
+    update(&mut state, Message::MenuUpBy(3)).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        assert_eq!(menu_data.selected_item, 2);
+    }
+
+    // Move up by more than available - should saturate to 0
+    update(&mut state, Message::MenuUpBy(10)).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        assert_eq!(menu_data.selected_item, 0);
+    }
+}
+
+#[test]
+fn test_menu_down_by() {
+    let scenarios = vec![create_test_scenario(), create_test_scenario()];
+    let mut state = create_test_app_state(scenarios);
+    // Navigate to menu first
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // Move down by 2
+    update(&mut state, Message::MenuDownBy(2)).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        assert_eq!(menu_data.selected_item, 2);
+    }
+
+    // Move down by more than available - should clamp to max
+    update(&mut state, Message::MenuDownBy(100)).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        // Max items = 2 scenarios + 4 menu items = 6, max index = 5
+        assert_eq!(menu_data.selected_item, 5);
+    }
+}
+
+#[test]
+fn test_menu_jump_to_first() {
+    let scenarios = vec![create_test_scenario(), create_test_scenario()];
+    let mut state = create_test_app_state(scenarios);
+    // Navigate to menu first
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // Set to some item
+    if let TypedScreen::Menu(menu_data) = &mut state.screen {
+        menu_data.selected_item = 4;
+    }
+
+    // Jump to first (gg command)
+    update(&mut state, Message::MenuJumpToFirst).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        assert_eq!(menu_data.selected_item, 0);
+    }
+}
+
+#[test]
+fn test_menu_jump_to_last() {
+    let scenarios = vec![create_test_scenario(), create_test_scenario()];
+    let mut state = create_test_app_state(scenarios);
+    // Navigate to menu first
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // Jump to last (G command)
+    update(&mut state, Message::MenuJumpToLast).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        // Max items = 2 scenarios + 4 menu items = 6, max index = 5
+        assert_eq!(menu_data.selected_item, 5);
+    }
+}
+
+#[test]
+fn test_menu_jump_to_specific() {
+    let scenarios = vec![
+        create_test_scenario(),
+        create_test_scenario(),
+        create_test_scenario(),
+    ];
+    let mut state = create_test_app_state(scenarios);
+    // Navigate to menu first
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // Jump to line 3 (1-indexed, so 0-indexed = 2)
+    update(&mut state, Message::MenuJumpTo(3)).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        assert_eq!(menu_data.selected_item, 2);
+    }
+
+    // Jump to line 1
+    update(&mut state, Message::MenuJumpTo(1)).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        assert_eq!(menu_data.selected_item, 0);
+    }
+
+    // Jump to line beyond max - should clamp
+    update(&mut state, Message::MenuJumpTo(100)).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        assert_eq!(menu_data.selected_item, 6); // 3 scenarios + 4 menu items - 1 = 6
+    }
+
+    // Jump to line 0 - should clamp to 0 (1-indexed minimum)
+    update(&mut state, Message::MenuJumpTo(0)).unwrap();
+    if let TypedScreen::Menu(menu_data) = &state.screen {
+        // saturating_sub(1) of 0 = 0
+        assert_eq!(menu_data.selected_item, 0);
+    }
+}
+
+#[test]
+fn test_menu_select_review_no_due() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    // Navigate to menu first
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // Select Review option (index = scenario_count = 1)
+    if let TypedScreen::Menu(menu_data) = &mut state.screen {
+        menu_data.selected_item = 1;
+    }
+
+    update(&mut state, Message::MenuSelect).unwrap();
+
+    // No reviews due, should stay on menu
+    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+}

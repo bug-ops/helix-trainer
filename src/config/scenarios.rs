@@ -433,5 +433,8 @@ impl Default for ScenarioLoader {
     }
 }
 
+/// Embedded scenario assets compiled into the binary
+pub mod embedded;
+
 #[cfg(test)]
 mod tests;

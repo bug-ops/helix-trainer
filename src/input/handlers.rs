@@ -43,6 +43,7 @@ pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Mess
         KeyCode::Char('p') if matches!(state.screen, TypedScreen::Statistics(_)) => {
             Some(Message::ShowProfile)
         }
+        KeyCode::Char('M') => Some(Message::ToggleSound),
         _ => None,
     }
 }
@@ -207,6 +208,7 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
                 'p' => return Some(Message::ShowProfile),
                 's' => return Some(Message::ShowStatistics),
                 'G' => return Some(Message::MenuJumpToLast),
+                'M' => return Some(Message::ToggleSound),
                 _ => {}
             }
         }
@@ -350,6 +352,7 @@ pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Char('l') => Some(Message::GoToScenarioList),
         KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('p') => Some(Message::ShowProfile),
+        KeyCode::Char('M') => Some(Message::ToggleSound),
         _ => None,
     }
 }
@@ -385,6 +388,7 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Char('r') => Some(Message::StartReviewSession),
         KeyCode::Char('p') => Some(Message::ShowProfile),
         KeyCode::Char('s') => Some(Message::ShowStatistics),
+        KeyCode::Char('M') => Some(Message::ToggleSound),
         _ => None,
     }
 }
@@ -409,12 +413,13 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
     }
 
     if session.state().is_paused() {
-        // Paused - allow resume, quit, back to menu, or view profile/stats
+        // Paused - allow resume, quit, back to menu, view profile/stats, or toggle sound
         return match key.code {
             KeyCode::Esc => Some(Message::ResumeMiniGame),
             KeyCode::Char('q') => Some(Message::MiniGameBackToMenu),
             KeyCode::Char('p') => Some(Message::ShowProfile),
             KeyCode::Char('s') => Some(Message::ShowStatistics),
+            KeyCode::Char('M') => Some(Message::ToggleSound),
             _ => None,
         };
     }
@@ -848,6 +853,78 @@ mod tests {
             let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
             assert_eq!(handle_task_special_keys(key), None);
         }
+    }
+
+    // CR-002: Test for 'M' key in handle_mode_selection_keys()
+    #[test]
+    fn test_mode_selection_key_m_toggles_sound() {
+        let key = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::NONE);
+        let msg = handle_mode_selection_keys(key);
+        assert_eq!(msg, Some(Message::ToggleSound));
+    }
+
+    // CR-003: Test for 'M' key in handle_menu_keys()
+    #[test]
+    fn test_menu_key_m_toggles_sound() {
+        let key = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Menu(MenuData::default());
+        let msg = handle_menu_keys(key, &mut state);
+        assert_eq!(msg, Some(Message::ToggleSound));
+    }
+
+    // CR-004: Test for 'M' key in handle_results_keys()
+    #[test]
+    fn test_results_key_m_toggles_sound() {
+        let key = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::NONE);
+        let msg = handle_results_keys(key);
+        assert_eq!(msg, Some(Message::ToggleSound));
+    }
+
+    // CR-005: Test for 'M' key in handle_profile_stats_keys()
+    #[test]
+    fn test_profile_stats_key_m_toggles_sound() {
+        let key = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::NONE);
+        let state = create_test_app_state();
+        let msg = handle_profile_stats_keys(key, &state);
+        assert_eq!(msg, Some(Message::ToggleSound));
+    }
+
+    // CR-006: Test for 'M' key in handle_minigame_keys() when paused
+    #[test]
+    fn test_minigame_key_m_toggles_sound_when_paused() {
+        use crate::config::Difficulty;
+        use crate::minigame::MiniGameSession;
+        use crate::testing::ScenarioBuilder;
+        use std::sync::Arc;
+
+        let mut state = create_test_app_state();
+
+        // Create minimal scenario for minigame session
+        let scenario = ScenarioBuilder::new()
+            .id("test_minigame")
+            .difficulty(Difficulty::Beginner)
+            .build();
+
+        let scenarios = Arc::new(vec![scenario]);
+
+        // Create and pause the minigame session
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        // Complete countdown to get to Playing state
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        // Pause the game
+        session.pause();
+
+        // Set the session in game state
+        state.game.minigame_session = Some(session);
+
+        // Test that 'M' key returns ToggleSound when paused
+        let key = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::NONE);
+        let msg = handle_minigame_keys(key, &state);
+        assert_eq!(msg, Some(Message::ToggleSound));
     }
 
     // Unit tests for key_to_command_string()

@@ -22,6 +22,7 @@ use crate::config::{Difficulty, Scenario, ScenarioCategory, SortMode};
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
 use crate::security::UserError;
+use crate::sound::SoundEffect;
 use std::fmt;
 use std::time::{Duration, Instant};
 
@@ -262,6 +263,9 @@ pub enum Message {
 
     /// Remove expired notifications from the queue
     CleanupNotifications,
+
+    /// Toggle sound on/off
+    ToggleSound,
 }
 
 /// Main application state
@@ -679,6 +683,8 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::CompleteScenario => {
             // This handler needs full AppState access to call update() for quest progress
             let outcome = handlers::handle_complete_scenario(state)?;
+            // Play success sound for training mode completion
+            state.progress.sound_manager.play(SoundEffect::ScenarioComplete);
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -688,6 +694,8 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 std::mem::replace(&mut state.screen, TypedScreen::Menu(MenuData::default()))
             {
                 let new_screen = handlers::handle_abandon_scenario(task_data)?;
+                // Play failure sound for abandoned scenario
+                state.progress.sound_manager.play(SoundEffect::ScenarioFailed);
                 state.screen = new_screen;
                 Ok(())
             } else {
@@ -933,6 +941,11 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::CleanupNotifications => {
             let outcome = handlers::handle_cleanup_notifications(&mut state.ui)?;
             apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::ToggleSound => {
+            let enabled = state.progress.sound_manager.toggle();
+            tracing::info!("Sound toggled: {}", if enabled { "on" } else { "off" });
             Ok(())
         }
     }

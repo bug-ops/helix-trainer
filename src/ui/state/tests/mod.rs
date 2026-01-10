@@ -6,3 +6,4 @@ mod navigation_tests;
 mod quest_tests;
 mod review_tests;
 mod scenario_tests;
+mod sound_tests;

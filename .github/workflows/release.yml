@@ -137,11 +137,17 @@ jobs:
         with:
           shared-key: "release-${{ matrix.target }}"
 
+      # Install Linux dependencies (ALSA for audio)
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux' && matrix.use_cross != true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+
       # Install musl tools for Linux musl builds
       - name: Install musl tools (Linux musl only)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
-          sudo apt-get update
           sudo apt-get install -y musl-tools
 
       # Install cross for ARM builds

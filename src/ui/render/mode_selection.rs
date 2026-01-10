@@ -85,9 +85,9 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
         "↑/↓ j/k: Navigate  |  Enter: Select  |  r: Review  |  p: Profile  |  s: Stats  |  q: Quit"
     };
     let instructions = Paragraph::new(instructions_text)
-    .style(Style::default().fg(Color::Gray))
-    .alignment(Alignment::Center)
-    .block(Block::default().borders(Borders::ALL));
+        .style(Style::default().fg(Color::Gray))
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
     frame.render_widget(instructions, chunks[2]);
 }
 
@@ -127,7 +127,11 @@ fn render_mode_option(
 }
 
 /// Render the mini-game mode submenu (Arcade/Survival/Challenge)
-fn render_minigame_mode_submenu(frame: &mut Frame, parent_area: Rect, selection: &MiniGameModeSelection) {
+fn render_minigame_mode_submenu(
+    frame: &mut Frame,
+    parent_area: Rect,
+    selection: &MiniGameModeSelection,
+) {
     use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
 
     // Position submenu to the right of "Arcade Mode" option
@@ -144,8 +148,7 @@ fn render_minigame_mode_submenu(frame: &mut Frame, parent_area: Rect, selection:
     );
 
     // Clear background
-    let clear = Block::default()
-        .style(Style::default().bg(Color::Black));
+    let clear = Block::default().style(Style::default().bg(Color::Black));
     frame.render_widget(clear, submenu_area);
 
     // Submenu border

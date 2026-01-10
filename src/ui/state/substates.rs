@@ -44,6 +44,12 @@ pub struct UIState {
 
     /// Notification queue for transient messages (level-up, achievements, etc.)
     pub notifications: NotificationQueue,
+
+    /// Last selected scenario index in menu (session-only, for position persistence)
+    pub last_menu_selected: usize,
+
+    /// Last scroll offset in menu (session-only, for position persistence)
+    pub last_menu_scroll: usize,
 }
 
 impl UIState {
@@ -58,6 +64,8 @@ impl UIState {
             quest_progress_changes: Vec::new(),
             scenario_mastery: None,
             notifications: NotificationQueue::new(),
+            last_menu_selected: 0,
+            last_menu_scroll: 0,
         }
     }
 
@@ -273,6 +281,8 @@ mod tests {
         assert!(ui.running);
         assert!(ui.show_key_history);
         assert!(ui.completion_time.is_none());
+        assert_eq!(ui.last_menu_selected, 0);
+        assert_eq!(ui.last_menu_scroll, 0);
     }
 
     #[test]

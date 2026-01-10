@@ -28,6 +28,12 @@ pub fn handle_start_scenario(
         // Create TaskData with the new session and scenario index for navigation
         let task_data = TaskData::with_index(session, index);
 
+        // Save menu position before leaving (for later restoration)
+        // Note: scroll_offset is not saved here because HandlerContext doesn't have
+        // access to the current MenuData. The scroll is restored from last_menu_scroll
+        // which is updated when the user navigates within the menu screen.
+        ctx.ui.last_menu_selected = index;
+
         // Update UI state
         ctx.ui.show_key_history = false;
         ctx.ui.completion_time = None;
@@ -141,9 +147,13 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
             ResultsData::from_completed(session, feedback, scenario_index)
                 .map_err(UserError::from)?
         } else {
-            // No session either, just go to menu
+            // No session either, just go to menu with restored position
             return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-                MenuData::default(),
+                MenuData {
+                    selected_item: state.ui.last_menu_selected,
+                    scroll_offset: state.ui.last_menu_scroll,
+                    command_buffer: String::new(),
+                },
             ))));
         };
         return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Results(
@@ -209,11 +219,17 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
 
     // Create ResultsData with completed session and transition to Results screen
     let Some(session) = completed_session else {
-        // No completed session available - go back to menu
+        // No completed session available - go back to menu with restored position
         // This shouldn't happen in normal flow, but handle gracefully
+        let selected = ctx.ui.last_menu_selected;
+        let scroll = ctx.ui.last_menu_scroll;
         ctx.ui.clear_temp_results();
         return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-            MenuData::default(),
+            MenuData {
+                selected_item: selected,
+                scroll_offset: scroll,
+                command_buffer: String::new(),
+            },
         ))));
     };
 
@@ -280,10 +296,14 @@ pub fn handle_retry_scenario(
 /// Handle NextScenario message
 ///
 /// Completes the current scenario flow and returns to menu
-pub fn handle_next_scenario(_ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
-    // Preserve menu state if possible
+/// Restores the previous menu position for consistent navigation experience
+pub fn handle_next_scenario(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-        MenuData::default(),
+        MenuData {
+            selected_item: ctx.ui.last_menu_selected,
+            scroll_offset: ctx.ui.last_menu_scroll,
+            command_buffer: String::new(),
+        },
     ))))
 }
 
@@ -291,16 +311,20 @@ pub fn handle_next_scenario(_ctx: &mut HandlerContext<'_>) -> Result<HandlerOutc
 ///
 /// Navigates to the next scenario in the filtered list.
 /// If at the end of the list, stays on Results screen.
-/// If no scenario_index is available, returns to Menu screen.
+/// If no scenario_index is available, returns to Menu screen with restored position.
 pub fn handle_next_lesson(
     results_data: &ResultsData,
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
     // Get current scenario index
     let Some(current_index) = results_data.scenario_index else {
-        // No index context - navigate to menu (scenario list)
+        // No index context - navigate to menu with restored position
         return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-            MenuData::default(),
+            MenuData {
+                selected_item: ctx.ui.last_menu_selected,
+                scroll_offset: ctx.ui.last_menu_scroll,
+                command_buffer: String::new(),
+            },
         ))));
     };
 
@@ -321,12 +345,34 @@ pub fn handle_next_lesson(
 ///
 /// Navigates directly to the Menu screen (scenario list).
 /// Unlike BackToMenu which goes to ModeSelection, this goes directly to Menu.
+///
+/// Auto-advance behavior: If the scenario was completed successfully, the cursor
+/// moves to the next scenario in the list. Otherwise, it stays at the current position.
 pub fn handle_go_to_scenario_list(
-    _results_data: &ResultsData,
-    _ctx: &mut HandlerContext<'_>,
+    results_data: &ResultsData,
+    ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
+    // Determine selected position with auto-advance for completed scenarios
+    let selected = if results_data.session.is_completed() {
+        // Auto-advance: move to next scenario after successful completion
+        // Clamp to last valid index; saturating_sub handles empty collection case
+        results_data
+            .scenario_index
+            .map(|i| (i + 1).min(ctx.game.scenario_collection.count().saturating_sub(1)))
+            .unwrap_or(ctx.ui.last_menu_selected)
+    } else {
+        // Stay at current position for abandoned scenarios
+        results_data
+            .scenario_index
+            .unwrap_or(ctx.ui.last_menu_selected)
+    };
+
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-        MenuData::default(),
+        MenuData {
+            selected_item: selected,
+            scroll_offset: ctx.ui.last_menu_scroll,
+            command_buffer: String::new(),
+        },
     ))))
 }
 
@@ -964,6 +1010,241 @@ mod tests {
             );
         } else {
             panic!("Expected Results screen after abandon");
+        }
+    }
+
+    // ============================================================================
+    // MENU POSITION PERSISTENCE TESTS
+    // ============================================================================
+
+    #[test]
+    fn test_menu_position_saved_on_start_scenario() {
+        let mut state = create_multi_scenario_state();
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Start scenario at index 2
+        let outcome = handle_start_scenario(&mut ctx, 2).unwrap();
+
+        // Verify transition to Task screen
+        assert!(matches!(
+            outcome,
+            HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Task(_))
+        ));
+
+        // Verify menu position was saved
+        assert_eq!(
+            ctx.ui.last_menu_selected, 2,
+            "Menu position should be saved when starting scenario"
+        );
+    }
+
+    #[test]
+    fn test_menu_position_restored_on_return() {
+        let mut state = create_multi_scenario_state();
+
+        // Set saved menu position
+        state.ui.last_menu_selected = 2;
+        state.ui.last_menu_scroll = 1;
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_next_scenario(&mut ctx).unwrap();
+
+        if let HandlerOutcome::Transition(screen) = outcome {
+            if let TypedScreen::Menu(menu_data) = *screen {
+                assert_eq!(
+                    menu_data.selected_item, 2,
+                    "Menu should restore selected_item"
+                );
+                assert_eq!(
+                    menu_data.scroll_offset, 1,
+                    "Menu should restore scroll_offset"
+                );
+            } else {
+                panic!("Expected Menu screen");
+            }
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_auto_advance_after_completion() {
+        use crate::game::SessionAfterAction;
+
+        let mut state = create_multi_scenario_state();
+        state.ui.last_menu_selected = 0;
+
+        // Create a completed session at index 0
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+
+        // Complete the scenario
+        let result = session.record_action("x".to_string()).unwrap();
+        let session = match result {
+            SessionAfterAction::StillActive(s) => s,
+            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+        };
+        let result = session.record_action("d".to_string()).unwrap();
+        let completed = match result {
+            SessionAfterAction::Completed(c) => c,
+            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+        };
+
+        let feedback = completed.feedback().unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, Some(0)).unwrap();
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+
+        if let HandlerOutcome::Transition(screen) = outcome {
+            if let TypedScreen::Menu(menu_data) = *screen {
+                assert_eq!(
+                    menu_data.selected_item, 1,
+                    "Menu should auto-advance to next scenario after completion"
+                );
+            } else {
+                panic!("Expected Menu screen");
+            }
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_no_advance_after_abandon() {
+        let mut state = create_multi_scenario_state();
+        state.ui.last_menu_selected = 0;
+
+        // Create an abandoned session at index 1
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+        let abandoned = session.abandon();
+        let feedback = abandoned.feedback();
+        let results_data = ResultsData::from_abandoned(abandoned, feedback, Some(1));
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+
+        if let HandlerOutcome::Transition(screen) = outcome {
+            if let TypedScreen::Menu(menu_data) = *screen {
+                assert_eq!(
+                    menu_data.selected_item, 1,
+                    "Menu should NOT auto-advance after abandon - stay at current"
+                );
+            } else {
+                panic!("Expected Menu screen");
+            }
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_auto_advance_clamps_to_last_scenario() {
+        use crate::game::SessionAfterAction;
+
+        let mut state = create_multi_scenario_state();
+        // Index 2 is the last scenario (3 scenarios: 0, 1, 2)
+        state.ui.last_menu_selected = 2;
+
+        // Create a completed session at the last index
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+
+        // Complete the scenario
+        let result = session.record_action("x".to_string()).unwrap();
+        let session = match result {
+            SessionAfterAction::StillActive(s) => s,
+            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+        };
+        let result = session.record_action("d".to_string()).unwrap();
+        let completed = match result {
+            SessionAfterAction::Completed(c) => c,
+            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+        };
+
+        let feedback = completed.feedback().unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, Some(2)).unwrap();
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+
+        if let HandlerOutcome::Transition(screen) = outcome {
+            if let TypedScreen::Menu(menu_data) = *screen {
+                assert_eq!(
+                    menu_data.selected_item, 2,
+                    "Menu should clamp to last scenario when at end of list"
+                );
+            } else {
+                panic!("Expected Menu screen");
+            }
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_next_lesson_returns_menu_with_position_when_no_index() {
+        let mut state = create_multi_scenario_state();
+        state.ui.last_menu_selected = 2;
+        state.ui.last_menu_scroll = 1;
+
+        // ResultsData without scenario_index
+        let results_data = create_results_data_with_index(None);
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_next_lesson(&results_data, &mut ctx).unwrap();
+
+        if let HandlerOutcome::Transition(screen) = outcome {
+            if let TypedScreen::Menu(menu_data) = *screen {
+                assert_eq!(
+                    menu_data.selected_item, 2,
+                    "Menu should restore last_menu_selected when no scenario_index"
+                );
+                assert_eq!(
+                    menu_data.scroll_offset, 1,
+                    "Menu should restore last_menu_scroll when no scenario_index"
+                );
+            } else {
+                panic!("Expected Menu screen");
+            }
+        } else {
+            panic!("Expected Transition outcome");
         }
     }
 }

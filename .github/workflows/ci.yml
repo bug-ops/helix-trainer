@@ -37,6 +37,10 @@ jobs:
         with:
           shared-key: "test-${{ matrix.os }}"
 
+      - name: Install ALSA development libraries (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
@@ -83,6 +87,9 @@ jobs:
         with:
           shared-key: "clippy"
 
+      - name: Install ALSA development libraries
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -121,6 +128,9 @@ jobs:
         with:
           shared-key: "msrv"
 
+      - name: Install ALSA development libraries
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       - name: Check with MSRV
         run: cargo check --all-features --verbose
 
@@ -141,6 +151,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "build-${{ matrix.os }}"
+
+      - name: Install ALSA development libraries (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
       - name: Install cargo-bloat (Linux only)
         if: matrix.os == 'ubuntu-latest'
@@ -246,6 +260,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "coverage"
+
+      - name: Install ALSA development libraries
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2

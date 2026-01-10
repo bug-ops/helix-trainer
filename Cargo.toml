@@ -1,6 +1,6 @@
 [package]
 name = "helix-trainer"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2024"
 rust-version = "1.89"
 authors = ["Andrei G <andrei.g@my.com>"]

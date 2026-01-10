@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-01-10
+
+### Added
+
+- **FSRS-based Arcade Mode** — Intelligent scenario selection prioritizes commands needing practice:
+  - Overdue commands increase scenario urgency
+  - Weak commands (low success rate) appear more often
+  - Novel commands get moderate priority for discovery
+  - Weighted random selection maintains variety
+
+- **Statistics Screen Improvements** — Real FSRS data integration:
+  - Command Mastery Distribution with progress bars
+  - Review Status showing due reviews and success rates
+  - Commands Needing Practice section (top 5 weak commands)
+  - Scenario Mastery distribution (Learning/Proficient/Mastered)
+
+- **Profile Screen Learning Progress** — New section showing FSRS learning metrics
+
+- **Review Session UX** — Improved review experience:
+  - Command descriptions from registry
+  - Session complete notifications with XP earned
+  - "No reviews due" informative message
+
+- **Mastery Level-Up Notifications** — Visual feedback when command mastery improves
+
+- **Navigation Shortcuts** — `m` and `Esc` keys navigate back to mode selection from scenario list
+
+- **Review Shortcut** — `r` key starts review session from all main screens
+
+### Changed
+
+- **Codebase Architecture** — Comprehensive refactoring:
+  - Split `input/typestate.rs` (2747 → ~400 lines max per file)
+  - Centralized test utilities in `src/testing/` module
+  - Split simulator tests into 8 organized modules
+  - Removed 21 dead code items
+
+### Quality
+
+- **Tests**: 1268 (up from 1239)
+- **Clippy**: Zero warnings
+- **Coverage**: 86%
+
 ## [0.5.3] - 2026-01-09
 
 ### Added

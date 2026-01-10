@@ -2400,7 +2400,7 @@ dependencies = [
 
 [[package]]
 name = "helix-trainer"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "chrono",

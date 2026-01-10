@@ -359,6 +359,79 @@ impl ReviewData {
 pub struct ModeSelectionData {
     /// Index of selected mode (0 = Training, 1 = Arcade)
     pub selected_mode: usize,
+
+    /// Mini-game mode selection state (when arcade is chosen)
+    pub minigame_mode_selection: Option<MiniGameModeSelection>,
+}
+
+/// Selection state for mini-game mode menu
+///
+/// Used when the player selects Arcade from the main mode selection
+/// and needs to choose between Arcade, Survival, and Challenge modes.
+///
+/// Note: Visibility is controlled by the `Option` wrapper in `ModeSelectionData.minigame_mode_selection`
+/// - `Some(MiniGameModeSelection)` = menu is visible
+/// - `None` = menu is hidden
+#[derive(Debug, Clone, Default)]
+pub struct MiniGameModeSelection {
+    /// Currently highlighted mode (0 = Arcade, 1 = Survival, 2 = Challenge)
+    pub selected_index: usize,
+}
+
+impl MiniGameModeSelection {
+    /// Available mode count
+    pub const MODE_COUNT: usize = 3;
+
+    /// Create a new mode selection starting at Arcade (index 0)
+    pub fn new() -> Self {
+        Self { selected_index: 0 }
+    }
+
+    /// Move selection up (wraps around)
+    pub fn select_previous(&mut self) {
+        if self.selected_index > 0 {
+            self.selected_index -= 1;
+        } else {
+            self.selected_index = Self::MODE_COUNT - 1;
+        }
+    }
+
+    /// Move selection down (wraps around)
+    pub fn select_next(&mut self) {
+        self.selected_index = (self.selected_index + 1) % Self::MODE_COUNT;
+    }
+
+    /// Get the selected mode configuration
+    pub fn selected_mode(&self) -> crate::minigame::MiniGameMode {
+        use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
+
+        match self.selected_index {
+            0 => MiniGameMode::Arcade(ArcadeConfig::default()),
+            1 => MiniGameMode::Survival(SurvivalConfig::default()),
+            2 => MiniGameMode::Challenge(ChallengeConfig::for_today()),
+            _ => MiniGameMode::default(),
+        }
+    }
+
+    /// Get the name for each mode by index
+    pub fn mode_name(index: usize) -> &'static str {
+        match index {
+            0 => "Arcade",
+            1 => "Survival",
+            2 => "Daily Challenge",
+            _ => "Unknown",
+        }
+    }
+
+    /// Get the description for each mode by index
+    pub fn mode_description(index: usize) -> &'static str {
+        match index {
+            0 => "60 seconds, 3 lives, chase the high score!",
+            1 => "One life. How long can you survive?",
+            2 => "Daily puzzle. 10 scenarios. 3 attempts.",
+            _ => "",
+        }
+    }
 }
 
 /// Data required for mini-game screen
@@ -373,6 +446,10 @@ pub struct MiniGameData {
     pub last_xp_earned: Option<u64>,
     /// History of recent keypresses (shared KeyHistory struct)
     pub key_history: KeyHistory,
+    /// Current game mode (for display purposes)
+    pub mode: Option<crate::minigame::MiniGameMode>,
+    /// Challenge progress for tracking attempts (for Challenge mode)
+    pub challenge_progress: Option<crate::minigame::ChallengeProgress>,
 }
 
 impl MiniGameData {
@@ -645,5 +722,53 @@ mod tests {
         assert!(coa.is_abandoned());
         assert!(!coa.is_completed());
         assert_eq!(coa.scenario_id(), "test_123");
+    }
+
+    // CR-007: Test MiniGameModeSelection invalid index handling
+    #[test]
+    fn test_mode_name_invalid_index() {
+        assert_eq!(MiniGameModeSelection::mode_name(3), "Unknown");
+        assert_eq!(MiniGameModeSelection::mode_name(100), "Unknown");
+        assert_eq!(MiniGameModeSelection::mode_name(usize::MAX), "Unknown");
+    }
+
+    #[test]
+    fn test_mode_description_invalid_index() {
+        assert_eq!(MiniGameModeSelection::mode_description(3), "");
+        assert_eq!(MiniGameModeSelection::mode_description(100), "");
+        assert_eq!(MiniGameModeSelection::mode_description(usize::MAX), "");
+    }
+
+    #[test]
+    fn test_selected_mode_invalid_index() {
+        let mut selection = MiniGameModeSelection::new();
+        selection.selected_index = 99;
+        let mode = selection.selected_mode();
+        // Should fall back to default Arcade mode
+        assert!(mode.is_arcade());
+    }
+
+    #[test]
+    fn test_minigame_mode_selection_valid_indices() {
+        // Test valid mode names
+        assert_eq!(MiniGameModeSelection::mode_name(0), "Arcade");
+        assert_eq!(MiniGameModeSelection::mode_name(1), "Survival");
+        assert_eq!(MiniGameModeSelection::mode_name(2), "Daily Challenge");
+
+        // Test valid mode descriptions
+        assert!(!MiniGameModeSelection::mode_description(0).is_empty());
+        assert!(!MiniGameModeSelection::mode_description(1).is_empty());
+        assert!(!MiniGameModeSelection::mode_description(2).is_empty());
+
+        // Test valid selected modes
+        let mut selection = MiniGameModeSelection::new();
+        selection.selected_index = 0;
+        assert!(selection.selected_mode().is_arcade());
+
+        selection.selected_index = 1;
+        assert!(selection.selected_mode().is_survival());
+
+        selection.selected_index = 2;
+        assert!(selection.selected_mode().is_challenge());
     }
 }

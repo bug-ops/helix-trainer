@@ -32,7 +32,9 @@
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
+mod challenge;
 mod difficulty;
+mod modes;
 mod scorer;
 mod scoring;
 mod session;
@@ -43,7 +45,9 @@ mod stats;
 mod tests;
 
 // Re-export public types
+pub use challenge::{ChallengeProgress, select_challenge_scenarios};
 pub use difficulty::{DifficultyController, LevelChange, PerformancePoint};
+pub use modes::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig, TimeDecreaseMode};
 pub use scorer::ScenarioScorer;
 pub use scoring::{PerformanceTier, ScoreBreakdown, ScoreCalculator};
 pub use session::{ActiveMiniScenario, MiniGameSession};

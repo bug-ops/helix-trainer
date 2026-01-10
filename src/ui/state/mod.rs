@@ -40,8 +40,8 @@ pub use substates::{ConfigState, GameState, ProgressState, UIState};
 pub mod screen;
 pub use screen::{
     CommandBufferAccess, CompletedOrAbandoned, InputStateAccess, KeyHistory, MenuData,
-    MiniGameData, ModeSelectionData, ProfileData, ResultsData, ReturnDestination, ReviewData,
-    StatisticsData, TaskData, TypedScreen,
+    MiniGameData, MiniGameModeSelection, ModeSelectionData, ProfileData, ResultsData,
+    ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario
@@ -520,7 +520,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             extract_screen!(state, ModeSelection, data => handlers::handle_mode_selection_down(data))
         }
         Message::ModeSelectionSelect => {
-            extract_screen!(state, ModeSelection, data, ctx => handlers::handle_mode_selection_select(data, &mut ctx))
+            extract_screen!(state, ModeSelection, mut data, ctx => handlers::handle_mode_selection_select(data, &mut ctx))
         }
         Message::SelectTrainingMode => {
             let mut ctx = HandlerContext::new(

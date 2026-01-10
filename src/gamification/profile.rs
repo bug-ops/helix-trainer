@@ -74,6 +74,18 @@ pub struct UserProfile {
     /// Sound configuration for audio feedback
     #[serde(default)]
     pub sound_config: SoundConfig,
+
+    /// Challenge mode progress (daily puzzle tracking)
+    #[serde(default)]
+    pub challenge_progress: crate::minigame::ChallengeProgress,
+
+    /// Survival mode best level reached
+    #[serde(default)]
+    pub survival_best_level: u32,
+
+    /// Survival mode best scenarios completed in single run
+    #[serde(default)]
+    pub survival_best_scenarios: u32,
 }
 
 impl UserProfile {
@@ -110,6 +122,9 @@ impl UserProfile {
             minigame_best_streak: 0,
             minigame_games_played: 0,
             sound_config: SoundConfig::default(),
+            challenge_progress: crate::minigame::ChallengeProgress::default(),
+            survival_best_level: 0,
+            survival_best_scenarios: 0,
         }
     }
 
@@ -597,5 +612,36 @@ mod tests {
 
         assert!((restored.sound_config.volume - 0.3).abs() < f32::EPSILON);
         assert!(!restored.sound_config.enabled);
+    }
+
+    // CR-016: Test backward compatibility with old profile format (missing game mode fields)
+    #[test]
+    fn test_profile_game_mode_fields_backward_compat() {
+        // Create a full profile, serialize it, then verify game mode fields can be absent
+        let mut profile = UserProfile::new();
+        profile.level = 5;
+        profile.total_xp = 1000;
+        profile.current_streak = 3;
+        profile.survival_best_level = 10;
+        profile.survival_best_scenarios = 25;
+
+        // Serialize
+        let toml_str = toml::to_string(&profile).unwrap();
+        assert!(toml_str.contains("survival_best_level"));
+
+        // Now deserialize back
+        let restored: UserProfile = toml::from_str(&toml_str).unwrap();
+
+        // Verify original fields are loaded
+        assert_eq!(restored.level, 5);
+        assert_eq!(restored.total_xp, 1000);
+        assert_eq!(restored.current_streak, 3);
+
+        // Verify new game mode fields are loaded correctly
+        assert_eq!(restored.survival_best_level, 10);
+        assert_eq!(restored.survival_best_scenarios, 25);
+
+        // Verify defaults work for challenge_progress (via #[serde(default)])
+        assert_eq!(restored.challenge_progress.attempts_used_today, 0);
     }
 }

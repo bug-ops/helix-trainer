@@ -9,8 +9,9 @@ use crate::game::{CommandExecutor, EditorState};
 use crate::helix::AnyModeSimulator;
 use crate::learning::PerformanceTracker;
 use crate::minigame::{
-    DifficultyController, LevelChange, MiniGameState, MiniGameStats, MultiplierChange,
-    MultiplierState, PerformancePoint, ScoreBreakdown, ScoreCalculator,
+    DifficultyController, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
+    MultiplierChange, MultiplierState, PerformancePoint, ScoreBreakdown, ScoreCalculator,
+    select_challenge_scenarios,
 };
 use crate::security::UserError;
 use std::collections::VecDeque;
@@ -203,10 +204,21 @@ pub struct MiniGameSession {
     /// When present, scenarios with commands needing practice are prioritized.
     /// This is a snapshot of the tracker at session creation time.
     tracker: Option<PerformanceTracker>,
+
+    /// Game mode configuration
+    mode: MiniGameMode,
+
+    /// Pre-selected scenarios for Challenge mode (None for other modes)
+    selected_scenarios: Option<Vec<Scenario>>,
+
+    /// Index into selected_scenarios for Challenge mode
+    challenge_scenario_index: usize,
 }
 
 impl MiniGameSession {
     /// Create a new mini-game session with scenario collection and optional FSRS tracker.
+    ///
+    /// Uses the default Arcade mode configuration.
     ///
     /// # Arguments
     ///
@@ -232,10 +244,47 @@ impl MiniGameSession {
     /// let session = MiniGameSession::new(scenarios, None);
     /// ```
     pub fn new(scenarios: Arc<Vec<Scenario>>, tracker: Option<PerformanceTracker>) -> Self {
+        Self::with_mode(scenarios, tracker, MiniGameMode::default())
+    }
+
+    /// Create a new mini-game session with specified game mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `scenarios` - Arc reference to available scenarios
+    /// * `tracker` - Optional performance tracker for FSRS-based weighted selection
+    /// * `mode` - Game mode configuration (Arcade, Survival, or Challenge)
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::minigame::{MiniGameSession, MiniGameMode, SurvivalConfig};
+    /// use std::sync::Arc;
+    ///
+    /// let scenarios = Arc::new(vec![/* scenarios */]);
+    ///
+    /// // Create Survival mode session
+    /// let mode = MiniGameMode::Survival(SurvivalConfig::default());
+    /// let session = MiniGameSession::with_mode(scenarios, None, mode);
+    /// assert_eq!(session.stats().lives, 1); // Survival mode has 1 life
+    /// ```
+    pub fn with_mode(
+        scenarios: Arc<Vec<Scenario>>,
+        tracker: Option<PerformanceTracker>,
+        mode: MiniGameMode,
+    ) -> Self {
+        let starting_lives = mode.starting_lives();
+
+        // For Challenge mode, pre-select scenarios using seeded RNG
+        let selected_scenarios = match &mode {
+            MiniGameMode::Challenge(config) => Some(select_challenge_scenarios(&scenarios, config)),
+            _ => None,
+        };
+
         let mut session = Self {
             current: None,
             queue: VecDeque::with_capacity(QUEUE_SIZE),
-            stats: MiniGameStats::new(),
+            stats: MiniGameStats::new_with_lives(starting_lives),
             difficulty: DifficultyController::new(),
             score_calculator: ScoreCalculator::new(),
             multiplier_state: MultiplierState::new(),
@@ -244,6 +293,9 @@ impl MiniGameSession {
             scenarios,
             transition_started_at: None,
             tracker,
+            mode,
+            selected_scenarios,
+            challenge_scenario_index: 0,
         };
 
         // Pre-fill queue
@@ -784,8 +836,8 @@ impl MiniGameSession {
         // Pop from queue
         let scenario = self.queue.pop_front().ok_or(UserError::OperationFailed)?;
 
-        // Get time limit from difficulty controller
-        let time_limit = self.difficulty.time_limit_for(&scenario);
+        // Get time limit based on mode
+        let time_limit = self.get_scenario_time_limit(&scenario);
 
         // Create active scenario
         self.current = Some(ActiveMiniScenario::new(scenario, time_limit)?);
@@ -796,11 +848,50 @@ impl MiniGameSession {
         Ok(())
     }
 
+    /// Get time limit for a scenario based on current game mode
+    ///
+    /// - Arcade: Uses DifficultyController's adaptive time limit
+    /// - Survival: Uses survival config's level-based time limit
+    /// - Challenge: Uses fixed time limit from config
+    fn get_scenario_time_limit(&self, scenario: &Scenario) -> Duration {
+        match &self.mode {
+            MiniGameMode::Arcade(_) => {
+                // Use DifficultyController's adaptive time limit
+                self.difficulty.time_limit_for(scenario)
+            }
+            MiniGameMode::Survival(config) => {
+                // Use survival-specific time calculation
+                config.time_limit_for_level(self.difficulty_level())
+            }
+            MiniGameMode::Challenge(config) => {
+                // Fixed time limit for challenge
+                config.time_per_scenario
+            }
+        }
+    }
+
     /// Refill queue to maintain QUEUE_SIZE
     ///
-    /// Uses FSRS-weighted selection if a performance tracker is available,
-    /// otherwise falls back to random selection.
+    /// Uses different selection strategies based on mode:
+    /// - Arcade/Survival: FSRS-weighted selection if tracker available
+    /// - Challenge: Uses pre-selected scenarios
     fn refill_queue(&mut self) {
+        // Challenge mode uses pre-selected scenarios
+        if let MiniGameMode::Challenge(config) = &self.mode {
+            if let Some(ref selected) = self.selected_scenarios {
+                while self.queue.len() < QUEUE_SIZE
+                    && self.challenge_scenario_index < config.scenario_count
+                    && self.challenge_scenario_index < selected.len()
+                {
+                    self.queue
+                        .push_back(selected[self.challenge_scenario_index].clone());
+                    self.challenge_scenario_index += 1;
+                }
+            }
+            return;
+        }
+
+        // Arcade and Survival use difficulty controller
         while self.queue.len() < QUEUE_SIZE {
             if let Some(scenario) = self
                 .difficulty
@@ -812,12 +903,55 @@ impl MiniGameSession {
             }
         }
     }
+
+    /// Get reference to the current game mode
+    pub fn mode(&self) -> &MiniGameMode {
+        &self.mode
+    }
+
+    /// Check if game should end based on mode
+    ///
+    /// - Arcade: Lives depleted (session timer handled externally)
+    /// - Survival: Single failure = game over (lives will be 0)
+    /// - Challenge: Lives depleted or all scenarios completed
+    pub fn check_game_over(&self) -> bool {
+        match &self.mode {
+            MiniGameMode::Arcade(_) | MiniGameMode::Survival(_) => {
+                // Lives depleted
+                self.stats.lives == 0
+            }
+            MiniGameMode::Challenge(config) => {
+                // Lives depleted or all scenarios completed
+                self.stats.lives == 0
+                    || self.stats.scenarios_completed >= config.scenario_count as u32
+            }
+        }
+    }
+
+    /// Check if Challenge mode is complete (all scenarios done)
+    pub fn is_challenge_complete(&self) -> bool {
+        if let MiniGameMode::Challenge(config) = &self.mode {
+            self.stats.scenarios_completed >= config.scenario_count as u32
+        } else {
+            false
+        }
+    }
+
+    /// Get scenarios completed count for Challenge mode progress display
+    pub fn challenge_scenarios_completed(&self) -> Option<(u32, usize)> {
+        if let MiniGameMode::Challenge(config) = &self.mode {
+            Some((self.stats.scenarios_completed, config.scenario_count))
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::Difficulty;
+    use crate::minigame::{ArcadeConfig, ChallengeConfig, SurvivalConfig};
     use crate::testing::ScenarioBuilder;
 
     fn create_test_scenario(id: &str, difficulty: Difficulty) -> Scenario {
@@ -1005,5 +1139,178 @@ mod tests {
                 "Cursor should be on last line (row 2)"
             );
         }
+    }
+
+    #[test]
+    fn test_survival_mode_single_life() {
+        let scenarios = Arc::new(vec![
+            create_test_scenario("s1", Difficulty::Beginner),
+            create_test_scenario("s2", Difficulty::Beginner),
+        ]);
+
+        let mode = MiniGameMode::Survival(SurvivalConfig::default());
+        let session = MiniGameSession::with_mode(scenarios, None, mode);
+
+        assert_eq!(session.stats().lives, 1);
+        assert!(session.mode().is_survival());
+    }
+
+    #[test]
+    fn test_survival_mode_game_over_on_first_failure() {
+        let scenarios = Arc::new(vec![
+            create_test_scenario("s1", Difficulty::Beginner),
+            create_test_scenario("s2", Difficulty::Beginner),
+        ]);
+
+        let mode = MiniGameMode::Survival(SurvivalConfig::default());
+        let mut session = MiniGameSession::with_mode(scenarios, None, mode);
+
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+
+        // Single timeout should end the game
+        session.handle_timeout();
+
+        assert_eq!(session.stats().lives, 0);
+        assert!(session.state().is_game_over());
+    }
+
+    #[test]
+    fn test_challenge_mode_starting_lives() {
+        let scenarios = Arc::new(vec![
+            create_test_scenario("s1", Difficulty::Beginner),
+            create_test_scenario("s2", Difficulty::Beginner),
+        ]);
+
+        let mode = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let session = MiniGameSession::with_mode(scenarios, None, mode);
+
+        assert_eq!(session.stats().lives, 3);
+        assert!(session.mode().is_challenge());
+    }
+
+    #[test]
+    fn test_challenge_mode_scenario_progress() {
+        let scenarios: Vec<Scenario> = (0..20)
+            .map(|i| create_test_scenario(&format!("s{}", i), Difficulty::Beginner))
+            .collect();
+
+        let mode = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let session = MiniGameSession::with_mode(Arc::new(scenarios), None, mode);
+
+        let progress = session.challenge_scenarios_completed();
+        assert!(progress.is_some());
+        let (completed, total) = progress.unwrap();
+        assert_eq!(completed, 0);
+        assert_eq!(total, 10); // CHALLENGE_SCENARIO_COUNT
+    }
+
+    #[test]
+    fn test_arcade_mode_defaults() {
+        let scenarios = Arc::new(vec![
+            create_test_scenario("s1", Difficulty::Beginner),
+            create_test_scenario("s2", Difficulty::Beginner),
+        ]);
+
+        // Default constructor uses Arcade mode
+        let session = MiniGameSession::new(scenarios, None);
+
+        assert_eq!(session.stats().lives, 3);
+        assert!(session.mode().is_arcade());
+        assert!(session.mode().has_session_timer());
+    }
+
+    #[test]
+    fn test_mode_has_session_timer() {
+        let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
+        let survival = MiniGameMode::Survival(SurvivalConfig::default());
+        let challenge = MiniGameMode::Challenge(ChallengeConfig::for_today());
+
+        assert!(arcade.has_session_timer());
+        assert!(!survival.has_session_timer());
+        assert!(!challenge.has_session_timer());
+    }
+
+    #[test]
+    fn test_check_game_over_arcade() {
+        let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+
+        // Not game over with lives
+        assert!(!session.check_game_over());
+
+        // Game over when lives depleted
+        session.stats.lives = 0;
+        assert!(session.check_game_over());
+    }
+
+    #[test]
+    fn test_check_game_over_challenge() {
+        let scenarios: Vec<Scenario> = (0..20)
+            .map(|i| create_test_scenario(&format!("s{}", i), Difficulty::Beginner))
+            .collect();
+
+        let mode = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let mut session = MiniGameSession::with_mode(Arc::new(scenarios), None, mode);
+
+        // Not game over initially
+        assert!(!session.check_game_over());
+
+        // Game over when all scenarios completed
+        session.stats.scenarios_completed = 10;
+        assert!(session.check_game_over());
+        assert!(session.is_challenge_complete());
+
+        // Also game over when lives depleted
+        session.stats.scenarios_completed = 5;
+        session.stats.lives = 0;
+        assert!(session.check_game_over());
+        assert!(!session.is_challenge_complete());
+    }
+
+    // CR-012: Test Survival mode time limit integration
+    #[test]
+    fn test_survival_mode_time_limit_integration() {
+        use crate::constants::SURVIVAL_BASE_TIME;
+        use std::time::Duration;
+
+        let scenarios = Arc::new(vec![
+            create_test_scenario("s1", Difficulty::Beginner),
+            create_test_scenario("s2", Difficulty::Beginner),
+        ]);
+
+        let config = SurvivalConfig::default();
+        let mode = MiniGameMode::Survival(config.clone());
+        let mut session = MiniGameSession::with_mode(scenarios, None, mode);
+
+        // Start session and complete countdown
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(session.state().is_playing());
+
+        // Verify time limit matches SurvivalConfig at level 1
+        if let Some(scenario) = session.current_scenario() {
+            let remaining = scenario.remaining_time();
+            // At level 1, time should be base_time (within margin due to elapsed time)
+            assert!(
+                remaining <= SURVIVAL_BASE_TIME,
+                "Remaining time {:?} should be <= base time {:?}",
+                remaining,
+                SURVIVAL_BASE_TIME
+            );
+        }
+
+        // Verify config calculation directly
+        let level1_time = config.time_limit_for_level(1);
+        assert_eq!(level1_time, SURVIVAL_BASE_TIME);
+
+        let level5_time = config.time_limit_for_level(5);
+        // Level 5 should have less time than level 1 (500ms * 4 levels = 2s less)
+        let expected_decrease = Duration::from_millis(500 * 4);
+        assert_eq!(level5_time, SURVIVAL_BASE_TIME - expected_decrease);
     }
 }

@@ -8,6 +8,7 @@ use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
+use crate::sound::SoundManager;
 use std::collections::HashSet;
 use std::time::Instant;
 
@@ -165,6 +166,9 @@ pub struct ProgressState {
 
     /// Last save time (for debouncing)
     pub last_save_time: Option<Instant>,
+
+    /// Sound manager for audio feedback
+    pub sound_manager: SoundManager,
 }
 
 impl ProgressState {
@@ -174,6 +178,11 @@ impl ProgressState {
         performance_tracker: PerformanceTracker,
         storage: ProfileStorage,
     ) -> Self {
+        // Initialize sound manager from profile config
+        let mut sound_manager = SoundManager::new(profile.sound_config.clone());
+        // Try to initialize audio (graceful failure)
+        let _ = sound_manager.try_init();
+
         Self {
             profile,
             performance_tracker,
@@ -184,6 +193,7 @@ impl ProgressState {
             previously_completed_quests: HashSet::new(),
             session_start_time: Instant::now(),
             last_save_time: None,
+            sound_manager,
         }
     }
 

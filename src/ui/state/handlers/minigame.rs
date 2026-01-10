@@ -9,6 +9,7 @@ use crate::input::typestate::{HandlerResult, command_to_key_event};
 use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
+use crate::sound::SoundEffect;
 use crate::ui::state::{
     AppState, GameState, HandlerContext, HandlerOutcome, InputStateAccess, MiniGameData,
     ModeSelectionData, TypedScreen,
@@ -91,6 +92,8 @@ pub(in crate::ui::state) fn handle_minigame_tick(
     if let Some(ref mut session) = ctx.game.minigame_session
         && session.state().is_countdown()
     {
+        // Play countdown sound on each tick
+        ctx.progress.sound_manager.play(SoundEffect::Countdown);
         session.tick_countdown();
     }
     Ok(HandlerOutcome::Stay)
@@ -127,6 +130,12 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
 
     // Check for completion
     if session.check_completion() {
+        // Play success sound
+        state
+            .progress
+            .sound_manager
+            .play(SoundEffect::ScenarioComplete);
+
         // Get current streak before advancing
         let current_streak = session.stats().streak;
 
@@ -162,6 +171,15 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
         // Re-borrow session after state modification
         if let Some(ref mut session) = state.game.minigame_session {
             session.advance_to_next();
+
+            // Check for multiplier increase and play sound
+            if session.take_multiplier_change().is_some() {
+                state.progress.sound_manager.play(SoundEffect::MultiplierUp);
+            }
+            // Check for level increase and play sound
+            if session.take_level_change().is_some() {
+                state.progress.sound_manager.play(SoundEffect::LevelUp);
+            }
         }
         // Transition state will be handled by timer
     }
@@ -223,7 +241,12 @@ pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) -> Res
         session.handle_timeout();
 
         if session.state().is_game_over() {
+            // Play game over sound
+            state.progress.sound_manager.play(SoundEffect::GameOver);
             handle_minigame_game_over(state)?;
+        } else {
+            // Play life lost sound (still has lives remaining)
+            state.progress.sound_manager.play(SoundEffect::LifeLost);
         }
     }
     Ok(())

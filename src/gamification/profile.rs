@@ -11,6 +11,7 @@ use crate::constants::{
     XP_LEVEL_FORMULA_BASE, XP_LEVEL_FORMULA_EXPONENT,
 };
 use crate::learning::ScenarioHistory;
+use crate::sound::SoundConfig;
 
 /// User profile with progression, streaks, and achievements
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +70,10 @@ pub struct UserProfile {
     /// Total number of mini-game sessions played
     #[serde(default)]
     pub minigame_games_played: u32,
+
+    /// Sound configuration for audio feedback
+    #[serde(default)]
+    pub sound_config: SoundConfig,
 }
 
 impl UserProfile {
@@ -104,6 +109,7 @@ impl UserProfile {
             minigame_high_score: 0,
             minigame_best_streak: 0,
             minigame_games_played: 0,
+            sound_config: SoundConfig::default(),
         }
     }
 
@@ -576,5 +582,20 @@ mod tests {
         profile.minigame_games_played = u32::MAX;
         profile.minigame_games_played = profile.minigame_games_played.saturating_add(1);
         assert_eq!(profile.minigame_games_played, u32::MAX);
+    }
+
+    #[test]
+    fn test_sound_config_persisted_in_profile() {
+        use crate::sound::SoundConfig;
+
+        let mut profile = UserProfile::new();
+        profile.sound_config = SoundConfig::new(0.3, false);
+
+        // Serialize and deserialize (TOML is the actual format)
+        let toml = toml::to_string(&profile).unwrap();
+        let restored: UserProfile = toml::from_str(&toml).unwrap();
+
+        assert!((restored.sound_config.volume - 0.3).abs() < f32::EPSILON);
+        assert!(!restored.sound_config.enabled);
     }
 }

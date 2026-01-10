@@ -6,6 +6,7 @@
 pub mod difficulty;
 pub mod gameplay;
 pub mod learning;
+pub mod sound;
 pub mod timing;
 pub mod ui;
 pub mod xp;
@@ -14,6 +15,7 @@ pub mod xp;
 pub use difficulty::*;
 pub use gameplay::*;
 pub use learning::*;
+pub use sound::*;
 pub use timing::*;
 pub use ui::*;
 pub use xp::*;

@@ -382,6 +382,7 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
 
     match key.code {
         KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Esc => Some(Message::ModeSelectionBack),
         KeyCode::Up | KeyCode::Char('k') => Some(Message::ModeSelectionUp),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::ModeSelectionDown),
         KeyCode::Enter => Some(Message::ModeSelectionSelect),
@@ -853,6 +854,14 @@ mod tests {
             let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
             assert_eq!(handle_task_special_keys(key), None);
         }
+    }
+
+    // Test for Esc key in handle_mode_selection_keys()
+    #[test]
+    fn test_mode_selection_key_esc_goes_back() {
+        let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let msg = handle_mode_selection_keys(key);
+        assert_eq!(msg, Some(Message::ModeSelectionBack));
     }
 
     // CR-002: Test for 'M' key in handle_mode_selection_keys()

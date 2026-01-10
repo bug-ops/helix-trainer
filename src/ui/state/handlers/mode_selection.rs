@@ -72,12 +72,6 @@ pub(in crate::ui::state) fn handle_mode_selection_select(
 /// Handle escape/back navigation
 ///
 /// If mini-game mode selection is open, close it. Otherwise, do nothing.
-///
-/// Note: Currently prepared for future ESC key integration in mode selection screen.
-/// The handler is fully implemented but not yet wired to the input handler.
-/// When ESC key handling is added to the mode selection input flow, this function
-/// should be called to close the mini-game mode submenu.
-#[allow(dead_code)]
 pub(in crate::ui::state) fn handle_mode_selection_back(
     data: &mut ModeSelectionData,
 ) -> Result<HandlerOutcome, UserError> {

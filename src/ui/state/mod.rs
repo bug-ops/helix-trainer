@@ -127,6 +127,9 @@ pub enum Message {
     /// Mode selection: select current mode
     ModeSelectionSelect,
 
+    /// Mode selection: go back (close submenu)
+    ModeSelectionBack,
+
     /// Select Training Mode (manual scenario selection)
     SelectTrainingMode,
 
@@ -525,6 +528,9 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
         Message::ModeSelectionSelect => {
             extract_screen!(state, ModeSelection, mut data, ctx => handlers::handle_mode_selection_select(data, &mut ctx))
+        }
+        Message::ModeSelectionBack => {
+            extract_screen!(state, ModeSelection, data => handlers::handle_mode_selection_back(data))
         }
         Message::SelectTrainingMode => {
             let mut ctx = HandlerContext::new(

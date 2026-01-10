@@ -1,13 +1,15 @@
 //! Async data loading functions
 //!
-//! This module provides async wrappers for filesystem operations,
+//! This module provides async wrappers for data loading operations,
 //! enabling background loading without blocking the UI thread.
+//!
+//! Scenarios are loaded from compile-time embedded data, while
+//! profiles are loaded from the user's config directory.
 
 use crate::async_state::DataLoadMessage;
 use crate::config::{Scenario, ScenarioLoader};
 use crate::gamification::{ProfileStorage, QuestTemplateRegistry, UserProfile};
 use anyhow::Result;
-use std::path::Path;
 use tokio::sync::mpsc;
 
 /// Spawn background data loaders for scenarios, profile, and quest registry
@@ -68,23 +70,23 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
     });
 }
 
-/// Async scenario loading (runs on blocking thread pool)
+/// Async scenario loading from embedded data
 ///
-/// Loads scenarios from the locale-specific directory using tokio's
-/// blocking task pool to avoid blocking the async runtime.
+/// Loads scenarios from compile-time embedded TOML content.
+/// This eliminates filesystem I/O and ensures consistent behavior
+/// regardless of the working directory.
 ///
 /// # Errors
 ///
-/// Returns an error if scenarios cannot be loaded from the filesystem.
+/// Returns an error if scenarios cannot be loaded from embedded data.
 pub async fn load_scenarios_async() -> Result<Vec<Scenario>> {
     tokio::task::spawn_blocking(move || {
         let current_locale = rust_i18n::locale();
         let locale_str: &str = current_locale.as_ref();
-        let scenarios_path = format!("./scenarios/{}", locale_str);
 
         let loader = ScenarioLoader::new();
         loader
-            .load_directory(Path::new(&scenarios_path))
+            .load_from_embedded(locale_str)
             .map_err(|e| anyhow::anyhow!("Scenario load error: {:?}", e))
     })
     .await?

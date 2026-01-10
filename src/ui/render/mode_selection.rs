@@ -1,6 +1,6 @@
 //! Mode selection screen rendering
 
-use crate::ui::state::{AppState, TypedScreen};
+use crate::ui::state::{AppState, MiniGameModeSelection, TypedScreen};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -69,17 +69,25 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
         Rect::new(inner.x, inner.y + 4, inner.width, 2),
         "Arcade Mode",
         "Fast-paced mini-games with time pressure",
-        mode_data.selected_mode == 1,
+        mode_data.selected_mode == 1 && mode_data.minigame_mode_selection.is_none(),
         "🎮",
     );
 
-    // Instructions
-    let instructions = Paragraph::new(
-        "↑/↓ j/k: Navigate  |  Enter: Select  |  r: Review  |  p: Profile  |  s: Stats  |  q: Quit",
-    )
-    .style(Style::default().fg(Color::Gray))
-    .alignment(Alignment::Center)
-    .block(Block::default().borders(Borders::ALL));
+    // Render mini-game mode submenu if active
+    if let Some(ref selection) = mode_data.minigame_mode_selection {
+        render_minigame_mode_submenu(frame, inner, selection);
+    }
+
+    // Instructions - different when submenu is open
+    let instructions_text = if mode_data.minigame_mode_selection.is_some() {
+        "↑/↓ j/k: Navigate  |  Enter: Start  |  Esc: Back  |  q: Quit"
+    } else {
+        "↑/↓ j/k: Navigate  |  Enter: Select  |  r: Review  |  p: Profile  |  s: Stats  |  q: Quit"
+    };
+    let instructions = Paragraph::new(instructions_text)
+        .style(Style::default().fg(Color::Gray))
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
     frame.render_widget(instructions, chunks[2]);
 }
 
@@ -116,6 +124,84 @@ fn render_mode_option(
 
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, area);
+}
+
+/// Render the mini-game mode submenu (Arcade/Survival/Challenge)
+fn render_minigame_mode_submenu(
+    frame: &mut Frame,
+    parent_area: Rect,
+    selection: &MiniGameModeSelection,
+) {
+    use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
+
+    // Position submenu to the right of "Arcade Mode" option
+    let submenu_width = 45;
+    let submenu_height = 11;
+    let submenu_x = parent_area.x + 20;
+    let submenu_y = parent_area.y + 3;
+
+    let submenu_area = Rect::new(
+        submenu_x.min(parent_area.right().saturating_sub(submenu_width)),
+        submenu_y,
+        submenu_width.min(parent_area.width),
+        submenu_height.min(parent_area.height.saturating_sub(3)),
+    );
+
+    // Clear background
+    let clear = Block::default().style(Style::default().bg(Color::Black));
+    frame.render_widget(clear, submenu_area);
+
+    // Submenu border
+    let block = Block::default()
+        .title(" Select Game Mode ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+    let inner = block.inner(submenu_area);
+    frame.render_widget(block, submenu_area);
+
+    // Mode options with descriptions
+    let modes: [(MiniGameMode, &str); 3] = [
+        (MiniGameMode::Arcade(ArcadeConfig::default()), "🎮"),
+        (MiniGameMode::Survival(SurvivalConfig::default()), "💀"),
+        (MiniGameMode::Challenge(ChallengeConfig::for_today()), "📅"),
+    ];
+
+    for (idx, (mode, icon)) in modes.iter().enumerate() {
+        let is_selected = idx == selection.selected_index;
+        let y_offset = (idx * 3) as u16;
+
+        if inner.y + y_offset >= inner.bottom() {
+            break;
+        }
+
+        let (prefix, name_style) = if is_selected {
+            (
+                " > ",
+                Style::default()
+                    .bg(super::SELECTION_BG_COLOR)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else {
+            ("   ", Style::default().fg(Color::White))
+        };
+
+        // Mode name line
+        let name_line = Line::from(vec![
+            Span::styled(prefix, name_style),
+            Span::styled(format!("{} {}", icon, mode.name()), name_style),
+        ]);
+
+        // Description line
+        let desc_line = Line::from(vec![
+            Span::raw("      "),
+            Span::styled(mode.description(), Style::default().fg(Color::DarkGray)),
+        ]);
+
+        let paragraph = Paragraph::new(vec![name_line, desc_line]);
+        let item_area = Rect::new(inner.x, inner.y + y_offset, inner.width, 2);
+        frame.render_widget(paragraph, item_area);
+    }
 }
 
 #[cfg(test)]

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-01-10
+
+### Added
+
+- **Audio Feedback System** — Sound effects for mini-game events:
+  - Complete/Failed scenario sounds
+  - Multiplier up, Level up, Life lost sounds
+  - Game over and countdown sounds
+  - Timer warning alerts
+  - OGG Vorbis format via rodio library (CC0 licensed from Kenney.nl)
+
+- **Game Mode Selection** — Three distinct mini-game modes:
+  - **Arcade**: Classic 60-second timed session with 3 lives
+  - **Survival**: Endless mode with 1 life, escalating time pressure (10s → 3s per level)
+  - **Daily Challenge**: Fixed 10 scenarios, 3 attempts per day, same for all players
+
+- **Sound Toggle** — Global sound on/off with `M` key across all screens
+
+- **Mode Selection Submenu** — Visual popup for choosing game mode when starting Arcade
+
+### Changed
+
+- CI: Added `libasound2-dev` installation for Linux audio support
+
+### Quality
+
+- **Tests**: 1355 (up from 1347)
+- **Clippy**: Zero warnings
+
 ## [0.5.4] - 2026-01-10
 
 ### Added
@@ -1103,7 +1132,9 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/bug-ops/helix-trainer/compare/v0.5.4...v0.5.5
+[0.5.4]: https://github.com/bug-ops/helix-trainer/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/bug-ops/helix-trainer/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/bug-ops/helix-trainer/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/bug-ops/helix-trainer/compare/v0.5.0...v0.5.1

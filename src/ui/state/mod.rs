@@ -22,6 +22,7 @@ use crate::config::{Difficulty, Scenario, ScenarioCategory, SortMode};
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
 use crate::security::UserError;
+use crate::sound::SoundEffect;
 use std::fmt;
 use std::time::{Duration, Instant};
 
@@ -40,8 +41,8 @@ pub use substates::{ConfigState, GameState, ProgressState, UIState};
 pub mod screen;
 pub use screen::{
     CommandBufferAccess, CompletedOrAbandoned, InputStateAccess, KeyHistory, MenuData,
-    MiniGameData, ModeSelectionData, ProfileData, ResultsData, ReturnDestination, ReviewData,
-    StatisticsData, TaskData, TypedScreen,
+    MiniGameData, MiniGameModeSelection, ModeSelectionData, ProfileData, ResultsData,
+    ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario
@@ -125,6 +126,9 @@ pub enum Message {
 
     /// Mode selection: select current mode
     ModeSelectionSelect,
+
+    /// Mode selection: go back (close submenu)
+    ModeSelectionBack,
 
     /// Select Training Mode (manual scenario selection)
     SelectTrainingMode,
@@ -262,6 +266,9 @@ pub enum Message {
 
     /// Remove expired notifications from the queue
     CleanupNotifications,
+
+    /// Toggle sound on/off
+    ToggleSound,
 }
 
 /// Main application state
@@ -520,7 +527,10 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             extract_screen!(state, ModeSelection, data => handlers::handle_mode_selection_down(data))
         }
         Message::ModeSelectionSelect => {
-            extract_screen!(state, ModeSelection, data, ctx => handlers::handle_mode_selection_select(data, &mut ctx))
+            extract_screen!(state, ModeSelection, mut data, ctx => handlers::handle_mode_selection_select(data, &mut ctx))
+        }
+        Message::ModeSelectionBack => {
+            extract_screen!(state, ModeSelection, data => handlers::handle_mode_selection_back(data))
         }
         Message::SelectTrainingMode => {
             let mut ctx = HandlerContext::new(
@@ -679,6 +689,11 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::CompleteScenario => {
             // This handler needs full AppState access to call update() for quest progress
             let outcome = handlers::handle_complete_scenario(state)?;
+            // Play success sound for training mode completion
+            state
+                .progress
+                .sound_manager
+                .play(SoundEffect::ScenarioComplete);
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -688,6 +703,11 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 std::mem::replace(&mut state.screen, TypedScreen::Menu(MenuData::default()))
             {
                 let new_screen = handlers::handle_abandon_scenario(task_data)?;
+                // Play failure sound for abandoned scenario
+                state
+                    .progress
+                    .sound_manager
+                    .play(SoundEffect::ScenarioFailed);
                 state.screen = new_screen;
                 Ok(())
             } else {
@@ -933,6 +953,11 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::CleanupNotifications => {
             let outcome = handlers::handle_cleanup_notifications(&mut state.ui)?;
             apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::ToggleSound => {
+            let enabled = state.progress.sound_manager.toggle();
+            tracing::info!("Sound toggled: {}", if enabled { "on" } else { "off" });
             Ok(())
         }
     }

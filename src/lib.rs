@@ -33,6 +33,7 @@ pub mod input;
 pub mod learning;
 pub mod minigame;
 pub mod security;
+pub mod sound;
 pub mod ui;
 
 // Test utilities - only compiled in test builds

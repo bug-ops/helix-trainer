@@ -223,6 +223,29 @@ impl MiniGameStats {
         Self::default()
     }
 
+    /// Create new stats with a specific number of starting lives
+    ///
+    /// Used by different game modes to configure starting lives:
+    /// - Arcade: 3 lives
+    /// - Survival: 1 life
+    /// - Challenge: 3 lives
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::minigame::MiniGameStats;
+    ///
+    /// let stats = MiniGameStats::new_with_lives(1);
+    /// assert_eq!(stats.lives, 1);
+    /// assert_eq!(stats.multiplier, 1.0);
+    /// ```
+    pub fn new_with_lives(lives: u8) -> Self {
+        Self {
+            lives,
+            ..Self::default()
+        }
+    }
+
     /// Increase score by points with current multiplier applied
     ///
     /// # Examples
@@ -633,6 +656,37 @@ mod tests {
             stats.increase_streak();
         }
         assert_eq!(stats.best_streak, 6); // New record
+    }
+
+    #[test]
+    fn test_new_with_lives() {
+        let stats = MiniGameStats::new_with_lives(1);
+        assert_eq!(stats.lives, 1);
+        assert_eq!(stats.score, 0);
+        assert_eq!(stats.multiplier, 1.0);
+        assert_eq!(stats.level, 1);
+
+        let stats = MiniGameStats::new_with_lives(5);
+        assert_eq!(stats.lives, 5);
+    }
+
+    // CR-009: Test new_with_lives boundary values
+    #[test]
+    fn test_new_with_lives_boundary_values() {
+        // Zero lives - immediately game over
+        let stats_zero = MiniGameStats::new_with_lives(0);
+        assert_eq!(stats_zero.lives, 0);
+        assert!(stats_zero.is_game_over());
+
+        // Default arcade lives
+        let stats_three = MiniGameStats::new_with_lives(3);
+        assert_eq!(stats_three.lives, 3);
+        assert!(!stats_three.is_game_over());
+
+        // Maximum u8 value
+        let stats_max = MiniGameStats::new_with_lives(u8::MAX);
+        assert_eq!(stats_max.lives, u8::MAX);
+        assert!(!stats_max.is_game_over());
     }
 
     mod multiplier_state_tests {

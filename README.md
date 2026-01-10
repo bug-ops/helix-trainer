@@ -31,14 +31,21 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 
 <img src="assets/statistics.png" width="600" alt="Statistics">
 
-### Mini-Games Mode
+### Game Modes
 
 <img src="assets/arcade-mode.png" width="600" alt="Arcade Mode">
 
+Three distinct game modes for varied training experiences:
+
+- **Arcade Mode** — 60-second timed sessions with 3 lives and streak multipliers up to 5x
+- **Survival Mode** — One life, escalating difficulty, endless challenge until you fail
+- **Daily Challenge** — Fixed daily scenarios with consistent difficulty for fair competition
+
+All modes feature:
+
 - **FSRS-Powered Selection** — Prioritizes scenarios with commands you need to practice
-- **Arcade Training** — 60-second timed sessions with automatic scenario progression
-- **Streak Multiplier** — Build combos up to 5x for consecutive completions
-- **Lives System** — Start with 3 lives, earn bonus lives at score milestones
+- **Audio Feedback** — Sound effects for correct/incorrect answers and game events (toggle with M key)
+- **Streak Multiplier** — Build combos for consecutive completions
 - **XP Integration** — Per-scenario XP awards with streak bonuses
 - **Pause & Resume** — Access profile/stats mid-game
 
@@ -46,8 +53,9 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 
 - **Smart Scenario Discovery** — Filter by category, difficulty, commands, or completion status with 6 sort modes
 - **Rich Metadata** — Every scenario tagged with category, difficulty, taught commands, and practice focus
+- **Syntax Highlighting** — Realistic Rust code snippets with proper highlighting
 - **Real Helix Accuracy** — Uses official `helix-core` library (v25.07.1)
-- **45+ Commands** — Movement, editing, clipboard, undo/redo, repeat
+- **45+ Commands** — Movement, editing, clipboard, undo/redo, repeat, surround, text objects
 - **136 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
 - **55 Daily Quests** — Easy, medium, and hard challenges across all commands
 - **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
@@ -57,7 +65,7 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 > [!NOTE]
 > **Requirements**: Terminal with Unicode support. No additional dependencies needed for pre-built binaries.
 
-### Pre-built Binaries (Recommended)
+### Pre-built binaries (recommended)
 
 Download for your platform from [**Releases**](https://github.com/bug-ops/helix-trainer/releases/latest):
 
@@ -86,10 +94,10 @@ cd helix-trainer-*/
 > [!TIP]
 > Verify checksums with `sha256sum -c helix-trainer-*.sha256`
 
-### Build from Source
+### Build from source
 
 > [!WARNING]
-> **Requires Rust 1.85+** (2024 edition). Install via [rustup.rs](https://rustup.rs/)
+> **Requires Rust 1.89+** (2024 edition). Install via [rustup.rs](https://rustup.rs/)
 
 ```bash
 git clone https://github.com/bug-ops/helix-trainer.git
@@ -98,7 +106,7 @@ cargo build --release
 ./target/release/helix-trainer
 ```
 
-## Quick Start
+## Quick start
 
 ```bash
 helix-trainer
@@ -107,30 +115,35 @@ helix-trainer
 > [!TIP]
 > **First time?** Start with Daily Quests! The system intelligently selects scenarios based on your current skill level and schedules reviews using FSRS spaced repetition.
 
-The interactive TUI will guide you through:
+The interactive TUI guides you through:
 
-1. **Daily Quests** — Fresh challenges every day (Practice, Learning, Review)
-2. **Training Scenarios** — 20 scenarios with instant feedback
-3. **Progress Tracking** — XP, levels, streaks, mastery progression
-4. **Performance Analytics** — Review calendar, mastery stats
+1. **Training Mode** — Manual scenario selection with detailed feedback
+2. **Arcade Mode** — Fast-paced mini-games with time pressure
+3. **Daily Quests** — Fresh challenges every day
+4. **Progress Tracking** — XP, levels, streaks, mastery progression
+5. **Performance Analytics** — Review calendar, mastery stats
 
-### Example Training Session
+### Example training session
 
 ```text
-Main Menu
-├─ Daily Quests (3 active)
-│  ├─ ✅ Practice: Complete 3 scenarios
-│  ├─ ⏳ Learning: Try 2 new scenarios
-│  └─ 🔄 Review: 5 cards due
-├─ Training Scenarios (20 available)
-│  ├─ Basic Movement (Mastered - 20% XP)
-│  ├─ Word Navigation (Proficient - 50% XP)
-│  └─ Delete Line (Learning - 100% XP)
-├─ Profile (Level 5, 842 XP)
-└─ Statistics
+Mode Selection
+├─ Training Mode
+│  ├─ Daily Quests (3 active)
+│  │  ├─ ✅ Practice: Complete 3 scenarios
+│  │  ├─ ⏳ Learning: Try 2 new scenarios
+│  │  └─ 🔄 Review: 5 cards due
+│  ├─ Scenario List (136 available)
+│  │  ├─ Basic Movement (Mastered - 20% XP)
+│  │  ├─ Word Navigation (Proficient - 50% XP)
+│  │  └─ Delete Line (Learning - 100% XP)
+│  └─ Profile / Statistics
+└─ Arcade Mode
+   ├─ 🎮 Arcade (60s, 3 lives)
+   ├─ 💀 Survival (1 life, endless)
+   └─ 📅 Daily Challenge
 ```
 
-## Commands Supported
+## Commands supported
 
 | Category | Commands |
 |----------|----------|
@@ -150,35 +163,32 @@ Main Menu
 
 All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
-## Why This Project Exists
+## Why this project exists
 
 **Traditional editor tutorials teach commands. Real development requires workflows.**
 
 Most Helix tutorials:
 
-- Teach <kbd>x</kbd><kbd>d</kbd> (delete line) in isolation ❌
-- Show <kbd>w</kbd> (next word) on synthetic text ❌
-- Stop at "congratulations, you know the basics!" ❌
+- Teach <kbd>x</kbd><kbd>d</kbd> (delete line) in isolation
+- Show <kbd>w</kbd> (next word) on synthetic text
+- Stop at "congratulations, you know the basics!"
 
 **Real development requires:**
 
-- Navigate to failing test → jump to implementation → fix bug → stage changes → commit ✅
-- Refactor function across 3 files using LSP ✅
-- Debug by jumping between error logs and source code ✅
+- Navigate to failing test → jump to implementation → fix bug → stage changes → commit
+- Refactor function across 3 files using LSP
+- Debug by jumping between error logs and source code
 
 **Helix Trainer bridges this gap** through:
 
-> [!IMPORTANT]
-> **The Key Differentiator**: Phase 2 will introduce full workflow simulation with mock LSP and git state. No other editor trainer does this. We're building the foundation (habits, engagement) before the flagship feature.
-
-### 1. Scientifically-Optimized Learning (FSRS)
+### Scientifically-optimized learning (FSRS)
 
 - **20-30% fewer reviews** than traditional spaced repetition
 - **99.6% better accuracy** than older algorithms (tested on 350M+ reviews)
 - **Identifies YOUR weaknesses** and schedules smart practice
 - Same algorithm as Anki 23.10+ (research-proven)
 
-### 2. Scenario Mastery System
+### Scenario mastery system
 
 Prevents XP farming while ensuring genuine skill development:
 
@@ -187,7 +197,7 @@ Prevents XP farming while ensuring genuine skill development:
 - **Bounded tracking**: 10,000 scenario limit with validation
 - **Performance benchmarks**: <1ms XP calculations, ~288 bytes per scenario
 
-### 3. Gamification That Works
+### Gamification that works
 
 Duolingo-proven mechanics:
 
@@ -196,47 +206,14 @@ Duolingo-proven mechanics:
 - **XP & levels** (exponential scaling)
 - **Achievements** for milestones
 
-### 4. 100% Offline & Privacy-First
+### Privacy-first architecture
 
 - No cloud services, no internet required
 - All data stored locally (`~/.config/helix-trainer/`)
 - No telemetry, tracking, or data collection
 - Your learning stays on your machine
 
-## Current Status
-
-> [!NOTE]
-> **Active Development**: Phase 2.2 complete! 136 scenarios with syntax highlighting, 1268 passing tests, 86% coverage.
-
-### Completed
-
-| Phase | Version | Highlights |
-|-------|---------|------------|
-| **Phase 1** | v0.1.3 | FSRS spaced repetition, daily quests, XP/mastery system, anti-farming |
-| **Phase 1.5** | v0.3.0 | Scenario metadata, filtering/sorting, categorized scenarios |
-| **Phase 2.1** | v0.4.1 | Arcade mode (60s sessions, lives, streak multiplier, XP integration) |
-| **Phase 4** | v0.5.0 | Typestate input system: surround commands (ms/mr/md), text objects (ma/mi) |
-| **Phase 2.2** | v0.5.3 | Adaptive difficulty, syntax highlighting, 136 scenarios with realistic Rust code |
-| **FSRS UX** | v0.5.4 | FSRS-based arcade selection, real statistics, review UX, codebase cleanup |
-
-### 🔄 Phase 2.3: Mini-Games Polish (Planned)
-
-- **Audio Feedback** — Sound effects with volume control
-- **Local Leaderboards** — Track personal bests and high scores
-- **New Game Modes** — Survival (endless), Challenge (daily puzzles)
-
-### 🔄 Phase 3: Workflow Simulator (Planned)
-
-The flagship feature that makes Helix Trainer unique:
-
-- **Mock LSP Server** — Realistic goto-definition, find-references, rename scenarios
-- **Git State Simulation** — Stage, commit, diff workflows without real repo
-- **Multi-File Navigation** — Jump between related files in simulated projects
-- **Real Workflows** — CI debugging, refactoring, code review scenarios
-
-**Why this matters**: Bridges the tutorial → productivity gap that nobody else solves.
-
-## Technology Stack
+## Technology stack
 
 | Component | Library |
 |-----------|---------|
@@ -245,6 +222,8 @@ The flagship feature that makes Helix Trainer unique:
 | **Async Runtime** | [tokio](https://tokio.rs/) |
 | **Editor Core** | [helix-core](https://github.com/helix-editor/helix) |
 | **Spaced Repetition** | [fsrs](https://crates.io/crates/fsrs) |
+| **Audio** | [rodio](https://github.com/RustAudio/rodio) |
+| **Syntax Highlighting** | [syntect](https://github.com/trishume/syntect) |
 | **Large Text** | [tui-big-text](https://crates.io/crates/tui-big-text) |
 
 ## Contributing
@@ -262,11 +241,9 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 **Quick contributor setup**:
 
 ```bash
-# Clone repository
 git clone https://github.com/bug-ops/helix-trainer.git
 cd helix-trainer
 
-# Run quality checks before committing
 cargo +nightly fmt
 cargo nextest run
 cargo clippy --all-targets --all-features -- -D warnings
@@ -289,7 +266,7 @@ cargo build --release
 - Spaced repetition for long-term retention
 - Gamification for daily habit formation
 - Progress tracking and analytics
-- (Phase 2) Full workflow training
+- Multiple game modes for varied practice
 
 They're complementary tools, not competitors.
 </details>
@@ -307,30 +284,16 @@ Yes, 100% offline. No internet required, all data local, zero telemetry.
 </details>
 
 <details>
-<summary><b>When is Phase 2 (Workflow Simulator)?</b></summary>
-
-After Phase 1 stabilizes (~3 months). We're building the foundation (habits, engagement) before the flagship feature.
-</details>
-
-<details>
 <summary><b>Is this only for Helix?</b></summary>
 
 Yes, Helix-specific. While many commands have similar names, Helix uses a different selection-first model. This trainer is designed specifically for Helix editor workflows.
 </details>
 
-## Roadmap
+<details>
+<summary><b>How do I toggle sound on/off?</b></summary>
 
-| Phase | Status | Focus |
-|-------|:------:|-------|
-| Phase A | ✅ | Foundation (30+ commands, 136 scenarios, TUI) |
-| Phase 1 | ✅ | Smart learning (FSRS, quests, mastery) |
-| Phase 2.1 | ✅ | Mini-Games mode (arcade, lives, streaks) |
-| Typestate | ✅ | Input expansion (surround ms/mr/md, text objects ma/mi) |
-| Phase 2.2 | ✅ | Adaptive difficulty, syntax highlighting, realistic scenarios |
-| FSRS UX | ✅ | FSRS-based arcade, real statistics, review improvements |
-| Phase 2.3 | 📋 | Mini-Games polish (sound, leaderboards) |
-| Phase 3 | 📋 | Workflow simulator (LSP, git, multi-file) |
-| Phase 4 | 💡 | Network effects (multiplayer, scenarios marketplace) |
+Press <kbd>M</kbd> on the mode selection screen to toggle audio feedback. Sound settings persist across sessions.
+</details>
 
 ## Acknowledgments
 
@@ -338,6 +301,7 @@ Yes, Helix-specific. While many commands have similar names, Helix uses a differ
 - [Ratatui](https://ratatui.rs/) — For the excellent TUI framework
 - [FSRS Research Team](https://github.com/open-spaced-repetition) — For the algorithm
 - [Anki](https://apps.ankiweb.net/) — Inspiration for spaced repetition
+- [Kenney.nl](https://kenney.nl/) — For CC0 sound effects
 
 Inspired by Helix's built-in `:tutor` and decades of learning science research.
 

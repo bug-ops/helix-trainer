@@ -326,7 +326,10 @@ impl QuestTemplateRegistry {
         }
     }
 
-    /// Load quest templates from the default path for a given locale
+    /// Load quest templates from embedded data for a given locale
+    ///
+    /// This method loads quests from compile-time embedded content,
+    /// eliminating filesystem access for consistent behavior.
     ///
     /// # Errors
     /// Returns UserError if loading fails
@@ -337,12 +340,12 @@ impl QuestTemplateRegistry {
     /// ```
     pub fn load_from_default_path(locale: &str) -> Result<Self, UserError> {
         let loader = QuestLoader::new();
-        let templates = loader.load_for_locale(locale)?;
+        let templates = loader.load_from_embedded(locale)?;
 
         tracing::info!(
             count = templates.len(),
             locale = locale,
-            "Loaded quest templates from TOML"
+            "Loaded quest templates from embedded data"
         );
 
         Ok(Self { templates })

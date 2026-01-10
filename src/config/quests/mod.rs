@@ -271,6 +271,70 @@ impl QuestLoader {
         Ok(quests)
     }
 
+    /// Load quest templates from embedded TOML content
+    ///
+    /// This method loads quests from compile-time embedded content,
+    /// eliminating the need for filesystem access. It applies the same
+    /// validation as filesystem loading.
+    ///
+    /// # Arguments
+    ///
+    /// * `locale` - Locale code (e.g., "en")
+    ///
+    /// # Errors
+    ///
+    /// Returns UserError if no embedded data exists for the locale or
+    /// if validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let loader = QuestLoader::new();
+    /// let templates = loader.load_from_embedded("en")?;
+    /// assert!(!templates.is_empty());
+    /// ```
+    pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<QuestTemplate>, UserError> {
+        let content = embedded::get_embedded_quests(locale).ok_or_else(|| {
+            tracing::warn!(locale = locale, "No embedded quests for locale");
+            UserError::ScenarioLoadError
+        })?;
+
+        tracing::info!(locale = locale, "Loading quests from embedded data");
+
+        // Parse TOML content
+        let quests_file: QuestsFile = toml::from_str(content).map_err(|e| {
+            tracing::error!(
+                locale = locale,
+                "Failed to parse embedded quest TOML: {}",
+                e
+            );
+            UserError::from(SecurityError::InvalidToml(e.to_string()))
+        })?;
+
+        let quests = quests_file.quests;
+
+        // Validate quest count
+        if quests.len() > MAX_QUEST_TEMPLATES_PER_FILE {
+            return Err(UserError::from(SecurityError::TooManyScenarios {
+                max: MAX_QUEST_TEMPLATES_PER_FILE,
+                actual: quests.len(),
+            }));
+        }
+
+        // Validate each quest template
+        for quest in &quests {
+            self.validate_quest(quest).map_err(UserError::from)?;
+        }
+
+        tracing::info!(
+            locale = locale,
+            count = quests.len(),
+            "Successfully loaded quest templates from embedded data"
+        );
+
+        Ok(quests)
+    }
+
     /// Validate a single quest template for security and correctness
     fn validate_quest(&self, quest: &QuestTemplate) -> Result<(), SecurityError> {
         // Validate string lengths

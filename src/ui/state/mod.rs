@@ -684,7 +684,10 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             // This handler needs full AppState access to call update() for quest progress
             let outcome = handlers::handle_complete_scenario(state)?;
             // Play success sound for training mode completion
-            state.progress.sound_manager.play(SoundEffect::ScenarioComplete);
+            state
+                .progress
+                .sound_manager
+                .play(SoundEffect::ScenarioComplete);
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -695,7 +698,10 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             {
                 let new_screen = handlers::handle_abandon_scenario(task_data)?;
                 // Play failure sound for abandoned scenario
-                state.progress.sound_manager.play(SoundEffect::ScenarioFailed);
+                state
+                    .progress
+                    .sound_manager
+                    .play(SoundEffect::ScenarioFailed);
                 state.screen = new_screen;
                 Ok(())
             } else {

@@ -74,10 +74,12 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
     );
 
     // Instructions
-    let instructions = Paragraph::new("↑/↓ or j/k: Navigate  |  Enter: Select  |  q: Quit")
-        .style(Style::default().fg(Color::Gray))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
+    let instructions = Paragraph::new(
+        "↑/↓ j/k: Navigate  |  Enter: Select  |  r: Review  |  p: Profile  |  s: Stats  |  q: Quit",
+    )
+    .style(Style::default().fg(Color::Gray))
+    .alignment(Alignment::Center)
+    .block(Block::default().borders(Borders::ALL));
     frame.render_widget(instructions, chunks[2]);
 }
 

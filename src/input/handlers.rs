@@ -22,7 +22,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 
-use crate::ui::{AppState, Message, state::TypedScreen};
+use crate::ui::{AppState, Message, Screen, state::TypedScreen};
 
 use super::typestate::handle_insert_mode_input;
 
@@ -36,6 +36,7 @@ pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Mess
     match key.code {
         KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Char('r') => Some(Message::StartReviewSession),
         KeyCode::Char('s') if matches!(state.screen, TypedScreen::Profile(_)) => {
             Some(Message::ShowStatistics)
         }
@@ -160,7 +161,7 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
     // Get current buffer
     let buffer = get_menu_buffer(state);
 
-    // Handle Escape - clear buffer
+    // Handle Escape - clear buffer or go back to mode selection
     if key.code == KeyCode::Esc {
         if let TypedScreen::Menu(ref mut data) = state.screen
             && !data.command_buffer.is_empty()
@@ -168,7 +169,8 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
             data.command_buffer.clear();
             return None; // Consumed the escape
         }
-        return None;
+        // Buffer is empty - go back to mode selection
+        return Some(Message::NavigateTo(Screen::ModeSelection));
     }
 
     // Handle Enter - always select
@@ -200,6 +202,7 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
         if buffer.is_empty() {
             match c {
                 'q' => return Some(Message::QuitApp),
+                'm' => return Some(Message::NavigateTo(Screen::ModeSelection)),
                 'r' => return Some(Message::StartReviewSession),
                 'p' => return Some(Message::ShowProfile),
                 's' => return Some(Message::ShowStatistics),
@@ -379,6 +382,9 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Up | KeyCode::Char('k') => Some(Message::ModeSelectionUp),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::ModeSelectionDown),
         KeyCode::Enter => Some(Message::ModeSelectionSelect),
+        KeyCode::Char('r') => Some(Message::StartReviewSession),
+        KeyCode::Char('p') => Some(Message::ShowProfile),
+        KeyCode::Char('s') => Some(Message::ShowStatistics),
         _ => None,
     }
 }

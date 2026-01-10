@@ -5,6 +5,7 @@
 
 pub mod difficulty;
 pub mod gameplay;
+pub mod learning;
 pub mod timing;
 pub mod ui;
 pub mod xp;
@@ -12,6 +13,7 @@ pub mod xp;
 // Re-export commonly used constants
 pub use difficulty::*;
 pub use gameplay::*;
+pub use learning::*;
 pub use timing::*;
 pub use ui::*;
 pub use xp::*;

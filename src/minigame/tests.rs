@@ -49,7 +49,7 @@ fn test_full_session_flow() {
         create_simple_scenario("s3"),
     ]);
 
-    let mut session = MiniGameSession::new(scenarios);
+    let mut session = MiniGameSession::new(scenarios, None);
 
     // Start countdown
     session.start();
@@ -76,7 +76,7 @@ fn test_difficulty_adapts_to_performance() {
         create_simple_scenario("s3"),
     ]);
 
-    let mut session = MiniGameSession::new(scenarios);
+    let mut session = MiniGameSession::new(scenarios, None);
 
     // Start and progress through countdown
     session.start();
@@ -115,7 +115,7 @@ fn test_streak_increases_multiplier() {
 #[test]
 fn test_game_over_when_lives_depleted() {
     let scenarios = Arc::new(vec![create_simple_scenario("s1")]);
-    let mut session = MiniGameSession::new(scenarios);
+    let mut session = MiniGameSession::new(scenarios, None);
 
     // Start and countdown to playing
     session.start();
@@ -135,7 +135,7 @@ fn test_game_over_when_lives_depleted() {
 #[test]
 fn test_stats_track_completions_and_failures() {
     let scenarios = Arc::new(vec![create_simple_scenario("s1")]);
-    let mut session = MiniGameSession::new(scenarios);
+    let mut session = MiniGameSession::new(scenarios, None);
 
     // Start and countdown to playing
     session.start();

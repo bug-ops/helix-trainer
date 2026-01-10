@@ -1,6 +1,7 @@
 //! Review session screen rendering
 
 use crate::helix::commands::CMD_ESCAPE;
+use crate::helix::registry::normal_registry;
 use crate::ui::state::{AppState, ReviewSessionState};
 use ratatui::{
     Frame,
@@ -9,6 +10,14 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph, Wrap},
 };
+
+/// Get a human-readable description for a Helix command from registry
+fn get_command_description(command: &str) -> &'static str {
+    normal_registry()
+        .get_metadata(command)
+        .map(|m| m.description)
+        .unwrap_or("Helix command")
+}
 
 /// Render the review session screen
 pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState) {
@@ -93,6 +102,9 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
     let tracker = &state.progress.performance_tracker;
     let perf = tracker.get_performance(command);
 
+    // Get command description
+    let description = get_command_description(command);
+
     let mastery_text = if let Some(p) = perf {
         format!("Mastery: {:?} ⭐", p.mastery_level)
     } else {
@@ -127,6 +139,12 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
+        Line::from(vec![Span::styled(
+            description,
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::ITALIC),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled(&mastery_text, Style::default().fg(Color::Yellow)),
@@ -223,4 +241,30 @@ fn render_footer(frame: &mut Frame, area: Rect) {
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_command_description_uses_registry() {
+        // Verify that known commands return descriptions from registry
+        let desc = get_command_description("h");
+        assert_ne!(desc, "Helix command");
+        assert!(!desc.is_empty());
+
+        let desc = get_command_description("w");
+        assert_ne!(desc, "Helix command");
+
+        let desc = get_command_description("d");
+        assert_ne!(desc, "Helix command");
+    }
+
+    #[test]
+    fn test_get_command_description_unknown_command_fallback() {
+        assert_eq!(get_command_description("unknown_cmd"), "Helix command");
+        assert_eq!(get_command_description(""), "Helix command");
+        assert_eq!(get_command_description("xyz123"), "Helix command");
+    }
 }

@@ -557,7 +557,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let scenarios = Arc::new(vec![create_test_scenario("s1")]);
-        let mut session = MiniGameSession::new(scenarios);
+        let mut session = MiniGameSession::new(scenarios, None);
         session.start();
 
         let mut state = AppState::new(

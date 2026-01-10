@@ -4,6 +4,7 @@
 
 use crate::constants::OPTIMAL_REVIEW_TIME;
 use crate::security::UserError;
+use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
     HandlerContext, HandlerOutcome, MenuData, ReviewData, ReviewResult, ReviewSessionState,
     TypedScreen,
@@ -23,7 +24,12 @@ pub fn handle_start_review_session(
         .get_due_reviews(&ctx.progress.performance_tracker);
 
     if due_commands.is_empty() {
-        // No reviews due, stay on current screen
+        // No reviews due - show informative notification
+        ctx.ui
+            .notifications
+            .push(Notification::new(NotificationType::Info {
+                message: "No reviews due. Keep practicing!".to_string(),
+            }));
         return Ok(HandlerOutcome::Stay);
     }
 
@@ -99,6 +105,15 @@ pub fn handle_next_review_command(
             let xp = (completed as u64 * 10) + (success_rate * 20.0) as u64;
             let profile = &mut ctx.progress.profile;
             profile.add_xp(xp);
+
+            // Show session summary notification
+            ctx.ui
+                .notifications
+                .push(Notification::new(NotificationType::ReviewSessionComplete {
+                    completed,
+                    success_count,
+                    xp_earned: xp,
+                }));
 
             // Clear review session
             ctx.game.review_session = None;

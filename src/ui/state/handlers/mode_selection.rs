@@ -62,12 +62,12 @@ pub(in crate::ui::state) fn handle_select_training_mode(
 
 /// Handle selecting Arcade Mode
 ///
-/// Transitions to the mini-game screen.
+/// Transitions to the mini-game screen with FSRS-weighted scenario selection.
 pub(in crate::ui::state) fn handle_select_arcade_mode(
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    // Use shared session creation from minigame module
-    super::minigame::create_minigame_session(ctx.game);
+    // Use shared session creation with FSRS tracker for weighted selection
+    super::minigame::create_minigame_session(ctx.game, Some(&ctx.progress.performance_tracker));
 
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
         MiniGameData::default(),

@@ -25,6 +25,19 @@ pub enum NotificationType {
 
     /// Streak milestone reached
     StreakMilestone { streak: u32 },
+
+    /// Informational message
+    Info { message: String },
+
+    /// Review session completed
+    ReviewSessionComplete {
+        completed: usize,
+        success_count: usize,
+        xp_earned: u64,
+    },
+
+    /// Command mastery level increased
+    MasteryLevelUp { command: String, new_level: String },
 }
 
 /// A notification to display in the UI
@@ -109,6 +122,11 @@ impl Notification {
             NotificationType::Achievement { name, .. } => format!("Achievement Unlocked: {}", name),
             NotificationType::QuestComplete { .. } => "Quest Complete!".to_string(),
             NotificationType::StreakMilestone { streak } => format!("{} Day Streak!", streak),
+            NotificationType::Info { .. } => "Info".to_string(),
+            NotificationType::ReviewSessionComplete { .. } => "Review Complete!".to_string(),
+            NotificationType::MasteryLevelUp { command, .. } => {
+                format!("Mastery Up: {}", command)
+            }
         }
     }
 
@@ -128,6 +146,20 @@ impl Notification {
             NotificationType::StreakMilestone { streak } => {
                 format!("Keep it up! {} days in a row", streak)
             }
+            NotificationType::Info { message } => message.clone(),
+            NotificationType::ReviewSessionComplete {
+                completed,
+                success_count,
+                xp_earned,
+            } => {
+                format!(
+                    "{}/{} correct (+{} XP)",
+                    success_count, completed, xp_earned
+                )
+            }
+            NotificationType::MasteryLevelUp { new_level, .. } => {
+                format!("Reached {} level!", new_level)
+            }
         }
     }
 
@@ -139,6 +171,9 @@ impl Notification {
             NotificationType::Achievement { .. } => Color::Magenta,
             NotificationType::QuestComplete { .. } => Color::Green,
             NotificationType::StreakMilestone { .. } => Color::Cyan,
+            NotificationType::Info { .. } => Color::Blue,
+            NotificationType::ReviewSessionComplete { .. } => Color::Green,
+            NotificationType::MasteryLevelUp { .. } => Color::Yellow,
         }
     }
 }
@@ -334,6 +369,27 @@ mod tests {
         let streak = Notification::new(NotificationType::StreakMilestone { streak: 7 });
         assert_eq!(streak.title(), "7 Day Streak!");
         assert_eq!(streak.message(), "Keep it up! 7 days in a row");
+
+        let info = Notification::new(NotificationType::Info {
+            message: "Test info message".to_string(),
+        });
+        assert_eq!(info.title(), "Info");
+        assert_eq!(info.message(), "Test info message");
+
+        let review_complete = Notification::new(NotificationType::ReviewSessionComplete {
+            completed: 5,
+            success_count: 4,
+            xp_earned: 60,
+        });
+        assert_eq!(review_complete.title(), "Review Complete!");
+        assert_eq!(review_complete.message(), "4/5 correct (+60 XP)");
+
+        let mastery_up = Notification::new(NotificationType::MasteryLevelUp {
+            command: "dd".to_string(),
+            new_level: "Intermediate".to_string(),
+        });
+        assert_eq!(mastery_up.title(), "Mastery Up: dd");
+        assert_eq!(mastery_up.message(), "Reached Intermediate level!");
     }
 
     #[test]
@@ -357,6 +413,24 @@ mod tests {
 
         let streak = Notification::new(NotificationType::StreakMilestone { streak: 5 });
         assert_eq!(streak.color(), Color::Cyan);
+
+        let info = Notification::new(NotificationType::Info {
+            message: "Test".to_string(),
+        });
+        assert_eq!(info.color(), Color::Blue);
+
+        let review_complete = Notification::new(NotificationType::ReviewSessionComplete {
+            completed: 3,
+            success_count: 2,
+            xp_earned: 40,
+        });
+        assert_eq!(review_complete.color(), Color::Green);
+
+        let mastery_up = Notification::new(NotificationType::MasteryLevelUp {
+            command: "w".to_string(),
+            new_level: "Advanced".to_string(),
+        });
+        assert_eq!(mastery_up.color(), Color::Yellow);
     }
 
     #[test]

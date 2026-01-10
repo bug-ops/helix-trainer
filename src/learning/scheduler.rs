@@ -79,6 +79,45 @@ impl Scheduler {
         }
     }
 
+    /// Record commands and track mastery level changes
+    ///
+    /// Returns list of (command, new_level_name) for commands that leveled up
+    pub fn record_scenario_commands_with_mastery(
+        &self,
+        tracker: &mut PerformanceTracker,
+        commands: &[String],
+        total_duration: std::time::Duration,
+        success: bool,
+    ) -> Vec<(String, String)> {
+        if commands.is_empty() {
+            return Vec::new();
+        }
+
+        // Calculate average time per command (rough estimate for FSRS)
+        let avg_duration = total_duration / commands.len() as u32;
+
+        // Optimal time is slightly less than avg (assume user could be 20% faster)
+        let optimal_time = avg_duration.mul_f32(0.8);
+
+        // Record each unique command and collect mastery changes
+        let unique_commands: std::collections::HashSet<_> = commands.iter().collect();
+        let mut mastery_changes = Vec::new();
+
+        for command in unique_commands {
+            if let Some((cmd, _old, new_level)) = tracker.record_attempt_with_mastery_change(
+                command,
+                avg_duration,
+                success,
+                optimal_time,
+            ) {
+                use super::traits::ProgressionTier;
+                mastery_changes.push((cmd, new_level.name().to_string()));
+            }
+        }
+
+        mastery_changes
+    }
+
     /// Get commands that are due for review now
     ///
     /// # Arguments

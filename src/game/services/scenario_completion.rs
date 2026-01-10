@@ -109,6 +109,19 @@ impl ScenarioCompletionService {
         scheduler.record_scenario_commands(tracker, commands, duration, success);
     }
 
+    /// Record commands and return mastery level changes
+    ///
+    /// Returns list of (command, new_level_name) for commands that leveled up
+    pub fn record_fsrs_data_with_mastery(
+        scheduler: &mut Scheduler,
+        tracker: &mut PerformanceTracker,
+        commands: &[String],
+        duration: Duration,
+        success: bool,
+    ) -> Vec<(String, String)> {
+        scheduler.record_scenario_commands_with_mastery(tracker, commands, duration, success)
+    }
+
     /// Extract command strings from feedback
     #[must_use]
     pub fn extract_commands(feedback: &Feedback) -> Vec<String> {

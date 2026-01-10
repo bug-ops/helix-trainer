@@ -359,6 +359,83 @@ impl ScenarioLoader {
         Ok(scenarios)
     }
 
+    /// Load scenarios from embedded TOML strings
+    ///
+    /// This method loads scenarios from compile-time embedded content,
+    /// eliminating the need for filesystem access. It applies the same
+    /// validation as filesystem loading.
+    ///
+    /// # Arguments
+    ///
+    /// * `locale` - Locale code (e.g., "en")
+    ///
+    /// # Errors
+    ///
+    /// Returns UserError if no embedded data exists for the locale or
+    /// if validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let loader = ScenarioLoader::new();
+    /// let scenarios = loader.load_from_embedded("en")?;
+    /// assert!(!scenarios.is_empty());
+    /// ```
+    pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<Scenario>, UserError> {
+        let embedded_contents = embedded::get_embedded_scenarios(locale);
+
+        if embedded_contents.is_empty() {
+            tracing::warn!(locale = locale, "No embedded scenarios for locale");
+            return Err(UserError::ScenarioLoadError);
+        }
+
+        tracing::info!(
+            locale = locale,
+            file_count = embedded_contents.len(),
+            "Loading scenarios from embedded data"
+        );
+
+        let mut all_scenarios = Vec::new();
+
+        for (index, content) in embedded_contents.iter().enumerate() {
+            // Parse TOML content
+            let scenarios_file: ScenariosFile = toml::from_str(content).map_err(|e| {
+                tracing::error!(
+                    locale = locale,
+                    index = index,
+                    "Failed to parse embedded scenario TOML: {}",
+                    e
+                );
+                UserError::from(SecurityError::InvalidToml(e.to_string()))
+            })?;
+
+            let scenarios = scenarios_file.scenarios;
+
+            // Validate scenario count per file
+            if scenarios.len() > MAX_SCENARIOS_PER_FILE {
+                return Err(UserError::from(SecurityError::TooManyScenarios {
+                    max: MAX_SCENARIOS_PER_FILE,
+                    actual: scenarios.len(),
+                }));
+            }
+
+            // Validate each scenario
+            for scenario in &scenarios {
+                self.validate_scenario(scenario).map_err(UserError::from)?;
+            }
+
+            all_scenarios.extend(scenarios);
+        }
+
+        tracing::info!(
+            locale = locale,
+            scenario_count = all_scenarios.len(),
+            "Successfully loaded scenarios from embedded data"
+        );
+
+        Ok(all_scenarios)
+    }
+
     /// Validate a single scenario for security and correctness
     /// Validate content size is within limits
     fn validate_content_size(&self, content: &str) -> Result<(), SecurityError> {
@@ -432,6 +509,9 @@ impl Default for ScenarioLoader {
         Self::new()
     }
 }
+
+/// Embedded scenario assets compiled into the binary
+pub mod embedded;
 
 #[cfg(test)]
 mod tests;

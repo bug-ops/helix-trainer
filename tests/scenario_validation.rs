@@ -1,7 +1,7 @@
 //! Integration tests for validating all scenario files
 //!
-//! This test suite loads and validates every scenario in the scenarios/ directory
-//! to ensure they are correctly defined and can be executed.
+//! This test suite validates every embedded scenario to ensure they are
+//! correctly defined and can be executed.
 //!
 //! IMPORTANT: The `test_all_scenarios_execute_solution` test validates commands
 //! key-by-key, exactly as the UI does. This catches issues like multi-key commands
@@ -12,77 +12,63 @@ use helix_trainer::game::GameSession;
 use helix_trainer::game::command_context::{
     ParsedCommand, extract_count_and_command, parse_command_buffer,
 };
-use std::path::Path;
-use walkdir::WalkDir;
 
 #[test]
 fn test_all_scenarios_load_successfully() {
-    let scenarios_dir = Path::new("scenarios");
-
-    if !scenarios_dir.exists() {
-        panic!("Scenarios directory not found: {:?}", scenarios_dir);
-    }
-
     let loader = ScenarioLoader::new();
     let mut total_scenarios = 0;
-    let mut failed_files = Vec::new();
+    let mut failed_scenarios = Vec::new();
 
-    // Walk through all .toml files in scenarios directory
-    for entry in WalkDir::new(scenarios_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("toml"))
-    {
-        let path = entry.path();
-        println!("\nValidating: {}", path.display());
+    // Load embedded scenarios for "en" locale
+    println!("\nValidating embedded scenarios for locale 'en'");
 
-        match loader.load(path) {
-            Ok(scenarios) => {
-                println!("  ✓ Loaded {} scenarios", scenarios.len());
-                total_scenarios += scenarios.len();
+    match loader.load_from_embedded("en") {
+        Ok(scenarios) => {
+            println!(
+                "  ✓ Loaded {} scenarios from embedded data",
+                scenarios.len()
+            );
+            total_scenarios += scenarios.len();
 
-                // Validate each scenario can create a GameSession
-                for scenario in scenarios {
-                    match GameSession::new(scenario.clone()) {
-                        Ok(_) => {
-                            println!("    ✓ Scenario '{}' ({})", scenario.name, scenario.id);
-                        }
-                        Err(e) => {
-                            let error_msg = format!(
-                                "Failed to create GameSession for '{}' ({}): {:?}",
-                                scenario.name, scenario.id, e
-                            );
-                            println!("    ✗ {}", error_msg);
-                            failed_files.push((path.to_path_buf(), error_msg));
-                        }
+            // Validate each scenario can create a GameSession
+            for scenario in scenarios {
+                match GameSession::new(scenario.clone()) {
+                    Ok(_) => {
+                        println!("    ✓ Scenario '{}' ({})", scenario.name, scenario.id);
+                    }
+                    Err(e) => {
+                        let error_msg = format!(
+                            "Failed to create GameSession for '{}' ({}): {:?}",
+                            scenario.name, scenario.id, e
+                        );
+                        println!("    ✗ {}", error_msg);
+                        failed_scenarios.push((scenario.id.clone(), error_msg));
                     }
                 }
             }
-            Err(e) => {
-                let error_msg = format!("Failed to load file: {:?}", e);
-                println!("  ✗ {}", error_msg);
-                failed_files.push((path.to_path_buf(), error_msg));
-            }
+        }
+        Err(e) => {
+            panic!("Failed to load embedded scenarios: {:?}", e);
         }
     }
 
     println!("\n{}", "=".repeat(60));
     println!("Validation Summary:");
     println!("  Total scenarios validated: {}", total_scenarios);
-    println!("  Failed files: {}", failed_files.len());
+    println!("  Failed scenarios: {}", failed_scenarios.len());
 
-    if !failed_files.is_empty() {
-        println!("\nFailed files:");
-        for (path, error) in &failed_files {
-            println!("  - {}: {}", path.display(), error);
+    if !failed_scenarios.is_empty() {
+        println!("\nFailed scenarios:");
+        for (id, error) in &failed_scenarios {
+            println!("  - {}: {}", id, error);
         }
         panic!(
-            "Scenario validation failed! {} file(s) have errors",
-            failed_files.len()
+            "Scenario validation failed! {} scenario(s) have errors",
+            failed_scenarios.len()
         );
     }
 
-    println!("\n✓ All scenarios validated successfully!");
+    println!("\n✓ All embedded scenarios validated successfully!");
 }
 
 /// Commands that are special keys handled outside the normal command buffer
@@ -201,144 +187,128 @@ fn validate_single_command(cmd: &str) -> Result<(), String> {
 
 #[test]
 fn test_all_scenarios_execute_solution() {
-    let scenarios_dir = Path::new("scenarios");
-
-    if !scenarios_dir.exists() {
-        panic!("Scenarios directory not found: {:?}", scenarios_dir);
-    }
-
     let loader = ScenarioLoader::new();
     let mut total_scenarios = 0;
     let mut failed_scenarios = Vec::new();
 
-    // Walk through all .toml files
-    for entry in WalkDir::new(scenarios_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("toml"))
-    {
-        let path = entry.path();
+    // Load embedded scenarios for "en" locale
+    let scenarios = loader
+        .load_from_embedded("en")
+        .expect("Failed to load embedded scenarios");
 
-        if let Ok(scenarios) = loader.load(path) {
-            for scenario in scenarios {
-                total_scenarios += 1;
+    for scenario in scenarios {
+        total_scenarios += 1;
 
-                // PHASE 1: Validate all commands are parseable key-by-key
-                // This catches issues like 'gs' not being recognized when typed as 'g' then 's'
-                if let Err(e) = validate_commands_ui_style(&scenario.solution.commands) {
-                    failed_scenarios.push((
-                        scenario.id.clone(),
-                        format!("UI-style validation failed: {}", e),
-                    ));
-                }
+        // PHASE 1: Validate all commands are parseable key-by-key
+        // This catches issues like 'gs' not being recognized when typed as 'g' then 's'
+        if let Err(e) = validate_commands_ui_style(&scenario.solution.commands) {
+            failed_scenarios.push((
+                scenario.id.clone(),
+                format!("UI-style validation failed: {}", e),
+            ));
+        }
 
-                // PHASE 2: Execute solution and verify completion
-                let session = match GameSession::new(scenario.clone()) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        failed_scenarios.push((
-                            scenario.id.clone(),
-                            format!("Failed to create session: {:?}", e),
-                        ));
-                        continue;
-                    }
-                };
+        // PHASE 2: Execute solution and verify completion
+        let session = match GameSession::new(scenario.clone()) {
+            Ok(s) => s,
+            Err(e) => {
+                failed_scenarios.push((
+                    scenario.id.clone(),
+                    format!("Failed to create session: {:?}", e),
+                ));
+                continue;
+            }
+        };
 
-                // Execute solution commands
-                use helix_trainer::game::SessionAfterAction;
-                let mut session_or_completed: Option<SessionAfterAction> =
-                    Some(SessionAfterAction::StillActive(session));
+        // Execute solution commands
+        use helix_trainer::game::SessionAfterAction;
+        let mut session_or_completed: Option<SessionAfterAction> =
+            Some(SessionAfterAction::StillActive(session));
 
-                for (i, cmd) in scenario.solution.commands.iter().enumerate() {
-                    if let Some(state) = session_or_completed.take() {
-                        match state {
-                            SessionAfterAction::StillActive(s) => {
-                                // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
-                                let (count, base_cmd) = extract_count_and_command(cmd);
+        for (i, cmd) in scenario.solution.commands.iter().enumerate() {
+            if let Some(state) = session_or_completed.take() {
+                match state {
+                    SessionAfterAction::StillActive(s) => {
+                        // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
+                        let (count, base_cmd) = extract_count_and_command(cmd);
 
-                                // Execute base command `count` times
-                                let mut current_session = Some(s);
-                                let mut execution_error = None;
+                        // Execute base command `count` times
+                        let mut current_session = Some(s);
+                        let mut execution_error = None;
 
-                                for _ in 0..count {
-                                    if let Some(active) = current_session.take() {
-                                        match active.record_action(base_cmd.to_string()) {
-                                            Ok(result) => match result {
-                                                SessionAfterAction::Completed(c) => {
-                                                    session_or_completed =
-                                                        Some(SessionAfterAction::Completed(c));
-                                                    break;
-                                                }
-                                                SessionAfterAction::StillActive(next) => {
-                                                    current_session = Some(next);
-                                                }
-                                            },
-                                            Err(e) => {
-                                                execution_error = Some(e);
-                                                break;
-                                            }
+                        for _ in 0..count {
+                            if let Some(active) = current_session.take() {
+                                match active.record_action(base_cmd.to_string()) {
+                                    Ok(result) => match result {
+                                        SessionAfterAction::Completed(c) => {
+                                            session_or_completed =
+                                                Some(SessionAfterAction::Completed(c));
+                                            break;
                                         }
+                                        SessionAfterAction::StillActive(next) => {
+                                            current_session = Some(next);
+                                        }
+                                    },
+                                    Err(e) => {
+                                        execution_error = Some(e);
+                                        break;
                                     }
                                 }
-
-                                // Handle execution error
-                                if let Some(e) = execution_error {
-                                    failed_scenarios.push((
-                                        scenario.id.clone(),
-                                        format!("Failed at command {} '{}': {:?}", i, cmd, e),
-                                    ));
-                                    break;
-                                }
-
-                                // If not completed, store remaining session
-                                if session_or_completed.is_none()
-                                    && let Some(remaining) = current_session
-                                {
-                                    session_or_completed =
-                                        Some(SessionAfterAction::StillActive(remaining));
-                                }
-
-                                // If completed, stop processing commands
-                                if matches!(
-                                    session_or_completed,
-                                    Some(SessionAfterAction::Completed(_))
-                                ) {
-                                    break;
-                                }
                             }
-                            SessionAfterAction::Completed(c) => {
-                                // Already completed
-                                session_or_completed = Some(SessionAfterAction::Completed(c));
-                                break;
-                            }
+                        }
+
+                        // Handle execution error
+                        if let Some(e) = execution_error {
+                            failed_scenarios.push((
+                                scenario.id.clone(),
+                                format!("Failed at command {} '{}': {:?}", i, cmd, e),
+                            ));
+                            break;
+                        }
+
+                        // If not completed, store remaining session
+                        if session_or_completed.is_none()
+                            && let Some(remaining) = current_session
+                        {
+                            session_or_completed = Some(SessionAfterAction::StillActive(remaining));
+                        }
+
+                        // If completed, stop processing commands
+                        if matches!(session_or_completed, Some(SessionAfterAction::Completed(_))) {
+                            break;
                         }
                     }
+                    SessionAfterAction::Completed(c) => {
+                        // Already completed
+                        session_or_completed = Some(SessionAfterAction::Completed(c));
+                        break;
+                    }
                 }
+            }
+        }
 
-                // Check if scenario is completed
-                if let Some(final_state) = session_or_completed {
-                    match final_state {
-                        SessionAfterAction::Completed(_) => {
-                            // Success!
-                        }
-                        SessionAfterAction::StillActive(s) => {
-                            if !s.check_completion() {
-                                let current = s.current_state();
-                                let target = s.target_state();
-                                failed_scenarios.push((
-                                    scenario.id.clone(),
-                                    format!(
-                                        "Solution did not complete scenario.\n  Current: content='{}', cursor={:?}, selection={:?}\n  Target:  content='{}', cursor={:?}, selection={:?}",
-                                        current.content(),
-                                        current.cursor_position(),
-                                        current.selection(),
-                                        target.content(),
-                                        target.cursor_position(),
-                                        target.selection()
-                                    ),
-                                ));
-                            }
-                        }
+        // Check if scenario is completed
+        if let Some(final_state) = session_or_completed {
+            match final_state {
+                SessionAfterAction::Completed(_) => {
+                    // Success!
+                }
+                SessionAfterAction::StillActive(s) => {
+                    if !s.check_completion() {
+                        let current = s.current_state();
+                        let target = s.target_state();
+                        failed_scenarios.push((
+                            scenario.id.clone(),
+                            format!(
+                                "Solution did not complete scenario.\n  Current: content='{}', cursor={:?}, selection={:?}\n  Target:  content='{}', cursor={:?}, selection={:?}",
+                                current.content(),
+                                current.cursor_position(),
+                                current.selection(),
+                                target.content(),
+                                target.cursor_position(),
+                                target.selection()
+                            ),
+                        ));
                     }
                 }
             }

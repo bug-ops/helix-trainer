@@ -2049,8 +2049,10 @@ mod minigame_screen_tests {
         }
 
         state.game.minigame_session = Some(session);
-        let mut minigame_data = MiniGameData::default();
-        minigame_data.last_xp_earned = Some(75);
+        let minigame_data = MiniGameData {
+            last_xp_earned: Some(75),
+            ..Default::default()
+        };
         state.screen = TypedScreen::MiniGame(minigame_data);
 
         terminal

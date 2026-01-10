@@ -11,7 +11,7 @@
 
 Stop learning commands in isolation. Train real development workflows with FSRS-powered spaced repetition (20-30% faster mastery), daily quests, XP progression, and anti-farming mechanics that ensure genuine skill development.
 
-<img src="assets/main-menu.png" width="600" alt="Main Menu">
+<img src="assets/training-mode.png" width="600" alt="Training Mode">
 
 > [!IMPORTANT]
 > **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in `~/.config/helix-trainer/`
@@ -29,10 +29,13 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 
 <img src="assets/profile.png" width="600" alt="Player Profile">
 
+<img src="assets/statistics.png" width="600" alt="Statistics">
+
 ### Mini-Games Mode
 
 <img src="assets/arcade-mode.png" width="600" alt="Arcade Mode">
 
+- **FSRS-Powered Selection** — Prioritizes scenarios with commands you need to practice
 - **Arcade Training** — 60-second timed sessions with automatic scenario progression
 - **Streak Multiplier** — Build combos up to 5x for consecutive completions
 - **Lives System** — Start with 3 lives, earn bonus lives at score milestones
@@ -203,7 +206,7 @@ Duolingo-proven mechanics:
 ## Current Status
 
 > [!NOTE]
-> **Active Development**: Phase 2.2 complete! 136 scenarios with syntax highlighting, 1239+ passing tests, zero clippy warnings.
+> **Active Development**: Phase 2.2 complete! 136 scenarios with syntax highlighting, 1268 passing tests, 86% coverage.
 
 ### Completed
 
@@ -214,6 +217,7 @@ Duolingo-proven mechanics:
 | **Phase 2.1** | v0.4.1 | Arcade mode (60s sessions, lives, streak multiplier, XP integration) |
 | **Phase 4** | v0.5.0 | Typestate input system: surround commands (ms/mr/md), text objects (ma/mi) |
 | **Phase 2.2** | v0.5.3 | Adaptive difficulty, syntax highlighting, 136 scenarios with realistic Rust code |
+| **FSRS UX** | v0.5.4 | FSRS-based arcade selection, real statistics, review UX, codebase cleanup |
 
 ### 🔄 Phase 2.3: Mini-Games Polish (Planned)
 
@@ -323,6 +327,7 @@ Yes, Helix-specific. While many commands have similar names, Helix uses a differ
 | Phase 2.1 | ✅ | Mini-Games mode (arcade, lives, streaks) |
 | Typestate | ✅ | Input expansion (surround ms/mr/md, text objects ma/mi) |
 | Phase 2.2 | ✅ | Adaptive difficulty, syntax highlighting, realistic scenarios |
+| FSRS UX | ✅ | FSRS-based arcade, real statistics, review improvements |
 | Phase 2.3 | 📋 | Mini-Games polish (sound, leaderboards) |
 | Phase 3 | 📋 | Workflow simulator (LSP, git, multi-file) |
 | Phase 4 | 💡 | Network effects (multiplayer, scenarios marketplace) |

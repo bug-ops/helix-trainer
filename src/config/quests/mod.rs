@@ -453,5 +453,8 @@ impl QuestTemplate {
     }
 }
 
+/// Embedded quest assets compiled into the binary
+pub mod embedded;
+
 #[cfg(test)]
 mod tests;

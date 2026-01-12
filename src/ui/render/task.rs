@@ -42,8 +42,14 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             ])
             .split(area);
 
-        // Title
-        let title = Paragraph::new(format!("Scenario: {}", scenario.name))
+        // Title with scenario number for progress tracking
+        let title_text = if let Some(index) = task_data.scenario_index {
+            let total = state.game.scenario_collection.count();
+            format!("Scenario {}/{}: {}", index + 1, total, scenario.name)
+        } else {
+            format!("Scenario: {}", scenario.name)
+        };
+        let title = Paragraph::new(title_text)
             .style(
                 Style::default()
                     .fg(Color::Green)

@@ -441,8 +441,7 @@ mod tests {
     #[test]
     fn test_preview_highlight_from_surround_char_not_found() {
         let content = "no brackets here";
-        let preview =
-            PreviewHighlight::from_surround_char(content, 0, 5, '(', PreviewType::Delete);
+        let preview = PreviewHighlight::from_surround_char(content, 0, 5, '(', PreviewType::Delete);
 
         assert!(preview.is_none());
     }
@@ -450,8 +449,7 @@ mod tests {
     #[test]
     fn test_preview_highlight_from_surround_char_delete_type() {
         let content = "[item]";
-        let preview =
-            PreviewHighlight::from_surround_char(content, 0, 2, '[', PreviewType::Delete);
+        let preview = PreviewHighlight::from_surround_char(content, 0, 2, '[', PreviewType::Delete);
 
         assert!(preview.is_some());
         let p = preview.unwrap();

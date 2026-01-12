@@ -112,3 +112,148 @@ pub fn find_surrounding_brackets(
 
     Some((open_row, open_col, close_row, close_col))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== get_bracket_pair tests ====================
+
+    #[test]
+    fn test_get_bracket_pair_all_types() {
+        // Parentheses
+        assert_eq!(get_bracket_pair('('), ('(', ')'));
+        assert_eq!(get_bracket_pair(')'), ('(', ')'));
+
+        // Square brackets
+        assert_eq!(get_bracket_pair('['), ('[', ']'));
+        assert_eq!(get_bracket_pair(']'), ('[', ']'));
+
+        // Curly braces
+        assert_eq!(get_bracket_pair('{'), ('{', '}'));
+        assert_eq!(get_bracket_pair('}'), ('{', '}'));
+
+        // Angle brackets
+        assert_eq!(get_bracket_pair('<'), ('<', '>'));
+        assert_eq!(get_bracket_pair('>'), ('<', '>'));
+
+        // Quotes and other characters return themselves
+        assert_eq!(get_bracket_pair('"'), ('"', '"'));
+        assert_eq!(get_bracket_pair('\''), ('\'', '\''));
+        assert_eq!(get_bracket_pair('`'), ('`', '`'));
+        assert_eq!(get_bracket_pair('x'), ('x', 'x'));
+    }
+
+    // ==================== find_surrounding_brackets tests ====================
+
+    #[test]
+    fn test_find_brackets_parentheses() {
+        let content = "fn test(arg) { }";
+        // Cursor inside parentheses at position 8 (on 'a')
+        let result = find_surrounding_brackets(content, 0, 8, '(');
+        assert!(result.is_some());
+        let (open_row, open_col, close_row, close_col) = result.unwrap();
+        assert_eq!(open_row, 0);
+        assert_eq!(open_col, 7); // Position of '('
+        assert_eq!(close_row, 0);
+        assert_eq!(close_col, 11); // Position of ')'
+    }
+
+    #[test]
+    fn test_find_brackets_empty_content() {
+        let content = "";
+        let result = find_surrounding_brackets(content, 0, 0, '(');
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_brackets_no_match() {
+        let content = "hello world";
+        // No brackets in content
+        let result = find_surrounding_brackets(content, 0, 5, '(');
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_brackets_cursor_outside() {
+        let content = "before (inside) after";
+        // Cursor at position 0 (before the brackets)
+        let result = find_surrounding_brackets(content, 0, 0, '(');
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_brackets_nested() {
+        let content = "fn test((inner)) { }";
+        // Cursor inside inner parentheses at position 9 (on 'i')
+        let result = find_surrounding_brackets(content, 0, 9, '(');
+        assert!(result.is_some());
+        let (open_row, open_col, close_row, close_col) = result.unwrap();
+        // Should find the innermost pair
+        assert_eq!(open_row, 0);
+        assert_eq!(open_col, 8); // Inner '('
+        assert_eq!(close_row, 0);
+        assert_eq!(close_col, 14); // Inner ')'
+    }
+
+    #[test]
+    fn test_find_brackets_multiline() {
+        let content = "fn test(\n  arg1,\n  arg2\n)";
+        // Cursor on line 1, col 2 (on 'a' of arg1)
+        let result = find_surrounding_brackets(content, 1, 2, '(');
+        assert!(result.is_some());
+        let (open_row, open_col, close_row, close_col) = result.unwrap();
+        assert_eq!(open_row, 0);
+        assert_eq!(open_col, 7); // '(' on line 0
+        assert_eq!(close_row, 3);
+        assert_eq!(close_col, 0); // ')' on line 3
+    }
+
+    #[test]
+    fn test_find_brackets_curly_braces() {
+        let content = "if true { body }";
+        // Cursor inside braces at position 10 (on 'b')
+        let result = find_surrounding_brackets(content, 0, 10, '{');
+        assert!(result.is_some());
+        let (open_row, open_col, close_row, close_col) = result.unwrap();
+        assert_eq!(open_row, 0);
+        assert_eq!(open_col, 8); // Position of '{'
+        assert_eq!(close_row, 0);
+        assert_eq!(close_col, 15); // Position of '}'
+    }
+
+    #[test]
+    fn test_find_brackets_square_brackets() {
+        let content = "let arr = [1, 2, 3];";
+        // Cursor inside brackets at position 11 (on '1')
+        let result = find_surrounding_brackets(content, 0, 11, '[');
+        assert!(result.is_some());
+        let (open_row, open_col, close_row, close_col) = result.unwrap();
+        assert_eq!(open_row, 0);
+        assert_eq!(open_col, 10); // Position of '['
+        assert_eq!(close_row, 0);
+        assert_eq!(close_col, 18); // Position of ']'
+    }
+
+    #[test]
+    fn test_find_brackets_angle_brackets() {
+        let content = "Vec<String>";
+        // Cursor inside angle brackets at position 4 (on 'S')
+        let result = find_surrounding_brackets(content, 0, 4, '<');
+        assert!(result.is_some());
+        let (open_row, open_col, close_row, close_col) = result.unwrap();
+        assert_eq!(open_row, 0);
+        assert_eq!(open_col, 3); // Position of '<'
+        assert_eq!(close_row, 0);
+        assert_eq!(close_col, 10); // Position of '>'
+    }
+
+    #[test]
+    fn test_find_brackets_cursor_on_bracket() {
+        let content = "(hello)";
+        // Cursor on the opening bracket
+        let result = find_surrounding_brackets(content, 0, 0, '(');
+        // helix-core should find the pair when cursor is on bracket
+        assert!(result.is_some());
+    }
+}

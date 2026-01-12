@@ -316,3 +316,183 @@ pub(super) fn render_editor_pair(
         .wrap(Wrap { trim: false });
     frame.render_widget(target, editor_chunks[1]);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== PreviewHighlight::color tests ====================
+
+    #[test]
+    fn test_preview_highlight_color_replace() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 0,
+            close_row: 0,
+            close_col: 5,
+            preview_type: PreviewType::Replace,
+        };
+
+        assert_eq!(preview.color(), Color::Yellow);
+    }
+
+    #[test]
+    fn test_preview_highlight_color_delete() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 0,
+            close_row: 0,
+            close_col: 5,
+            preview_type: PreviewType::Delete,
+        };
+
+        assert_eq!(preview.color(), Color::Red);
+    }
+
+    // ==================== get_preview_positions tests ====================
+
+    #[test]
+    fn test_get_preview_positions_open_bracket() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 5,
+            close_row: 2,
+            close_col: 10,
+            preview_type: PreviewType::Replace,
+        };
+
+        // Line 0 should contain the open bracket position
+        let positions = get_preview_positions(Some(preview), 0);
+        assert_eq!(positions, vec![5]);
+    }
+
+    #[test]
+    fn test_get_preview_positions_close_bracket() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 5,
+            close_row: 2,
+            close_col: 10,
+            preview_type: PreviewType::Replace,
+        };
+
+        // Line 2 should contain the close bracket position
+        let positions = get_preview_positions(Some(preview), 2);
+        assert_eq!(positions, vec![10]);
+    }
+
+    #[test]
+    fn test_get_preview_positions_both_on_same_line() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 3,
+            close_row: 0,
+            close_col: 8,
+            preview_type: PreviewType::Delete,
+        };
+
+        // Line 0 should contain both bracket positions, sorted
+        let positions = get_preview_positions(Some(preview), 0);
+        assert_eq!(positions, vec![3, 8]);
+    }
+
+    #[test]
+    fn test_get_preview_positions_none() {
+        // When preview is None, should return empty vec
+        let positions = get_preview_positions(None, 0);
+        assert!(positions.is_empty());
+    }
+
+    #[test]
+    fn test_get_preview_positions_middle_line() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 5,
+            close_row: 3,
+            close_col: 10,
+            preview_type: PreviewType::Replace,
+        };
+
+        // Line 1 (middle line) should have no positions
+        let positions = get_preview_positions(Some(preview), 1);
+        assert!(positions.is_empty());
+
+        // Line 2 (middle line) should also have no positions
+        let positions = get_preview_positions(Some(preview), 2);
+        assert!(positions.is_empty());
+    }
+
+    // ==================== PreviewHighlight::from_surround_char tests ====================
+
+    #[test]
+    fn test_preview_highlight_from_surround_char_found() {
+        let content = "fn test(arg) { }";
+        // Cursor inside parentheses
+        let preview =
+            PreviewHighlight::from_surround_char(content, 0, 8, '(', PreviewType::Replace);
+
+        assert!(preview.is_some());
+        let p = preview.unwrap();
+        assert_eq!(p.open_col, 7);
+        assert_eq!(p.close_col, 11);
+        assert_eq!(p.preview_type, PreviewType::Replace);
+    }
+
+    #[test]
+    fn test_preview_highlight_from_surround_char_not_found() {
+        let content = "no brackets here";
+        let preview =
+            PreviewHighlight::from_surround_char(content, 0, 5, '(', PreviewType::Delete);
+
+        assert!(preview.is_none());
+    }
+
+    #[test]
+    fn test_preview_highlight_from_surround_char_delete_type() {
+        let content = "[item]";
+        let preview =
+            PreviewHighlight::from_surround_char(content, 0, 2, '[', PreviewType::Delete);
+
+        assert!(preview.is_some());
+        let p = preview.unwrap();
+        assert_eq!(p.preview_type, PreviewType::Delete);
+        assert_eq!(p.color(), Color::Red);
+    }
+
+    // ==================== PreviewType equality tests ====================
+
+    #[test]
+    fn test_preview_type_equality() {
+        assert_eq!(PreviewType::Replace, PreviewType::Replace);
+        assert_eq!(PreviewType::Delete, PreviewType::Delete);
+        assert_ne!(PreviewType::Replace, PreviewType::Delete);
+    }
+
+    // ==================== line_has_selection tests ====================
+
+    #[test]
+    fn test_line_has_selection_within_range() {
+        let sel = crate::game::Selection::new(
+            crate::game::CursorPosition { row: 1, col: 0 },
+            crate::game::CursorPosition { row: 3, col: 5 },
+        );
+
+        assert!(!line_has_selection(0, &sel)); // Before selection
+        assert!(line_has_selection(1, &sel)); // Start of selection
+        assert!(line_has_selection(2, &sel)); // Middle of selection
+        assert!(line_has_selection(3, &sel)); // End of selection
+        assert!(!line_has_selection(4, &sel)); // After selection
+    }
+
+    #[test]
+    fn test_line_has_selection_edge_case_end_col_zero() {
+        let sel = crate::game::Selection::new(
+            crate::game::CursorPosition { row: 1, col: 0 },
+            crate::game::CursorPosition { row: 2, col: 0 },
+        );
+
+        // When end.col is 0, line 2 should NOT be considered selected
+        assert!(line_has_selection(1, &sel));
+        assert!(!line_has_selection(2, &sel));
+    }
+}

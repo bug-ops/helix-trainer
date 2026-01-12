@@ -248,3 +248,89 @@ fn test_text_object_pending_predicates() {
     assert!(!InputState::MatchPending.is_text_object_pending());
     assert!(!InputState::SurroundAddPending.is_text_object_pending());
 }
+
+// ==================== Surround preview accessor tests ====================
+
+#[test]
+fn test_pending_surround_preview_none_in_base() {
+    let sm = InputStateMachine::new();
+    // In BaseState, pending_surround_preview should return None
+    assert!(sm.pending_surround_preview().is_none());
+}
+
+#[test]
+fn test_pending_surround_preview_none_in_match_pending() {
+    let mut sm = InputStateMachine::new();
+    // Transition to MatchPending
+    sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+    assert!(sm.state().is_match_pending());
+    // Still no preview in MatchPending
+    assert!(sm.pending_surround_preview().is_none());
+}
+
+#[test]
+fn test_pending_surround_preview_none_in_surround_replace_from() {
+    let mut sm = InputStateMachine::new();
+    // Go to SurroundReplaceFromPending
+    sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+    sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+    assert!(matches!(sm.state(), InputState::SurroundReplaceFromPending));
+    // Still no preview - we don't know which bracket yet
+    assert!(sm.pending_surround_preview().is_none());
+}
+
+#[test]
+fn test_pending_surround_preview_replace() {
+    use crate::input::typestate::SurroundPreview;
+
+    let mut sm = InputStateMachine::new();
+    // Go to SurroundReplaceToPending with from_char='('
+    sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+    sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+    sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
+
+    assert!(matches!(
+        sm.state(),
+        InputState::SurroundReplaceToPending { from_char: '(' }
+    ));
+
+    // Should return Replace variant with the from_char
+    let preview = sm.pending_surround_preview();
+    assert!(preview.is_some());
+    assert_eq!(preview.unwrap(), SurroundPreview::Replace('('));
+}
+
+#[test]
+fn test_pending_surround_replace_char() {
+    let mut sm = InputStateMachine::new();
+    // In BaseState, pending_surround_replace_char should return None
+    assert!(sm.pending_surround_replace_char().is_none());
+
+    // Go to SurroundReplaceToPending
+    sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+    sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+    sm.process_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
+
+    // Now should return the from_char
+    assert_eq!(sm.pending_surround_replace_char(), Some('['));
+}
+
+#[test]
+fn test_pending_surround_replace_char_various_brackets() {
+    let brackets = ['(', '[', '{', '<', '"', '\''];
+
+    for bracket in brackets {
+        let mut sm = InputStateMachine::new();
+        sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+        sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+        sm.process_key(KeyEvent::new(KeyCode::Char(bracket), KeyModifiers::NONE));
+
+        assert_eq!(
+            sm.pending_surround_replace_char(),
+            Some(bracket),
+            "Expected pending_surround_replace_char to return Some('{}') but got {:?}",
+            bracket,
+            sm.pending_surround_replace_char()
+        );
+    }
+}

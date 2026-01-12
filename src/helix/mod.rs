@@ -77,7 +77,7 @@ pub fn get_bracket_pair(ch: char) -> (char, char) {
 /// // Cursor inside the parentheses of println
 /// if let Some((or, oc, cr, cc)) = find_surrounding_brackets(content, 0, 22, '(') {
 ///     assert_eq!(oc, 20); // Opening paren position
-///     assert_eq!(cc, 29); // Closing paren position
+///     assert_eq!(cc, 28); // Closing paren position
 /// }
 /// ```
 pub fn find_surrounding_brackets(

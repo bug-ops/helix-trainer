@@ -251,7 +251,7 @@ estimated_time_seconds = 15
 [[scenarios]]
 id = "surround_replace_quotes_001"
 name = "Replace double quotes with single quotes"
-description = "Use 'mr\"\\'' to change quote style"
+description = "Position cursor inside quotes and press: m r \" '"
 
 hints = [
     "Quickly convert between quote styles",
@@ -268,7 +268,7 @@ cursor_position = [0, 12]
 
 [scenarios.solution]
 commands = ["mr\"'"]
-description = "Press 'mr\"\\'' to change double to single quotes"
+description = "Press m r \" ' to change double to single quotes"
 
 [scenarios.scoring]
 optimal_count = 4

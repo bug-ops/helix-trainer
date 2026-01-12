@@ -1,6 +1,6 @@
 //! Editor text rendering with cursor and selection
 
-use super::helpers::{char_range_to_bytes, split_at_char_index};
+use super::helpers::{char_range_to_bytes, find_surrounding_brackets};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -9,6 +9,180 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
+/// Type of preview highlight
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewType {
+    /// Surround replace - yellow highlight for brackets to be replaced
+    Replace,
+    /// Surround delete - red highlight for brackets to be deleted
+    Delete,
+}
+
+/// Preview highlight for surround operations
+///
+/// Contains positions of brackets that will be modified and the operation type
+#[derive(Debug, Clone, Copy)]
+pub struct PreviewHighlight {
+    pub open_row: usize,
+    pub open_col: usize,
+    pub close_row: usize,
+    pub close_col: usize,
+    pub preview_type: PreviewType,
+}
+
+impl PreviewHighlight {
+    /// Create preview highlight by finding surrounding brackets
+    pub fn from_surround_char(
+        content: &str,
+        cursor_row: usize,
+        cursor_col: usize,
+        bracket_char: char,
+        preview_type: PreviewType,
+    ) -> Option<Self> {
+        let (open_row, open_col, close_row, close_col) =
+            find_surrounding_brackets(content, cursor_row, cursor_col, bracket_char)?;
+        Some(Self {
+            open_row,
+            open_col,
+            close_row,
+            close_col,
+            preview_type,
+        })
+    }
+
+    /// Get the highlight color for this preview type
+    pub fn color(&self) -> Color {
+        match self.preview_type {
+            PreviewType::Replace => Color::Yellow,
+            PreviewType::Delete => Color::Red,
+        }
+    }
+}
+
+/// Render a line with selection highlighting
+fn render_line_with_selection<'a>(
+    line_text: &'a str,
+    line_idx: usize,
+    line_color: Color,
+    sel: &crate::game::Selection,
+) -> Line<'a> {
+    let mut spans = Vec::new();
+
+    let line_start_col = if line_idx == sel.start.row {
+        sel.start.col
+    } else {
+        0
+    };
+
+    let line_end_col = if line_idx == sel.end.row {
+        sel.end.col
+    } else {
+        line_text.chars().count()
+    };
+
+    let (start_byte, end_byte) = char_range_to_bytes(line_text, line_start_col, line_end_col);
+
+    if start_byte > 0 {
+        spans.push(Span::styled(
+            &line_text[..start_byte],
+            Style::default().fg(line_color),
+        ));
+    }
+
+    if start_byte < end_byte && end_byte <= line_text.len() {
+        spans.push(Span::styled(
+            &line_text[start_byte..end_byte],
+            Style::default()
+                .bg(super::SELECTION_BG_COLOR)
+                .fg(Color::White),
+        ));
+    }
+
+    if end_byte < line_text.len() {
+        spans.push(Span::styled(
+            &line_text[end_byte..],
+            Style::default().fg(line_color),
+        ));
+    }
+
+    Line::from(spans)
+}
+
+/// Render a line with cursor and/or preview highlights
+fn render_line_with_highlights(
+    line_text: &str,
+    line_color: Color,
+    cursor_col: Option<usize>,
+    preview_positions: &[usize],
+    preview_color: Color,
+) -> Line<'static> {
+    let mut spans = Vec::new();
+    let line_chars: Vec<char> = line_text.chars().collect();
+    let mut byte_pos = 0;
+
+    for (col, ch) in line_chars.iter().enumerate() {
+        let char_len = ch.len_utf8();
+        let char_str = &line_text[byte_pos..byte_pos + char_len];
+
+        let style = if cursor_col == Some(col) {
+            Style::default()
+                .bg(Color::White)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD)
+        } else if preview_positions.contains(&col) {
+            Style::default()
+                .bg(preview_color)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(line_color)
+        };
+
+        spans.push(Span::styled(char_str.to_string(), style));
+        byte_pos += char_len;
+    }
+
+    // Cursor at end of line
+    if let Some(col) = cursor_col
+        && col >= line_chars.len()
+    {
+        spans.push(Span::styled(
+            "\u{2588}".to_string(),
+            Style::default()
+                .bg(Color::White)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    Line::from(spans)
+}
+
+/// Get preview highlight positions for a specific line
+fn get_preview_positions(preview: Option<PreviewHighlight>, line_idx: usize) -> Vec<usize> {
+    let Some(p) = preview else {
+        return Vec::new();
+    };
+
+    let mut positions = Vec::new();
+    if line_idx == p.open_row {
+        positions.push(p.open_col);
+    }
+    if line_idx == p.close_row {
+        positions.push(p.close_col);
+    }
+    positions.sort();
+    positions
+}
+
+/// Check if a line has selection (accounting for edge cases)
+fn line_has_selection(line_idx: usize, sel: &crate::game::Selection) -> bool {
+    if line_idx == sel.end.row && sel.end.col == 0 {
+        return false;
+    }
+    line_idx >= sel.start.row && line_idx <= sel.end.row
+}
+
 /// Render editor text with cursor, selection and diff highlighting
 ///
 /// Compares current state with target state and colors lines:
@@ -16,144 +190,55 @@ use ratatui::{
 /// - Red: lines that differ from target
 /// - Selection shown with blue background
 /// - Cursor shown with inverse colors
+/// - Preview highlight shown with yellow/red background
 pub(super) fn render_editor_with_diff<'a>(
     current: &'a crate::game::EditorState,
     target: &crate::game::EditorState,
+    preview: Option<PreviewHighlight>,
 ) -> Vec<Line<'a>> {
-    let current_content = current.content();
-    let target_content = target.content();
     let cursor = current.cursor_position();
-    let (cursor_line, cursor_col) = (cursor.row, cursor.col);
     let selection = current.selection();
+    let preview_color = preview.map(|p| p.color()).unwrap_or(Color::Yellow);
 
-    let current_lines: Vec<&str> = current_content.lines().collect();
-    let target_lines: Vec<&str> = target_content.lines().collect();
+    let current_lines: Vec<&str> = current.content().lines().collect();
+    let target_lines: Vec<&str> = target.content().lines().collect();
 
     current_lines
         .iter()
         .enumerate()
         .map(|(line_idx, &line_text)| {
-            // Determine if this line matches target
             let matches_target = target_lines
                 .get(line_idx)
-                .map(|&target_line| target_line == line_text)
+                .map(|&t| t == line_text)
                 .unwrap_or(false);
 
-            // Choose color based on match
             let line_color = if matches_target {
                 Color::Green
             } else {
                 Color::Red
             };
 
-            // Check if this line has selection
-            if let Some(sel) = selection {
-                let sel_start_line = sel.start.row;
-                let sel_end_line = sel.end.row;
-
-                // Skip if this is the end line but end_col is 0 (selection ends before this line)
-                let line_has_selection = if line_idx == sel_end_line && sel.end.col == 0 {
-                    false
-                } else {
-                    line_idx >= sel_start_line && line_idx <= sel_end_line
-                };
-
-                if line_has_selection {
-                    // This line contains selection
-                    let mut spans = Vec::new();
-
-                    // Determine selection range for this line
-                    let line_start_col = if line_idx == sel_start_line {
-                        sel.start.col
-                    } else {
-                        0
-                    };
-
-                    let line_end_col = if line_idx == sel_end_line {
-                        sel.end.col
-                    } else {
-                        line_text.chars().count()
-                    };
-
-                    // Get byte indices for selection range
-                    let (start_byte, end_byte) =
-                        char_range_to_bytes(line_text, line_start_col, line_end_col);
-
-                    // Text before selection
-                    if start_byte > 0 {
-                        spans.push(Span::styled(
-                            &line_text[..start_byte],
-                            Style::default().fg(line_color),
-                        ));
-                    }
-
-                    // Selected text with highlight
-                    if start_byte < end_byte && end_byte <= line_text.len() {
-                        spans.push(Span::styled(
-                            &line_text[start_byte..end_byte],
-                            Style::default()
-                                .bg(super::SELECTION_BG_COLOR)
-                                .fg(Color::White),
-                        ));
-                    }
-
-                    // Text after selection
-                    if end_byte < line_text.len() {
-                        spans.push(Span::styled(
-                            &line_text[end_byte..],
-                            Style::default().fg(line_color),
-                        ));
-                    }
-
-                    return Line::from(spans);
-                }
+            // Selection takes priority
+            if let Some(sel) = selection
+                && line_has_selection(line_idx, &sel)
+            {
+                return render_line_with_selection(line_text, line_idx, line_color, &sel);
             }
 
-            // No selection - show cursor if on this line
-            if line_idx == cursor_line {
-                // This line contains the cursor
-                let mut spans = Vec::new();
+            let preview_positions = get_preview_positions(preview, line_idx);
+            let has_cursor = line_idx == cursor.row;
+            let has_preview = !preview_positions.is_empty();
 
-                // Split line at cursor position (zero-allocation)
-                let (before_end, char_start, char_end, after_start) =
-                    split_at_char_index(line_text, cursor_col);
-
-                // Add text before cursor
-                if before_end > 0 {
-                    spans.push(Span::styled(
-                        &line_text[..before_end],
-                        Style::default().fg(line_color),
-                    ));
-                }
-
-                // Add cursor character with inverse style
-                // For empty lines, use a special block character that renders as a cursor
-                // without causing line wrapping issues
-                let cursor_char = &line_text[char_start..char_end];
-                let cursor_display = if cursor_char.is_empty() {
-                    "\u{2588}" // Full block character for cursor on empty line
-                } else {
-                    cursor_char
-                };
-                spans.push(Span::styled(
-                    cursor_display,
-                    Style::default()
-                        .bg(Color::White)
-                        .fg(Color::Black)
-                        .add_modifier(Modifier::BOLD),
-                ));
-
-                // Add text after cursor
-                if after_start < line_text.len() {
-                    spans.push(Span::styled(
-                        &line_text[after_start..],
-                        Style::default().fg(line_color),
-                    ));
-                }
-
-                Line::from(spans)
+            if has_cursor || has_preview {
+                let cursor_col = if has_cursor { Some(cursor.col) } else { None };
+                render_line_with_highlights(
+                    line_text,
+                    line_color,
+                    cursor_col,
+                    &preview_positions,
+                    preview_color,
+                )
             } else {
-                // Regular line without cursor
                 Line::from(Span::styled(line_text, Style::default().fg(line_color)))
             }
         })
@@ -191,6 +276,7 @@ pub(super) fn render_editor_with_selection(state: &crate::game::EditorState) -> 
 /// * `target_state` - Target state to achieve
 /// * `current_title` - Title for current state panel
 /// * `target_title` - Title for target state panel
+/// * `preview` - Optional preview highlight for surround replace
 pub(super) fn render_editor_pair(
     frame: &mut Frame,
     area: Rect,
@@ -198,6 +284,7 @@ pub(super) fn render_editor_pair(
     target_state: &crate::game::EditorState,
     current_title: &str,
     target_title: &str,
+    preview: Option<PreviewHighlight>,
 ) {
     // Split into two columns
     let editor_chunks = Layout::default()
@@ -206,7 +293,7 @@ pub(super) fn render_editor_pair(
         .split(area);
 
     // Current state with cursor and diff highlighting
-    let current_lines = render_editor_with_diff(current_state, target_state);
+    let current_lines = render_editor_with_diff(current_state, target_state, preview);
     let current = Paragraph::new(current_lines)
         .block(
             Block::default()
@@ -228,4 +315,182 @@ pub(super) fn render_editor_pair(
         )
         .wrap(Wrap { trim: false });
     frame.render_widget(target, editor_chunks[1]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== PreviewHighlight::color tests ====================
+
+    #[test]
+    fn test_preview_highlight_color_replace() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 0,
+            close_row: 0,
+            close_col: 5,
+            preview_type: PreviewType::Replace,
+        };
+
+        assert_eq!(preview.color(), Color::Yellow);
+    }
+
+    #[test]
+    fn test_preview_highlight_color_delete() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 0,
+            close_row: 0,
+            close_col: 5,
+            preview_type: PreviewType::Delete,
+        };
+
+        assert_eq!(preview.color(), Color::Red);
+    }
+
+    // ==================== get_preview_positions tests ====================
+
+    #[test]
+    fn test_get_preview_positions_open_bracket() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 5,
+            close_row: 2,
+            close_col: 10,
+            preview_type: PreviewType::Replace,
+        };
+
+        // Line 0 should contain the open bracket position
+        let positions = get_preview_positions(Some(preview), 0);
+        assert_eq!(positions, vec![5]);
+    }
+
+    #[test]
+    fn test_get_preview_positions_close_bracket() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 5,
+            close_row: 2,
+            close_col: 10,
+            preview_type: PreviewType::Replace,
+        };
+
+        // Line 2 should contain the close bracket position
+        let positions = get_preview_positions(Some(preview), 2);
+        assert_eq!(positions, vec![10]);
+    }
+
+    #[test]
+    fn test_get_preview_positions_both_on_same_line() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 3,
+            close_row: 0,
+            close_col: 8,
+            preview_type: PreviewType::Delete,
+        };
+
+        // Line 0 should contain both bracket positions, sorted
+        let positions = get_preview_positions(Some(preview), 0);
+        assert_eq!(positions, vec![3, 8]);
+    }
+
+    #[test]
+    fn test_get_preview_positions_none() {
+        // When preview is None, should return empty vec
+        let positions = get_preview_positions(None, 0);
+        assert!(positions.is_empty());
+    }
+
+    #[test]
+    fn test_get_preview_positions_middle_line() {
+        let preview = PreviewHighlight {
+            open_row: 0,
+            open_col: 5,
+            close_row: 3,
+            close_col: 10,
+            preview_type: PreviewType::Replace,
+        };
+
+        // Line 1 (middle line) should have no positions
+        let positions = get_preview_positions(Some(preview), 1);
+        assert!(positions.is_empty());
+
+        // Line 2 (middle line) should also have no positions
+        let positions = get_preview_positions(Some(preview), 2);
+        assert!(positions.is_empty());
+    }
+
+    // ==================== PreviewHighlight::from_surround_char tests ====================
+
+    #[test]
+    fn test_preview_highlight_from_surround_char_found() {
+        let content = "fn test(arg) { }";
+        // Cursor inside parentheses
+        let preview =
+            PreviewHighlight::from_surround_char(content, 0, 8, '(', PreviewType::Replace);
+
+        assert!(preview.is_some());
+        let p = preview.unwrap();
+        assert_eq!(p.open_col, 7);
+        assert_eq!(p.close_col, 11);
+        assert_eq!(p.preview_type, PreviewType::Replace);
+    }
+
+    #[test]
+    fn test_preview_highlight_from_surround_char_not_found() {
+        let content = "no brackets here";
+        let preview = PreviewHighlight::from_surround_char(content, 0, 5, '(', PreviewType::Delete);
+
+        assert!(preview.is_none());
+    }
+
+    #[test]
+    fn test_preview_highlight_from_surround_char_delete_type() {
+        let content = "[item]";
+        let preview = PreviewHighlight::from_surround_char(content, 0, 2, '[', PreviewType::Delete);
+
+        assert!(preview.is_some());
+        let p = preview.unwrap();
+        assert_eq!(p.preview_type, PreviewType::Delete);
+        assert_eq!(p.color(), Color::Red);
+    }
+
+    // ==================== PreviewType equality tests ====================
+
+    #[test]
+    fn test_preview_type_equality() {
+        assert_eq!(PreviewType::Replace, PreviewType::Replace);
+        assert_eq!(PreviewType::Delete, PreviewType::Delete);
+        assert_ne!(PreviewType::Replace, PreviewType::Delete);
+    }
+
+    // ==================== line_has_selection tests ====================
+
+    #[test]
+    fn test_line_has_selection_within_range() {
+        let sel = crate::game::Selection::new(
+            crate::game::CursorPosition { row: 1, col: 0 },
+            crate::game::CursorPosition { row: 3, col: 5 },
+        );
+
+        assert!(!line_has_selection(0, &sel)); // Before selection
+        assert!(line_has_selection(1, &sel)); // Start of selection
+        assert!(line_has_selection(2, &sel)); // Middle of selection
+        assert!(line_has_selection(3, &sel)); // End of selection
+        assert!(!line_has_selection(4, &sel)); // After selection
+    }
+
+    #[test]
+    fn test_line_has_selection_edge_case_end_col_zero() {
+        let sel = crate::game::Selection::new(
+            crate::game::CursorPosition { row: 1, col: 0 },
+            crate::game::CursorPosition { row: 2, col: 0 },
+        );
+
+        // When end.col is 0, line 2 should NOT be considered selected
+        assert!(line_has_selection(1, &sel));
+        assert!(!line_has_selection(2, &sel));
+    }
 }

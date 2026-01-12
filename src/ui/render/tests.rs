@@ -356,7 +356,7 @@ mod editor_tests {
         let current = create_editor_state("line 1\nline 2\n", 0, 0);
         let target = create_editor_state("line 1\nline 2\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         // Should have 2 lines
         assert_eq!(lines.len(), 2);
@@ -367,7 +367,7 @@ mod editor_tests {
         let current = create_editor_state("line 1\nline 2\n", 0, 0);
         let target = create_editor_state("line 1\nline X\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         // Should have 2 lines
         assert_eq!(lines.len(), 2);
@@ -378,7 +378,7 @@ mod editor_tests {
         let current = create_editor_state("hello world\nsecond line\n", 0, 5);
         let target = create_editor_state("hello world\nsecond line\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         // First line should have cursor rendering (multiple spans)
         assert!(!lines.is_empty());
@@ -389,7 +389,7 @@ mod editor_tests {
         let current = create_editor_state("hello\n", 0, 5);
         let target = create_editor_state("hello\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         assert_eq!(lines.len(), 1);
     }
@@ -399,7 +399,7 @@ mod editor_tests {
         let current = create_editor_state("", 0, 0);
         let target = create_editor_state("", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         // Empty content should produce empty lines
         assert!(lines.is_empty());
@@ -410,7 +410,7 @@ mod editor_tests {
         let current = create_editor_state("\n", 0, 0);
         let target = create_editor_state("\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         assert_eq!(lines.len(), 1);
     }
@@ -448,7 +448,7 @@ mod editor_tests {
         let current = create_editor_with_selection("hello world\n", (0, 0), (0, 0), (0, 5));
         let target = create_editor_state("hello world\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         // Should render with selection highlighting
         assert_eq!(lines.len(), 1);
@@ -459,7 +459,7 @@ mod editor_tests {
         let current = create_editor_state("line 1\nline 2\nline 3\n", 0, 0);
         let target = create_editor_state("line 1\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         // Current has 3 lines
         assert_eq!(lines.len(), 3);
@@ -470,7 +470,7 @@ mod editor_tests {
         let current = create_editor_state("line 1\n", 0, 0);
         let target = create_editor_state("line 1\nline 2\nline 3\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         // Current has 1 line
         assert_eq!(lines.len(), 1);
@@ -481,7 +481,7 @@ mod editor_tests {
         let current = create_editor_state("hello world\n", 0, 6);
         let target = create_editor_state("hello world\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         // Should render cursor at position 6 (on 'w')
         assert_eq!(lines.len(), 1);
@@ -492,7 +492,7 @@ mod editor_tests {
         let current = create_editor_state("héllo wörld\n", 0, 0);
         let target = create_editor_state("héllo wörld\n", 0, 0);
 
-        let lines = super::super::editor::render_editor_with_diff(&current, &target);
+        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
 
         assert_eq!(lines.len(), 1);
     }

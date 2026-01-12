@@ -203,6 +203,7 @@ fn render_scenario_editor<S: PlayableScenario>(
     frame.render_widget(task, chunks[0]);
 
     // Editor views - reuse common rendering function
+    // No preview highlight in arcade mode
     render_editor_pair(
         frame,
         chunks[1],
@@ -210,6 +211,7 @@ fn render_scenario_editor<S: PlayableScenario>(
         scenario.target_state(),
         " Current ",
         " Target ",
+        None,
     );
 }
 

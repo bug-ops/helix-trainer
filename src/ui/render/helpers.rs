@@ -129,3 +129,6 @@ pub(super) fn inner_rect(outer: Rect) -> Rect {
         height: outer.height.saturating_sub(2),
     }
 }
+
+// Re-export find_surrounding_brackets from helix module
+pub(super) use crate::helix::find_surrounding_brackets;

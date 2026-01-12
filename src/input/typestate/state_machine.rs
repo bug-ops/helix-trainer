@@ -116,4 +116,40 @@ impl InputStateMachine {
             _ => None,
         }
     }
+
+    /// Get the pending surround replace "from" char if in that state
+    ///
+    /// Returns Some(char) when waiting for the "to" character in surround replace,
+    /// used to preview which brackets will be replaced.
+    pub fn pending_surround_replace_char(&self) -> Option<char> {
+        match &self.state {
+            InputState::SurroundReplaceToPending { from_char } => Some(*from_char),
+            _ => None,
+        }
+    }
+
+    /// Get a preview character for surround operations
+    ///
+    /// Returns Some(char) when in a state that should show bracket preview:
+    /// - `SurroundReplaceToPending` - show brackets that will be replaced
+    /// - `SurroundDeletePending` waiting for char - handled at input time
+    ///
+    /// Used for visual feedback in the editor.
+    pub fn pending_surround_preview(&self) -> Option<SurroundPreview> {
+        match &self.state {
+            InputState::SurroundReplaceToPending { from_char } => {
+                Some(SurroundPreview::Replace(*from_char))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Type of surround preview to display
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurroundPreview {
+    /// Preview for surround replace - shows which brackets will be replaced
+    Replace(char),
+    /// Preview for surround delete - shows which brackets will be deleted
+    Delete(char),
 }

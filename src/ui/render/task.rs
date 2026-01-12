@@ -1,6 +1,6 @@
 //! Task screen rendering
 
-use super::editor::render_editor_pair;
+use super::editor::{PreviewHighlight, PreviewType, render_editor_pair};
 use super::popups::{render_hint_popup, render_key_history_popup, render_success_popup};
 use crate::game::PlayableScenario;
 use crate::ui::state::{AppState, TypedScreen};
@@ -83,6 +83,28 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             session as &dyn PlayableScenario
         };
 
+        // Calculate preview highlight for surround operations
+        let preview =
+            task_data
+                .input_state
+                .pending_surround_preview()
+                .and_then(|surround_preview| {
+                    use crate::input::typestate::SurroundPreview;
+                    let current = playable.current_state();
+                    let cursor = current.cursor_position();
+                    let (bracket_char, preview_type) = match surround_preview {
+                        SurroundPreview::Replace(ch) => (ch, PreviewType::Replace),
+                        SurroundPreview::Delete(ch) => (ch, PreviewType::Delete),
+                    };
+                    PreviewHighlight::from_surround_char(
+                        current.content(),
+                        cursor.row,
+                        cursor.col,
+                        bracket_char,
+                        preview_type,
+                    )
+                });
+
         // Render editor pair using shared function
         let current_title = t!("editor.current_state");
         let target_title = t!("editor.target_state");
@@ -93,6 +115,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             playable.target_state(),
             &current_title,
             &target_title,
+            preview,
         );
 
         // Stats with mode indicator and progress

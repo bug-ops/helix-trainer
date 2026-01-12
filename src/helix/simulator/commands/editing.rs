@@ -333,15 +333,7 @@ pub fn replace_surround<M: EditorMode>(
     Ok(())
 }
 
-fn get_surround_pair(ch: char) -> (char, char) {
-    match ch {
-        '(' | ')' => ('(', ')'),
-        '[' | ']' => ('[', ']'),
-        '{' | '}' => ('{', '}'),
-        '<' | '>' => ('<', '>'),
-        _ => (ch, ch),
-    }
-}
+use crate::helix::get_bracket_pair as get_surround_pair;
 
 fn find_surrounding_pair<M: EditorMode>(
     sim: &HelixSimulator<M>,

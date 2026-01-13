@@ -256,3 +256,448 @@ fn test_from_target_with_selection() {
     assert_eq!(sel.end.row, 0);
     assert_eq!(sel.end.col, 5);
 }
+
+// Tests for multi-selection support (Issue #141)
+
+#[test]
+fn test_with_selections_creates_multiple() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    let state = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        0,
+    )
+    .unwrap();
+
+    assert_eq!(state.selections().len(), 2);
+    assert_eq!(state.selection(), Some(sel1)); // Primary is index 0
+    assert_eq!(state.primary_selection_idx(), 0);
+}
+
+#[test]
+fn test_with_selections_primary_index() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    let state = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        1, // Primary is index 1
+    )
+    .unwrap();
+
+    assert_eq!(state.selection(), Some(sel2)); // Primary is sel2
+    assert_eq!(state.primary_selection_idx(), 1);
+}
+
+#[test]
+fn test_with_selections_invalid_primary_idx() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+
+    let result = EditorState::with_selections(
+        "hello world".to_string(),
+        cursor,
+        vec![sel1],
+        5, // Invalid index
+    );
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_add_selection() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+
+    let mut state =
+        EditorState::new("hello world\nfoo bar".to_string(), cursor, Some(sel1)).unwrap();
+
+    assert_eq!(state.selections().len(), 1);
+
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+    state.add_selection(sel2).unwrap();
+
+    assert_eq!(state.selections().len(), 2);
+    assert_eq!(state.selections()[1], sel2);
+}
+
+#[test]
+fn test_add_selection_out_of_bounds() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let mut state = EditorState::new("hello world".to_string(), cursor, None).unwrap();
+
+    let invalid_sel = Selection::new(
+        CursorPosition::new(5, 0).unwrap(), // Out of bounds
+        CursorPosition::new(5, 3).unwrap(),
+    );
+    let result = state.add_selection(invalid_sel);
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_set_selections() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let mut state = EditorState::new("hello world\nfoo bar".to_string(), cursor, None).unwrap();
+
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    state.set_selections(vec![sel1, sel2], 1).unwrap();
+
+    assert_eq!(state.selections().len(), 2);
+    assert_eq!(state.primary_selection_idx(), 1);
+    assert_eq!(state.selection(), Some(sel2));
+}
+
+#[test]
+fn test_set_primary_selection() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    let mut state = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        0,
+    )
+    .unwrap();
+
+    assert_eq!(state.primary_selection_idx(), 0);
+    state.set_primary_selection(1).unwrap();
+    assert_eq!(state.primary_selection_idx(), 1);
+    assert_eq!(state.selection(), Some(sel2));
+}
+
+#[test]
+fn test_set_primary_selection_no_selections() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let mut state = EditorState::new("hello world".to_string(), cursor, None).unwrap();
+
+    let result = state.set_primary_selection(0);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_set_primary_selection_out_of_bounds() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+
+    let mut state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+
+    let result = state.set_primary_selection(5);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_matches_multiple_selections() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    let state1 = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        0,
+    )
+    .unwrap();
+
+    let state2 = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        1, // Different primary, but same selections
+    )
+    .unwrap();
+
+    assert!(state1.matches(&state2));
+}
+
+#[test]
+fn test_matches_multiple_selections_order_independent() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    // Order is [sel1, sel2]
+    let state1 = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        0,
+    )
+    .unwrap();
+
+    // Order is [sel2, sel1] - reversed
+    let state2 = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel2, sel1],
+        0,
+    )
+    .unwrap();
+
+    // Should still match because comparison is order-independent
+    assert!(state1.matches(&state2));
+}
+
+#[test]
+fn test_matches_different_selection_count() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    let state1 = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        0,
+    )
+    .unwrap();
+
+    let state2 = EditorState::new("hello world\nfoo bar".to_string(), cursor, Some(sel1)).unwrap();
+
+    // Different number of selections
+    assert!(!state1.matches(&state2));
+}
+
+#[test]
+fn test_selections_empty_returns_empty_slice() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let state = EditorState::new("hello world".to_string(), cursor, None).unwrap();
+
+    assert!(state.selections().is_empty());
+    assert!(state.selection().is_none());
+}
+
+#[test]
+fn test_set_content_removes_invalid_selections() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    let mut state = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        0,
+    )
+    .unwrap();
+
+    assert_eq!(state.selections().len(), 2);
+
+    // Set content with only one line - sel2 should be removed
+    state.set_content("only one line".to_string()).unwrap();
+
+    assert_eq!(state.selections().len(), 1);
+    assert_eq!(state.selection(), Some(sel1));
+}
+
+#[test]
+fn test_default_selections_empty() {
+    let state = EditorState::default();
+    assert!(state.selections().is_empty());
+    assert_eq!(state.primary_selection_idx(), 0);
+}
+
+// Additional tests for edge cases (Issue #141 code review)
+
+#[test]
+fn test_with_selections_empty_vec() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let state = EditorState::with_selections("hello world".to_string(), cursor, vec![], 0);
+    assert!(state.is_ok());
+    let state = state.unwrap();
+    assert!(state.selections().is_empty());
+    assert!(state.selection().is_none());
+}
+
+#[test]
+fn test_set_selections_empty_clears_all() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let mut state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+
+    state.set_selections(vec![], 0).unwrap();
+
+    assert!(state.selections().is_empty());
+    assert!(state.selection().is_none());
+}
+
+#[test]
+fn test_set_selections_invalid_primary_idx() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let mut state = EditorState::new("hello world".to_string(), cursor, None).unwrap();
+
+    let sel = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+
+    let result = state.set_selections(vec![sel], 5);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_add_selection_to_empty() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let mut state = EditorState::new("hello world".to_string(), cursor, None).unwrap();
+
+    assert!(state.selections().is_empty());
+
+    let sel = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    state.add_selection(sel).unwrap();
+
+    assert_eq!(state.selections().len(), 1);
+    assert_eq!(state.selection(), Some(sel));
+}
+
+#[test]
+fn test_set_content_resets_primary_idx() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(1, 0).unwrap(),
+        CursorPosition::new(1, 3).unwrap(),
+    );
+
+    let mut state = EditorState::with_selections(
+        "hello world\nfoo bar".to_string(),
+        cursor,
+        vec![sel1, sel2],
+        1, // Primary is sel2 on line 1
+    )
+    .unwrap();
+
+    assert_eq!(state.primary_selection_idx(), 1);
+
+    // Shrink content to remove sel2
+    state.set_content("only one line".to_string()).unwrap();
+
+    // Primary idx should reset to 0
+    assert_eq!(state.primary_selection_idx(), 0);
+    assert_eq!(state.selections().len(), 1);
+}
+
+#[test]
+fn test_matches_overlapping_selections() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel1 = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+    let sel2 = Selection::new(
+        CursorPosition::new(0, 3).unwrap(),
+        CursorPosition::new(0, 8).unwrap(),
+    );
+
+    let state1 =
+        EditorState::with_selections("hello world".to_string(), cursor, vec![sel1, sel2], 0)
+            .unwrap();
+
+    let state2 =
+        EditorState::with_selections("hello world".to_string(), cursor, vec![sel1, sel2], 0)
+            .unwrap();
+
+    assert!(state1.matches(&state2));
+}
+
+#[test]
+fn test_matches_duplicate_selections() {
+    let cursor = CursorPosition::new(0, 0).unwrap();
+    let sel = Selection::new(
+        CursorPosition::new(0, 0).unwrap(),
+        CursorPosition::new(0, 5).unwrap(),
+    );
+
+    let state1 = EditorState::with_selections(
+        "hello world".to_string(),
+        cursor,
+        vec![sel, sel], // Same selection twice
+        0,
+    )
+    .unwrap();
+
+    let state2 =
+        EditorState::with_selections("hello world".to_string(), cursor, vec![sel, sel], 0).unwrap();
+
+    assert!(state1.matches(&state2));
+}

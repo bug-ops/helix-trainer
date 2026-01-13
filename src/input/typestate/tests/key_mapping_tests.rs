@@ -724,8 +724,17 @@ fn test_parse_case_insensitive_special_keys() {
 // ============================================================================
 
 #[test]
+fn test_map_alt_c_lowercase_change_noyank() {
+    // Alt-c: change_selection_noyank (lowercase)
+    assert_eq!(
+        map_single_key_command('c', KeyModifiers::ALT),
+        Some(CMD_CHANGE_SELECTION_NOYANK)
+    );
+}
+
+#[test]
 fn test_map_alt_c_copy_selection_prev() {
-    // Alt-C: copy_selection_on_prev_line
+    // Alt-C: copy_selection_on_prev_line (uppercase)
     assert_eq!(
         map_single_key_command('C', KeyModifiers::ALT | KeyModifiers::SHIFT),
         Some(CMD_COPY_SELECTION_PREV)

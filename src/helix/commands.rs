@@ -36,6 +36,7 @@ pub const CMD_APPEND_LINE_END: &str = "A";
 pub const CMD_OPEN_BELOW: &str = "o";
 pub const CMD_OPEN_ABOVE: &str = "O";
 pub const CMD_CHANGE: &str = "c";
+pub const CMD_CHANGE_SELECTION_NOYANK: &str = "Alt-c";
 pub const CMD_JOIN_LINES: &str = "J";
 pub const CMD_JOIN_SELECTIONS_SPACE: &str = "Alt-J";
 pub const CMD_INDENT: &str = ">";

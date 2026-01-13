@@ -158,18 +158,19 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
     // Pattern: (char, is_shift, is_alt)
     match (c, is_shift, is_alt) {
         // Alt commands (must be checked first as they have highest specificity)
-        ('C', true, true) => Some(CMD_COPY_SELECTION_PREV), // Alt-C
-        ('J', true, true) => Some(CMD_JOIN_SELECTIONS_SPACE), // Alt-J
-        ('K', true, true) => Some(CMD_REMOVE_MATCHING),     // Alt-K
+        ('c', false, true) => Some(CMD_CHANGE_SELECTION_NOYANK), // Alt-c
+        ('C', true, true) => Some(CMD_COPY_SELECTION_PREV),      // Alt-C
+        ('J', true, true) => Some(CMD_JOIN_SELECTIONS_SPACE),    // Alt-J
+        ('K', true, true) => Some(CMD_REMOVE_MATCHING),          // Alt-K
         ('s', false, true) => Some(CMD_SPLIT_SELECTION_NEWLINES), // Alt-s
-        ('x', false, true) => Some(CMD_SHRINK_TO_LINE_BOUNDS), // Alt-x
+        ('x', false, true) => Some(CMD_SHRINK_TO_LINE_BOUNDS),   // Alt-x
         (',', false, true) => Some(CMD_REMOVE_PRIMARY_SELECTION), // Alt-,
-        ('-', false, true) => Some(CMD_MERGE_SELECTIONS),   // Alt--
-        ('_', _, true) => Some(CMD_MERGE_CONSECUTIVE),      // Alt-_
-        ('.', false, true) => Some(CMD_REPEAT_LAST_MOTION), // Alt-.
-        ('`', false, true) => Some(CMD_SWITCH_TO_UPPERCASE), // Alt-`
-        (';', false, true) => Some(CMD_FLIP_SELECTIONS),    // Alt-;
-        ('*', _, true) => Some(CMD_SEARCH_SELECTION),       // Alt-*
+        ('-', false, true) => Some(CMD_MERGE_SELECTIONS),        // Alt--
+        ('_', _, true) => Some(CMD_MERGE_CONSECUTIVE),           // Alt-_
+        ('.', false, true) => Some(CMD_REPEAT_LAST_MOTION),      // Alt-.
+        ('`', false, true) => Some(CMD_SWITCH_TO_UPPERCASE),     // Alt-`
+        (';', false, true) => Some(CMD_FLIP_SELECTIONS),         // Alt-;
+        ('*', _, true) => Some(CMD_SEARCH_SELECTION),            // Alt-*
 
         // Movement (no Alt)
         ('h', false, false) => Some(CMD_MOVE_LEFT),

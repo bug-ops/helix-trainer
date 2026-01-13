@@ -21,7 +21,8 @@ pub mod view_state;
 #[cfg(test)]
 mod tests;
 
-use crate::game::{CursorPosition, EditorState};
+use crate::game::EditorState;
+use crate::game::editor_state::{CursorPosition, Selection as GameSelection};
 use crate::helix::repeat::RepeatBuffer;
 use crate::security::UserError;
 use helix_core::{Rope, Selection, Transaction};
@@ -33,7 +34,7 @@ pub use mode::{EditorMode, InsertMode, NormalMode};
 // Re-export state types
 pub use find_state::{FindDirection, FindState, FindType};
 pub use search_state::{SearchDirection, SearchState};
-pub use snapshot::{EditorDisplay, EditorSnapshot, SerializableRange};
+pub use snapshot::{EditorDisplay, EditorSnapshot, SelectionBounds, SerializableRange};
 pub use view_state::ViewState;
 
 // Re-export old Mode enum for backward compatibility during migration
@@ -162,7 +163,7 @@ impl<M: EditorMode> HelixSimulator<M> {
         };
 
         // Export ALL selections from helix_core::Selection
-        let selections: Vec<crate::game::Selection> = self
+        let selections: Vec<GameSelection> = self
             .selection
             .ranges()
             .iter()
@@ -185,7 +186,7 @@ impl<M: EditorMode> HelixSimulator<M> {
                     ((head_row, head_col), (anchor_row, anchor_col))
                 };
 
-                Some(crate::game::Selection::new(
+                Some(GameSelection::new(
                     CursorPosition {
                         row: start_row,
                         col: start_col,
@@ -328,8 +329,8 @@ impl HelixSimulator<NormalMode> {
         let selections = state.selections();
         let selection = if selections.is_empty() {
             // No selections: create single point range from cursor_position
-            let cursor = state.cursor_position();
-            let char_idx = row_col_to_pos(cursor.row, cursor.col);
+            let (row, col) = state.cursor_position();
+            let char_idx = row_col_to_pos(row, col);
             let max_pos = rope.len_chars();
             let safe_pos = char_idx.min(max_pos);
             Selection::point(safe_pos)
@@ -533,6 +534,17 @@ impl AnyModeSimulator {
     /// Create from an EditorSnapshot in Normal mode.
     pub fn from_snapshot(snapshot: &EditorSnapshot) -> Self {
         Self::Normal(HelixSimulator::from_snapshot(snapshot))
+    }
+
+    /// Get display facade for UI rendering.
+    ///
+    /// The display facade provides row/col conversion from char offsets
+    /// without copying data. Use this at the UI boundary for rendering.
+    pub fn display(&self) -> EditorDisplay<'_> {
+        match self {
+            Self::Normal(sim) => sim.display(),
+            Self::Insert(sim) => sim.display(),
+        }
     }
 }
 

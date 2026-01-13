@@ -204,15 +204,7 @@ fn render_scenario_editor<S: PlayableScenario>(
 
     // Editor views - reuse common rendering function
     // No preview highlight in arcade mode
-    render_editor_pair(
-        frame,
-        chunks[1],
-        scenario.current_state(),
-        scenario.target_state(),
-        " Current ",
-        " Target ",
-        None,
-    );
+    render_editor_pair(frame, chunks[1], scenario, " Current ", " Target ", None);
 }
 
 /// Render timer bar

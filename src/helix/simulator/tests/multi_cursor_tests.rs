@@ -5,7 +5,8 @@
 //! - `from_editor_state()` imports ALL selections into helix_core::Selection
 //! - Round-trip: EditorState -> Simulator -> EditorState preserves all selections
 
-use crate::game::{CursorPosition, EditorState, Selection};
+use crate::game::EditorState;
+use crate::game::editor_state::{CursorPosition, Selection};
 use crate::helix::simulator::{AnyModeSimulator, HelixSimulator, NormalMode};
 
 #[test]
@@ -17,8 +18,8 @@ fn test_from_editor_state_single_cursor() {
     let exported = sim.get_state().unwrap();
 
     assert_eq!(exported.content(), "hello world");
-    assert_eq!(exported.cursor_position().row, 0);
-    assert_eq!(exported.cursor_position().col, 0);
+    assert_eq!(exported.cursor_position().0, 0);
+    assert_eq!(exported.cursor_position().1, 0);
     assert!(exported.selections().is_empty());
 }
 

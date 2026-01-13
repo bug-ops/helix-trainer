@@ -153,7 +153,9 @@ impl EditorSnapshot {
 
     /// Check if this snapshot matches another (content + selections).
     ///
-    /// Performs order-independent selection comparison for multi-cursor scenarios.
+    /// Performs order-independent and direction-independent selection comparison.
+    /// This handles the case where helix-core might have (anchor=27, head=12) while
+    /// the TOML target specifies (anchor=12, head=27) - both represent the same range.
     pub fn matches(&self, other: &EditorSnapshot) -> bool {
         // Content must match
         if self.content != other.content {
@@ -167,19 +169,51 @@ impl EditorSnapshot {
             return self.cursor_offset() == other.cursor_offset();
         }
 
-        // Multi-selection comparison (order-independent)
+        // Multi-selection comparison (order-independent and direction-independent)
         if self.selections.len() != other.selections.len() {
             return false;
         }
 
-        // Sort both for order-independent comparison
-        let mut self_sorted: Vec<_> = self.selections.clone();
-        let mut other_sorted: Vec<_> = other.selections.clone();
+        // Normalize both sets to (min, max) tuples for comparison
+        // This ignores selection direction (anchor vs head)
+        let normalize = |r: &SerializableRange| (r.anchor.min(r.head), r.anchor.max(r.head));
 
-        self_sorted.sort_by_key(|r| (r.anchor.min(r.head), r.anchor.max(r.head)));
-        other_sorted.sort_by_key(|r| (r.anchor.min(r.head), r.anchor.max(r.head)));
+        let mut self_normalized: Vec<_> = self.selections.iter().map(normalize).collect();
+        let mut other_normalized: Vec<_> = other.selections.iter().map(normalize).collect();
 
-        self_sorted == other_sorted
+        self_normalized.sort();
+        other_normalized.sort();
+
+        self_normalized == other_normalized
+    }
+}
+
+/// Selection bounds for UI rendering.
+///
+/// Simple struct holding row/col coordinates for start and end of selection.
+/// Used to decouple UI rendering from helix-core types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelectionBounds {
+    /// Start row (0-indexed)
+    pub start_row: usize,
+    /// Start column (0-indexed)
+    pub start_col: usize,
+    /// End row (0-indexed)
+    pub end_row: usize,
+    /// End column (0-indexed)
+    pub end_col: usize,
+}
+
+impl SelectionBounds {
+    /// Create new selection bounds.
+    #[inline]
+    pub fn new(start_row: usize, start_col: usize, end_row: usize, end_col: usize) -> Self {
+        Self {
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+        }
     }
 }
 
@@ -235,6 +269,37 @@ impl<'a> EditorDisplay<'a> {
         }
     }
 
+    /// Get primary selection as SelectionBounds for UI rendering.
+    ///
+    /// Returns None if primary selection is a point (no actual selection).
+    /// This is the preferred method for UI code.
+    pub fn selection(&self) -> Option<SelectionBounds> {
+        let range = self.selection.primary();
+        if range.anchor == range.head {
+            return None;
+        }
+
+        let anchor_pos = self.char_to_row_col(range.anchor);
+        let head_pos = self.char_to_row_col(range.head);
+
+        // Normalize to (start, end)
+        if range.anchor < range.head {
+            Some(SelectionBounds::new(
+                anchor_pos.0,
+                anchor_pos.1,
+                head_pos.0,
+                head_pos.1,
+            ))
+        } else {
+            Some(SelectionBounds::new(
+                head_pos.0,
+                head_pos.1,
+                anchor_pos.0,
+                anchor_pos.1,
+            ))
+        }
+    }
+
     /// Get all selection bounds.
     pub fn all_selection_bounds(&self) -> Vec<((usize, usize), (usize, usize))> {
         self.selection
@@ -285,6 +350,119 @@ impl<'a> EditorDisplay<'a> {
         let col = clamped - line_start;
         (line, col)
     }
+}
+
+impl EditorSnapshot {
+    /// Create a snapshot from scenario config with row/col cursor position.
+    ///
+    /// Converts row/col coordinates to char offsets using the content.
+    /// This is the entry point for loading scenarios into the helix-core representation.
+    ///
+    /// # Arguments
+    /// * `content` - Document content
+    /// * `cursor_row` - Row (0-indexed)
+    /// * `cursor_col` - Column (0-indexed)
+    pub fn from_row_col(content: String, cursor_row: usize, cursor_col: usize) -> Self {
+        let char_offset = row_col_to_char_offset(&content, cursor_row, cursor_col);
+        Self::with_cursor(content, char_offset)
+    }
+
+    /// Create a snapshot from scenario config with row/col selection.
+    ///
+    /// Converts row/col coordinates to char offsets.
+    ///
+    /// # Arguments
+    /// * `content` - Document content
+    /// * `sel` - Selection as [start_row, start_col, end_row, end_col]
+    pub fn from_row_col_selection(content: String, sel: [usize; 4]) -> Self {
+        let anchor = row_col_to_char_offset(&content, sel[0], sel[1]);
+        let head = row_col_to_char_offset(&content, sel[2], sel[3]);
+        Self::with_selections(content, vec![SerializableRange::new(anchor, head)], 0)
+    }
+
+    /// Create from scenario config with multiple cursors (point selections).
+    pub fn from_multi_cursor(content: String, cursors: &[[usize; 2]]) -> Self {
+        if cursors.is_empty() {
+            return Self::with_cursor(content, 0);
+        }
+
+        let selections: Vec<SerializableRange> = cursors
+            .iter()
+            .map(|c| {
+                let offset = row_col_to_char_offset(&content, c[0], c[1]);
+                SerializableRange::point(offset)
+            })
+            .collect();
+
+        Self::with_selections(content, selections, 0)
+    }
+
+    /// Create from scenario config with multiple selections.
+    pub fn from_multi_selection(content: String, selections: &[[usize; 4]]) -> Self {
+        if selections.is_empty() {
+            return Self::with_cursor(content, 0);
+        }
+
+        let ranges: Vec<SerializableRange> = selections
+            .iter()
+            .map(|s| {
+                let anchor = row_col_to_char_offset(&content, s[0], s[1]);
+                let head = row_col_to_char_offset(&content, s[2], s[3]);
+                SerializableRange::new(anchor, head)
+            })
+            .collect();
+
+        Self::with_selections(content, ranges, 0)
+    }
+
+    /// Create from scenario Setup or TargetState config.
+    ///
+    /// Handles all cursor/selection formats (single, multi-cursor, multi-selection).
+    pub fn from_scenario_config(
+        content: String,
+        cursor_position: Option<(usize, usize)>,
+        selection: Option<[usize; 4]>,
+        cursors: Option<&[[usize; 2]]>,
+        selections: Option<&[[usize; 4]]>,
+    ) -> Self {
+        // Multi-selection takes priority
+        if let Some(sels) = selections {
+            return Self::from_multi_selection(content, sels);
+        }
+
+        // Multi-cursor next
+        if let Some(curs) = cursors {
+            return Self::from_multi_cursor(content, curs);
+        }
+
+        // Single selection
+        if let Some(sel) = selection {
+            return Self::from_row_col_selection(content, sel);
+        }
+
+        // Single cursor (or default)
+        let (row, col) = cursor_position.unwrap_or((0, 0));
+        Self::from_row_col(content, row, col)
+    }
+}
+
+/// Convert (row, col) to char offset in content.
+///
+/// This is the central conversion function for row/col -> char offset.
+/// Used when loading scenarios from TOML format.
+fn row_col_to_char_offset(content: &str, row: usize, col: usize) -> usize {
+    let mut char_offset = 0;
+    for (line_idx, line) in content.lines().enumerate() {
+        if line_idx == row {
+            // Clamp column to line length
+            let safe_col = col.min(line.chars().count());
+            return char_offset + safe_col;
+        }
+        // Add line length plus newline
+        char_offset += line.chars().count() + 1;
+    }
+    // If row exceeds line count, return end of content
+    content.chars().count()
 }
 
 #[cfg(test)]
@@ -433,5 +611,203 @@ mod tests {
 
         assert_eq!(selection.ranges().len(), 2);
         assert_eq!(selection.primary_index(), 1);
+    }
+
+    // ==================== row_col_to_char_offset tests ====================
+
+    #[test]
+    fn test_row_col_to_char_offset_first_line() {
+        let content = "hello\nworld";
+        assert_eq!(row_col_to_char_offset(content, 0, 0), 0);
+        assert_eq!(row_col_to_char_offset(content, 0, 3), 3);
+        assert_eq!(row_col_to_char_offset(content, 0, 5), 5);
+    }
+
+    #[test]
+    fn test_row_col_to_char_offset_second_line() {
+        let content = "hello\nworld";
+        // Second line starts at char 6 (5 chars + 1 newline)
+        assert_eq!(row_col_to_char_offset(content, 1, 0), 6);
+        assert_eq!(row_col_to_char_offset(content, 1, 3), 9);
+    }
+
+    #[test]
+    fn test_row_col_to_char_offset_clamps_column() {
+        let content = "hi\nworld";
+        // Line 0 has 2 chars, so col 10 should clamp to 2
+        assert_eq!(row_col_to_char_offset(content, 0, 10), 2);
+    }
+
+    #[test]
+    fn test_row_col_to_char_offset_beyond_lines() {
+        let content = "hello";
+        // Row 5 doesn't exist, should return end of content
+        assert_eq!(row_col_to_char_offset(content, 5, 0), 5);
+    }
+
+    // ==================== EditorSnapshot::from_row_col tests ====================
+
+    #[test]
+    fn test_snapshot_from_row_col() {
+        let snap = EditorSnapshot::from_row_col("line 1\nline 2".to_string(), 1, 2);
+
+        assert_eq!(snap.content, "line 1\nline 2");
+        // Line 1 starts at char 7, plus col 2 = char 9
+        assert_eq!(snap.cursor_offset(), 9);
+    }
+
+    #[test]
+    fn test_snapshot_from_row_col_selection() {
+        let snap = EditorSnapshot::from_row_col_selection(
+            "hello world".to_string(),
+            [0, 0, 0, 5], // Select "hello"
+        );
+
+        assert_eq!(snap.selections.len(), 1);
+        assert_eq!(snap.selections[0].anchor, 0);
+        assert_eq!(snap.selections[0].head, 5);
+    }
+
+    #[test]
+    fn test_snapshot_from_multi_cursor() {
+        let snap = EditorSnapshot::from_multi_cursor("hello\nworld".to_string(), &[[0, 0], [1, 0]]);
+
+        assert_eq!(snap.selections.len(), 2);
+        assert_eq!(snap.selections[0].anchor, 0);
+        assert_eq!(snap.selections[0].head, 0);
+        assert_eq!(snap.selections[1].anchor, 6);
+        assert_eq!(snap.selections[1].head, 6);
+    }
+
+    #[test]
+    fn test_snapshot_from_multi_selection() {
+        let snap = EditorSnapshot::from_multi_selection(
+            "hello world".to_string(),
+            &[[0, 0, 0, 5], [0, 6, 0, 11]],
+        );
+
+        assert_eq!(snap.selections.len(), 2);
+        assert_eq!(snap.selections[0].anchor, 0);
+        assert_eq!(snap.selections[0].head, 5);
+        assert_eq!(snap.selections[1].anchor, 6);
+        assert_eq!(snap.selections[1].head, 11);
+    }
+
+    #[test]
+    fn test_snapshot_from_scenario_config_single_cursor() {
+        let snap = EditorSnapshot::from_scenario_config(
+            "test".to_string(),
+            Some((0, 2)),
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(snap.cursor_offset(), 2);
+        assert_eq!(snap.selections.len(), 1);
+    }
+
+    #[test]
+    fn test_snapshot_from_scenario_config_multi_selection_priority() {
+        // Multi-selection should take priority over cursor_position
+        let snap = EditorSnapshot::from_scenario_config(
+            "hello world".to_string(),
+            Some((0, 0)),                         // cursor
+            None,                                 // selection
+            None,                                 // cursors
+            Some(&[[0, 0, 0, 5], [0, 6, 0, 11]]), // multi-selections
+        );
+
+        // Should use multi-selections, not cursor_position
+        assert_eq!(snap.selections.len(), 2);
+    }
+
+    #[test]
+    fn test_scenario_line_selection_conversion() {
+        // Reproduce the select_line_001 scenario issue
+        // Target: selection = [1, 0, 2, 0] means row 1 col 0 to row 2 col 0
+        let content = "fn main() {\n    let x = 1;\n    let y = 2;\n}";
+
+        // Target snapshot from TOML config
+        let target_snap = EditorSnapshot::from_scenario_config(
+            content.to_string(),
+            Some((1, 0)),       // cursor_position
+            Some([1, 0, 2, 0]), // selection
+            None,               // cursors
+            None,               // selections
+        );
+
+        // Calculate what the char offsets should be:
+        // "fn main() {\n" = 12 chars (11 + 1 newline)
+        // Row 1: "    let x = 1;\n" = 15 chars (14 + 1 newline)
+        // Row 1 starts at char 12
+        // Row 2 starts at char 12 + 15 = 27
+
+        assert_eq!(target_snap.selections.len(), 1);
+        assert_eq!(
+            target_snap.selections[0].anchor, 12,
+            "anchor should be start of row 1"
+        );
+        assert_eq!(
+            target_snap.selections[0].head, 27,
+            "head should be start of row 2"
+        );
+    }
+
+    #[test]
+    fn test_scenario_line_selection_matching() {
+        // Test that a simulator state matches the target
+        let content = "fn main() {\n    let x = 1;\n    let y = 2;\n}";
+
+        // Target: line selection from row 1 to row 2
+        let target = EditorSnapshot::from_scenario_config(
+            content.to_string(),
+            Some((1, 0)),
+            Some([1, 0, 2, 0]),
+            None,
+            None,
+        );
+
+        // Current: same selection (as if we executed 'x' on line 1)
+        // Row 1 starts at char 12, Row 2 starts at char 27
+        let current = EditorSnapshot::with_selections(
+            content.to_string(),
+            vec![SerializableRange::new(12, 27)],
+            0,
+        );
+
+        assert!(current.matches(&target), "Same selection should match");
+    }
+
+    #[test]
+    fn test_helix_select_line_matches_toml_target() {
+        // Verify that helix-core 'x' command result matches TOML target
+        // even when anchor/head are in different order
+        let content = "fn main() {\n    let x = 1;\n    let y = 2;\n}";
+
+        use crate::helix::HelixSimulator;
+        let mut sim = HelixSimulator::new(content.to_string());
+
+        // Position at row 1, col 6 (char 18)
+        sim.selection = helix_core::Selection::point(18);
+
+        // Execute select line command
+        use crate::helix::registry::normal_registry;
+        normal_registry().execute(&mut sim, "x").unwrap();
+
+        let current_snap = sim.to_snapshot();
+
+        // Target from TOML: selection = [1, 0, 2, 0]
+        let target_snap = EditorSnapshot::from_scenario_config(
+            content.to_string(),
+            Some((1, 0)),
+            Some([1, 0, 2, 0]),
+            None,
+            None,
+        );
+
+        // Helix produces (anchor=27, head=12), TOML produces (anchor=12, head=27)
+        // These should match because they represent the same range
+        assert!(current_snap.matches(&target_snap));
     }
 }

@@ -4,6 +4,7 @@
 //! like 'dd', 'gg', 'r<char>' through the typestate-based InputStateMachine.
 
 use helix_trainer::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
+use helix_trainer::game::PlayableScenario;
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::ui::state::{InputStateAccess, TypedScreen};
@@ -86,7 +87,7 @@ fn test_replace_command_multi_key() {
             task_data.input_state().state()
         );
         // Content should still be "Hxllo" - nothing changed yet
-        assert_eq!(task_data.session.current_state().content(), "Hxllo");
+        assert_eq!(task_data.session.current_content(), "Hxllo");
     } else {
         panic!("Should be on Task screen");
     }
@@ -112,10 +113,10 @@ fn test_replace_command_multi_key() {
                 // Scenario completed - check pending session has correct content
                 let pending = state.game.pending_completed_session.as_ref();
                 assert!(pending.is_some(), "Should have pending completed session");
-                assert_eq!(pending.unwrap().current_state().content(), "Hello");
+                assert_eq!(pending.unwrap().current_content(), "Hello");
             } else {
                 // Scenario not yet complete - check session content
-                assert_eq!(task_data.session.current_state().content(), "Hello");
+                assert_eq!(task_data.session.current_content(), "Hello");
             }
         }
         TypedScreen::Results(results_data) => {
@@ -148,13 +149,10 @@ fn test_xd_command_line_delete() {
         // Input state should be Base (single-key command executes immediately)
         assert!(task_data.input_state().state().is_base());
         // Content unchanged after x (selection only)
-        assert_eq!(
-            task_data.session.current_state().content(),
-            "line1\nline2\nline3"
-        );
+        assert_eq!(task_data.session.current_content(), "line1\nline2\nline3");
         // Selection should be set
         assert!(
-            task_data.session.current_state().selection().is_some(),
+            task_data.session.current_selection().is_some(),
             "Selection should be set after 'x'"
         );
     } else {
@@ -167,7 +165,7 @@ fn test_xd_command_line_delete() {
     if let TypedScreen::Task(task_data) = &state.screen {
         // Input state should be Base
         assert!(task_data.input_state().state().is_base());
-        assert_eq!(task_data.session.current_state().content(), "line1\nline3");
+        assert_eq!(task_data.session.current_content(), "line1\nline3");
     } else {
         panic!("Should be on Task screen after xd (scenario incomplete)");
     }
@@ -206,8 +204,8 @@ fn test_gg_command_multi_key() {
     if let TypedScreen::Task(task_data) = &state.screen {
         // Input state should be back to Base
         assert!(task_data.input_state().state().is_base());
-        let cursor = task_data.session.current_state().cursor_position();
-        assert_eq!((cursor.row, cursor.col), (0, 0));
+        let cursor = task_data.session.current_cursor();
+        assert_eq!(cursor, (0, 0));
     } else {
         panic!("Should be on Task screen after gg (scenario incomplete)");
     }
@@ -242,7 +240,7 @@ fn test_replace_command_valid_sequence() {
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
         // Content should be "rest" (replaced 't' with 'r')
-        assert_eq!(task_data.session.current_state().content(), "rest");
+        assert_eq!(task_data.session.current_content(), "rest");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -270,7 +268,7 @@ fn test_single_key_command_immediate_execution() {
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
         // Cursor should have moved
-        assert_eq!(task_data.session.current_state().cursor_position().col, 1);
+        assert_eq!(task_data.session.current_cursor().1, 1);
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -290,7 +288,7 @@ fn test_replace_with_special_chars() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("!"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.session.current_state().content(), "!");
+        assert_eq!(task_data.session.current_content(), "!");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -316,7 +314,7 @@ fn test_undo_integration() {
     update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.session.current_state().content(), "line2");
+        assert_eq!(task_data.session.current_content(), "line2");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -326,7 +324,7 @@ fn test_undo_integration() {
 
     if let TypedScreen::Task(task_data) = &state.screen {
         // After undo, line1 should be restored
-        assert_eq!(task_data.session.current_state().content(), "line1\nline2");
+        assert_eq!(task_data.session.current_content(), "line1\nline2");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }

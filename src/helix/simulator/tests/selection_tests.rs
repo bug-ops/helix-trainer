@@ -5,7 +5,8 @@
 //! - Select all: %
 //! - Selection + delete workflows: x+d
 
-use crate::game::{CursorPosition, EditorState};
+use crate::game::EditorState;
+use crate::game::editor_state::CursorPosition;
 use crate::helix::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
@@ -20,7 +21,7 @@ fn test_select_line_then_delete() {
     // Move to line 1
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().row, 1);
+    assert_eq!(state.cursor_position().0, 1);
 
     // Execute x (select line)
     sim.execute_command(CMD_SELECT_LINE).unwrap();
@@ -58,8 +59,8 @@ fn test_select_line_scenario_exact() {
         state.selection(),
         state.content()
     );
-    assert_eq!(state.cursor_position().row, 1);
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().0, 1);
+    assert_eq!(state.cursor_position().1, 0);
 
     // Execute x (select line)
     sim.execute_command(CMD_SELECT_LINE).unwrap();
@@ -124,7 +125,7 @@ fn test_repeat_select_line_then_delete() {
     // Move to line 2
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().row, 1);
+    assert_eq!(state.cursor_position().0, 1);
 
     // Select line with x
     sim.execute_command(CMD_SELECT_LINE).unwrap();
@@ -135,7 +136,7 @@ fn test_repeat_select_line_then_delete() {
     assert_eq!(state.content(), "line 1\nline 3\nline 4\n");
 
     // Now cursor should be on what was line 3 (now line 2)
-    assert_eq!(state.cursor_position().row, 1);
+    assert_eq!(state.cursor_position().0, 1);
 
     // Repeat with . - should execute x+d together
     sim.execute_command(".").unwrap();

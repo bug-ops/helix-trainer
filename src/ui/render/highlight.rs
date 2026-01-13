@@ -2,6 +2,7 @@
 
 use std::sync::LazyLock;
 
+use crate::helix::SelectionBounds;
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
@@ -83,7 +84,7 @@ pub fn highlight_code_with_cursor(
     content: &str,
     cursor_line: usize,
     cursor_col: usize,
-    selection: Option<&crate::game::Selection>,
+    selection: Option<&SelectionBounds>,
 ) -> Vec<Line<'static>> {
     use super::helpers::{char_range_to_bytes, split_at_char_index};
 
@@ -100,11 +101,11 @@ pub fn highlight_code_with_cursor(
         .map(|(line_idx, line_text)| {
             // Check for selection on this line
             if let Some(sel) = selection {
-                let sel_start_line = sel.start.row;
-                let sel_end_line = sel.end.row;
+                let sel_start_line = sel.start_row;
+                let sel_end_line = sel.end_row;
 
                 // Skip if this is the end line but end_col is 0
-                let line_has_selection = if line_idx == sel_end_line && sel.end.col == 0 {
+                let line_has_selection = if line_idx == sel_end_line && sel.end_col == 0 {
                     false
                 } else {
                     line_idx >= sel_start_line && line_idx <= sel_end_line
@@ -118,13 +119,13 @@ pub fn highlight_code_with_cursor(
 
                     // Determine selection range for this line
                     let line_start_col = if line_idx == sel_start_line {
-                        sel.start.col
+                        sel.start_col
                     } else {
                         0
                     };
 
                     let line_end_col = if line_idx == sel_end_line {
-                        sel.end.col
+                        sel.end_col
                     } else {
                         line_text.chars().count()
                     };

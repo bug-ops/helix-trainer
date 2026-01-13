@@ -8,10 +8,10 @@
 //! (gs, gg, ge) that would fail in the UI due to missing command buffer handling.
 
 use helix_trainer::config::ScenarioLoader;
-use helix_trainer::game::GameSession;
 use helix_trainer::game::command_context::{
     ParsedCommand, extract_count_and_command, parse_command_buffer,
 };
+use helix_trainer::game::{GameSession, PlayableScenario};
 
 #[test]
 fn test_all_scenarios_load_successfully() {
@@ -295,18 +295,16 @@ fn test_all_scenarios_execute_solution() {
                 }
                 SessionAfterAction::StillActive(s) => {
                     if !s.check_completion() {
-                        let current = s.current_state();
-                        let target = s.target_state();
                         failed_scenarios.push((
                             scenario.id.clone(),
                             format!(
                                 "Solution did not complete scenario.\n  Current: content='{}', cursor={:?}, selection={:?}\n  Target:  content='{}', cursor={:?}, selection={:?}",
-                                current.content(),
-                                current.cursor_position(),
-                                current.selection(),
-                                target.content(),
-                                target.cursor_position(),
-                                target.selection()
+                                s.current_content(),
+                                s.current_cursor(),
+                                s.current_selection(),
+                                s.target_content(),
+                                s.target_cursor(),
+                                s.target_selection()
                             ),
                         ));
                     }

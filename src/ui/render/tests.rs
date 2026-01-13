@@ -322,178 +322,150 @@ mod helper_tests {
 // ==================== Editor Rendering Tests ====================
 
 mod editor_tests {
-    use crate::game::{CursorPosition, EditorState, Selection};
-
-    fn create_editor_state(content: &str, row: usize, col: usize) -> EditorState {
-        let cursor = CursorPosition { row, col };
-        EditorState::new(content.to_string(), cursor, None).unwrap()
-    }
-
-    fn create_editor_with_selection(
-        content: &str,
-        cursor: (usize, usize),
-        sel_start: (usize, usize),
-        sel_end: (usize, usize),
-    ) -> EditorState {
-        let cursor_pos = CursorPosition {
-            row: cursor.0,
-            col: cursor.1,
-        };
-        let start = CursorPosition {
-            row: sel_start.0,
-            col: sel_start.1,
-        };
-        let end = CursorPosition {
-            row: sel_end.0,
-            col: sel_end.1,
-        };
-        let selection = Selection::new(start, end);
-        EditorState::new(content.to_string(), cursor_pos, Some(selection)).unwrap()
-    }
+    use crate::helix::SelectionBounds;
 
     #[test]
     fn test_render_editor_with_diff_matching_lines() {
-        let current = create_editor_state("line 1\nline 2\n", 0, 0);
-        let target = create_editor_state("line 1\nline 2\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Should have 2 lines
+        let lines = super::super::editor::render_editor_with_diff(
+            "line 1\nline 2\n",
+            "line 1\nline 2\n",
+            (0, 0),
+            None,
+            None,
+        );
         assert_eq!(lines.len(), 2);
     }
 
     #[test]
     fn test_render_editor_with_diff_different_lines() {
-        let current = create_editor_state("line 1\nline 2\n", 0, 0);
-        let target = create_editor_state("line 1\nline X\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Should have 2 lines
+        let lines = super::super::editor::render_editor_with_diff(
+            "line 1\nline 2\n",
+            "line 1\nline X\n",
+            (0, 0),
+            None,
+            None,
+        );
         assert_eq!(lines.len(), 2);
     }
 
     #[test]
     fn test_render_editor_with_diff_cursor_on_first_line() {
-        let current = create_editor_state("hello world\nsecond line\n", 0, 5);
-        let target = create_editor_state("hello world\nsecond line\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // First line should have cursor rendering (multiple spans)
+        let lines = super::super::editor::render_editor_with_diff(
+            "hello world\nsecond line\n",
+            "hello world\nsecond line\n",
+            (0, 5),
+            None,
+            None,
+        );
         assert!(!lines.is_empty());
     }
 
     #[test]
     fn test_render_editor_with_diff_cursor_at_end_of_line() {
-        let current = create_editor_state("hello\n", 0, 5);
-        let target = create_editor_state("hello\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
+        let lines =
+            super::super::editor::render_editor_with_diff("hello\n", "hello\n", (0, 5), None, None);
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_with_diff_empty_content() {
-        let current = create_editor_state("", 0, 0);
-        let target = create_editor_state("", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Empty content should produce empty lines
+        let lines = super::super::editor::render_editor_with_diff("", "", (0, 0), None, None);
         assert!(lines.is_empty());
     }
 
     #[test]
     fn test_render_editor_with_diff_single_empty_line() {
-        let current = create_editor_state("\n", 0, 0);
-        let target = create_editor_state("\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
+        let lines = super::super::editor::render_editor_with_diff("\n", "\n", (0, 0), None, None);
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_with_selection_no_selection() {
-        let state = create_editor_state("line 1\nline 2\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_selection(&state);
-
+        let lines =
+            super::super::editor::render_editor_with_selection("line 1\nline 2\n", (0, 0), None);
         assert_eq!(lines.len(), 2);
     }
 
     #[test]
     fn test_render_editor_with_selection_single_line_selection() {
-        let state = create_editor_with_selection("hello world\n", (0, 0), (0, 0), (0, 5));
-
-        let lines = super::super::editor::render_editor_with_selection(&state);
-
+        let selection = SelectionBounds::new(0, 0, 0, 5);
+        let lines = super::super::editor::render_editor_with_selection(
+            "hello world\n",
+            (0, 0),
+            Some(selection),
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_with_selection_multiline_selection() {
-        let state =
-            create_editor_with_selection("line 1\nline 2\nline 3\n", (0, 0), (0, 0), (2, 0));
-
-        let lines = super::super::editor::render_editor_with_selection(&state);
-
+        let selection = SelectionBounds::new(0, 0, 2, 0);
+        let lines = super::super::editor::render_editor_with_selection(
+            "line 1\nline 2\nline 3\n",
+            (0, 0),
+            Some(selection),
+        );
         assert_eq!(lines.len(), 3);
     }
 
     #[test]
     fn test_render_editor_with_diff_selection_present() {
-        let current = create_editor_with_selection("hello world\n", (0, 0), (0, 0), (0, 5));
-        let target = create_editor_state("hello world\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Should render with selection highlighting
+        let selection = SelectionBounds::new(0, 0, 0, 5);
+        let lines = super::super::editor::render_editor_with_diff(
+            "hello world\n",
+            "hello world\n",
+            (0, 0),
+            Some(selection),
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_with_diff_target_shorter() {
-        let current = create_editor_state("line 1\nline 2\nline 3\n", 0, 0);
-        let target = create_editor_state("line 1\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Current has 3 lines
+        let lines = super::super::editor::render_editor_with_diff(
+            "line 1\nline 2\nline 3\n",
+            "line 1\n",
+            (0, 0),
+            None,
+            None,
+        );
         assert_eq!(lines.len(), 3);
     }
 
     #[test]
     fn test_render_editor_with_diff_target_longer() {
-        let current = create_editor_state("line 1\n", 0, 0);
-        let target = create_editor_state("line 1\nline 2\nline 3\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Current has 1 line
+        let lines = super::super::editor::render_editor_with_diff(
+            "line 1\n",
+            "line 1\nline 2\nline 3\n",
+            (0, 0),
+            None,
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_cursor_middle_of_line() {
-        let current = create_editor_state("hello world\n", 0, 6);
-        let target = create_editor_state("hello world\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Should render cursor at position 6 (on 'w')
+        let lines = super::super::editor::render_editor_with_diff(
+            "hello world\n",
+            "hello world\n",
+            (0, 6),
+            None,
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_unicode_content() {
-        let current = create_editor_state("héllo wörld\n", 0, 0);
-        let target = create_editor_state("héllo wörld\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
+        let lines = super::super::editor::render_editor_with_diff(
+            "héllo wörld\n",
+            "héllo wörld\n",
+            (0, 0),
+            None,
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 }

@@ -5,8 +5,8 @@
 
 use crate::config::{Difficulty, Scenario};
 use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
-use crate::game::{CommandExecutor, EditorState};
-use crate::helix::AnyModeSimulator;
+use crate::game::CommandExecutor;
+use crate::helix::{AnyModeSimulator, EditorSnapshot};
 use crate::learning::PerformanceTracker;
 use crate::minigame::{
     DifficultyController, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
@@ -29,14 +29,11 @@ pub struct ActiveMiniScenario {
     /// The scenario being played
     pub scenario: Scenario,
 
-    /// Helix simulator instance
+    /// Helix simulator instance (source of truth for current state)
     simulator: AnyModeSimulator,
 
-    /// Current editor state
-    current_state: EditorState,
-
-    /// Target state to achieve
-    target_state: EditorState,
+    /// Target as snapshot for efficient completion checking
+    target_snapshot: EditorSnapshot,
 
     /// When scenario started
     started_at: Instant,
@@ -61,8 +58,7 @@ impl ActiveMiniScenario {
         Ok(Self {
             scenario,
             simulator: state.simulator,
-            current_state: state.current_state,
-            target_state: state.target_state,
+            target_snapshot: state.target_snapshot,
             started_at: Instant::now(),
             time_limit,
             actions: Vec::new(),
@@ -71,7 +67,7 @@ impl ActiveMiniScenario {
 
     /// Check if scenario is completed
     fn is_completed(&self) -> bool {
-        self.current_state.matches(&self.target_state)
+        self.simulator.matches_snapshot(&self.target_snapshot)
     }
 
     /// Get elapsed time since scenario started
@@ -96,16 +92,6 @@ impl ActiveMiniScenario {
         (self.elapsed().as_secs_f64() / self.time_limit.as_secs_f64()).clamp(0.0, 1.0)
     }
 
-    /// Get current editor state
-    pub fn current_state(&self) -> &EditorState {
-        &self.current_state
-    }
-
-    /// Get target editor state
-    pub fn target_state(&self) -> &EditorState {
-        &self.target_state
-    }
-
     /// Get number of actions taken
     pub fn action_count(&self) -> usize {
         self.actions.len()
@@ -124,12 +110,34 @@ impl ActiveMiniScenario {
 
 // Implement PlayableScenario trait for ActiveMiniScenario
 impl crate::game::PlayableScenario for ActiveMiniScenario {
-    fn current_state(&self) -> &crate::game::EditorState {
-        &self.current_state
+    fn current_content(&self) -> String {
+        self.simulator.display().content()
     }
 
-    fn target_state(&self) -> &crate::game::EditorState {
-        &self.target_state
+    fn target_content(&self) -> String {
+        self.target_snapshot.content.clone()
+    }
+
+    fn current_cursor(&self) -> (usize, usize) {
+        self.simulator.display().cursor_position()
+    }
+
+    fn target_cursor(&self) -> (usize, usize) {
+        let rope = helix_core::Rope::from(self.target_snapshot.content.as_str());
+        let selection = self.target_snapshot.to_helix_selection();
+        let display = crate::helix::EditorDisplay::new(&rope, &selection);
+        display.cursor_position()
+    }
+
+    fn current_selection(&self) -> Option<crate::helix::SelectionBounds> {
+        self.simulator.display().selection()
+    }
+
+    fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
+        let rope = helix_core::Rope::from(self.target_snapshot.content.as_str());
+        let selection = self.target_snapshot.to_helix_selection();
+        let display = crate::helix::EditorDisplay::new(&rope, &selection);
+        display.selection()
     }
 
     fn action_count(&self) -> usize {
@@ -149,13 +157,12 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
 impl CommandExecutor for ActiveMiniScenario {
     fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
         self.simulator.execute_command(command)?;
-        self.current_state = self.simulator.to_editor_state()?;
         self.actions.push(command.to_string());
         Ok(())
     }
 
     fn check_completion(&self) -> bool {
-        self.current_state.matches(&self.target_state)
+        self.simulator.matches_snapshot(&self.target_snapshot)
     }
 }
 
@@ -951,6 +958,7 @@ impl MiniGameSession {
 mod tests {
     use super::*;
     use crate::config::Difficulty;
+    use crate::game::PlayableScenario;
     use crate::minigame::{ArcadeConfig, ChallengeConfig, SurvivalConfig};
     use crate::testing::ScenarioBuilder;
 
@@ -1132,12 +1140,8 @@ mod tests {
 
         // Check that the cursor moved
         if let Some(scenario) = session.current_scenario() {
-            let state = scenario.current_state();
-            assert_eq!(
-                state.cursor_position().row,
-                2,
-                "Cursor should be on last line (row 2)"
-            );
+            let (row, _col) = scenario.current_cursor();
+            assert_eq!(row, 2, "Cursor should be on last line (row 2)");
         }
     }
 

@@ -5,6 +5,8 @@
 
 use std::time::Duration;
 
+use crate::helix::SelectionBounds;
+
 pub mod command_context;
 pub mod editor_state;
 pub mod scenario_state;
@@ -16,7 +18,7 @@ pub use command_context::{
     CommandBuffer, CommandContext, CommandExecutor, CommandInputResult, ParsedCommand,
     extract_count_and_command, format_key_for_display, parse_command_buffer, process_command_input,
 };
-pub use editor_state::{CursorPosition, EditorState, Selection};
+pub use editor_state::EditorState;
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};
 pub use session::{
@@ -29,23 +31,39 @@ pub use session::{
 /// Both training mode (`GameSession<Active>`) and arcade mode (`ActiveMiniScenario`)
 /// implement this trait, enabling shared rendering and state inspection logic.
 ///
+/// This trait uses primitive types (strings, tuples) instead of EditorState
+/// to minimize coupling with legacy types. Implementations typically use
+/// the simulator's EditorDisplay facade internally.
+///
 /// # Examples
 ///
 /// ```ignore
 /// use helix_trainer::game::PlayableScenario;
 ///
 /// fn render_editor<S: PlayableScenario>(session: &S) {
-///     let current = session.current_state();
-///     let target = session.target_state();
-///     // ... render both states
+///     let current_content = session.current_content();
+///     let (cursor_row, cursor_col) = session.current_cursor();
+///     // ... render editor
 /// }
 /// ```
 pub trait PlayableScenario {
-    /// Get reference to the current editor state
-    fn current_state(&self) -> &EditorState;
+    /// Get current editor content as string
+    fn current_content(&self) -> String;
 
-    /// Get reference to the target editor state
-    fn target_state(&self) -> &EditorState;
+    /// Get target editor content as string
+    fn target_content(&self) -> String;
+
+    /// Get current cursor position as (row, col)
+    fn current_cursor(&self) -> (usize, usize);
+
+    /// Get target cursor position as (row, col)
+    fn target_cursor(&self) -> (usize, usize);
+
+    /// Get current selection bounds (if any)
+    fn current_selection(&self) -> Option<SelectionBounds>;
+
+    /// Get target selection bounds (if any)
+    fn target_selection(&self) -> Option<SelectionBounds>;
 
     /// Get the number of actions taken so far
     fn action_count(&self) -> usize;
@@ -55,11 +73,6 @@ pub trait PlayableScenario {
 
     /// Get elapsed time since scenario start
     fn elapsed(&self) -> Duration;
-
-    /// Check if current state matches target state
-    fn is_completed(&self) -> bool {
-        self.current_state() == self.target_state()
-    }
 
     /// Get current editor mode as string for UI display
     fn mode_name(&self) -> &'static str {

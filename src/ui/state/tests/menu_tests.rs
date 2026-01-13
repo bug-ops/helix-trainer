@@ -1,6 +1,7 @@
 //! Tests for menu navigation and selection
 
 use super::common::{create_test_app_state, create_test_scenario};
+use crate::game::PlayableScenario;
 use crate::ui::state::{Message, TypedScreen, update};
 
 #[test]
@@ -87,7 +88,7 @@ fn test_menu_select_start_training() {
     // After TypedScreen refactoring, session is inside TaskData
     if let TypedScreen::Task(task_data) = &state.screen {
         // Session exists inside TaskData
-        assert!(!task_data.session.current_state().content().is_empty());
+        assert!(!task_data.session.current_content().is_empty());
     } else {
         panic!("Should be on Task screen with active session");
     }

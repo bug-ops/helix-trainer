@@ -572,7 +572,7 @@ impl EditorState {
         &self.content
     }
 
-    /// Get the cursor position.
+    /// Get the cursor position as (row, col) tuple.
     ///
     /// # Examples
     ///
@@ -581,11 +581,12 @@ impl EditorState {
     ///
     /// let cursor = CursorPosition::new(1, 3)?;
     /// let state = EditorState::new("line 1\nline 2\n".to_string(), cursor, None)?;
-    /// assert_eq!(state.cursor_position().row, 1);
+    /// let (row, col) = state.cursor_position();
+    /// assert_eq!(row, 1);
     /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
-    pub fn cursor_position(&self) -> CursorPosition {
-        self.cursor_pos
+    pub fn cursor_position(&self) -> (usize, usize) {
+        (self.cursor_pos.row, self.cursor_pos.col)
     }
 
     /// Get the primary selection (backward compatible).

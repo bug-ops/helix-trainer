@@ -1,6 +1,8 @@
 //! Editor text rendering with cursor and selection
 
 use super::helpers::{char_range_to_bytes, find_surrounding_brackets};
+use crate::game::PlayableScenario;
+use crate::helix::SelectionBounds;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -60,22 +62,22 @@ impl PreviewHighlight {
 }
 
 /// Render a line with selection highlighting
-fn render_line_with_selection<'a>(
-    line_text: &'a str,
+fn render_line_with_selection(
+    line_text: &str,
     line_idx: usize,
     line_color: Color,
-    sel: &crate::game::Selection,
-) -> Line<'a> {
+    sel: &SelectionBounds,
+) -> Line<'static> {
     let mut spans = Vec::new();
 
-    let line_start_col = if line_idx == sel.start.row {
-        sel.start.col
+    let line_start_col = if line_idx == sel.start_row {
+        sel.start_col
     } else {
         0
     };
 
-    let line_end_col = if line_idx == sel.end.row {
-        sel.end.col
+    let line_end_col = if line_idx == sel.end_row {
+        sel.end_col
     } else {
         line_text.chars().count()
     };
@@ -84,14 +86,14 @@ fn render_line_with_selection<'a>(
 
     if start_byte > 0 {
         spans.push(Span::styled(
-            &line_text[..start_byte],
+            line_text[..start_byte].to_string(),
             Style::default().fg(line_color),
         ));
     }
 
     if start_byte < end_byte && end_byte <= line_text.len() {
         spans.push(Span::styled(
-            &line_text[start_byte..end_byte],
+            line_text[start_byte..end_byte].to_string(),
             Style::default()
                 .bg(super::SELECTION_BG_COLOR)
                 .fg(Color::White),
@@ -100,7 +102,7 @@ fn render_line_with_selection<'a>(
 
     if end_byte < line_text.len() {
         spans.push(Span::styled(
-            &line_text[end_byte..],
+            line_text[end_byte..].to_string(),
             Style::default().fg(line_color),
         ));
     }
@@ -176,11 +178,11 @@ fn get_preview_positions(preview: Option<PreviewHighlight>, line_idx: usize) -> 
 }
 
 /// Check if a line has selection (accounting for edge cases)
-fn line_has_selection(line_idx: usize, sel: &crate::game::Selection) -> bool {
-    if line_idx == sel.end.row && sel.end.col == 0 {
+fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
+    if line_idx == sel.end_row && sel.end_col == 0 {
         return false;
     }
-    line_idx >= sel.start.row && line_idx <= sel.end.row
+    line_idx >= sel.start_row && line_idx <= sel.end_row
 }
 
 /// Render editor text with cursor, selection and diff highlighting
@@ -191,17 +193,18 @@ fn line_has_selection(line_idx: usize, sel: &crate::game::Selection) -> bool {
 /// - Selection shown with blue background
 /// - Cursor shown with inverse colors
 /// - Preview highlight shown with yellow/red background
-pub(super) fn render_editor_with_diff<'a>(
-    current: &'a crate::game::EditorState,
-    target: &crate::game::EditorState,
+pub(super) fn render_editor_with_diff(
+    current_content: &str,
+    target_content: &str,
+    cursor_pos: (usize, usize),
+    selection: Option<SelectionBounds>,
     preview: Option<PreviewHighlight>,
-) -> Vec<Line<'a>> {
-    let cursor = current.cursor_position();
-    let selection = current.selection();
+) -> Vec<Line<'static>> {
+    let (cursor_row, cursor_col) = cursor_pos;
     let preview_color = preview.map(|p| p.color()).unwrap_or(Color::Yellow);
 
-    let current_lines: Vec<&str> = current.content().lines().collect();
-    let target_lines: Vec<&str> = target.content().lines().collect();
+    let current_lines: Vec<&str> = current_content.lines().collect();
+    let target_lines: Vec<&str> = target_content.lines().collect();
 
     current_lines
         .iter()
@@ -219,27 +222,30 @@ pub(super) fn render_editor_with_diff<'a>(
             };
 
             // Selection takes priority
-            if let Some(sel) = selection
-                && line_has_selection(line_idx, &sel)
+            if let Some(ref sel) = selection
+                && line_has_selection(line_idx, sel)
             {
-                return render_line_with_selection(line_text, line_idx, line_color, &sel);
+                return render_line_with_selection(line_text, line_idx, line_color, sel);
             }
 
             let preview_positions = get_preview_positions(preview, line_idx);
-            let has_cursor = line_idx == cursor.row;
+            let has_cursor = line_idx == cursor_row;
             let has_preview = !preview_positions.is_empty();
 
             if has_cursor || has_preview {
-                let cursor_col = if has_cursor { Some(cursor.col) } else { None };
+                let col = if has_cursor { Some(cursor_col) } else { None };
                 render_line_with_highlights(
                     line_text,
                     line_color,
-                    cursor_col,
+                    col,
                     &preview_positions,
                     preview_color,
                 )
             } else {
-                Line::from(Span::styled(line_text, Style::default().fg(line_color)))
+                Line::from(Span::styled(
+                    line_text.to_string(),
+                    Style::default().fg(line_color),
+                ))
             }
         })
         .collect()
@@ -247,17 +253,19 @@ pub(super) fn render_editor_with_diff<'a>(
 
 /// Render editor text with syntax highlighting and selection
 ///
-/// Takes EditorState and returns `Vec<Line>` with syntax highlighting,
-/// selection range highlighted using background color, and cursor shown if present.
-pub(super) fn render_editor_with_selection(state: &crate::game::EditorState) -> Vec<Line<'static>> {
-    let content = state.content();
-    let cursor = state.cursor_position();
-    let selection = state.selection();
-
+/// Takes content, cursor position, and selection bounds, returns `Vec<Line>`
+/// with syntax highlighting, selection range highlighted using background color,
+/// and cursor shown if present.
+pub(super) fn render_editor_with_selection(
+    content: &str,
+    cursor_pos: (usize, usize),
+    selection: Option<SelectionBounds>,
+) -> Vec<Line<'static>> {
+    let (cursor_row, cursor_col) = cursor_pos;
     super::highlight::highlight_code_with_cursor(
         content,
-        cursor.row,
-        cursor.col,
+        cursor_row,
+        cursor_col,
         selection.as_ref(),
     )
 }
@@ -272,20 +280,26 @@ pub(super) fn render_editor_with_selection(state: &crate::game::EditorState) -> 
 ///
 /// * `frame` - Ratatui frame to render into
 /// * `area` - Area to render the editor views
-/// * `current_state` - Current editor state with cursor
-/// * `target_state` - Target state to achieve
+/// * `scenario` - The playable scenario providing state access
 /// * `current_title` - Title for current state panel
 /// * `target_title` - Title for target state panel
 /// * `preview` - Optional preview highlight for surround replace
-pub(super) fn render_editor_pair(
+pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     frame: &mut Frame,
     area: Rect,
-    current_state: &crate::game::EditorState,
-    target_state: &crate::game::EditorState,
+    scenario: &S,
     current_title: &str,
     target_title: &str,
     preview: Option<PreviewHighlight>,
 ) {
+    // Get state from trait methods
+    let current_content = scenario.current_content();
+    let target_content = scenario.target_content();
+    let cursor_pos = scenario.current_cursor();
+    let selection = scenario.current_selection();
+    let target_cursor = scenario.target_cursor();
+    let target_selection = scenario.target_selection();
+
     // Split into two columns
     let editor_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -293,7 +307,13 @@ pub(super) fn render_editor_pair(
         .split(area);
 
     // Current state with cursor and diff highlighting
-    let current_lines = render_editor_with_diff(current_state, target_state, preview);
+    let current_lines = render_editor_with_diff(
+        &current_content,
+        &target_content,
+        cursor_pos,
+        selection,
+        preview,
+    );
     let current = Paragraph::new(current_lines)
         .block(
             Block::default()
@@ -305,7 +325,8 @@ pub(super) fn render_editor_pair(
     frame.render_widget(current, editor_chunks[0]);
 
     // Target state with selection highlighting (if any)
-    let target_lines = render_editor_with_selection(target_state);
+    let target_lines =
+        render_editor_with_selection(&target_content, target_cursor, target_selection);
     let target = Paragraph::new(target_lines)
         .block(
             Block::default()
@@ -470,10 +491,7 @@ mod tests {
 
     #[test]
     fn test_line_has_selection_within_range() {
-        let sel = crate::game::Selection::new(
-            crate::game::CursorPosition { row: 1, col: 0 },
-            crate::game::CursorPosition { row: 3, col: 5 },
-        );
+        let sel = SelectionBounds::new(1, 0, 3, 5);
 
         assert!(!line_has_selection(0, &sel)); // Before selection
         assert!(line_has_selection(1, &sel)); // Start of selection
@@ -484,12 +502,9 @@ mod tests {
 
     #[test]
     fn test_line_has_selection_edge_case_end_col_zero() {
-        let sel = crate::game::Selection::new(
-            crate::game::CursorPosition { row: 1, col: 0 },
-            crate::game::CursorPosition { row: 2, col: 0 },
-        );
+        let sel = SelectionBounds::new(1, 0, 2, 0);
 
-        // When end.col is 0, line 2 should NOT be considered selected
+        // When end_col is 0, line 2 should NOT be considered selected
         assert!(line_has_selection(1, &sel));
         assert!(!line_has_selection(2, &sel));
     }

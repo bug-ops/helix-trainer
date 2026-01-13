@@ -28,8 +28,8 @@ fn test_from_setup() {
     let state = EditorState::from_setup("line 1\nline 2\n", [1, 0], None);
     assert!(state.is_ok());
     let state = state.unwrap();
-    assert_eq!(state.cursor_position().row, 1);
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().0, 1);
+    assert_eq!(state.cursor_position().1, 0);
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn test_set_content_adjusts_cursor() {
     state.set_content("only one line\n".to_string()).unwrap();
 
     // Cursor should be clamped to line 0
-    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().0, 0);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn test_move_cursor() {
     let new_pos = CursorPosition::new(1, 3).unwrap();
     state.move_cursor(new_pos).unwrap();
 
-    assert_eq!(state.cursor_position(), new_pos);
+    assert_eq!(state.cursor_position(), (1, 3));
 }
 
 #[test]
@@ -177,8 +177,8 @@ fn test_set_selection_clear() {
 fn test_default_editor_state() {
     let state = EditorState::default();
     assert_eq!(state.content(), "");
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().0, 0);
+    assert_eq!(state.cursor_position().1, 0);
     assert!(state.selection().is_none());
 }
 
@@ -712,8 +712,8 @@ fn test_from_scenario_setup_single_cursor() {
     let state =
         EditorState::from_scenario_setup("test content", Some((0, 4)), None, None, None).unwrap();
 
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 4);
+    assert_eq!(state.cursor_position().0, 0);
+    assert_eq!(state.cursor_position().1, 4);
     assert!(state.selections().is_empty());
 }
 
@@ -726,8 +726,8 @@ fn test_from_scenario_setup_with_cursors() {
 
     assert_eq!(state.selections().len(), 2);
     // First cursor position should be used
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().0, 0);
+    assert_eq!(state.cursor_position().1, 0);
 }
 
 #[test]
@@ -740,8 +740,8 @@ fn test_from_scenario_setup_with_selections() {
 
     assert_eq!(state.selections().len(), 2);
     // Cursor should be at first selection's end
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 4);
+    assert_eq!(state.cursor_position().0, 0);
+    assert_eq!(state.cursor_position().1, 4);
 }
 
 #[test]
@@ -749,8 +749,8 @@ fn test_from_scenario_target_single_cursor() {
     let state = EditorState::from_scenario_target("target content", Some((0, 6)), None, None, None)
         .unwrap();
 
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 6);
+    assert_eq!(state.cursor_position().0, 0);
+    assert_eq!(state.cursor_position().1, 6);
 }
 
 #[test]
@@ -816,7 +816,7 @@ fn test_format_priority_cursors_over_cursor_position() {
 
     // Should have 2 selections (from cursors), cursor at first cursor position
     assert_eq!(state.selections().len(), 2);
-    assert_eq!(state.cursor_position().col, 5);
+    assert_eq!(state.cursor_position().1, 5);
 }
 
 #[test]
@@ -835,8 +835,8 @@ fn test_format_priority_empty_selections_array() {
 
     // Empty selections means no selections, cursor defaults to (0,0)
     assert!(state.selections().is_empty());
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().0, 0);
+    assert_eq!(state.cursor_position().1, 0);
 }
 
 #[test]
@@ -855,8 +855,8 @@ fn test_format_priority_empty_cursors_array() {
 
     // Empty cursors means no selections, cursor defaults to (0,0)
     assert!(state.selections().is_empty());
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().0, 0);
+    assert_eq!(state.cursor_position().1, 0);
 }
 
 #[test]
@@ -864,8 +864,8 @@ fn test_format_default_cursor_fallback() {
     // When no cursor info is provided, default to (0, 0)
     let state = EditorState::from_scenario_setup("test content", None, None, None, None).unwrap();
 
-    assert_eq!(state.cursor_position().row, 0);
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().0, 0);
+    assert_eq!(state.cursor_position().1, 0);
 }
 
 #[test]

@@ -321,6 +321,8 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
 ///
 /// This is a helper function to bridge the gap between command strings
 /// coming from the input layer and the KeyEvent-based state machine.
+/// Uses `parse_helix_key_string()` for parsing, which supports modifiers
+/// like Alt-C, Ctrl-w, etc.
 ///
 /// # Examples
 ///
@@ -332,32 +334,12 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
 ///
 /// let key = command_to_key_event("Escape");
 /// assert_eq!(key.code, KeyCode::Esc);
+///
+/// let key = command_to_key_event("Alt-C");
+/// assert!(key.modifiers.contains(KeyModifiers::ALT));
+/// assert!(key.modifiers.contains(KeyModifiers::SHIFT));
 /// ```
 pub fn command_to_key_event(command: &str) -> KeyEvent {
-    // Handle single character commands
-    if command.len() == 1 {
-        let c = command.chars().next().unwrap();
-        // Check if it's an uppercase letter (implies Shift)
-        let modifiers = if c.is_ascii_uppercase() {
-            KeyModifiers::SHIFT
-        } else {
-            KeyModifiers::NONE
-        };
-        return KeyEvent::new(KeyCode::Char(c), modifiers);
-    }
-
-    // Handle special command strings
-    match command {
-        "Escape" => KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
-        "Left" => KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
-        "Right" => KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
-        "Up" => KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
-        "Down" => KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
-        "Backspace" => KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
-        _ => {
-            // Default: treat first char as the key
-            let c = command.chars().next().unwrap_or(' ');
-            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
-        }
-    }
+    parse_helix_key_string(command)
+        .unwrap_or_else(|| KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE))
 }

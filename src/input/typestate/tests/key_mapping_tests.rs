@@ -473,9 +473,10 @@ fn test_command_to_key_backspace() {
 
 #[test]
 fn test_command_to_key_unknown_multichar() {
-    // Unknown multi-character command uses first char
+    // Unknown multi-character strings that aren't recognized special keys
+    // fall back to space (via parse_helix_key_string returning None)
     let key = command_to_key_event("unknown");
-    assert_eq!(key.code, KeyCode::Char('u'));
+    assert_eq!(key.code, KeyCode::Char(' '));
 }
 
 #[test]

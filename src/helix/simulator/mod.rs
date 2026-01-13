@@ -109,51 +109,81 @@ impl<M: EditorMode> HelixSimulator<M> {
     }
 
     /// Get current editor state
+    ///
+    /// Exports ALL selections from helix_core::Selection to EditorState.
+    /// Point selections (anchor == head) are skipped as they represent cursors without selection.
     pub fn get_state(&self) -> Result<EditorState, UserError> {
-        let range = self.selection.primary();
-        let head = range.head;
-        let anchor = range.anchor;
-
-        // Clamp to valid bounds
         let max_pos = self.doc.len_chars();
-        let head_clamped = head.min(max_pos);
 
-        // Convert head position to (line, col)
-        // Note: We use `head` (not cursor()) for backward compatibility with scenarios.
-        // The `head` represents the actual selection head position, while `cursor()`
-        // returns the visual block cursor position which is head-1 for forward selections.
-        let line = self.doc.char_to_line(head_clamped);
-        let line_start = self.doc.line_to_char(line);
-        let col = head_clamped - line_start;
-
-        // Extract selection if anchor != head (non-empty selection)
-        let selection = if anchor != head {
-            let anchor_clamped = anchor.min(max_pos);
-            let anchor_line = self.doc.char_to_line(anchor_clamped);
-            let anchor_line_start = self.doc.line_to_char(anchor_line);
-            let anchor_col = anchor_clamped - anchor_line_start;
-
-            // Create selection with start being the smaller position
-            let (start_line, start_col, end_line, end_col) = if anchor_clamped < head {
-                (anchor_line, anchor_col, line, col)
-            } else {
-                (line, col, anchor_line, anchor_col)
-            };
-
-            Some(crate::game::Selection::new(
-                CursorPosition::new(start_line, start_col).map_err(UserError::from)?,
-                CursorPosition::new(end_line, end_col).map_err(UserError::from)?,
-            ))
-        } else {
-            None
+        // Helper: convert char index to (row, col)
+        let pos_to_row_col = |char_idx: usize| -> (usize, usize) {
+            let clamped = char_idx.min(max_pos);
+            let line = self.doc.char_to_line(clamped);
+            let line_start = self.doc.line_to_char(line);
+            let col = clamped - line_start;
+            (line, col)
         };
 
-        EditorState::new(
-            self.doc.to_string(),
-            CursorPosition::new(line, col).map_err(UserError::from)?,
-            selection,
-        )
-        .map_err(UserError::from)
+        // Export ALL selections from helix_core::Selection
+        let selections: Vec<crate::game::Selection> = self
+            .selection
+            .ranges()
+            .iter()
+            .filter_map(|range| {
+                let anchor = range.anchor;
+                let head = range.head;
+
+                // Skip point selections (anchor == head) - they're just cursors
+                if anchor == head {
+                    return None;
+                }
+
+                let (anchor_row, anchor_col) = pos_to_row_col(anchor);
+                let (head_row, head_col) = pos_to_row_col(head);
+
+                // Normalize to ensure start <= end for Selection
+                let ((start_row, start_col), (end_row, end_col)) = if anchor < head {
+                    ((anchor_row, anchor_col), (head_row, head_col))
+                } else {
+                    ((head_row, head_col), (anchor_row, anchor_col))
+                };
+
+                Some(crate::game::Selection::new(
+                    CursorPosition {
+                        row: start_row,
+                        col: start_col,
+                    },
+                    CursorPosition {
+                        row: end_row,
+                        col: end_col,
+                    },
+                ))
+            })
+            .collect();
+
+        // Build cursor position from primary range's head
+        let primary = self.selection.primary();
+        let (cursor_row, cursor_col) = pos_to_row_col(primary.head);
+        let cursor = CursorPosition::new(cursor_row, cursor_col).map_err(UserError::from)?;
+
+        // Determine primary selection index
+        let primary_idx = self.selection.primary_index();
+
+        if selections.is_empty() {
+            // No non-point selections - use simple constructor
+            EditorState::new(self.doc.to_string(), cursor, None).map_err(UserError::from)
+        } else {
+            // Use with_selections for multi-selection support
+            // Clamp primary_idx to valid range (may differ if some ranges were skipped)
+            let clamped_primary_idx = primary_idx.min(selections.len().saturating_sub(1));
+            EditorState::with_selections(
+                self.doc.to_string(),
+                cursor,
+                selections,
+                clamped_primary_idx,
+            )
+            .map_err(UserError::from)
+        }
     }
 
     /// Convert simulator state to EditorState (alias for get_state)
@@ -198,44 +228,55 @@ impl HelixSimulator<NormalMode> {
 
     /// Create a new simulator from an EditorState (starts in Normal mode)
     ///
-    /// Initializes the simulator with the content, cursor position, and optional selection
-    /// from the EditorState. This is useful when starting from a scenario setup.
+    /// Initializes the simulator with the content, cursor position, and ALL selections
+    /// from the EditorState. This enables multi-cursor scenarios.
     pub fn from_editor_state(state: &EditorState) -> Self {
         let rope = Rope::from(state.content());
-        let lines: Vec<&str> = state.content().lines().collect();
 
-        // Helper to convert (row, col) to absolute char position
-        let pos_to_char = |row: usize, col: usize| -> usize {
-            if row == 0 {
-                col
-            } else {
-                let mut pos = 0;
-                for line_idx in 0..row {
-                    if line_idx < lines.len() {
-                        pos += lines[line_idx].chars().count() + 1; // +1 for newline
-                    }
-                }
-                pos + col
+        // Helper to convert (row, col) to absolute char position using Rope API
+        let row_col_to_pos = |row: usize, col: usize| -> usize {
+            let line_count = rope.len_lines();
+            if row >= line_count {
+                return rope.len_chars();
             }
+            let line_start = rope.line_to_char(row);
+            let line_len = rope.line(row).len_chars();
+            // Clamp column to line length (excluding newline for position calculation)
+            let safe_col = col.min(line_len.saturating_sub(1).max(col.min(line_len)));
+            line_start.saturating_add(safe_col).min(rope.len_chars())
         };
 
-        // Convert cursor position
-        let cursor = state.cursor_position();
-        let char_pos = pos_to_char(cursor.row, cursor.col);
-
-        // Ensure position is within bounds
-        let max_pos = rope.len_chars().saturating_sub(1);
-        let safe_pos = char_pos.min(max_pos);
-
-        // Handle selection if present
-        let selection = if let Some(sel) = state.selection() {
-            let anchor = pos_to_char(sel.start.row, sel.start.col);
-            let head = pos_to_char(sel.end.row, sel.end.col);
-            let safe_anchor = anchor.min(rope.len_chars());
-            let safe_head = head.min(rope.len_chars());
-            Selection::single(safe_anchor, safe_head)
-        } else {
+        // Convert EditorState selections to helix_core::Selection
+        let selections = state.selections();
+        let selection = if selections.is_empty() {
+            // No selections: create single point range from cursor_position
+            let cursor = state.cursor_position();
+            let char_idx = row_col_to_pos(cursor.row, cursor.col);
+            let max_pos = rope.len_chars();
+            let safe_pos = char_idx.min(max_pos);
             Selection::point(safe_pos)
+        } else {
+            // Convert all selections to helix_core::Range
+            let ranges: Vec<helix_core::Range> = selections
+                .iter()
+                .map(|sel| {
+                    let start_idx = row_col_to_pos(sel.start.row, sel.start.col);
+                    let end_idx = row_col_to_pos(sel.end.row, sel.end.col);
+                    let safe_start = start_idx.min(rope.len_chars());
+                    let safe_end = end_idx.min(rope.len_chars());
+                    // helix_core::Range: anchor is start, head is end
+                    helix_core::Range::new(safe_start, safe_end)
+                })
+                .collect();
+
+            // Get primary index, clamped to valid range
+            let primary_idx = state
+                .primary_selection_idx()
+                .min(ranges.len().saturating_sub(1));
+
+            // Create Selection with all ranges
+            // Note: Selection::new() panics if ranges is empty, but we checked above
+            Selection::new(ranges.into(), primary_idx)
         };
 
         Self {

@@ -19,11 +19,10 @@ use crate::input::typestate::{
 
 impl InputHandler<BaseState> for KeyHandler {
     fn handle_key(_state: &BaseState, key: KeyEvent) -> HandlerResult {
-        // Only handle keys without modifiers (except Shift for uppercase)
-        let has_modifier = key.modifiers.contains(KeyModifiers::CONTROL)
-            || key.modifiers.contains(KeyModifiers::ALT);
+        // Only filter CONTROL modifier, let ALT through for Alt-key commands
+        let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
-        match (key.code, has_modifier) {
+        match (key.code, has_ctrl) {
             // Special modifiers - let through for Ctrl-R, Ctrl-C, etc.
             (KeyCode::Char('r'), true) if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 HandlerResult::Execute(Cow::Borrowed(CMD_CTRL_R))

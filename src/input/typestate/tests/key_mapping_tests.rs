@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::helix::commands::*;
 use crate::input::typestate::key_mapping::{
     command_to_key_event, handle_insert_mode_input, is_count_compatible_command,
-    map_key_to_helix_command, map_single_key_command,
+    map_key_to_helix_command, map_single_key_command, parse_helix_key_string,
 };
 
 // ============================================================================
@@ -483,4 +483,305 @@ fn test_command_to_key_empty() {
     // Empty string falls back to space character
     let key = command_to_key_event("");
     assert_eq!(key.code, KeyCode::Char(' '));
+}
+
+// ============================================================================
+// parse_helix_key_string tests
+// ============================================================================
+
+#[test]
+fn test_parse_single_lowercase() {
+    let key = parse_helix_key_string("c").unwrap();
+    assert_eq!(key.code, KeyCode::Char('c'));
+    assert_eq!(key.modifiers, KeyModifiers::NONE);
+}
+
+#[test]
+fn test_parse_single_uppercase() {
+    let key = parse_helix_key_string("C").unwrap();
+    assert_eq!(key.code, KeyCode::Char('C'));
+    assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+}
+
+#[test]
+fn test_parse_alt_lowercase() {
+    let key = parse_helix_key_string("Alt-c").unwrap();
+    assert_eq!(key.code, KeyCode::Char('c'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(!key.modifiers.contains(KeyModifiers::SHIFT));
+}
+
+#[test]
+fn test_parse_alt_uppercase() {
+    let key = parse_helix_key_string("Alt-C").unwrap();
+    assert_eq!(key.code, KeyCode::Char('C'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+}
+
+#[test]
+fn test_parse_alt_short_form() {
+    let key = parse_helix_key_string("A-c").unwrap();
+    assert_eq!(key.code, KeyCode::Char('c'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(!key.modifiers.contains(KeyModifiers::SHIFT));
+
+    let key = parse_helix_key_string("A-C").unwrap();
+    assert_eq!(key.code, KeyCode::Char('C'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+}
+
+#[test]
+fn test_parse_ctrl_lowercase() {
+    let key = parse_helix_key_string("Ctrl-c").unwrap();
+    assert_eq!(key.code, KeyCode::Char('c'));
+    assert!(key.modifiers.contains(KeyModifiers::CONTROL));
+    assert!(!key.modifiers.contains(KeyModifiers::SHIFT));
+}
+
+#[test]
+fn test_parse_ctrl_short_form() {
+    let key = parse_helix_key_string("C-w").unwrap();
+    assert_eq!(key.code, KeyCode::Char('w'));
+    assert!(key.modifiers.contains(KeyModifiers::CONTROL));
+}
+
+#[test]
+fn test_parse_shift_explicit() {
+    let key = parse_helix_key_string("Shift-a").unwrap();
+    assert_eq!(key.code, KeyCode::Char('a'));
+    assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+
+    let key = parse_helix_key_string("S-a").unwrap();
+    assert_eq!(key.code, KeyCode::Char('a'));
+    assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+}
+
+#[test]
+fn test_parse_special_keys() {
+    let key = parse_helix_key_string("Escape").unwrap();
+    assert_eq!(key.code, KeyCode::Esc);
+
+    let key = parse_helix_key_string("Backspace").unwrap();
+    assert_eq!(key.code, KeyCode::Backspace);
+
+    let key = parse_helix_key_string("Enter").unwrap();
+    assert_eq!(key.code, KeyCode::Enter);
+
+    let key = parse_helix_key_string("Tab").unwrap();
+    assert_eq!(key.code, KeyCode::Tab);
+
+    let key = parse_helix_key_string("Space").unwrap();
+    assert_eq!(key.code, KeyCode::Char(' '));
+}
+
+#[test]
+fn test_parse_arrow_keys() {
+    let key = parse_helix_key_string("Left").unwrap();
+    assert_eq!(key.code, KeyCode::Left);
+
+    let key = parse_helix_key_string("Right").unwrap();
+    assert_eq!(key.code, KeyCode::Right);
+
+    let key = parse_helix_key_string("Up").unwrap();
+    assert_eq!(key.code, KeyCode::Up);
+
+    let key = parse_helix_key_string("Down").unwrap();
+    assert_eq!(key.code, KeyCode::Down);
+}
+
+#[test]
+fn test_parse_special_keys_short_form() {
+    let key = parse_helix_key_string("esc").unwrap();
+    assert_eq!(key.code, KeyCode::Esc);
+
+    let key = parse_helix_key_string("bs").unwrap();
+    assert_eq!(key.code, KeyCode::Backspace);
+
+    let key = parse_helix_key_string("ret").unwrap();
+    assert_eq!(key.code, KeyCode::Enter);
+}
+
+#[test]
+fn test_parse_function_keys() {
+    let key = parse_helix_key_string("F1").unwrap();
+    assert_eq!(key.code, KeyCode::F(1));
+
+    let key = parse_helix_key_string("F12").unwrap();
+    assert_eq!(key.code, KeyCode::F(12));
+}
+
+#[test]
+fn test_parse_navigation_keys() {
+    let key = parse_helix_key_string("Home").unwrap();
+    assert_eq!(key.code, KeyCode::Home);
+
+    let key = parse_helix_key_string("End").unwrap();
+    assert_eq!(key.code, KeyCode::End);
+
+    let key = parse_helix_key_string("PageUp").unwrap();
+    assert_eq!(key.code, KeyCode::PageUp);
+
+    let key = parse_helix_key_string("PageDown").unwrap();
+    assert_eq!(key.code, KeyCode::PageDown);
+
+    let key = parse_helix_key_string("Insert").unwrap();
+    assert_eq!(key.code, KeyCode::Insert);
+
+    let key = parse_helix_key_string("Delete").unwrap();
+    assert_eq!(key.code, KeyCode::Delete);
+}
+
+#[test]
+fn test_parse_modifier_with_special_key() {
+    let key = parse_helix_key_string("Ctrl-Space").unwrap();
+    assert_eq!(key.code, KeyCode::Char(' '));
+    assert!(key.modifiers.contains(KeyModifiers::CONTROL));
+
+    let key = parse_helix_key_string("Alt-Enter").unwrap();
+    assert_eq!(key.code, KeyCode::Enter);
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+}
+
+#[test]
+fn test_parse_special_characters() {
+    let key = parse_helix_key_string("-").unwrap();
+    assert_eq!(key.code, KeyCode::Char('-'));
+
+    let key = parse_helix_key_string("Alt--").unwrap();
+    assert_eq!(key.code, KeyCode::Char('-'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+
+    let key = parse_helix_key_string("Alt-,").unwrap();
+    assert_eq!(key.code, KeyCode::Char(','));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+
+    let key = parse_helix_key_string("Alt-.").unwrap();
+    assert_eq!(key.code, KeyCode::Char('.'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+
+    let key = parse_helix_key_string("Alt-;").unwrap();
+    assert_eq!(key.code, KeyCode::Char(';'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+
+    let key = parse_helix_key_string("Alt-`").unwrap();
+    assert_eq!(key.code, KeyCode::Char('`'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+
+    let key = parse_helix_key_string("Alt-*").unwrap();
+    assert_eq!(key.code, KeyCode::Char('*'));
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+}
+
+#[test]
+fn test_parse_empty_string() {
+    assert!(parse_helix_key_string("").is_none());
+}
+
+#[test]
+fn test_parse_invalid_string() {
+    // Multi-character strings that are not recognized special keys
+    assert!(parse_helix_key_string("unknown").is_none());
+    assert!(parse_helix_key_string("xyz").is_none());
+}
+
+#[test]
+fn test_parse_modifier_only() {
+    // Modifier prefix without key should return None
+    assert!(parse_helix_key_string("Alt-").is_none());
+    assert!(parse_helix_key_string("Ctrl-").is_none());
+    assert!(parse_helix_key_string("A-").is_none());
+    assert!(parse_helix_key_string("C-").is_none());
+}
+
+#[test]
+fn test_parse_case_insensitive_modifiers() {
+    let key1 = parse_helix_key_string("Alt-c").unwrap();
+    let key2 = parse_helix_key_string("alt-c").unwrap();
+    assert_eq!(key1.code, key2.code);
+    assert_eq!(key1.modifiers, key2.modifiers);
+
+    let key1 = parse_helix_key_string("Ctrl-c").unwrap();
+    let key2 = parse_helix_key_string("ctrl-c").unwrap();
+    assert_eq!(key1.code, key2.code);
+    assert_eq!(key1.modifiers, key2.modifiers);
+}
+
+#[test]
+fn test_parse_case_insensitive_special_keys() {
+    let key1 = parse_helix_key_string("Escape").unwrap();
+    let key2 = parse_helix_key_string("escape").unwrap();
+    assert_eq!(key1.code, key2.code);
+
+    let key1 = parse_helix_key_string("ESCAPE").unwrap();
+    assert_eq!(key1.code, KeyCode::Esc);
+}
+
+#[test]
+fn test_parse_all_alt_commands_from_plan() {
+    // Alt-C: copy_selection_on_prev_line
+    let key = parse_helix_key_string("Alt-C").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+    assert_eq!(key.code, KeyCode::Char('C'));
+
+    // Alt-J: join_selections_space
+    let key = parse_helix_key_string("Alt-J").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+    assert_eq!(key.code, KeyCode::Char('J'));
+
+    // Alt-K: remove_selections
+    let key = parse_helix_key_string("Alt-K").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+    assert_eq!(key.code, KeyCode::Char('K'));
+
+    // Alt-s: split_selection_on_newline (lowercase)
+    let key = parse_helix_key_string("Alt-s").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(!key.modifiers.contains(KeyModifiers::SHIFT));
+    assert_eq!(key.code, KeyCode::Char('s'));
+
+    // Alt-x: shrink_to_line_bounds (lowercase)
+    let key = parse_helix_key_string("Alt-x").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert!(!key.modifiers.contains(KeyModifiers::SHIFT));
+    assert_eq!(key.code, KeyCode::Char('x'));
+
+    // Alt-,: remove_primary_selection
+    let key = parse_helix_key_string("Alt-,").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert_eq!(key.code, KeyCode::Char(','));
+
+    // Alt--: merge_selections
+    let key = parse_helix_key_string("Alt--").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert_eq!(key.code, KeyCode::Char('-'));
+
+    // Alt-_: merge_consecutive_selections
+    let key = parse_helix_key_string("Alt-_").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert_eq!(key.code, KeyCode::Char('_'));
+
+    // Alt-.: repeat_last_motion
+    let key = parse_helix_key_string("Alt-.").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert_eq!(key.code, KeyCode::Char('.'));
+
+    // Alt-`: switch_to_uppercase
+    let key = parse_helix_key_string("Alt-`").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert_eq!(key.code, KeyCode::Char('`'));
+
+    // Alt-;: flip_selections
+    let key = parse_helix_key_string("Alt-;").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert_eq!(key.code, KeyCode::Char(';'));
+
+    // Alt-*: search_selection
+    let key = parse_helix_key_string("Alt-*").unwrap();
+    assert!(key.modifiers.contains(KeyModifiers::ALT));
+    assert_eq!(key.code, KeyCode::Char('*'));
 }

@@ -57,7 +57,10 @@ mod tests;
 pub use handler_result::HandlerResult;
 pub use handlers::{InputHandler, KeyHandler};
 pub use input_state::InputState;
-pub use key_mapping::{command_to_key_event, handle_insert_mode_input, map_key_to_helix_command};
+pub use key_mapping::{
+    command_to_key_event, handle_insert_mode_input, map_key_to_helix_command,
+    parse_helix_key_string,
+};
 pub use state_machine::{InputStateMachine, SurroundPreview};
 pub use state_types::{
     BaseState, CountPending, FindCharPending, FindType, GotoPending, HandlerState, MatchPending,

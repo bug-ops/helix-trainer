@@ -9,6 +9,144 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
 
+/// Parse Helix-style key string to KeyEvent
+///
+/// Supports formats:
+/// - "Alt-C" / "A-C" -> Alt + Shift + c
+/// - "Alt-c" / "A-c" -> Alt + c
+/// - "Ctrl-c" / "C-c" -> Ctrl + c
+/// - "C" -> Shift + c (uppercase = shift)
+/// - "c" -> c (lowercase = no shift)
+/// - Special keys: "Escape", "Backspace", "Enter", "Tab", "Space"
+/// - Arrow keys: "Left", "Right", "Up", "Down"
+///
+/// Reference: Helix uses format like "A-c" for Alt-c, "C-w" for Ctrl-w
+pub fn parse_helix_key_string(s: &str) -> Option<KeyEvent> {
+    if s.is_empty() {
+        return None;
+    }
+
+    let mut modifiers = KeyModifiers::NONE;
+    let mut remaining = s;
+
+    // Parse modifier prefixes (case-insensitive for modifier names)
+    loop {
+        if remaining.starts_with("Alt-") || remaining.starts_with("alt-") {
+            modifiers |= KeyModifiers::ALT;
+            remaining = &remaining[4..];
+        } else if remaining.starts_with("A-") {
+            modifiers |= KeyModifiers::ALT;
+            remaining = &remaining[2..];
+        } else if remaining.starts_with("Ctrl-") || remaining.starts_with("ctrl-") {
+            modifiers |= KeyModifiers::CONTROL;
+            remaining = &remaining[5..];
+        } else if remaining.starts_with("C-") {
+            modifiers |= KeyModifiers::CONTROL;
+            remaining = &remaining[2..];
+        } else if remaining.starts_with("Shift-") || remaining.starts_with("shift-") {
+            modifiers |= KeyModifiers::SHIFT;
+            remaining = &remaining[6..];
+        } else if remaining.starts_with("S-") {
+            modifiers |= KeyModifiers::SHIFT;
+            remaining = &remaining[2..];
+        } else {
+            break;
+        }
+    }
+
+    if remaining.is_empty() {
+        return None;
+    }
+
+    // Parse the key part
+    let key_code = parse_key_code(remaining, &mut modifiers)?;
+
+    Some(KeyEvent::new(key_code, modifiers))
+}
+
+/// Parse the key code from a string, updating modifiers for uppercase letters
+fn parse_key_code(s: &str, modifiers: &mut KeyModifiers) -> Option<KeyCode> {
+    // Single character (byte length check is correct for ASCII-only key inputs)
+    if s.len() == 1 {
+        let c = s.chars().next()?;
+        // Uppercase ASCII letter implies Shift modifier
+        if c.is_ascii_uppercase() {
+            *modifiers |= KeyModifiers::SHIFT;
+        }
+        return Some(KeyCode::Char(c));
+    }
+
+    // Special keys (case-insensitive comparison without heap allocation)
+    if s.eq_ignore_ascii_case("escape") || s.eq_ignore_ascii_case("esc") {
+        return Some(KeyCode::Esc);
+    }
+    if s.eq_ignore_ascii_case("backspace") || s.eq_ignore_ascii_case("bs") {
+        return Some(KeyCode::Backspace);
+    }
+    if s.eq_ignore_ascii_case("enter")
+        || s.eq_ignore_ascii_case("return")
+        || s.eq_ignore_ascii_case("ret")
+    {
+        return Some(KeyCode::Enter);
+    }
+    if s.eq_ignore_ascii_case("tab") {
+        return Some(KeyCode::Tab);
+    }
+    if s.eq_ignore_ascii_case("space") {
+        return Some(KeyCode::Char(' '));
+    }
+    if s.eq_ignore_ascii_case("left") {
+        return Some(KeyCode::Left);
+    }
+    if s.eq_ignore_ascii_case("right") {
+        return Some(KeyCode::Right);
+    }
+    if s.eq_ignore_ascii_case("up") {
+        return Some(KeyCode::Up);
+    }
+    if s.eq_ignore_ascii_case("down") {
+        return Some(KeyCode::Down);
+    }
+    if s.eq_ignore_ascii_case("home") {
+        return Some(KeyCode::Home);
+    }
+    if s.eq_ignore_ascii_case("end") {
+        return Some(KeyCode::End);
+    }
+    if s.eq_ignore_ascii_case("pageup") || s.eq_ignore_ascii_case("page_up") {
+        return Some(KeyCode::PageUp);
+    }
+    if s.eq_ignore_ascii_case("pagedown") || s.eq_ignore_ascii_case("page_down") {
+        return Some(KeyCode::PageDown);
+    }
+    if s.eq_ignore_ascii_case("insert") || s.eq_ignore_ascii_case("ins") {
+        return Some(KeyCode::Insert);
+    }
+    if s.eq_ignore_ascii_case("delete") || s.eq_ignore_ascii_case("del") {
+        return Some(KeyCode::Delete);
+    }
+    // Special characters by name
+    if s.eq_ignore_ascii_case("minus") {
+        return Some(KeyCode::Char('-'));
+    }
+    if s.eq_ignore_ascii_case("plus") {
+        return Some(KeyCode::Char('+'));
+    }
+
+    // Function keys (F1-F12) with case-insensitive first character check
+    let first_char = s.chars().next()?;
+    if first_char.eq_ignore_ascii_case(&'f')
+        && s.len() > 1
+        && let Ok(n) = s[1..].parse::<u8>()
+        && (1..=12).contains(&n)
+    {
+        return Some(KeyCode::F(n));
+    }
+
+    // Multi-character strings that are not recognized special keys
+    None
+}
+
 /// Map a single-key command character to its command string
 ///
 /// Returns None for invalid commands or prefix commands.

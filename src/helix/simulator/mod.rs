@@ -14,6 +14,7 @@ pub mod find_state;
 mod insert_mode;
 mod mode;
 pub mod search_state;
+pub mod snapshot;
 mod undo;
 pub mod view_state;
 
@@ -32,6 +33,7 @@ pub use mode::{EditorMode, InsertMode, NormalMode};
 // Re-export state types
 pub use find_state::{FindDirection, FindState, FindType};
 pub use search_state::{SearchDirection, SearchState};
+pub use snapshot::{EditorDisplay, EditorSnapshot, SerializableRange};
 pub use view_state::ViewState;
 
 // Re-export old Mode enum for backward compatibility during migration
@@ -106,6 +108,41 @@ impl<M: EditorMode> HelixSimulator<M> {
     /// Get current editor mode name
     pub fn mode_name(&self) -> &'static str {
         M::name()
+    }
+
+    /// Create an EditorSnapshot from current simulator state.
+    ///
+    /// This is the preferred way to capture simulator state for:
+    /// - Comparison with target state
+    /// - Serialization/persistence
+    /// - Test assertions
+    pub fn to_snapshot(&self) -> EditorSnapshot {
+        EditorSnapshot::from_helix(&self.doc, &self.selection)
+    }
+
+    /// Get display facade for UI rendering.
+    ///
+    /// The display facade provides row/col conversion from char offsets
+    /// without copying data. Use this at the UI boundary for rendering.
+    pub fn display(&self) -> EditorDisplay<'_> {
+        EditorDisplay::new(&self.doc, &self.selection)
+    }
+
+    /// Check if simulator state matches a target snapshot.
+    ///
+    /// Used for completion checking. Performs order-independent
+    /// selection comparison for multi-cursor scenarios.
+    pub fn matches_snapshot(&self, target: &EditorSnapshot) -> bool {
+        self.to_snapshot().matches(target)
+    }
+
+    /// Check if simulator state matches another simulator.
+    ///
+    /// Convenience method for direct simulator-to-simulator comparison.
+    pub fn matches<N: EditorMode>(&self, other: &HelixSimulator<N>) -> bool {
+        let self_snap = self.to_snapshot();
+        let other_snap = other.to_snapshot();
+        self_snap.matches(&other_snap)
     }
 
     /// Get current editor state
@@ -214,6 +251,47 @@ impl HelixSimulator<NormalMode> {
         Self {
             doc: Rope::from(content.as_str()),
             selection: Selection::point(0),
+            history: Vec::new(),
+            clipboard: None,
+            repeat_buffer: RepeatBuffer::new(),
+            is_repeating: false,
+            repeat_depth: 0,
+            search_state: SearchState::new(),
+            view_state: ViewState::new(),
+            find_state: FindState::new(),
+            _mode: PhantomData,
+        }
+    }
+
+    /// Create a new simulator from an EditorSnapshot (starts in Normal mode)
+    ///
+    /// This is the preferred way to initialize from serialized state.
+    /// Unlike `from_editor_state()`, this uses char offsets directly
+    /// without row/col conversion overhead.
+    pub fn from_snapshot(snapshot: &EditorSnapshot) -> Self {
+        let rope = Rope::from(snapshot.content.as_str());
+        let max_pos = rope.len_chars();
+
+        // Convert snapshot selections to helix_core::Selection
+        let selection = if snapshot.selections.is_empty() {
+            Selection::point(0)
+        } else {
+            let ranges: Vec<helix_core::Range> = snapshot
+                .selections
+                .iter()
+                .map(|r| {
+                    let anchor = r.anchor.min(max_pos);
+                    let head = r.head.min(max_pos);
+                    helix_core::Range::new(anchor, head)
+                })
+                .collect();
+            let primary_idx = snapshot.primary_idx.min(ranges.len().saturating_sub(1));
+            Selection::new(ranges.into(), primary_idx)
+        };
+
+        Self {
+            doc: rope,
+            selection,
             history: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
@@ -426,6 +504,35 @@ impl AnyModeSimulator {
             Self::Normal(sim) => sim.repeat_buffer(),
             Self::Insert(sim) => sim.repeat_buffer(),
         }
+    }
+
+    /// Create an EditorSnapshot from current simulator state.
+    ///
+    /// This is the preferred way to capture simulator state for:
+    /// - Comparison with target state
+    /// - Serialization/persistence
+    /// - Test assertions
+    pub fn to_snapshot(&self) -> EditorSnapshot {
+        match self {
+            Self::Normal(sim) => sim.to_snapshot(),
+            Self::Insert(sim) => sim.to_snapshot(),
+        }
+    }
+
+    /// Check if simulator state matches a target snapshot.
+    ///
+    /// Used for completion checking. Performs order-independent
+    /// selection comparison for multi-cursor scenarios.
+    pub fn matches_snapshot(&self, target: &EditorSnapshot) -> bool {
+        match self {
+            Self::Normal(sim) => sim.matches_snapshot(target),
+            Self::Insert(sim) => sim.matches_snapshot(target),
+        }
+    }
+
+    /// Create from an EditorSnapshot in Normal mode.
+    pub fn from_snapshot(snapshot: &EditorSnapshot) -> Self {
+        Self::Normal(HelixSimulator::from_snapshot(snapshot))
     }
 }
 

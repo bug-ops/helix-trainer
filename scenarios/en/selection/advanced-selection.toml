@@ -1,5 +1,6 @@
 # Advanced Selection Commands
-# Scenarios for _, C, Alt-C, Alt-s, Ctrl-c, Alt--, Alt-x
+# Scenarios for _
+# NOTE: C, Alt-C, Alt-s, Alt-x scenarios disabled - require implementation (issue #141)
 
 # ============================================================================
 # TRIM SELECTIONS (_ command)
@@ -79,205 +80,177 @@ estimated_time_seconds = 10
 
 # ============================================================================
 # COPY SELECTION TO NEXT/PREV LINE (C, Alt-C commands)
+# DISABLED: Requires multi-cursor support (see issue #141)
 # ============================================================================
 
-[[scenarios]]
-id = "copy_selection_next_001"
-name = "Copy cursor to next line"
-description = "Use 'C' to move cursor to the next line at same column"
+# [[scenarios]]
+# id = "copy_selection_next_001"
+# name = "Copy cursor to next line"
+# description = "Use 'C' to create additional cursor on the next line"
+# hints = [
+#     "'C' creates a new cursor on the next line at same column",
+#     "Great for editing multiple similar lines",
+# ]
+# [scenarios.setup]
+# file_content = """let a = 1;
+# let b = 2;
+# let c = 3;"""
+# cursor_position = [0, 4]
+# [scenarios.target]
+# file_content = """let a = 1;
+# let b = 2;
+# let c = 3;"""
+# cursors = [[0, 4], [1, 4]]  # multi-cursor
+# [scenarios.solution]
+# commands = ["C"]
+# description = "Press 'C' to add cursor on next line"
+# [scenarios.scoring]
+# optimal_count = 1
+# max_points = 100
+# tolerance = 0
+# [scenarios.metadata]
+# category = "selection"
+# difficulty = "intermediate"
+# tags = ["selection", "multi-cursor", "line"]
+# commands_taught = ["C"]
+# estimated_time_seconds = 10
 
-hints = [
-    "'C' copies the cursor position to the next line",
-    "Great for editing multiple similar lines",
-]
+# [[scenarios]]
+# id = "copy_selection_prev_001"
+# name = "Copy cursor to previous line"
+# description = "Use 'Alt-C' to create additional cursor on the previous line"
+# hints = [
+#     "'Alt-C' creates a new cursor on the previous line",
+#     "Opposite of 'C' command",
+# ]
+# [scenarios.setup]
+# file_content = """let x = 10;
+# let y = 20;
+# let z = 30;"""
+# cursor_position = [2, 4]
+# [scenarios.target]
+# file_content = """let x = 10;
+# let y = 20;
+# let z = 30;"""
+# cursors = [[1, 4], [2, 4]]  # multi-cursor
+# [scenarios.solution]
+# commands = ["Alt-C"]
+# description = "Press 'Alt-C' to add cursor on previous line"
+# [scenarios.scoring]
+# optimal_count = 1
+# max_points = 100
+# tolerance = 0
+# [scenarios.metadata]
+# category = "selection"
+# difficulty = "intermediate"
+# tags = ["selection", "multi-cursor", "line"]
+# commands_taught = ["Alt-C"]
+# estimated_time_seconds = 10
 
-[scenarios.setup]
-file_content = """let a = 1;
-let b = 2;
-let c = 3;"""
-cursor_position = [0, 4]
-
-[scenarios.target]
-file_content = """let a = 1;
-let b = 2;
-let c = 3;"""
-cursor_position = [1, 4]
-
-[scenarios.solution]
-commands = ["C"]
-description = "Press 'C' to move cursor to next line"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "selection"
-difficulty = "intermediate"
-tags = ["selection", "cursor", "line"]
-commands_taught = ["C"]
-estimated_time_seconds = 10
-
-[[scenarios]]
-id = "copy_selection_prev_001"
-name = "Copy cursor to previous line"
-description = "Use 'Alt-C' to move cursor to the previous line at same column"
-
-hints = [
-    "'Alt-C' copies the cursor position to the previous line",
-    "Opposite of 'C' command",
-]
-
-[scenarios.setup]
-file_content = """let x = 10;
-let y = 20;
-let z = 30;"""
-cursor_position = [2, 4]
-
-[scenarios.target]
-file_content = """let x = 10;
-let y = 20;
-let z = 30;"""
-cursor_position = [1, 4]
-
-[scenarios.solution]
-commands = ["Alt-C"]
-description = "Press 'Alt-C' to move cursor to previous line"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "selection"
-difficulty = "intermediate"
-tags = ["selection", "cursor", "line"]
-commands_taught = ["Alt-C"]
-estimated_time_seconds = 10
-
-[[scenarios]]
-id = "copy_selection_next_clamp_001"
-name = "Copy cursor clamps to shorter line"
-description = "When next line is shorter, cursor is clamped to line end"
-
-hints = [
-    "'C' clamps the column if the next line is shorter",
-    "Prevents cursor from going past line end",
-]
-
-[scenarios.setup]
-file_content = """fn calculate() -> i32 {
-    42
-}"""
-cursor_position = [0, 18]
-
-[scenarios.target]
-file_content = """fn calculate() -> i32 {
-    42
-}"""
-cursor_position = [1, 6]
-
-[scenarios.solution]
-commands = ["C"]
-description = "Press 'C' to move to next line (column clamped)"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "selection"
-difficulty = "intermediate"
-tags = ["selection", "cursor", "clamping"]
-commands_taught = ["C"]
-estimated_time_seconds = 10
+# [[scenarios]]
+# id = "copy_selection_next_clamp_001"
+# name = "Copy cursor clamps to shorter line"
+# description = "When next line is shorter, cursor is clamped to line end"
+# hints = [
+#     "'C' clamps the column if the next line is shorter",
+#     "Prevents cursor from going past line end",
+# ]
+# [scenarios.setup]
+# file_content = """fn calculate() -> i32 {
+#     42
+# }"""
+# cursor_position = [0, 18]
+# [scenarios.target]
+# file_content = """fn calculate() -> i32 {
+#     42
+# }"""
+# cursors = [[0, 18], [1, 6]]  # multi-cursor, clamped
+# [scenarios.solution]
+# commands = ["C"]
+# description = "Press 'C' to add cursor on next line (column clamped)"
+# [scenarios.scoring]
+# optimal_count = 1
+# max_points = 100
+# tolerance = 0
+# [scenarios.metadata]
+# category = "selection"
+# difficulty = "intermediate"
+# tags = ["selection", "multi-cursor", "clamping"]
+# commands_taught = ["C"]
+# estimated_time_seconds = 10
 
 # ============================================================================
 # SPLIT SELECTION ON NEWLINES (Alt-s command)
+# DISABLED: Requires multi-cursor support (see issue #141)
 # ============================================================================
 
-[[scenarios]]
-id = "split_selection_newlines_001"
-name = "Split selection on newlines"
-description = "Use 'Alt-s' to split a multi-line selection into per-line selections"
-
-hints = [
-    "'Alt-s' creates one selection per line",
-    "Useful for applying edits to each line individually",
-]
-
-[scenarios.setup]
-file_content = """let a = 1;
-let b = 2;
-let c = 3;"""
-cursor_position = [0, 0]
-selection = [0, 0, 2, 10]
-
-[scenarios.target]
-file_content = """let a = 1;
-let b = 2;
-let c = 3;"""
-cursor_position = [0, 10]
-selection = [0, 0, 0, 10]
-
-[scenarios.solution]
-commands = ["Alt-s"]
-description = "Press 'Alt-s' to split selection on newlines (keeps first line)"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "selection"
-difficulty = "intermediate"
-tags = ["selection", "split", "lines"]
-commands_taught = ["Alt-s"]
-estimated_time_seconds = 15
+# [[scenarios]]
+# id = "split_selection_newlines_001"
+# name = "Split selection on newlines"
+# description = "Use 'Alt-s' to split a multi-line selection into per-line selections"
+# hints = [
+#     "'Alt-s' creates one selection per line",
+#     "Useful for applying edits to each line individually",
+# ]
+# [scenarios.setup]
+# file_content = """let a = 1;
+# let b = 2;
+# let c = 3;"""
+# cursor_position = [0, 0]
+# selection = [0, 0, 2, 10]
+# [scenarios.target]
+# file_content = """let a = 1;
+# let b = 2;
+# let c = 3;"""
+# selections = [[0, 0, 0, 10], [1, 0, 1, 10], [2, 0, 2, 10]]  # multi-selection
+# [scenarios.solution]
+# commands = ["Alt-s"]
+# description = "Press 'Alt-s' to split selection on newlines"
+# [scenarios.scoring]
+# optimal_count = 1
+# max_points = 100
+# tolerance = 0
+# [scenarios.metadata]
+# category = "selection"
+# difficulty = "intermediate"
+# tags = ["selection", "split", "multi-cursor"]
+# commands_taught = ["Alt-s"]
+# estimated_time_seconds = 15
 
 # ============================================================================
 # SHRINK TO LINE BOUNDS (Alt-x command)
+# DISABLED: Requires shrink_to_line_bounds implementation (issue #141)
 # ============================================================================
 
-[[scenarios]]
-id = "shrink_to_line_bounds_001"
-name = "Shrink selection to line"
-description = "Use 'Alt-x' to shrink selection to the current line bounds"
-
-hints = [
-    "'Alt-x' selects the entire current line",
-    "Useful for line-oriented editing operations",
-]
-
-[scenarios.setup]
-file_content = """fn main() {
-    let x = 42;
-}"""
-cursor_position = [1, 8]
-
-[scenarios.target]
-file_content = """fn main() {
-    let x = 42;
-}"""
-cursor_position = [1, 0]
-selection = [1, 0, 1, 15]
-
-[scenarios.solution]
-commands = ["Alt-x"]
-description = "Press 'Alt-x' to select current line"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "selection"
-difficulty = "intermediate"
-tags = ["selection", "line", "shrink"]
-commands_taught = ["Alt-x"]
-estimated_time_seconds = 10
+# [[scenarios]]
+# id = "shrink_to_line_bounds_001"
+# name = "Shrink selection to line"
+# description = "Use 'Alt-x' to shrink selection to the current line bounds"
+# hints = [
+#     "'Alt-x' selects the entire current line",
+#     "Useful for line-oriented editing operations",
+# ]
+# [scenarios.setup]
+# file_content = """fn main() {
+#     let x = 42;
+# }"""
+# cursor_position = [1, 8]
+# [scenarios.target]
+# file_content = """fn main() {
+#     let x = 42;
+# }"""
+# cursor_position = [1, 0]
+# selection = [1, 0, 1, 15]
+# [scenarios.solution]
+# commands = ["Alt-x"]
+# description = "Press 'Alt-x' to select current line"
+# [scenarios.scoring]
+# optimal_count = 1
+# max_points = 100
+# tolerance = 0
+# [scenarios.metadata]
+# category = "selection"
+# difficulty = "intermediate"
+# tags = ["selection", "line", "shrink"]
+# commands_taught = ["Alt-x"]
+# estimated_time_seconds = 10

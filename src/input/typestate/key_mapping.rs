@@ -150,78 +150,95 @@ fn parse_key_code(s: &str, modifiers: &mut KeyModifiers) -> Option<KeyCode> {
 /// Map a single-key command character to its command string
 ///
 /// Returns None for invalid commands or prefix commands.
+/// Handles SHIFT and ALT modifiers for proper command dispatch.
 pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'static str> {
     let is_shift = modifiers.contains(KeyModifiers::SHIFT);
+    let is_alt = modifiers.contains(KeyModifiers::ALT);
 
-    match (c, is_shift) {
-        // Movement
-        ('h', false) => Some(CMD_MOVE_LEFT),
-        ('j', false) => Some(CMD_MOVE_DOWN),
-        ('k', false) => Some(CMD_MOVE_UP),
-        ('l', false) => Some(CMD_MOVE_RIGHT),
+    // Pattern: (char, is_shift, is_alt)
+    match (c, is_shift, is_alt) {
+        // Alt commands (must be checked first as they have highest specificity)
+        ('C', true, true) => Some(CMD_COPY_SELECTION_PREV), // Alt-C
+        ('J', true, true) => Some(CMD_JOIN_SELECTIONS_SPACE), // Alt-J
+        ('K', true, true) => Some(CMD_REMOVE_MATCHING),     // Alt-K
+        ('s', false, true) => Some(CMD_SPLIT_SELECTION_NEWLINES), // Alt-s
+        ('x', false, true) => Some(CMD_SHRINK_TO_LINE_BOUNDS), // Alt-x
+        (',', false, true) => Some(CMD_REMOVE_PRIMARY_SELECTION), // Alt-,
+        ('-', false, true) => Some(CMD_MERGE_SELECTIONS),   // Alt--
+        ('_', _, true) => Some(CMD_MERGE_CONSECUTIVE),      // Alt-_
+        ('.', false, true) => Some(CMD_REPEAT_LAST_MOTION), // Alt-.
+        ('`', false, true) => Some(CMD_SWITCH_TO_UPPERCASE), // Alt-`
+        (';', false, true) => Some(CMD_FLIP_SELECTIONS),    // Alt-;
+        ('*', _, true) => Some(CMD_SEARCH_SELECTION),       // Alt-*
 
-        // Word movement
-        ('w', false) => Some(CMD_MOVE_WORD_FORWARD),
-        ('b', false) => Some(CMD_MOVE_WORD_BACKWARD),
-        ('e', false) => Some(CMD_MOVE_WORD_END),
+        // Movement (no Alt)
+        ('h', false, false) => Some(CMD_MOVE_LEFT),
+        ('j', false, false) => Some(CMD_MOVE_DOWN),
+        ('k', false, false) => Some(CMD_MOVE_UP),
+        ('l', false, false) => Some(CMD_MOVE_RIGHT),
 
-        // WORD movement (uppercase)
-        ('W', _) => Some(CMD_MOVE_LONG_WORD_FORWARD),
-        ('B', _) => Some(CMD_MOVE_LONG_WORD_BACKWARD),
-        ('E', _) => Some(CMD_MOVE_LONG_WORD_END),
+        // Word movement (no Alt)
+        ('w', false, false) => Some(CMD_MOVE_WORD_FORWARD),
+        ('b', false, false) => Some(CMD_MOVE_WORD_BACKWARD),
+        ('e', false, false) => Some(CMD_MOVE_WORD_END),
 
-        // Selection
-        ('x', false) => Some(CMD_SELECT_LINE),
-        ('X', _) => Some(CMD_EXTEND_LINE),
-        ('%', _) => Some(CMD_SELECT_ALL),
-        (';', false) => Some(CMD_COLLAPSE_SELECTION),
-        ('v', false) => Some(CMD_SELECT_MODE),
+        // WORD movement (uppercase, no Alt)
+        ('W', _, false) => Some(CMD_MOVE_LONG_WORD_FORWARD),
+        ('B', _, false) => Some(CMD_MOVE_LONG_WORD_BACKWARD),
+        ('E', _, false) => Some(CMD_MOVE_LONG_WORD_END),
 
-        // Editing
-        ('d', false) => Some(CMD_DELETE_SELECTION),
-        ('c', false) => Some(CMD_CHANGE),
-        ('i', false) => Some(CMD_INSERT),
-        ('a', false) => Some(CMD_APPEND),
-        ('I', _) => Some(CMD_INSERT_LINE_START),
-        ('A', _) => Some(CMD_APPEND_LINE_END),
-        ('o', false) => Some(CMD_OPEN_BELOW),
-        ('O', _) => Some(CMD_OPEN_ABOVE),
-        ('J', _) => Some(CMD_JOIN_LINES),
+        // Selection (no Alt)
+        ('x', false, false) => Some(CMD_SELECT_LINE),
+        ('X', _, false) => Some(CMD_EXTEND_LINE),
+        ('%', _, false) => Some(CMD_SELECT_ALL),
+        (';', false, false) => Some(CMD_COLLAPSE_SELECTION),
+        ('v', false, false) => Some(CMD_SELECT_MODE),
 
-        // Indentation
-        ('>', _) => Some(CMD_INDENT),
-        ('<', _) => Some(CMD_DEDENT),
+        // Editing (no Alt)
+        ('d', false, false) => Some(CMD_DELETE_SELECTION),
+        ('c', false, false) => Some(CMD_CHANGE),
+        ('i', false, false) => Some(CMD_INSERT),
+        ('a', false, false) => Some(CMD_APPEND),
+        ('I', _, false) => Some(CMD_INSERT_LINE_START),
+        ('A', _, false) => Some(CMD_APPEND_LINE_END),
+        ('o', false, false) => Some(CMD_OPEN_BELOW),
+        ('O', _, false) => Some(CMD_OPEN_ABOVE),
+        ('J', _, false) => Some(CMD_JOIN_LINES),
 
-        // Case
-        ('~', _) => Some(CMD_SWITCH_CASE),
-        ('`', _) => Some(CMD_SWITCH_CASE_ALT),
+        // Indentation (no Alt)
+        ('>', _, false) => Some(CMD_INDENT),
+        ('<', _, false) => Some(CMD_DEDENT),
 
-        // Clipboard
-        ('y', false) => Some(CMD_YANK),
-        ('p', false) => Some(CMD_PASTE_AFTER),
-        ('P', _) => Some(CMD_PASTE_BEFORE),
+        // Case (no Alt)
+        ('~', _, false) => Some(CMD_SWITCH_CASE),
+        ('`', _, false) => Some(CMD_SWITCH_CASE_ALT),
 
-        // Undo/Redo
-        ('u', false) => Some(CMD_UNDO),
-        ('U', _) => Some(CMD_REDO),
+        // Clipboard (no Alt)
+        ('y', false, false) => Some(CMD_YANK),
+        ('p', false, false) => Some(CMD_PASTE_AFTER),
+        ('P', _, false) => Some(CMD_PASTE_BEFORE),
 
-        // Repeat
-        ('.', _) => Some(CMD_REPEAT),
+        // Undo/Redo (no Alt)
+        ('u', false, false) => Some(CMD_UNDO),
+        ('U', _, false) => Some(CMD_REDO),
 
-        // Search
-        ('/', _) => Some(CMD_SEARCH_FORWARD),
-        ('?', _) => Some(CMD_SEARCH_BACKWARD),
-        ('n', false) => Some(CMD_SEARCH_NEXT),
-        ('N', _) => Some(CMD_SEARCH_PREV),
-        ('*', _) => Some(CMD_SEARCH_WORD),
+        // Repeat (no Alt)
+        ('.', _, false) => Some(CMD_REPEAT),
 
-        // Selection manipulation
-        ('s', false) => Some(CMD_SELECT_REGEX),
-        ('S', _) => Some(CMD_SPLIT_SELECTION),
-        ('&', _) => Some(CMD_ALIGN_SELECTIONS),
-        ('_', _) => Some(CMD_TRIM_SELECTIONS),
-        ('C', _) => Some(CMD_COPY_SELECTION_NEXT),
-        ('K', _) => Some(CMD_KEEP_MATCHING),
+        // Search (no Alt)
+        ('/', _, false) => Some(CMD_SEARCH_FORWARD),
+        ('?', _, false) => Some(CMD_SEARCH_BACKWARD),
+        ('n', false, false) => Some(CMD_SEARCH_NEXT),
+        ('N', _, false) => Some(CMD_SEARCH_PREV),
+        ('*', _, false) => Some(CMD_SEARCH_WORD),
+
+        // Selection manipulation (no Alt)
+        ('s', false, false) => Some(CMD_SELECT_REGEX),
+        ('S', _, false) => Some(CMD_SPLIT_SELECTION),
+        ('&', _, false) => Some(CMD_ALIGN_SELECTIONS),
+        ('_', _, false) => Some(CMD_TRIM_SELECTIONS),
+        ('C', _, false) => Some(CMD_COPY_SELECTION_NEXT),
+        ('K', _, false) => Some(CMD_KEEP_MATCHING),
 
         _ => None,
     }

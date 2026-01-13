@@ -718,6 +718,157 @@ fn test_parse_case_insensitive_special_keys() {
     assert_eq!(key1.code, KeyCode::Esc);
 }
 
+// ============================================================================
+// Alt command mapping tests (map_single_key_command with ALT modifier)
+// ============================================================================
+
+#[test]
+fn test_map_alt_c_copy_selection_prev() {
+    // Alt-C: copy_selection_on_prev_line
+    assert_eq!(
+        map_single_key_command('C', KeyModifiers::ALT | KeyModifiers::SHIFT),
+        Some(CMD_COPY_SELECTION_PREV)
+    );
+}
+
+#[test]
+fn test_map_alt_j_join_selections_space() {
+    // Alt-J: join_selections_space
+    assert_eq!(
+        map_single_key_command('J', KeyModifiers::ALT | KeyModifiers::SHIFT),
+        Some(CMD_JOIN_SELECTIONS_SPACE)
+    );
+}
+
+#[test]
+fn test_map_alt_k_remove_matching() {
+    // Alt-K: remove_selections
+    assert_eq!(
+        map_single_key_command('K', KeyModifiers::ALT | KeyModifiers::SHIFT),
+        Some(CMD_REMOVE_MATCHING)
+    );
+}
+
+#[test]
+fn test_map_alt_s_split_on_newlines() {
+    // Alt-s: split_selection_on_newline (lowercase)
+    assert_eq!(
+        map_single_key_command('s', KeyModifiers::ALT),
+        Some(CMD_SPLIT_SELECTION_NEWLINES)
+    );
+}
+
+#[test]
+fn test_map_alt_x_shrink_to_line_bounds() {
+    // Alt-x: shrink_to_line_bounds (lowercase)
+    assert_eq!(
+        map_single_key_command('x', KeyModifiers::ALT),
+        Some(CMD_SHRINK_TO_LINE_BOUNDS)
+    );
+}
+
+#[test]
+fn test_map_alt_comma_remove_primary() {
+    // Alt-,: remove_primary_selection
+    assert_eq!(
+        map_single_key_command(',', KeyModifiers::ALT),
+        Some(CMD_REMOVE_PRIMARY_SELECTION)
+    );
+}
+
+#[test]
+fn test_map_alt_minus_merge_selections() {
+    // Alt--: merge_selections
+    assert_eq!(
+        map_single_key_command('-', KeyModifiers::ALT),
+        Some(CMD_MERGE_SELECTIONS)
+    );
+}
+
+#[test]
+fn test_map_alt_underscore_merge_consecutive() {
+    // Alt-_: merge_consecutive_selections
+    assert_eq!(
+        map_single_key_command('_', KeyModifiers::ALT | KeyModifiers::SHIFT),
+        Some(CMD_MERGE_CONSECUTIVE)
+    );
+}
+
+#[test]
+fn test_map_alt_dot_repeat_last_motion() {
+    // Alt-.: repeat_last_motion
+    assert_eq!(
+        map_single_key_command('.', KeyModifiers::ALT),
+        Some(CMD_REPEAT_LAST_MOTION)
+    );
+}
+
+#[test]
+fn test_map_alt_backtick_switch_uppercase() {
+    // Alt-`: switch_to_uppercase
+    assert_eq!(
+        map_single_key_command('`', KeyModifiers::ALT),
+        Some(CMD_SWITCH_TO_UPPERCASE)
+    );
+}
+
+#[test]
+fn test_map_alt_semicolon_flip_selections() {
+    // Alt-;: flip_selections
+    assert_eq!(
+        map_single_key_command(';', KeyModifiers::ALT),
+        Some(CMD_FLIP_SELECTIONS)
+    );
+}
+
+#[test]
+fn test_map_alt_asterisk_search_selection() {
+    // Alt-*: search_selection
+    assert_eq!(
+        map_single_key_command('*', KeyModifiers::ALT | KeyModifiers::SHIFT),
+        Some(CMD_SEARCH_SELECTION)
+    );
+}
+
+#[test]
+fn test_alt_does_not_affect_normal_commands() {
+    // Without Alt, 'x' should be select_line, not shrink_to_line_bounds
+    assert_eq!(
+        map_single_key_command('x', KeyModifiers::NONE),
+        Some(CMD_SELECT_LINE)
+    );
+
+    // Without Alt, 's' should be select_regex, not split_on_newlines
+    assert_eq!(
+        map_single_key_command('s', KeyModifiers::NONE),
+        Some(CMD_SELECT_REGEX)
+    );
+
+    // Without Alt, ';' should be collapse_selection, not flip_selections
+    assert_eq!(
+        map_single_key_command(';', KeyModifiers::NONE),
+        Some(CMD_COLLAPSE_SELECTION)
+    );
+
+    // Without Alt, 'C' (Shift) should be copy_selection_next, not copy_selection_prev
+    assert_eq!(
+        map_single_key_command('C', KeyModifiers::SHIFT),
+        Some(CMD_COPY_SELECTION_NEXT)
+    );
+
+    // Without Alt, 'J' (Shift) should be join_lines, not join_selections_space
+    assert_eq!(
+        map_single_key_command('J', KeyModifiers::SHIFT),
+        Some(CMD_JOIN_LINES)
+    );
+
+    // Without Alt, 'K' (Shift) should be keep_matching, not remove_matching
+    assert_eq!(
+        map_single_key_command('K', KeyModifiers::SHIFT),
+        Some(CMD_KEEP_MATCHING)
+    );
+}
+
 #[test]
 fn test_parse_all_alt_commands_from_plan() {
     // Alt-C: copy_selection_on_prev_line

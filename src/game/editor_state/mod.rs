@@ -402,6 +402,160 @@ impl EditorState {
         Self::new(file_content.to_string(), cursor, sel)
     }
 
+    /// Create EditorState from scenario setup with multi-cursor support.
+    ///
+    /// Handles both single-cursor and multi-cursor formats:
+    /// - Single cursor: uses `cursor_position` and optional `selection`
+    /// - Multi-cursor: uses `cursors` or `selections` arrays
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityError` if content or cursor positions are invalid.
+    pub fn from_scenario_setup(
+        file_content: &str,
+        cursor_position: Option<(usize, usize)>,
+        selection: Option<[usize; 4]>,
+        cursors: Option<&[[usize; 2]]>,
+        selections: Option<&[[usize; 4]]>,
+    ) -> Result<Self, SecurityError> {
+        Self::from_multi_cursor_config(
+            file_content,
+            cursor_position,
+            selection,
+            cursors,
+            selections,
+        )
+    }
+
+    /// Create EditorState from scenario target with multi-cursor support.
+    ///
+    /// Handles both single-cursor and multi-cursor formats:
+    /// - Single cursor: uses `cursor_position` and optional `selection`
+    /// - Multi-cursor: uses `cursors` or `selections` arrays
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityError` if content or cursor positions are invalid.
+    pub fn from_scenario_target(
+        file_content: &str,
+        cursor_position: Option<(usize, usize)>,
+        selection: Option<[usize; 4]>,
+        cursors: Option<&[[usize; 2]]>,
+        selections: Option<&[[usize; 4]]>,
+    ) -> Result<Self, SecurityError> {
+        Self::from_multi_cursor_config(
+            file_content,
+            cursor_position,
+            selection,
+            cursors,
+            selections,
+        )
+    }
+
+    /// Internal helper for creating EditorState from multi-cursor configuration.
+    fn from_multi_cursor_config(
+        file_content: &str,
+        cursor_position: Option<(usize, usize)>,
+        selection: Option<[usize; 4]>,
+        cursors: Option<&[[usize; 2]]>,
+        selections_arr: Option<&[[usize; 4]]>,
+    ) -> Result<Self, SecurityError> {
+        // Pre-compute line count for validation
+        let line_count = file_content.lines().count().max(1);
+
+        // Multi-selection format takes priority
+        if let Some(sels) = selections_arr {
+            // Early validation: check all positions are within bounds before allocating
+            for (idx, sel) in sels.iter().enumerate() {
+                if sel[0] >= line_count || sel[2] >= line_count {
+                    return Err(SecurityError::InvalidInput(format!(
+                        "Selection {} row out of bounds (max {})",
+                        idx,
+                        line_count.saturating_sub(1)
+                    )));
+                }
+            }
+
+            let selections: Vec<Selection> = sels
+                .iter()
+                .map(|s| Selection {
+                    start: CursorPosition {
+                        row: s[0],
+                        col: s[1],
+                    },
+                    end: CursorPosition {
+                        row: s[2],
+                        col: s[3],
+                    },
+                })
+                .collect();
+
+            // Use first selection's end as cursor position
+            let cursor = if let Some(first) = selections.first() {
+                first.end
+            } else {
+                CursorPosition { row: 0, col: 0 }
+            };
+
+            return Self::with_selections(file_content.to_string(), cursor, selections, 0);
+        }
+
+        // Multi-cursor format (point selections)
+        if let Some(curs) = cursors {
+            // Early validation: check all positions are within bounds before allocating
+            for (idx, cur) in curs.iter().enumerate() {
+                if cur[0] >= line_count {
+                    return Err(SecurityError::InvalidInput(format!(
+                        "Cursor {} row {} out of bounds (max {})",
+                        idx,
+                        cur[0],
+                        line_count.saturating_sub(1)
+                    )));
+                }
+            }
+
+            let selections: Vec<Selection> = curs
+                .iter()
+                .map(|c| {
+                    let pos = CursorPosition {
+                        row: c[0],
+                        col: c[1],
+                    };
+                    Selection {
+                        start: pos,
+                        end: pos,
+                    }
+                })
+                .collect();
+
+            let cursor = if let Some(first) = curs.first() {
+                CursorPosition {
+                    row: first[0],
+                    col: first[1],
+                }
+            } else {
+                CursorPosition { row: 0, col: 0 }
+            };
+
+            return Self::with_selections(file_content.to_string(), cursor, selections, 0);
+        }
+
+        // Single cursor format (backward compatible)
+        let pos = cursor_position.unwrap_or((0, 0));
+        let cursor = CursorPosition::from_array([pos.0, pos.1])?;
+        let sel = selection.map(|s| Selection {
+            start: CursorPosition {
+                row: s[0],
+                col: s[1],
+            },
+            end: CursorPosition {
+                row: s[2],
+                col: s[3],
+            },
+        });
+        Self::new(file_content.to_string(), cursor, sel)
+    }
+
     /// Get the file content.
     ///
     /// # Examples
@@ -836,6 +990,12 @@ impl EditorState {
         // Content must always match
         if self.content != other.content {
             return false;
+        }
+
+        // Early return for single-cursor scenarios (99% of cases)
+        // This avoids unnecessary Vec clones for the common case
+        if other.selections.is_empty() && self.selections.is_empty() {
+            return self.cursor_pos == other.cursor_pos;
         }
 
         // If target has selections, check all selections match (order-independent)

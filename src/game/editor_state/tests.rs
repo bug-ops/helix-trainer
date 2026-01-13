@@ -701,3 +701,208 @@ fn test_matches_duplicate_selections() {
 
     assert!(state1.matches(&state2));
 }
+
+// ============================================================================
+// TESTING-001: Tests for from_scenario_setup() and from_scenario_target()
+// ============================================================================
+
+#[test]
+fn test_from_scenario_setup_single_cursor() {
+    // Backward compatible single cursor format
+    let state =
+        EditorState::from_scenario_setup("test content", Some((0, 4)), None, None, None).unwrap();
+
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 4);
+    assert!(state.selections().is_empty());
+}
+
+#[test]
+fn test_from_scenario_setup_with_cursors() {
+    // Multi-cursor format using cursors array
+    let cursors = vec![[0, 0], [0, 5]];
+    let state =
+        EditorState::from_scenario_setup("test content", None, None, Some(&cursors), None).unwrap();
+
+    assert_eq!(state.selections().len(), 2);
+    // First cursor position should be used
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_from_scenario_setup_with_selections() {
+    // Multi-selection format
+    let selections = vec![[0, 0, 0, 4], [0, 5, 0, 12]];
+    let state =
+        EditorState::from_scenario_setup("test content", None, None, None, Some(&selections))
+            .unwrap();
+
+    assert_eq!(state.selections().len(), 2);
+    // Cursor should be at first selection's end
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 4);
+}
+
+#[test]
+fn test_from_scenario_target_single_cursor() {
+    let state = EditorState::from_scenario_target("target content", Some((0, 6)), None, None, None)
+        .unwrap();
+
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 6);
+}
+
+#[test]
+fn test_from_scenario_target_with_cursors() {
+    let cursors = vec![[0, 0], [0, 7]];
+    let state =
+        EditorState::from_scenario_target("target content", None, None, Some(&cursors), None)
+            .unwrap();
+
+    assert_eq!(state.selections().len(), 2);
+}
+
+#[test]
+fn test_from_scenario_target_with_selections() {
+    let selections = vec![[0, 0, 0, 6]];
+    let state =
+        EditorState::from_scenario_target("target content", None, None, None, Some(&selections))
+            .unwrap();
+
+    assert_eq!(state.selections().len(), 1);
+    let sel = state.selections()[0];
+    assert_eq!(sel.start.col, 0);
+    assert_eq!(sel.end.col, 6);
+}
+
+// ============================================================================
+// TESTING-002: Tests for from_multi_cursor_config() format priority
+// ============================================================================
+
+#[test]
+fn test_format_priority_selections_over_cursors() {
+    // When both selections and cursors are provided, selections takes precedence
+    let cursors = vec![[0, 0], [0, 1]];
+    let selections = vec![[0, 0, 0, 5]];
+
+    let state = EditorState::from_scenario_setup(
+        "test content",
+        None,
+        None,
+        Some(&cursors),
+        Some(&selections),
+    )
+    .unwrap();
+
+    // Should have 1 selection (from selections), not 2 (from cursors)
+    assert_eq!(state.selections().len(), 1);
+    assert_eq!(state.selections()[0].end.col, 5);
+}
+
+#[test]
+fn test_format_priority_cursors_over_cursor_position() {
+    // When both cursors and cursor_position are provided, cursors takes precedence
+    let cursors = vec![[0, 5], [0, 10]];
+
+    let state = EditorState::from_scenario_setup(
+        "test content",
+        Some((0, 0)), // This should be ignored
+        None,
+        Some(&cursors),
+        None,
+    )
+    .unwrap();
+
+    // Should have 2 selections (from cursors), cursor at first cursor position
+    assert_eq!(state.selections().len(), 2);
+    assert_eq!(state.cursor_position().col, 5);
+}
+
+#[test]
+fn test_format_priority_empty_selections_array() {
+    // Empty selections array should still take precedence (empty result)
+    let empty_selections: Vec<[usize; 4]> = vec![];
+
+    let state = EditorState::from_scenario_setup(
+        "test content",
+        Some((0, 5)),
+        None,
+        None,
+        Some(&empty_selections),
+    )
+    .unwrap();
+
+    // Empty selections means no selections, cursor defaults to (0,0)
+    assert!(state.selections().is_empty());
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_format_priority_empty_cursors_array() {
+    // Empty cursors array should still take precedence
+    let empty_cursors: Vec<[usize; 2]> = vec![];
+
+    let state = EditorState::from_scenario_setup(
+        "test content",
+        Some((0, 5)),
+        None,
+        Some(&empty_cursors),
+        None,
+    )
+    .unwrap();
+
+    // Empty cursors means no selections, cursor defaults to (0,0)
+    assert!(state.selections().is_empty());
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_format_default_cursor_fallback() {
+    // When no cursor info is provided, default to (0, 0)
+    let state = EditorState::from_scenario_setup("test content", None, None, None, None).unwrap();
+
+    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().col, 0);
+}
+
+#[test]
+fn test_single_cursor_to_selection_conversion() {
+    // cursors array converts to point selections
+    let cursors = vec![[0, 3]];
+
+    let state =
+        EditorState::from_scenario_setup("test content", None, None, Some(&cursors), None).unwrap();
+
+    assert_eq!(state.selections().len(), 1);
+    let sel = state.selections()[0];
+    // Point selection: start == end
+    assert_eq!(sel.start.col, sel.end.col);
+    assert_eq!(sel.start.row, sel.end.row);
+}
+
+// ============================================================================
+// SEC-002: Early bounds validation tests
+// ============================================================================
+
+#[test]
+fn test_from_scenario_setup_invalid_cursor_row() {
+    // Cursor row exceeds content bounds
+    let cursors = vec![[5, 0]]; // Row 5 doesn't exist in single-line content
+
+    let result = EditorState::from_scenario_setup("test", None, None, Some(&cursors), None);
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_from_scenario_setup_invalid_selection_row() {
+    // Selection row exceeds content bounds
+    let selections = vec![[0, 0, 5, 0]]; // End row 5 doesn't exist
+
+    let result = EditorState::from_scenario_setup("test", None, None, None, Some(&selections));
+
+    assert!(result.is_err());
+}

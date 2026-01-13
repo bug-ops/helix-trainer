@@ -252,6 +252,12 @@ pub mod limits {
 
     /// Maximum required conditions count
     pub const MAX_REQUIRED_CONDITIONS: usize = 20;
+
+    /// Maximum number of cursors per scenario
+    pub const MAX_CURSORS_PER_SCENARIO: usize = 100;
+
+    /// Maximum number of selections per scenario
+    pub const MAX_SELECTIONS_PER_SCENARIO: usize = 100;
 }
 
 /// Path validation utilities

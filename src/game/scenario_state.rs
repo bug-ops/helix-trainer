@@ -48,25 +48,23 @@ impl ScenarioState {
     /// assert_eq!(state.current_state, state.initial_state);
     /// ```
     pub fn from_scenario(scenario: &Scenario) -> Result<Self, UserError> {
-        // Create initial state from scenario setup (with optional selection)
-        let initial_state = EditorState::from_setup(
+        // Create initial state from scenario setup (supports multi-cursor)
+        let initial_state = EditorState::from_scenario_setup(
             &scenario.setup.file_content,
-            [
-                scenario.setup.cursor_position.0,
-                scenario.setup.cursor_position.1,
-            ],
+            scenario.setup.cursor_position,
             scenario.setup.selection,
+            scenario.setup.cursors.as_deref(),
+            scenario.setup.selections.as_deref(),
         )
         .map_err(|_| UserError::ScenarioTooComplex)?;
 
-        // Create target state with optional selection
-        let target_state = EditorState::from_target(
+        // Create target state (supports multi-cursor)
+        let target_state = EditorState::from_scenario_target(
             &scenario.target.file_content,
-            [
-                scenario.target.cursor_position.0,
-                scenario.target.cursor_position.1,
-            ],
+            scenario.target.cursor_position,
             scenario.target.selection,
+            scenario.target.cursors.as_deref(),
+            scenario.target.selections.as_deref(),
         )
         .map_err(|_| UserError::ScenarioTooComplex)?;
 

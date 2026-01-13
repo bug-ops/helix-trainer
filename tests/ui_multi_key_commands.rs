@@ -32,13 +32,17 @@ fn create_test_scenario(
         description: "Test scenario for integration testing".to_string(),
         setup: Setup {
             file_content: setup_content.to_string(),
-            cursor_position: setup_cursor,
+            cursor_position: Some(setup_cursor),
             selection: None,
+            cursors: None,
+            selections: None,
         },
         target: TargetState {
             file_content: target_content.to_string(),
-            cursor_position: target_cursor,
+            cursor_position: Some(target_cursor),
             selection: None,
+            cursors: None,
+            selections: None,
         },
         solution: Solution {
             commands: vec!["test".to_string()],

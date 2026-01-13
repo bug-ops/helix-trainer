@@ -239,13 +239,17 @@ impl ScenarioBuilder {
             description: self.description,
             setup: Setup {
                 file_content: self.setup_content,
-                cursor_position: self.setup_cursor,
+                cursor_position: Some(self.setup_cursor),
                 selection: self.setup_selection,
+                cursors: None,
+                selections: None,
             },
             target: TargetState {
                 file_content: self.target_content,
-                cursor_position: self.target_cursor,
+                cursor_position: Some(self.target_cursor),
                 selection: self.target_selection,
+                cursors: None,
+                selections: None,
             },
             solution: Solution {
                 commands: self.commands,

@@ -85,6 +85,9 @@ pub enum TypedScreen {
     /// Statistics screen
     Statistics(StatisticsData),
 
+    /// Category filters configuration screen
+    CategoryFilters(CategoryFiltersData),
+
     /// Review session screen
     Review(ReviewData),
 
@@ -102,6 +105,7 @@ impl TypedScreen {
             Self::Results(_) => "Results",
             Self::Profile(_) => "Profile",
             Self::Statistics(_) => "Statistics",
+            Self::CategoryFilters(_) => "CategoryFilters",
             Self::Review(_) => "Review",
             Self::MiniGame(_) => "MiniGame",
         }
@@ -116,6 +120,7 @@ impl TypedScreen {
             Self::Results(_) => super::Screen::Results,
             Self::Profile(_) => super::Screen::Profile,
             Self::Statistics(_) => super::Screen::Statistics,
+            Self::CategoryFilters(_) => super::Screen::CategoryFilters,
             Self::Review(_) => super::Screen::Review,
             Self::MiniGame(_) => super::Screen::MiniGame,
         }
@@ -336,6 +341,15 @@ pub struct ProfileData {
 /// Data required for statistics screen
 #[derive(Debug, Clone, Default)]
 pub struct StatisticsData {
+    /// Where to return when pressing Esc/back
+    pub return_to: ReturnDestination,
+}
+
+/// Data required for category filters screen
+#[derive(Debug, Clone, Default)]
+pub struct CategoryFiltersData {
+    /// Index of currently selected category (0-indexed)
+    pub selected_index: usize,
     /// Where to return when pressing Esc/back
     pub return_to: ReturnDestination,
 }
@@ -782,5 +796,32 @@ mod tests {
 
         selection.selected_index = 2;
         assert!(selection.selected_mode().is_challenge());
+    }
+
+    #[test]
+    fn test_category_filters_data_default() {
+        let data = CategoryFiltersData::default();
+        assert_eq!(data.selected_index, 0);
+        assert_eq!(data.return_to, ReturnDestination::Menu);
+    }
+
+    #[test]
+    fn test_category_filters_data_with_values() {
+        let data = CategoryFiltersData {
+            selected_index: 5,
+            return_to: ReturnDestination::PausedMiniGame,
+        };
+        assert_eq!(data.selected_index, 5);
+        assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
+    }
+
+    #[test]
+    fn test_typed_screen_category_filters() {
+        let screen = TypedScreen::CategoryFilters(CategoryFiltersData::default());
+        assert_eq!(screen.screen_type(), "CategoryFilters");
+        assert_eq!(
+            screen.to_screen_enum(),
+            super::super::Screen::CategoryFilters
+        );
     }
 }

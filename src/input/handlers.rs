@@ -207,6 +207,7 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
                 'r' => return Some(Message::StartReviewSession),
                 'p' => return Some(Message::ShowProfile),
                 's' => return Some(Message::ShowStatistics),
+                'f' => return Some(Message::ShowCategoryFilters),
                 'G' => return Some(Message::MenuJumpToLast),
                 'M' => return Some(Message::ToggleSound),
                 _ => {}
@@ -378,6 +379,31 @@ pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Char('f') => Some(Message::CompleteReviewCommand { success: false }),
         KeyCode::Esc => Some(Message::AbandonReviewSession),
         KeyCode::Char('q') => Some(Message::QuitApp),
+        _ => None,
+    }
+}
+
+/// Handle keyboard events on category filters screen
+///
+/// Key bindings:
+/// - `j` or `Down` - Move selection down (CategoryFilterDown)
+/// - `k` or `Up` - Move selection up (CategoryFilterUp)
+/// - `Space` or `Enter` - Toggle selected category filter (CategoryFilterToggle)
+/// - `a` - Select all (clear filters) (CategoryFilterSelectAll)
+/// - `Esc` or `q` - Return to previous screen (BackToMenu)
+/// - `Ctrl-Q` - Return to previous screen (BackToMenu)
+pub fn handle_category_filters_keys(key: KeyEvent) -> Option<Message> {
+    // Ctrl-Q returns to previous screen (unified exit key)
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::BackToMenu);
+    }
+
+    match key.code {
+        KeyCode::Down | KeyCode::Char('j') => Some(Message::CategoryFilterDown),
+        KeyCode::Up | KeyCode::Char('k') => Some(Message::CategoryFilterUp),
+        KeyCode::Char(' ') | KeyCode::Enter => Some(Message::CategoryFilterToggle),
+        KeyCode::Char('a') => Some(Message::CategoryFilterSelectAll),
+        KeyCode::Esc | KeyCode::Char('q') => Some(Message::BackToMenu),
         _ => None,
     }
 }
@@ -895,6 +921,16 @@ mod tests {
         assert_eq!(msg, Some(Message::ToggleSound));
     }
 
+    // Issue #138 Phase 5: Test for 'f' key in handle_menu_keys()
+    #[test]
+    fn test_menu_key_f_shows_category_filters() {
+        let key = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Menu(MenuData::default());
+        let msg = handle_menu_keys(key, &mut state);
+        assert_eq!(msg, Some(Message::ShowCategoryFilters));
+    }
+
     // CR-004: Test for 'M' key in handle_results_keys()
     #[test]
     fn test_results_key_m_toggles_sound() {
@@ -1025,6 +1061,97 @@ mod tests {
         fn test_home_key_returns_none() {
             let key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
             assert_eq!(key_to_command_string(key), None);
+        }
+    }
+
+    mod handle_category_filters_keys_tests {
+        use super::*;
+
+        #[test]
+        fn test_j_moves_down() {
+            let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+            assert_eq!(
+                handle_category_filters_keys(key),
+                Some(Message::CategoryFilterDown)
+            );
+        }
+
+        #[test]
+        fn test_down_arrow_moves_down() {
+            let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+            assert_eq!(
+                handle_category_filters_keys(key),
+                Some(Message::CategoryFilterDown)
+            );
+        }
+
+        #[test]
+        fn test_k_moves_up() {
+            let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+            assert_eq!(
+                handle_category_filters_keys(key),
+                Some(Message::CategoryFilterUp)
+            );
+        }
+
+        #[test]
+        fn test_up_arrow_moves_up() {
+            let key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+            assert_eq!(
+                handle_category_filters_keys(key),
+                Some(Message::CategoryFilterUp)
+            );
+        }
+
+        #[test]
+        fn test_space_toggles() {
+            let key = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+            assert_eq!(
+                handle_category_filters_keys(key),
+                Some(Message::CategoryFilterToggle)
+            );
+        }
+
+        #[test]
+        fn test_enter_toggles() {
+            let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+            assert_eq!(
+                handle_category_filters_keys(key),
+                Some(Message::CategoryFilterToggle)
+            );
+        }
+
+        #[test]
+        fn test_a_selects_all() {
+            let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+            assert_eq!(
+                handle_category_filters_keys(key),
+                Some(Message::CategoryFilterSelectAll)
+            );
+        }
+
+        #[test]
+        fn test_esc_returns_to_menu() {
+            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            assert_eq!(handle_category_filters_keys(key), Some(Message::BackToMenu));
+        }
+
+        #[test]
+        fn test_q_returns_to_menu() {
+            let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+            assert_eq!(handle_category_filters_keys(key), Some(Message::BackToMenu));
+        }
+
+        #[test]
+        fn test_ctrl_q_returns_to_menu() {
+            let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+            assert_eq!(handle_category_filters_keys(key), Some(Message::BackToMenu));
+        }
+
+        #[test]
+        fn test_unknown_key_returns_none() {
+            let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+            assert_eq!(handle_category_filters_keys(key), None);
         }
     }
 }

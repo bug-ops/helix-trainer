@@ -40,8 +40,8 @@ pub use substates::{ConfigState, GameState, ProgressState, UIState};
 // Type-safe screen variants with required data
 pub mod screen;
 pub use screen::{
-    CommandBufferAccess, CompletedOrAbandoned, InputStateAccess, KeyHistory, MenuData,
-    MiniGameData, MiniGameModeSelection, ModeSelectionData, ProfileData, ResultsData,
+    CategoryFiltersData, CommandBufferAccess, CompletedOrAbandoned, InputStateAccess, KeyHistory,
+    MenuData, MiniGameData, MiniGameModeSelection, ModeSelectionData, ProfileData, ResultsData,
     ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
@@ -99,6 +99,8 @@ pub enum Screen {
     Profile,
     /// Statistics screen showing command mastery and analytics
     Statistics,
+    /// Category filters configuration screen
+    CategoryFilters,
     /// Review session screen for spaced repetition
     Review,
     /// Mini-game mode (Arcade Mode)
@@ -248,6 +250,21 @@ pub enum Message {
 
     /// Reset all filters to default
     ResetFilters,
+
+    /// Navigate to category filters screen
+    ShowCategoryFilters,
+
+    /// Move selection up in category filters screen
+    CategoryFilterUp,
+
+    /// Move selection down in category filters screen
+    CategoryFilterDown,
+
+    /// Toggle selected category filter on/off
+    CategoryFilterToggle,
+
+    /// Reset category filters to show all categories
+    CategoryFilterSelectAll,
 
     /// Start a review session
     StartReviewSession,
@@ -894,6 +911,39 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 &state.config,
             );
             let outcome = handlers::handle_reset_filters(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+
+        // Category filters screen messages
+        Message::ShowCategoryFilters => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_show_category_filters(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::CategoryFilterUp => {
+            extract_screen!(state, CategoryFilters, mut data, ctx => handlers::handle_category_filter_up(data, &ctx))
+        }
+        Message::CategoryFilterDown => {
+            extract_screen!(state, CategoryFilters, mut data, ctx => handlers::handle_category_filter_down(data, &ctx))
+        }
+        Message::CategoryFilterToggle => {
+            extract_screen!(state, CategoryFilters, data, ctx => handlers::handle_category_filter_toggle(data, &mut ctx))
+        }
+        Message::CategoryFilterSelectAll => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_category_filter_select_all(&mut ctx)?;
             apply_outcome(state, outcome);
             Ok(())
         }

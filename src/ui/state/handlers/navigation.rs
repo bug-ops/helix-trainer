@@ -6,8 +6,8 @@
 
 use crate::security::UserError;
 use crate::ui::state::{
-    HandlerContext, HandlerOutcome, MenuData, MiniGameData, ModeSelectionData, ProfileData,
-    ReturnDestination, Screen, StatisticsData, TypedScreen,
+    CategoryFiltersData, HandlerContext, HandlerOutcome, MenuData, MiniGameData, ModeSelectionData,
+    ProfileData, ReturnDestination, Screen, StatisticsData, TypedScreen,
 };
 
 /// Handle QuitApp message
@@ -30,6 +30,7 @@ pub fn handle_navigate_to(screen: Screen) -> Result<HandlerOutcome, UserError> {
         Screen::MainMenu => TypedScreen::Menu(MenuData::default()),
         Screen::Profile => TypedScreen::Profile(ProfileData::default()),
         Screen::Statistics => TypedScreen::Statistics(StatisticsData::default()),
+        Screen::CategoryFilters => TypedScreen::CategoryFilters(CategoryFiltersData::default()),
         Screen::MiniGame => TypedScreen::MiniGame(MiniGameData::default()),
         // NOTE: Task, Results, and Review screens require data and should not be
         // navigated to via NavigateTo - they have their own handlers
@@ -45,11 +46,24 @@ pub fn handle_navigate_to(screen: Screen) -> Result<HandlerOutcome, UserError> {
 ///
 /// Returns to the appropriate screen based on context:
 /// - From Profile/Statistics with PausedMiniGame return destination: returns to paused mini-game
+/// - From CategoryFilters: returns to Menu (scenario list) or PausedMiniGame based on return_to
 /// - Otherwise: returns to mode selection screen (the main menu)
 pub fn handle_back_to_menu(
     current_screen: &TypedScreen,
     _ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
+    // CategoryFilters returns to its original screen (Menu or PausedMiniGame)
+    if let TypedScreen::CategoryFilters(data) = current_screen {
+        return match data.return_to {
+            ReturnDestination::Menu => Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+                MenuData::default(),
+            )))),
+            ReturnDestination::PausedMiniGame => Ok(HandlerOutcome::Transition(Box::new(
+                TypedScreen::MiniGame(MiniGameData::default()),
+            ))),
+        };
+    }
+
     // Check if we should return to paused mini-game instead of mode selection
     let return_to_minigame = match current_screen {
         TypedScreen::Profile(data) => data.return_to == ReturnDestination::PausedMiniGame,
@@ -239,6 +253,16 @@ mod tests {
     }
 
     #[test]
+    fn test_navigate_to_category_filters() {
+        let outcome = handle_navigate_to(Screen::CategoryFilters).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::CategoryFilters(_)));
+        }
+    }
+
+    #[test]
     fn test_navigate_to_results_stays_on_current() {
         let outcome = handle_navigate_to(Screen::Results).unwrap();
         assert!(outcome.is_stay());
@@ -261,6 +285,41 @@ mod tests {
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
             assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+        }
+    }
+
+    #[test]
+    fn test_back_to_menu_from_category_filters_returns_to_menu() {
+        let screen = TypedScreen::CategoryFilters(CategoryFiltersData {
+            selected_index: 0,
+            return_to: ReturnDestination::Menu,
+        });
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let outcome = handle_back_to_menu(&screen, &mut ctx).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(new_screen) = outcome {
+            // Should return to Menu (scenario list), not ModeSelection
+            assert!(matches!(*new_screen, TypedScreen::Menu(_)));
+        }
+    }
+
+    #[test]
+    fn test_back_to_menu_from_category_filters_returns_to_paused_minigame() {
+        let screen = TypedScreen::CategoryFilters(CategoryFiltersData {
+            selected_index: 0,
+            return_to: ReturnDestination::PausedMiniGame,
+        });
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let outcome = handle_back_to_menu(&screen, &mut ctx).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(new_screen) = outcome {
+            assert!(matches!(*new_screen, TypedScreen::MiniGame(_)));
         }
     }
 }

@@ -323,14 +323,23 @@ mod helper_tests {
 
 mod editor_tests {
     use crate::helix::SelectionBounds;
+    use crate::ui::render::editor::CursorInfo;
+
+    fn primary_cursor(row: usize, col: usize) -> Vec<CursorInfo> {
+        vec![CursorInfo {
+            row,
+            col,
+            is_primary: true,
+        }]
+    }
 
     #[test]
     fn test_render_editor_with_diff_matching_lines() {
         let lines = super::super::editor::render_editor_with_diff(
             "line 1\nline 2\n",
             "line 1\nline 2\n",
-            (0, 0),
-            None,
+            &primary_cursor(0, 0),
+            &[],
             None,
         );
         assert_eq!(lines.len(), 2);
@@ -341,8 +350,8 @@ mod editor_tests {
         let lines = super::super::editor::render_editor_with_diff(
             "line 1\nline 2\n",
             "line 1\nline X\n",
-            (0, 0),
-            None,
+            &primary_cursor(0, 0),
+            &[],
             None,
         );
         assert_eq!(lines.len(), 2);
@@ -353,8 +362,8 @@ mod editor_tests {
         let lines = super::super::editor::render_editor_with_diff(
             "hello world\nsecond line\n",
             "hello world\nsecond line\n",
-            (0, 5),
-            None,
+            &primary_cursor(0, 5),
+            &[],
             None,
         );
         assert!(!lines.is_empty());
@@ -362,20 +371,32 @@ mod editor_tests {
 
     #[test]
     fn test_render_editor_with_diff_cursor_at_end_of_line() {
-        let lines =
-            super::super::editor::render_editor_with_diff("hello\n", "hello\n", (0, 5), None, None);
+        let lines = super::super::editor::render_editor_with_diff(
+            "hello\n",
+            "hello\n",
+            &primary_cursor(0, 5),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_with_diff_empty_content() {
-        let lines = super::super::editor::render_editor_with_diff("", "", (0, 0), None, None);
+        let lines =
+            super::super::editor::render_editor_with_diff("", "", &primary_cursor(0, 0), &[], None);
         assert!(lines.is_empty());
     }
 
     #[test]
     fn test_render_editor_with_diff_single_empty_line() {
-        let lines = super::super::editor::render_editor_with_diff("\n", "\n", (0, 0), None, None);
+        let lines = super::super::editor::render_editor_with_diff(
+            "\n",
+            "\n",
+            &primary_cursor(0, 0),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
@@ -414,8 +435,8 @@ mod editor_tests {
         let lines = super::super::editor::render_editor_with_diff(
             "hello world\n",
             "hello world\n",
-            (0, 0),
-            Some(selection),
+            &primary_cursor(0, 0),
+            &[selection],
             None,
         );
         assert_eq!(lines.len(), 1);
@@ -426,8 +447,8 @@ mod editor_tests {
         let lines = super::super::editor::render_editor_with_diff(
             "line 1\nline 2\nline 3\n",
             "line 1\n",
-            (0, 0),
-            None,
+            &primary_cursor(0, 0),
+            &[],
             None,
         );
         assert_eq!(lines.len(), 3);
@@ -438,8 +459,8 @@ mod editor_tests {
         let lines = super::super::editor::render_editor_with_diff(
             "line 1\n",
             "line 1\nline 2\nline 3\n",
-            (0, 0),
-            None,
+            &primary_cursor(0, 0),
+            &[],
             None,
         );
         assert_eq!(lines.len(), 1);
@@ -450,8 +471,8 @@ mod editor_tests {
         let lines = super::super::editor::render_editor_with_diff(
             "hello world\n",
             "hello world\n",
-            (0, 6),
-            None,
+            &primary_cursor(0, 6),
+            &[],
             None,
         );
         assert_eq!(lines.len(), 1);
@@ -462,8 +483,8 @@ mod editor_tests {
         let lines = super::super::editor::render_editor_with_diff(
             "héllo wörld\n",
             "héllo wörld\n",
-            (0, 0),
-            None,
+            &primary_cursor(0, 0),
+            &[],
             None,
         );
         assert_eq!(lines.len(), 1);

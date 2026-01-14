@@ -1,6 +1,6 @@
 //! Editor text rendering with cursor and selection
 
-use super::helpers::{char_range_to_bytes, find_surrounding_brackets};
+use super::helpers::find_surrounding_brackets;
 use crate::game::PlayableScenario;
 use crate::helix::SelectionBounds;
 use ratatui::{
@@ -18,6 +18,39 @@ pub enum PreviewType {
     Replace,
     /// Surround delete - red highlight for brackets to be deleted
     Delete,
+}
+
+/// Cursor information for multi-cursor rendering.
+///
+/// Encapsulates cursor position and primary/secondary status for style differentiation.
+#[derive(Debug, Clone, Copy)]
+pub struct CursorInfo {
+    /// Row position (0-indexed)
+    pub row: usize,
+    /// Column position (0-indexed)
+    pub col: usize,
+    /// Whether this is the primary cursor
+    pub is_primary: bool,
+}
+
+impl CursorInfo {
+    /// Get cursor style based on primary/secondary status.
+    ///
+    /// Primary cursor: white background, black foreground
+    /// Secondary cursor: cyan background, black foreground
+    pub fn style(&self) -> Style {
+        if self.is_primary {
+            Style::default()
+                .bg(Color::White)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .bg(Color::Cyan)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD)
+        }
+    }
 }
 
 /// Preview highlight for surround operations
@@ -61,60 +94,14 @@ impl PreviewHighlight {
     }
 }
 
-/// Render a line with selection highlighting
-fn render_line_with_selection(
-    line_text: &str,
-    line_idx: usize,
-    line_color: Color,
-    sel: &SelectionBounds,
-) -> Line<'static> {
-    let mut spans = Vec::new();
-
-    let line_start_col = if line_idx == sel.start_row {
-        sel.start_col
-    } else {
-        0
-    };
-
-    let line_end_col = if line_idx == sel.end_row {
-        sel.end_col
-    } else {
-        line_text.chars().count()
-    };
-
-    let (start_byte, end_byte) = char_range_to_bytes(line_text, line_start_col, line_end_col);
-
-    if start_byte > 0 {
-        spans.push(Span::styled(
-            line_text[..start_byte].to_string(),
-            Style::default().fg(line_color),
-        ));
-    }
-
-    if start_byte < end_byte && end_byte <= line_text.len() {
-        spans.push(Span::styled(
-            line_text[start_byte..end_byte].to_string(),
-            Style::default()
-                .bg(super::SELECTION_BG_COLOR)
-                .fg(Color::White),
-        ));
-    }
-
-    if end_byte < line_text.len() {
-        spans.push(Span::styled(
-            line_text[end_byte..].to_string(),
-            Style::default().fg(line_color),
-        ));
-    }
-
-    Line::from(spans)
-}
-
-/// Render a line with cursor and/or preview highlights
-fn render_line_with_highlights(
+/// Render a line with multiple cursors.
+///
+/// Handles multiple cursor positions on a single line, with different styles
+/// for primary (white bg) and secondary (cyan bg) cursors.
+fn render_line_with_multi_cursor(
     line_text: &str,
     line_color: Color,
-    cursor_col: Option<usize>,
+    cursors: &[CursorInfo],
     preview_positions: &[usize],
     preview_color: Color,
 ) -> Line<'static> {
@@ -126,11 +113,11 @@ fn render_line_with_highlights(
         let char_len = ch.len_utf8();
         let char_str = &line_text[byte_pos..byte_pos + char_len];
 
-        let style = if cursor_col == Some(col) {
-            Style::default()
-                .bg(Color::White)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD)
+        // Check if any cursor is at this position
+        let cursor_at_pos = cursors.iter().find(|c| c.col == col);
+
+        let style = if let Some(cursor) = cursor_at_pos {
+            cursor.style()
         } else if preview_positions.contains(&col) {
             Style::default()
                 .bg(preview_color)
@@ -144,17 +131,65 @@ fn render_line_with_highlights(
         byte_pos += char_len;
     }
 
-    // Cursor at end of line
-    if let Some(col) = cursor_col
-        && col >= line_chars.len()
-    {
-        spans.push(Span::styled(
-            "\u{2588}".to_string(),
+    // Cursors at end of line
+    for cursor in cursors.iter().filter(|c| c.col >= line_chars.len()) {
+        spans.push(Span::styled("\u{2588}".to_string(), cursor.style()));
+    }
+
+    Line::from(spans)
+}
+
+/// Render a line with multiple selections.
+///
+/// Handles overlapping selections by using a HashSet to track highlighted columns.
+fn render_line_with_multi_selection(
+    line_text: &str,
+    line_idx: usize,
+    line_color: Color,
+    selections: &[SelectionBounds],
+) -> Line<'static> {
+    // Build a set of highlighted columns from all selections
+    let mut highlighted_cols: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+    for sel in selections {
+        if !line_has_selection(line_idx, sel) {
+            continue;
+        }
+
+        let start_col = if line_idx == sel.start_row {
+            sel.start_col
+        } else {
+            0
+        };
+        let end_col = if line_idx == sel.end_row {
+            sel.end_col
+        } else {
+            line_text.chars().count()
+        };
+
+        for col in start_col..end_col {
+            highlighted_cols.insert(col);
+        }
+    }
+
+    // Render character by character
+    let mut spans = Vec::new();
+    let mut byte_pos = 0;
+
+    for (col, ch) in line_text.chars().enumerate() {
+        let char_len = ch.len_utf8();
+        let char_str = &line_text[byte_pos..byte_pos + char_len];
+
+        let style = if highlighted_cols.contains(&col) {
             Style::default()
-                .bg(Color::White)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD),
-        ));
+                .bg(super::SELECTION_BG_COLOR)
+                .fg(Color::White)
+        } else {
+            Style::default().fg(line_color)
+        };
+
+        spans.push(Span::styled(char_str.to_string(), style));
+        byte_pos += char_len;
     }
 
     Line::from(spans)
@@ -185,22 +220,22 @@ fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
     line_idx >= sel.start_row && line_idx <= sel.end_row
 }
 
-/// Render editor text with cursor, selection and diff highlighting
+/// Render editor text with multi-cursor, multi-selection and diff highlighting.
 ///
 /// Compares current state with target state and colors lines:
 /// - Green: lines that match target
 /// - Red: lines that differ from target
 /// - Selection shown with blue background
-/// - Cursor shown with inverse colors
+/// - Primary cursor shown with white background
+/// - Secondary cursors shown with cyan background
 /// - Preview highlight shown with yellow/red background
 pub(super) fn render_editor_with_diff(
     current_content: &str,
     target_content: &str,
-    cursor_pos: (usize, usize),
-    selection: Option<SelectionBounds>,
+    cursors: &[CursorInfo],
+    selections: &[SelectionBounds],
     preview: Option<PreviewHighlight>,
 ) -> Vec<Line<'static>> {
-    let (cursor_row, cursor_col) = cursor_pos;
     let preview_color = preview.map(|p| p.color()).unwrap_or(Color::Yellow);
 
     let current_lines: Vec<&str> = current_content.lines().collect();
@@ -221,23 +256,32 @@ pub(super) fn render_editor_with_diff(
                 Color::Red
             };
 
-            // Selection takes priority
-            if let Some(ref sel) = selection
-                && line_has_selection(line_idx, sel)
-            {
-                return render_line_with_selection(line_text, line_idx, line_color, sel);
+            // Multi-selection takes priority
+            let line_has_any_selection = selections
+                .iter()
+                .any(|sel| line_has_selection(line_idx, sel));
+            if line_has_any_selection {
+                return render_line_with_multi_selection(
+                    line_text, line_idx, line_color, selections,
+                );
             }
 
+            // Gather cursors on this line
+            let cursors_on_line: Vec<CursorInfo> = cursors
+                .iter()
+                .filter(|c| c.row == line_idx)
+                .copied()
+                .collect();
+
             let preview_positions = get_preview_positions(preview, line_idx);
-            let has_cursor = line_idx == cursor_row;
+            let has_cursors = !cursors_on_line.is_empty();
             let has_preview = !preview_positions.is_empty();
 
-            if has_cursor || has_preview {
-                let col = if has_cursor { Some(cursor_col) } else { None };
-                render_line_with_highlights(
+            if has_cursors || has_preview {
+                render_line_with_multi_cursor(
                     line_text,
                     line_color,
-                    col,
+                    &cursors_on_line,
                     &preview_positions,
                     preview_color,
                 )
@@ -295,10 +339,23 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     // Get state from trait methods
     let current_content = scenario.current_content();
     let target_content = scenario.target_content();
-    let cursor_pos = scenario.current_cursor();
-    let selection = scenario.current_selection();
     let target_cursor = scenario.target_cursor();
     let target_selection = scenario.target_selection();
+
+    // Get all cursors and build CursorInfo list
+    let all_cursor_positions = scenario.all_cursors();
+    let cursors: Vec<CursorInfo> = all_cursor_positions
+        .iter()
+        .enumerate()
+        .map(|(idx, &(row, col))| CursorInfo {
+            row,
+            col,
+            is_primary: idx == 0, // First cursor is primary
+        })
+        .collect();
+
+    // Get all selections
+    let selections = scenario.all_selections();
 
     // Split into two columns
     let editor_chunks = Layout::default()
@@ -306,12 +363,12 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    // Current state with cursor and diff highlighting
+    // Current state with multi-cursor and diff highlighting
     let current_lines = render_editor_with_diff(
         &current_content,
         &target_content,
-        cursor_pos,
-        selection,
+        &cursors,
+        &selections,
         preview,
     );
     let current = Paragraph::new(current_lines)
@@ -507,5 +564,167 @@ mod tests {
         // When end_col is 0, line 2 should NOT be considered selected
         assert!(line_has_selection(1, &sel));
         assert!(!line_has_selection(2, &sel));
+    }
+
+    // ==================== CursorInfo tests ====================
+
+    #[test]
+    fn test_cursor_info_primary_style() {
+        let cursor = CursorInfo {
+            row: 0,
+            col: 5,
+            is_primary: true,
+        };
+        let style = cursor.style();
+        assert_eq!(style.bg, Some(Color::White));
+        assert_eq!(style.fg, Some(Color::Black));
+    }
+
+    #[test]
+    fn test_cursor_info_secondary_style() {
+        let cursor = CursorInfo {
+            row: 1,
+            col: 3,
+            is_primary: false,
+        };
+        let style = cursor.style();
+        assert_eq!(style.bg, Some(Color::Cyan));
+        assert_eq!(style.fg, Some(Color::Black));
+    }
+
+    // ==================== render_line_with_multi_cursor tests ====================
+
+    #[test]
+    fn test_render_line_with_multi_cursor_single() {
+        let cursors = vec![CursorInfo {
+            row: 0,
+            col: 5,
+            is_primary: true,
+        }];
+        let line = render_line_with_multi_cursor(
+            "hello world",
+            Color::Green,
+            &cursors,
+            &[],
+            Color::Yellow,
+        );
+        // Should produce spans with cursor styled at position 5
+        assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn test_render_line_with_multi_cursor_multiple() {
+        let cursors = vec![
+            CursorInfo {
+                row: 0,
+                col: 0,
+                is_primary: true,
+            },
+            CursorInfo {
+                row: 0,
+                col: 5,
+                is_primary: false,
+            },
+        ];
+        let line = render_line_with_multi_cursor(
+            "hello world",
+            Color::Green,
+            &cursors,
+            &[],
+            Color::Yellow,
+        );
+        // Should have spans for each character
+        assert_eq!(line.spans.len(), 11); // "hello world" = 11 chars
+    }
+
+    #[test]
+    fn test_render_line_with_multi_cursor_at_end() {
+        let cursors = vec![CursorInfo {
+            row: 0,
+            col: 5,
+            is_primary: true,
+        }];
+        // Cursor at col 5 on a line with only 5 chars (indices 0-4) should render block
+        let line =
+            render_line_with_multi_cursor("hello", Color::Green, &cursors, &[], Color::Yellow);
+        // Should have 5 char spans + 1 block char for cursor at end
+        assert_eq!(line.spans.len(), 6);
+    }
+
+    #[test]
+    fn test_render_line_with_multi_cursor_primary_secondary() {
+        let cursors = vec![
+            CursorInfo {
+                row: 0,
+                col: 0,
+                is_primary: true,
+            },
+            CursorInfo {
+                row: 0,
+                col: 2,
+                is_primary: false,
+            },
+        ];
+        let line = render_line_with_multi_cursor("abc", Color::Green, &cursors, &[], Color::Yellow);
+        // Check that first and third chars have cursor styling
+        assert_eq!(line.spans.len(), 3);
+        // First span (primary cursor) should have white background
+        assert_eq!(line.spans[0].style.bg, Some(Color::White));
+        // Third span (secondary cursor) should have cyan background
+        assert_eq!(line.spans[2].style.bg, Some(Color::Cyan));
+    }
+
+    // ==================== render_line_with_multi_selection tests ====================
+
+    #[test]
+    fn test_render_line_with_multi_selection_single() {
+        let selections = vec![SelectionBounds::new(0, 2, 0, 5)];
+        let line = render_line_with_multi_selection("hello world", 0, Color::Green, &selections);
+        // Should highlight chars at indices 2, 3, 4
+        assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn test_render_line_with_multi_selection_overlapping() {
+        let selections = vec![
+            SelectionBounds::new(0, 0, 0, 5),
+            SelectionBounds::new(0, 3, 0, 8),
+        ];
+        let line = render_line_with_multi_selection("hello world", 0, Color::Green, &selections);
+        // Overlapping selections (0-5 and 3-8) should merge to highlight 0-8
+        // Check that we have spans with proper styling
+        assert!(!line.spans.is_empty());
+    }
+
+    #[test]
+    fn test_render_line_with_multi_selection_spanning_lines() {
+        // Selection from row 0 to row 2
+        let selections = vec![SelectionBounds::new(0, 3, 2, 5)];
+
+        // Line 0: should highlight from col 3 to end
+        let line0 = render_line_with_multi_selection("hello", 0, Color::Green, &selections);
+        assert!(!line0.spans.is_empty());
+
+        // Line 1: should highlight entire line (0 to end)
+        let line1 = render_line_with_multi_selection("world", 1, Color::Green, &selections);
+        assert!(!line1.spans.is_empty());
+
+        // Line 2: should highlight from 0 to col 5
+        let line2 = render_line_with_multi_selection("test", 2, Color::Green, &selections);
+        assert!(!line2.spans.is_empty());
+    }
+
+    #[test]
+    fn test_render_line_with_multi_selection_no_selection_on_line() {
+        let selections = vec![SelectionBounds::new(2, 0, 3, 5)];
+        // Line 0 is not in the selection range (2-3)
+        let line = render_line_with_multi_selection("hello", 0, Color::Green, &selections);
+        // Should render with normal styling (no selection highlight)
+        assert!(!line.spans.is_empty());
+        // All spans should have green foreground (no selection background)
+        for span in &line.spans {
+            assert_eq!(span.style.fg, Some(Color::Green));
+            assert!(span.style.bg.is_none());
+        }
     }
 }

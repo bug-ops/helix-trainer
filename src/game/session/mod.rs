@@ -818,6 +818,19 @@ impl super::PlayableScenario for GameSession<Active> {
     fn elapsed(&self) -> std::time::Duration {
         self.started_at.elapsed()
     }
+
+    fn all_cursors(&self) -> Vec<(usize, usize)> {
+        self.simulator.display().all_cursor_positions()
+    }
+
+    fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
+        self.simulator
+            .display()
+            .all_selection_bounds()
+            .into_iter()
+            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+            .collect()
+    }
 }
 
 // Implement PlayableScenario trait for GameSession<Completed>
@@ -865,6 +878,19 @@ impl super::PlayableScenario for GameSession<Completed> {
         self.completed_at
             .map(|end| end.duration_since(self.started_at))
             .unwrap_or_else(|| self.started_at.elapsed())
+    }
+
+    fn all_cursors(&self) -> Vec<(usize, usize)> {
+        self.simulator.display().all_cursor_positions()
+    }
+
+    fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
+        self.simulator
+            .display()
+            .all_selection_bounds()
+            .into_iter()
+            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+            .collect()
     }
 }
 

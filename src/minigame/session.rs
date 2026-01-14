@@ -151,6 +151,19 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
     fn elapsed(&self) -> std::time::Duration {
         self.started_at.elapsed()
     }
+
+    fn all_cursors(&self) -> Vec<(usize, usize)> {
+        self.simulator.display().all_cursor_positions()
+    }
+
+    fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
+        self.simulator
+            .display()
+            .all_selection_bounds()
+            .into_iter()
+            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+            .collect()
+    }
 }
 
 // Implement CommandExecutor trait for unified command handling with count prefix

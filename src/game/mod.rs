@@ -82,4 +82,20 @@ pub trait PlayableScenario {
             "NORMAL"
         }
     }
+
+    /// Get all cursor positions for multi-cursor scenarios.
+    ///
+    /// Returns a vector of (row, col) pairs. The first cursor is the primary cursor.
+    /// Default implementation returns only the primary cursor.
+    fn all_cursors(&self) -> Vec<(usize, usize)> {
+        vec![self.current_cursor()]
+    }
+
+    /// Get all selection bounds for multi-selection scenarios.
+    ///
+    /// Returns a vector of SelectionBounds. Default implementation
+    /// returns the primary selection if any.
+    fn all_selections(&self) -> Vec<SelectionBounds> {
+        self.current_selection().into_iter().collect()
+    }
 }

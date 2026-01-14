@@ -6,8 +6,8 @@ main_menu = "Main Menu"
 main_menu_with_scroll = "Main Menu [%{first}-%{last}/%{total}]"
 main_menu_total = "Main Menu [%{total}]"
 quit = "Quit"
-instructions = "j/k: Navigate | gg/G: First/Last | 5j: Move 5 | Enter: Select | m/Esc: Back | q: Quit"
-instructions_with_numbers = "j/k: Navigate | gg/G: First/Last | 15G: Go to 15 | Enter: Select | m/Esc: Back | q: Quit"
+instructions = "j/k: Navigate | gg/G: First/Last | 5j: Move 5 | Enter: Select | f: Filter | m/Esc: Back | q: Quit"
+instructions_with_numbers = "j/k: Navigate | gg/G: First/Last | 15G: Go to 15 | Enter: Select | f: Filter | m/Esc: Back | q: Quit"
 
 [task]
 title = "Task"

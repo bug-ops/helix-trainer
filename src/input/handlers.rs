@@ -207,6 +207,7 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
                 'r' => return Some(Message::StartReviewSession),
                 'p' => return Some(Message::ShowProfile),
                 's' => return Some(Message::ShowStatistics),
+                'f' => return Some(Message::ShowCategoryFilters),
                 'G' => return Some(Message::MenuJumpToLast),
                 'M' => return Some(Message::ToggleSound),
                 _ => {}
@@ -918,6 +919,16 @@ mod tests {
         state.screen = TypedScreen::Menu(MenuData::default());
         let msg = handle_menu_keys(key, &mut state);
         assert_eq!(msg, Some(Message::ToggleSound));
+    }
+
+    // Issue #138 Phase 5: Test for 'f' key in handle_menu_keys()
+    #[test]
+    fn test_menu_key_f_shows_category_filters() {
+        let key = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Menu(MenuData::default());
+        let msg = handle_menu_keys(key, &mut state);
+        assert_eq!(msg, Some(Message::ShowCategoryFilters));
     }
 
     // CR-004: Test for 'M' key in handle_results_keys()

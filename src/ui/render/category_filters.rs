@@ -4,10 +4,10 @@ use crate::config::ScenarioCategory;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    layout::Alignment,
+    style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Paragraph},
 };
 
 /// Get a human-readable display name for a category
@@ -40,7 +40,7 @@ fn category_icon(category: &ScenarioCategory) -> &'static str {
     }
 }
 
-/// Render the category filters screen
+/// Render the category filters as a centered popup overlay
 pub(super) fn render_category_filters(frame: &mut Frame, state: &AppState) {
     let TypedScreen::CategoryFilters(filters_data) = &state.screen else {
         return;
@@ -48,61 +48,50 @@ pub(super) fn render_category_filters(frame: &mut Frame, state: &AppState) {
 
     let area = frame.area();
 
-    // Main layout: title | content | instructions
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([
-            Constraint::Length(3), // Title
-            Constraint::Min(8),    // Content
-            Constraint::Length(3), // Instructions
-        ])
-        .split(area);
+    // Calculate popup dimensions based on content
+    let categories = state.game.scenario_collection.get_categories();
+    // Height: categories + 2 padding lines + 1 summary + 1 spacing + 1 instructions
+    let content_height = categories.len() as u16 + 5;
+    // Add 2 for popup borders
+    let popup_height = (content_height + 2).min(20);
+    let popup_width = 52u16;
 
-    // Title
-    let title = Paragraph::new("CATEGORY FILTERS")
-        .style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(title, chunks[0]);
+    // Constrain popup dimensions to terminal size
+    let popup_width = popup_width.min(area.width.saturating_sub(4));
+    let popup_height = popup_height.min(area.height.saturating_sub(4));
 
-    // Content area
-    render_filter_content(frame, state, filters_data.selected_index, chunks[1]);
+    // Create centered popup area
+    let popup_area = super::helpers::centered_popup(area, popup_width, popup_height);
 
-    // Instructions
-    let instructions = Paragraph::new(
-        "j/k or Up/Down: Navigate  |  Space/Enter: Toggle  |  a: Select All  |  Esc/q: Back",
-    )
-    .style(Style::default().fg(Color::Gray))
-    .alignment(Alignment::Center)
-    .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(instructions, chunks[2]);
+    // Clear popup area with black background
+    let clear_block = Block::default().style(Style::default().bg(Color::Black));
+    frame.render_widget(clear_block, popup_area);
+
+    // Render popup block with title
+    let block = super::helpers::popup_block(Some(" CATEGORY FILTERS "), Color::Cyan);
+    frame.render_widget(&block, popup_area);
+
+    // Get inner area for content
+    let inner_area = super::helpers::inner_rect(popup_area);
+
+    // Render content inside popup
+    render_popup_content(frame, state, filters_data.selected_index, inner_area);
 }
 
-/// Render the filter content (category list)
-fn render_filter_content(
+/// Render popup content: category list, summary, and instructions
+fn render_popup_content(
     frame: &mut Frame,
     state: &AppState,
     selected_index: usize,
     area: ratatui::layout::Rect,
 ) {
-    let content_block = Block::default()
-        .title(" Select Categories ")
-        .borders(Borders::ALL);
-    let inner_area = content_block.inner(area);
-    frame.render_widget(content_block, area);
-
     let categories = state.game.scenario_collection.get_categories();
 
     if categories.is_empty() {
         let empty_msg = Paragraph::new("No categories available")
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);
-        frame.render_widget(empty_msg, inner_area);
+        frame.render_widget(empty_msg, area);
         return;
     }
 
@@ -182,10 +171,17 @@ fn render_filter_content(
         Span::styled(summary_text, Style::default().fg(Color::Gray)),
     ]));
 
+    // Add compact instructions at bottom
+    lines.push(Line::from("")); // Spacing
+    lines.push(Line::from(vec![Span::styled(
+        "   j/k Toggle  a:All  Esc:Back",
+        Style::default().fg(Color::DarkGray),
+    )]));
+
     let paragraph = Paragraph::new(lines)
         .alignment(Alignment::Left)
         .style(Style::default().fg(Color::White));
-    frame.render_widget(paragraph, inner_area);
+    frame.render_widget(paragraph, area);
 }
 
 #[cfg(test)]

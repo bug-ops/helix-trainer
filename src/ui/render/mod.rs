@@ -54,7 +54,17 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         crate::ui::state::TypedScreen::Statistics(_) => {
             statistics::render_statistics_screen(frame, state)
         }
-        crate::ui::state::TypedScreen::CategoryFilters(_) => {
+        crate::ui::state::TypedScreen::CategoryFilters(filters_data) => {
+            // Render background screen first based on return destination
+            match filters_data.return_to {
+                crate::ui::state::ReturnDestination::Menu => {
+                    menu::render_main_menu(frame, state);
+                }
+                crate::ui::state::ReturnDestination::PausedMiniGame => {
+                    minigame::render_minigame(frame, state);
+                }
+            }
+            // Render category filters popup on top
             category_filters::render_category_filters(frame, state)
         }
         crate::ui::state::TypedScreen::Review(_) => review::render_review_screen(frame, state),

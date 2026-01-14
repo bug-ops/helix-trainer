@@ -9,14 +9,62 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
 
+/// Map macOS composed Unicode characters to Alt + base key
+///
+/// On macOS, when terminal doesn't support kitty keyboard protocol,
+/// Option+key produces composed Unicode characters instead of Alt modifier.
+/// This function converts them back to proper Alt + key combinations.
+///
+/// Common macOS Option compositions:
+/// - Option+c = ç, Option+Shift+C = Ç
+/// - Option+s = ß, Option+j = ∆, Option+k = ˚
+/// - Option+x = ≈, Option+; = …, Option+, = ≤
+fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> {
+    match ch {
+        // Alt+lowercase
+        'ç' => Some(('c', KeyModifiers::ALT)),
+        'ß' => Some(('s', KeyModifiers::ALT)),
+        '∆' => Some(('j', KeyModifiers::ALT)),
+        '˚' => Some(('k', KeyModifiers::ALT)),
+        '≈' => Some(('x', KeyModifiers::ALT)),
+        '…' => Some((';', KeyModifiers::ALT)),
+        '≤' => Some((',', KeyModifiers::ALT)),
+        '–' => Some(('-', KeyModifiers::ALT)),
+        '≥' => Some(('.', KeyModifiers::ALT)),
+        '`' => Some(('`', KeyModifiers::ALT)), // dead key produces same char
+        // Alt+Shift (uppercase or shifted symbols)
+        'Ç' => Some(('C', KeyModifiers::ALT)), // Alt-C (copy_selection_prev)
+        '˝' => Some(('J', KeyModifiers::ALT)), // Alt-J (join_selections_space)
+        '\u{F8FF}' => Some(('K', KeyModifiers::ALT)), // Alt-K (remove_matching) - Apple logo
+        '¯' => Some(('_', KeyModifiers::ALT)), // Alt-_ (merge_consecutive)
+        '¬' => Some(('l', KeyModifiers::ALT)), // Alt-l if needed
+        _ => None,
+    }
+}
+
 /// Normalize a KeyEvent to canonical form (like Helix does)
 ///
 /// This ensures consistent representation regardless of terminal behavior:
+/// - macOS composed chars (ç, Ç) → base char + ALT modifier
 /// - lowercase + SHIFT → uppercase (SHIFT removed)
 /// - uppercase + SHIFT → uppercase (SHIFT removed, already uppercase)
 ///
 /// This matches Helix's normalization: "C-S-r and C-R are represented by equal KeyEvents"
 pub fn normalize_key_event(key: KeyEvent) -> KeyEvent {
+    // First, try to map macOS composed Unicode characters to Alt combinations
+    if let KeyCode::Char(ch) = key.code
+        && let Some((base_char, alt_modifier)) = map_macos_composed_char(ch)
+    {
+        let mut modifiers = key.modifiers;
+        modifiers.insert(alt_modifier);
+        // Remove SHIFT if the base char is uppercase (it's already implied)
+        if base_char.is_ascii_uppercase() {
+            modifiers.remove(KeyModifiers::SHIFT);
+        }
+        return KeyEvent::new(KeyCode::Char(base_char), modifiers);
+    }
+
+    // Standard normalization for SHIFT + letter
     match key.code {
         KeyCode::Char(ch)
             if ch.is_ascii_lowercase() && key.modifiers.contains(KeyModifiers::SHIFT) =>

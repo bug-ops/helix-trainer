@@ -537,8 +537,8 @@ fn test_repeat_insert_scenario_loads_correctly() {
         .expect("Should find repeat_insert_001");
 
     // Verify cursor positions are within bounds
-    assert_eq!(scenario.setup.cursor_position, (0, 4));
-    assert_eq!(scenario.target.cursor_position, (0, 8));
+    assert_eq!(scenario.setup.cursor_position, Some((0, 4)));
+    assert_eq!(scenario.target.cursor_position, Some((0, 8)));
 
     // Verify content - realistic Rust code
     assert_eq!(scenario.setup.file_content, "fn f() {}");
@@ -905,4 +905,864 @@ tolerance = 0
 
     let result = loader.load(temp_file.path());
     assert!(result.is_err(), "Should reject oversized target content");
+}
+
+// ============================================================================
+// Multi-cursor format tests
+// ============================================================================
+
+#[test]
+fn test_scenario_with_multi_cursors() {
+    let toml = r#"
+[[scenarios]]
+id = "multi_cursor_001"
+name = "Multi-cursor test"
+description = "Test with multiple cursors"
+
+[scenarios.setup]
+file_content = """let a = 1;
+let b = 2;
+let c = 3;"""
+cursor_position = [0, 4]
+
+[scenarios.target]
+file_content = """let a = 1;
+let b = 2;
+let c = 3;"""
+cursors = [[0, 4], [1, 4], [2, 4]]
+
+[scenarios.solution]
+commands = ["C", "C"]
+description = "Add cursors on next lines"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+    let temp_path = temp_file.path();
+
+    let parent_dir = temp_path.parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_path);
+    assert!(
+        result.is_ok(),
+        "Should load scenario with multi-cursors: {:?}",
+        result.err()
+    );
+
+    let scenarios = result.unwrap();
+    assert_eq!(scenarios.len(), 1);
+    assert!(scenarios[0].target.cursors.is_some());
+    assert_eq!(scenarios[0].target.cursors.as_ref().unwrap().len(), 3);
+}
+
+#[test]
+fn test_scenario_with_multi_selections() {
+    let toml = r#"
+[[scenarios]]
+id = "multi_selection_001"
+name = "Multi-selection test"
+description = "Test with multiple selections"
+
+[scenarios.setup]
+file_content = """let a = 1;
+let b = 2;
+let c = 3;"""
+cursor_position = [0, 0]
+selection = [0, 0, 2, 10]
+
+[scenarios.target]
+file_content = """let a = 1;
+let b = 2;
+let c = 3;"""
+selections = [[0, 0, 0, 10], [1, 0, 1, 10], [2, 0, 2, 10]]
+
+[scenarios.solution]
+commands = ["Alt-s"]
+description = "Split selection on newlines"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+    let temp_path = temp_file.path();
+
+    let parent_dir = temp_path.parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_path);
+    assert!(
+        result.is_ok(),
+        "Should load scenario with multi-selections: {:?}",
+        result.err()
+    );
+
+    let scenarios = result.unwrap();
+    assert_eq!(scenarios.len(), 1);
+    assert!(scenarios[0].target.selections.is_some());
+    assert_eq!(scenarios[0].target.selections.as_ref().unwrap().len(), 3);
+}
+
+#[test]
+fn test_setup_effective_cursor_position() {
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: Some((1, 5)),
+        selection: None,
+        cursors: None,
+        selections: None,
+    };
+    assert_eq!(setup.effective_cursor_position(), (1, 5));
+
+    let setup_multi = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: Some(vec![[2, 3], [4, 5]]),
+        selections: None,
+    };
+    assert_eq!(setup_multi.effective_cursor_position(), (2, 3));
+}
+
+#[test]
+fn test_setup_all_cursors() {
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: Some((1, 5)),
+        selection: None,
+        cursors: None,
+        selections: None,
+    };
+    assert_eq!(setup.all_cursors(), vec![[1, 5]]);
+
+    let setup_multi = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: Some(vec![[2, 3], [4, 5]]),
+        selections: None,
+    };
+    assert_eq!(setup_multi.all_cursors(), vec![[2, 3], [4, 5]]);
+}
+
+#[test]
+fn test_setup_all_selections() {
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: Some((0, 0)),
+        selection: Some([0, 0, 0, 5]),
+        cursors: None,
+        selections: None,
+    };
+    assert_eq!(setup.all_selections(), Some(vec![[0, 0, 0, 5]]));
+
+    let setup_multi = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: None,
+        selections: Some(vec![[0, 0, 0, 5], [1, 0, 1, 5]]),
+    };
+    assert_eq!(
+        setup_multi.all_selections(),
+        Some(vec![[0, 0, 0, 5], [1, 0, 1, 5]])
+    );
+}
+
+#[test]
+fn test_setup_is_multi_cursor() {
+    let single = Setup {
+        file_content: "test".to_string(),
+        cursor_position: Some((0, 0)),
+        selection: None,
+        cursors: None,
+        selections: None,
+    };
+    assert!(!single.is_multi_cursor());
+
+    let multi_cursors = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: Some(vec![[0, 0], [1, 0]]),
+        selections: None,
+    };
+    assert!(multi_cursors.is_multi_cursor());
+
+    let multi_selections = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: None,
+        selections: Some(vec![[0, 0, 0, 5]]),
+    };
+    assert!(multi_selections.is_multi_cursor());
+}
+
+#[test]
+fn test_scenario_missing_cursor_rejected() {
+    let toml = r#"
+[[scenarios]]
+id = "missing_cursor_001"
+name = "Missing cursor test"
+description = "Should fail - no cursor specified"
+
+[scenarios.setup]
+file_content = "test"
+
+[scenarios.target]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["nop"]
+description = "No operation"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_err(),
+        "Should reject scenario with no cursor specification"
+    );
+}
+
+#[test]
+fn test_multi_cursor_invalid_position_rejected() {
+    let toml = r#"
+[[scenarios]]
+id = "invalid_multi_cursor_001"
+name = "Invalid multi-cursor test"
+description = "Should fail - cursor position out of bounds"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+cursors = [[0, 0], [50000, 0]]
+
+[scenarios.solution]
+commands = ["C"]
+description = "Add cursor"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_err(),
+        "Should reject scenario with invalid multi-cursor position"
+    );
+}
+
+// ============================================================================
+// TESTING-003: Edge case tests for Setup/TargetState helpers
+// ============================================================================
+
+#[test]
+fn test_setup_effective_cursor_from_selections() {
+    // When only selections are present, cursor is at first selection's head
+    let setup = Setup {
+        file_content: "test content".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: None,
+        selections: Some(vec![[0, 2, 0, 5], [0, 8, 0, 12]]),
+    };
+    // First selection's end (head) is at (0, 5)
+    assert_eq!(setup.effective_cursor_position(), (0, 5));
+}
+
+#[test]
+fn test_setup_all_cursors_derived_from_selections() {
+    // all_cursors should derive from selections when cursors is None
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: None,
+        selections: Some(vec![[0, 0, 0, 3], [0, 5, 0, 8]]),
+    };
+    // Cursors are at selection ends (heads)
+    let cursors = setup.all_cursors();
+    assert_eq!(cursors.len(), 2);
+    assert_eq!(cursors[0], [0, 3]);
+    assert_eq!(cursors[1], [0, 8]);
+}
+
+#[test]
+fn test_setup_all_selections_derived_from_cursors() {
+    // all_selections should create point selections from cursors
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: Some(vec![[0, 2], [0, 5]]),
+        selections: None,
+    };
+    let selections = setup.all_selections().unwrap();
+    assert_eq!(selections.len(), 2);
+    // Point selections: start == end
+    assert_eq!(selections[0], [0, 2, 0, 2]);
+    assert_eq!(selections[1], [0, 5, 0, 5]);
+}
+
+#[test]
+fn test_setup_all_selections_none_when_no_selection_info() {
+    // When no selection/selections/cursors, all_selections returns None
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: Some((0, 0)),
+        selection: None,
+        cursors: None,
+        selections: None,
+    };
+    assert!(setup.all_selections().is_none());
+}
+
+#[test]
+fn test_setup_empty_cursors_array() {
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: Some((0, 2)),
+        selection: None,
+        cursors: Some(vec![]),
+        selections: None,
+    };
+    // Empty cursors array: effective_cursor_position falls back to cursor_position
+    assert_eq!(setup.effective_cursor_position(), (0, 2));
+    // all_cursors returns empty vec
+    assert!(setup.all_cursors().is_empty());
+}
+
+#[test]
+fn test_setup_empty_selections_array() {
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: Some((0, 2)),
+        selection: None,
+        cursors: None,
+        selections: Some(vec![]),
+    };
+    // Empty selections array: effective_cursor_position falls back to cursor_position
+    assert_eq!(setup.effective_cursor_position(), (0, 2));
+    // all_selections returns Some(empty vec)
+    assert_eq!(setup.all_selections(), Some(vec![]));
+}
+
+#[test]
+fn test_target_effective_cursor_from_selections() {
+    let target = TargetState {
+        file_content: "test content".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: None,
+        selections: Some(vec![[0, 0, 0, 7]]),
+    };
+    assert_eq!(target.effective_cursor_position(), (0, 7));
+}
+
+#[test]
+fn test_target_all_cursors_derived_from_selections() {
+    let target = TargetState {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: None,
+        selections: Some(vec![[0, 0, 0, 4]]),
+    };
+    let cursors = target.all_cursors();
+    assert_eq!(cursors.len(), 1);
+    assert_eq!(cursors[0], [0, 4]); // Head of selection
+}
+
+#[test]
+fn test_cursors_ref_returns_reference() {
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: Some(vec![[0, 1], [0, 2]]),
+        selections: None,
+    };
+    let ref_slice = setup.cursors_ref();
+    assert!(ref_slice.is_some());
+    assert_eq!(ref_slice.unwrap().len(), 2);
+}
+
+#[test]
+fn test_selections_ref_returns_reference() {
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: None,
+        selection: None,
+        cursors: None,
+        selections: Some(vec![[0, 0, 0, 5]]),
+    };
+    let ref_slice = setup.selections_ref();
+    assert!(ref_slice.is_some());
+    assert_eq!(ref_slice.unwrap().len(), 1);
+}
+
+#[test]
+fn test_cursors_ref_none_when_not_set() {
+    let setup = Setup {
+        file_content: "test".to_string(),
+        cursor_position: Some((0, 0)),
+        selection: None,
+        cursors: None,
+        selections: None,
+    };
+    assert!(setup.cursors_ref().is_none());
+}
+
+// ============================================================================
+// TESTING-004: Validation boundary tests
+// ============================================================================
+
+#[test]
+fn test_cursor_at_max_position_boundary() {
+    // MAX_POSITION is 10,000 - cursor at exactly boundary should pass
+    let toml = r#"
+[[scenarios]]
+id = "boundary_test_001"
+name = "Boundary Test"
+description = "Test cursor at max boundary"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [10000, 10000]
+
+[scenarios.target]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["gg"]
+description = "Go to start"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_ok(),
+        "Should accept cursor at exactly MAX_POSITION"
+    );
+}
+
+#[test]
+fn test_cursor_exceeding_max_position() {
+    // Cursor position exceeding MAX_POSITION (10,000) should fail
+    let toml = r#"
+[[scenarios]]
+id = "boundary_exceed_001"
+name = "Boundary Exceed Test"
+description = "Test cursor exceeding max boundary"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [10001, 0]
+
+[scenarios.target]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["gg"]
+description = "Go to start"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_err(),
+        "Should reject cursor exceeding MAX_POSITION"
+    );
+}
+
+#[test]
+fn test_point_selection_anchor_equals_head() {
+    // Point selection where anchor == head should be valid
+    let toml = r#"
+[[scenarios]]
+id = "point_selection_001"
+name = "Point Selection Test"
+description = "Test point selection"
+
+[scenarios.setup]
+file_content = "test content"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test content"
+selections = [[0, 5, 0, 5]]
+
+[scenarios.solution]
+commands = ["w"]
+description = "Move to word"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_ok(),
+        "Should accept point selection (anchor == head)"
+    );
+}
+
+#[test]
+fn test_cursors_at_max_limit() {
+    // Exactly MAX_CURSORS_PER_SCENARIO cursors should be valid
+    let mut cursors_str = String::from("[");
+    for i in 0..100 {
+        if i > 0 {
+            cursors_str.push_str(", ");
+        }
+        cursors_str.push_str(&format!("[0, {}]", i % 4));
+    }
+    cursors_str.push(']');
+
+    let toml = format!(
+        r#"
+[[scenarios]]
+id = "max_cursors_001"
+name = "Max Cursors Test"
+description = "Test at max cursors limit"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+cursors = {}
+
+[scenarios.solution]
+commands = ["C"]
+description = "Add cursor"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#,
+        cursors_str
+    );
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_ok(),
+        "Should accept exactly MAX_CURSORS_PER_SCENARIO cursors"
+    );
+}
+
+#[test]
+fn test_cursors_exceeding_max_limit() {
+    // More than MAX_CURSORS_PER_SCENARIO cursors should fail
+    let mut cursors_str = String::from("[");
+    for i in 0..101 {
+        if i > 0 {
+            cursors_str.push_str(", ");
+        }
+        cursors_str.push_str(&format!("[0, {}]", i % 4));
+    }
+    cursors_str.push(']');
+
+    let toml = format!(
+        r#"
+[[scenarios]]
+id = "exceed_cursors_001"
+name = "Exceed Cursors Test"
+description = "Test exceeding max cursors limit"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+cursors = {}
+
+[scenarios.solution]
+commands = ["C"]
+description = "Add cursor"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#,
+        cursors_str
+    );
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_err(),
+        "Should reject more than MAX_CURSORS_PER_SCENARIO cursors"
+    );
+}
+
+#[test]
+fn test_selections_at_max_limit() {
+    // Exactly MAX_SELECTIONS_PER_SCENARIO selections should be valid
+    let mut selections_str = String::from("[");
+    for i in 0..100 {
+        if i > 0 {
+            selections_str.push_str(", ");
+        }
+        selections_str.push_str(&format!("[0, {}, 0, {}]", i % 4, (i % 4) + 1));
+    }
+    selections_str.push(']');
+
+    let toml = format!(
+        r#"
+[[scenarios]]
+id = "max_selections_001"
+name = "Max Selections Test"
+description = "Test at max selections limit"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+selections = {}
+
+[scenarios.solution]
+commands = ["C"]
+description = "Add selection"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#,
+        selections_str
+    );
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_ok(),
+        "Should accept exactly MAX_SELECTIONS_PER_SCENARIO selections"
+    );
+}
+
+#[test]
+fn test_selections_exceeding_max_limit() {
+    // More than MAX_SELECTIONS_PER_SCENARIO selections should fail
+    let mut selections_str = String::from("[");
+    for i in 0..101 {
+        if i > 0 {
+            selections_str.push_str(", ");
+        }
+        selections_str.push_str(&format!("[0, {}, 0, {}]", i % 4, (i % 4) + 1));
+    }
+    selections_str.push(']');
+
+    let toml = format!(
+        r#"
+[[scenarios]]
+id = "exceed_selections_001"
+name = "Exceed Selections Test"
+description = "Test exceeding max selections limit"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+selections = {}
+
+[scenarios.solution]
+commands = ["C"]
+description = "Add selection"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#,
+        selections_str
+    );
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(
+        result.is_err(),
+        "Should reject more than MAX_SELECTIONS_PER_SCENARIO selections"
+    );
+}
+
+#[test]
+fn test_empty_cursors_array_valid() {
+    // Empty cursors array should be valid (falls back to cursor_position)
+    let toml = r#"
+[[scenarios]]
+id = "empty_cursors_001"
+name = "Empty Cursors Test"
+description = "Test empty cursors array"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+cursor_position = [0, 0]
+cursors = []
+
+[scenarios.solution]
+commands = ["nop"]
+description = "No operation"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(result.is_ok(), "Should accept empty cursors array");
+}
+
+#[test]
+fn test_empty_selections_array_valid() {
+    // Empty selections array should be valid
+    let toml = r#"
+[[scenarios]]
+id = "empty_selections_001"
+name = "Empty Selections Test"
+description = "Test empty selections array"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+cursor_position = [0, 0]
+selections = []
+
+[scenarios.solution]
+commands = ["nop"]
+description = "No operation"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(result.is_ok(), "Should accept empty selections array");
 }

@@ -214,13 +214,17 @@ mod tests {
             description: "A test scenario".to_string(),
             setup: Setup {
                 file_content: "test content".to_string(),
-                cursor_position: (0, 0),
+                cursor_position: Some((0, 0)),
                 selection: None,
+                cursors: None,
+                selections: None,
             },
             target: TargetState {
                 file_content: "target content".to_string(),
-                cursor_position: (0, 0),
+                cursor_position: Some((0, 0)),
                 selection: None,
+                cursors: None,
+                selections: None,
             },
             solution: Solution {
                 commands: commands.into_iter().map(String::from).collect(),

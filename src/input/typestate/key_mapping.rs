@@ -9,6 +9,82 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
 
+/// Map macOS composed Unicode characters to Alt + base key
+///
+/// On macOS, when terminal doesn't support kitty keyboard protocol,
+/// Option+key produces composed Unicode characters instead of Alt modifier.
+/// This function converts them back to proper Alt + key combinations.
+///
+/// Common macOS Option compositions:
+/// - Option+c = ç, Option+Shift+C = Ç
+/// - Option+s = ß, Option+j = ∆, Option+k = ˚
+/// - Option+x = ≈, Option+; = …, Option+, = ≤
+fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> {
+    match ch {
+        // Alt+lowercase
+        'ç' => Some(('c', KeyModifiers::ALT)),
+        'ß' => Some(('s', KeyModifiers::ALT)),
+        '∆' => Some(('j', KeyModifiers::ALT)),
+        '˚' => Some(('k', KeyModifiers::ALT)),
+        '≈' => Some(('x', KeyModifiers::ALT)),
+        '…' => Some((';', KeyModifiers::ALT)),
+        '≤' => Some((',', KeyModifiers::ALT)),
+        '–' => Some(('-', KeyModifiers::ALT)),
+        '≥' => Some(('.', KeyModifiers::ALT)),
+        '`' => Some(('`', KeyModifiers::ALT)), // dead key produces same char
+        // Alt+Shift (uppercase or shifted symbols)
+        'Ç' => Some(('C', KeyModifiers::ALT)), // Alt-C (copy_selection_prev)
+        '˝' => Some(('J', KeyModifiers::ALT)), // Alt-J (join_selections_space)
+        '\u{F8FF}' => Some(('K', KeyModifiers::ALT)), // Alt-K (remove_matching) - Apple logo
+        '¯' => Some(('_', KeyModifiers::ALT)), // Alt-_ (merge_consecutive)
+        '¬' => Some(('l', KeyModifiers::ALT)), // Alt-l if needed
+        _ => None,
+    }
+}
+
+/// Normalize a KeyEvent to canonical form (like Helix does)
+///
+/// This ensures consistent representation regardless of terminal behavior:
+/// - macOS composed chars (ç, Ç) → base char + ALT modifier
+/// - lowercase + SHIFT → uppercase (SHIFT removed)
+/// - uppercase + SHIFT → uppercase (SHIFT removed, already uppercase)
+///
+/// This matches Helix's normalization: "C-S-r and C-R are represented by equal KeyEvents"
+pub fn normalize_key_event(key: KeyEvent) -> KeyEvent {
+    // First, try to map macOS composed Unicode characters to Alt combinations
+    if let KeyCode::Char(ch) = key.code
+        && let Some((base_char, alt_modifier)) = map_macos_composed_char(ch)
+    {
+        let mut modifiers = key.modifiers;
+        modifiers.insert(alt_modifier);
+        // Remove SHIFT if the base char is uppercase (it's already implied)
+        if base_char.is_ascii_uppercase() {
+            modifiers.remove(KeyModifiers::SHIFT);
+        }
+        return KeyEvent::new(KeyCode::Char(base_char), modifiers);
+    }
+
+    // Standard normalization for SHIFT + letter
+    match key.code {
+        KeyCode::Char(ch)
+            if ch.is_ascii_lowercase() && key.modifiers.contains(KeyModifiers::SHIFT) =>
+        {
+            let mut modifiers = key.modifiers;
+            modifiers.remove(KeyModifiers::SHIFT);
+            KeyEvent::new(KeyCode::Char(ch.to_ascii_uppercase()), modifiers)
+        }
+        KeyCode::Char(ch)
+            if ch.is_ascii_uppercase() && key.modifiers.contains(KeyModifiers::SHIFT) =>
+        {
+            // Already uppercase, just remove redundant SHIFT
+            let mut modifiers = key.modifiers;
+            modifiers.remove(KeyModifiers::SHIFT);
+            KeyEvent::new(KeyCode::Char(ch), modifiers)
+        }
+        _ => key,
+    }
+}
+
 /// Parse Helix-style key string to KeyEvent
 ///
 /// Supports formats:
@@ -156,21 +232,24 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
     let is_alt = modifiers.contains(KeyModifiers::ALT);
 
     // Pattern: (char, is_shift, is_alt)
+    // Note: For uppercase letters and shifted punctuation, we use wildcard (_) for is_shift
+    // because terminal behavior varies. The normalization function handles this at a
+    // higher level, but this function remains flexible for direct testing.
     match (c, is_shift, is_alt) {
         // Alt commands (must be checked first as they have highest specificity)
         ('c', false, true) => Some(CMD_CHANGE_SELECTION_NOYANK), // Alt-c
-        ('C', true, true) => Some(CMD_COPY_SELECTION_PREV),      // Alt-C
-        ('J', true, true) => Some(CMD_JOIN_SELECTIONS_SPACE),    // Alt-J
-        ('K', true, true) => Some(CMD_REMOVE_MATCHING),          // Alt-K
+        ('C', _, true) => Some(CMD_COPY_SELECTION_PREV),         // Alt-C (any SHIFT)
+        ('J', _, true) => Some(CMD_JOIN_SELECTIONS_SPACE),       // Alt-J (any SHIFT)
+        ('K', _, true) => Some(CMD_REMOVE_MATCHING),             // Alt-K (any SHIFT)
         ('s', false, true) => Some(CMD_SPLIT_SELECTION_NEWLINES), // Alt-s
         ('x', false, true) => Some(CMD_SHRINK_TO_LINE_BOUNDS),   // Alt-x
         (',', false, true) => Some(CMD_REMOVE_PRIMARY_SELECTION), // Alt-,
         ('-', false, true) => Some(CMD_MERGE_SELECTIONS),        // Alt--
-        ('_', _, true) => Some(CMD_MERGE_CONSECUTIVE),           // Alt-_
+        ('_', _, true) => Some(CMD_MERGE_CONSECUTIVE),           // Alt-_ (SHIFT varies)
         ('.', false, true) => Some(CMD_REPEAT_LAST_MOTION),      // Alt-.
         ('`', false, true) => Some(CMD_SWITCH_TO_UPPERCASE),     // Alt-`
         (';', false, true) => Some(CMD_FLIP_SELECTIONS),         // Alt-;
-        ('*', _, true) => Some(CMD_SEARCH_SELECTION),            // Alt-*
+        ('*', _, true) => Some(CMD_SEARCH_SELECTION),            // Alt-* (SHIFT varies)
 
         // Movement (no Alt)
         ('h', false, false) => Some(CMD_MOVE_LEFT),
@@ -206,13 +285,13 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
         ('O', _, false) => Some(CMD_OPEN_ABOVE),
         ('J', _, false) => Some(CMD_JOIN_LINES),
 
-        // Indentation (no Alt)
+        // Indentation (no Alt - Shift produces these chars but may or may not be flagged)
         ('>', _, false) => Some(CMD_INDENT),
         ('<', _, false) => Some(CMD_DEDENT),
 
         // Case (no Alt)
         ('~', _, false) => Some(CMD_SWITCH_CASE),
-        ('`', _, false) => Some(CMD_SWITCH_CASE_ALT),
+        ('`', false, false) => Some(CMD_SWITCH_CASE_ALT),
 
         // Clipboard (no Alt)
         ('y', false, false) => Some(CMD_YANK),
@@ -224,10 +303,10 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
         ('U', _, false) => Some(CMD_REDO),
 
         // Repeat (no Alt)
-        ('.', _, false) => Some(CMD_REPEAT),
+        ('.', false, false) => Some(CMD_REPEAT),
 
         // Search (no Alt)
-        ('/', _, false) => Some(CMD_SEARCH_FORWARD),
+        ('/', false, false) => Some(CMD_SEARCH_FORWARD),
         ('?', _, false) => Some(CMD_SEARCH_BACKWARD),
         ('n', false, false) => Some(CMD_SEARCH_NEXT),
         ('N', _, false) => Some(CMD_SEARCH_PREV),
@@ -286,7 +365,10 @@ pub fn is_count_compatible_command(c: char, modifiers: KeyModifiers) -> bool {
 /// simple key events to their corresponding Helix command strings.
 /// It handles single-key commands but not multi-key sequences
 /// (those require the InputStateMachine).
+///
+/// Note: This function normalizes the key event before mapping.
 pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
+    let key = normalize_key_event(key);
     match key.code {
         KeyCode::Char(c) => map_single_key_command(c, key.modifiers),
         KeyCode::Esc => Some(CMD_ESCAPE),

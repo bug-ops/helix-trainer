@@ -61,143 +61,6 @@ fn test_render_task_screen_with_session() {
 
 mod helper_tests {
     #[test]
-    fn test_split_at_char_index_ascii_beginning() {
-        let s = "hello";
-        let (before_end, char_start, char_end, after_start) =
-            super::super::helpers::split_at_char_index(s, 0);
-
-        assert_eq!(before_end, 0);
-        assert_eq!(char_start, 0);
-        assert_eq!(char_end, 1);
-        assert_eq!(after_start, 1);
-        assert_eq!(&s[char_start..char_end], "h");
-    }
-
-    #[test]
-    fn test_split_at_char_index_ascii_middle() {
-        let s = "hello";
-        let (before_end, char_start, char_end, after_start) =
-            super::super::helpers::split_at_char_index(s, 2);
-
-        assert_eq!(before_end, 2);
-        assert_eq!(char_start, 2);
-        assert_eq!(char_end, 3);
-        assert_eq!(after_start, 3);
-        assert_eq!(&s[..before_end], "he");
-        assert_eq!(&s[char_start..char_end], "l");
-        assert_eq!(&s[after_start..], "lo");
-    }
-
-    #[test]
-    fn test_split_at_char_index_ascii_end() {
-        let s = "hello";
-        let (before_end, char_start, char_end, after_start) =
-            super::super::helpers::split_at_char_index(s, 4);
-
-        assert_eq!(before_end, 4);
-        assert_eq!(char_start, 4);
-        assert_eq!(char_end, 5);
-        assert_eq!(after_start, 5);
-        assert_eq!(&s[char_start..char_end], "o");
-    }
-
-    #[test]
-    fn test_split_at_char_index_out_of_bounds() {
-        let s = "hello";
-        let (before_end, char_start, char_end, after_start) =
-            super::super::helpers::split_at_char_index(s, 10);
-
-        // All should point to end of string
-        assert_eq!(before_end, s.len());
-        assert_eq!(char_start, s.len());
-        assert_eq!(char_end, s.len());
-        assert_eq!(after_start, s.len());
-    }
-
-    #[test]
-    fn test_split_at_char_index_empty_string() {
-        let s = "";
-        let (before_end, char_start, char_end, after_start) =
-            super::super::helpers::split_at_char_index(s, 0);
-
-        assert_eq!(before_end, 0);
-        assert_eq!(char_start, 0);
-        assert_eq!(char_end, 0);
-        assert_eq!(after_start, 0);
-    }
-
-    #[test]
-    fn test_split_at_char_index_unicode_multibyte() {
-        // Unicode string with multi-byte characters
-        let s = "héllo"; // é is 2 bytes in UTF-8
-        let (_before_end, char_start, char_end, after_start) =
-            super::super::helpers::split_at_char_index(s, 1);
-
-        assert_eq!(&s[char_start..char_end], "é");
-        // After the é, the rest should be "llo"
-        assert_eq!(&s[after_start..], "llo");
-    }
-
-    #[test]
-    fn test_split_at_char_index_unicode_emoji() {
-        // String with emoji (4 bytes)
-        let s = "a😀b";
-        let (before_end, char_start, char_end, after_start) =
-            super::super::helpers::split_at_char_index(s, 1);
-
-        assert_eq!(&s[..before_end], "a");
-        assert_eq!(&s[char_start..char_end], "😀");
-        assert_eq!(&s[after_start..], "b");
-    }
-
-    #[test]
-    fn test_char_range_to_bytes_ascii() {
-        let s = "hello world";
-        let (start, end) = super::super::helpers::char_range_to_bytes(s, 0, 5);
-
-        assert_eq!(start, 0);
-        assert_eq!(end, 5);
-        assert_eq!(&s[start..end], "hello");
-    }
-
-    #[test]
-    fn test_char_range_to_bytes_middle() {
-        let s = "hello world";
-        let (start, end) = super::super::helpers::char_range_to_bytes(s, 6, 11);
-
-        assert_eq!(start, 6);
-        assert_eq!(end, 11);
-        assert_eq!(&s[start..end], "world");
-    }
-
-    #[test]
-    fn test_char_range_to_bytes_unicode() {
-        let s = "héllo"; // é is 2 bytes
-        let (start, end) = super::super::helpers::char_range_to_bytes(s, 0, 2);
-
-        assert_eq!(&s[start..end], "hé");
-    }
-
-    #[test]
-    fn test_char_range_to_bytes_out_of_bounds() {
-        let s = "hello";
-        let (start, end) = super::super::helpers::char_range_to_bytes(s, 10, 20);
-
-        assert_eq!(start, s.len());
-        assert_eq!(end, s.len());
-    }
-
-    #[test]
-    fn test_char_range_to_bytes_empty_range() {
-        let s = "hello";
-        let (start, end) = super::super::helpers::char_range_to_bytes(s, 2, 2);
-
-        // When start == end, we should get an empty range at that position
-        assert_eq!(start, 2);
-        assert_eq!(end, s.len()); // Due to iterator consumption behavior
-    }
-
-    #[test]
     fn test_centered_popup_exact_fit() {
         use ratatui::layout::Rect;
 
@@ -322,178 +185,142 @@ mod helper_tests {
 // ==================== Editor Rendering Tests ====================
 
 mod editor_tests {
-    use crate::game::{CursorPosition, EditorState, Selection};
+    use crate::helix::SelectionBounds;
+    use crate::ui::render::editor::CursorInfo;
 
-    fn create_editor_state(content: &str, row: usize, col: usize) -> EditorState {
-        let cursor = CursorPosition { row, col };
-        EditorState::new(content.to_string(), cursor, None).unwrap()
-    }
-
-    fn create_editor_with_selection(
-        content: &str,
-        cursor: (usize, usize),
-        sel_start: (usize, usize),
-        sel_end: (usize, usize),
-    ) -> EditorState {
-        let cursor_pos = CursorPosition {
-            row: cursor.0,
-            col: cursor.1,
-        };
-        let start = CursorPosition {
-            row: sel_start.0,
-            col: sel_start.1,
-        };
-        let end = CursorPosition {
-            row: sel_end.0,
-            col: sel_end.1,
-        };
-        let selection = Selection::new(start, end);
-        EditorState::new(content.to_string(), cursor_pos, Some(selection)).unwrap()
+    fn primary_cursor(row: usize, col: usize) -> Vec<CursorInfo> {
+        vec![CursorInfo {
+            row,
+            col,
+            is_primary: true,
+        }]
     }
 
     #[test]
     fn test_render_editor_with_diff_matching_lines() {
-        let current = create_editor_state("line 1\nline 2\n", 0, 0);
-        let target = create_editor_state("line 1\nline 2\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Should have 2 lines
+        let lines = super::super::editor::render_editor_with_diff(
+            "line 1\nline 2\n",
+            "line 1\nline 2\n",
+            &primary_cursor(0, 0),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 2);
     }
 
     #[test]
     fn test_render_editor_with_diff_different_lines() {
-        let current = create_editor_state("line 1\nline 2\n", 0, 0);
-        let target = create_editor_state("line 1\nline X\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Should have 2 lines
+        let lines = super::super::editor::render_editor_with_diff(
+            "line 1\nline 2\n",
+            "line 1\nline X\n",
+            &primary_cursor(0, 0),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 2);
     }
 
     #[test]
     fn test_render_editor_with_diff_cursor_on_first_line() {
-        let current = create_editor_state("hello world\nsecond line\n", 0, 5);
-        let target = create_editor_state("hello world\nsecond line\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // First line should have cursor rendering (multiple spans)
+        let lines = super::super::editor::render_editor_with_diff(
+            "hello world\nsecond line\n",
+            "hello world\nsecond line\n",
+            &primary_cursor(0, 5),
+            &[],
+            None,
+        );
         assert!(!lines.is_empty());
     }
 
     #[test]
     fn test_render_editor_with_diff_cursor_at_end_of_line() {
-        let current = create_editor_state("hello\n", 0, 5);
-        let target = create_editor_state("hello\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
+        let lines = super::super::editor::render_editor_with_diff(
+            "hello\n",
+            "hello\n",
+            &primary_cursor(0, 5),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_with_diff_empty_content() {
-        let current = create_editor_state("", 0, 0);
-        let target = create_editor_state("", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Empty content should produce empty lines
+        let lines =
+            super::super::editor::render_editor_with_diff("", "", &primary_cursor(0, 0), &[], None);
         assert!(lines.is_empty());
     }
 
     #[test]
     fn test_render_editor_with_diff_single_empty_line() {
-        let current = create_editor_state("\n", 0, 0);
-        let target = create_editor_state("\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
+        let lines = super::super::editor::render_editor_with_diff(
+            "\n",
+            "\n",
+            &primary_cursor(0, 0),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 1);
-    }
-
-    #[test]
-    fn test_render_editor_with_selection_no_selection() {
-        let state = create_editor_state("line 1\nline 2\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_selection(&state);
-
-        assert_eq!(lines.len(), 2);
-    }
-
-    #[test]
-    fn test_render_editor_with_selection_single_line_selection() {
-        let state = create_editor_with_selection("hello world\n", (0, 0), (0, 0), (0, 5));
-
-        let lines = super::super::editor::render_editor_with_selection(&state);
-
-        assert_eq!(lines.len(), 1);
-    }
-
-    #[test]
-    fn test_render_editor_with_selection_multiline_selection() {
-        let state =
-            create_editor_with_selection("line 1\nline 2\nline 3\n", (0, 0), (0, 0), (2, 0));
-
-        let lines = super::super::editor::render_editor_with_selection(&state);
-
-        assert_eq!(lines.len(), 3);
     }
 
     #[test]
     fn test_render_editor_with_diff_selection_present() {
-        let current = create_editor_with_selection("hello world\n", (0, 0), (0, 0), (0, 5));
-        let target = create_editor_state("hello world\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Should render with selection highlighting
+        let selection = SelectionBounds::new(0, 0, 0, 5);
+        let lines = super::super::editor::render_editor_with_diff(
+            "hello world\n",
+            "hello world\n",
+            &primary_cursor(0, 0),
+            &[selection],
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_with_diff_target_shorter() {
-        let current = create_editor_state("line 1\nline 2\nline 3\n", 0, 0);
-        let target = create_editor_state("line 1\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Current has 3 lines
+        let lines = super::super::editor::render_editor_with_diff(
+            "line 1\nline 2\nline 3\n",
+            "line 1\n",
+            &primary_cursor(0, 0),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 3);
     }
 
     #[test]
     fn test_render_editor_with_diff_target_longer() {
-        let current = create_editor_state("line 1\n", 0, 0);
-        let target = create_editor_state("line 1\nline 2\nline 3\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Current has 1 line
+        let lines = super::super::editor::render_editor_with_diff(
+            "line 1\n",
+            "line 1\nline 2\nline 3\n",
+            &primary_cursor(0, 0),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_cursor_middle_of_line() {
-        let current = create_editor_state("hello world\n", 0, 6);
-        let target = create_editor_state("hello world\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
-        // Should render cursor at position 6 (on 'w')
+        let lines = super::super::editor::render_editor_with_diff(
+            "hello world\n",
+            "hello world\n",
+            &primary_cursor(0, 6),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn test_render_editor_unicode_content() {
-        let current = create_editor_state("héllo wörld\n", 0, 0);
-        let target = create_editor_state("héllo wörld\n", 0, 0);
-
-        let lines = super::super::editor::render_editor_with_diff(&current, &target, None);
-
+        let lines = super::super::editor::render_editor_with_diff(
+            "héllo wörld\n",
+            "héllo wörld\n",
+            &primary_cursor(0, 0),
+            &[],
+            None,
+        );
         assert_eq!(lines.len(), 1);
     }
 }

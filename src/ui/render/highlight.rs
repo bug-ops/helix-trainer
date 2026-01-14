@@ -1,7 +1,10 @@
 //! Syntax highlighting for code content using syntect
 
+use std::collections::HashSet;
 use std::sync::LazyLock;
 
+use crate::helix::SelectionBounds;
+use crate::ui::render::editor::CursorInfo;
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
@@ -40,53 +43,24 @@ fn syntect_to_ratatui_style(style: syntect::highlighting::Style) -> Style {
     ratatui_style
 }
 
-/// Highlight code content and return styled lines for ratatui
-///
-/// Uses Rust syntax highlighting with a dark theme suitable for terminals.
-#[allow(dead_code)]
-pub fn highlight_code(content: &str) -> Vec<Line<'static>> {
-    // Use Rust syntax (our scenarios are Rust code)
-    let syntax = SYNTAX_SET
-        .find_syntax_by_extension("rs")
-        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
-
-    // Use base16-eighties dark theme (good for terminals)
-    let theme = &THEME_SET.themes["base16-eighties.dark"];
-
-    let mut highlighter = HighlightLines::new(syntax, theme);
-
-    content
-        .lines()
-        .map(|line| {
-            // Highlight the line
-            let highlighted = highlighter
-                .highlight_line(line, &SYNTAX_SET)
-                .unwrap_or_default();
-
-            // Convert to ratatui spans
-            let spans: Vec<Span<'static>> = highlighted
-                .into_iter()
-                .map(|(style, text)| {
-                    Span::styled(text.to_string(), syntect_to_ratatui_style(style))
-                })
-                .collect();
-
-            Line::from(spans)
-        })
-        .collect()
+/// Check if a line has selection (accounting for edge cases)
+fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
+    if line_idx == sel.end_row && sel.end_col == 0 {
+        return false;
+    }
+    line_idx >= sel.start_row && line_idx <= sel.end_row
 }
 
-/// Highlight code with cursor and selection overlay
+/// Highlight code with syntax highlighting, multi-cursor and multi-selection support.
 ///
-/// Combines syntax highlighting with cursor/selection display.
-pub fn highlight_code_with_cursor(
+/// Uses syntect for syntax highlighting while overlaying cursor and selection styles.
+/// Primary cursor uses white background, secondary cursors use cyan background.
+/// Selections use blue background.
+pub fn highlight_code_with_multi_cursor(
     content: &str,
-    cursor_line: usize,
-    cursor_col: usize,
-    selection: Option<&crate::game::Selection>,
+    cursors: &[CursorInfo],
+    selections: &[SelectionBounds],
 ) -> Vec<Line<'static>> {
-    use super::helpers::{char_range_to_bytes, split_at_char_index};
-
     let syntax = SYNTAX_SET
         .find_syntax_by_extension("rs")
         .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
@@ -98,190 +72,94 @@ pub fn highlight_code_with_cursor(
         .lines()
         .enumerate()
         .map(|(line_idx, line_text)| {
-            // Check for selection on this line
-            if let Some(sel) = selection {
-                let sel_start_line = sel.start.row;
-                let sel_end_line = sel.end.row;
-
-                // Skip if this is the end line but end_col is 0
-                let line_has_selection = if line_idx == sel_end_line && sel.end.col == 0 {
-                    false
-                } else {
-                    line_idx >= sel_start_line && line_idx <= sel_end_line
-                };
-
-                if line_has_selection {
-                    // Get highlighted spans first
-                    let highlighted = highlighter
-                        .highlight_line(line_text, &SYNTAX_SET)
-                        .unwrap_or_default();
-
-                    // Determine selection range for this line
-                    let line_start_col = if line_idx == sel_start_line {
-                        sel.start.col
-                    } else {
-                        0
-                    };
-
-                    let line_end_col = if line_idx == sel_end_line {
-                        sel.end.col
-                    } else {
-                        line_text.chars().count()
-                    };
-
-                    let (start_byte, end_byte) =
-                        char_range_to_bytes(line_text, line_start_col, line_end_col);
-
-                    // Build spans with selection overlay
-                    let mut spans: Vec<Span<'static>> = Vec::new();
-                    let mut current_byte = 0;
-
-                    for (style, text) in highlighted {
-                        let text_start = current_byte;
-                        let text_end = current_byte + text.len();
-
-                        if text_end <= start_byte || text_start >= end_byte {
-                            // Completely outside selection
-                            spans.push(Span::styled(
-                                text.to_string(),
-                                syntect_to_ratatui_style(style),
-                            ));
-                        } else if text_start >= start_byte && text_end <= end_byte {
-                            // Completely inside selection
-                            spans.push(Span::styled(
-                                text.to_string(),
-                                syntect_to_ratatui_style(style)
-                                    .bg(super::SELECTION_BG_COLOR)
-                                    .fg(Color::White),
-                            ));
-                        } else {
-                            // Partially inside selection - split
-                            let sel_start_in_text = start_byte.saturating_sub(text_start);
-                            let sel_end_in_text = (end_byte - text_start).min(text.len());
-
-                            if sel_start_in_text > 0 {
-                                spans.push(Span::styled(
-                                    text[..sel_start_in_text].to_string(),
-                                    syntect_to_ratatui_style(style),
-                                ));
-                            }
-
-                            if sel_end_in_text > sel_start_in_text {
-                                spans.push(Span::styled(
-                                    text[sel_start_in_text..sel_end_in_text].to_string(),
-                                    syntect_to_ratatui_style(style)
-                                        .bg(super::SELECTION_BG_COLOR)
-                                        .fg(Color::White),
-                                ));
-                            }
-
-                            if sel_end_in_text < text.len() {
-                                spans.push(Span::styled(
-                                    text[sel_end_in_text..].to_string(),
-                                    syntect_to_ratatui_style(style),
-                                ));
-                            }
-                        }
-
-                        current_byte = text_end;
-                    }
-
-                    return Line::from(spans);
-                }
-            }
-
-            // Check if cursor is on this line
-            if line_idx == cursor_line {
-                let highlighted = highlighter
-                    .highlight_line(line_text, &SYNTAX_SET)
-                    .unwrap_or_default();
-
-                let (_before_end, char_start, char_end, after_start) =
-                    split_at_char_index(line_text, cursor_col);
-
-                // Build spans with cursor overlay
-                let mut spans: Vec<Span<'static>> = Vec::new();
-                let mut current_byte = 0;
-
-                for (style, text) in highlighted {
-                    let text_start = current_byte;
-                    let text_end = current_byte + text.len();
-
-                    if text_end <= char_start || text_start >= after_start {
-                        // Outside cursor
-                        spans.push(Span::styled(
-                            text.to_string(),
-                            syntect_to_ratatui_style(style),
-                        ));
-                    } else if text_start <= char_start && text_end >= after_start {
-                        // Cursor is within this span
-                        let cursor_start_in_text = char_start - text_start;
-                        let cursor_end_in_text = char_end - text_start;
-
-                        if cursor_start_in_text > 0 {
-                            spans.push(Span::styled(
-                                text[..cursor_start_in_text].to_string(),
-                                syntect_to_ratatui_style(style),
-                            ));
-                        }
-
-                        let cursor_char = &text[cursor_start_in_text..cursor_end_in_text];
-                        let cursor_display = if cursor_char.is_empty() {
-                            "\u{2588}".to_string()
-                        } else {
-                            cursor_char.to_string()
-                        };
-                        spans.push(Span::styled(
-                            cursor_display,
-                            Style::default()
-                                .bg(Color::White)
-                                .fg(Color::Black)
-                                .add_modifier(ratatui::style::Modifier::BOLD),
-                        ));
-
-                        if cursor_end_in_text < text.len() {
-                            spans.push(Span::styled(
-                                text[cursor_end_in_text..].to_string(),
-                                syntect_to_ratatui_style(style),
-                            ));
-                        }
-                    } else {
-                        // Partially overlaps cursor - simplified handling
-                        spans.push(Span::styled(
-                            text.to_string(),
-                            syntect_to_ratatui_style(style),
-                        ));
-                    }
-
-                    current_byte = text_end;
-                }
-
-                // Handle cursor at end of line (past last character) or empty line
-                let line_char_count = line_text.chars().count();
-                if cursor_col >= line_char_count {
-                    spans.push(Span::styled(
-                        "\u{2588}".to_string(),
-                        Style::default()
-                            .bg(Color::White)
-                            .fg(Color::Black)
-                            .add_modifier(ratatui::style::Modifier::BOLD),
-                    ));
-                }
-
-                return Line::from(spans);
-            }
-
-            // Regular line - just highlight
+            // Get highlighted spans from syntect
             let highlighted = highlighter
                 .highlight_line(line_text, &SYNTAX_SET)
                 .unwrap_or_default();
 
-            let spans: Vec<Span<'static>> = highlighted
-                .into_iter()
-                .map(|(style, text)| {
-                    Span::styled(text.to_string(), syntect_to_ratatui_style(style))
-                })
-                .collect();
+            // Check for selections on this line
+            let line_has_any_selection = selections
+                .iter()
+                .any(|sel| line_has_selection(line_idx, sel));
+
+            // Get cursors on this line
+            let cursors_on_line: Vec<&CursorInfo> =
+                cursors.iter().filter(|c| c.row == line_idx).collect();
+
+            // If no overlays needed, just return syntax highlighted line
+            if !line_has_any_selection && cursors_on_line.is_empty() {
+                let spans: Vec<Span<'static>> = highlighted
+                    .into_iter()
+                    .map(|(style, text)| {
+                        Span::styled(text.to_string(), syntect_to_ratatui_style(style))
+                    })
+                    .collect();
+                return Line::from(spans);
+            }
+
+            // Build per-character style map from syntax highlighting
+            let mut char_styles: Vec<Style> = Vec::new();
+            for (style, text) in &highlighted {
+                let ratatui_style = syntect_to_ratatui_style(*style);
+                for _ in text.chars() {
+                    char_styles.push(ratatui_style);
+                }
+            }
+
+            // Build set of highlighted columns from selections
+            let line_chars: Vec<char> = line_text.chars().collect();
+            let mut highlighted_cols: HashSet<usize> = HashSet::new();
+            for sel in selections {
+                if !line_has_selection(line_idx, sel) {
+                    continue;
+                }
+                let start_col = if line_idx == sel.start_row {
+                    sel.start_col
+                } else {
+                    0
+                };
+                let end_col = if line_idx == sel.end_row {
+                    sel.end_col
+                } else {
+                    line_chars.len()
+                };
+                for col in start_col..end_col {
+                    highlighted_cols.insert(col);
+                }
+            }
+
+            let mut spans: Vec<Span<'static>> = Vec::new();
+
+            for (col, ch) in line_chars.iter().enumerate() {
+                // Check if cursor is at this position
+                let cursor_at_pos = cursors_on_line.iter().find(|c| c.col == col);
+
+                if let Some(cursor) = cursor_at_pos {
+                    // Cursor takes priority
+                    spans.push(Span::styled(ch.to_string(), cursor.style()));
+                } else if highlighted_cols.contains(&col) {
+                    // Selection highlight - preserve syntax foreground color
+                    let fg_color = char_styles
+                        .get(col)
+                        .and_then(|s| s.fg)
+                        .unwrap_or(Color::White);
+                    spans.push(Span::styled(
+                        ch.to_string(),
+                        Style::default().bg(super::SELECTION_BG_COLOR).fg(fg_color),
+                    ));
+                } else {
+                    // Regular character with syntax highlighting
+                    let style = char_styles.get(col).copied().unwrap_or_else(Style::default);
+                    spans.push(Span::styled(ch.to_string(), style));
+                }
+            }
+
+            // Handle cursor at end of line
+            for cursor in &cursors_on_line {
+                if cursor.col >= line_chars.len() {
+                    spans.push(Span::styled("\u{2588}".to_string(), cursor.style()));
+                }
+            }
 
             Line::from(spans)
         })
@@ -293,22 +171,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_highlight_rust_code() {
-        let code = "fn main() {\n    println!(\"Hello\");\n}";
-        let lines = highlight_code(code);
-        assert_eq!(lines.len(), 3);
-    }
-
-    #[test]
-    fn test_highlight_empty_content() {
-        let lines = highlight_code("");
-        assert!(lines.is_empty());
-    }
-
-    #[test]
     fn test_syntax_set_loads() {
         // Force lazy initialization
         let _ = SYNTAX_SET.find_syntax_by_extension("rs");
         assert!(SYNTAX_SET.find_syntax_by_extension("rs").is_some());
+    }
+
+    #[test]
+    fn test_highlight_with_multi_cursor_no_overlays() {
+        let code = "fn main() {\n    println!(\"Hello\");\n}";
+        let lines = highlight_code_with_multi_cursor(code, &[], &[]);
+        assert_eq!(lines.len(), 3);
+    }
+
+    #[test]
+    fn test_highlight_with_multi_cursor_empty() {
+        let lines = highlight_code_with_multi_cursor("", &[], &[]);
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn test_highlight_with_cursor() {
+        let code = "hello";
+        let cursor = CursorInfo {
+            row: 0,
+            col: 2,
+            is_primary: true,
+        };
+        let lines = highlight_code_with_multi_cursor(code, &[cursor], &[]);
+        assert_eq!(lines.len(), 1);
     }
 }

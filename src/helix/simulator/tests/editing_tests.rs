@@ -78,7 +78,7 @@ fn test_open_below() {
     let mut sim = AnyModeSimulator::new("line1\nline2".to_string());
 
     // Cursor at start of first line
-    assert_eq!(sim.get_state().unwrap().cursor_position().row, 0);
+    assert_eq!(sim.get_state().unwrap().cursor_position().0, 0);
 
     // Press 'o' should insert new line below and enter insert mode
     sim.execute_command(CMD_OPEN_BELOW).unwrap();
@@ -86,7 +86,7 @@ fn test_open_below() {
     let state = sim.get_state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "line1\n\nline2");
-    assert_eq!(state.cursor_position().row, 1); // On new empty line
+    assert_eq!(state.cursor_position().0, 1); // On new empty line
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn test_open_above() {
 
     // Move to second line
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
+    assert_eq!(sim.get_state().unwrap().cursor_position().0, 1);
 
     // Press 'O' should insert new line above and enter insert mode
     sim.execute_command(CMD_OPEN_ABOVE).unwrap();
@@ -103,7 +103,7 @@ fn test_open_above() {
     let state = sim.get_state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "line1\n\nline2");
-    assert_eq!(state.cursor_position().row, 1); // On new empty line
+    assert_eq!(state.cursor_position().0, 1); // On new empty line
 }
 
 // ============================================================================
@@ -119,7 +119,7 @@ fn test_join_lines() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "line1 line2\nline3");
-    assert_eq!(state.cursor_position().row, 0);
+    assert_eq!(state.cursor_position().0, 0);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn test_join_lines_at_last_line() {
 
     // Move to last line
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().row, 1);
+    assert_eq!(sim.get_state().unwrap().cursor_position().0, 1);
 
     // Try to join - should do nothing
     sim.execute_command(CMD_JOIN_LINES).unwrap();
@@ -151,7 +151,7 @@ fn test_indent_line() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "  hello\nworld");
     // Cursor should move forward by 2
-    assert_eq!(state.cursor_position().col, 2);
+    assert_eq!(state.cursor_position().1, 2);
 }
 
 #[test]
@@ -163,7 +163,7 @@ fn test_dedent_line() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello\n    world");
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().1, 0);
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn test_dedent_line_with_one_space() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hello");
-    assert_eq!(state.cursor_position().col, 0);
+    assert_eq!(state.cursor_position().1, 0);
 }
 
 #[test]
@@ -199,7 +199,7 @@ fn test_multiple_indent() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "    code");
-    assert_eq!(state.cursor_position().col, 4);
+    assert_eq!(state.cursor_position().1, 4);
 }
 
 // ============================================================================
@@ -239,5 +239,5 @@ fn test_change_selection() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "ello");
     assert_eq!(sim.mode(), Mode::Insert);
-    assert_eq!(state.cursor_position().col, 0); // Cursor stays at start
+    assert_eq!(state.cursor_position().1, 0); // Cursor stays at start
 }

@@ -9,12 +9,14 @@
 //! - `clipboard_tests`: Yank and paste operations
 //! - `repeat_recording_tests`: Repeat buffer recording verification
 //! - `repeat_execution_tests`: Dot command execution tests
+//! - `multi_cursor_tests`: Multi-cursor state conversion (Issue #141)
 
 mod basic_tests;
 mod clipboard_tests;
 mod editing_tests;
 mod mode_tests;
 mod movement_tests;
+mod multi_cursor_tests;
 mod repeat_execution_tests;
 mod repeat_recording_tests;
 mod selection_tests;

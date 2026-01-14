@@ -4,33 +4,26 @@
 //! reducing code duplication between training and arcade modes.
 
 use crate::config::Scenario;
-use crate::game::EditorState;
-use crate::helix::AnyModeSimulator;
+use crate::helix::{AnyModeSimulator, EditorSnapshot};
 use crate::security::UserError;
 
 /// Initialized scenario state ready for gameplay
 ///
-/// Contains all the components needed to start a scenario:
-/// - Initial editor state (starting position)
-/// - Target editor state (goal to achieve)
-/// - Current editor state (mutable during gameplay)
-/// - Helix simulator for command execution
+/// Contains the Helix simulator (source of truth) and target snapshot
+/// for efficient completion checking. All state queries go through
+/// the simulator's EditorDisplay facade.
 pub struct ScenarioState {
-    /// The initial state when scenario starts
-    pub initial_state: EditorState,
-    /// The target state to achieve
-    pub target_state: EditorState,
-    /// Current state (clone of initial, modified during play)
-    pub current_state: EditorState,
-    /// Helix simulator for command execution
+    /// Helix simulator for command execution (source of truth)
     pub simulator: AnyModeSimulator,
+    /// Target as snapshot for efficient completion checking
+    pub target_snapshot: EditorSnapshot,
 }
 
 impl ScenarioState {
     /// Initialize scenario state from a scenario configuration
     ///
-    /// Creates initial and target EditorState from scenario setup/target,
-    /// and initializes the Helix simulator.
+    /// Creates the Helix simulator from scenario setup and target snapshot
+    /// for completion checking.
     ///
     /// # Arguments
     /// * `scenario` - The scenario configuration to initialize from
@@ -45,65 +38,50 @@ impl ScenarioState {
     /// use helix_trainer::game::ScenarioState;
     ///
     /// let state = ScenarioState::from_scenario(&scenario)?;
-    /// assert_eq!(state.current_state, state.initial_state);
+    /// assert!(!state.is_completed());
     /// ```
     pub fn from_scenario(scenario: &Scenario) -> Result<Self, UserError> {
-        // Create initial state from scenario setup (with optional selection)
-        let initial_state = EditorState::from_setup(
-            &scenario.setup.file_content,
-            [
-                scenario.setup.cursor_position.0,
-                scenario.setup.cursor_position.1,
-            ],
+        // Create initial snapshot from scenario setup
+        let initial_snapshot = EditorSnapshot::from_scenario_config(
+            scenario.setup.file_content.clone(),
+            scenario.setup.cursor_position,
             scenario.setup.selection,
-        )
-        .map_err(|_| UserError::ScenarioTooComplex)?;
+            scenario.setup.cursors.as_deref(),
+            scenario.setup.selections.as_deref(),
+        );
 
-        // Create target state with optional selection
-        let target_state = EditorState::from_target(
-            &scenario.target.file_content,
-            [
-                scenario.target.cursor_position.0,
-                scenario.target.cursor_position.1,
-            ],
+        // Create target snapshot for completion checking
+        let target_snapshot = EditorSnapshot::from_scenario_config(
+            scenario.target.file_content.clone(),
+            scenario.target.cursor_position,
             scenario.target.selection,
-        )
-        .map_err(|_| UserError::ScenarioTooComplex)?;
+            scenario.target.cursors.as_deref(),
+            scenario.target.selections.as_deref(),
+        );
 
-        // Clone initial state as current state
-        let current_state = initial_state.clone();
-
-        // Initialize Helix simulator from initial state
-        let simulator = AnyModeSimulator::from_editor_state(&initial_state);
+        // Initialize Helix simulator from initial snapshot
+        let simulator = AnyModeSimulator::from_snapshot(&initial_snapshot);
 
         Ok(Self {
-            initial_state,
-            target_state,
-            current_state,
             simulator,
+            target_snapshot,
         })
     }
 
     /// Check if current state matches target state
     ///
-    /// This is the unified completion check used by both modes.
+    /// Uses `HelixSimulator::matches_snapshot()` for efficient comparison
+    /// directly against helix-core primitives.
     #[inline]
     pub fn is_completed(&self) -> bool {
-        self.current_state.matches(&self.target_state)
+        self.simulator.matches_snapshot(&self.target_snapshot)
     }
 
     /// Check if content matches target (ignoring cursor position)
     #[inline]
     pub fn content_matches(&self) -> bool {
-        self.current_state.content_matches(&self.target_state)
-    }
-
-    /// Reset to initial state
-    ///
-    /// Restores current_state to initial_state and reinitializes simulator.
-    pub fn reset(&mut self, scenario: &Scenario) {
-        self.current_state = self.initial_state.clone();
-        self.simulator = AnyModeSimulator::new(scenario.setup.file_content.clone());
+        let current_snapshot = self.simulator.to_snapshot();
+        current_snapshot.content_matches(&self.target_snapshot)
     }
 }
 
@@ -130,9 +108,10 @@ mod tests {
         let scenario = create_test_scenario();
         let state = ScenarioState::from_scenario(&scenario).unwrap();
 
-        assert_eq!(state.initial_state.content(), "hello");
-        assert_eq!(state.target_state.content(), "world");
-        assert_eq!(state.current_state.content(), "hello");
+        // Verify simulator has initial content
+        assert_eq!(state.simulator.display().content(), "hello");
+        // Verify target snapshot has target content
+        assert_eq!(state.target_snapshot.content, "world");
     }
 
     #[test]

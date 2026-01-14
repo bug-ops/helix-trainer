@@ -21,7 +21,7 @@ fn test_yank_and_paste_after() {
 
     // Move to 'b'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().col, 1);
+    assert_eq!(sim.get_state().unwrap().cursor_position().1, 1);
 
     // Paste after 'b' - should insert 'a' between 'b' and 'c'
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
@@ -29,7 +29,7 @@ fn test_yank_and_paste_after() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "abac");
     // In Helix, cursor stays on last pasted character
-    assert_eq!(state.cursor_position().col, 2); // Cursor on pasted 'a'
+    assert_eq!(state.cursor_position().1, 2); // Cursor on pasted 'a'
 }
 
 // ============================================================================
@@ -43,7 +43,7 @@ fn test_yank_and_paste_before() {
     // Move to 'c'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().col, 2);
+    assert_eq!(sim.get_state().unwrap().cursor_position().1, 2);
 
     // Yank 'c'
     sim.execute_command(CMD_YANK).unwrap();
@@ -51,7 +51,7 @@ fn test_yank_and_paste_before() {
     // Move back to 'a'
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().col, 0);
+    assert_eq!(sim.get_state().unwrap().cursor_position().1, 0);
 
     // Paste before 'a'
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
@@ -59,7 +59,7 @@ fn test_yank_and_paste_before() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "cabc");
     // In Helix, cursor stays on last pasted character
-    assert_eq!(state.cursor_position().col, 0); // Cursor on pasted 'c'
+    assert_eq!(state.cursor_position().1, 0); // Cursor on pasted 'c'
 }
 
 // ============================================================================
@@ -81,7 +81,7 @@ fn test_paste_before_cursor_scenario() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(
-        state.cursor_position().col,
+        state.cursor_position().1,
         2,
         "Should be at position 2 ('z')"
     );
@@ -99,7 +99,7 @@ fn test_paste_before_cursor_scenario() {
 
     let state = sim.get_state().unwrap();
     assert_eq!(
-        state.cursor_position().col,
+        state.cursor_position().1,
         1,
         "Should be at position 1 ('y')"
     );
@@ -111,7 +111,7 @@ fn test_paste_before_cursor_scenario() {
     assert_eq!(state.content(), "xzyz", "Content should be 'xzyz'");
     // In Helix, cursor stays on last pasted character (position 1)
     assert_eq!(
-        state.cursor_position().col,
+        state.cursor_position().1,
         1,
         "Cursor should be at position 1 (on pasted 'z')"
     );

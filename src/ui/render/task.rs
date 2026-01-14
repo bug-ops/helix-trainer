@@ -90,16 +90,16 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
                 .pending_surround_preview()
                 .and_then(|surround_preview| {
                     use crate::input::typestate::SurroundPreview;
-                    let current = playable.current_state();
-                    let cursor = current.cursor_position();
+                    let current_content = playable.current_content();
+                    let (cursor_row, cursor_col) = playable.current_cursor();
                     let (bracket_char, preview_type) = match surround_preview {
                         SurroundPreview::Replace(ch) => (ch, PreviewType::Replace),
                         SurroundPreview::Delete(ch) => (ch, PreviewType::Delete),
                     };
                     PreviewHighlight::from_surround_char(
-                        current.content(),
-                        cursor.row,
-                        cursor.col,
+                        &current_content,
+                        cursor_row,
+                        cursor_col,
                         bracket_char,
                         preview_type,
                     )
@@ -111,8 +111,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         render_editor_pair(
             frame,
             chunks[2],
-            playable.current_state(),
-            playable.target_state(),
+            playable,
             &current_title,
             &target_title,
             preview,

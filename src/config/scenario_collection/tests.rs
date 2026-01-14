@@ -17,13 +17,17 @@ fn create_scenario(
         description: "Test scenario".to_string(),
         setup: Setup {
             file_content: "test".to_string(),
-            cursor_position: (0, 0),
+            cursor_position: Some((0, 0)),
             selection: None,
+            cursors: None,
+            selections: None,
         },
         target: TargetState {
             file_content: "test".to_string(),
-            cursor_position: (0, 0),
+            cursor_position: Some((0, 0)),
             selection: None,
+            cursors: None,
+            selections: None,
         },
         solution: Solution {
             commands: vec!["test".to_string()],
@@ -590,13 +594,17 @@ fn test_scenarios_without_metadata() {
         description: "Test".to_string(),
         setup: Setup {
             file_content: "test".to_string(),
-            cursor_position: (0, 0),
+            cursor_position: Some((0, 0)),
             selection: None,
+            cursors: None,
+            selections: None,
         },
         target: TargetState {
             file_content: "test".to_string(),
-            cursor_position: (0, 0),
+            cursor_position: Some((0, 0)),
             selection: None,
+            cursors: None,
+            selections: None,
         },
         solution: Solution {
             commands: vec!["test".to_string()],

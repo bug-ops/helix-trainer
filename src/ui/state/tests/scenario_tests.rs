@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use super::common::{create_test_app_state, create_test_scenario};
+use crate::game::PlayableScenario;
 use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE};
 use crate::ui::state::{Message, TypedScreen, update};
 
@@ -17,7 +18,7 @@ fn test_start_scenario() {
     assert!(matches!(state.screen, TypedScreen::Task(_)));
     if let TypedScreen::Task(task_data) = &state.screen {
         // Verify session exists in task data
-        assert!(!task_data.session.current_state().content().is_empty());
+        assert!(!task_data.session.current_content().is_empty());
     }
 }
 

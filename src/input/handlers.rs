@@ -24,7 +24,7 @@ use std::borrow::Cow;
 
 use crate::ui::{AppState, Message, Screen, state::TypedScreen};
 
-use super::typestate::handle_insert_mode_input;
+use super::typestate::{handle_insert_mode_input, map_key_to_helix_command, normalize_key_event};
 
 /// Handle keyboard events on profile and statistics screens
 pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
@@ -303,15 +303,24 @@ where
 /// - Multi-key commands (gg, dd)
 /// - Character arguments (fx, rx)
 /// - Count prefixes (3j, 10k)
+/// - Modifier commands (Alt-C, Ctrl-r)
+///
+/// Uses `map_key_to_helix_command` for known commands (which returns constants
+/// like CMD_COPY_SELECTION_PREV = "Alt-C"), and builds strings for prefix keys
+/// that the state machine needs to handle.
 fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
+    // First try to get the command constant from map_key_to_helix_command
+    // This handles all known single-key commands including modifier commands
+    if let Some(cmd) = map_key_to_helix_command(key) {
+        return Some(Cow::Borrowed(cmd));
+    }
+
+    // For unknown commands (prefix keys like 'g', 'm', 'f', etc.),
+    // normalize and return the character for the state machine to process
+    let key = normalize_key_event(key);
+
     match key.code {
         KeyCode::Char(c) => Some(Cow::Owned(c.to_string())),
-        KeyCode::Esc => Some(Cow::Borrowed("Escape")),
-        KeyCode::Backspace => Some(Cow::Borrowed("Backspace")),
-        KeyCode::Left => Some(Cow::Borrowed("Left")),
-        KeyCode::Right => Some(Cow::Borrowed("Right")),
-        KeyCode::Up => Some(Cow::Borrowed("Up")),
-        KeyCode::Down => Some(Cow::Borrowed("Down")),
         KeyCode::Enter => Some(Cow::Borrowed("Enter")),
         KeyCode::Tab => Some(Cow::Borrowed("Tab")),
         _ => None,
@@ -788,13 +797,17 @@ mod tests {
                 description: "Test scenario".to_string(),
                 setup: Setup {
                     file_content: "test".to_string(),
-                    cursor_position: (0, 0),
+                    cursor_position: Some((0, 0)),
                     selection: None,
+                    cursors: None,
+                    selections: None,
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor_position: (0, 0),
+                    cursor_position: Some((0, 0)),
                     selection: None,
+                    cursors: None,
+                    selections: None,
                 },
                 solution: Solution {
                     commands: vec!["x".to_string()],

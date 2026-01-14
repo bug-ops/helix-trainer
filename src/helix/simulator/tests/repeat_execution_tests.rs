@@ -262,7 +262,7 @@ fn test_repeat_insert_with_movements() {
     let state = sim.get_state().unwrap();
     assert_eq!(state.content(), "hiworld");
     // Cursor should be at position 1 (moved left once from 2)
-    assert_eq!(state.cursor_position().col, 1);
+    assert_eq!(state.cursor_position().1, 1);
 
     // Move to end (use 'gl' in Helix, not '$')
     sim.execute_command(CMD_GOTO_LINE_END).unwrap();
@@ -273,7 +273,7 @@ fn test_repeat_insert_with_movements() {
     // Should insert "hi" at end, then move left once
     assert_eq!(state.content(), "hiworldhi");
     // Cursor moved left from position 9 to position 8
-    assert_eq!(state.cursor_position().col, 8);
+    assert_eq!(state.cursor_position().1, 8);
 }
 
 #[test]
@@ -388,7 +388,7 @@ fn test_scenario_repeat_insert_001() {
     sim.execute_command("gl").unwrap();
 
     let state = sim.get_state().unwrap();
-    assert_eq!(state.cursor_position().row, 1, "Should be on line 1");
+    assert_eq!(state.cursor_position().0, 1, "Should be on line 1");
 
     // Repeat the insert
     sim.execute_command(".").unwrap();

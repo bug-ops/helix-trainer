@@ -31,8 +31,8 @@
 //! ```
 
 use crate::config::Scenario;
-use crate::game::{CommandExecutor, EditorState, PerformanceRating, Scorer};
-use crate::helix::{AnyModeSimulator, Mode};
+use crate::game::{CommandExecutor, PerformanceRating, Scorer};
+use crate::helix::{AnyModeSimulator, EditorSnapshot, Mode};
 use crate::security::{self, SecurityError, UserError};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
@@ -40,6 +40,20 @@ use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
 pub use typestate::{Abandoned, Active, Completed, SessionState};
+
+/// Helper to execute operations on a target snapshot's EditorDisplay
+///
+/// Creates a temporary EditorDisplay from the snapshot and passes it to the closure.
+/// This avoids repeating the Rope/Selection/Display creation pattern.
+fn with_target_display<T, F>(snapshot: &EditorSnapshot, f: F) -> T
+where
+    F: FnOnce(&crate::helix::EditorDisplay) -> T,
+{
+    let rope = helix_core::Rope::from(snapshot.content.as_str());
+    let selection = snapshot.to_helix_selection();
+    let display = crate::helix::EditorDisplay::new(&rope, &selection);
+    f(&display)
+}
 
 /// Represents a single user action during gameplay
 ///
@@ -191,14 +205,10 @@ impl SessionAfterAction {
 pub struct GameSession<State: SessionState = Active> {
     /// The scenario being played
     scenario: Scenario,
-    /// Initial state from scenario setup
-    initial_state: EditorState,
-    /// Target state to achieve
-    target_state: EditorState,
-    /// Current editor state
-    current_state: EditorState,
-    /// Helix editor simulator for command execution
+    /// Helix editor simulator for command execution (source of truth)
     simulator: AnyModeSimulator,
+    /// Target as snapshot for efficient completion checking
+    target_snapshot: EditorSnapshot,
     /// All user actions taken so far
     user_actions: Vec<UserAction>,
     /// When the session started
@@ -246,37 +256,6 @@ impl<S: SessionState> GameSession<S> {
         &self.scenario
     }
 
-    /// Get reference to the current editor state
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// use helix_trainer::game::GameSession;
-    ///
-    /// let session = GameSession::new(scenario)?;
-    /// let current = session.current_state();
-    /// assert_eq!(current.content(), scenario.setup.file_content.as_str());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
-    /// ```
-    pub fn current_state(&self) -> &EditorState {
-        &self.current_state
-    }
-
-    /// Get reference to the target editor state
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// use helix_trainer::game::GameSession;
-    ///
-    /// let session = GameSession::new(scenario)?;
-    /// let target = session.target_state();
-    /// # Ok::<(), helix_trainer::security::UserError>(())
-    /// ```
-    pub fn target_state(&self) -> &EditorState {
-        &self.target_state
-    }
-
     /// Get the number of actions taken so far
     pub fn action_count(&self) -> usize {
         self.user_actions.len()
@@ -300,11 +279,6 @@ impl<S: SessionState> GameSession<S> {
     /// Get number of hints shown so far
     pub fn hints_shown(&self) -> usize {
         self.hints_shown
-    }
-
-    /// Get reference to initial editor state
-    pub fn initial_state(&self) -> &EditorState {
-        &self.initial_state
     }
 
     /// Get reference to all user actions
@@ -347,8 +321,8 @@ impl<S: SessionState> GameSession<S> {
     /// This is a private helper method that performs the actual calculation.
     /// The public `completion_progress()` method caches this result.
     fn calculate_progress(&self) -> u8 {
-        let current_content = self.current_state.content();
-        let target_content = self.target_state.content();
+        let current_content = self.simulator.display().content();
+        let target_content = &self.target_snapshot.content;
 
         let current_lines: Vec<&str> = current_content.lines().collect();
         let target_lines: Vec<&str> = target_content.lines().collect();
@@ -400,10 +374,8 @@ impl GameSession<Active> {
 
         Ok(Self {
             scenario,
-            initial_state: state.initial_state,
-            target_state: state.target_state,
-            current_state: state.current_state,
             simulator: state.simulator,
+            target_snapshot: state.target_snapshot,
             user_actions: Vec::new(),
             started_at: Instant::now(),
             completed_at: None,
@@ -519,10 +491,8 @@ impl GameSession<Active> {
     fn into_completed(self) -> GameSession<Completed> {
         GameSession {
             scenario: self.scenario,
-            initial_state: self.initial_state,
-            target_state: self.target_state,
-            current_state: self.current_state,
             simulator: self.simulator,
+            target_snapshot: self.target_snapshot,
             user_actions: self.user_actions,
             started_at: self.started_at,
             completed_at: Some(Instant::now()),
@@ -535,8 +505,8 @@ impl GameSession<Active> {
 
     /// Check if the scenario is completed successfully
     ///
-    /// Compares current state with target state (both content and cursor).
-    /// Returns true only if they match exactly.
+    /// Uses `matches_snapshot()` for efficient comparison directly
+    /// against helix-core primitives.
     ///
     /// # Examples
     ///
@@ -548,7 +518,7 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn check_completion(&self) -> bool {
-        self.current_state.matches(&self.target_state)
+        self.simulator.matches_snapshot(&self.target_snapshot)
     }
 
     /// Check if content matches target (ignoring cursor position)
@@ -568,7 +538,9 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn check_content_matches(&self) -> bool {
-        self.current_state.content_matches(&self.target_state)
+        self.simulator
+            .to_snapshot()
+            .content_matches(&self.target_snapshot)
     }
 
     /// Get the next available hint
@@ -616,10 +588,8 @@ impl GameSession<Active> {
     pub fn abandon(self) -> GameSession<Abandoned> {
         GameSession {
             scenario: self.scenario,
-            initial_state: self.initial_state,
-            target_state: self.target_state,
-            current_state: self.current_state,
             simulator: self.simulator,
+            target_snapshot: self.target_snapshot,
             user_actions: self.user_actions,
             started_at: self.started_at,
             completed_at: None,
@@ -652,9 +622,15 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn reset(&mut self) -> Result<(), SecurityError> {
-        self.current_state = self.initial_state.clone();
-        // Reset simulator to initial content
-        self.simulator = AnyModeSimulator::new(self.scenario.setup.file_content.clone());
+        // Recreate initial snapshot from scenario config and reset simulator
+        let initial_snapshot = EditorSnapshot::from_scenario_config(
+            self.scenario.setup.file_content.clone(),
+            self.scenario.setup.cursor_position,
+            self.scenario.setup.selection,
+            self.scenario.setup.cursors.as_deref(),
+            self.scenario.setup.selections.as_deref(),
+        );
+        self.simulator = AnyModeSimulator::from_snapshot(&initial_snapshot);
         self.user_actions.clear();
         self.started_at = Instant::now();
         self.completed_at = None;
@@ -672,9 +648,6 @@ impl CommandExecutor for GameSession<Active> {
         // Execute command through simulator
         self.simulator.execute_command(command)?;
 
-        // Sync current state with simulator
-        self.current_state = self.simulator.to_editor_state()?;
-
         // Invalidate progress cache since state changed
         self.progress_needs_update.set(true);
 
@@ -682,7 +655,7 @@ impl CommandExecutor for GameSession<Active> {
     }
 
     fn check_completion(&self) -> bool {
-        self.current_state.matches(&self.target_state)
+        self.simulator.matches_snapshot(&self.target_snapshot)
     }
 }
 
@@ -816,12 +789,28 @@ pub mod typestate;
 
 // Implement PlayableScenario trait for GameSession<Active>
 impl super::PlayableScenario for GameSession<Active> {
-    fn current_state(&self) -> &super::EditorState {
-        &self.current_state
+    fn current_content(&self) -> String {
+        self.simulator.display().content()
     }
 
-    fn target_state(&self) -> &super::EditorState {
-        &self.target_state
+    fn target_content(&self) -> String {
+        self.target_snapshot.content.clone()
+    }
+
+    fn current_cursor(&self) -> (usize, usize) {
+        self.simulator.display().cursor_position()
+    }
+
+    fn target_cursor(&self) -> (usize, usize) {
+        with_target_display(&self.target_snapshot, |d| d.cursor_position())
+    }
+
+    fn current_selection(&self) -> Option<crate::helix::SelectionBounds> {
+        self.simulator.display().selection()
+    }
+
+    fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
+        with_target_display(&self.target_snapshot, |d| d.selection())
     }
 
     fn action_count(&self) -> usize {
@@ -835,16 +824,58 @@ impl super::PlayableScenario for GameSession<Active> {
     fn elapsed(&self) -> std::time::Duration {
         self.started_at.elapsed()
     }
+
+    fn all_cursors(&self) -> Vec<(usize, usize)> {
+        self.simulator.display().all_cursor_positions()
+    }
+
+    fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
+        self.simulator
+            .display()
+            .all_selection_bounds()
+            .into_iter()
+            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+            .collect()
+    }
+
+    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
+        with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
+    }
+
+    fn all_target_selections(&self) -> Vec<crate::helix::SelectionBounds> {
+        with_target_display(&self.target_snapshot, |d| {
+            d.all_selection_bounds()
+                .into_iter()
+                .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+                .collect()
+        })
+    }
 }
 
 // Implement PlayableScenario trait for GameSession<Completed>
 impl super::PlayableScenario for GameSession<Completed> {
-    fn current_state(&self) -> &super::EditorState {
-        &self.current_state
+    fn current_content(&self) -> String {
+        self.simulator.display().content()
     }
 
-    fn target_state(&self) -> &super::EditorState {
-        &self.target_state
+    fn target_content(&self) -> String {
+        self.target_snapshot.content.clone()
+    }
+
+    fn current_cursor(&self) -> (usize, usize) {
+        self.simulator.display().cursor_position()
+    }
+
+    fn target_cursor(&self) -> (usize, usize) {
+        with_target_display(&self.target_snapshot, |d| d.cursor_position())
+    }
+
+    fn current_selection(&self) -> Option<crate::helix::SelectionBounds> {
+        self.simulator.display().selection()
+    }
+
+    fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
+        with_target_display(&self.target_snapshot, |d| d.selection())
     }
 
     fn action_count(&self) -> usize {
@@ -860,6 +891,32 @@ impl super::PlayableScenario for GameSession<Completed> {
         self.completed_at
             .map(|end| end.duration_since(self.started_at))
             .unwrap_or_else(|| self.started_at.elapsed())
+    }
+
+    fn all_cursors(&self) -> Vec<(usize, usize)> {
+        self.simulator.display().all_cursor_positions()
+    }
+
+    fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
+        self.simulator
+            .display()
+            .all_selection_bounds()
+            .into_iter()
+            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+            .collect()
+    }
+
+    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
+        with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
+    }
+
+    fn all_target_selections(&self) -> Vec<crate::helix::SelectionBounds> {
+        with_target_display(&self.target_snapshot, |d| {
+            d.all_selection_bounds()
+                .into_iter()
+                .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+                .collect()
+        })
     }
 }
 

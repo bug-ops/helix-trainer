@@ -2,6 +2,7 @@
 
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
+use helix_core::Range;
 use helix_core::Selection;
 use helix_core::comment::toggle_line_comments;
 use helix_core::selection::split_on_newline;
@@ -64,6 +65,9 @@ pub fn merge_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 }
 
 /// Copy selection to next line (C command)
+///
+/// Creates an additional cursor on the next line at the same column (with clamping).
+/// Preserves existing cursors - the new cursor becomes the primary selection.
 pub fn copy_selection_next_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -89,12 +93,22 @@ pub fn copy_selection_next_line<M: EditorMode>(
 
     let new_col = col.min(next_line_len);
     let new_head = next_line_start + new_col;
-    sim.selection = Selection::point(new_head.min(sim.doc.len_chars()));
+
+    // Accumulate existing ranges and add the new cursor
+    let new_range = Range::point(new_head.min(sim.doc.len_chars()));
+    let mut ranges: Vec<Range> = sim.selection.ranges().to_vec();
+    ranges.push(new_range);
+    let primary_index = ranges.len() - 1;
+    // Primary index is the newly added cursor (last index)
+    sim.selection = Selection::new(ranges.into(), primary_index);
 
     Ok(())
 }
 
 /// Copy selection to previous line (Alt-C command)
+///
+/// Creates an additional cursor on the previous line at the same column (with clamping).
+/// Preserves existing cursors - the new cursor becomes the primary selection.
 pub fn copy_selection_prev_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -114,7 +128,14 @@ pub fn copy_selection_prev_line<M: EditorMode>(
 
     let new_col = col.min(prev_line_len);
     let new_head = prev_line_start + new_col;
-    sim.selection = Selection::point(new_head);
+
+    // Accumulate existing ranges and insert new cursor at beginning
+    let new_range = Range::point(new_head);
+    let mut ranges: Vec<Range> = sim.selection.ranges().to_vec();
+    // Insert at beginning since we're going backwards (maintains top-to-bottom order)
+    ranges.insert(0, new_range);
+    // Primary index is the newly added cursor (index 0)
+    sim.selection = Selection::new(ranges.into(), 0);
 
     Ok(())
 }
@@ -274,7 +295,10 @@ mod tests {
 
         copy_selection_next_line(&mut sim).unwrap();
 
-        // Should be at column 2 of line 2
+        // Should now have 2 cursors
+        assert_eq!(sim.selection.len(), 2);
+
+        // Primary cursor should be at column 2 of line 2 (the new cursor)
         let head = sim.selection.primary().head;
         let line = sim.doc.char_to_line(head);
         let line_start = sim.doc.line_to_char(line);
@@ -282,6 +306,11 @@ mod tests {
 
         assert_eq!(line, 1);
         assert_eq!(col, 2);
+
+        // Original cursor should still exist at position 2 (line 0, col 2)
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[0].head, 2); // Original cursor
+        assert_eq!(ranges[1].head, 9); // New cursor at line 2 (7 chars for "line 1\n" + 2)
     }
 
     #[test]
@@ -295,9 +324,17 @@ mod tests {
 
         copy_selection_prev_line(&mut sim).unwrap();
 
-        // Should be at column 2 of line 1
+        // Should now have 2 cursors
+        assert_eq!(sim.selection.len(), 2);
+
+        // Primary cursor should be at column 2 of line 1 (the new cursor, inserted at beginning)
         let head = sim.selection.primary().head;
         assert_eq!(head, 2);
+
+        // Verify cursor order: new cursor at index 0, original at index 1
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[0].head, 2); // New cursor at line 0, col 2
+        assert_eq!(ranges[1].head, line2_start + 2); // Original cursor at line 1, col 2
     }
 
     #[test]
@@ -445,7 +482,10 @@ mod tests {
 
         copy_selection_next_line(&mut sim).unwrap();
 
-        // Next line is shorter, column should be clamped
+        // Should have 2 cursors now
+        assert_eq!(sim.selection.len(), 2);
+
+        // Primary cursor (new) should be on next line with clamped column
         let head = sim.selection.primary().head;
         let line = sim.doc.char_to_line(head);
         assert_eq!(line, 1);
@@ -454,6 +494,10 @@ mod tests {
         let line_start = sim.doc.line_to_char(1);
         let col = head - line_start;
         assert!(col <= 5);
+
+        // Original cursor should still be at position 12
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[0].head, 12);
     }
 
     #[test]
@@ -467,13 +511,20 @@ mod tests {
 
         copy_selection_prev_line(&mut sim).unwrap();
 
-        // Previous line is shorter, column should be clamped
+        // Should have 2 cursors now
+        assert_eq!(sim.selection.len(), 2);
+
+        // Primary cursor (new, at index 0) should be on previous line with clamped column
         let head = sim.selection.primary().head;
         let line = sim.doc.char_to_line(head);
         assert_eq!(line, 0);
 
         // Column should be clamped to "short" length (5)
         assert!(head <= 5);
+
+        // Original cursor should still be at position line2_start + 12
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[1].head, line2_start + 12);
     }
 
     #[test]
@@ -617,5 +668,99 @@ mod tests {
         let range = sim.selection.primary();
         assert_eq!(range.from(), 6); // Start of "last line"
         assert_eq!(range.to(), 15); // End of file
+    }
+
+    // Multi-cursor creation tests (Issue #141 Phase 5)
+
+    #[test]
+    fn test_copy_selection_next_creates_multi_cursor() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("line 1\nline 2\nline 3".to_string());
+
+        // Start at position 2 (column 2 of line 0)
+        sim.selection = Selection::point(2);
+        assert_eq!(sim.selection.len(), 1);
+
+        // First C: creates cursor on line 1
+        copy_selection_next_line(&mut sim).unwrap();
+        assert_eq!(sim.selection.len(), 2);
+
+        // Second C: creates cursor on line 2
+        copy_selection_next_line(&mut sim).unwrap();
+        assert_eq!(sim.selection.len(), 3);
+
+        // Verify all cursor positions
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[0].head, 2); // Line 0, col 2
+        assert_eq!(ranges[1].head, 9); // Line 1, col 2 (7 chars for "line 1\n" + 2)
+        assert_eq!(ranges[2].head, 16); // Line 2, col 2 (14 chars for first two lines + 2)
+    }
+
+    #[test]
+    fn test_copy_selection_prev_creates_multi_cursor() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("line 1\nline 2\nline 3".to_string());
+
+        // Start at line 2, column 2 (position 16)
+        sim.selection = Selection::point(16);
+        assert_eq!(sim.selection.len(), 1);
+
+        // First Alt-C: creates cursor on line 1
+        copy_selection_prev_line(&mut sim).unwrap();
+        assert_eq!(sim.selection.len(), 2);
+
+        // Second Alt-C: creates cursor on line 0
+        copy_selection_prev_line(&mut sim).unwrap();
+        assert_eq!(sim.selection.len(), 3);
+
+        // Verify all cursor positions (new cursors inserted at beginning)
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[0].head, 2); // Line 0, col 2 (most recent)
+        assert_eq!(ranges[1].head, 9); // Line 1, col 2
+        assert_eq!(ranges[2].head, 16); // Line 2, col 2 (original)
+    }
+
+    #[test]
+    fn test_copy_selection_with_existing_multi_cursor() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("a\nb\nc\nd".to_string());
+
+        // Start with 2 cursors at lines 0 and 1
+        let ranges = vec![Range::point(0), Range::point(2)];
+        sim.selection = Selection::new(ranges.into(), 1); // Primary at index 1 (line 1)
+
+        assert_eq!(sim.selection.len(), 2);
+
+        // C from primary cursor (at line 1) should add cursor at line 2
+        copy_selection_next_line(&mut sim).unwrap();
+
+        // Now should have 3 cursors
+        assert_eq!(sim.selection.len(), 3);
+
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[0].head, 0); // Line 0
+        assert_eq!(ranges[1].head, 2); // Line 1
+        assert_eq!(ranges[2].head, 4); // Line 2 (new cursor)
+    }
+
+    #[test]
+    fn test_copy_selection_column_clamp_multi_cursor() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("long line here\nshort\ntiny".to_string());
+
+        // Start at column 10 of first line
+        sim.selection = Selection::point(10);
+
+        // First C: column clamped to 5 on "short"
+        copy_selection_next_line(&mut sim).unwrap();
+        assert_eq!(sim.selection.len(), 2);
+
+        // Second C: column clamped to 4 on "tiny"
+        copy_selection_next_line(&mut sim).unwrap();
+        assert_eq!(sim.selection.len(), 3);
+
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges[0].head, 10); // Original at col 10
+        assert_eq!(ranges[1].head, 20); // "short" is 5 chars, so clamped to end (15 + 5 = 20)
+        assert_eq!(ranges[2].head, 25); // "tiny" is 4 chars, so clamped to end (21 + 4 = 25)
     }
 }

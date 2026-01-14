@@ -25,7 +25,10 @@ pub mod simulator;
 pub use commands::*;
 pub use executor::CommandExecutor;
 pub use repeat::{Movement, RepeatBuffer, RepeatableAction, is_repeatable_command};
-pub use simulator::{AnyModeSimulator, EditorMode, HelixSimulator, InsertMode, Mode, NormalMode};
+pub use simulator::{
+    AnyModeSimulator, EditorDisplay, EditorMode, EditorSnapshot, HelixSimulator, InsertMode, Mode,
+    NormalMode, SelectionBounds, SerializableRange,
+};
 
 /// Get the open/close pair for a bracket or quote character
 ///

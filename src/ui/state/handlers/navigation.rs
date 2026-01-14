@@ -240,6 +240,16 @@ mod tests {
     }
 
     #[test]
+    fn test_navigate_to_category_filters() {
+        let outcome = handle_navigate_to(Screen::CategoryFilters).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::CategoryFilters(_)));
+        }
+    }
+
+    #[test]
     fn test_navigate_to_results_stays_on_current() {
         let outcome = handle_navigate_to(Screen::Results).unwrap();
         assert!(outcome.is_stay());

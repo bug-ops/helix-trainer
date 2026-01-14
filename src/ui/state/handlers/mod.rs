@@ -4,6 +4,10 @@
 //! Each handler is a pure function that modifies AppState based on a message.
 
 // Re-export all handlers for use in the main update function
+pub(super) use category_filters::{
+    handle_category_filter_down, handle_category_filter_select_all, handle_category_filter_toggle,
+    handle_category_filter_up, handle_show_category_filters,
+};
 pub(super) use filters::{
     handle_reset_filters, handle_set_sort_mode, handle_toggle_category_filter,
     handle_toggle_completed_filter, handle_toggle_difficulty_filter,
@@ -37,6 +41,7 @@ pub(super) use scenario::{
     handle_next_lesson, handle_next_scenario, handle_retry_scenario, handle_start_scenario,
 };
 
+mod category_filters;
 mod filters;
 mod gameplay;
 pub(super) mod menu;

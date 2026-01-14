@@ -13,12 +13,16 @@ use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{
     handler_result::HandlerResult,
     input_state::InputState,
-    key_mapping::map_single_key_command,
+    key_mapping::{map_single_key_command, normalize_key_event},
     state_types::{BaseState, FindType},
 };
 
 impl InputHandler<BaseState> for KeyHandler {
     fn handle_key(_state: &BaseState, key: KeyEvent) -> HandlerResult {
+        // Normalize key event for consistent handling across terminals
+        // (e.g., 'c' + SHIFT + ALT → 'C' + ALT)
+        let key = normalize_key_event(key);
+
         // Only filter CONTROL modifier, let ALT through for Alt-key commands
         let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 

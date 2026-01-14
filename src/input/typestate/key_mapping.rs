@@ -158,10 +158,12 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
     // Pattern: (char, is_shift, is_alt)
     match (c, is_shift, is_alt) {
         // Alt commands (must be checked first as they have highest specificity)
+        // Note: Some terminals send uppercase chars without SHIFT modifier set,
+        // so we match both ('C', _, true) and ('c', true, true) patterns for uppercase Alt commands
         ('c', false, true) => Some(CMD_CHANGE_SELECTION_NOYANK), // Alt-c
-        ('C', true, true) => Some(CMD_COPY_SELECTION_PREV),      // Alt-C
-        ('J', true, true) => Some(CMD_JOIN_SELECTIONS_SPACE),    // Alt-J
-        ('K', true, true) => Some(CMD_REMOVE_MATCHING),          // Alt-K
+        ('C', _, true) => Some(CMD_COPY_SELECTION_PREV),         // Alt-C (with or without SHIFT flag)
+        ('J', _, true) => Some(CMD_JOIN_SELECTIONS_SPACE),       // Alt-J
+        ('K', _, true) => Some(CMD_REMOVE_MATCHING),             // Alt-K
         ('s', false, true) => Some(CMD_SPLIT_SELECTION_NEWLINES), // Alt-s
         ('x', false, true) => Some(CMD_SHRINK_TO_LINE_BOUNDS),   // Alt-x
         (',', false, true) => Some(CMD_REMOVE_PRIMARY_SELECTION), // Alt-,

@@ -6,8 +6,8 @@
 
 use crate::security::UserError;
 use crate::ui::state::{
-    HandlerContext, HandlerOutcome, MenuData, MiniGameData, ModeSelectionData, ProfileData,
-    ReturnDestination, Screen, StatisticsData, TypedScreen,
+    CategoryFiltersData, HandlerContext, HandlerOutcome, MenuData, MiniGameData, ModeSelectionData,
+    ProfileData, ReturnDestination, Screen, StatisticsData, TypedScreen,
 };
 
 /// Handle QuitApp message
@@ -30,6 +30,7 @@ pub fn handle_navigate_to(screen: Screen) -> Result<HandlerOutcome, UserError> {
         Screen::MainMenu => TypedScreen::Menu(MenuData::default()),
         Screen::Profile => TypedScreen::Profile(ProfileData::default()),
         Screen::Statistics => TypedScreen::Statistics(StatisticsData::default()),
+        Screen::CategoryFilters => TypedScreen::CategoryFilters(CategoryFiltersData::default()),
         Screen::MiniGame => TypedScreen::MiniGame(MiniGameData::default()),
         // NOTE: Task, Results, and Review screens require data and should not be
         // navigated to via NavigateTo - they have their own handlers

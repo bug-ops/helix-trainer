@@ -40,8 +40,8 @@ pub use substates::{ConfigState, GameState, ProgressState, UIState};
 // Type-safe screen variants with required data
 pub mod screen;
 pub use screen::{
-    CommandBufferAccess, CompletedOrAbandoned, InputStateAccess, KeyHistory, MenuData,
-    MiniGameData, MiniGameModeSelection, ModeSelectionData, ProfileData, ResultsData,
+    CategoryFiltersData, CommandBufferAccess, CompletedOrAbandoned, InputStateAccess, KeyHistory,
+    MenuData, MiniGameData, MiniGameModeSelection, ModeSelectionData, ProfileData, ResultsData,
     ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
@@ -99,6 +99,8 @@ pub enum Screen {
     Profile,
     /// Statistics screen showing command mastery and analytics
     Statistics,
+    /// Category filters configuration screen
+    CategoryFilters,
     /// Review session screen for spaced repetition
     Review,
     /// Mini-game mode (Arcade Mode)

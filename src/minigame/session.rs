@@ -21,6 +21,17 @@ use std::time::{Duration, Instant};
 /// Size of scenario queue (number of upcoming scenarios visible)
 const QUEUE_SIZE: usize = 3;
 
+/// Helper to execute operations on a target snapshot's EditorDisplay
+fn with_target_display<T, F>(snapshot: &EditorSnapshot, f: F) -> T
+where
+    F: FnOnce(&crate::helix::EditorDisplay) -> T,
+{
+    let rope = helix_core::Rope::from(snapshot.content.as_str());
+    let selection = snapshot.to_helix_selection();
+    let display = crate::helix::EditorDisplay::new(&rope, &selection);
+    f(&display)
+}
+
 /// Active scenario being played with timer
 ///
 /// Represents the scenario currently being solved by the player,
@@ -123,10 +134,7 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
     }
 
     fn target_cursor(&self) -> (usize, usize) {
-        let rope = helix_core::Rope::from(self.target_snapshot.content.as_str());
-        let selection = self.target_snapshot.to_helix_selection();
-        let display = crate::helix::EditorDisplay::new(&rope, &selection);
-        display.cursor_position()
+        with_target_display(&self.target_snapshot, |d| d.cursor_position())
     }
 
     fn current_selection(&self) -> Option<crate::helix::SelectionBounds> {
@@ -134,10 +142,7 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
     }
 
     fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
-        let rope = helix_core::Rope::from(self.target_snapshot.content.as_str());
-        let selection = self.target_snapshot.to_helix_selection();
-        let display = crate::helix::EditorDisplay::new(&rope, &selection);
-        display.selection()
+        with_target_display(&self.target_snapshot, |d| d.selection())
     }
 
     fn action_count(&self) -> usize {
@@ -166,21 +171,16 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
     }
 
     fn all_target_cursors(&self) -> Vec<(usize, usize)> {
-        let rope = helix_core::Rope::from(self.target_snapshot.content.as_str());
-        let selection = self.target_snapshot.to_helix_selection();
-        let display = crate::helix::EditorDisplay::new(&rope, &selection);
-        display.all_cursor_positions()
+        with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
     }
 
     fn all_target_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        let rope = helix_core::Rope::from(self.target_snapshot.content.as_str());
-        let selection = self.target_snapshot.to_helix_selection();
-        let display = crate::helix::EditorDisplay::new(&rope, &selection);
-        display
-            .all_selection_bounds()
-            .into_iter()
-            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
-            .collect()
+        with_target_display(&self.target_snapshot, |d| {
+            d.all_selection_bounds()
+                .into_iter()
+                .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+                .collect()
+        })
     }
 }
 

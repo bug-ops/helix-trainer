@@ -45,17 +45,29 @@ pub fn handle_navigate_to(screen: Screen) -> Result<HandlerOutcome, UserError> {
 /// Handle BackToMenu message
 ///
 /// Returns to the appropriate screen based on context:
-/// - From Profile/Statistics/CategoryFilters with PausedMiniGame return destination: returns to paused mini-game
+/// - From Profile/Statistics with PausedMiniGame return destination: returns to paused mini-game
+/// - From CategoryFilters: returns to Menu (scenario list) or PausedMiniGame based on return_to
 /// - Otherwise: returns to mode selection screen (the main menu)
 pub fn handle_back_to_menu(
     current_screen: &TypedScreen,
     _ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
+    // CategoryFilters returns to its original screen (Menu or PausedMiniGame)
+    if let TypedScreen::CategoryFilters(data) = current_screen {
+        return match data.return_to {
+            ReturnDestination::Menu => Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+                MenuData::default(),
+            )))),
+            ReturnDestination::PausedMiniGame => Ok(HandlerOutcome::Transition(Box::new(
+                TypedScreen::MiniGame(MiniGameData::default()),
+            ))),
+        };
+    }
+
     // Check if we should return to paused mini-game instead of mode selection
     let return_to_minigame = match current_screen {
         TypedScreen::Profile(data) => data.return_to == ReturnDestination::PausedMiniGame,
         TypedScreen::Statistics(data) => data.return_to == ReturnDestination::PausedMiniGame,
-        TypedScreen::CategoryFilters(data) => data.return_to == ReturnDestination::PausedMiniGame,
         _ => false,
     };
 
@@ -277,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn test_back_to_menu_from_category_filters_returns_to_mode_selection() {
+    fn test_back_to_menu_from_category_filters_returns_to_menu() {
         let screen = TypedScreen::CategoryFilters(CategoryFiltersData {
             selected_index: 0,
             return_to: ReturnDestination::Menu,
@@ -289,7 +301,8 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+            // Should return to Menu (scenario list), not ModeSelection
+            assert!(matches!(*new_screen, TypedScreen::Menu(_)));
         }
     }
 

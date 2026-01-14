@@ -64,6 +64,8 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                     minigame::render_minigame(frame, state);
                 }
             }
+            // Dim the background for modal effect
+            helpers::render_dimmed_overlay(frame, frame.area());
             // Render category filters popup on top
             category_filters::render_category_filters(frame, state)
         }

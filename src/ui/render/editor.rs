@@ -375,13 +375,11 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
         .wrap(Wrap { trim: false });
     frame.render_widget(current, editor_chunks[0]);
 
-    // Target state with multi-cursor (no diff highlighting - use same content for both)
-    let target_lines = render_editor_with_diff(
-        &target_content,
+    // Target state with syntax highlighting and multi-cursor
+    let target_lines = super::highlight::highlight_code_with_multi_cursor(
         &target_content,
         &target_cursors,
         &target_selections,
-        None,
     );
     let target = Paragraph::new(target_lines)
         .block(

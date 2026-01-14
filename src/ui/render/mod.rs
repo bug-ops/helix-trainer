@@ -58,14 +58,12 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             // Render background screen first based on return destination
             match filters_data.return_to {
                 crate::ui::state::ReturnDestination::Menu => {
-                    menu::render_main_menu(frame, state);
+                    menu::render_main_menu_background(frame, state);
                 }
                 crate::ui::state::ReturnDestination::PausedMiniGame => {
                     minigame::render_minigame(frame, state);
                 }
             }
-            // Dim the background for modal effect
-            helpers::render_dimmed_overlay(frame, frame.area());
             // Render category filters popup on top
             category_filters::render_category_filters(frame, state)
         }

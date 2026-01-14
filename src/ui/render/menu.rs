@@ -217,6 +217,99 @@ fn render_scrollbar(
     }
 }
 
+/// Render the main menu screen as a background (for overlay popups)
+///
+/// This renders a simplified version of the menu without selection highlighting,
+/// used when CategoryFilters or other popups need to show the menu behind them.
+pub(super) fn render_main_menu_background(frame: &mut Frame, state: &AppState) {
+    let area = frame.area();
+
+    // Create layout: header | title | menu | quests | instructions
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints([
+            Constraint::Length(1), // Header with level/XP/streak
+            Constraint::Length(3), // Title
+            Constraint::Min(4),    // Menu items
+            Constraint::Length(6), // Quest panel
+            Constraint::Length(3), // Instructions
+        ])
+        .split(area);
+
+    // Render profile header
+    render_profile_header(frame, chunks[0], state);
+
+    // Title
+    let title = Paragraph::new(t!("menu.title").to_string())
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
+    frame.render_widget(title, chunks[1]);
+
+    // Calculate visible area height for menu (excluding borders)
+    let menu_height = chunks[2].height.saturating_sub(2) as usize;
+    let total_items = state.game.scenario_collection.count() + 4; // +4 for Review, Profile, Statistics, Quit
+
+    // Use default scroll offset (0) for background render - no selection
+    let scroll_offset = 0;
+
+    // Build menu items with no selection (usize::MAX ensures nothing matches)
+    let all_items = build_menu_items(state, usize::MAX);
+
+    // Apply scroll offset by skipping items
+    let visible_items: Vec<ListItem> = all_items
+        .into_iter()
+        .skip(scroll_offset)
+        .take(menu_height)
+        .collect();
+
+    // Add scroll indicator to title if list is scrollable
+    let menu_title = if total_items > menu_height {
+        let first_visible = scroll_offset + 1;
+        let last_visible = (scroll_offset + menu_height).min(total_items);
+        t!(
+            "menu.main_menu_with_scroll",
+            first = first_visible,
+            last = last_visible,
+            total = total_items
+        )
+        .to_string()
+    } else {
+        t!("menu.main_menu_total", total = total_items).to_string()
+    };
+
+    let menu = List::new(visible_items)
+        .block(Block::default().title(menu_title).borders(Borders::ALL))
+        .style(Style::default().fg(Color::White));
+    frame.render_widget(menu, chunks[2]);
+
+    // Render quest panel
+    render_quest_panel(frame, chunks[3], state);
+
+    // Draw scrollbar if needed
+    if total_items > menu_height {
+        render_scrollbar(frame, chunks[2], scroll_offset, total_items, menu_height);
+    }
+
+    // Instructions
+    let instructions = if total_items > 9 {
+        Paragraph::new(t!("menu.instructions_with_numbers").to_string())
+    } else {
+        Paragraph::new(t!("menu.instructions").to_string())
+    };
+
+    let instructions = instructions
+        .style(Style::default().fg(Color::Gray))
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
+    frame.render_widget(instructions, chunks[4]);
+}
+
 /// Render the main menu screen
 pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     // Extract MenuData from TypedScreen::Menu (early check)

@@ -70,21 +70,5 @@ pub(super) fn inner_rect(outer: Rect) -> Rect {
     }
 }
 
-/// Dark overlay color for dimming background behind popups
-pub(super) const DIMMED_BG_COLOR: Color = Color::Rgb(20, 20, 25);
-
-/// Render a dimmed overlay to darken the background behind a popup
-///
-/// This creates a modal effect by dimming the content behind the popup.
-///
-/// # Arguments
-///
-/// * `frame` - The frame to render to
-/// * `area` - The area to dim (typically frame.area())
-pub(super) fn render_dimmed_overlay(frame: &mut ratatui::Frame, area: Rect) {
-    let overlay = Block::default().style(Style::default().bg(DIMMED_BG_COLOR));
-    frame.render_widget(overlay, area);
-}
-
 // Re-export find_surrounding_brackets from helix module
 pub(super) use crate::helix::find_surrounding_brackets;

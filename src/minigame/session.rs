@@ -164,6 +164,24 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
             .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
             .collect()
     }
+
+    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
+        let rope = helix_core::Rope::from(self.target_snapshot.content.as_str());
+        let selection = self.target_snapshot.to_helix_selection();
+        let display = crate::helix::EditorDisplay::new(&rope, &selection);
+        display.all_cursor_positions()
+    }
+
+    fn all_target_selections(&self) -> Vec<crate::helix::SelectionBounds> {
+        let rope = helix_core::Rope::from(self.target_snapshot.content.as_str());
+        let selection = self.target_snapshot.to_helix_selection();
+        let display = crate::helix::EditorDisplay::new(&rope, &selection);
+        display
+            .all_selection_bounds()
+            .into_iter()
+            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
+            .collect()
+    }
 }
 
 // Implement CommandExecutor trait for unified command handling with count prefix

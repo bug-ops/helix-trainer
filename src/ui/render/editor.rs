@@ -295,25 +295,6 @@ pub(super) fn render_editor_with_diff(
         .collect()
 }
 
-/// Render editor text with syntax highlighting and selection
-///
-/// Takes content, cursor position, and selection bounds, returns `Vec<Line>`
-/// with syntax highlighting, selection range highlighted using background color,
-/// and cursor shown if present.
-pub(super) fn render_editor_with_selection(
-    content: &str,
-    cursor_pos: (usize, usize),
-    selection: Option<SelectionBounds>,
-) -> Vec<Line<'static>> {
-    let (cursor_row, cursor_col) = cursor_pos;
-    super::highlight::highlight_code_with_cursor(
-        content,
-        cursor_row,
-        cursor_col,
-        selection.as_ref(),
-    )
-}
-
 /// Render a side-by-side editor view (current state vs target state)
 ///
 /// This is the common layout used by both Training mode and Arcade mode.
@@ -339,10 +320,8 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     // Get state from trait methods
     let current_content = scenario.current_content();
     let target_content = scenario.target_content();
-    let target_cursor = scenario.target_cursor();
-    let target_selection = scenario.target_selection();
 
-    // Get all cursors and build CursorInfo list
+    // Get all current cursors and build CursorInfo list
     let all_cursor_positions = scenario.all_cursors();
     let cursors: Vec<CursorInfo> = all_cursor_positions
         .iter()
@@ -354,8 +333,23 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
         })
         .collect();
 
-    // Get all selections
+    // Get all current selections
     let selections = scenario.all_selections();
+
+    // Get all target cursors and build CursorInfo list
+    let all_target_cursor_positions = scenario.all_target_cursors();
+    let target_cursors: Vec<CursorInfo> = all_target_cursor_positions
+        .iter()
+        .enumerate()
+        .map(|(idx, &(row, col))| CursorInfo {
+            row,
+            col,
+            is_primary: idx == 0, // First cursor is primary
+        })
+        .collect();
+
+    // Get all target selections
+    let target_selections = scenario.all_target_selections();
 
     // Split into two columns
     let editor_chunks = Layout::default()
@@ -381,9 +375,14 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
         .wrap(Wrap { trim: false });
     frame.render_widget(current, editor_chunks[0]);
 
-    // Target state with selection highlighting (if any)
-    let target_lines =
-        render_editor_with_selection(&target_content, target_cursor, target_selection);
+    // Target state with multi-cursor (no diff highlighting - use same content for both)
+    let target_lines = render_editor_with_diff(
+        &target_content,
+        &target_content,
+        &target_cursors,
+        &target_selections,
+        None,
+    );
     let target = Paragraph::new(target_lines)
         .block(
             Block::default()

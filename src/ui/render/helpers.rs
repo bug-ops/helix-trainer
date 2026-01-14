@@ -6,66 +6,6 @@ use ratatui::{
     widgets::{Block, Borders},
 };
 
-/// Split a string at a character index without allocating
-///
-/// Returns byte indices (start, char_byte_pos, end) for efficient slicing.
-/// This avoids collecting chars into new Strings.
-///
-/// # Arguments
-///
-/// * `s` - The string to split
-/// * `char_idx` - Character index (not byte index)
-///
-/// # Returns
-///
-/// Tuple of (before_end_byte, char_start_byte, char_end_byte, after_start_byte)
-pub(super) fn split_at_char_index(s: &str, char_idx: usize) -> (usize, usize, usize, usize) {
-    let mut char_indices = s.char_indices();
-
-    // Find the byte position of the character at char_idx
-    let char_byte_start = char_indices
-        .nth(char_idx)
-        .map(|(idx, _)| idx)
-        .unwrap_or(s.len());
-
-    // Find the end byte position of the character (start of next char or end of string)
-    let char_byte_end = char_indices.next().map(|(idx, _)| idx).unwrap_or(s.len());
-
-    (
-        char_byte_start,
-        char_byte_start,
-        char_byte_end,
-        char_byte_end,
-    )
-}
-
-/// Get byte indices for a character range without allocating
-///
-/// Returns (start_byte, end_byte) for a range of characters.
-///
-/// # Arguments
-///
-/// * `s` - The string to analyze
-/// * `start_char` - Starting character index
-/// * `end_char` - Ending character index (exclusive)
-///
-/// # Returns
-///
-/// Tuple of (start_byte_index, end_byte_index)
-pub(super) fn char_range_to_bytes(s: &str, start_char: usize, end_char: usize) -> (usize, usize) {
-    let mut char_indices = s.char_indices().enumerate();
-
-    let start_byte = char_indices
-        .find_map(|(idx, (byte_pos, _))| (idx == start_char).then_some(byte_pos))
-        .unwrap_or(s.len());
-
-    let end_byte = char_indices
-        .find_map(|(idx, (byte_pos, _))| (idx == end_char).then_some(byte_pos))
-        .unwrap_or(s.len());
-
-    (start_byte, end_byte)
-}
-
 /// Calculate centered popup area with given dimensions
 ///
 /// # Arguments

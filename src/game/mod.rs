@@ -98,4 +98,20 @@ pub trait PlayableScenario {
     fn all_selections(&self) -> Vec<SelectionBounds> {
         self.current_selection().into_iter().collect()
     }
+
+    /// Get all target cursor positions for multi-cursor scenarios.
+    ///
+    /// Returns a vector of (row, col) pairs. The first cursor is the primary cursor.
+    /// Default implementation returns only the primary target cursor.
+    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
+        vec![self.target_cursor()]
+    }
+
+    /// Get all target selection bounds for multi-selection scenarios.
+    ///
+    /// Returns a vector of SelectionBounds. Default implementation
+    /// returns the primary target selection if any.
+    fn all_target_selections(&self) -> Vec<SelectionBounds> {
+        self.target_selection().into_iter().collect()
+    }
 }

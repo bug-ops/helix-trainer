@@ -46,7 +46,6 @@ pub fn handle_key_event(key: KeyEvent, state: &mut AppState) -> Option<Message> 
         }
         TypedScreen::Review(_) => handle_review_keys(key),
         TypedScreen::MiniGame(_) => handle_minigame_keys(key, state),
-        // TODO: Implement category filters input handling in Phase 3
-        TypedScreen::CategoryFilters(_) => None,
+        TypedScreen::CategoryFilters(_) => handle_category_filters_keys(key),
     }
 }

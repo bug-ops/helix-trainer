@@ -33,11 +33,11 @@ cursor_position = [3, 8]
 selection = [3, 8, 3, 13]
 
 [scenarios.solution]
-commands = ["*"]
-description = "Press '*' to jump to next occurrence of 'count'"
+commands = ["*", "n"]
+description = "Press '*' to search for 'count', then 'n' to jump to next occurrence"
 
 [scenarios.scoring]
-optimal_count = 1
+optimal_count = 2
 max_points = 100
 tolerance = 0
 
@@ -74,11 +74,11 @@ cursor_position = [1, 19]
 selection = [1, 15, 1, 19]
 
 [scenarios.solution]
-commands = ["*", "n"]
-description = "Press '*' then 'n' to reach the third 'data'"
+commands = ["*", "n", "n"]
+description = "Press '*' to search for 'data', then 'n' twice to reach the third 'data'"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 3
 max_points = 100
 tolerance = 0
 
@@ -119,11 +119,11 @@ cursor_position = [1, 5]
 selection = [1, 4, 1, 5]
 
 [scenarios.solution]
-commands = ["*"]
-description = "Press '*' to find next 'a'"
+commands = ["*", "n"]
+description = "Press '*' to search for 'a', then 'n' to find next match"
 
 [scenarios.scoring]
-optimal_count = 1
+optimal_count = 2
 max_points = 100
 tolerance = 0
 
@@ -166,11 +166,11 @@ cursor_position = [5, 24]
 selection = [5, 19, 5, 24]
 
 [scenarios.solution]
-commands = ["*", "N", "N"]
-description = "Press '*' to search for 'count', then 'N' twice to reach the last occurrence"
+commands = ["*", "N"]
+description = "Press '*' to search for 'count', then 'N' to go backward to last occurrence"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 2
 max_points = 100
 tolerance = 0
 

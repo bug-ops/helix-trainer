@@ -160,6 +160,9 @@ pub fn goto_prev_match<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Search word under cursor (* command)
+///
+/// Sets the word under cursor as search pattern and selects it,
+/// but does NOT jump to next match. Use `n` to navigate to next occurrence.
 pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -177,13 +180,16 @@ pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
         .set_word_pattern(&word, SearchDirection::Forward)
         .is_ok()
     {
-        search_next_match(sim)?;
+        sim.selection = Selection::single(start, end);
     }
 
     Ok(())
 }
 
 /// Search selection text (Alt-* command)
+///
+/// Sets the current selection as search pattern. If selection is empty,
+/// falls back to word under cursor. Does NOT jump to next match.
 pub fn search_selection<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -198,13 +204,9 @@ pub fn search_selection<M: crate::helix::simulator::EditorMode>(
     let slice = sim.doc.slice(..);
     let selection_text: String = slice.slice(start..end).chars().collect();
 
-    if sim
-        .search_state
+    sim.search_state
         .set_selection_pattern(&selection_text, SearchDirection::Forward)
-        .is_ok()
-    {
-        search_next_match(sim)?;
-    }
+        .ok();
 
     Ok(())
 }
@@ -228,10 +230,10 @@ mod tests {
         // Should have found the word pattern
         assert!(sim.search_state.has_pattern());
 
-        // Should have selected the next match (second "hello")
+        // Should have selected the CURRENT word (first "hello"), not jumped
         let range = sim.selection.primary();
-        assert_eq!(range.from(), 12);
-        assert_eq!(range.to(), 17);
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 5);
     }
 
     #[test]
@@ -244,8 +246,13 @@ mod tests {
 
         search_word_under_cursor(&mut sim).unwrap();
 
-        // Should still find the word and jump to next occurrence
+        // Should find the word and select it (stay on current word)
         assert!(sim.search_state.has_pattern());
+
+        // Verify cursor stays on current word
+        let range = sim.selection.primary();
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 5);
     }
 
     #[test]
@@ -261,10 +268,10 @@ mod tests {
         // Should have pattern set
         assert!(sim.search_state.has_pattern());
 
-        // Should have found next match
+        // Selection should remain unchanged (already set at 0..3)
         let range = sim.selection.primary();
-        assert_eq!(range.from(), 8);
-        assert_eq!(range.to(), 11);
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 3);
     }
 
     #[test]

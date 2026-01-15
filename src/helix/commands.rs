@@ -130,7 +130,6 @@ pub const CMD_SEARCH_BACKWARD: &str = "?";
 pub const CMD_SEARCH_NEXT: &str = "n";
 pub const CMD_SEARCH_PREV: &str = "N";
 pub const CMD_SEARCH_WORD: &str = "*";
-pub const CMD_SEARCH_WORD_BACKWARD: &str = "#";
 pub const CMD_SEARCH_SELECTION: &str = "Alt-*";
 
 // View mode commands

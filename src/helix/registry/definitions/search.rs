@@ -1,6 +1,6 @@
 //! Search command definitions
 //!
-//! Registers search commands (/, ?, n, N, *, #, Alt-*)
+//! Registers search commands (/, ?, n, N, *, Alt-*)
 
 use crate::helix::commands::*;
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
@@ -87,19 +87,6 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         ),
         search::search_selection,
     ));
-
-    registry.register(Command::new(
-        CommandMetadata::new(
-            "search_word_backward",
-            CMD_SEARCH_WORD_BACKWARD,
-            "Search word backward",
-            "Search backward for the word under cursor with word boundaries.",
-            Category::Search,
-            false,
-            None,
-        ),
-        search::search_word_under_cursor_backward,
-    ));
 }
 
 #[cfg(test)]
@@ -126,10 +113,6 @@ mod tests {
             registry.contains(CMD_SEARCH_SELECTION),
             "Missing search_selection"
         );
-        assert!(
-            registry.contains(CMD_SEARCH_WORD_BACKWARD),
-            "Missing search_word_backward"
-        );
     }
 
     #[test]
@@ -139,8 +122,8 @@ mod tests {
 
         let search_cmds = registry.commands_in_category(Category::Search);
         assert!(
-            search_cmds.len() >= 7,
-            "Expected at least 7 search commands"
+            search_cmds.len() >= 6,
+            "Expected at least 6 search commands"
         );
     }
 }

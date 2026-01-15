@@ -632,7 +632,6 @@ Track which commands have been implemented in the simulator:
 | ✅ | <kbd>n</kbd> | Jump to next match |
 | ✅ | <kbd>N</kbd> | Jump to previous match |
 | ✅ | <kbd>*</kbd> | Search word under cursor forward |
-| ✅ | <kbd>#</kbd> | Search word under cursor backward |
 | ✅ | <kbd>Alt</kbd>+<kbd>*</kbd> | Search selection text |
 
 ### View Commands
@@ -674,7 +673,7 @@ Track which commands have been implemented in the simulator:
 | **Page** | 4 | <kbd>Ctrl+b</kbd> <kbd>Ctrl+f</kbd> <kbd>Ctrl+u</kbd> <kbd>Ctrl+d</kbd> |
 | **Editing** | 17 | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>d</kbd> <kbd>c</kbd> <kbd>r</kbd> <kbd>R</kbd> <kbd>~</kbd> <kbd>`</kbd> <kbd>Alt+`</kbd> <kbd>.</kbd> <kbd>u</kbd> <kbd>U</kbd> |
 | **Selection** | 20 | <kbd>x</kbd> <kbd>X</kbd> <kbd>v</kbd> <kbd>;</kbd> <kbd>,</kbd> <kbd>%</kbd> <kbd>s</kbd> <kbd>S</kbd> <kbd>C</kbd> <kbd>K</kbd> <kbd>Alt+C</kbd> <kbd>Alt+K</kbd> <kbd>Alt+s</kbd> <kbd>Alt+x</kbd> <kbd>_</kbd> <kbd>&</kbd> <kbd>Alt+-</kbd> <kbd>Alt+_</kbd> <kbd>Alt+,</kbd> |
-| **Search** | 7 | <kbd>/</kbd> <kbd>?</kbd> <kbd>n</kbd> <kbd>N</kbd> <kbd>*</kbd> <kbd>#</kbd> <kbd>Alt+*</kbd> |
+| **Search** | 6 | <kbd>/</kbd> <kbd>?</kbd> <kbd>n</kbd> <kbd>N</kbd> <kbd>*</kbd> <kbd>Alt+*</kbd> |
 | **View** | 6 | <kbd>z</kbd> <kbd>zz</kbd> <kbd>zt</kbd> <kbd>zb</kbd> <kbd>zm</kbd> <kbd>zj</kbd> <kbd>zk</kbd> |
 | **Match Mode** | 6 | <kbd>mm</kbd> <kbd>ms</kbd> <kbd>md</kbd> <kbd>mr</kbd> <kbd>ma</kbd> <kbd>mi</kbd> |
 | **Indentation** | 2 | <kbd>></kbd> <kbd><</kbd> |

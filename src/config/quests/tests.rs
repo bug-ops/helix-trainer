@@ -598,7 +598,7 @@ fn test_validate_all_quest_templates() {
         ".", // Replace (r + char is handled specially)
         "r", // Selection
         "_", "C", // Search
-        "*", "n", "N", "#", // Text objects (match mode prefix + object)
+        "*", "n", "N", // Text objects (match mode prefix + object)
         "miw", "maw", "mip", "map", // Surround (match mode prefix + surround command)
         "ms", "md", "mr",
     ]

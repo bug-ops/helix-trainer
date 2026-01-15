@@ -1,4 +1,7 @@
 //! Search commands (/, ?, n, N, *, Alt-*)
+//!
+//! Note: Helix provides `*` for word search (forward). To search backward
+//! for word under cursor, use `*` followed by `N` to go to previous match.
 
 use crate::helix::simulator::HelixSimulator;
 use crate::helix::simulator::search_state::SearchDirection;
@@ -175,30 +178,6 @@ pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
         .is_ok()
     {
         search_next_match(sim)?;
-    }
-
-    Ok(())
-}
-
-/// Search word under cursor backward (# command)
-pub fn search_word_under_cursor_backward<M: crate::helix::simulator::EditorMode>(
-    sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let slice = sim.doc.slice(..);
-
-    let Some((start, end)) = extract_word_at_cursor(slice, head) else {
-        return Ok(());
-    };
-
-    let word: String = slice.slice(start..end).chars().collect();
-
-    if sim
-        .search_state
-        .set_word_pattern(&word, SearchDirection::Backward)
-        .is_ok()
-    {
-        search_prev_match(sim)?;
     }
 
     Ok(())

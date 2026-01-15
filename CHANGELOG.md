@@ -217,13 +217,12 @@ This release significantly expands command coverage with a complete typestate-ba
   - <kbd>Alt</kbd>-<kbd>K</kbd> remove_selections_matching: Remove matching
   - <kbd>Ctrl</kbd>-<kbd>c</kbd> toggle_comments: Toggle line comments
 
-- **Search Commands (7 new)** (#100)
+- **Search Commands (6 new)** (#100)
   - <kbd>/</kbd> search_forward: Search forward with regex
   - <kbd>?</kbd> search_backward: Search backward with regex
   - <kbd>n</kbd> search_next: Jump to next match
   - <kbd>N</kbd> search_prev: Jump to previous match
   - <kbd>*</kbd> search_word_under_cursor: Search word forward
-  - <kbd>#</kbd> search_word_backward: Search word backward (#105)
   - <kbd>Alt</kbd>-<kbd>*</kbd> search_selection: Search selection text
 
 - **View Commands (6 new)** (#100)

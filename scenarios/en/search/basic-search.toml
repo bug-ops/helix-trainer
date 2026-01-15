@@ -1,5 +1,5 @@
 # Basic Search Commands
-# Scenarios for *, #, n, N search commands
+# Scenarios for *, n, N search commands
 
 [[scenarios]]
 id = "search_word_001"
@@ -90,45 +90,6 @@ commands_taught = ["*", "n"]
 estimated_time_seconds = 15
 
 [[scenarios]]
-id = "search_word_backward_001"
-name = "Search word backward"
-description = "Use '#' to search backward for word under cursor"
-
-hints = [
-    "'#' searches backward for word under cursor",
-    "Like '*' but in reverse direction",
-]
-
-[scenarios.setup]
-file_content = """let value = 10;
-let other = 20;
-let result = value + other;"""
-cursor_position = [2, 13]
-
-[scenarios.target]
-file_content = """let value = 10;
-let other = 20;
-let result = value + other;"""
-cursor_position = [0, 4]
-selection = [0, 4, 0, 9]
-
-[scenarios.solution]
-commands = ["#"]
-description = "Press '#' to jump to previous occurrence of 'value'"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "search"
-difficulty = "beginner"
-tags = ["search", "word", "backward"]
-commands_taught = ["#"]
-estimated_time_seconds = 10
-
-[[scenarios]]
 id = "search_next_001"
 name = "Go to next match"
 description = "Use '*' to search for word under cursor"
@@ -173,39 +134,4 @@ tags = ["search", "next", "match"]
 commands_taught = ["*"]
 estimated_time_seconds = 10
 
-[[scenarios]]
-id = "search_prev_001"
-name = "Go to previous match"
-description = "Use 'N' to navigate to previous search match"
 
-hints = [
-    "'N' goes to the previous match (opposite of 'n')",
-    "Useful for reversing search direction",
-]
-
-[scenarios.setup]
-file_content = """struct Point { x: i32, y: i32 }
-struct Rect { x: i32, y: i32, w: i32, h: i32 }"""
-cursor_position = [1, 14]
-
-[scenarios.target]
-file_content = """struct Point { x: i32, y: i32 }
-struct Rect { x: i32, y: i32, w: i32, h: i32 }"""
-cursor_position = [0, 15]
-selection = [0, 15, 0, 16]
-
-[scenarios.solution]
-commands = ["#"]
-description = "Press '#' to search backward for 'x'"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "search"
-difficulty = "intermediate"
-tags = ["search", "previous", "match"]
-commands_taught = ["#"]
-estimated_time_seconds = 10

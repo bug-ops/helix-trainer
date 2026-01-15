@@ -1,7 +1,7 @@
 # Helix Editor — Complete Keybindings Reference
 
 > **Source:** [docs.helix-editor.com/keymap.html](https://docs.helix-editor.com/keymap.html)
-> **Updated:** 2025-10-30
+> **Updated:** 2026-01-15
 
 Comprehensive reference of all Helix editor keybindings for developing training scenarios.
 
@@ -631,7 +631,7 @@ Track which commands have been implemented in the simulator:
 | ✅ | <kbd>?</kbd> | Search backward with regex |
 | ✅ | <kbd>n</kbd> | Jump to next match |
 | ✅ | <kbd>N</kbd> | Jump to previous match |
-| ✅ | <kbd>*</kbd> | Search word under cursor forward |
+| ✅ | <kbd>*</kbd> | Select word under cursor and set search pattern |
 | ✅ | <kbd>Alt</kbd>+<kbd>*</kbd> | Search selection text |
 
 ### View Commands

@@ -320,17 +320,17 @@ estimated_time_seconds = 10
 
 ### Search scenario
 
-Search for word under cursor using `*`:
+Search for word under cursor using `*` and `n`:
 
 ```toml
 [[scenarios]]
 id = "search_word_001"
 name = "Search word forward"
-description = "Use '*' to search for the word under cursor"
+description = "Use '*' to search for the word under cursor and 'n' to jump to next match"
 
 hints = [
-    "'*' searches forward for word under cursor",
-    "The search includes word boundaries",
+    "'*' selects word under cursor and sets search pattern",
+    "'n' jumps to next match",
 ]
 
 [scenarios.setup]
@@ -343,11 +343,11 @@ cursor_position = [0, 12]
 selection = [0, 12, 0, 17]
 
 [scenarios.solution]
-commands = ["*"]
-description = "Press '*' to jump to next 'hello'"
+commands = ["*", "n"]
+description = "Press '*' to select 'hello' and set search pattern, then 'n' to jump to next match"
 
 [scenarios.scoring]
-optimal_count = 1
+optimal_count = 2
 max_points = 100
 tolerance = 0
 
@@ -355,7 +355,7 @@ tolerance = 0
 category = "search"
 difficulty = "beginner"
 tags = ["search", "word", "forward"]
-commands_taught = ["*"]
+commands_taught = ["*", "n"]
 estimated_time_seconds = 10
 ```
 

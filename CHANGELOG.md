@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-01-15
+
+### Added
+
+- **Category Filters Screen** — Filter scenarios by category with popup UI (#143):
+  - Quick category selection with `f` key from scenario list
+  - 9 categories: Movement, Editing, Selection, Clipboard, Search, Text Objects, Surround, Multi-cursor, Insert
+  - Toggle categories with Space/Enter, navigate with j/k
+
+- **Multi-cursor Support** — Full support for Helix multi-cursor operations (#142):
+  - `C` (copy_selection_on_next_line) and `Alt-C` (copy_selection_on_prev_line)
+  - Multi-cursor scenarios for learning cursor multiplication
+
+- **Bracket Preview Highlight** — Visual preview for surround commands (#136):
+  - Shows bracket type before confirming surround operation
+  - Supports all bracket pairs: `()`, `[]`, `{}`, `<>`, quotes
+
+- **Scenario Progress Tracking** — Display current scenario number in title (#135)
+
+### Fixed
+
+- **Search Command `*` Behavior** — Now correctly matches real Helix behavior (#150):
+  - `*` selects current word and sets search pattern without jumping
+  - Use `n`/`N` to navigate between matches after `*`
+
+- **Search `N` Command** — Fixed `find_prev` returning same match at cursor end (#148):
+  - Proper backward navigation with correct match boundary handling
+
+- **Removed Invalid `#` Command** — Removed Vim-ism that doesn't exist in Helix (#146):
+  - `#` (search_word_backward) is not a Helix command
+  - Use `*` followed by `N` for backward word search
+
+- **Alt Modifier Key Support** — Proper handling of Alt-key combinations (#140)
+
+### Quality
+
+- **Tests**: 1842 (up from 1626)
+- **Clippy**: Zero warnings
+
 ## [0.5.6] - 2026-01-10
 
 ### Added

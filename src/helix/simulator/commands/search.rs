@@ -411,12 +411,13 @@ mod tests {
         // Call search_backward
         search_backward(&mut sim).unwrap();
 
-        // Should find the last match (second "hello") since we're searching backward
-        // from byte position 17, and the match "hello" at 12-17 ends at 17,
-        // so it finds the match ending <= 17
+        // At position 17, the match "hello" at 12..17 ends exactly at 17.
+        // Since position 17 is the exclusive end of the match, find_prev uses
+        // strict inequality (range.end < pos), so 17 < 17 is false.
+        // This means the match at 12..17 is excluded, and we get the previous match.
         let range = sim.selection.primary();
-        assert_eq!(range.from(), 12);
-        assert_eq!(range.to(), 17);
+        assert_eq!(range.from(), 0);
+        assert_eq!(range.to(), 5);
     }
 
     #[test]

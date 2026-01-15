@@ -134,4 +134,50 @@ tags = ["search", "next", "match"]
 commands_taught = ["*"]
 estimated_time_seconds = 10
 
+[[scenarios]]
+id = "search_prev_001"
+name = "Search word backward"
+description = "Use '*' and 'N' to navigate backward through word occurrences"
+
+hints = [
+    "'*' starts forward search for word under cursor",
+    "'N' jumps to the previous match (opposite direction)",
+]
+
+[scenarios.setup]
+file_content = """fn main() {
+    let count = 0;
+    for i in 0..10 {
+        count += 1;
+    }
+    println!("{}", count);
+}"""
+cursor_position = [1, 8]
+
+[scenarios.target]
+file_content = """fn main() {
+    let count = 0;
+    for i in 0..10 {
+        count += 1;
+    }
+    println!("{}", count);
+}"""
+cursor_position = [5, 24]
+selection = [5, 19, 5, 24]
+
+[scenarios.solution]
+commands = ["*", "N", "N"]
+description = "Press '*' to search for 'count', then 'N' twice to reach the last occurrence"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "beginner"
+tags = ["search", "word", "backward", "prev"]
+commands_taught = ["*", "N"]
+estimated_time_seconds = 15
 

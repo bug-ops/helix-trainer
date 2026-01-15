@@ -199,9 +199,10 @@ impl SearchState {
             return None;
         }
 
-        // Binary search for the last match ending at or before pos
-        // We want the rightmost match where range.end <= pos
-        let idx = self.matches.partition_point(|range| range.end <= pos);
+        // Binary search for the last match ending strictly before pos
+        // We want the rightmost match where range.end < pos
+        // This ensures we skip the current match when cursor is at its end
+        let idx = self.matches.partition_point(|range| range.end < pos);
 
         if idx > 0 {
             let i = idx - 1;
@@ -325,25 +326,33 @@ mod tests {
         state.update_matches("foo bar foo baz foo");
         // Matches are at positions: 0..3, 8..11, 16..19
 
-        // At position 19 (end of doc), last match ends at 19, so find_prev finds match ending <= 19
-        // Match at 16..19 ends at 19, so 19 <= 19 is true, returns that match
+        // At position 19 (end of last match), find_prev returns PREVIOUS match (not current)
+        // Match at 16..19 ends at 19, but 19 < 19 is false, so it's excluded
         let (idx, range) = state.find_prev(19).unwrap();
-        assert_eq!(idx, 2);
-        assert_eq!(range, 16..19);
+        assert_eq!(idx, 1);
+        assert_eq!(range, 8..11);
 
-        // At position 16, we want matches ending <= 16
-        // Match 8..11 ends at 11, 11 <= 16 is true
+        // At position 16 (start of last match), matches ending < 16 are 0..3 and 8..11
         let (idx, range) = state.find_prev(16).unwrap();
         assert_eq!(idx, 1);
         assert_eq!(range, 8..11);
 
-        // At position 8 (start of second match), we want matches ending <= 8
-        // Match 0..3 ends at 3, 3 <= 8 is true
+        // At position 11 (end of second match), find_prev returns first match
+        let (idx, range) = state.find_prev(11).unwrap();
+        assert_eq!(idx, 0);
+        assert_eq!(range, 0..3);
+
+        // At position 8 (start of second match), matches ending < 8 is only 0..3
         let (idx, range) = state.find_prev(8).unwrap();
         assert_eq!(idx, 0);
         assert_eq!(range, 0..3);
 
-        // Wrap around: at position 0, no match ends <= 0, wraps to last match
+        // At position 3 (end of first match), no match ends < 3, wraps to last match
+        let (idx, range) = state.find_prev(3).unwrap();
+        assert_eq!(idx, 2);
+        assert_eq!(range, 16..19);
+
+        // Wrap around: at position 0, no match ends < 0, wraps to last match
         let (idx, range) = state.find_prev(0).unwrap();
         assert_eq!(idx, 2);
         assert_eq!(range, 16..19);
@@ -500,5 +509,55 @@ mod tests {
 
         // No matches
         assert!(state.find_prev(0).is_none());
+    }
+
+    #[test]
+    fn test_find_prev_cursor_at_match_end() {
+        let mut state = SearchState::new();
+        state.set_pattern("abc", SearchDirection::Forward).unwrap();
+        state.update_matches("abc def abc ghi abc");
+        // Matches at: 0..3, 8..11, 16..19
+
+        // When cursor is at END of a match, find_prev should NOT return that match
+        // Position 3 = end of first match, should wrap to last
+        let (idx, range) = state.find_prev(3).unwrap();
+        assert_eq!(idx, 2);
+        assert_eq!(range, 16..19);
+
+        // Position 11 = end of second match, should return first
+        let (idx, range) = state.find_prev(11).unwrap();
+        assert_eq!(idx, 0);
+        assert_eq!(range, 0..3);
+
+        // Position 19 = end of third match, should return second
+        let (idx, range) = state.find_prev(19).unwrap();
+        assert_eq!(idx, 1);
+        assert_eq!(range, 8..11);
+    }
+
+    #[test]
+    fn test_find_next_and_prev_symmetry() {
+        let mut state = SearchState::new();
+        state.set_pattern("x", SearchDirection::Forward).unwrap();
+        state.update_matches("x y x z x");
+        // Matches at: 0..1, 4..5, 8..9
+
+        // Starting at position 4 (start of second match)
+        // find_next should return match at 8..9
+        let (next_idx, _) = state.find_next(4).unwrap();
+        assert_eq!(next_idx, 2);
+
+        // find_prev should return match at 0..1
+        let (prev_idx, _) = state.find_prev(4).unwrap();
+        assert_eq!(prev_idx, 0);
+
+        // At position 5 (end of second match)
+        // find_next should return match at 8..9
+        let (next_idx, _) = state.find_next(5).unwrap();
+        assert_eq!(next_idx, 2);
+
+        // find_prev should return match at 0..1 (NOT 4..5!)
+        let (prev_idx, _) = state.find_prev(5).unwrap();
+        assert_eq!(prev_idx, 0);
     }
 }

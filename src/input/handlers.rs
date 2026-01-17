@@ -1090,12 +1090,16 @@ mod tests {
                 description: "Test scenario".to_string(),
                 setup: Setup {
                     file_content: "test".to_string(),
-                    cursor_position: (0, 0),
+                    cursor_position: Some((0, 0)),
+                    cursors: None,
+                    selections: None,
                     selection: None,
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor_position: (0, 0),
+                    cursor_position: Some((0, 0)),
+                    cursors: None,
+                    selections: None,
                     selection: None,
                 },
                 solution: Solution {
@@ -1146,13 +1150,17 @@ mod tests {
                 description: "Test scenario".to_string(),
                 setup: Setup {
                     file_content: "test".to_string(),
-                    cursor_position: (0, 0),
+                    cursor_position: Some((0, 0)),
                     selection: None,
+                    cursors: None,
+                    selections: None,
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor_position: (0, 0),
+                    cursor_position: Some((0, 0)),
                     selection: None,
+                    cursors: None,
+                    selections: None,
                 },
                 solution: Solution {
                     commands: vec!["x".to_string()],

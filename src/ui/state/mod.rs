@@ -354,12 +354,23 @@ impl AppState {
         profile_storage: ProfileStorage,
         performance_tracker: PerformanceTracker,
     ) -> Self {
+        Self::with_config(scenarios, profile, profile_storage, performance_tracker, ConfigState::default())
+    }
+
+    /// Create a new application state with custom configuration
+    pub fn with_config(
+        scenarios: Vec<Scenario>,
+        profile: UserProfile,
+        profile_storage: ProfileStorage,
+        performance_tracker: PerformanceTracker,
+        config: ConfigState,
+    ) -> Self {
         Self {
             screen: TypedScreen::ModeSelection(ModeSelectionData::default()),
             ui: UIState::new(),
             game: GameState::new(scenarios),
             progress: ProgressState::new(profile, performance_tracker, profile_storage),
-            config: ConfigState::default(),
+            config,
         }
     }
 

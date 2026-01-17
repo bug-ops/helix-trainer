@@ -244,6 +244,9 @@ pub struct ConfigState {
 
     /// Whether to show completed scenarios
     pub show_completed: bool,
+
+    /// Enable arrow keys for movement in normal mode (for exotic keyboard layouts)
+    pub enable_arrow_keys_in_normal_mode: bool,
 }
 
 impl Default for ConfigState {
@@ -253,6 +256,7 @@ impl Default for ConfigState {
             category_filters: HashSet::new(),
             difficulty_filters: HashSet::new(),
             show_completed: true,
+            enable_arrow_keys_in_normal_mode: false,
         }
     }
 }

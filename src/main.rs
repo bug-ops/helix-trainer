@@ -7,6 +7,7 @@
 
 use anyhow::Result;
 use helix_trainer::{
+    config::{AppConfig, ConfigStorage},
     data_loader::spawn_data_loaders,
     gamification::ProfileStorage,
     learning::PerformanceTracker,
@@ -47,14 +48,29 @@ async fn main() -> Result<()> {
     // Create channel for data loading messages
     let (data_tx, mut data_rx) = mpsc::channel(32);
 
+    // Load application configuration
+    let config_storage = ConfigStorage::new();
+    let app_config = config_storage.load().unwrap_or_else(|e| {
+        tracing::warn!("Failed to load config, using defaults: {}", e);
+        AppConfig::default()
+    });
+
     // Initialize app state (empty, will be populated by async loaders)
     let profile_storage = ProfileStorage::new();
     let tracker = PerformanceTracker::new();
-    let mut app_state = AppState::new(
+
+    // Create ConfigState from loaded AppConfig
+    let config_state = ui::state::ConfigState {
+        enable_arrow_keys_in_normal_mode: app_config.enable_arrow_keys_in_normal_mode,
+        ..ui::state::ConfigState::default()
+    };
+
+    let mut app_state = AppState::with_config(
         vec![],
         helix_trainer::gamification::UserProfile::new(),
         profile_storage,
         tracker,
+        config_state,
     );
 
     // Setup terminal
@@ -80,6 +96,16 @@ async fn main() -> Result<()> {
         tracing::error!("Failed to save profile on exit: {}", e);
     } else {
         tracing::info!("Profile saved successfully");
+    }
+
+    // Save configuration before exit
+    let app_config = AppConfig {
+        enable_arrow_keys_in_normal_mode: app_state.config.enable_arrow_keys_in_normal_mode,
+    };
+    if let Err(e) = config_storage.save(&app_config) {
+        tracing::error!("Failed to save config on exit: {}", e);
+    } else {
+        tracing::info!("Config saved successfully");
     }
 
     // Restore terminal

@@ -1,7 +1,9 @@
 name: PR Labeler
 
 on:
-  pull_request:
+  # Use pull_request_target to have write permissions for fork PRs
+  # This is safe for labeler as it only reads PR metadata, not code
+  pull_request_target:
     types: [opened, synchronize, reopened, edited]
 
 permissions:
@@ -15,8 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout code
+      # Checkout base branch only (not PR code) for labeler config
+      - name: Checkout base branch
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.base_ref }}
 
       - name: Apply file-based labels
         uses: actions/labeler@v6
@@ -24,6 +29,8 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           configuration-path: .github/labeler.yml
           sync-labels: false
+          # Use PR number from pull_request_target event
+          pr-number: ${{ github.event.pull_request.number }}
 
   # Label PRs based on title prefix (conventional commits)
   title-labeler:

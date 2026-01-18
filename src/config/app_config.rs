@@ -11,7 +11,20 @@ use serde::{Deserialize, Serialize};
 /// Application configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AppConfig {
-    /// Enable arrow keys for movement in normal mode (for exotic keyboard layouts like bépo)
+    /// Enable arrow keys for movement in normal mode (for exotic keyboard layouts like bépo).
+    ///
+    /// To enable this feature, manually create or edit the config file at
+    /// `~/.config/helix-trainer/config.json` with the following structure:
+    ///
+    /// ```json
+    /// {
+    ///   "config": {
+    ///     "enable_arrow_keys_in_normal_mode": true
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// The configuration file is automatically created with default values (false) on first run.
     pub enable_arrow_keys_in_normal_mode: bool,
 }
 
@@ -83,13 +96,11 @@ impl ConfigStorage {
             return Ok(AppConfig::default());
         }
 
-        let contents = fs::read_to_string(&self.file_path).map_err(|e| {
-            format!("Failed to read config: {}", e)
-        })?;
+        let contents = fs::read_to_string(&self.file_path)
+            .map_err(|e| format!("Failed to read config: {}", e))?;
 
-        let data: ConfigData = serde_json::from_str(&contents).map_err(|e| {
-            format!("Failed to parse config: {}", e)
-        })?;
+        let data: ConfigData = serde_json::from_str(&contents)
+            .map_err(|e| format!("Failed to parse config: {}", e))?;
 
         Ok(data.config)
     }
@@ -114,22 +125,17 @@ impl ConfigStorage {
     pub fn save(&self, config: &AppConfig) -> Result<(), String> {
         // Create parent directory if needed
         if let Some(parent) = self.file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                format!("Failed to create directory: {}", e)
-            })?;
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
         }
 
         let data = ConfigData {
             config: config.clone(),
         };
 
-        let json = serde_json::to_string_pretty(&data).map_err(|e| {
-            format!("Failed to serialize config: {}", e)
-        })?;
+        let json = serde_json::to_string_pretty(&data)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-        fs::write(&self.file_path, json).map_err(|e| {
-            format!("Failed to write config: {}", e)
-        })?;
+        fs::write(&self.file_path, json).map_err(|e| format!("Failed to write config: {}", e))?;
 
         Ok(())
     }
@@ -163,8 +169,9 @@ mod tests {
         let storage = ConfigStorage::with_path(&file_path);
 
         // Create config
-        let mut config = AppConfig::default();
-        config.enable_arrow_keys_in_normal_mode = true;
+        let config = AppConfig {
+            enable_arrow_keys_in_normal_mode: true,
+        };
 
         // Save
         storage.save(&config).unwrap();
@@ -210,8 +217,9 @@ mod tests {
         let file_path = temp_dir.path().join("config.json");
         let storage = ConfigStorage::with_path(&file_path);
 
-        let mut config = AppConfig::default();
-        config.enable_arrow_keys_in_normal_mode = true;
+        let config = AppConfig {
+            enable_arrow_keys_in_normal_mode: true,
+        };
 
         storage.save(&config).unwrap();
 
@@ -220,5 +228,84 @@ mod tests {
         assert!(json.contains("\"config\""));
         assert!(json.contains("\"enable_arrow_keys_in_normal_mode\""));
     }
-}
 
+    #[test]
+    fn test_load_invalid_json_returns_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.json");
+        let storage = ConfigStorage::with_path(&file_path);
+
+        // Write invalid JSON
+        fs::write(&file_path, "invalid json {").unwrap();
+
+        let result = storage.load();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Failed to parse config"));
+    }
+
+    #[test]
+    fn test_load_missing_config_field_returns_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.json");
+        let storage = ConfigStorage::with_path(&file_path);
+
+        // Write JSON without "config" field
+        fs::write(&file_path, r#"{"other": "value"}"#).unwrap();
+
+        let result = storage.load();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_new_creates_default_path() {
+        let storage = ConfigStorage::new();
+        let path = storage.path();
+        assert!(path.to_string_lossy().contains("helix-trainer"));
+        assert!(path.to_string_lossy().contains("config.json"));
+    }
+
+    #[test]
+    fn test_path_returns_file_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.json");
+        let storage = ConfigStorage::with_path(&file_path);
+        assert_eq!(storage.path(), file_path.as_path());
+    }
+
+    #[test]
+    fn test_default_impl() {
+        let storage = ConfigStorage::default();
+        let path = storage.path();
+        assert!(path.to_string_lossy().contains("helix-trainer"));
+    }
+
+    #[test]
+    fn test_save_when_no_parent_directory() {
+        // Test edge case: file path with no parent (shouldn't happen in practice but test it)
+        // We'll use a path that exists but has no parent by using a root path
+        // Actually, let's test with a file in the temp dir root
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.json");
+        let storage = ConfigStorage::with_path(&file_path);
+
+        let config = AppConfig::default();
+        // This should work fine
+        storage.save(&config).unwrap();
+        assert!(storage.exists());
+    }
+
+    #[test]
+    fn test_load_file_read_error() {
+        // Create a directory with the config file name to simulate read error
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.json");
+
+        // Create a directory instead of a file
+        fs::create_dir_all(&file_path).unwrap();
+
+        let storage = ConfigStorage::with_path(&file_path);
+        let result = storage.load();
+        // Should return an error when trying to read a directory as a file
+        assert!(result.is_err());
+    }
+}

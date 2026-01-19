@@ -309,7 +309,7 @@ where
     } else {
         // Normal mode: check if arrow keys should be mapped to movement commands
         // Only map if no modifiers are pressed (to avoid conflicts with Ctrl+Arrow, Alt+Arrow, etc.)
-        if state.config.enable_arrow_keys_in_normal_mode
+        if state.config.persistent.enable_arrow_keys_in_normal_mode
             && key.modifiers.is_empty()
             && let Some(mapped_cmd) = map_arrow_to_movement(key.code)
         {
@@ -1142,7 +1142,7 @@ mod tests {
             use crate::ui::state::screen::TaskData;
 
             let mut state = create_test_app_state();
-            state.config.enable_arrow_keys_in_normal_mode = true;
+            state.config.persistent.enable_arrow_keys_in_normal_mode = true;
 
             // Create a simple scenario
             let scenario = Scenario {
@@ -1230,7 +1230,7 @@ mod tests {
             use crate::ui::state::screen::TaskData;
 
             let mut state = create_test_app_state();
-            state.config.enable_arrow_keys_in_normal_mode = true;
+            state.config.persistent.enable_arrow_keys_in_normal_mode = true;
 
             // Create a simple scenario
             let scenario = Scenario {

@@ -6,6 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Application configuration
@@ -91,16 +92,15 @@ impl ConfigStorage {
     /// let storage = ConfigStorage::new();
     /// let config = storage.load().unwrap();
     /// ```
-    pub fn load(&self) -> Result<AppConfig, String> {
+    pub fn load(&self) -> Result<AppConfig> {
         if !self.file_path.exists() {
             return Ok(AppConfig::default());
         }
 
-        let contents = fs::read_to_string(&self.file_path)
-            .map_err(|e| format!("Failed to read config: {}", e))?;
+        let contents = fs::read_to_string(&self.file_path).context("Failed to read config file")?;
 
-        let data: ConfigData = serde_json::from_str(&contents)
-            .map_err(|e| format!("Failed to parse config: {}", e))?;
+        let data: ConfigData =
+            serde_json::from_str(&contents).context("Failed to parse config JSON")?;
 
         Ok(data.config)
     }
@@ -122,20 +122,19 @@ impl ConfigStorage {
     /// let config = AppConfig::default();
     /// storage.save(&config).unwrap();
     /// ```
-    pub fn save(&self, config: &AppConfig) -> Result<(), String> {
+    pub fn save(&self, config: &AppConfig) -> Result<()> {
         // Create parent directory if needed
         if let Some(parent) = self.file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+            fs::create_dir_all(parent).context("Failed to create config directory")?;
         }
 
         let data = ConfigData {
             config: config.clone(),
         };
 
-        let json = serde_json::to_string_pretty(&data)
-            .map_err(|e| format!("Failed to serialize config: {}", e))?;
+        let json = serde_json::to_string_pretty(&data).context("Failed to serialize config")?;
 
-        fs::write(&self.file_path, json).map_err(|e| format!("Failed to write config: {}", e))?;
+        fs::write(&self.file_path, json).context("Failed to write config file")?;
 
         Ok(())
     }
@@ -240,7 +239,12 @@ mod tests {
 
         let result = storage.load();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Failed to parse config"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse config JSON")
+        );
     }
 
     #[test]

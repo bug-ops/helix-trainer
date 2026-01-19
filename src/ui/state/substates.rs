@@ -3,7 +3,7 @@
 //! This module defines focused sub-structures that group related fields
 //! from AppState, improving code organization and maintainability.
 
-use crate::config::{Difficulty, ScenarioCategory, ScenarioCollection, SortMode};
+use crate::config::{AppConfig, Difficulty, ScenarioCategory, ScenarioCollection, SortMode};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, UserProfile};
@@ -245,18 +245,22 @@ pub struct ConfigState {
     /// Whether to show completed scenarios
     pub show_completed: bool,
 
-    /// Enable arrow keys for movement in normal mode (for exotic keyboard layouts)
-    pub enable_arrow_keys_in_normal_mode: bool,
+    /// Persistent configuration (loaded from/saved to disk)
+    pub persistent: AppConfig,
+
+    /// Whether persistent config was modified during this session
+    pub config_modified: bool,
 }
 
 impl Default for ConfigState {
     fn default() -> Self {
         Self {
+            persistent: AppConfig::default(),
             sort_mode: SortMode::ByName,
             category_filters: HashSet::new(),
             difficulty_filters: HashSet::new(),
             show_completed: true,
-            enable_arrow_keys_in_normal_mode: false,
+            config_modified: false,
         }
     }
 }
@@ -272,6 +276,11 @@ impl ConfigState {
         !self.category_filters.is_empty()
             || !self.difficulty_filters.is_empty()
             || !self.show_completed
+    }
+
+    /// Mark that persistent config was modified
+    pub fn mark_config_modified(&mut self) {
+        self.config_modified = true;
     }
 }
 
@@ -295,6 +304,8 @@ mod tests {
         assert_eq!(config.sort_mode, SortMode::ByName);
         assert!(config.category_filters.is_empty());
         assert!(config.show_completed);
+        assert!(!config.config_modified);
+        assert!(!config.persistent.enable_arrow_keys_in_normal_mode);
     }
 
     #[test]

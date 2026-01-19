@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
 
     // Create ConfigState from loaded AppConfig
     let config_state = ui::state::ConfigState {
-        enable_arrow_keys_in_normal_mode: app_config.enable_arrow_keys_in_normal_mode,
+        persistent: app_config,
         ..ui::state::ConfigState::default()
     };
 
@@ -98,14 +98,13 @@ async fn main() -> Result<()> {
         tracing::info!("Profile saved successfully");
     }
 
-    // Save configuration before exit
-    let app_config = AppConfig {
-        enable_arrow_keys_in_normal_mode: app_state.config.enable_arrow_keys_in_normal_mode,
-    };
-    if let Err(e) = config_storage.save(&app_config) {
-        tracing::error!("Failed to save config on exit: {}", e);
-    } else {
-        tracing::info!("Config saved successfully");
+    // Save configuration before exit (only if modified)
+    if app_state.config.config_modified {
+        if let Err(e) = config_storage.save(&app_state.config.persistent) {
+            tracing::error!("Failed to save config on exit: {:?}", e);
+        } else {
+            tracing::info!("Config saved successfully");
+        }
     }
 
     // Restore terminal

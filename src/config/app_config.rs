@@ -25,7 +25,8 @@ pub struct AppConfig {
     /// }
     /// ```
     ///
-    /// The configuration file is automatically created with default values (false) on first run.
+    /// If the configuration file does not exist, default values (false) are used in memory.
+    /// The configuration file is only written when configuration changes are saved.
     pub enable_arrow_keys_in_normal_mode: bool,
 }
 

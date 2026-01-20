@@ -382,7 +382,7 @@ impl AppState {
     ///
     /// let scenarios = vec![/* ... */];
     /// let mut config = ConfigState::default();
-    /// config.enable_arrow_keys_in_normal_mode = true;
+    /// config.persistent.enable_arrow_keys_in_normal_mode = true;
     /// let state = AppState::with_config(scenarios, profile, storage, tracker, config);
     /// ```
     pub fn with_config(

@@ -354,12 +354,50 @@ impl AppState {
         profile_storage: ProfileStorage,
         performance_tracker: PerformanceTracker,
     ) -> Self {
+        Self::with_config(
+            scenarios,
+            profile,
+            profile_storage,
+            performance_tracker,
+            ConfigState::default(),
+        )
+    }
+
+    /// Create a new application state with custom configuration
+    ///
+    /// # Arguments
+    ///
+    /// * `scenarios` - The list of available scenarios to play
+    /// * `profile` - User profile with XP, level, achievements
+    /// * `profile_storage` - Storage for saving/loading profile
+    /// * `performance_tracker` - Tracker for command performance and spaced repetition
+    /// * `config` - Custom configuration state (e.g., for enabling arrow keys in normal mode)
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::ui::AppState;
+    /// use helix_trainer::config::Scenario;
+    /// use helix_trainer::ui::state::ConfigState;
+    ///
+    /// let scenarios = vec![/* ... */];
+    /// let mut config = ConfigState::default();
+    /// config.persistent.enable_arrow_keys_in_normal_mode = true;
+    /// let state = AppState::with_config(scenarios, profile, storage, tracker, config);
+    /// ```
+    pub fn with_config(
+        scenarios: Vec<Scenario>,
+        profile: UserProfile,
+        profile_storage: ProfileStorage,
+        performance_tracker: PerformanceTracker,
+        config: ConfigState,
+    ) -> Self {
         Self {
             screen: TypedScreen::ModeSelection(ModeSelectionData::default()),
             ui: UIState::new(),
             game: GameState::new(scenarios),
             progress: ProgressState::new(profile, performance_tracker, profile_storage),
-            config: ConfigState::default(),
+            config,
         }
     }
 

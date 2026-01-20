@@ -279,6 +279,21 @@ fn is_gameplay_insert_mode(state: &AppState) -> bool {
     }
 }
 
+/// Map arrow keys to movement commands
+///
+/// Returns the corresponding movement command if the key is an arrow key,
+/// None otherwise.
+fn map_arrow_to_movement(key_code: KeyCode) -> Option<&'static str> {
+    use crate::helix::commands::{CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP};
+    match key_code {
+        KeyCode::Left => Some(CMD_MOVE_LEFT),   // "h"
+        KeyCode::Right => Some(CMD_MOVE_RIGHT), // "l"
+        KeyCode::Up => Some(CMD_MOVE_UP),       // "k"
+        KeyCode::Down => Some(CMD_MOVE_DOWN),   // "j"
+        _ => None,
+    }
+}
+
 /// Handle gameplay input (insert mode or normal mode command)
 ///
 /// Shared logic for both training and arcade modes.
@@ -292,6 +307,15 @@ where
         // Insert mode: use dedicated handler
         handle_insert_mode_input(key).map(make_message)
     } else {
+        // Normal mode: check if arrow keys should be mapped to movement commands
+        // Only map if no modifiers are pressed (to avoid conflicts with Ctrl+Arrow, Alt+Arrow, etc.)
+        if state.config.persistent.enable_arrow_keys_in_normal_mode
+            && key.modifiers.is_empty()
+            && let Some(mapped_cmd) = map_arrow_to_movement(key.code)
+        {
+            return Some(make_message(Cow::Borrowed(mapped_cmd)));
+        }
+
         // Normal mode: convert key to string for InputStateMachine
         // State machine handles multi-key commands in gameplay.rs/minigame.rs
         key_to_command_string(key).map(make_message)
@@ -1040,9 +1064,239 @@ mod tests {
         }
 
         #[test]
+        fn test_map_arrow_to_movement() {
+            use crate::helix::commands::{
+                CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
+            };
+
+            assert_eq!(map_arrow_to_movement(KeyCode::Left), Some(CMD_MOVE_LEFT));
+            assert_eq!(map_arrow_to_movement(KeyCode::Right), Some(CMD_MOVE_RIGHT));
+            assert_eq!(map_arrow_to_movement(KeyCode::Up), Some(CMD_MOVE_UP));
+            assert_eq!(map_arrow_to_movement(KeyCode::Down), Some(CMD_MOVE_DOWN));
+            assert_eq!(map_arrow_to_movement(KeyCode::Char('h')), None);
+        }
+
+        #[test]
+        fn test_arrow_keys_ignored_by_default() {
+            use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+            use crate::ui::state::{ConfigState, screen::TaskData};
+
+            let mut state = create_test_app_state();
+            state.config = ConfigState::default(); // enable_arrow_keys_in_normal_mode = false
+
+            // Create a simple scenario
+            let scenario = Scenario {
+                id: "test".to_string(),
+                name: "Test".to_string(),
+                description: "Test scenario".to_string(),
+                setup: Setup {
+                    file_content: "test".to_string(),
+                    cursor_position: Some((0, 0)),
+                    cursors: None,
+                    selections: None,
+                    selection: None,
+                },
+                target: TargetState {
+                    file_content: "test2".to_string(),
+                    cursor_position: Some((0, 0)),
+                    cursors: None,
+                    selections: None,
+                    selection: None,
+                },
+                solution: Solution {
+                    commands: vec!["x".to_string()],
+                    description: "Delete char".to_string(),
+                },
+                scoring: ScoringConfig {
+                    optimal_count: 1,
+                    max_points: 100,
+                    tolerance: 0,
+                },
+                hints: vec![],
+                alternatives: vec![],
+                metadata: None,
+            };
+
+            let session = GameSession::new(scenario).unwrap();
+            state.screen = TypedScreen::Task(TaskData::new(session));
+
+            // Arrow keys should be converted to "Left"/"Right" strings, not movement commands
+            let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+            let result = handle_gameplay_input(left_key, &state, Message::ExecuteCommand);
+
+            // Should return "Left" string, not "h" command
+            match result {
+                Some(Message::ExecuteCommand(cmd)) => {
+                    assert_eq!(cmd, "Left");
+                }
+                _ => panic!("Expected ExecuteCommand with 'Left'"),
+            }
+        }
+
+        #[test]
+        fn test_arrow_keys_mapped_when_enabled() {
+            use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+            use crate::helix::commands::{
+                CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
+            };
+            use crate::ui::state::screen::TaskData;
+
+            let mut state = create_test_app_state();
+            state.config.persistent.enable_arrow_keys_in_normal_mode = true;
+
+            // Create a simple scenario
+            let scenario = Scenario {
+                id: "test".to_string(),
+                name: "Test".to_string(),
+                description: "Test scenario".to_string(),
+                setup: Setup {
+                    file_content: "test".to_string(),
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
+                target: TargetState {
+                    file_content: "test2".to_string(),
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
+                solution: Solution {
+                    commands: vec!["x".to_string()],
+                    description: "Delete char".to_string(),
+                },
+                scoring: ScoringConfig {
+                    optimal_count: 1,
+                    max_points: 100,
+                    tolerance: 0,
+                },
+                hints: vec![],
+                alternatives: vec![],
+                metadata: None,
+            };
+
+            let session = GameSession::new(scenario).unwrap();
+            state.screen = TypedScreen::Task(TaskData::new(session));
+
+            // Arrow keys should be mapped to movement commands
+            let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+            let result = handle_gameplay_input(left_key, &state, Message::ExecuteCommand);
+            match result {
+                Some(Message::ExecuteCommand(cmd)) => {
+                    assert_eq!(cmd, CMD_MOVE_LEFT);
+                }
+                _ => panic!("Expected ExecuteCommand with CMD_MOVE_LEFT"),
+            }
+
+            let right_key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+            let result = handle_gameplay_input(right_key, &state, Message::ExecuteCommand);
+            match result {
+                Some(Message::ExecuteCommand(cmd)) => {
+                    assert_eq!(cmd, CMD_MOVE_RIGHT);
+                }
+                _ => panic!("Expected ExecuteCommand with CMD_MOVE_RIGHT"),
+            }
+
+            let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+            let result = handle_gameplay_input(up_key, &state, Message::ExecuteCommand);
+            match result {
+                Some(Message::ExecuteCommand(cmd)) => {
+                    assert_eq!(cmd, CMD_MOVE_UP);
+                }
+                _ => panic!("Expected ExecuteCommand with CMD_MOVE_UP"),
+            }
+
+            let down_key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+            let result = handle_gameplay_input(down_key, &state, Message::ExecuteCommand);
+            match result {
+                Some(Message::ExecuteCommand(cmd)) => {
+                    assert_eq!(cmd, CMD_MOVE_DOWN);
+                }
+                _ => panic!("Expected ExecuteCommand with CMD_MOVE_DOWN"),
+            }
+        }
+
+        #[test]
         fn test_enter_key() {
             let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
             assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Enter")));
+        }
+
+        #[test]
+        fn test_arrow_keys_with_modifiers_not_mapped() {
+            use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+            use crate::ui::state::screen::TaskData;
+
+            let mut state = create_test_app_state();
+            state.config.persistent.enable_arrow_keys_in_normal_mode = true;
+
+            // Create a simple scenario
+            let scenario = Scenario {
+                id: "test".to_string(),
+                name: "Test".to_string(),
+                description: "Test scenario".to_string(),
+                setup: Setup {
+                    file_content: "test".to_string(),
+                    cursor_position: Some((0, 0)),
+                    cursors: None,
+                    selections: None,
+                    selection: None,
+                },
+                target: TargetState {
+                    file_content: "test2".to_string(),
+                    cursor_position: Some((0, 0)),
+                    cursors: None,
+                    selections: None,
+                    selection: None,
+                },
+                solution: Solution {
+                    commands: vec!["x".to_string()],
+                    description: "Delete char".to_string(),
+                },
+                scoring: ScoringConfig {
+                    optimal_count: 1,
+                    max_points: 100,
+                    tolerance: 0,
+                },
+                hints: vec![],
+                alternatives: vec![],
+                metadata: None,
+            };
+
+            let session = GameSession::new(scenario).unwrap();
+            state.screen = TypedScreen::Task(TaskData::new(session));
+
+            // Arrow keys with modifiers should NOT be mapped (should use normal handler)
+            let ctrl_left = KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL);
+            let result = handle_gameplay_input(ctrl_left, &state, Message::ExecuteCommand);
+            // Should return "Left" string, not "h" command
+            match result {
+                Some(Message::ExecuteCommand(cmd)) => {
+                    assert_eq!(cmd, "Left");
+                }
+                _ => panic!("Expected ExecuteCommand with 'Left' for Ctrl+Left"),
+            }
+
+            let alt_up = KeyEvent::new(KeyCode::Up, KeyModifiers::ALT);
+            let result = handle_gameplay_input(alt_up, &state, Message::ExecuteCommand);
+            match result {
+                Some(Message::ExecuteCommand(cmd)) => {
+                    assert_eq!(cmd, "Up");
+                }
+                _ => panic!("Expected ExecuteCommand with 'Up' for Alt+Up"),
+            }
+
+            // Test with Shift modifier
+            let shift_right = KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT);
+            let result = handle_gameplay_input(shift_right, &state, Message::ExecuteCommand);
+            match result {
+                Some(Message::ExecuteCommand(cmd)) => {
+                    assert_eq!(cmd, "Right");
+                }
+                _ => panic!("Expected ExecuteCommand with 'Right' for Shift+Right"),
+            }
         }
 
         #[test]

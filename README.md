@@ -59,6 +59,7 @@ All modes feature:
 - **136 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
 - **55 Daily Quests** — Easy, medium, and hard challenges across all commands
 - **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
+- **Arrow Key Navigation** — Optional `enable_arrow_keys_in_normal_mode` configuration for cursor movement
 
 ## Installation
 

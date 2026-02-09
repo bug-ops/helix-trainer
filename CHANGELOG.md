@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-02-09
+
+### Added
+
+- **Arrow key cursor movement** — Optional user configuration to enable arrow keys for cursor movement (#153)
+
+### Changed
+
+- CI: Added dependabot auto-merge workflow for patch-level dependency updates
+- CI: Fixed codecov upload to not fail workflow on upload errors
+- CI: Fixed labeler workflow to use `pull_request_target` event
+
+### Dependencies
+
+- `rand`: 0.9.2 → 0.10.0 (adapted to `RngExt` trait rename)
+- `anyhow`: 1.0.100 → 1.0.101
+- `proptest`: 1.9.0 → 1.10.0
+- `regex`: 1.12.2 → 1.12.3
+- `criterion`: 0.8.1 → 0.8.2
+- `tui-big-text`: 0.8.1 → 0.8.2
+- `chrono`: 0.4.42 → 0.4.43
+- `thiserror`: 2.0.17 → 2.0.18
+- `time`: bumped to latest compatible
+- `bytes`: bumped to latest compatible
+
+### Quality
+
+- **Tests**: 1857 (up from 1842)
+- **Clippy**: Zero warnings
+
 ## [0.5.7] - 2026-01-15
 
 ### Added
@@ -1199,7 +1229,10 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.8...HEAD
+[0.5.8]: https://github.com/bug-ops/helix-trainer/compare/v0.5.7...v0.5.8
+[0.5.7]: https://github.com/bug-ops/helix-trainer/compare/v0.5.6...v0.5.7
+[0.5.6]: https://github.com/bug-ops/helix-trainer/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/bug-ops/helix-trainer/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/bug-ops/helix-trainer/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/bug-ops/helix-trainer/compare/v0.5.2...v0.5.3

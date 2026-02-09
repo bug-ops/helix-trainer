@@ -2,7 +2,7 @@
 
 use chrono::{Datelike, Utc};
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::time::Duration;

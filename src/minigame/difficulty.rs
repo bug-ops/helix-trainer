@@ -407,7 +407,7 @@ impl DifficultyController {
 
         if candidates.is_empty() {
             // Fallback: pick any random scenario
-            use rand::Rng;
+            use rand::RngExt;
             let mut rng = rand::rng();
             let idx = rng.random_range(0..scenarios.len());
             return Some(scenarios[idx].clone());
@@ -417,7 +417,7 @@ impl DifficultyController {
         match tracker {
             Some(t) => self.weighted_select(&candidates, t),
             None => {
-                use rand::Rng;
+                use rand::RngExt;
                 let mut rng = rand::rng();
                 let idx = rng.random_range(0..candidates.len());
                 Some(candidates[idx].clone())

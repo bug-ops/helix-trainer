@@ -236,7 +236,7 @@ jobs:
           cargo bloat --release --crates -n 20 || true
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: helix-trainer-${{ matrix.os }}
           path: |
@@ -288,7 +288,7 @@ jobs:
           name: helix-trainer-coverage
 
       - name: Archive coverage report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: lcov.info

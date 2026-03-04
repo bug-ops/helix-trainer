@@ -130,6 +130,7 @@
           packages = with pkgs; [
             cargo-watch
             cargo-deny
+            cargo-nextest
           ];
 
           inherit buildInputs;

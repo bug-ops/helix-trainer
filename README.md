@@ -95,6 +95,24 @@ cd helix-trainer-*/
 > [!TIP]
 > Verify checksums with `sha256sum -c helix-trainer-*.sha256`
 
+### Nix
+
+Run directly without installing:
+
+```bash
+nix run github:bug-ops/helix-trainer
+```
+
+Or add to your NixOS/home-manager configuration:
+
+```nix
+# flake.nix
+inputs.helix-trainer.url = "github:bug-ops/helix-trainer";
+
+# configuration.nix or home.nix
+environment.systemPackages = [ inputs.helix-trainer.packages.${system}.default ];
+```
+
 ### Build from source
 
 > [!WARNING]

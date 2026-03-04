@@ -19,10 +19,12 @@ We follow a strict PR-based workflow. All changes go through:
 git clone https://github.com/bug-ops/helix-trainer.git
 cd helix-trainer
 
+# Enter the dev shell (provides Rust 1.89, cargo-watch, cargo-deny, and native deps)
+nix develop
+
 # Create feature branch
 git checkout -b feature/amazing-feature
 ```
-
 ## Pre-Commit Checks
 
 > [!IMPORTANT]

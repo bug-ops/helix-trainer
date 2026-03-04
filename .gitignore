@@ -45,3 +45,6 @@ tmp/
 # Temporary files
 *.tmp
 *.bak
+
+# Nix build result
+/result

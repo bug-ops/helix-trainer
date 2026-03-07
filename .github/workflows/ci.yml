@@ -293,3 +293,28 @@ jobs:
           name: coverage-report
           path: lcov.info
           retention-days: 30
+
+  gate:
+    name: CI Gate
+    if: always()
+    needs: [test, fmt, clippy, security, msrv, build, coverage]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs
+        run: |
+          results=(
+            "${{ needs.test.result }}"
+            "${{ needs.fmt.result }}"
+            "${{ needs.clippy.result }}"
+            "${{ needs.security.result }}"
+            "${{ needs.msrv.result }}"
+            "${{ needs.build.result }}"
+            "${{ needs.coverage.result }}"
+          )
+          for result in "${results[@]}"; do
+            if [[ "$result" != "success" ]]; then
+              echo "::error::One or more CI jobs failed or were cancelled"
+              exit 1
+            fi
+          done
+          echo "All CI jobs passed"

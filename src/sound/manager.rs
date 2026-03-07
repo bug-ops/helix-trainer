@@ -5,7 +5,7 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use rodio::mixer::Mixer;
-use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
+use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player};
 
 use super::assets;
 use super::config::SoundConfig;
@@ -18,7 +18,7 @@ use super::error::SoundError;
 /// If audio is unavailable, all play operations become no-ops.
 pub struct SoundManager {
     /// Audio output stream (kept alive for playback)
-    _stream: Option<OutputStream>,
+    _stream: Option<MixerDeviceSink>,
     /// Mixer for creating sinks
     mixer: Option<Mixer>,
     /// Current configuration
@@ -53,7 +53,7 @@ impl SoundManager {
             return Ok(());
         }
 
-        match OutputStreamBuilder::open_default_stream() {
+        match DeviceSinkBuilder::open_default_sink() {
             Ok(stream) => {
                 let mixer = stream.mixer().clone();
                 self._stream = Some(stream);
@@ -96,7 +96,7 @@ impl SoundManager {
         // Decode and play
         match Decoder::new(cursor) {
             Ok(source) => {
-                let sink = Sink::connect_new(mixer);
+                let sink = Player::connect_new(mixer);
                 sink.set_volume(self.config.volume);
                 sink.append(source);
                 sink.detach(); // Play to completion without blocking

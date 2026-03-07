@@ -22,7 +22,7 @@ futures = "0.3"
 helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
 rand = "0.10"
 ratatui = "0.30"
-rodio = { version = "0.21", default-features = false, features = ["vorbis", "playback"], optional = true }
+rodio = { version = "0.22", default-features = false, features = ["vorbis", "playback"], optional = true }
 rust-i18n = "3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -34,7 +34,7 @@ tokio = { version = "1.49", features = [
     "time",
     "macros",
 ] }
-toml = "0.9"
+toml = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tui-big-text = "0.8.2"
@@ -44,7 +44,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 dhat = "0.3"
 proptest = "1.10"
 regex = "1.12"
-tempfile = "3.24"
+tempfile = "3.26"
 walkdir = "2.5"
 
 [[bin]]

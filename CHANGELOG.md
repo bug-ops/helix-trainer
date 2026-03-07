@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-03-07
+
 ### Fixed
 
 - Fix double keypress on Windows by filtering `KeyEventKind::Release` events (#182)
@@ -1233,7 +1235,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.8...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.9...HEAD
+[0.5.9]: https://github.com/bug-ops/helix-trainer/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/bug-ops/helix-trainer/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/bug-ops/helix-trainer/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/bug-ops/helix-trainer/compare/v0.5.5...v0.5.6

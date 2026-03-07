@@ -3,7 +3,7 @@
 //! Core event loop using tokio::select! for non-blocking I/O.
 
 use anyhow::Result;
-use crossterm::event::{Event, EventStream, KeyCode, KeyModifiers};
+use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
@@ -106,6 +106,9 @@ pub async fn run_async_event_loop(
             // Terminal events (keyboard input) - highest priority
             maybe_event = event_stream.next() => {
                 if let Some(Ok(Event::Key(key))) = maybe_event {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
                     // Handle global quit shortcut first
                     if key.code == KeyCode::Char('c')
                         && key.modifiers.contains(KeyModifiers::CONTROL)

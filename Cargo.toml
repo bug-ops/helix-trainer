@@ -44,7 +44,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 dhat = "0.3"
 proptest = "1.10"
 regex = "1.12"
-tempfile = "3.26"
+tempfile = "3.27"
 walkdir = "2.5"
 
 [[bin]]

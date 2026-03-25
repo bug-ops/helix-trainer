@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::{AchievementId, Quest};
 use crate::constants::{
@@ -10,6 +10,7 @@ use crate::constants::{
     MINIGAME_STREAK_BONUS_MAX_XP, MINIGAME_XP_PER_100_POINTS, SCENARIO_BASE_XP_PER_100_POINTS,
     XP_LEVEL_FORMULA_BASE, XP_LEVEL_FORMULA_EXPONENT,
 };
+use crate::learning::CommandPerformance;
 use crate::learning::ScenarioHistory;
 use crate::sound::SoundConfig;
 
@@ -86,6 +87,10 @@ pub struct UserProfile {
     /// Survival mode best scenarios completed in single run
     #[serde(default)]
     pub survival_best_scenarios: u32,
+
+    /// Persisted FSRS/PerformanceTracker data
+    #[serde(default)]
+    pub performance_data: HashMap<String, CommandPerformance>,
 }
 
 impl UserProfile {
@@ -125,6 +130,7 @@ impl UserProfile {
             challenge_progress: crate::minigame::ChallengeProgress::default(),
             survival_best_level: 0,
             survival_best_scenarios: 0,
+            performance_data: HashMap::new(),
         }
     }
 

@@ -342,6 +342,17 @@ impl PerformanceTracker {
         }
     }
 
+    pub fn get_stats_clone(&self) -> HashMap<String, CommandPerformance> {
+        self.stats.clone()
+    }
+
+    pub fn from_stats(stats: HashMap<String, CommandPerformance>) -> Self {
+        Self {
+            stats,
+            fsrs: FSRS::new(Some(&[])).unwrap(),
+        }
+    }
+
     pub fn get_performance(&self, command: &str) -> Option<&CommandPerformance> {
         self.stats.get(command)
     }

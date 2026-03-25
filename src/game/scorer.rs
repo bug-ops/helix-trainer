@@ -187,8 +187,8 @@ impl Scorer {
     ///
     /// assert_eq!(Scorer::get_rating(100, 100), PerformanceRating::Perfect);
     /// assert_eq!(Scorer::get_rating(95, 100), PerformanceRating::Excellent);
-    /// assert_eq!(Scorer::get_rating(80, 100), PerformanceRating::Good);
-    /// assert_eq!(Scorer::get_rating(40, 100), PerformanceRating::Poor);
+    /// assert_eq!(Scorer::get_rating(75, 100), PerformanceRating::Good);
+    /// assert_eq!(Scorer::get_rating(30, 100), PerformanceRating::Poor);
     /// ```
     pub fn get_rating(score: u32, max_points: u32) -> PerformanceRating {
         if max_points == 0 {
@@ -199,9 +199,9 @@ impl Scorer {
 
         match percentage as u32 {
             100 => PerformanceRating::Perfect,
-            90..=99 => PerformanceRating::Excellent,
-            75..=89 => PerformanceRating::Good,
-            50..=74 => PerformanceRating::Fair,
+            80..=99 => PerformanceRating::Excellent,
+            60..=79 => PerformanceRating::Good,
+            40..=59 => PerformanceRating::Fair,
             _ => PerformanceRating::Poor,
         }
     }
@@ -270,13 +270,13 @@ impl Scorer {
 pub enum PerformanceRating {
     /// 100% - Perfect execution with no suboptimal moves
     Perfect,
-    /// 90-99% - Excellent performance with minimal deviations
+    /// 80-99% - Excellent performance with minimal deviations
     Excellent,
-    /// 75-89% - Good performance with some room for improvement
+    /// 60-79% - Good performance with some room for improvement
     Good,
-    /// 50-74% - Fair performance, basic understanding shown
+    /// 40-59% - Fair performance, basic understanding shown
     Fair,
-    /// <50% - Needs improvement, significant deviations from optimal
+    /// <40% - Needs improvement, significant deviations from optimal
     Poor,
 }
 
@@ -405,21 +405,28 @@ mod tests {
     #[test]
     fn test_rating_excellent() {
         assert_eq!(Scorer::get_rating(95, 100), PerformanceRating::Excellent);
+        // Verify Excellent is reachable with realistic scenario data (optimal <= 7)
+        // optimal=7, actual=8 → score = floor(7/8 * 100) = 87 → Excellent
+        let score = Scorer::calculate_score(7, 8, 0, 100).unwrap();
+        assert_eq!(Scorer::get_rating(score, 100), PerformanceRating::Excellent);
+        // optimal=4, actual=5 → score = floor(4/5 * 100) = 80 → Excellent
+        let score = Scorer::calculate_score(4, 5, 0, 100).unwrap();
+        assert_eq!(Scorer::get_rating(score, 100), PerformanceRating::Excellent);
     }
 
     #[test]
     fn test_rating_good() {
-        assert_eq!(Scorer::get_rating(80, 100), PerformanceRating::Good);
+        assert_eq!(Scorer::get_rating(75, 100), PerformanceRating::Good);
     }
 
     #[test]
     fn test_rating_fair() {
-        assert_eq!(Scorer::get_rating(60, 100), PerformanceRating::Fair);
+        assert_eq!(Scorer::get_rating(50, 100), PerformanceRating::Fair);
     }
 
     #[test]
     fn test_rating_poor() {
-        assert_eq!(Scorer::get_rating(40, 100), PerformanceRating::Poor);
+        assert_eq!(Scorer::get_rating(30, 100), PerformanceRating::Poor);
     }
 
     #[test]

@@ -102,6 +102,11 @@ fn record_scenario_completion(
     }
 
     let commands = ScenarioCompletionService::extract_commands(feedback);
+    ctx.progress.profile.commands_executed = ctx
+        .progress
+        .profile
+        .commands_executed
+        .saturating_add(commands.len() as u32);
     let mastery_changes = ScenarioCompletionService::record_fsrs_data_with_mastery(
         &mut ctx.progress.scheduler,
         &mut ctx.progress.performance_tracker,

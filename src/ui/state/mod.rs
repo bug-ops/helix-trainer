@@ -423,6 +423,8 @@ impl AppState {
             return Ok(());
         }
 
+        self.progress.profile.performance_data =
+            self.progress.performance_tracker.get_stats_clone();
         self.progress.storage.save(&self.progress.profile)?;
         self.progress.mark_saved();
 
@@ -435,6 +437,8 @@ impl AppState {
     ///
     /// Returns error if save operation fails
     pub fn save_profile_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
+        self.progress.profile.performance_data =
+            self.progress.performance_tracker.get_stats_clone();
         self.progress.storage.save(&self.progress.profile)?;
         self.progress.mark_saved();
         Ok(())

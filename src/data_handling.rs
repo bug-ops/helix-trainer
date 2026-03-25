@@ -44,7 +44,9 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
 
             // Check if we need to refresh daily quests
             let now = Utc::now();
-            if should_refresh_quests(&updated_profile, now) {
+            if should_refresh_quests(&updated_profile, now)
+                || updated_profile.daily_quests.is_empty()
+            {
                 tracing::info!("Refreshing daily quests for new day");
                 let tracker = PerformanceTracker::new();
                 updated_profile.reset_daily_quests();
@@ -63,6 +65,8 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                     QuestGenerator::generate_quests(&updated_profile, &tracker, &quest_registry);
             }
 
+            state.progress.performance_tracker =
+                PerformanceTracker::from_stats(updated_profile.performance_data.clone());
             state.progress.profile = updated_profile;
             tracing::info!("Profile loaded");
         }

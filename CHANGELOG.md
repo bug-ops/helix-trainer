@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PerformanceTracker (FSRS) data now persisted between sessions (#196)
 - `commands_executed` counter now incremented on scenario completion (#196)
 - Daily quests now generated on first launch (#195)
+- Escape key no longer counts as a game action when dismissing the hint popup (#194)
+- Arcade sub-mode headers now display the correct title: Survival shows `SURVIVAL MODE`, Daily Challenge shows `DAILY CHALLENGE` (#197)
 
 ## [0.5.9] - 2026-03-07
 

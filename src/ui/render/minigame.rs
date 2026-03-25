@@ -18,6 +18,16 @@ use ratatui::{
 /// Combo count threshold for highlighted display (bold + magenta)
 const COMBO_HIGHLIGHT_THRESHOLD: u32 = 5;
 
+/// Return the header title string for the current arcade sub-mode
+fn mode_title(session: &crate::minigame::MiniGameSession) -> &'static str {
+    use crate::minigame::MiniGameMode;
+    match session.mode() {
+        MiniGameMode::Survival(_) => "SURVIVAL MODE",
+        MiniGameMode::Challenge(_) => "DAILY CHALLENGE",
+        MiniGameMode::Arcade(_) => "ARCADE MODE",
+    }
+}
+
 /// Render the mini-game screen
 pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
     // Extract MiniGameData from TypedScreen::MiniGame
@@ -77,7 +87,7 @@ fn render_countdown(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         .split(area);
 
     // Title
-    let title = Paragraph::new("ARCADE MODE")
+    let title = Paragraph::new(mode_title(session))
         .style(
             Style::default()
                 .fg(Color::Magenta)
@@ -124,7 +134,7 @@ fn render_playing(frame: &mut Frame, area: Rect, session: &crate::minigame::Mini
     // Title + controls
     let title_line = Line::from(vec![
         Span::styled(
-            "ARCADE MODE",
+            mode_title(session),
             Style::default()
                 .fg(Color::Magenta)
                 .add_modifier(Modifier::BOLD),

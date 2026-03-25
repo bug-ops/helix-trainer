@@ -359,6 +359,14 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         return Some(msg);
     }
 
+    // If hint panel is visible, Escape dismisses it without counting as a game action
+    if key.code == KeyCode::Esc
+        && let TypedScreen::Task(task_data) = &state.screen
+        && task_data.show_hint_panel
+    {
+        return Some(Message::ShowHint);
+    }
+
     // Handle gameplay input (insert mode or normal mode)
     handle_gameplay_input(key, state, Message::ExecuteCommand)
 }

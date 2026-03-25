@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Excellent` performance tier (80-99%) is now reachable with all existing scenarios by lowering the threshold from 90% to 80% (#201)
 - PerformanceTracker (FSRS) data now persisted between sessions (#196)
 - `commands_executed` counter now incremented on scenario completion (#196)
 - Daily quests now generated on first launch (#195)

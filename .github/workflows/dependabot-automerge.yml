@@ -24,7 +24,7 @@ jobs:
         if: |
           steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
           steps.metadata.outputs.update-type == 'version-update:semver-minor'
-        uses: lewagon/wait-on-check-action@v1.5.0
+        uses: lewagon/wait-on-check-action@v1.6.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           running-workflow-name: 'Auto-merge'

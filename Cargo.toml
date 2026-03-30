@@ -42,7 +42,7 @@ tui-big-text = "0.8.3"
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
 dhat = "0.3"
-proptest = "1.10"
+proptest = "1.11"
 regex = "1.12"
 tempfile = "3.27"
 walkdir = "2.5"

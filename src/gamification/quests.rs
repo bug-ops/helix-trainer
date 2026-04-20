@@ -615,10 +615,8 @@ impl QuestTracker {
                 QuestType::SpeedRun {
                     scenario_id: quest_scenario,
                     time_limit,
-                } if quest_scenario == scenario_id => {
-                    if duration <= *time_limit {
-                        quest.completed = true;
-                    }
+                } if quest_scenario == scenario_id && duration <= *time_limit => {
+                    quest.completed = true;
                 }
                 _ => {}
             }

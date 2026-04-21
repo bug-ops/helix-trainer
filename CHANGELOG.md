@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-04-21
+
 ### Fixed
 
 - `Excellent` performance tier (80-99%) is now reachable with all existing scenarios by lowering the threshold from 90% to 80% (#201)
@@ -15,6 +17,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Daily quests now generated on first launch (#195)
 - Escape key no longer counts as a game action when dismissing the hint popup (#194)
 - Arcade sub-mode headers now display the correct title: Survival shows `SURVIVAL MODE`, Daily Challenge shows `DAILY CHALLENGE` (#197)
+- Collapse nested if into match guard for clippy compliance in gamification module
+
+### Dependencies
+
+- `rust-i18n`: 3.1.5 → 4.0.0 (#217)
+- `tokio`: 1.49.0 → 1.52.x (#187, #209, #216)
+- `rand`: 0.10.0 → 0.10.1 (#215)
+- `toml`: 1.0.3 → 1.1.2 (#188, #193, #207, #208)
+- `tui-big-text`: 0.8.2 → 0.8.4 (#205, #210)
+- `proptest`: 1.10.0 → 1.11.0 (#206)
+- `tempfile`: 3.26.0 → 3.27.0 (#189)
+- `tracing-subscriber`: 0.3.22 → 0.3.23 (#190)
+- `rodio`: 0.22.1 → 0.22.2 (#186)
+
+### CI
+
+- Bump `codecov/codecov-action` from 5 to 6 (#203)
+- Bump `lewagon/wait-on-check-action` from 1.5.0 to 1.7.0 (#204, #212, #218)
+- Bump `softprops/action-gh-release` from 2 to 3 (#211)
+- Bump `actions/github-script` from 8 to 9 (#214)
+- Bump `dependabot/fetch-metadata` from 2 to 3 (#213)
 
 ## [0.5.9] - 2026-03-07
 
@@ -1244,7 +1267,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.9...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.10...HEAD
+[0.5.10]: https://github.com/bug-ops/helix-trainer/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/bug-ops/helix-trainer/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/bug-ops/helix-trainer/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/bug-ops/helix-trainer/compare/v0.5.6...v0.5.7

@@ -66,6 +66,15 @@ All modes feature:
 > [!NOTE]
 > **Requirements**: Terminal with Unicode support. No additional dependencies needed for pre-built binaries.
 
+### From crates.io
+
+```bash
+cargo install helix-trainer
+```
+
+> [!TIP]
+> Use `cargo binstall helix-trainer` for faster installation without compilation.
+
 ### Pre-built binaries (recommended)
 
 Download for your platform from [**Releases**](https://github.com/bug-ops/helix-trainer/releases/latest):

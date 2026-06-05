@@ -228,7 +228,7 @@ impl PerformanceTracker {
     pub fn new() -> Self {
         Self {
             stats: HashMap::new(),
-            fsrs: FSRS::new(Some(&[])).unwrap(), // Use default parameters
+            fsrs: FSRS::new(&[]).unwrap(),
         }
     }
 
@@ -349,7 +349,7 @@ impl PerformanceTracker {
     pub fn from_stats(stats: HashMap<String, CommandPerformance>) -> Self {
         Self {
             stats,
-            fsrs: FSRS::new(Some(&[])).unwrap(),
+            fsrs: FSRS::new(&[]).unwrap(),
         }
     }
 

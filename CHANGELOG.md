@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.11] - 2026-07-07
+
+### Dependencies
+
+- `tokio`: 1.52.1 → 1.52.3 (#220)
+- `serde_json`: 1.0.149 → 1.0.150 (#221)
+- `rust-i18n`: 4.0.0 → 4.1.0 (#222)
+- `fsrs`: 5.2.0 → 6.6.1 (#223, #225, #230)
+- `ratatui`: 0.30.0 → 0.30.2 (#226, #234)
+- `chrono`: 0.4.44 → 0.4.45 (#227)
+- `tui-big-text`: 0.8.4 → 0.8.8 (#229, #233)
+- `regex`: 1.12.3 → 1.12.4 (#231)
+- `anyhow`: 1.0.102 → 1.0.103 (#236)
+- `rand`: 0.10.1 → 0.10.2 (#238)
+- `crossbeam-epoch`: 0.9.18 → 0.9.20 (transitive, fixes RUSTSEC-2026-0204) (#238)
+
+### CI
+
+- Bump `codecov/codecov-action` from 6 to 7 (#224)
+- Bump `lewagon/wait-on-check-action` from 1.7.0 to 1.8.1 (#228, #237)
+- Bump `actions/checkout` from 6 to 7 (#232)
+- Bump `actions/cache` from 5 to 6 (#235)
+
 ## [0.5.10] - 2026-04-21
 
 ### Fixed
@@ -1267,7 +1290,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.10...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.11...HEAD
+[0.5.11]: https://github.com/bug-ops/helix-trainer/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/bug-ops/helix-trainer/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/bug-ops/helix-trainer/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/bug-ops/helix-trainer/compare/v0.5.7...v0.5.8

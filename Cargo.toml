@@ -1,6 +1,6 @@
 [package]
 name = "helix-trainer"
-version = "0.5.11"
+version = "0.5.12"
 edition = "2024"
 rust-version = "1.89"
 authors = ["Andrei G <andrei.g@my.com>"]
@@ -28,7 +28,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 syntect = { version = "5.3", default-features = false, features = ["default-themes", "default-syntaxes", "regex-onig"] }
 thiserror = "2.0"
-tokio = { version = "1.52", features = [
+tokio = { version = "1.53", features = [
     "rt-multi-thread",
     "sync",
     "time",
@@ -37,13 +37,13 @@ tokio = { version = "1.52", features = [
 toml = "1.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-tui-big-text = "0.8.4"
+tui-big-text = "0.8"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
 dhat = "0.3"
 proptest = "1.11"
-regex = "1.12"
+regex = "1.13"
 tempfile = "3.27"
 walkdir = "2.5"
 

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.12] - 2026-07-27
+
+### Dependencies
+
+- `serde`: 1.0.228 → 1.0.229 (#242)
+- `regex`: 1.12.4 → 1.13.1 (#241, #249)
+- `toml`: 1.1.2 → 1.1.3 (#247)
+- `tokio`: 1.52.3 → 1.53.1 (#244, #252)
+- `anyhow`: 1.0.103 → 1.0.104 (#245)
+- `rust-i18n`: 4.1.0 → 4.2.1 (#248)
+- `futures`: 0.3.32 → 0.3.33 (#243)
+- `thiserror`: 2.0.18 → 2.0.19 (#246)
+- `serde_json`: 1.0.150 → 1.0.151 (#253)
+
+### CI
+
+- Bump `lewagon/wait-on-check-action` from 1.8.1 to 1.9.0 (#250)
+- Bump `actions/labeler` from 6 to 7 (#251)
+
 ## [0.5.11] - 2026-07-07
 
 ### Dependencies
@@ -1290,7 +1309,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.11...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.12...HEAD
+[0.5.12]: https://github.com/bug-ops/helix-trainer/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/bug-ops/helix-trainer/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/bug-ops/helix-trainer/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/bug-ops/helix-trainer/compare/v0.5.8...v0.5.9

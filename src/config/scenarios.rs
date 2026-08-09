@@ -98,7 +98,7 @@ pub struct Scenario {
     pub metadata: Option<ScenarioMetadata>,
 }
 
-/// Initial editor setup
+/// Cursor and selection configuration shared by [`Setup`] and [`TargetState`]
 ///
 /// Supports two formats:
 /// - Single cursor: `cursor_position = [row, col]` with optional `selection`
@@ -107,9 +107,7 @@ pub struct Scenario {
 /// INVARIANT: at least one of cursor_position/cursors/selections must be set,
 /// checked by `ScenarioLoader::validate_setup_or_target_config`.
 #[derive(Deserialize, Debug, Clone)]
-pub struct Setup {
-    pub file_content: String,
-
+pub struct CursorSpec {
     /// Single cursor position [row, col] - for simple scenarios
     #[serde(default)]
     pub cursor_position: Option<(usize, usize)>,
@@ -127,33 +125,22 @@ pub struct Setup {
     pub selections: Option<Vec<[usize; 4]>>,
 }
 
+/// Initial editor setup
+#[derive(Deserialize, Debug, Clone)]
+pub struct Setup {
+    pub file_content: String,
+
+    #[serde(flatten)]
+    pub cursor: CursorSpec,
+}
+
 /// Target state to achieve
-///
-/// Supports two formats:
-/// - Single cursor: `cursor_position = [row, col]` with optional `selection`
-/// - Multi-cursor: `cursors = [[row, col], ...]` or `selections = [[start_row, start_col, end_row, end_col], ...]`
-///
-/// INVARIANT: at least one of cursor_position/cursors/selections must be set,
-/// checked by `ScenarioLoader::validate_setup_or_target_config`.
 #[derive(Deserialize, Debug, Clone)]
 pub struct TargetState {
     pub file_content: String,
 
-    /// Single cursor position [row, col] - for simple scenarios
-    #[serde(default)]
-    pub cursor_position: Option<(usize, usize)>,
-
-    /// Single selection range [start_row, start_col, end_row, end_col]
-    #[serde(default)]
-    pub selection: Option<[usize; 4]>,
-
-    /// Multiple cursor positions [[row, col], ...] - for multi-cursor scenarios
-    #[serde(default)]
-    pub cursors: Option<Vec<[usize; 2]>>,
-
-    /// Multiple selection ranges [[start_row, start_col, end_row, end_col], ...]
-    #[serde(default)]
-    pub selections: Option<Vec<[usize; 4]>>,
+    #[serde(flatten)]
+    pub cursor: CursorSpec,
 }
 
 /// Optimal solution
@@ -179,7 +166,7 @@ pub struct ScoringConfig {
     pub tolerance: usize,
 }
 
-impl Setup {
+impl CursorSpec {
     /// Get effective cursor position (single cursor or first of multi-cursor).
     ///
     /// Prefers `cursor_position` for backward compatibility, but falls back to
@@ -238,88 +225,7 @@ impl Setup {
         None
     }
 
-    /// Check if this setup uses multi-cursor format.
-    pub fn is_multi_cursor(&self) -> bool {
-        self.cursors.is_some() || self.selections.is_some()
-    }
-
-    /// Get raw cursors reference without derivation.
-    ///
-    /// Returns the raw `cursors` field as a slice reference, or None if not set.
-    /// Use `all_cursors()` if you need derived values.
-    pub fn cursors_ref(&self) -> Option<&[[usize; 2]]> {
-        self.cursors.as_deref()
-    }
-
-    /// Get raw selections reference without derivation.
-    ///
-    /// Returns the raw `selections` field as a slice reference, or None if not set.
-    /// Use `all_selections()` if you need derived values.
-    pub fn selections_ref(&self) -> Option<&[[usize; 4]]> {
-        self.selections.as_deref()
-    }
-}
-
-impl TargetState {
-    /// Get effective cursor position (single cursor or first of multi-cursor).
-    ///
-    /// Prefers `cursor_position` for backward compatibility, but falls back to
-    /// first element of `cursors` if available.
-    pub fn effective_cursor_position(&self) -> (usize, usize) {
-        if let Some(pos) = self.cursor_position {
-            return pos;
-        }
-        if let Some(cursors) = &self.cursors
-            && let Some(first) = cursors.first()
-        {
-            return (first[0], first[1]);
-        }
-        if let Some(selections) = &self.selections
-            && let Some(first) = selections.first()
-        {
-            // For selections, cursor is at the end position (head)
-            return (first[2], first[3]);
-        }
-        // Default to (0, 0) if nothing specified
-        (0, 0)
-    }
-
-    /// Get all cursor positions for multi-cursor scenarios.
-    ///
-    /// Returns `cursors` if present, otherwise derives from `selections` or `cursor_position`.
-    pub fn all_cursors(&self) -> Vec<[usize; 2]> {
-        if let Some(cursors) = &self.cursors {
-            return cursors.clone();
-        }
-        if let Some(selections) = &self.selections {
-            // Each selection's end (head) position is a cursor
-            return selections.iter().map(|s| [s[2], s[3]]).collect();
-        }
-        // Single cursor fallback
-        let pos = self.effective_cursor_position();
-        vec![[pos.0, pos.1]]
-    }
-
-    /// Get all selections for multi-selection scenarios.
-    ///
-    /// Returns `selections` if present, otherwise derives from `selection`,
-    /// `cursors`, or `cursor_position`.
-    pub fn all_selections(&self) -> Option<Vec<[usize; 4]>> {
-        if let Some(selections) = &self.selections {
-            return Some(selections.clone());
-        }
-        if let Some(selection) = &self.selection {
-            return Some(vec![*selection]);
-        }
-        if let Some(cursors) = &self.cursors {
-            // Point selections from cursors
-            return Some(cursors.iter().map(|c| [c[0], c[1], c[0], c[1]]).collect());
-        }
-        // No selection
-        None
-    }
-
-    /// Check if this target uses multi-cursor format.
+    /// Check if this spec uses multi-cursor format.
     pub fn is_multi_cursor(&self) -> bool {
         self.cursors.is_some() || self.selections.is_some()
     }
@@ -630,20 +536,10 @@ impl ScenarioLoader {
         self.validate_content_size(&scenario.target.file_content)?;
 
         // Validate setup cursor/selection configuration
-        self.validate_setup_or_target_config(
-            &scenario.setup.cursor_position,
-            &scenario.setup.selection,
-            &scenario.setup.cursors,
-            &scenario.setup.selections,
-        )?;
+        self.validate_setup_or_target_config(&scenario.setup.cursor)?;
 
         // Validate target cursor/selection configuration
-        self.validate_setup_or_target_config(
-            &scenario.target.cursor_position,
-            &scenario.target.selection,
-            &scenario.target.cursors,
-            &scenario.target.selections,
-        )?;
+        self.validate_setup_or_target_config(&scenario.target.cursor)?;
 
         // Validate collection sizes
         if scenario.hints.len() > MAX_HINTS {
@@ -679,33 +575,27 @@ impl ScenarioLoader {
     /// Ensures that:
     /// - At least cursor_position, cursors, or selections is specified
     /// - All cursor positions are within bounds
-    fn validate_setup_or_target_config(
-        &self,
-        cursor_position: &Option<(usize, usize)>,
-        selection: &Option<[usize; 4]>,
-        cursors: &Option<Vec<[usize; 2]>>,
-        selections: &Option<Vec<[usize; 4]>>,
-    ) -> Result<(), SecurityError> {
+    fn validate_setup_or_target_config(&self, spec: &CursorSpec) -> Result<(), SecurityError> {
         // Must have at least one cursor specification
-        if cursor_position.is_none() && cursors.is_none() && selections.is_none() {
+        if spec.cursor_position.is_none() && spec.cursors.is_none() && spec.selections.is_none() {
             return Err(SecurityError::InvalidInput(
                 "Must specify cursor_position, cursors, or selections".to_string(),
             ));
         }
 
         // Validate single cursor_position
-        if let Some(pos) = cursor_position {
-            self.validate_cursor_position(*pos)?;
+        if let Some(pos) = spec.cursor_position {
+            self.validate_cursor_position(pos)?;
         }
 
         // Validate single selection
-        if let Some(sel) = selection {
+        if let Some(sel) = &spec.selection {
             self.validate_cursor_position((sel[0], sel[1]))?;
             self.validate_cursor_position((sel[2], sel[3]))?;
         }
 
         // Validate multi-cursor positions (with array length limit check)
-        if let Some(positions) = cursors {
+        if let Some(positions) = &spec.cursors {
             if positions.len() > MAX_CURSORS_PER_SCENARIO {
                 return Err(SecurityError::InvalidInput(format!(
                     "Too many cursors (max {}, got {})",
@@ -719,7 +609,7 @@ impl ScenarioLoader {
         }
 
         // Validate multi-selection ranges (with array length limit check)
-        if let Some(sels) = selections {
+        if let Some(sels) = &spec.selections {
             if sels.len() > MAX_SELECTIONS_PER_SCENARIO {
                 return Err(SecurityError::InvalidInput(format!(
                     "Too many selections (max {}, got {})",

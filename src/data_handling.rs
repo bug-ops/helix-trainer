@@ -126,7 +126,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
 mod tests {
     use super::*;
     use helix_trainer::{
-        config::{Scenario, ScoringConfig, Setup, Solution, TargetState},
+        config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState},
         gamification::ProfileStorage,
     };
 
@@ -159,17 +159,21 @@ mod tests {
             description: "Test scenario".to_string(),
             setup: Setup {
                 file_content: "line 1\nline 2\nline 3\n".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             target: TargetState {
                 file_content: "line 2\nline 3\n".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             solution: Solution {
                 commands: vec!["x".to_string(), "d".to_string()],

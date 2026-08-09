@@ -7,8 +7,8 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use helix_trainer::config::{
-    Difficulty, Scenario, ScenarioCategory, ScenarioCollection, ScenarioFilter, ScenarioMetadata,
-    ScoringConfig, Setup, Solution, SortMode, TargetState,
+    CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioCollection, ScenarioFilter,
+    ScenarioMetadata, ScoringConfig, Setup, Solution, SortMode, TargetState,
 };
 use helix_trainer::gamification::UserProfile;
 use std::collections::HashSet;
@@ -27,17 +27,21 @@ fn create_scenario(
         description: "Test scenario".to_string(),
         setup: Setup {
             file_content: "line 1\nline 2\nline 3\n".to_string(),
-            cursor_position: Some((0, 0)),
-            selection: None,
-            cursors: None,
-            selections: None,
+            cursor: CursorSpec {
+                cursor_position: Some((0, 0)),
+                selection: None,
+                cursors: None,
+                selections: None,
+            },
         },
         target: TargetState {
             file_content: "line 2\nline 3\n".to_string(),
-            cursor_position: Some((0, 0)),
-            selection: None,
-            cursors: None,
-            selections: None,
+            cursor: CursorSpec {
+                cursor_position: Some((0, 0)),
+                selection: None,
+                cursors: None,
+                selections: None,
+            },
         },
         solution: Solution {
             commands: vec!["x".to_string()],

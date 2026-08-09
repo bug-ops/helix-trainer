@@ -11,11 +11,11 @@ pub mod scenarios;
 
 pub use app_config::{AppConfig, ConfigStorage};
 pub use quests::{
-    QuestConditions, QuestDifficulty, QuestLoader, QuestParams, QuestTemplate, QuestTypeTag,
-    QuestsFile, QuestsMetadata, XpConfig,
+    QuestConditions, QuestDifficulty, QuestLoader, QuestSpec, QuestTemplate, QuestsFile,
+    QuestsMetadata, XpConfig,
 };
 pub use scenario_collection::{ScenarioCollection, ScenarioFilter, SortMode};
 pub use scenarios::{
-    AlternativeSolution, Difficulty, Scenario, ScenarioCategory, ScenarioLoader, ScenarioMetadata,
-    ScenariosFile, ScoringConfig, Setup, Solution, TargetState,
+    AlternativeSolution, CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioLoader,
+    ScenarioMetadata, ScenariosFile, ScoringConfig, Setup, Solution, TargetState,
 };

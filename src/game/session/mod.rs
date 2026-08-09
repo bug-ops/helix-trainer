@@ -625,10 +625,10 @@ impl GameSession<Active> {
         // Recreate initial snapshot from scenario config and reset simulator
         let initial_snapshot = EditorSnapshot::from_scenario_config(
             self.scenario.setup.file_content.clone(),
-            self.scenario.setup.cursor_position,
-            self.scenario.setup.selection,
-            self.scenario.setup.cursors.as_deref(),
-            self.scenario.setup.selections.as_deref(),
+            self.scenario.setup.cursor.cursor_position,
+            self.scenario.setup.cursor.selection,
+            self.scenario.setup.cursor.cursors.as_deref(),
+            self.scenario.setup.cursor.selections.as_deref(),
         );
         self.simulator = AnyModeSimulator::from_snapshot(&initial_snapshot);
         self.user_actions.clear();

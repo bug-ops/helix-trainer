@@ -416,13 +416,13 @@ impl MiniGameModeSelection {
     }
 
     /// Get the selected mode configuration
-    pub fn selected_mode(&self) -> crate::minigame::MiniGameMode {
+    pub fn selected_mode(&self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
         use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
 
         match self.selected_index {
             0 => MiniGameMode::Arcade(ArcadeConfig::default()),
             1 => MiniGameMode::Survival(SurvivalConfig::default()),
-            2 => MiniGameMode::Challenge(ChallengeConfig::for_today()),
+            2 => MiniGameMode::Challenge(ChallengeConfig::for_date(today)),
             _ => MiniGameMode::default(),
         }
     }
@@ -781,7 +781,7 @@ mod tests {
     fn test_selected_mode_invalid_index() {
         let mut selection = MiniGameModeSelection::new();
         selection.selected_index = 99;
-        let mode = selection.selected_mode();
+        let mode = selection.selected_mode(chrono::Utc::now().date_naive());
         // Should fall back to default Arcade mode
         assert!(mode.is_arcade());
     }
@@ -799,15 +799,16 @@ mod tests {
         assert!(!MiniGameModeSelection::mode_description(2).is_empty());
 
         // Test valid selected modes
+        let today = chrono::Utc::now().date_naive();
         let mut selection = MiniGameModeSelection::new();
         selection.selected_index = 0;
-        assert!(selection.selected_mode().is_arcade());
+        assert!(selection.selected_mode(today).is_arcade());
 
         selection.selected_index = 1;
-        assert!(selection.selected_mode().is_survival());
+        assert!(selection.selected_mode(today).is_survival());
 
         selection.selected_index = 2;
-        assert!(selection.selected_mode().is_challenge());
+        assert!(selection.selected_mode(today).is_challenge());
     }
 
     #[test]

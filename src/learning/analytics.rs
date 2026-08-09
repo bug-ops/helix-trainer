@@ -105,12 +105,12 @@ impl Analytics {
     pub fn get_progress_over_time(
         tracker: &PerformanceTracker,
         days: u32,
+        now: DateTime<Utc>,
     ) -> Vec<(DateTime<Utc>, f64)> {
         if days == 0 {
             return Vec::new();
         }
 
-        let now = Utc::now();
         let summary = Self::get_mastery_summary(tracker);
 
         // Simulate historical progress (linear growth for now)
@@ -302,7 +302,7 @@ mod tests {
     fn test_progress_over_time_zero_days() {
         let tracker = setup_tracker_with_varied_mastery();
 
-        let progress = Analytics::get_progress_over_time(&tracker, 0);
+        let progress = Analytics::get_progress_over_time(&tracker, 0, Utc::now());
         assert!(progress.is_empty());
     }
 
@@ -311,7 +311,7 @@ mod tests {
         let tracker = setup_tracker_with_varied_mastery();
 
         let days = 7;
-        let progress = Analytics::get_progress_over_time(&tracker, days);
+        let progress = Analytics::get_progress_over_time(&tracker, days, Utc::now());
 
         // Should have days+1 points (including day 0)
         assert_eq!(progress.len(), (days + 1) as usize);
@@ -331,7 +331,7 @@ mod tests {
     fn test_progress_over_time_growth() {
         let tracker = setup_tracker_with_varied_mastery();
 
-        let progress = Analytics::get_progress_over_time(&tracker, 5);
+        let progress = Analytics::get_progress_over_time(&tracker, 5, Utc::now());
 
         // First point should be 0 (simulated start)
         assert_eq!(progress[0].1, 0.0);

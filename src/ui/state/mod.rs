@@ -23,7 +23,9 @@ use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
 use crate::security::UserError;
 use crate::sound::SoundEffect;
+use crate::time::Clock;
 use std::fmt;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 // Message handlers in separate modules
@@ -389,11 +391,38 @@ impl AppState {
         performance_tracker: PerformanceTracker,
         config: ConfigState,
     ) -> Self {
+        Self::with_clock(
+            scenarios,
+            profile,
+            profile_storage,
+            performance_tracker,
+            config,
+            Arc::new(crate::time::SystemClock),
+        )
+    }
+
+    /// Create a new application state with custom configuration and an explicit clock
+    ///
+    /// Primarily useful for tests that need deterministic control over day-boundary
+    /// and scheduling behavior; see [`crate::time::FakeClock`].
+    pub fn with_clock(
+        scenarios: Vec<Scenario>,
+        profile: UserProfile,
+        profile_storage: ProfileStorage,
+        performance_tracker: PerformanceTracker,
+        config: ConfigState,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
         Self {
             screen: TypedScreen::ModeSelection(ModeSelectionData::default()),
             ui: UIState::new(),
             game: GameState::new(scenarios),
-            progress: ProgressState::new(profile, performance_tracker, profile_storage),
+            progress: ProgressState::with_clock(
+                profile,
+                performance_tracker,
+                profile_storage,
+                clock,
+            ),
             config,
         }
     }

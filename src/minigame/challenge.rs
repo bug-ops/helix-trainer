@@ -5,6 +5,7 @@
 //! - Best score tracking (daily and all-time)
 //! - Deterministic scenario selection using seeded RNG
 
+use chrono::NaiveDate;
 use rand::SeedableRng;
 use rand::prelude::SliceRandom;
 use serde::{Deserialize, Serialize};
@@ -64,8 +65,8 @@ impl ChallengeProgress {
     }
 
     /// Check if player can attempt today's challenge
-    pub fn can_attempt(&self) -> bool {
-        let today = Self::today_string();
+    pub fn can_attempt(&self, today: NaiveDate) -> bool {
+        let today = Self::today_string(today);
 
         // Different day = reset attempts
         if self.last_challenge_date.as_deref() != Some(&today) {
@@ -76,8 +77,8 @@ impl ChallengeProgress {
     }
 
     /// Get remaining attempts for today
-    pub fn attempts_remaining(&self) -> u8 {
-        let today = Self::today_string();
+    pub fn attempts_remaining(&self, today: NaiveDate) -> u8 {
+        let today = Self::today_string(today);
 
         if self.last_challenge_date.as_deref() != Some(&today) {
             return CHALLENGE_MAX_ATTEMPTS;
@@ -87,8 +88,8 @@ impl ChallengeProgress {
     }
 
     /// Start a new attempt, resetting if new day
-    pub fn start_attempt(&mut self) {
-        let today = Self::today_string();
+    pub fn start_attempt(&mut self, today: NaiveDate) {
+        let today = Self::today_string(today);
 
         // Reset for new day
         if self.last_challenge_date.as_deref() != Some(&today) {
@@ -126,14 +127,14 @@ impl ChallengeProgress {
         }
     }
 
-    /// Get today's date string in YYYY-MM-DD format
-    fn today_string() -> String {
-        chrono::Utc::now().date_naive().to_string()
+    /// Get the given date as a YYYY-MM-DD string
+    fn today_string(today: NaiveDate) -> String {
+        today.to_string()
     }
 
-    /// Check if progress is for today
-    pub fn is_today(&self) -> bool {
-        self.last_challenge_date.as_deref() == Some(&Self::today_string())
+    /// Check if progress is for the given date
+    pub fn is_today(&self, today: NaiveDate) -> bool {
+        self.last_challenge_date.as_deref() == Some(&Self::today_string(today))
     }
 }
 
@@ -172,7 +173,7 @@ impl ChallengeProgress {
 /// use helix_trainer::minigame::{ChallengeConfig, select_challenge_scenarios};
 ///
 /// let scenarios = load_scenarios();
-/// let config = ChallengeConfig::for_today();
+/// let config = ChallengeConfig::for_date(chrono::Utc::now().date_naive());
 /// let selected = select_challenge_scenarios(&scenarios, &config);
 /// assert_eq!(selected.len(), 10);
 /// ```
@@ -226,35 +227,37 @@ mod tests {
 
     #[test]
     fn test_can_attempt_new_day() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let progress = ChallengeProgress::new();
-        assert!(progress.can_attempt());
-        assert_eq!(progress.attempts_remaining(), CHALLENGE_MAX_ATTEMPTS);
+        assert!(progress.can_attempt(today));
+        assert_eq!(progress.attempts_remaining(today), CHALLENGE_MAX_ATTEMPTS);
     }
 
     #[test]
     fn test_can_attempt_after_using_attempts() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        let today = chrono::Utc::now().date_naive().to_string();
-        progress.last_challenge_date = Some(today);
+        progress.last_challenge_date = Some(today.to_string());
         progress.attempts_used_today = 2;
 
-        assert!(progress.can_attempt());
-        assert_eq!(progress.attempts_remaining(), 1);
+        assert!(progress.can_attempt(today));
+        assert_eq!(progress.attempts_remaining(today), 1);
 
         progress.attempts_used_today = 3;
-        assert!(!progress.can_attempt());
-        assert_eq!(progress.attempts_remaining(), 0);
+        assert!(!progress.can_attempt(today));
+        assert_eq!(progress.attempts_remaining(today), 0);
     }
 
     #[test]
     fn test_start_attempt_new_day() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.last_challenge_date = Some("2020-01-01".to_string());
         progress.attempts_used_today = 3;
         progress.best_score_today = 5000;
         progress.best_scenarios_today = 8;
 
-        progress.start_attempt();
+        progress.start_attempt(today);
 
         // Should reset for new day
         assert_eq!(progress.attempts_used_today, 1);
@@ -265,24 +268,25 @@ mod tests {
 
     #[test]
     fn test_start_attempt_same_day() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        let today = chrono::Utc::now().date_naive().to_string();
-        progress.last_challenge_date = Some(today.clone());
+        progress.last_challenge_date = Some(today.to_string());
         progress.attempts_used_today = 1;
         progress.best_score_today = 5000;
 
-        progress.start_attempt();
+        progress.start_attempt(today);
 
         // Should not reset, just increment
         assert_eq!(progress.attempts_used_today, 2);
         assert_eq!(progress.best_score_today, 5000);
-        assert_eq!(progress.last_challenge_date, Some(today));
+        assert_eq!(progress.last_challenge_date, Some(today.to_string()));
     }
 
     #[test]
     fn test_record_result_updates_daily_best() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.start_attempt();
+        progress.start_attempt(today);
 
         progress.record_result(1000, 5);
         assert_eq!(progress.best_score_today, 1000);
@@ -301,10 +305,11 @@ mod tests {
 
     #[test]
     fn test_record_result_updates_all_time_best() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.all_time_best_score = 3000;
         progress.all_time_best_scenarios = 8;
-        progress.start_attempt();
+        progress.start_attempt(today);
 
         // Should not update (lower)
         progress.record_result(2000, 5);
@@ -319,8 +324,9 @@ mod tests {
 
     #[test]
     fn test_record_result_tracks_completions() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.start_attempt();
+        progress.start_attempt(today);
 
         // Incomplete challenge
         progress.record_result(1000, 9);
@@ -376,7 +382,8 @@ mod tests {
             .map(|i| create_test_scenario(&format!("scenario_{}", i)))
             .collect();
 
-        let config = ChallengeConfig::for_today();
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let config = ChallengeConfig::for_date(today);
         let selected = select_challenge_scenarios(&scenarios, &config);
 
         // Should return all available scenarios
@@ -389,7 +396,8 @@ mod tests {
             .map(|i| create_test_scenario(&format!("scenario_{}", i)))
             .collect();
 
-        let config = ChallengeConfig::for_today();
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let config = ChallengeConfig::for_date(today);
         let selected = select_challenge_scenarios(&scenarios, &config);
 
         // Should only return scenario_count scenarios
@@ -398,24 +406,26 @@ mod tests {
 
     #[test]
     fn test_challenge_max_attempts_enforced() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
 
         // Use all attempts
         for _ in 0..CHALLENGE_MAX_ATTEMPTS {
-            assert!(progress.can_attempt());
-            progress.start_attempt();
+            assert!(progress.can_attempt(today));
+            progress.start_attempt(today);
         }
 
         // Should not be able to attempt anymore
-        assert!(!progress.can_attempt());
-        assert_eq!(progress.attempts_remaining(), 0);
+        assert!(!progress.can_attempt(today));
+        assert_eq!(progress.attempts_remaining(today), 0);
     }
 
     // CR-003: Test ChallengeProgress TOML serialization roundtrip
     #[test]
     fn test_challenge_progress_serialization_roundtrip() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.start_attempt();
+        progress.start_attempt(today);
         progress.record_result(5000, 8);
 
         let toml = toml::to_string(&progress).unwrap();
@@ -449,21 +459,23 @@ mod tests {
     // CR-008: Test is_today() method
     #[test]
     fn test_challenge_progress_is_today() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        assert!(!progress.is_today()); // No date set yet
+        assert!(!progress.is_today(today)); // No date set yet
 
-        progress.start_attempt();
-        assert!(progress.is_today()); // Now has today's date
+        progress.start_attempt(today);
+        assert!(progress.is_today(today)); // Now has today's date
 
         progress.last_challenge_date = Some("2020-01-01".to_string());
-        assert!(!progress.is_today()); // Past date
+        assert!(!progress.is_today(today)); // Past date
     }
 
     // CR-018: Test empty scenario list
     #[test]
     fn test_select_challenge_scenarios_empty_input() {
         let scenarios: Vec<Scenario> = vec![];
-        let config = ChallengeConfig::for_today();
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let config = ChallengeConfig::for_date(today);
         let selected = select_challenge_scenarios(&scenarios, &config);
         assert!(selected.is_empty());
     }

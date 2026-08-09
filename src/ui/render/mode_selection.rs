@@ -163,7 +163,11 @@ fn render_minigame_mode_submenu(
     let modes: [(MiniGameMode, &str); 3] = [
         (MiniGameMode::Arcade(ArcadeConfig::default()), "🎮"),
         (MiniGameMode::Survival(SurvivalConfig::default()), "💀"),
-        (MiniGameMode::Challenge(ChallengeConfig::for_today()), "📅"),
+        // Display-only placeholder icon; not tied to a live clock, so wall-clock is fine here.
+        (
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive())),
+            "📅",
+        ),
     ];
 
     for (idx, (mode, icon)) in modes.iter().enumerate() {

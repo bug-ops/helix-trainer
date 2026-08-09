@@ -112,7 +112,9 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
     };
 
     let next_review = if let Some(p) = perf {
-        let now = chrono::Utc::now();
+        // `state: &AppState` is in scope here, so use the injected clock rather than
+        // the wall clock directly.
+        let now = state.progress.now();
         let days = (p.due - now).num_days();
         if days > 0 {
             format!("Next: in {} days", days)

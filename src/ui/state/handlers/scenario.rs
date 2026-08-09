@@ -248,12 +248,14 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     let is_first_today = ctx.progress.scenarios_completed_today == 0;
     let xp = ScenarioCompletionService::calculate_xp_components(&feedback, is_first_today);
 
+    let now = ctx.progress.now();
     let (actual_xp, mastery_level, mastery_multiplier, mastery_factor, repeat_penalty) =
         ScenarioCompletionService::record_and_scale_xp(
             &mut ctx.progress.profile,
             &scenario_id,
             feedback.score,
             xp.total_base_xp,
+            now,
         );
 
     // Store mastery info for results display

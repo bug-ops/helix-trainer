@@ -5,6 +5,7 @@
 use crate::game::Feedback;
 use crate::gamification::UserProfile;
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
+use chrono::{DateTime, Utc};
 use std::time::Duration;
 
 /// Components of XP calculation before mastery scaling
@@ -59,6 +60,7 @@ impl ScenarioCompletionService {
         scenario_id: &str,
         score: u32,
         base_xp: u64,
+        now: DateTime<Utc>,
     ) -> (u64, ScenarioMastery, f64, f64, f64) {
         // Capture multipliers BEFORE recording (what will be applied)
         let (_pre_mastery_level, pre_mastery_factor, pre_repeat_penalty) = profile
@@ -67,9 +69,10 @@ impl ScenarioCompletionService {
             .map(|c| (c.mastery_level, c.mastery_factor(), c.repeat_penalty()))
             .unwrap_or((ScenarioMastery::Learning, 1.0, 1.0));
 
-        let actual_xp = profile
-            .scenario_history
-            .record_completion(scenario_id, score, base_xp);
+        let actual_xp =
+            profile
+                .scenario_history
+                .record_completion(scenario_id, score, base_xp, now);
 
         // Get post-recording mastery level (may have changed due to this completion)
         let post_mastery_level = profile
@@ -309,7 +312,13 @@ mod tests {
     fn test_record_and_scale_xp_first_completion() {
         let mut profile = UserProfile::new();
         let (actual_xp, mastery, multiplier, mastery_factor, repeat_penalty) =
-            ScenarioCompletionService::record_and_scale_xp(&mut profile, "test_scenario", 100, 50);
+            ScenarioCompletionService::record_and_scale_xp(
+                &mut profile,
+                "test_scenario",
+                100,
+                50,
+                Utc::now(),
+            );
 
         // First completion gets full XP (no penalty)
         assert_eq!(actual_xp, 50);
@@ -330,6 +339,7 @@ mod tests {
                 "test_scenario",
                 100,
                 50,
+                Utc::now(),
             );
         }
 

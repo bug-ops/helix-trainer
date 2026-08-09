@@ -36,21 +36,21 @@ impl StreakManager {
     ///
     /// ```
     /// use helix_trainer::gamification::{StreakManager, UserProfile, StreakChange};
-    /// use chrono::{Utc, Duration};
+    /// use helix_trainer::time::{Clock, FakeClock};
     ///
-    /// let mut profile = UserProfile::new();
+    /// let clock = FakeClock::at("2026-01-15T12:00:00Z");
+    /// let mut profile = UserProfile::new_at(clock.now());
     /// profile.current_streak = 5;
-    ///
-    /// // Simulate next day activity
-    /// profile.last_activity = Utc::now() - Duration::days(1);
     /// profile.complete_quest("test_quest".to_string());
     ///
-    /// let change = StreakManager::update_streak(&mut profile);
+    /// // Simulate next day activity
+    /// clock.advance_days(1);
+    ///
+    /// let change = StreakManager::update_streak(&mut profile, clock.now());
     /// assert_eq!(change, StreakChange::Incremented { new_streak: 6 });
     /// assert_eq!(profile.current_streak, 6);
     /// ```
-    pub fn update_streak(profile: &mut UserProfile) -> StreakChange {
-        let now = Utc::now();
+    pub fn update_streak(profile: &mut UserProfile, now: DateTime<Utc>) -> StreakChange {
         let last_active = profile.last_activity;
 
         let days_since_active = Self::days_between(last_active, now);
@@ -154,61 +154,67 @@ impl StreakManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::time::{Clock, FakeClock};
     use chrono::Duration;
 
     #[test]
     fn test_streak_same_day_continues() {
-        let mut profile = UserProfile::new();
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
 
-        let change = StreakManager::update_streak(&mut profile);
+        let change = StreakManager::update_streak(&mut profile, clock.now());
         assert_eq!(change, StreakChange::Continued);
         assert_eq!(profile.current_streak, 5);
     }
 
     #[test]
     fn test_streak_increments_next_day() {
-        let mut profile = UserProfile::new();
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
-        profile.last_activity = Utc::now() - Duration::days(1);
         profile.complete_quest("test_quest".to_string());
+        clock.advance_days(1);
 
-        let change = StreakManager::update_streak(&mut profile);
+        let change = StreakManager::update_streak(&mut profile, clock.now());
         assert_eq!(change, StreakChange::Incremented { new_streak: 6 });
         assert_eq!(profile.current_streak, 6);
     }
 
     #[test]
     fn test_streak_doesnt_increment_without_quest() {
-        let mut profile = UserProfile::new();
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
-        profile.last_activity = Utc::now() - Duration::days(1);
+        clock.advance_days(1);
         // No quest completed
 
-        let change = StreakManager::update_streak(&mut profile);
+        let change = StreakManager::update_streak(&mut profile, clock.now());
         assert_eq!(change, StreakChange::Continued);
         assert_eq!(profile.current_streak, 5);
     }
 
     #[test]
     fn test_streak_breaks_when_missed() {
-        let mut profile = UserProfile::new();
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 10;
-        profile.last_activity = Utc::now() - Duration::days(2);
+        clock.advance_days(2);
 
-        let change = StreakManager::update_streak(&mut profile);
+        let change = StreakManager::update_streak(&mut profile, clock.now());
         assert_eq!(change, StreakChange::Broken { was_streak: 10 });
         assert_eq!(profile.current_streak, 0);
     }
 
     #[test]
     fn test_streak_freeze_protects() {
-        let mut profile = UserProfile::new();
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 10;
         profile.streak_freeze_available = true;
-        profile.last_activity = Utc::now() - Duration::days(2);
+        clock.advance_days(2);
 
-        let change = StreakManager::update_streak(&mut profile);
+        let change = StreakManager::update_streak(&mut profile, clock.now());
         assert_eq!(change, StreakChange::Protected { used_freeze: true });
         assert_eq!(profile.current_streak, 10); // Streak preserved
         assert!(!profile.streak_freeze_available); // Freeze consumed
@@ -216,13 +222,14 @@ mod tests {
 
     #[test]
     fn test_longest_streak_updates() {
-        let mut profile = UserProfile::new();
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
         profile.longest_streak = 5;
-        profile.last_activity = Utc::now() - Duration::days(1);
         profile.complete_quest("test".to_string());
+        clock.advance_days(1);
 
-        StreakManager::update_streak(&mut profile);
+        StreakManager::update_streak(&mut profile, clock.now());
         assert_eq!(profile.longest_streak, 6);
     }
 

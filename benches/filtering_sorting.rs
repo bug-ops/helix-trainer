@@ -108,7 +108,7 @@ fn create_profile_with_completions(scenario_ids: &[String]) -> UserProfile {
             // Complete ~33% of scenarios
             profile
                 .scenario_history
-                .record_completion(scenario_id, 100, 50);
+                .record_completion(scenario_id, 100, 50, chrono::Utc::now());
         }
     }
 

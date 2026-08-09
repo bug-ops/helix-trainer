@@ -1,6 +1,6 @@
 //! Daily quest generation and tracking
 
-use chrono::{Datelike, Utc};
+use chrono::{Datelike, NaiveDate};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -457,13 +457,14 @@ impl QuestGenerator {
     /// # Examples
     ///
     /// ```ignore
+    /// use chrono::Utc;
     /// use helix_trainer::gamification::{QuestGenerator, QuestTemplateRegistry, UserProfile};
     /// use helix_trainer::learning::PerformanceTracker;
     ///
     /// let profile = UserProfile::new(); // Level 1
     /// let tracker = PerformanceTracker::new();
     /// let registry = QuestTemplateRegistry::load_from_default_path("en")?;
-    /// let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+    /// let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry, Utc::now().date_naive());
     ///
     /// assert_eq!(quests.len(), 3); // Beginners get 3 quests
     /// ```
@@ -471,15 +472,15 @@ impl QuestGenerator {
         profile: &UserProfile,
         tracker: &PerformanceTracker,
         registry: &QuestTemplateRegistry,
+        today: NaiveDate,
     ) -> Vec<Quest> {
-        let mut rng = Self::create_rng();
+        let mut rng = Self::create_rng(today);
         let distribution = QuestDistribution::for_level(profile.level);
         distribution.generate_quests(&mut rng, tracker, registry)
     }
 
-    fn create_rng() -> StdRng {
+    fn create_rng(today: NaiveDate) -> StdRng {
         // Seed with current date for consistency within a day
-        let today = Utc::now().date_naive();
         let seed = today.num_days_from_ce() as u64;
         StdRng::seed_from_u64(seed)
     }
@@ -709,20 +710,22 @@ mod tests {
         let tracker = PerformanceTracker::new();
         let registry = test_registry();
 
+        let today = chrono::Utc::now().date_naive();
+
         // Level 1 - should get 3 quests (2 easy + 1 medium)
         let mut profile = UserProfile::new();
         profile.level = 1;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry, today);
         assert_eq!(quests.len(), 3);
 
         // Level 10 - should get 4 quests (1 easy + 2 medium + 1 hard)
         profile.level = 10;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry, today);
         assert_eq!(quests.len(), 4);
 
         // Level 20 - should get 4 quests (1 medium + 2 hard + 1 exploration)
         profile.level = 20;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry, today);
         assert_eq!(quests.len(), 4);
     }
 

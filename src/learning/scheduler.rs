@@ -1,6 +1,8 @@
 use super::performance::{CommandPerformance, PerformanceTracker};
+use crate::time::{Clock, SystemClock};
 use chrono::{DateTime, Utc};
 use std::collections::BinaryHeap;
+use std::sync::Arc;
 
 /// Review item with priority information
 #[derive(Debug, Clone)]
@@ -35,13 +37,31 @@ impl PartialOrd for ReviewItem {
 }
 
 /// Scheduler for spaced repetition reviews
-#[derive(Debug, Default)]
-pub struct Scheduler;
+pub struct Scheduler {
+    clock: Arc<dyn Clock>,
+}
+
+impl std::fmt::Debug for Scheduler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Scheduler").finish_non_exhaustive()
+    }
+}
+
+impl Default for Scheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Scheduler {
-    /// Create a new scheduler
+    /// Create a new scheduler backed by the system clock
     pub fn new() -> Self {
-        Self
+        Self::with_clock(Arc::new(SystemClock))
+    }
+
+    /// Create a new scheduler backed by the given clock
+    pub fn with_clock(clock: Arc<dyn Clock>) -> Self {
+        Self { clock }
     }
 
     /// Record commands used in a completed scenario
@@ -123,7 +143,7 @@ impl Scheduler {
     /// # Arguments
     /// * `tracker` - Reference to performance tracker
     pub fn get_due_reviews(&self, tracker: &PerformanceTracker) -> Vec<String> {
-        let now = Utc::now();
+        let now = self.clock.now();
 
         tracker
             .all_commands()
@@ -148,7 +168,7 @@ impl Scheduler {
     /// * `tracker` - Reference to performance tracker
     /// * `limit` - Maximum number of items to return
     pub fn get_review_queue(&self, tracker: &PerformanceTracker, limit: usize) -> Vec<ReviewItem> {
-        let now = Utc::now();
+        let now = self.clock.now();
 
         // Build priority queue (BinaryHeap is max-heap by default)
         let heap: BinaryHeap<ReviewItem> = tracker
@@ -324,13 +344,13 @@ mod tests {
         let now = Utc::now();
 
         // Command 1: Very overdue, hard difficulty
-        let mut cmd1 = CommandPerformance::new("hard_overdue".to_string());
+        let mut cmd1 = CommandPerformance::new("hard_overdue".to_string(), now);
         cmd1.difficulty = 8.0;
         cmd1.scheduled_days = 10;
         cmd1.due = now - ChronoDuration::days(20); // 20 days overdue
 
         // Command 2: Slightly overdue, easy difficulty
-        let mut cmd2 = CommandPerformance::new("easy_overdue".to_string());
+        let mut cmd2 = CommandPerformance::new("easy_overdue".to_string(), now);
         cmd2.difficulty = 3.0;
         cmd2.scheduled_days = 10;
         cmd2.due = now - ChronoDuration::days(5); // 5 days overdue
@@ -458,7 +478,7 @@ mod tests {
     fn test_priority_zero_when_not_overdue() {
         let now = Utc::now();
 
-        let mut cmd = CommandPerformance::new("not_due".to_string());
+        let mut cmd = CommandPerformance::new("not_due".to_string(), now);
         cmd.difficulty = 8.0;
         cmd.scheduled_days = 10;
         cmd.due = now + ChronoDuration::days(5); // Future due date
@@ -467,6 +487,35 @@ mod tests {
 
         // Not overdue = zero priority
         assert_eq!(priority, 0.0);
+    }
+
+    #[test]
+    fn test_get_due_reviews_honors_injected_clock() {
+        use crate::time::FakeClock;
+
+        let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
+        let mut tracker = PerformanceTracker::with_clock(clock.clone());
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+
+        let scheduled_days = tracker.get_performance("x").unwrap().scheduled_days;
+        assert!(
+            scheduled_days >= 1,
+            "second review should push the due date forward"
+        );
+
+        let scheduler = Scheduler::with_clock(clock.clone());
+        assert!(
+            scheduler.get_due_reviews(&tracker).is_empty(),
+            "not due yet relative to the fake clock"
+        );
+
+        clock.advance_days(scheduled_days as i64);
+        assert_eq!(
+            scheduler.get_due_reviews(&tracker),
+            vec!["x".to_string()],
+            "must become due once the injected clock advances, proving Scheduler doesn't read wall-clock time"
+        );
     }
 
     #[test]

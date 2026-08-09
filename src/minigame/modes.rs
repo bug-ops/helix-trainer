@@ -226,12 +226,6 @@ pub struct ChallengeConfig {
 }
 
 impl ChallengeConfig {
-    /// Create a challenge config for today's date (UTC)
-    pub fn for_today() -> Self {
-        let today = chrono::Utc::now().date_naive();
-        Self::for_date(today)
-    }
-
     /// Create a challenge config for a specific date
     pub fn for_date(date: chrono::NaiveDate) -> Self {
         // Seed = days since Unix epoch, ensuring same seed for same date
@@ -252,15 +246,9 @@ impl ChallengeConfig {
         }
     }
 
-    /// Check if this challenge is for today
-    pub fn is_today(&self) -> bool {
-        self.date == chrono::Utc::now().date_naive()
-    }
-}
-
-impl Default for ChallengeConfig {
-    fn default() -> Self {
-        Self::for_today()
+    /// Check if this challenge is for the given date
+    pub fn is_today(&self, today: chrono::NaiveDate) -> bool {
+        self.date == today
     }
 }
 
@@ -290,7 +278,8 @@ mod tests {
 
     #[test]
     fn test_challenge_mode_config() {
-        let mode = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let mode =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
         assert!(mode.is_challenge());
         assert_eq!(mode.starting_lives(), 3);
         assert!(!mode.has_session_timer());
@@ -388,19 +377,21 @@ mod tests {
 
     #[test]
     fn test_challenge_is_today() {
-        let config = ChallengeConfig::for_today();
-        assert!(config.is_today());
+        let today = chrono::Utc::now().date_naive();
+        let config = ChallengeConfig::for_date(today);
+        assert!(config.is_today(today));
 
         let past = chrono::NaiveDate::from_ymd_opt(2020, 1, 1).unwrap();
         let past_config = ChallengeConfig::for_date(past);
-        assert!(!past_config.is_today());
+        assert!(!past_config.is_today(today));
     }
 
     #[test]
     fn test_mode_descriptions() {
         let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
         let survival = MiniGameMode::Survival(SurvivalConfig::default());
-        let challenge = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let challenge =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
 
         assert!(!arcade.description().is_empty());
         assert!(!survival.description().is_empty());
@@ -446,7 +437,8 @@ mod tests {
     fn test_mode_name_values() {
         let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
         let survival = MiniGameMode::Survival(SurvivalConfig::default());
-        let challenge = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let challenge =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
 
         assert_eq!(arcade.name(), "Arcade");
         assert_eq!(survival.name(), "Survival");
@@ -457,7 +449,8 @@ mod tests {
     fn test_mode_description_values() {
         let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
         let survival = MiniGameMode::Survival(SurvivalConfig::default());
-        let challenge = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let challenge =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
 
         assert_eq!(
             arcade.description(),

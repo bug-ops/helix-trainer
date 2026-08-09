@@ -125,7 +125,21 @@ impl UserProfile {
     /// assert_eq!(profile.current_streak, 0);
     /// ```
     pub fn new() -> Self {
-        let now = Utc::now();
+        Self::new_at(Utc::now())
+    }
+
+    /// Create a new user profile with an explicit creation timestamp
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::Utc;
+    /// use helix_trainer::gamification::UserProfile;
+    ///
+    /// let profile = UserProfile::new_at(Utc::now());
+    /// assert_eq!(profile.level, 1);
+    /// ```
+    pub fn new_at(now: DateTime<Utc>) -> Self {
         Self {
             level: 1,
             total_xp: 0,
@@ -229,10 +243,10 @@ impl UserProfile {
     }
 
     /// Reset daily quest state (called at midnight)
-    pub fn reset_daily_quests(&mut self) {
+    pub fn reset_daily_quests(&mut self, now: DateTime<Utc>) {
         self.completed_quests_today.clear();
         self.daily_quests.clear();
-        self.last_quest_refresh = Utc::now();
+        self.last_quest_refresh = now;
     }
 }
 
@@ -571,7 +585,7 @@ mod tests {
         profile.complete_quest("quest_1".to_string());
         assert!(profile.is_quest_completed("quest_1"));
 
-        profile.reset_daily_quests();
+        profile.reset_daily_quests(Utc::now());
         assert!(!profile.is_quest_completed("quest_1"));
         assert!(profile.daily_quests.is_empty());
     }

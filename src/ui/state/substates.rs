@@ -9,7 +9,9 @@ use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
 use crate::sound::SoundManager;
+use crate::time::Clock;
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Instant;
 
 use super::{QuestProgressChange, ReviewSessionState, XPBreakdown};
@@ -177,24 +179,53 @@ pub struct ProgressState {
 
     /// Sound manager for audio feedback
     pub sound_manager: SoundManager,
+
+    /// Source of the current time, injected for testability
+    ///
+    /// Private: construction is routed exclusively through [`ProgressState::new`] /
+    /// [`ProgressState::with_clock`] so that every clock-consuming field
+    /// (`performance_tracker`, `scheduler`) is guaranteed to share this same instance.
+    /// Reassigning the field directly after construction would not re-point those fields
+    /// and would silently reintroduce clock drift between them.
+    clock: Arc<dyn Clock>,
 }
 
 impl ProgressState {
-    /// Create new ProgressState
+    /// Create new ProgressState backed by the system clock
     pub fn new(
         profile: UserProfile,
         performance_tracker: PerformanceTracker,
         storage: ProfileStorage,
+    ) -> Self {
+        Self::with_clock(
+            profile,
+            performance_tracker,
+            storage,
+            Arc::new(crate::time::SystemClock),
+        )
+    }
+
+    /// Create new ProgressState with an explicit clock
+    ///
+    /// The clock is propagated to every clock-consuming field (`performance_tracker`,
+    /// `scheduler`) so they observe the same time, not just `self.clock`.
+    pub fn with_clock(
+        profile: UserProfile,
+        mut performance_tracker: PerformanceTracker,
+        storage: ProfileStorage,
+        clock: Arc<dyn Clock>,
     ) -> Self {
         // Initialize sound manager from profile config
         let mut sound_manager = SoundManager::new(profile.sound_config.clone());
         // Try to initialize audio (graceful failure)
         let _ = sound_manager.try_init();
 
+        performance_tracker.set_clock(clock.clone());
+
         Self {
             profile,
             performance_tracker,
-            scheduler: Scheduler::new(),
+            scheduler: Scheduler::with_clock(clock.clone()),
             storage,
             scenarios_completed_today: 0,
             commands_used_today: HashSet::new(),
@@ -202,7 +233,24 @@ impl ProgressState {
             session_start_time: Instant::now(),
             last_save_time: None,
             sound_manager,
+            clock,
         }
+    }
+
+    /// Get the current time from the injected clock
+    pub fn now(&self) -> chrono::DateTime<chrono::Utc> {
+        self.clock.now()
+    }
+
+    /// Get the current date from the injected clock
+    pub fn today(&self) -> chrono::NaiveDate {
+        self.clock.today()
+    }
+
+    /// Get a shared handle to the injected clock, e.g. to construct another clock-consuming
+    /// type (such as `PerformanceTracker::from_stats_with_clock`) that shares the same time.
+    pub fn clock(&self) -> Arc<dyn Clock> {
+        self.clock.clone()
     }
 
     /// Check if enough time has passed since last save
@@ -412,6 +460,47 @@ mod tests {
         assert!(progress.last_save_time.is_none());
         progress.mark_saved();
         assert!(progress.last_save_time.is_some());
+    }
+
+    /// Regression test: `ProgressState::with_clock` must propagate the injected clock to
+    /// every clock-consuming field, not just `self.clock`. Previously `performance_tracker`
+    /// kept whatever clock it was constructed with (typically `SystemClock`), so a command
+    /// recorded through it stamped `due`/`last_review` from the wall clock while
+    /// `scheduler.get_due_reviews` compared against the injected fake clock — due dates
+    /// would land far off from what the fake clock reported "now" as.
+    #[test]
+    fn test_with_clock_propagates_to_performance_tracker_and_scheduler() {
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use crate::time::{Clock, FakeClock};
+        use std::sync::Arc;
+
+        let clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
+        let mut progress = ProgressState::with_clock(
+            UserProfile::new(),
+            PerformanceTracker::new(), // built with the default SystemClock
+            ProfileStorage::for_test(),
+            clock.clone(),
+        );
+
+        progress.performance_tracker.record_attempt(
+            "x",
+            std::time::Duration::from_secs(1),
+            true,
+            std::time::Duration::from_secs(1),
+        );
+
+        // If the tracker still used SystemClock, `last_review` would be wall-clock "now",
+        // not the fake clock's fixed instant.
+        let perf = progress.performance_tracker.get_performance("x").unwrap();
+        assert_eq!(perf.last_review, clock.now());
+
+        // The scheduler must observe the same fake "now" the tracker recorded against, so
+        // a command recorded at the fake clock's current time is immediately due.
+        let due = progress
+            .scheduler
+            .get_due_reviews(&progress.performance_tracker);
+        assert!(due.contains(&"x".to_string()));
     }
 
     #[test]

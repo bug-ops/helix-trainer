@@ -129,4 +129,40 @@ mod tests {
 
         assert!(!state.content_matches());
     }
+
+    /// Regression test for #283: entering Insert mode alone must not
+    /// register as completion, even when the target content is already
+    /// reachable mid-Insert (e.g. `o` opens a blank line matching the
+    /// target before `Escape` returns to Normal mode).
+    #[test]
+    fn test_insert_mode_entry_alone_does_not_complete() {
+        let scenario = ScenarioBuilder::new()
+            .id("open_below_001")
+            .name("Insert line below")
+            .setup_content("fn add(a: i32, b: i32) -> i32 {\n    a + b\n}")
+            .setup_cursor(0, 0)
+            .target_content("fn add(a: i32, b: i32) -> i32 {\n\n    a + b\n}")
+            .target_cursor(1, 0)
+            .commands(vec!["o", "Escape"])
+            .command_description("Press 'o' to open line below, then Escape")
+            .optimal_count(2)
+            .build();
+        let mut state = ScenarioState::from_scenario(&scenario).unwrap();
+
+        state.simulator.execute_command("o").unwrap();
+        assert_eq!(
+            state.simulator.display().content(),
+            scenario.target.file_content
+        );
+        assert!(
+            !state.is_completed(),
+            "scenario must not complete while still in Insert mode"
+        );
+
+        state.simulator.execute_command("Escape").unwrap();
+        assert!(
+            state.is_completed(),
+            "scenario must complete once back in Normal mode"
+        );
+    }
 }

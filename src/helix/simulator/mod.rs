@@ -544,12 +544,23 @@ impl AnyModeSimulator {
     /// Check if simulator state matches a target snapshot.
     ///
     /// Used for completion checking. Performs order-independent
-    /// selection comparison for multi-cursor scenarios.
+    /// selection comparison for multi-cursor scenarios. In addition to
+    /// content/cursor/selection equality, the editor must be back in
+    /// Normal mode: a scenario is only "complete" once the documented
+    /// solution has fully run, and every scenario solution that enters
+    /// Insert mode returns to Normal mode (via `Escape`) before the
+    /// target state is reached. Without this check, a scenario whose
+    /// target content is reachable mid-Insert (e.g. `o` immediately
+    /// after opening a blank line) would register as complete before
+    /// the trailing `Escape` is pressed.
     pub fn matches_snapshot(&self, target: &EditorSnapshot) -> bool {
-        match self {
-            Self::Normal(sim) => sim.matches_snapshot(target),
-            Self::Insert(sim) => sim.matches_snapshot(target),
-        }
+        self.mode() == Mode::Normal
+            && match self {
+                Self::Normal(sim) => sim.matches_snapshot(target),
+                // Unreachable: the `mode() == Mode::Normal` check above
+                // already short-circuits before this arm can run.
+                Self::Insert(_) => false,
+            }
     }
 
     /// Create from an EditorSnapshot in Normal mode.

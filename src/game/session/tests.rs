@@ -352,3 +352,53 @@ fn test_playable_scenario_elapsed_fixed_after_completion() {
         }
     }
 }
+
+#[test]
+fn test_completion_progress_not_100_while_in_insert_mode() {
+    // Regression test for #283: content can already match the target while
+    // still in Insert mode (e.g. right after 'o' opens a blank line), but
+    // the progress bar must not report 100% until Escape returns to Normal
+    // mode, mirroring `check_completion()`'s mode requirement.
+    let scenario = ScenarioBuilder::new()
+        .id("open_below_001")
+        .name("Insert line below")
+        .setup_content("fn add(a: i32, b: i32) -> i32 {\n    a + b\n}")
+        .setup_cursor(0, 0)
+        .target_content("fn add(a: i32, b: i32) -> i32 {\n\n    a + b\n}")
+        .target_cursor(1, 0)
+        .commands(vec!["o", "Escape"])
+        .command_description("Press 'o' to open line below, then Escape")
+        .optimal_count(2)
+        .build();
+    let session = GameSession::new(scenario).unwrap();
+
+    let result = session.record_action("o".to_string()).unwrap();
+    let session = match result {
+        SessionAfterAction::StillActive(s) => s,
+        SessionAfterAction::Completed(_) => {
+            panic!("Session should not complete while still in Insert mode")
+        }
+    };
+    assert!(
+        session.is_insert_mode(),
+        "Session should still be in Insert mode after 'o'"
+    );
+    assert!(
+        session.completion_progress() < 100,
+        "Progress must not read 100% while still in Insert mode"
+    );
+
+    let result = session.record_action("Escape".to_string()).unwrap();
+    match result {
+        SessionAfterAction::Completed(completed) => {
+            assert_eq!(
+                completed.completion_progress(),
+                100,
+                "Progress should read 100% once back in Normal mode"
+            );
+        }
+        SessionAfterAction::StillActive(_) => {
+            panic!("Session should be completed after 'o' + 'Escape'");
+        }
+    }
+}

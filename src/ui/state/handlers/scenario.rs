@@ -249,30 +249,29 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     let xp = ScenarioCompletionService::calculate_xp_components(&feedback, is_first_today);
 
     let now = ctx.progress.now();
-    let (actual_xp, mastery_level, mastery_multiplier, mastery_factor, repeat_penalty) =
-        ScenarioCompletionService::record_and_scale_xp(
-            &mut ctx.progress.profile,
-            &scenario_id,
-            feedback.score,
-            xp.total_base_xp,
-            now,
-        );
+    let xp_scaling = ScenarioCompletionService::record_and_scale_xp(
+        &mut ctx.progress.profile,
+        &scenario_id,
+        feedback.score,
+        xp.total_base_xp,
+        now,
+    );
 
     // Store mastery info for results display
-    ctx.ui.scenario_mastery = Some((mastery_level, mastery_multiplier));
+    ctx.ui.scenario_mastery = Some((xp_scaling.mastery_level, xp_scaling.applied_multiplier));
 
     // Collect quest bonuses
     let quest_bonuses = collect_quest_bonuses(&mut ctx);
     let quest_xp = quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
-    let total_xp = actual_xp + quest_xp;
+    let total_xp = xp_scaling.actual_xp + quest_xp;
 
     ctx.ui.xp_breakdown = Some(XPBreakdown {
         base_xp: xp.base_xp,
         perfect_bonus: xp.perfect_bonus,
         first_today_bonus: xp.first_today_bonus,
-        mastery_multiplier,
-        mastery_factor,
-        repeat_penalty,
+        mastery_multiplier: xp_scaling.applied_multiplier,
+        mastery_factor: xp_scaling.applied_mastery_factor,
+        repeat_penalty: xp_scaling.applied_repeat_penalty,
         quest_bonuses,
         total_xp,
     });

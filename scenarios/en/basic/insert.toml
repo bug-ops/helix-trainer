@@ -46,7 +46,10 @@ id = "open_below_001"
 name = "Insert line below"
 description = "Open a new line below the current line"
 
-hints = ["'o' inserts a new line below and enters insert mode"]
+hints = [
+    "'o' inserts a new line below and enters insert mode",
+    "Don't forget to press Escape to exit insert mode",
+]
 
 [scenarios.setup]
 file_content = """fn add(a: i32, b: i32) -> i32 {
@@ -82,7 +85,10 @@ id = "open_above_001"
 name = "Insert line above"
 description = "Open a new line above the current line"
 
-hints = ["'O' inserts a new line above and enters insert mode"]
+hints = [
+    "'O' inserts a new line above and enters insert mode",
+    "Don't forget to press Escape to exit insert mode",
+]
 
 [scenarios.setup]
 file_content = """fn main() {

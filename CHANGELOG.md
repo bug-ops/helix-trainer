@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Scenario completion checking now requires the editor to be back in Normal mode, not just matching content/cursor/selections; scenarios whose solution is a bare mode-entry command followed by `Escape` (e.g. `o`, `Escape` for "Insert line below") no longer complete on the mode-entry keystroke alone, before `Escape` is pressed (#283). `open_below_001`/`open_above_001` now hint that Escape is required, the progress bar no longer reads 100% while still in Insert mode, and the hint panel no longer swallows the first Escape needed to exit Insert mode
 - CI now runs the full `cargo nextest` test surface (`--workspace --all-features --lib --bins --tests`) instead of `--lib` only, so integration tests under `tests/` (e.g. `tests/scenario_validation.rs`, which verifies every scenario's documented solution actually completes it) are no longer silently skipped in CI (#288)
 - Added `.gitattributes` (`* text=auto eol=lf`) to force LF checkouts on every platform; without it, Windows checkouts converted `scenarios/`/`quests/` TOML files to CRLF, and since those are embedded verbatim via `include_str!()`, the TOML parser preserved `\r\n` literally inside multi-line strings, corrupting scenario content and breaking cursor/column math for roughly half of all scenarios on Windows only — surfaced immediately once CI began running `tests/scenario_validation.rs` on `windows-latest` (#288)
 - Pausing an arcade/survival/challenge mini-game session no longer lets the active scenario's countdown timer keep draining in real time; elapsed time now excludes accumulated paused duration (#271)
@@ -61,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Consolidated scenario/quest TOML parsing, count-limit enforcement, and per-item validation into a shared `config::loader::parse_and_validate` pipeline (#276)
 - Collapsed the duplicated `PlayableScenario` trait implementations for `GameSession<Active>` and `GameSession<Completed>` into a single `impl<S: SessionState> PlayableScenario for GameSession<S>` block; the per-state `elapsed()` behavior is now dispatched through a new `SessionState::session_elapsed` associated function (#280)
 - **BREAKING**: Removed `AppState::save_profile_debounced`, `AppState::save_profile_immediate`, and `ProgressState::save_blocking` — the serialized save-writer path introduced for #294 left them with no production caller; the application's exit-time save now goes through `AppState::prepare_final_save_request` instead (#294)
+- `ScenarioCompletionService::record_and_scale_xp` now returns a named `XPScalingResult` struct instead of an unlabeled `(u64, ScenarioMastery, f64, f64, f64)` tuple, removing the risk of a silent positional swap between its three `f64` fields (#281)
 
 ## [0.5.12] - 2026-07-27
 

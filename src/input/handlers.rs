@@ -359,10 +359,13 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         return Some(msg);
     }
 
-    // If hint panel is visible, Escape dismisses it without counting as a game action
+    // If hint panel is visible, Escape dismisses it without counting as a game action.
+    // Skip this while in Insert mode so Escape exits Insert mode first (matching the
+    // arcade path); a second Escape then closes the panel.
     if key.code == KeyCode::Esc
         && let TypedScreen::Task(task_data) = &state.screen
         && task_data.show_hint_panel
+        && !is_gameplay_insert_mode(state)
     {
         return Some(Message::ShowHint);
     }
@@ -528,6 +531,50 @@ mod tests {
 
     fn create_test_app_state() -> AppState {
         empty_test_app_state()
+    }
+
+    /// Build an `Active` `GameSession` for a minimal scenario, used to exercise
+    /// insert/normal mode transitions in task-screen key handling tests.
+    fn make_active_task_session() -> GameSession<crate::game::Active> {
+        use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
+
+        let scenario = Scenario {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            description: "Test scenario".to_string(),
+            setup: Setup {
+                file_content: "test".to_string(),
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
+            },
+            target: TargetState {
+                file_content: "test2".to_string(),
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
+            },
+            solution: Solution {
+                commands: vec!["x".to_string()],
+                description: "Delete char".to_string(),
+            },
+            scoring: ScoringConfig {
+                optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
+                max_points: 100,
+                tolerance: 0,
+            },
+            hints: vec![],
+            alternatives: vec![],
+            metadata: None,
+        };
+
+        GameSession::new(scenario).unwrap()
     }
 
     #[test]
@@ -844,52 +891,59 @@ mod tests {
 
         #[test]
         fn test_is_gameplay_insert_mode_on_task_screen_normal_mode() {
-            use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
-
             let mut state = create_test_app_state();
-
-            // Create a simple scenario
-            let scenario = Scenario {
-                id: "test".to_string(),
-                name: "Test".to_string(),
-                description: "Test scenario".to_string(),
-                setup: Setup {
-                    file_content: "test".to_string(),
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
-                },
-                target: TargetState {
-                    file_content: "test2".to_string(),
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
-                },
-                solution: Solution {
-                    commands: vec!["x".to_string()],
-                    description: "Delete char".to_string(),
-                },
-                scoring: ScoringConfig {
-                    optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
-                    max_points: 100,
-                    tolerance: 0,
-                },
-                hints: vec![],
-                alternatives: vec![],
-                metadata: None,
-            };
-
-            let session = GameSession::new(scenario).unwrap();
-            state.screen = TypedScreen::Task(TaskData::new(session));
+            state.screen = TypedScreen::Task(TaskData::new(make_active_task_session()));
 
             // GameSession starts in Normal mode
             assert!(!is_gameplay_insert_mode(&state));
+        }
+    }
+
+    // Regression tests for the hint-panel Escape interaction fixed alongside #283:
+    // Escape must exit Insert mode before it dismisses the hint panel.
+    mod task_keys_hint_panel_escape_tests {
+        use super::*;
+        use crate::helix::commands::CMD_INSERT;
+
+        #[test]
+        fn test_escape_exits_insert_mode_even_with_hint_panel_open() {
+            let mut state = create_test_app_state();
+            let session = make_active_task_session();
+            let session = match session.record_action(CMD_INSERT.to_string()).unwrap() {
+                crate::game::SessionAfterAction::StillActive(session) => session,
+                crate::game::SessionAfterAction::Completed(_) => {
+                    panic!("entering insert mode should not complete the scenario")
+                }
+            };
+            assert!(session.is_insert_mode());
+
+            let mut task_data = TaskData::new(session);
+            task_data.show_hint_panel = true;
+            state.screen = TypedScreen::Task(task_data);
+
+            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            let msg = handle_task_keys(key, &state);
+
+            // Escape should exit Insert mode (gameplay Escape), not dismiss the hint panel.
+            assert_eq!(
+                msg,
+                Some(Message::ExecuteCommand(Cow::Borrowed(
+                    crate::helix::commands::CMD_ESCAPE
+                )))
+            );
+        }
+
+        #[test]
+        fn test_escape_dismisses_hint_panel_in_normal_mode() {
+            let mut state = create_test_app_state();
+            let mut task_data = TaskData::new(make_active_task_session());
+            task_data.show_hint_panel = true;
+            state.screen = TypedScreen::Task(task_data);
+
+            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            let msg = handle_task_keys(key, &state);
+
+            assert_eq!(msg, Some(Message::ShowHint));
         }
     }
 

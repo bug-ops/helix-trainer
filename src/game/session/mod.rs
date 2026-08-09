@@ -341,7 +341,16 @@ impl<S: SessionState> GameSession<S> {
 
         // Calculate percentage (0-100)
         let percentage = (matching_lines * 100) / target_lines.len().max(1);
-        percentage.min(100) as u8
+
+        // Mirror matches_snapshot's mode requirement: content can match the
+        // target while still in Insert mode (e.g. right after `o`), but the
+        // scenario isn't actually complete until Escape returns to Normal
+        // mode, so don't report 100% until then.
+        if self.mode() != Mode::Normal {
+            percentage.min(99) as u8
+        } else {
+            percentage.min(100) as u8
+        }
     }
 }
 

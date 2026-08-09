@@ -192,6 +192,27 @@ impl CanonicalKeys {
     pub fn tokens(&self) -> Vec<&str> {
         tokenize(&self.0)
     }
+
+    /// Returns `true` when [`tokens`](Self::tokens) would produce exactly
+    /// one token equal to the whole string, without allocating.
+    ///
+    /// Callers on the keystroke hot path (the overwhelmingly common case is
+    /// a single, un-remapped key) should check this first and dispatch on
+    /// [`as_str`](Self::as_str) directly, falling back to `tokens()` only
+    /// when this returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::input::keymap::CanonicalKeys;
+    ///
+    /// assert!(CanonicalKeys::from_static("f").is_single_token());
+    /// assert!(CanonicalKeys::from_static("Alt-*").is_single_token());
+    /// assert!(!CanonicalKeys::from_static("gg").is_single_token());
+    /// ```
+    pub fn is_single_token(&self) -> bool {
+        is_single_token(&self.0)
+    }
 }
 
 impl From<Cow<'static, str>> for CanonicalKeys {
@@ -209,11 +230,23 @@ fn starts_with_modifier_prefix(s: &str) -> bool {
     })
 }
 
+/// Mirrors `tokenize`'s token-count logic (rules 1-3) without allocating a
+/// `Vec` - used by [`CanonicalKeys::is_single_token`] on the hot path. The
+/// single-`char` check is tried first since it's both the cheapest test and
+/// the dominant case (a bare, un-remapped key), ahead of the string-prefix
+/// and named-key comparisons rules 1-2 need.
+fn is_single_token(s: &str) -> bool {
+    !s.is_empty()
+        && (s.chars().next().is_some_and(|c| c.len_utf8() == s.len())
+            || starts_with_modifier_prefix(s)
+            || is_named_key(s))
+}
+
 fn tokenize(s: &str) -> Vec<&str> {
     if s.is_empty() {
         return Vec::new();
     }
-    if starts_with_modifier_prefix(s) || is_named_key(s) {
+    if is_single_token(s) {
         return vec![s];
     }
     let mut tokens = Vec::with_capacity(s.len());
@@ -335,5 +368,32 @@ mod tests {
             }
         }
         assert!(checked >= 84);
+    }
+
+    /// Equivalence gate: `is_single_token` must never drift from
+    /// `tokenize().len() == 1` - it exists purely to answer that question
+    /// without allocating, so a mismatch would silently break the
+    /// keystroke hot path's fast case.
+    #[test]
+    fn is_single_token_matches_tokens_len_across_inputs() {
+        let mut inputs: Vec<&str> = vec![
+            "",       // empty string: zero tokens
+            "é",      // single multi-byte char: one token
+            "Escape", // named key: one token
+            "Alt-*",  // modifier-prefixed: one token
+            "gg",     // two single-char tokens
+            "mi(",    // three single-char tokens
+        ];
+        let registry = normal_registry();
+        for meta in registry.all_commands() {
+            inputs.push(meta.key);
+        }
+        for s in inputs {
+            assert_eq!(
+                is_single_token(s),
+                tokenize(s).len() == 1,
+                "is_single_token/tokenize mismatch for {s:?}"
+            );
+        }
     }
 }

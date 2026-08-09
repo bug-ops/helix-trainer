@@ -385,7 +385,7 @@ where
             .config
             .keymap
             .lookup(context, PhysicalKey::from_event(key))
-        && (canonical.tokens().len() == 1 || machine.state().is_base())
+        && (canonical.is_single_token() || machine.state().is_base())
     {
         let typed = Cow::Owned(PhysicalKey::from_event(key).label());
         return Some(make_message(canonical.clone(), typed));

@@ -135,15 +135,23 @@ pub fn handle_execute_command(
         state.screen = TypedScreen::Task(task_data);
     } else {
         // Normal mode - use InputStateMachine for multi-key command handling.
-        let tokens = keys.tokens();
-        let resolved = if tokens.len() > 1 {
+        // Single-token keys (the overwhelmingly common case) are dispatched
+        // directly to avoid the `Vec` allocation `tokens()` would incur.
+        //
+        // An empty `keys` (never produced today - the keymap parser rejects
+        // empty bindings at config-load time) would take this branch with
+        // an empty `tokens`; `apply_canonical_expansion` handles that by
+        // returning `None`, unlike the old `tokens[0]` indexing this
+        // replaced, which would have panicked.
+        let resolved = if !keys.is_single_token() {
+            let tokens = keys.tokens();
             task_data
                 .input_state_mut()
                 .apply_canonical_expansion(&tokens)
         } else {
             match task_data
                 .input_state_mut()
-                .process_key(command_to_key_event(tokens[0]))
+                .process_key(command_to_key_event(keys.as_str()))
             {
                 HandlerResult::Execute(cmd) => Some(cmd.to_string()),
                 HandlerResult::Transition(_) => {

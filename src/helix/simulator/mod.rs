@@ -76,8 +76,14 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Current selection(s) with head and anchor positions
     pub(super) selection: Selection,
 
-    /// Undo history stack storing both transactions and previous document states
-    pub(super) history: Vec<(Transaction, Rope)>,
+    /// Undo history stack storing the document state from immediately
+    /// before each applied transaction.
+    pub(super) history: Vec<Rope>,
+
+    /// Redo stack storing the document state each `undo` moves away from,
+    /// so `redo` can restore it. Cleared whenever a new transaction is
+    /// applied, matching standard editor undo/redo semantics.
+    pub(super) redo_stack: Vec<Rope>,
 
     /// Clipboard for yank and paste operations
     pub(super) clipboard: Option<String>,
@@ -237,11 +243,21 @@ impl<M: EditorMode> HelixSimulator<M> {
     }
 
     /// Apply transaction and save history
+    ///
+    /// No-op transactions (empty change set) are skipped entirely: they
+    /// leave the document unchanged, so recording them would create a
+    /// spurious undo step and needlessly discard valid redo history.
     pub(super) fn apply_transaction(&mut self, transaction: Transaction) {
+        if transaction.changes().is_empty() {
+            return;
+        }
+
         // Save previous state before applying transaction
         let prev_doc = self.doc.clone();
-        self.history.push((transaction.clone(), prev_doc));
+        self.history.push(prev_doc);
         transaction.apply(&mut self.doc);
+        // A new edit invalidates any previously undone changes
+        self.redo_stack.clear();
     }
 }
 
@@ -253,6 +269,7 @@ impl HelixSimulator<NormalMode> {
             doc: Rope::from(content.as_str()),
             selection: Selection::point(0),
             history: Vec::new(),
+            redo_stack: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
@@ -294,6 +311,7 @@ impl HelixSimulator<NormalMode> {
             doc: rope,
             selection,
             history: Vec::new(),
+            redo_stack: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
@@ -362,6 +380,7 @@ impl HelixSimulator<NormalMode> {
             doc: rope,
             selection,
             history: Vec::new(),
+            redo_stack: Vec::new(),
             clipboard: None,
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
@@ -385,6 +404,7 @@ impl HelixSimulator<NormalMode> {
             doc: self.doc,
             selection: collapsed_selection,
             history: self.history,
+            redo_stack: self.redo_stack,
             clipboard: self.clipboard,
             repeat_buffer: self.repeat_buffer,
             is_repeating: self.is_repeating,
@@ -425,6 +445,7 @@ impl HelixSimulator<InsertMode> {
             doc: self.doc,
             selection: self.selection,
             history: self.history,
+            redo_stack: self.redo_stack,
             clipboard: self.clipboard,
             repeat_buffer: self.repeat_buffer,
             is_repeating: self.is_repeating,

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scenario `id` fields with an empty string now fail validation, matching quest template behavior (#275)
 - `yank` (`y`) now copies the full `anchor..head` range of the primary selection instead of a single character, so text objects and extend motions yank the entire selected text (#266)
 - `paste_after`/`paste_before` (`p`/`P`) now insert at the correct end of a range selection regardless of its direction, instead of always using the raw (possibly backward) `head` position (#266)
+- `redo` (`U`, `Ctrl-r`) now restores the most recently undone change via a redo stack built on the existing document history, instead of being a no-op; repeated redo walks forward through history and round-trips correctly with undo (#265)
+- Applying a transaction with no actual document changes no longer records a spurious undo step or discards pending redo history (#265)
 
 ### Changed
 

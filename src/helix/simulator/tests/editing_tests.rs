@@ -371,3 +371,20 @@ fn test_change_selection() {
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.cursor_position().1, 0); // Cursor stays at start
 }
+
+#[test]
+fn test_change_selection_noyank() {
+    let mut sim = AnyModeSimulator::new("hello".to_string());
+
+    // Cursor at start
+    assert_eq!(sim.state().unwrap().content(), "hello");
+    assert_eq!(sim.mode(), Mode::Normal);
+
+    // Press Alt-c should delete 'h' and enter insert mode, without yanking
+    sim.execute_command(CMD_CHANGE_SELECTION_NOYANK).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(state.content(), "ello");
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.cursor_position().1, 0); // Cursor stays at start
+}

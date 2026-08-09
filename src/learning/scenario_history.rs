@@ -285,6 +285,26 @@ impl ScenarioHistory {
         self.completions.get(scenario_id)
     }
 
+    /// Iterate over every recorded scenario completion.
+    ///
+    /// Used to compute cross-scenario aggregates (e.g. the overall attempt
+    /// time span) that can't be derived from a single [`Self::get`] lookup.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::Utc;
+    /// use helix_trainer::learning::ScenarioHistory;
+    ///
+    /// let mut history = ScenarioHistory::new();
+    /// history.record_completion("a", 100, 50, Utc::now());
+    /// history.record_completion("b", 80, 40, Utc::now());
+    /// assert_eq!(history.iter().count(), 2);
+    /// ```
+    pub fn iter(&self) -> impl Iterator<Item = &ScenarioCompletion> {
+        self.completions.values()
+    }
+
     /// Record a scenario completion with score and base XP
     ///
     /// Returns actual XP awarded after mastery scaling

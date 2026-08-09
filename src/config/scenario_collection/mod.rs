@@ -370,6 +370,230 @@ impl ScenarioCollection {
     pub fn active_sort(&self) -> SortMode {
         self.active_sort
     }
+
+    /// Whether a scenario has at least one recorded completion in `profile`.
+    ///
+    /// Shared by [`Self::completed_count`] (fast, per-frame safe) and
+    /// [`Self::curriculum_stats`] (single-pass, allocates `per_category`) so the
+    /// two can never disagree on what counts as "completed".
+    fn is_scenario_completed(scenario: &Scenario, profile: &UserProfile) -> bool {
+        profile.scenario_history.get(&scenario.id).is_some()
+    }
+
+    /// Number of unfiltered scenarios with at least one recorded completion.
+    ///
+    /// Cheap enough to call every render frame (a `HashMap` lookup per scenario,
+    /// no allocation) — used by [`Self::is_curriculum_complete`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::Utc;
+    /// use helix_trainer::config::{
+    ///     CursorSpec, Scenario, ScenarioCollection, ScoringConfig, Setup, Solution, TargetState,
+    /// };
+    /// use helix_trainer::gamification::UserProfile;
+    ///
+    /// fn minimal_scenario(id: &str) -> Scenario {
+    ///     let cursor = CursorSpec {
+    ///         cursor_position: Some((0, 0)),
+    ///         selection: None,
+    ///         cursors: None,
+    ///         selections: None,
+    ///     };
+    ///     Scenario {
+    ///         id: id.to_string(),
+    ///         name: "Test".to_string(),
+    ///         description: "Test".to_string(),
+    ///         setup: Setup { file_content: "test".to_string(), cursor: cursor.clone() },
+    ///         target: TargetState { file_content: "test".to_string(), cursor },
+    ///         solution: Solution { commands: vec!["x".to_string()], description: "Test".to_string() },
+    ///         alternatives: vec![],
+    ///         hints: vec![],
+    ///         scoring: ScoringConfig {
+    ///             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
+    ///             max_points: 100,
+    ///             tolerance: 0,
+    ///         },
+    ///         metadata: None,
+    ///     }
+    /// }
+    ///
+    /// let collection = ScenarioCollection::new(vec![minimal_scenario("s1")]);
+    /// let mut profile = UserProfile::new();
+    /// assert_eq!(collection.completed_count(&profile), 0);
+    ///
+    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    /// assert_eq!(collection.completed_count(&profile), 1);
+    /// ```
+    pub fn completed_count(&self, profile: &UserProfile) -> usize {
+        self.scenarios
+            .iter()
+            .filter(|s| Self::is_scenario_completed(s, profile))
+            .count()
+    }
+
+    /// Whether every scenario in the collection has been completed at least once.
+    ///
+    /// False for an empty collection — a failed scenario load must never
+    /// celebrate curriculum completion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::Utc;
+    /// use helix_trainer::config::{
+    ///     CursorSpec, Scenario, ScenarioCollection, ScoringConfig, Setup, Solution, TargetState,
+    /// };
+    /// use helix_trainer::gamification::UserProfile;
+    ///
+    /// fn minimal_scenario(id: &str) -> Scenario {
+    ///     let cursor = CursorSpec {
+    ///         cursor_position: Some((0, 0)),
+    ///         selection: None,
+    ///         cursors: None,
+    ///         selections: None,
+    ///     };
+    ///     Scenario {
+    ///         id: id.to_string(),
+    ///         name: "Test".to_string(),
+    ///         description: "Test".to_string(),
+    ///         setup: Setup { file_content: "test".to_string(), cursor: cursor.clone() },
+    ///         target: TargetState { file_content: "test".to_string(), cursor },
+    ///         solution: Solution { commands: vec!["x".to_string()], description: "Test".to_string() },
+    ///         alternatives: vec![],
+    ///         hints: vec![],
+    ///         scoring: ScoringConfig {
+    ///             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
+    ///             max_points: 100,
+    ///             tolerance: 0,
+    ///         },
+    ///         metadata: None,
+    ///     }
+    /// }
+    ///
+    /// let collection = ScenarioCollection::new(vec![minimal_scenario("s1")]);
+    /// let mut profile = UserProfile::new();
+    /// assert!(!collection.is_curriculum_complete(&profile));
+    ///
+    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    /// assert!(collection.is_curriculum_complete(&profile));
+    ///
+    /// // An empty collection is never complete, even with no scenarios to finish.
+    /// assert!(!ScenarioCollection::new(vec![]).is_curriculum_complete(&profile));
+    /// ```
+    pub fn is_curriculum_complete(&self, profile: &UserProfile) -> bool {
+        self.total_count() > 0 && self.completed_count(profile) == self.total_count()
+    }
+
+    /// Join the unfiltered scenario set against the profile's completion
+    /// history in a single pass, computing per-category and overall mastery
+    /// counts for the end-game summary screen.
+    ///
+    /// Scenarios with no `metadata.category` (both are `Option`) are counted
+    /// in `total`/`perfected` but excluded from `per_category` — there is no
+    /// category to attribute them to. Every scenario shipped today has a
+    /// category, so this is currently a no-op exclusion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::Utc;
+    /// use helix_trainer::config::{
+    ///     CursorSpec, Scenario, ScenarioCategory, ScenarioCollection, ScenarioMetadata,
+    ///     ScoringConfig, Setup, Solution, TargetState,
+    /// };
+    /// use helix_trainer::gamification::UserProfile;
+    ///
+    /// let cursor = CursorSpec {
+    ///     cursor_position: Some((0, 0)),
+    ///     selection: None,
+    ///     cursors: None,
+    ///     selections: None,
+    /// };
+    /// let scenario = Scenario {
+    ///     id: "s1".to_string(),
+    ///     name: "Test".to_string(),
+    ///     description: "Test".to_string(),
+    ///     setup: Setup { file_content: "test".to_string(), cursor: cursor.clone() },
+    ///     target: TargetState { file_content: "test".to_string(), cursor },
+    ///     solution: Solution { commands: vec!["x".to_string()], description: "Test".to_string() },
+    ///     alternatives: vec![],
+    ///     hints: vec![],
+    ///     scoring: ScoringConfig {
+    ///         optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
+    ///         max_points: 100,
+    ///         tolerance: 0,
+    ///     },
+    ///     metadata: Some(ScenarioMetadata {
+    ///         category: Some(ScenarioCategory::Movement),
+    ///         ..Default::default()
+    ///     }),
+    /// };
+    ///
+    /// let collection = ScenarioCollection::new(vec![scenario]);
+    /// let mut profile = UserProfile::new();
+    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    ///
+    /// let stats = collection.curriculum_stats(&profile);
+    /// assert_eq!(stats.total, 1);
+    /// assert_eq!(stats.perfected, 1);
+    /// assert_eq!(stats.per_category, vec![(ScenarioCategory::Movement, 1, 1)]);
+    /// ```
+    pub fn curriculum_stats(&self, profile: &UserProfile) -> CurriculumStats {
+        let mut stats = CurriculumStats {
+            total: self.scenarios.len(),
+            ..Default::default()
+        };
+        let mut per_category: Vec<(ScenarioCategory, usize, usize)> = Vec::new();
+
+        for scenario in &self.scenarios {
+            let completed = Self::is_scenario_completed(scenario, profile);
+            let perfected = profile
+                .scenario_history
+                .get(&scenario.id)
+                .is_some_and(|c| c.perfect_count > 0);
+
+            if completed {
+                stats.completed += 1;
+            }
+            if perfected {
+                stats.perfected += 1;
+            }
+
+            if let Some(category) = scenario.metadata.as_ref().and_then(|m| m.category) {
+                match per_category.iter_mut().find(|(c, _, _)| *c == category) {
+                    Some((_, cat_perfected, cat_total)) => {
+                        *cat_total += 1;
+                        if perfected {
+                            *cat_perfected += 1;
+                        }
+                    }
+                    None => per_category.push((category, usize::from(perfected), 1)),
+                }
+            }
+        }
+
+        per_category.sort_by_key(|(c, _, _)| *c as u8);
+        stats.per_category = per_category;
+        stats
+    }
+}
+
+/// Per-category and overall mastery counts over the unfiltered scenario set.
+///
+/// Returned by [`ScenarioCollection::curriculum_stats`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CurriculumStats {
+    /// Total scenarios in the collection, ignoring the active filter.
+    pub total: usize,
+    /// Scenarios with at least one recorded completion.
+    pub completed: usize,
+    /// Scenarios with at least one 100% completion (`perfect_count > 0`).
+    pub perfected: usize,
+    /// `(category, perfected_in_category, total_in_category)`, sorted the same
+    /// way as [`ScenarioCollection::get_categories`] (`*category as u8`).
+    pub per_category: Vec<(ScenarioCategory, usize, usize)>,
 }
 
 #[cfg(test)]

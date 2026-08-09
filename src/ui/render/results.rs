@@ -129,6 +129,34 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
             ]));
         }
 
+        // Curriculum-completion discoverability hint. Computed live (not stored on
+        // ResultsData) so it also appears on the abandon path, which has no
+        // HandlerContext available to set it at transition time.
+        //
+        // Gated on both the curriculum being complete AND this being the last
+        // scenario in the current filtered list - `handle_next_lesson` only
+        // transitions to the summary at `next_index >= count()` (matching its
+        // own end-of-list check). Without the second condition, replaying a
+        // scenario that isn't last in the filtered list would show this hint
+        // while `(n)` actually just starts the next scenario.
+        let at_end_of_list = results_data
+            .scenario_index
+            .is_some_and(|i| i + 1 >= state.game.scenario_collection.count());
+        let curriculum_complete = at_end_of_list
+            && state
+                .game
+                .scenario_collection
+                .is_curriculum_complete(&state.progress.profile);
+        if curriculum_complete {
+            result_lines.push(Line::from(""));
+            result_lines.push(Line::from(vec![Span::styled(
+                t!("results.curriculum_complete_hint").to_string(),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]));
+        }
+
         let results = Paragraph::new(result_lines)
             .block(
                 Block::default()

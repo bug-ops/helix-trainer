@@ -45,8 +45,9 @@ pub use substates::{ConfigState, GameState, ProgressState, UIState};
 pub mod screen;
 pub use screen::{
     AchievementsData, CategoryFiltersData, CommandBufferAccess, CompletedOrAbandoned,
-    InputStateAccess, KeyHistory, MenuData, MiniGameData, MiniGameModeSelection, ModeSelectionData,
-    ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
+    EndGameSummaryData, InputStateAccess, KeyHistory, MenuData, MiniGameData,
+    MiniGameModeSelection, ModeSelectionData, NextStep, ProfileData, ResultsData,
+    ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario
@@ -111,6 +112,8 @@ pub enum Screen {
     Review,
     /// Mini-game mode (Arcade Mode)
     MiniGame,
+    /// Curriculum-completion summary screen
+    EndGameSummary,
 }
 
 /// Messages that trigger state updates
@@ -849,6 +852,13 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                     &state.config,
                 );
                 let outcome = handlers::handle_next_lesson(results_data, &mut ctx)?;
+                // Curriculum-completion fanfare - not the routine ScenarioComplete chime,
+                // since this fires on every scenario. See `Message::CompleteScenario` above
+                // for that call.
+                if matches!(&outcome, HandlerOutcome::Transition(s) if matches!(**s, TypedScreen::EndGameSummary(_)))
+                {
+                    state.progress.sound_manager.play(SoundEffect::LevelUp);
+                }
                 apply_outcome(state, outcome);
                 Ok(())
             } else {

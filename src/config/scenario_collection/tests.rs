@@ -743,3 +743,186 @@ fn test_active_filter_and_sort() {
     assert!(collection.active_filter().categories.is_some());
     assert_eq!(collection.active_sort(), SortMode::ByName);
 }
+
+mod curriculum_stats_tests {
+    use super::*;
+
+    fn three_scenario_collection() -> ScenarioCollection {
+        ScenarioCollection::new(vec![
+            create_scenario(
+                "001",
+                "First",
+                Some(ScenarioCategory::Movement),
+                Some(Difficulty::Beginner),
+                vec!["h"],
+            ),
+            create_scenario(
+                "002",
+                "Second",
+                Some(ScenarioCategory::Editing),
+                Some(Difficulty::Beginner),
+                vec!["d"],
+            ),
+            create_scenario(
+                "003",
+                "Third",
+                Some(ScenarioCategory::Movement),
+                Some(Difficulty::Beginner),
+                vec!["l"],
+            ),
+        ])
+    }
+
+    /// Regression guard for S1: a scenario completed multiple times, only
+    /// perfect on some of those runs, must contribute exactly 1 to `completed`
+    /// and `perfected` - never derived from the replay-inclusive event
+    /// counters (`profile.scenarios_completed`/`perfect_scenarios`).
+    #[test]
+    fn test_curriculum_stats_replay_heavy_scenario_counts_once() {
+        let collection = three_scenario_collection();
+        let mut profile = UserProfile::new();
+        // Three attempts on "001": two perfect, one not.
+        profile
+            .scenario_history
+            .record_completion("001", 100, 50, Utc::now());
+        profile
+            .scenario_history
+            .record_completion("001", 80, 40, Utc::now());
+        profile
+            .scenario_history
+            .record_completion("001", 100, 50, Utc::now());
+
+        let stats = collection.curriculum_stats(&profile);
+
+        assert_eq!(stats.total, 3);
+        assert_eq!(stats.completed, 1);
+        assert_eq!(stats.perfected, 1);
+    }
+
+    #[test]
+    fn test_curriculum_stats_per_category_sorted_by_enum_order() {
+        // Insertion order is deliberately the reverse of enum order (Editing
+        // before Movement) - if `curriculum_stats` ever dropped the explicit
+        // `sort_by_key`, this fixture would catch it by returning
+        // first-seen order instead. `three_scenario_collection` (Movement,
+        // Editing, Movement) would NOT catch that regression, since its
+        // insertion order already happens to match enum order.
+        let scenarios = vec![
+            create_scenario(
+                "001",
+                "First",
+                Some(ScenarioCategory::Editing),
+                Some(Difficulty::Beginner),
+                vec!["d"],
+            ),
+            create_scenario(
+                "002",
+                "Second",
+                Some(ScenarioCategory::Movement),
+                Some(Difficulty::Beginner),
+                vec!["h"],
+            ),
+        ];
+        let collection = ScenarioCollection::new(scenarios);
+        let mut profile = UserProfile::new();
+        profile
+            .scenario_history
+            .record_completion("001", 100, 50, Utc::now());
+        profile
+            .scenario_history
+            .record_completion("002", 50, 25, Utc::now());
+
+        let stats = collection.curriculum_stats(&profile);
+
+        // Movement (0) sorts before Editing (1) per ScenarioCategory enum order,
+        // despite Editing having been inserted first.
+        assert_eq!(
+            stats.per_category,
+            vec![
+                (ScenarioCategory::Movement, 0, 1), // 002 completed but not perfect
+                (ScenarioCategory::Editing, 1, 1),  // 001 perfect
+            ]
+        );
+    }
+
+    #[test]
+    fn test_curriculum_stats_uncategorized_excluded_from_breakdown_but_counted_in_total() {
+        let mut scenarios = vec![create_scenario(
+            "001",
+            "First",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        )];
+        scenarios.push(create_scenario(
+            "004",
+            "Uncategorized",
+            None,
+            Some(Difficulty::Beginner),
+            vec!["x"],
+        ));
+        let collection = ScenarioCollection::new(scenarios);
+
+        let profile = UserProfile::new();
+        let stats = collection.curriculum_stats(&profile);
+
+        assert_eq!(stats.total, 2);
+        let category_total: usize = stats.per_category.iter().map(|(_, _, total)| total).sum();
+        assert_eq!(
+            category_total, 1,
+            "uncategorized scenario must not appear in per_category"
+        );
+    }
+
+    #[test]
+    fn test_completed_count_matches_curriculum_stats_completed() {
+        let collection = three_scenario_collection();
+        let mut profile = UserProfile::new();
+        profile
+            .scenario_history
+            .record_completion("001", 100, 50, Utc::now());
+
+        assert_eq!(
+            collection.completed_count(&profile),
+            collection.curriculum_stats(&profile).completed
+        );
+    }
+
+    #[test]
+    fn test_is_curriculum_complete_empty_collection_is_false() {
+        let collection = ScenarioCollection::new(vec![]);
+        let profile = UserProfile::new();
+        assert!(!collection.is_curriculum_complete(&profile));
+    }
+
+    #[test]
+    fn test_is_curriculum_complete_all_but_one_is_false() {
+        let collection = three_scenario_collection();
+        let mut profile = UserProfile::new();
+        profile
+            .scenario_history
+            .record_completion("001", 100, 50, Utc::now());
+        profile
+            .scenario_history
+            .record_completion("002", 100, 50, Utc::now());
+
+        assert!(!collection.is_curriculum_complete(&profile));
+    }
+
+    #[test]
+    fn test_is_curriculum_complete_all_completed_is_true() {
+        let collection = three_scenario_collection();
+        let mut profile = UserProfile::new();
+        profile
+            .scenario_history
+            .record_completion("001", 100, 50, Utc::now());
+        profile
+            .scenario_history
+            .record_completion("002", 100, 50, Utc::now());
+        profile
+            .scenario_history
+            .record_completion("003", 100, 50, Utc::now());
+
+        assert!(collection.is_curriculum_complete(&profile));
+    }
+}

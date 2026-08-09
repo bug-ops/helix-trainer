@@ -171,7 +171,7 @@ impl<M: EditorMode> HelixSimulator<M> {
     ///
     /// Exports ALL selections from helix_core::Selection to EditorState.
     /// Point selections (anchor == head) are skipped as they represent cursors without selection.
-    pub fn get_state(&self) -> Result<EditorState, UserError> {
+    pub fn state(&self) -> Result<EditorState, UserError> {
         let max_pos = self.doc.len_chars();
 
         // Helper: convert char index to (row, col)
@@ -243,11 +243,6 @@ impl<M: EditorMode> HelixSimulator<M> {
             )
             .map_err(UserError::from)
         }
-    }
-
-    /// Convert simulator state to EditorState (alias for get_state)
-    pub fn to_editor_state(&self) -> Result<EditorState, UserError> {
-        self.get_state()
     }
 
     /// Get a reference to the repeat buffer
@@ -555,16 +550,11 @@ impl AnyModeSimulator {
     }
 
     /// Get current editor state
-    pub fn to_editor_state(&self) -> Result<EditorState, UserError> {
+    pub fn state(&self) -> Result<EditorState, UserError> {
         match self {
-            Self::Normal(sim) => sim.to_editor_state(),
-            Self::Insert(sim) => sim.to_editor_state(),
+            Self::Normal(sim) => sim.state(),
+            Self::Insert(sim) => sim.state(),
         }
-    }
-
-    /// Get current editor state (alias for to_editor_state)
-    pub fn get_state(&self) -> Result<EditorState, UserError> {
-        self.to_editor_state()
     }
 
     /// Get reference to repeat buffer
@@ -855,8 +845,8 @@ impl super::executor::CommandExecutor for AnyModeSimulator {
         self.execute_command(cmd)
     }
 
-    fn to_editor_state(&self) -> Result<EditorState, UserError> {
-        self.to_editor_state()
+    fn state(&self) -> Result<EditorState, UserError> {
+        self.state()
     }
 
     fn mode(&self) -> Mode {

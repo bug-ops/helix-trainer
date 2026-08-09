@@ -23,7 +23,7 @@
 //! use helix_trainer::helix::registry::{NORMAL_REGISTRY, KeyMatch};
 //!
 //! // Get command metadata
-//! if let Some(meta) = NORMAL_REGISTRY.get_metadata("h") {
+//! if let Some(meta) = NORMAL_REGISTRY.metadata("h") {
 //!     println!("{}: {}", meta.name, meta.description);
 //! }
 //!
@@ -103,12 +103,12 @@ mod tests {
     fn test_normal_registry_metadata() {
         let registry = normal_registry();
 
-        let h_meta = registry.get_metadata("h").unwrap();
+        let h_meta = registry.metadata("h").unwrap();
         assert_eq!(h_meta.name, "move_char_left");
         assert_eq!(h_meta.category, Category::Movement);
         assert!(!h_meta.repeatable);
 
-        let d_meta = registry.get_metadata("d").unwrap();
+        let d_meta = registry.metadata("d").unwrap();
         assert_eq!(d_meta.name, "delete_selection");
         assert_eq!(d_meta.category, Category::Editing);
         assert!(d_meta.repeatable);

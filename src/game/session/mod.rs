@@ -568,12 +568,12 @@ impl GameSession<Active> {
     /// use helix_trainer::game::GameSession;
     ///
     /// let mut session = GameSession::new(scenario)?;
-    /// if let Some(hint) = session.get_hint() {
+    /// if let Some(hint) = session.hint() {
     ///     println!("Hint: {}", hint);
     /// }
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
-    pub fn get_hint(&mut self) -> Option<String> {
+    pub fn hint(&mut self) -> Option<String> {
         if self.hints_shown < self.scenario.hints.len() {
             let hint = self.scenario.hints[self.hints_shown].clone();
             self.hints_shown += 1;
@@ -723,7 +723,7 @@ impl GameSession<Completed> {
         let max_points = self.scenario.scoring.max_points;
 
         let score = self.score()?;
-        let rating = Scorer::get_rating(score, max_points);
+        let rating = Scorer::rating(score, max_points);
 
         let duration = self
             .completed_at

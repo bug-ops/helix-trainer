@@ -150,7 +150,7 @@ impl Scheduler {
             .into_iter()
             .filter_map(|cmd| {
                 tracker
-                    .get_performance(cmd)
+                    .performance(cmd)
                     .filter(|perf| perf.due <= now)
                     .map(|_| cmd.to_string())
             })
@@ -175,7 +175,7 @@ impl Scheduler {
             .all_commands()
             .into_iter()
             .filter_map(|cmd| {
-                tracker.get_performance(cmd).and_then(|perf| {
+                tracker.performance(cmd).and_then(|perf| {
                     if perf.due <= now {
                         Some(ReviewItem {
                             id: cmd.to_string(),
@@ -263,7 +263,7 @@ impl Scheduler {
         }
 
         // Get weak commands (low mastery, high difficulty, or many lapses)
-        let weak_commands = tracker.get_weak_commands();
+        let weak_commands = tracker.weak_commands();
 
         // Get all known commands to find untried ones
         let all_known_commands = tracker.all_commands();
@@ -498,7 +498,7 @@ mod tests {
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let scheduled_days = tracker.get_performance("x").unwrap().scheduled_days;
+        let scheduled_days = tracker.performance("x").unwrap().scheduled_days;
         assert!(
             scheduled_days >= 1,
             "second review should push the due date forward"

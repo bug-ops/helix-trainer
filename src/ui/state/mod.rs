@@ -465,7 +465,7 @@ impl AppState {
     }
 
     /// Get a scenario by filtered index
-    pub fn get_scenario(&self, index: usize) -> Option<&Scenario> {
+    pub fn scenario(&self, index: usize) -> Option<&Scenario> {
         self.game.scenario_collection.get_filtered_by_index(index)
     }
 

@@ -1450,15 +1450,15 @@ mod tests {
         session.record_to_fsrs(&mut tracker, true);
 
         assert!(
-            tracker.get_performance("\"y").is_some(),
+            tracker.performance("\"y").is_some(),
             "expected the normalized '\"y' card to exist"
         );
         assert!(
-            tracker.get_performance("\"ay").is_none(),
+            tracker.performance("\"ay").is_none(),
             "raw '\"ay' must not exist as its own card"
         );
         assert!(
-            tracker.get_performance("\"by").is_none(),
+            tracker.performance("\"by").is_none(),
             "raw '\"by' must not exist as its own card"
         );
     }

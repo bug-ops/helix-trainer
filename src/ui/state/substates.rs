@@ -374,7 +374,7 @@ impl ProgressState {
     /// write outcome otherwise arrives later as a
     /// [`crate::async_state::DataLoadMessage`].
     pub fn save_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
-        self.profile.performance_data = self.performance_tracker.get_stats_clone();
+        self.profile.performance_data = self.performance_tracker.stats_clone();
 
         let Some(tx) = &self.save_tx else {
             return self.save_sync();
@@ -447,7 +447,7 @@ impl ProgressState {
     /// — and so is never overwritten by an older mid-session save that was
     /// still in flight when the app exited.
     pub fn prepare_final_save_request(&mut self) -> SaveRequest {
-        self.profile.performance_data = self.performance_tracker.get_stats_clone();
+        self.profile.performance_data = self.performance_tracker.stats_clone();
         SaveRequest {
             storage: self.storage.clone(),
             profile: self.profile.clone(),
@@ -665,7 +665,7 @@ mod tests {
 
         // If the tracker still used SystemClock, `last_review` would be wall-clock "now",
         // not the fake clock's fixed instant.
-        let perf = progress.performance_tracker.get_performance("x").unwrap();
+        let perf = progress.performance_tracker.performance("x").unwrap();
         assert_eq!(perf.last_review, clock.now());
 
         // The scheduler must observe the same fake "now" the tracker recorded against, so
@@ -742,7 +742,7 @@ mod tests {
         assert!(!persisted.performance_data.is_empty());
         assert!(stats_match(
             &persisted.performance_data,
-            &progress.performance_tracker.get_stats_clone()
+            &progress.performance_tracker.stats_clone()
         ));
     }
 
@@ -817,7 +817,7 @@ mod tests {
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(stats_match(
             &persisted.performance_data,
-            &progress.performance_tracker.get_stats_clone()
+            &progress.performance_tracker.stats_clone()
         ));
         assert!(!persisted.performance_data.is_empty());
     }

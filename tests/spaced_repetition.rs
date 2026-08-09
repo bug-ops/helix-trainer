@@ -71,7 +71,7 @@ fn test_complete_learning_workflow() {
     }
 
     // Verify initial state
-    let x_perf = tracker.get_performance("x").unwrap();
+    let x_perf = tracker.performance("x").unwrap();
     assert_eq!(x_perf.attempts, 3);
     assert_eq!(x_perf.successes, 3);
     // Mastery level is calculated by FSRS, don't assert specific level
@@ -83,11 +83,11 @@ fn test_complete_learning_workflow() {
             | MasteryLevel::Master
     ));
 
-    let yy_perf = tracker.get_performance("yy").unwrap();
+    let yy_perf = tracker.performance("yy").unwrap();
     assert_eq!(yy_perf.attempts, 3);
     assert_eq!(yy_perf.successes, 2);
 
-    let w_perf = tracker.get_performance("w").unwrap();
+    let w_perf = tracker.performance("w").unwrap();
     assert_eq!(w_perf.attempts, 5);
     assert_eq!(w_perf.successes, 5);
 
@@ -132,7 +132,7 @@ fn test_mastery_progression() {
         );
     }
 
-    let perf = tracker.get_performance("x").unwrap();
+    let perf = tracker.performance("x").unwrap();
 
     // With 20 successful attempts, should have valid mastery level
     assert!(matches!(

@@ -11,7 +11,7 @@
 //!
 //! let mut sim = HelixSimulator::new("hello world".to_string());
 //! sim.execute_command("w")?;  // Move to next word
-//! let state = sim.get_state()?;
+//! let state = sim.state()?;
 //! assert_eq!(state.cursor_position().col, 6);
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```

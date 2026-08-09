@@ -36,13 +36,13 @@ fn test_macro_records_and_replays_insert_excursion() {
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap(); // q: stop
     assert!(!sim.is_recording_macro());
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "a!b\ncd");
 
     // Replay from row 1 ("cd"), where the recording left the cursor.
     sim.execute_command(CMD_REPLAY_MACRO).unwrap(); // Q
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "a!b\nc!d");
 }
 
@@ -51,7 +51,7 @@ fn test_macro_replay_noop_when_nothing_stored() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
     let result = sim.execute_command(CMD_REPLAY_MACRO);
     assert!(result.is_ok());
-    assert_eq!(sim.get_state().unwrap().content(), "hello");
+    assert_eq!(sim.state().unwrap().content(), "hello");
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn test_macro_q_types_literal_char_in_insert_mode() {
     sim.execute_command(CMD_INSERT).unwrap(); // i: enter Insert mode
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap(); // 'q' typed literally
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "q");
     assert!(!sim.is_recording_macro());
 }
@@ -96,7 +96,7 @@ fn test_macro_replay_is_noop_while_recording_a_different_macro() {
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "xxx");
+    assert_eq!(sim.state().unwrap().content(), "xxx");
 
     // Start recording macro B; press Q mid-recording.
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
@@ -105,11 +105,11 @@ fn test_macro_replay_is_noop_while_recording_a_different_macro() {
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
 
     // Document unchanged by the Q press - only the real B commands ran.
-    assert_eq!(sim.get_state().unwrap().content(), "xxx");
+    assert_eq!(sim.state().unwrap().content(), "xxx");
 
     // Replaying B (delete was NOT part of B, only the move) must not delete.
     sim.execute_command(CMD_REPLAY_MACRO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "xxx");
+    assert_eq!(sim.state().unwrap().content(), "xxx");
 }
 
 /// Documents an invariant relevant to the `execute_repeat_impl` two-arm
@@ -134,7 +134,7 @@ fn test_q_while_insert_mode_does_not_stop_recording() {
 
     assert!(sim.is_insert_mode());
     assert!(sim.is_recording_macro()); // still recording - the toggle never fired
-    assert_eq!(sim.get_state().unwrap().content(), "q");
+    assert_eq!(sim.state().unwrap().content(), "q");
 }
 
 #[test]
@@ -143,19 +143,19 @@ fn test_dot_repeat_while_recording_captures_expansion_not_literal_dot() {
 
     // Prime the repeat buffer with a delete-char action, outside recording.
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "aaa");
+    assert_eq!(sim.state().unwrap().content(), "aaa");
 
     // Record a macro consisting of just "." (repeat last action).
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
     sim.execute_command(CMD_REPEAT).unwrap(); // expands to another delete
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
 
-    assert_eq!(sim.get_state().unwrap().content(), "aa");
+    assert_eq!(sim.state().unwrap().content(), "aa");
 
     // Replaying the macro deletes again, proving the *expansion* was
     // captured rather than a literal '.' (which would be a no-op replay
     // target here, since CMD_REPEAT itself never reaches the macro-recording
     // tap - it early-returns before it).
     sim.execute_command(CMD_REPLAY_MACRO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "a");
+    assert_eq!(sim.state().unwrap().content(), "a");
 }

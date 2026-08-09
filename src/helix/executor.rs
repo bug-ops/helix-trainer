@@ -18,7 +18,7 @@ pub use super::simulator::Mode;
 /// ```ignore
 /// fn process_command<E: CommandExecutor>(executor: &mut E, cmd: &str) -> Result<(), UserError> {
 ///     executor.execute_command(cmd)?;
-///     let state = executor.to_editor_state()?;
+///     let state = executor.state()?;
 ///     println!("Cursor at: {:?}", state.cursor_position());
 ///     Ok(())
 /// }
@@ -40,7 +40,7 @@ pub trait CommandExecutor {
     /// # Errors
     ///
     /// Returns `UserError` if state extraction fails
-    fn to_editor_state(&self) -> Result<EditorState, UserError>;
+    fn state(&self) -> Result<EditorState, UserError>;
 
     /// Get the current mode (Normal or Insert)
     fn mode(&self) -> Mode;

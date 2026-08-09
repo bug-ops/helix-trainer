@@ -23,12 +23,12 @@ fn test_yank_and_paste_after() {
 
     // Move to 'b'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().1, 1);
+    assert_eq!(sim.state().unwrap().cursor_position().1, 1);
 
     // Paste after 'b' - should insert 'a' between 'b' and 'c'
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "abac");
     // In Helix, cursor stays on last pasted character
     assert_eq!(state.cursor_position().1, 2); // Cursor on pasted 'a'
@@ -45,7 +45,7 @@ fn test_yank_and_paste_before() {
     // Move to 'c'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().1, 2);
+    assert_eq!(sim.state().unwrap().cursor_position().1, 2);
 
     // Yank 'c'
     sim.execute_command(CMD_YANK).unwrap();
@@ -53,12 +53,12 @@ fn test_yank_and_paste_before() {
     // Move back to 'a'
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().1, 0);
+    assert_eq!(sim.state().unwrap().cursor_position().1, 0);
 
     // Paste before 'a'
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "cabc");
     // In Helix, cursor stays on last pasted character
     assert_eq!(state.cursor_position().1, 0); // Cursor on pasted 'c'
@@ -81,7 +81,7 @@ fn test_paste_before_cursor_scenario() {
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(
         state.cursor_position().1,
         2,
@@ -92,14 +92,14 @@ fn test_paste_before_cursor_scenario() {
     sim.execute_command(CMD_YANK).unwrap();
 
     // Check what was yanked
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     println!("After yank:");
     println!("  Cursor position: {:?}", state.cursor_position());
 
     // Move left to 'y'
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(
         state.cursor_position().1,
         1,
@@ -109,7 +109,7 @@ fn test_paste_before_cursor_scenario() {
     // Paste before
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "xzyz", "Content should be 'xzyz'");
     // In Helix, cursor stays on last pasted character (position 1)
     assert_eq!(
@@ -134,7 +134,7 @@ fn test_yank_multichar_forward_selection_round_trips_full_text() {
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(
         state.content(),
         "hello worldworld",
@@ -154,7 +154,7 @@ fn test_yank_multichar_backward_selection_extracts_same_range() {
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(
         state.content(),
         "hello worldworld",
@@ -175,7 +175,7 @@ fn test_paste_before_multichar_forward_selection_inserts_at_selection_start() {
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(
         state.content(),
         "hello worldworld",
@@ -195,7 +195,7 @@ fn test_paste_before_multichar_backward_selection_inserts_at_selection_start() {
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(
         state.content(),
         "hello worldworld",
@@ -215,7 +215,7 @@ fn test_paste_after_select_line_yank_paste_matches_helix() {
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "hello\nhello\nworld\n");
 }
 
@@ -232,7 +232,7 @@ fn test_paste_before_divergent_clipboard_matches_helix() {
     sim.execute_command(CMD_SHRINK_TO_LINE_BOUNDS).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "aab cd");
 }
 
@@ -247,7 +247,7 @@ fn test_yank_select_line_round_trips_full_line() {
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "abc\nXabc\nYZ\n");
 }
 
@@ -260,7 +260,7 @@ fn test_yank_point_selection_still_yanks_single_char() {
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "hhello world");
 }
 
@@ -280,12 +280,12 @@ fn test_repeat_yank_and_paste() {
 
     // Paste
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "hello\nwhorld");
 
     // Repeat paste
     sim.execute_command(".").unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     // The paste should repeat with the same clipboard content
     assert!(state.content().contains("hello"));
 }

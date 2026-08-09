@@ -46,7 +46,7 @@ impl Analytics {
         let mut total_difficulty = 0.0;
 
         for command in &all_commands {
-            if let Some(perf) = tracker.get_performance(command) {
+            if let Some(perf) = tracker.performance(command) {
                 use super::ProgressionTier;
                 match perf.mastery_level.tier_level() {
                     3 => master += 1,
@@ -83,7 +83,7 @@ impl Analytics {
             .all_commands()
             .iter()
             .filter_map(|&cmd| {
-                tracker.get_performance(cmd).and_then(|perf| {
+                tracker.performance(cmd).and_then(|perf| {
                     if perf.mastery_level == level {
                         Some(cmd.to_string())
                     } else {
@@ -143,7 +143,7 @@ impl Analytics {
             .all_commands()
             .iter()
             .filter_map(|&cmd| {
-                tracker.get_performance(cmd).and_then(|perf| {
+                tracker.performance(cmd).and_then(|perf| {
                     let expected_stability = perf.attempts as f32 / 2.0;
 
                     if perf.attempts >= MIN_ATTEMPTS
@@ -179,7 +179,7 @@ impl Analytics {
 
         let total: f64 = all_commands
             .iter()
-            .filter_map(|&cmd| tracker.get_performance(cmd))
+            .filter_map(|&cmd| tracker.performance(cmd))
             .map(|perf| perf.success_rate())
             .sum();
 

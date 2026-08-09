@@ -21,7 +21,7 @@ fn test_delete_char() {
 
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "ello");
 }
 
@@ -33,7 +33,7 @@ fn test_delete_char_in_middle() {
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // Move to 'l'
     sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // Delete 'l'
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "helo");
 }
 
@@ -48,7 +48,7 @@ fn test_multiple_line_deletions() {
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "line3\n");
 }
 
@@ -63,10 +63,10 @@ fn test_undo() {
     // Delete line using x (select) + d (delete)
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "");
+    assert_eq!(sim.state().unwrap().content(), "");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+    assert_eq!(sim.state().unwrap().content(), "test\n");
 }
 
 #[test]
@@ -75,13 +75,13 @@ fn test_undo_then_redo_round_trip() {
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "");
+    assert_eq!(sim.state().unwrap().content(), "");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+    assert_eq!(sim.state().unwrap().content(), "test\n");
 
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "");
+    assert_eq!(sim.state().unwrap().content(), "");
 }
 
 #[test]
@@ -91,10 +91,10 @@ fn test_redo_via_ctrl_r_alias() {
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+    assert_eq!(sim.state().unwrap().content(), "test\n");
 
     sim.execute_command(CMD_CTRL_R).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "");
+    assert_eq!(sim.state().unwrap().content(), "");
 }
 
 #[test]
@@ -104,35 +104,35 @@ fn test_multiple_sequential_undo_redo_walks_full_history() {
     // Three edits, each deleting the current (now-first) line
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "bbb\nccc\n");
+    assert_eq!(sim.state().unwrap().content(), "bbb\nccc\n");
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "ccc\n");
+    assert_eq!(sim.state().unwrap().content(), "ccc\n");
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "");
+    assert_eq!(sim.state().unwrap().content(), "");
 
     // Undo 3x should walk back through each intermediate state
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "ccc\n");
+    assert_eq!(sim.state().unwrap().content(), "ccc\n");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "bbb\nccc\n");
+    assert_eq!(sim.state().unwrap().content(), "bbb\nccc\n");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "aaa\nbbb\nccc\n");
+    assert_eq!(sim.state().unwrap().content(), "aaa\nbbb\nccc\n");
 
     // Redo 3x should walk forward and land back at the latest state
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "bbb\nccc\n");
+    assert_eq!(sim.state().unwrap().content(), "bbb\nccc\n");
 
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "ccc\n");
+    assert_eq!(sim.state().unwrap().content(), "ccc\n");
 
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "");
+    assert_eq!(sim.state().unwrap().content(), "");
 }
 
 #[test]
@@ -143,17 +143,17 @@ fn test_new_edit_after_undo_clears_redo_stack() {
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "line1\nline2\nline3\n");
+    assert_eq!(sim.state().unwrap().content(), "line1\nline2\nline3\n");
 
     // A fresh edit on a different line must invalidate the pending redo
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "line1\nline3\n");
+    assert_eq!(sim.state().unwrap().content(), "line1\nline3\n");
 
     // Redo should now be a no-op: the stale "restore line1 deletion" entry is gone
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "line1\nline3\n");
+    assert_eq!(sim.state().unwrap().content(), "line1\nline3\n");
 }
 
 #[test]
@@ -166,19 +166,19 @@ fn test_noop_command_after_undo_does_not_clear_pending_redo() {
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "");
+    assert_eq!(sim.state().unwrap().content(), "");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+    assert_eq!(sim.state().unwrap().content(), "test\n");
 
     // Point selection (anchor == head) at the start of the doc: no text to
     // uppercase, so this produces an empty changeset.
     sim.execute_command(CMD_SWITCH_TO_UPPERCASE).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+    assert_eq!(sim.state().unwrap().content(), "test\n");
 
     // The pending redo from the earlier undo must still be intact.
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "");
+    assert_eq!(sim.state().unwrap().content(), "");
 }
 
 #[test]
@@ -187,16 +187,16 @@ fn test_interleaved_undo_redo_undo_round_trips() {
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "bbb\n");
+    assert_eq!(sim.state().unwrap().content(), "bbb\n");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "aaa\nbbb\n");
+    assert_eq!(sim.state().unwrap().content(), "aaa\nbbb\n");
 
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "bbb\n");
+    assert_eq!(sim.state().unwrap().content(), "bbb\n");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.get_state().unwrap().content(), "aaa\nbbb\n");
+    assert_eq!(sim.state().unwrap().content(), "aaa\nbbb\n");
 }
 
 // ============================================================================
@@ -208,12 +208,12 @@ fn test_open_below() {
     let mut sim = AnyModeSimulator::new("line1\nline2".to_string());
 
     // Cursor at start of first line
-    assert_eq!(sim.get_state().unwrap().cursor_position().0, 0);
+    assert_eq!(sim.state().unwrap().cursor_position().0, 0);
 
     // Press 'o' should insert new line below and enter insert mode
     sim.execute_command(CMD_OPEN_BELOW).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "line1\n\nline2");
     assert_eq!(state.cursor_position().0, 1); // On new empty line
@@ -225,12 +225,12 @@ fn test_open_above() {
 
     // Move to second line
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().0, 1);
+    assert_eq!(sim.state().unwrap().cursor_position().0, 1);
 
     // Press 'O' should insert new line above and enter insert mode
     sim.execute_command(CMD_OPEN_ABOVE).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "line1\n\nline2");
     assert_eq!(state.cursor_position().0, 1); // On new empty line
@@ -247,7 +247,7 @@ fn test_join_lines() {
     // Join first two lines
     sim.execute_command(CMD_JOIN_LINES).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "line1 line2\nline3");
     assert_eq!(state.cursor_position().0, 0);
 }
@@ -258,12 +258,12 @@ fn test_join_lines_at_last_line() {
 
     // Move to last line
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    assert_eq!(sim.get_state().unwrap().cursor_position().0, 1);
+    assert_eq!(sim.state().unwrap().cursor_position().0, 1);
 
     // Try to join - should do nothing
     sim.execute_command(CMD_JOIN_LINES).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "line1\nline2");
 }
 
@@ -278,7 +278,7 @@ fn test_indent_line() {
     // Indent first line
     sim.execute_command(CMD_INDENT).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "  hello\nworld");
     // Cursor should move forward by 2
     assert_eq!(state.cursor_position().1, 2);
@@ -291,7 +291,7 @@ fn test_dedent_line() {
     // Dedent first line (remove 2 spaces)
     sim.execute_command(CMD_DEDENT).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "hello\n    world");
     assert_eq!(state.cursor_position().1, 0);
 }
@@ -303,7 +303,7 @@ fn test_dedent_line_with_one_space() {
     // Dedent - should remove only 1 space
     sim.execute_command(CMD_DEDENT).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "hello");
     assert_eq!(state.cursor_position().1, 0);
 }
@@ -315,7 +315,7 @@ fn test_dedent_line_no_spaces() {
     // Dedent line with no leading spaces - should do nothing
     sim.execute_command(CMD_DEDENT).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "hello");
 }
 
@@ -327,7 +327,7 @@ fn test_multiple_indent() {
     sim.execute_command(CMD_INDENT).unwrap();
     sim.execute_command(CMD_INDENT).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "    code");
     assert_eq!(state.cursor_position().1, 4);
 }
@@ -341,12 +341,12 @@ fn test_replace_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Cursor at start
-    assert_eq!(sim.get_state().unwrap().content(), "hello");
+    assert_eq!(sim.state().unwrap().content(), "hello");
 
     // Press 'r' then 'X' should replace 'h' with 'X'
     sim.execute_command("rX").unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "Xello");
     assert_eq!(sim.mode(), Mode::Normal); // Should stay in normal mode
 }
@@ -360,13 +360,13 @@ fn test_change_selection() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Cursor at start
-    assert_eq!(sim.get_state().unwrap().content(), "hello");
+    assert_eq!(sim.state().unwrap().content(), "hello");
     assert_eq!(sim.mode(), Mode::Normal);
 
     // Press 'c' should delete 'h' and enter insert mode
     sim.execute_command(CMD_CHANGE).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.content(), "ello");
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.cursor_position().1, 0); // Cursor stays at start

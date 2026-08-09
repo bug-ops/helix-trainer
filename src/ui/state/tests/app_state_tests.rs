@@ -26,22 +26,22 @@ fn test_scenario_count_multiple() {
 }
 
 #[test]
-fn test_get_scenario_valid_index() {
+fn test_scenario_valid_index() {
     let scenario = create_test_scenario();
     let scenarios = vec![scenario];
     let state = create_test_app_state(scenarios);
 
-    let fetched = state.get_scenario(0);
+    let fetched = state.scenario(0);
     assert!(fetched.is_some());
     assert_eq!(fetched.unwrap().id, "test_001");
 }
 
 #[test]
-fn test_get_scenario_invalid_index() {
+fn test_scenario_invalid_index() {
     let scenario = create_test_scenario();
     let state = create_test_app_state(vec![scenario]);
 
-    let fetched = state.get_scenario(100);
+    let fetched = state.scenario(100);
     assert!(fetched.is_none());
 }
 

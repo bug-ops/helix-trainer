@@ -264,7 +264,7 @@ fn render_weak_commands_section(lines: &mut Vec<Line<'static>>, state: &AppState
     lines.push(Line::from(""));
 
     let tracker = &state.progress.performance_tracker;
-    let weak_commands = tracker.get_weak_commands();
+    let weak_commands = tracker.weak_commands();
 
     if weak_commands.is_empty() {
         lines.push(Line::from(vec![Span::styled(
@@ -276,7 +276,7 @@ fn render_weak_commands_section(lines: &mut Vec<Line<'static>>, state: &AppState
 
     // Show top 5 weak commands with their stats
     for (i, cmd) in weak_commands.iter().take(5).enumerate() {
-        if let Some(perf) = tracker.get_performance(cmd) {
+        if let Some(perf) = tracker.performance(cmd) {
             let success_rate = perf.success_rate();
             let rate_color = if success_rate < 0.5 {
                 Color::Red

@@ -44,6 +44,15 @@ fn calculate_menu_scroll(
     visible_height: usize,
     total_items: usize,
 ) -> (usize, usize) {
+    // No rows are visible (e.g. a very short terminal collapses the menu area to 0 height) -
+    // `visible_height - 1` below would underflow (#321). Return the caller's offset
+    // unchanged rather than resetting to 0: nothing is visible to scroll, so there is
+    // nothing to correct, and resetting would discard the caller's scroll position for
+    // this transient 0-height frame.
+    if visible_height == 0 {
+        return (current_offset, 0);
+    }
+
     let mut scroll_offset = current_offset;
 
     // Adjust scroll offset to keep selected item visible
@@ -209,7 +218,7 @@ fn render_scrollbar(
     if scrollbar_height > 0 {
         // Calculate scrollbar position
         let scrollbar_pos = if total_items > 1 {
-            (scroll_offset * scrollbar_height) / (total_items - visible_height).max(1)
+            (scroll_offset * scrollbar_height) / total_items.saturating_sub(visible_height).max(1)
         } else {
             0
         };
@@ -627,6 +636,16 @@ mod tests {
         fn test_calculate_menu_scroll_returns_visible_height() {
             let (_, visible) = calculate_menu_scroll(5, 0, 10, 20);
             assert_eq!(visible, 10);
+        }
+
+        #[test]
+        fn test_calculate_menu_scroll_zero_visible_height_does_not_underflow() {
+            // Regression test for #321: at very small terminal heights the menu layout can
+            // yield a 0-height visible area, and `visible_height - 1` would underflow.
+            // Nothing is visible, so the caller's offset must be preserved rather than reset.
+            let (offset, visible) = calculate_menu_scroll(5, 3, 0, 20);
+            assert_eq!(offset, 3);
+            assert_eq!(visible, 0);
         }
     }
 

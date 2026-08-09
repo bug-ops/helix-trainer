@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
 };
 
 /// Type of preview highlight
@@ -352,9 +352,11 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     let target_selections = scenario.all_target_selections();
 
     // Split into two columns of guaranteed-equal width. Percentage(50)/Percentage(50)
-    // hands the leftover column to one side unpredictably on odd widths, which made the
-    // two panels wrap the same line differently and desynced their rendered rows (#192).
-    // A middle spacer of the (0 or 1) leftover column keeps both sides equal instead.
+    // hands the leftover column to one side unpredictably on odd widths (#192). Equal
+    // widths still matter with no wrapping (see below): they keep the truncation cutoff
+    // and the horizontal-scroll offset identical in both panels, so columns stay aligned
+    // between Current and Target. A middle spacer of the (0 or 1) leftover column keeps
+    // both sides equal instead.
     let half_width = area.width / 2;
     let spare_width = area.width - half_width * 2;
     let editor_chunks = Layout::default()
@@ -376,6 +378,30 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
         &selections,
         preview,
     );
+    // No `.wrap()`: Current/Target cursors sit on different rows by construction, so a row
+    // whose length (including an appended past-EOL cursor block, see
+    // `render_line_with_multi_cursor`) exactly fills the panel's inner width would soft-wrap
+    // in one panel but not the other, desyncing every subsequent row between the two panels
+    // (#333). Truncating instead guarantees one rendered row per logical line in both panels;
+    // the horizontal scroll below keeps the truncated part reachable instead of hiding it
+    // (and the cursor with it) with no indicator.
+    //
+    // `h_off` is derived from the Current panel's primary cursor column and applied to BOTH
+    // panels identically, so a line that runs past the panel's inner width scrolls into view
+    // around the cursor while keeping Current/Target columns aligned.
+    let panel_inner_width = current_area.width.saturating_sub(2) as usize;
+    let primary_cursor_col = cursors
+        .iter()
+        .find(|c| c.is_primary)
+        .map(|c| c.col)
+        .unwrap_or(0);
+    let h_off: u16 = if primary_cursor_col < panel_inner_width {
+        0
+    } else {
+        let raw = primary_cursor_col.saturating_sub(panel_inner_width) + 1;
+        u16::try_from(raw).unwrap_or(u16::MAX)
+    };
+
     let current = Paragraph::new(current_lines)
         .block(
             Block::default()
@@ -383,7 +409,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan)),
         )
-        .wrap(Wrap { trim: false });
+        .scroll((0, h_off));
     frame.render_widget(current, current_area);
 
     // Target state with syntax highlighting and multi-cursor
@@ -399,7 +425,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Green)),
         )
-        .wrap(Wrap { trim: false });
+        .scroll((0, h_off));
     frame.render_widget(target, target_area);
 }
 
@@ -834,6 +860,174 @@ mod tests {
         assert_eq!(
             current_width, target_width,
             "issue #192 regressed: Current={current_width}, Target={target_width} at width 91"
+        );
+    }
+
+    // ==================== render_editor_pair cursor-past-EOL wrap desync regression (#333) ====================
+
+    #[test]
+    fn test_render_editor_pair_cursor_past_eol_at_panel_width_does_not_desync_rows() {
+        use crate::game::{GameSession, SessionAfterAction};
+        use crate::testing::ScenarioBuilder;
+        use ratatui::{Terminal, backend::TestBackend};
+
+        // Even area width so half_width divides exactly; inner content width per panel is
+        // half_width - 2 (borders). Craft the first line to exactly fill that inner width so
+        // appending the past-EOL cursor block character (see `render_line_with_multi_cursor`)
+        // makes Current's row one cell wider than Target's - the exact condition that used
+        // to make `Wrap` soft-wrap Current but not Target and desync every following row.
+        let area_width = 42u16;
+        let inner_width = (area_width / 2 - 2) as usize;
+        let first_line = "x".repeat(inner_width);
+        let content = format!("{first_line}\nsecond\n");
+
+        let scenario = ScenarioBuilder::new()
+            .id("panel_wrap_desync_test")
+            .setup_content(content.clone())
+            .target_content(content)
+            .build();
+        let session = GameSession::new(scenario).unwrap();
+
+        // "A" (append at end of line) puts the cursor at col == line length, i.e. past-EOL.
+        let session = match session.record_action("A".to_string()).unwrap() {
+            SessionAfterAction::StillActive(session) => session,
+            SessionAfterAction::Completed(_) => panic!("expected session to remain active"),
+        };
+        assert_eq!(session.all_cursors(), vec![(0, inner_width)]);
+
+        let backend = TestBackend::new(area_width, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_editor_pair(frame, area, &session, " Current ", " Target ", None);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+
+        // Row 0 is the top border, row 1 is the first content line; "second" must land on
+        // row 2 in BOTH panels. Before the fix, Current's soft-wrapped first line pushed
+        // "second" down to row 3 in Current only, desyncing it from Target.
+        let row_containing = |x_start: u16, x_end: u16, text: &str| -> Option<u16> {
+            (0..buffer.area.height).find(|&y| {
+                (x_start..x_end)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+                    .contains(text)
+            })
+        };
+
+        // At this exact-fit boundary the cursor sits one column past the visible window
+        // (see the S1 horizontal-scroll fix below), so h_off == 1 here. The shared scroll
+        // shifts every row uniformly, including "second", which loses its leading "s".
+        let h_off = inner_width.saturating_sub(inner_width) + 1;
+        let expected_second = &"second"[h_off.min("second".len())..];
+
+        let half_width = area_width / 2;
+        let current_second_row = row_containing(0, half_width, expected_second)
+            .unwrap_or_else(|| panic!("{expected_second:?} not found in Current panel"));
+        let target_second_row = row_containing(half_width, area_width, expected_second)
+            .unwrap_or_else(|| panic!("{expected_second:?} not found in Target panel"));
+
+        assert_eq!(
+            current_second_row, 2,
+            "Current panel wrapped the cursor-past-EOL line into an extra row"
+        );
+        assert_eq!(
+            current_second_row, target_second_row,
+            "Current/Target rows desynced: current has 'second' at row {current_second_row}, \
+             target at row {target_second_row}"
+        );
+    }
+
+    // ==================== render_editor_pair horizontal follow-cursor scroll (#333 S1) ====================
+
+    #[test]
+    fn test_render_editor_pair_long_line_scrolls_to_keep_cursor_visible() {
+        use crate::game::{GameSession, SessionAfterAction};
+        use crate::testing::ScenarioBuilder;
+        use ratatui::{Terminal, backend::TestBackend};
+
+        // First line is longer than the panel's inner width, so without horizontal scroll
+        // the truncated tail (including a past-EOL cursor placed there) would be invisible.
+        // The second line is a distinct marker long enough to survive the resulting shift
+        // (the shared h_off scrolls every row, not just the cursor's).
+        let area_width = 42u16;
+        let inner_width = (area_width / 2 - 2) as usize;
+        let first_line = "x".repeat(inner_width + 8);
+        let second_line = "second_line_marker_0123456789";
+        let content = format!("{first_line}\n{second_line}\n");
+
+        let scenario = ScenarioBuilder::new()
+            .id("panel_long_line_scroll_test")
+            .setup_content(content.clone())
+            .target_content(content)
+            .build();
+        let session = GameSession::new(scenario).unwrap();
+
+        // "A" (append at end of line) puts the cursor past-EOL, beyond the inner width.
+        let session = match session.record_action("A".to_string()).unwrap() {
+            SessionAfterAction::StillActive(session) => session,
+            SessionAfterAction::Completed(_) => panic!("expected session to remain active"),
+        };
+        let cursor_col = inner_width + 8;
+        assert_eq!(session.all_cursors(), vec![(0, cursor_col)]);
+
+        let backend = TestBackend::new(area_width, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_editor_pair(frame, area, &session, " Current ", " Target ", None);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+
+        // Rows must still stay in sync between the two panels even though the first line
+        // overruns the panel width - no wrap means row count is unaffected by scrolling.
+        // The shared h_off shifts the second line too, so search for its visible remainder
+        // rather than the full marker text.
+        let h_off = cursor_col - inner_width + 1;
+        // Clip to the visible window: content past `inner_width` columns from `h_off` is
+        // truncated (no wrap), so searching for more than that would never be found.
+        let visible_end = (h_off + inner_width).min(second_line.len());
+        let expected_second = &second_line[h_off.min(second_line.len())..visible_end];
+        assert!(
+            !expected_second.is_empty(),
+            "test bug: second_line_marker too short to survive h_off={h_off}"
+        );
+
+        let half_width = area_width / 2;
+        let row_containing = |x_start: u16, x_end: u16, text: &str| -> Option<u16> {
+            (0..buffer.area.height).find(|&y| {
+                (x_start..x_end)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+                    .contains(text)
+            })
+        };
+        let current_second_row = row_containing(0, half_width, expected_second)
+            .unwrap_or_else(|| panic!("{expected_second:?} not found in Current panel"));
+        let target_second_row = row_containing(half_width, area_width, expected_second)
+            .unwrap_or_else(|| panic!("{expected_second:?} not found in Target panel"));
+        assert_eq!(
+            current_second_row, target_second_row,
+            "Current/Target rows desynced with a long first line: current row \
+             {current_second_row}, target row {target_second_row}"
+        );
+
+        // The past-EOL cursor block must actually be rendered on screen: with h_off =
+        // cursor_col - inner_width + 1, its local column inside the panel is
+        // cursor_col - h_off = inner_width - 1, the last visible column.
+        let local_col = cursor_col - h_off;
+        assert_eq!(local_col, inner_width - 1);
+        let cursor_x = 1 + local_col as u16; // +1 for the left border
+        let cursor_y = 1u16; // row 0 is the top border, row 1 is the first content line
+        assert_eq!(
+            buffer[(cursor_x, cursor_y)].symbol(),
+            "\u{2588}",
+            "past-EOL cursor block not visible at expected column {cursor_x} - \
+             horizontal scroll did not bring it into view"
         );
     }
 }

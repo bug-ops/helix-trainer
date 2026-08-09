@@ -1,0 +1,517 @@
+# Scrolling / Page Movement
+# Scenarios for Ctrl-d, Ctrl-u, Ctrl-f, Ctrl-b (half-page/page movement)
+# NOTE: this simulator moves the cursor by a fixed line delta (page = 20 lines,
+# half-page = 10 lines) rather than deriving it from a real terminal viewport
+# height, since no viewport/scroll-offset is tracked by the scenario scorer.
+
+[[scenarios]]
+id = "scroll_half_page_down_001"
+name = "Scroll half page down"
+description = "Use 'Ctrl-d' to move the cursor down half a page"
+
+hints = [
+    "'Ctrl-d' moves the cursor down about half a screen",
+    "The column position is preserved when possible",
+]
+
+[scenarios.setup]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [10, 5]
+
+[scenarios.solution]
+commands = ["Ctrl-d"]
+description = "Press 'Ctrl-d' to scroll half a page down"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["scroll", "page", "viewport"]
+commands_taught = ["Ctrl-d"]
+estimated_time_seconds = 8
+
+[[scenarios]]
+id = "scroll_half_page_up_001"
+name = "Scroll half page up"
+description = "Use 'Ctrl-u' to move the cursor up half a page"
+
+hints = [
+    "'Ctrl-u' moves the cursor up about half a screen",
+    "The column position is preserved when possible",
+]
+
+[scenarios.setup]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [15, 5]
+
+[scenarios.target]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [5, 5]
+
+[scenarios.solution]
+commands = ["Ctrl-u"]
+description = "Press 'Ctrl-u' to scroll half a page up"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["scroll", "page", "viewport"]
+commands_taught = ["Ctrl-u"]
+estimated_time_seconds = 8
+
+[[scenarios]]
+id = "scroll_page_down_001"
+name = "Scroll full page down"
+description = "Use 'Ctrl-f' to move the cursor down a full page"
+
+hints = [
+    "'Ctrl-f' moves the cursor down about a full screen",
+    "Useful for jumping through large files quickly",
+]
+
+[scenarios.setup]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [0, 5]
+
+[scenarios.target]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [20, 5]
+
+[scenarios.solution]
+commands = ["Ctrl-f"]
+description = "Press 'Ctrl-f' to scroll a full page down"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["scroll", "page", "viewport"]
+commands_taught = ["Ctrl-f"]
+estimated_time_seconds = 8
+
+[[scenarios]]
+id = "scroll_page_up_001"
+name = "Scroll full page up"
+description = "Use 'Ctrl-b' to move the cursor up a full page"
+
+hints = [
+    "'Ctrl-b' moves the cursor up about a full screen",
+    "Useful for jumping through large files quickly",
+]
+
+[scenarios.setup]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [25, 5]
+
+[scenarios.target]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [5, 5]
+
+[scenarios.solution]
+commands = ["Ctrl-b"]
+description = "Press 'Ctrl-b' to scroll a full page up"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["scroll", "page", "viewport"]
+commands_taught = ["Ctrl-b"]
+estimated_time_seconds = 8
+
+[[scenarios]]
+id = "scroll_page_up_clamp_001"
+name = "Scroll page up clamps to document start"
+description = "Use 'Ctrl-b' near the top of the document to see it clamp at line 1"
+
+hints = [
+    "'Ctrl-b' cannot move above the first line",
+    "The cursor stops at the document start instead of going out of bounds",
+]
+
+[scenarios.setup]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10"""
+cursor_position = [5, 5]
+
+[scenarios.target]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10"""
+cursor_position = [0, 5]
+
+[scenarios.solution]
+commands = ["Ctrl-b"]
+description = "Press 'Ctrl-b' to scroll up, clamping at the first line"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["scroll", "page", "viewport", "boundary"]
+commands_taught = ["Ctrl-b"]
+estimated_time_seconds = 8
+
+[[scenarios]]
+id = "scroll_half_page_down_clamp_001"
+name = "Scroll half page down clamps to document end"
+description = "Use 'Ctrl-d' near the bottom of the document to see it clamp at the last line"
+
+hints = [
+    "'Ctrl-d' cannot move past the last line",
+    "The cursor stops at the document end instead of going out of bounds",
+]
+
+[scenarios.setup]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [25, 5]
+
+[scenarios.target]
+file_content = """line 01
+line 02
+line 03
+line 04
+line 05
+line 06
+line 07
+line 08
+line 09
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [29, 5]
+
+[scenarios.solution]
+commands = ["Ctrl-d"]
+description = "Press 'Ctrl-d' to scroll down, clamping at the last line"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["scroll", "page", "viewport", "boundary"]
+commands_taught = ["Ctrl-d"]
+estimated_time_seconds = 8

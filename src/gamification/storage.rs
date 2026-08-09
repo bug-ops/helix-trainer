@@ -489,11 +489,16 @@ mod tests {
     /// Regression test for S3: a save that fails partway (e.g. the temp-file write
     /// errors before the atomic rename) must leave the existing `profile.json`
     /// byte-for-byte untouched, not truncated or partially overwritten.
-    #[cfg(unix)]
+    ///
+    /// Failure is injected by pre-occupying the exact temp-file path the next
+    /// `save()` call will use (predictable from `save`'s pid + monotonic-counter
+    /// naming scheme, see [`TMP_SUFFIX_COUNTER`]) with a directory, so
+    /// `fs::File::create` deterministically fails with "Is a directory". Unlike
+    /// a directory-permission approach (e.g. `chmod 0555`), this is a hard
+    /// type-level OS constraint that root cannot bypass, so the test is
+    /// reliable regardless of the privilege level it runs under.
     #[test]
     fn test_failed_save_does_not_corrupt_existing_profile() {
-        use std::os::unix::fs::PermissionsExt;
-
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("profile.json");
         let storage = ProfileStorage::with_path(&file_path);
@@ -503,24 +508,19 @@ mod tests {
         storage.save(&profile).unwrap();
         let bytes_before = fs::read_to_string(&file_path).unwrap();
 
-        // Strip write permission from the directory so the next save's
-        // temp-file write fails before it ever reaches `fs::rename`.
-        let original_perms = fs::metadata(temp_dir.path()).unwrap().permissions();
-        let mut readonly_perms = original_perms.clone();
-        readonly_perms.set_mode(0o555);
-        fs::set_permissions(temp_dir.path(), readonly_perms).unwrap();
+        let next_suffix = TMP_SUFFIX_COUNTER.load(Ordering::Relaxed);
+        let mut tmp_file_name = file_path.file_name().unwrap().to_os_string();
+        tmp_file_name.push(format!(".{}.{}.tmp", std::process::id(), next_suffix));
+        let predicted_tmp_path = file_path.with_file_name(tmp_file_name);
+        fs::create_dir(&predicted_tmp_path).unwrap();
 
         let mut profile2 = profile.clone();
         profile2.add_xp(500);
         let result = storage.save(&profile2);
 
-        // Restore permissions before any assertion so TempDir can clean up
-        // even if an assertion below panics.
-        fs::set_permissions(temp_dir.path(), original_perms).unwrap();
-
         assert!(
             result.is_err(),
-            "save should fail when the directory is read-only"
+            "save should fail when its temp-file target is occupied by a directory"
         );
 
         let bytes_after = fs::read_to_string(&file_path).unwrap();

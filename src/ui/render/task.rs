@@ -208,13 +208,20 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             String::new()
         };
 
-        // Live feedback for an in-progress '"'-register selection or
-        // ':'-command-line buffer, so the user can see what they're typing.
+        // Live feedback for an in-progress '"'-register selection,
+        // ':'-command-line buffer, or 's'/'S' regex-selection prompt, so the
+        // user can see what they're typing.
         let pending_text = super::helpers::pending_input_indicator(&task_data.input_state);
 
+        let macro_indicator = if task_data.session.is_recording_macro() {
+            " [q: REC] "
+        } else {
+            ""
+        };
+
         let instructions = Paragraph::new(format!(
-            "{}{}{}| Ctrl-Q: Abandon | Ctrl-C: Quit",
-            pending_text, hint_indicator, last_cmd_text
+            "{}{}{}{}| Ctrl-Q: Abandon | Ctrl-C: Quit",
+            pending_text, macro_indicator, hint_indicator, last_cmd_text
         ))
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)

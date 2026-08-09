@@ -106,6 +106,10 @@ pub const CMD_GOTO_LAST_LINE: &str = "ge";
 pub const CMD_ESCAPE: &str = "Escape";
 pub const CMD_REPEAT: &str = ".";
 
+// Macro recording and replay
+pub const CMD_TOGGLE_MACRO_RECORDING: &str = "q";
+pub const CMD_REPLAY_MACRO: &str = "Q";
+
 // Replace command prefix (used with character, e.g., "rx")
 pub const CMD_REPLACE: &str = "r";
 
@@ -149,7 +153,7 @@ pub const CMD_SCROLL_UP: &str = "zk";
 
 /// Canonicalize a raw executed command string to a stable FSRS/quest card id.
 ///
-/// Two families of commands otherwise mint a separate learning card per
+/// Three families of commands otherwise mint a separate learning card per
 /// operand, which fragments spaced-repetition data for what is really one
 /// skill:
 ///
@@ -158,6 +162,9 @@ pub const CMD_SCROLL_UP: &str = "zk";
 /// - Command-line invocations (`:goto 3`, `:g 7`, ...) collapse to their
 ///   canonical name (`:goto`), folding aliases (`:g` -> `:goto`) so both
 ///   spellings share one card.
+/// - Regex-selection prompt invocations (`s foo`, `s bar`, `S ,`, ...)
+///   collapse to the bare command (`s`, `S`) - the pattern is not the thing
+///   being taught.
 ///
 /// Every other command string is returned unchanged.
 ///
@@ -169,6 +176,8 @@ pub const CMD_SCROLL_UP: &str = "zk";
 /// assert_eq!(normalize_command_id("\"ay"), "\"y");
 /// assert_eq!(normalize_command_id(":goto 3"), ":goto");
 /// assert_eq!(normalize_command_id(":g 3"), ":goto");
+/// assert_eq!(normalize_command_id("s foo"), "s");
+/// assert_eq!(normalize_command_id("S ,"), "S");
 /// assert_eq!(normalize_command_id("h"), "h");
 /// ```
 pub fn normalize_command_id(cmd: &str) -> std::borrow::Cow<'_, str> {
@@ -193,6 +202,21 @@ pub fn normalize_command_id(cmd: &str) -> std::borrow::Cow<'_, str> {
             other => other,
         };
         return Cow::Owned(format!("{CMD_COMMAND_LINE}{canonical}"));
+    }
+
+    if cmd
+        .strip_prefix(CMD_SELECT_REGEX)
+        .and_then(|r| r.strip_prefix(' '))
+        .is_some()
+    {
+        return Cow::Borrowed(CMD_SELECT_REGEX);
+    }
+    if cmd
+        .strip_prefix(CMD_SPLIT_SELECTION)
+        .and_then(|r| r.strip_prefix(' '))
+        .is_some()
+    {
+        return Cow::Borrowed(CMD_SPLIT_SELECTION);
     }
 
     Cow::Borrowed(cmd)
@@ -237,5 +261,24 @@ mod normalize_command_id_tests {
         assert_eq!(normalize_command_id("h"), "h");
         assert_eq!(normalize_command_id("gg"), "gg");
         assert_eq!(normalize_command_id("ms("), "ms(");
+    }
+
+    /// Regression test: distinct `s`/`S` patterns must collapse to one FSRS
+    /// card per command, mirroring the `:`-command precedent - otherwise
+    /// every distinct pattern mints its own permanent learning card.
+    #[test]
+    fn regex_selection_patterns_normalize_to_bare_command() {
+        assert_eq!(normalize_command_id("s foo"), "s");
+        assert_eq!(normalize_command_id("s bar"), "s");
+        assert_eq!(normalize_command_id("S ,"), "S");
+        assert_eq!(normalize_command_id("S foo bar"), "S"); // pattern with a space
+    }
+
+    /// Bare `s`/`S` (no space, no pattern) is not the prompt-command shape
+    /// and must be left unchanged.
+    #[test]
+    fn bare_s_and_shift_s_are_unchanged() {
+        assert_eq!(normalize_command_id("s"), "s");
+        assert_eq!(normalize_command_id("S"), "S");
     }
 }

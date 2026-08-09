@@ -6,6 +6,15 @@
 use super::state_types::FindType;
 use crate::input::keymap::KeyContext;
 
+/// Which `s`/`S` regex-selection command a `RegexPromptPending` buffer is for
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegexPromptKind {
+    /// `s` - select all regex matches within the current selection
+    SelectRegex,
+    /// `S` - split the current selection on a regex delimiter
+    SplitSelection,
+}
+
 /// Runtime representation of input state
 ///
 /// This enum wraps the typestate pattern for runtime use, allowing dynamic
@@ -43,6 +52,11 @@ pub enum InputState {
     RegisterOpPending { register: char },
     /// After ':' - accumulating a command-line buffer
     CommandLinePending { buffer: String },
+    /// After 's'/'S' - accumulating a regex-selection prompt buffer
+    RegexPromptPending {
+        kind: RegexPromptKind,
+        buffer: String,
+    },
     /// After digit 1-9 - building count prefix
     CountPending { count: usize },
     /// After '[' - waiting for unmatched previous command second key
@@ -85,6 +99,11 @@ impl InputState {
     /// Check if this is count pending state
     pub fn is_count_pending(&self) -> bool {
         matches!(self, Self::CountPending { .. })
+    }
+
+    /// Check if this is a regex-selection prompt pending state
+    pub fn is_regex_prompt_pending(&self) -> bool {
+        matches!(self, Self::RegexPromptPending { .. })
     }
 
     /// Check if this state is waiting for a character argument
@@ -146,7 +165,7 @@ impl InputState {
     /// which command a key invokes, only how it's recorded). States that
     /// consume a literal character argument (find/replace targets,
     /// register names, surround/text-object characters, the command-line
-    /// buffer) return `None`.
+    /// and regex-prompt buffers) return `None`.
     pub fn key_context(&self) -> Option<KeyContext> {
         match self {
             Self::Base | Self::CountPending { .. } | Self::RegisterOpPending { .. } => {
@@ -166,7 +185,8 @@ impl InputState {
             | Self::FindCharPending { .. }
             | Self::ReplaceCharPending
             | Self::RegisterPending
-            | Self::CommandLinePending { .. } => None,
+            | Self::CommandLinePending { .. }
+            | Self::RegexPromptPending { .. } => None,
         }
     }
 
@@ -188,6 +208,7 @@ impl InputState {
             Self::RegisterPending => "REGISTER_PENDING",
             Self::RegisterOpPending { .. } => "REGISTER_OP_PENDING",
             Self::CommandLinePending { .. } => "COMMAND_LINE_PENDING",
+            Self::RegexPromptPending { .. } => "REGEX_PROMPT_PENDING",
             Self::CountPending { .. } => "COUNT_PENDING",
             Self::UnmatchedPrevPending => "UNMATCHED_PREV_PENDING",
             Self::UnmatchedNextPending => "UNMATCHED_NEXT_PENDING",

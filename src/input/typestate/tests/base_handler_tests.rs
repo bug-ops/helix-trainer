@@ -127,12 +127,68 @@ fn test_base_state_till_backward_prefix() {
 
 #[test]
 fn test_base_state_unknown_key_stays() {
-    // Test that unknown keys stay in base state
+    // Test that unknown keys stay in base state.
+    // '@' is not bound to anything - unlike 'Q', which is now the macro
+    // replay command (see test_base_state_macro_replay_transitions below).
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('@'), KeyModifiers::NONE),
+    );
+    assert!(matches!(result, HandlerResult::Stay));
+}
+
+#[test]
+fn test_base_state_macro_toggle_executes() {
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+    );
+    assert_eq!(
+        result,
+        HandlerResult::Execute(std::borrow::Cow::Borrowed(CMD_TOGGLE_MACRO_RECORDING))
+    );
+}
+
+#[test]
+fn test_base_state_macro_replay_executes() {
     let result = KeyHandler::handle_key(
         &BaseState,
         KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT),
     );
-    assert!(matches!(result, HandlerResult::Stay));
+    assert_eq!(
+        result,
+        HandlerResult::Execute(std::borrow::Cow::Borrowed(CMD_REPLAY_MACRO))
+    );
+}
+
+#[test]
+fn test_base_state_select_regex_prompt_transitions() {
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
+    );
+    assert_eq!(
+        result,
+        HandlerResult::Transition(InputState::RegexPromptPending {
+            kind: crate::input::typestate::RegexPromptKind::SelectRegex,
+            buffer: String::new(),
+        })
+    );
+}
+
+#[test]
+fn test_base_state_split_selection_prompt_transitions() {
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT),
+    );
+    assert_eq!(
+        result,
+        HandlerResult::Transition(InputState::RegexPromptPending {
+            kind: crate::input::typestate::RegexPromptKind::SplitSelection,
+            buffer: String::new(),
+        })
+    );
 }
 
 #[test]

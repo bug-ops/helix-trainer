@@ -211,12 +211,32 @@ pub mod limits {
     /// Maximum command sequence length
     pub const MAX_COMMAND_SEQUENCE_LENGTH: usize = 100;
 
-    /// Maximum length of the `:`-prefixed command-line buffer
+    /// Maximum number of commands stored in a single `q`/`Q` macro
     ///
-    /// `InputState` is cloned on every keystroke transition, so this bounds
-    /// the per-keystroke clone cost (O(n²) in the worst case) as well as the
-    /// rendered prompt line length.
+    /// Recording stops accepting further commands once this cap is hit,
+    /// keeping what was already captured rather than failing outright.
+    pub const MAX_MACRO_LENGTH: usize = 100;
+
+    /// Maximum length of a single-line prompt buffer
+    ///
+    /// Shared by every prompt that accumulates text one keystroke at a time
+    /// before executing atomically: the `:`-prefixed command-line buffer and
+    /// the `s`/`S` regex-selection prompt. `InputState` is cloned on every
+    /// keystroke transition, so this bounds the per-keystroke clone cost
+    /// (O(n²) in the worst case) as well as the rendered prompt line length.
     pub const MAX_COMMAND_LINE_LEN: usize = 256;
+
+    /// Maximum number of selection ranges kept from a single `s`/`S` regex
+    /// match pass
+    ///
+    /// `helix_core::selection::{select_on_matches, split_on_matches}` loop
+    /// `find_iter` unbounded and accept no cap parameter, so this bounds the
+    /// *retained* selection post-hoc rather than peak allocation during the
+    /// scan. Peak allocation is bounded by document size (not
+    /// attacker-controlled: documents are scenario-authored and tiny), and
+    /// `regex-cursor` is finite-automaton based, so catastrophic backtracking
+    /// is not a concern here.
+    pub const MAX_REGEX_SELECTION_MATCHES: usize = 10_000;
 
     /// Command timeout
     pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);

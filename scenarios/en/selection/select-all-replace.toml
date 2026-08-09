@@ -1,9 +1,6 @@
-# Select-All and Replace-With-Yanked
-# Scenarios for '%' (select entire file) and 'R' (replace selection with yanked text)
-# NOTE: 's' (select regex matches) and 'S' (split selection on regex) are registered
-# commands but their handlers are currently no-op stubs in this simulator
-# (src/helix/simulator/commands/selection.rs) - no regex engine is wired in yet.
-# Scenarios for them are omitted until that implementation lands; see issue #198.
+# Select-All, Replace-With-Yanked, and Regex Selection
+# Scenarios for '%' (select entire file), 'R' (replace selection with yanked
+# text), 's' (select regex matches), and 'S' (split selection on regex).
 
 [[scenarios]]
 id = "select_all_001"
@@ -86,70 +83,80 @@ estimated_time_seconds = 15
 
 # ============================================================================
 # SELECT REGEX MATCHES (s command)
-# DISABLED: 'select_regex' is a no-op stub in src/helix/simulator/commands/selection.rs
 # ============================================================================
 
-# [[scenarios]]
-# id = "select_regex_001"
-# name = "Select regex matches within selection"
-# description = "Use 's' to select all regex matches within the current selection"
-# hints = [
-#     "'s' opens a prompt for a regex pattern",
-#     "Every match within the current selection becomes its own selection",
-# ]
-# [scenarios.setup]
-# file_content = """foo bar foo baz foo"""
-# cursor_position = [0, 0]
-# selection = [0, 0, 0, 19]
-# [scenarios.target]
-# file_content = """foo bar foo baz foo"""
-# cursor_position = [0, 19]
-# selections = [[0, 0, 0, 3], [0, 8, 0, 11], [0, 16, 0, 19]]
-# [scenarios.solution]
-# commands = ["s", "foo", "Enter"]
-# description = "Press 's', type 'foo', then Enter to select every 'foo' match"
-# [scenarios.scoring]
-# optimal_count = 3
-# max_points = 100
-# tolerance = 0
-# [scenarios.metadata]
-# category = "selection"
-# difficulty = "advanced"
-# tags = ["selection", "regex"]
-# commands_taught = ["s"]
-# estimated_time_seconds = 15
+[[scenarios]]
+id = "select_regex_001"
+name = "Select regex matches within selection"
+description = "Use 's' to select all regex matches within the current selection"
+
+hints = [
+    "'s' opens a prompt for a regex pattern",
+    "Every match within the current selection becomes its own selection",
+]
+
+[scenarios.setup]
+file_content = """foo bar foo baz foo"""
+cursor_position = [0, 0]
+selection = [0, 0, 0, 19]
+
+[scenarios.target]
+file_content = """foo bar foo baz foo"""
+cursor_position = [0, 19]
+selections = [[0, 0, 0, 3], [0, 8, 0, 11], [0, 16, 0, 19]]
+
+[scenarios.solution]
+commands = ["s foo"]
+description = "Press 's', type 'foo', then Enter to select every 'foo' match"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "advanced"
+tags = ["selection", "regex"]
+commands_taught = ["s"]
+estimated_time_seconds = 15
 
 # ============================================================================
 # SPLIT SELECTION ON REGEX (S command)
-# DISABLED: 'split_selection' is a no-op stub in src/helix/simulator/commands/selection.rs
 # ============================================================================
 
-# [[scenarios]]
-# id = "split_selection_001"
-# name = "Split selection on regex"
-# description = "Use 'S' to split the current selection on a regex delimiter"
-# hints = [
-#     "'S' opens a prompt for a regex delimiter pattern",
-#     "The selection is split into ranges between the delimiter matches",
-# ]
-# [scenarios.setup]
-# file_content = """foo,bar,baz"""
-# cursor_position = [0, 0]
-# selection = [0, 0, 0, 11]
-# [scenarios.target]
-# file_content = """foo,bar,baz"""
-# cursor_position = [0, 11]
-# selections = [[0, 0, 0, 3], [0, 4, 0, 7], [0, 8, 0, 11]]
-# [scenarios.solution]
-# commands = ["S", ",", "Enter"]
-# description = "Press 'S', type ',', then Enter to split on commas"
-# [scenarios.scoring]
-# optimal_count = 3
-# max_points = 100
-# tolerance = 0
-# [scenarios.metadata]
-# category = "selection"
-# difficulty = "advanced"
-# tags = ["selection", "regex", "split"]
-# commands_taught = ["S"]
-# estimated_time_seconds = 15
+[[scenarios]]
+id = "split_selection_001"
+name = "Split selection on regex"
+description = "Use 'S' to split the current selection on a regex delimiter"
+
+hints = [
+    "'S' opens a prompt for a regex delimiter pattern",
+    "The selection is split into ranges between the delimiter matches",
+]
+
+[scenarios.setup]
+file_content = """foo,bar,baz"""
+cursor_position = [0, 0]
+selection = [0, 0, 0, 11]
+
+[scenarios.target]
+file_content = """foo,bar,baz"""
+cursor_position = [0, 11]
+selections = [[0, 0, 0, 3], [0, 4, 0, 7], [0, 8, 0, 11]]
+
+[scenarios.solution]
+commands = ["S ,"]
+description = "Press 'S', type ',', then Enter to split on commas"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "advanced"
+tags = ["selection", "regex", "split"]
+commands_taught = ["S"]
+estimated_time_seconds = 15

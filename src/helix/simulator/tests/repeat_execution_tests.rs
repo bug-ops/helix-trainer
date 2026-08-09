@@ -141,6 +141,42 @@ fn test_repeat_replace_char() {
     assert_eq!(state.content(), "xxllo");
 }
 
+/// Regression test: `q` as the *argument* char to `r` (replace) must remain
+/// `.`-repeatable. `is_repeatable_command` is applied per-key to the whole
+/// key sequence, including argument chars, not just the command key.
+#[test]
+fn test_repeat_replace_with_q_argument() {
+    let mut sim = AnyModeSimulator::new("hello".to_string());
+
+    // Replace 'h' with 'q'
+    sim.execute_command("rq").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "qello");
+
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+
+    // Repeat replace (should replace 'e' with 'q')
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.content(), "qqllo");
+}
+
+/// Regression test: `q` as the *argument* char to `f` (find-char) must
+/// remain `.`-repeatable, same rationale as above.
+#[test]
+fn test_repeat_find_char_with_q_argument() {
+    let mut sim = AnyModeSimulator::new("aqbqcq".to_string());
+
+    sim.execute_command("fq").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position(), (0, 1));
+
+    // Repeat find (should move to the next 'q')
+    sim.execute_command(".").unwrap();
+    let state = sim.get_state().unwrap();
+    assert_eq!(state.cursor_position(), (0, 3));
+}
+
 #[test]
 fn test_repeat_multiple_times() {
     let mut sim = AnyModeSimulator::new("xxxxxx".to_string());

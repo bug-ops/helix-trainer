@@ -86,6 +86,13 @@ impl InputStateMachine {
                 },
                 key,
             ),
+            InputState::RegexPromptPending { kind, buffer } => KeyHandler::handle_key(
+                &RegexPromptPending {
+                    kind: *kind,
+                    buffer: buffer.clone(),
+                },
+                key,
+            ),
             InputState::CountPending { count } => {
                 KeyHandler::handle_key(&CountPending { count: *count }, key)
             }
@@ -214,6 +221,17 @@ impl InputStateMachine {
             }
         }
         None
+    }
+
+    /// Get the in-progress `s`/`S` regex-selection prompt buffer, if pending.
+    ///
+    /// Returns the command kind and the pattern typed so far (not including
+    /// the leading 's'/'S'), for rendering a live prompt line.
+    pub fn pending_regex_prompt(&self) -> Option<(super::input_state::RegexPromptKind, &str)> {
+        match &self.state {
+            InputState::RegexPromptPending { kind, buffer } => Some((*kind, buffer.as_str())),
+            _ => None,
+        }
     }
 
     /// Get a preview character for surround operations

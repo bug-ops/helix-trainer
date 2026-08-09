@@ -373,6 +373,17 @@ pub fn is_operator_command(key: &KeyEvent) -> bool {
 /// - `Esc` (cancel)
 /// - Movement commands: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `g`, `G`
 ///
+/// Note: `q`/`Q` (macro record toggle/replay) are deliberately *not*
+/// excluded here, even though they're never actually repeatable in
+/// practice. `execute_command_any_mode` intercepts both before dispatch
+/// ever reaches `record_command_if_needed_normal` (the sole caller of this
+/// function), so neither can appear as the *command* key in a recorded
+/// sequence. But this function is also applied to every *argument* char in
+/// a multi-key sequence (`key_events.iter().all(is_repeatable_command)`),
+/// and 'q'/'Q' are valid arguments to `r`/`f`/`t`/`F`/`T` (e.g. `rq`,
+/// `fq`) - excluding them here would make those combinations silently
+/// unrepeatable.
+///
 /// Returns `true` for all editing commands:
 /// - Character operations: `x`, `r`
 /// - Line operations: `d`, `J`
@@ -703,5 +714,20 @@ mod tests {
             KeyCode::Tab,
             KeyModifiers::NONE
         )));
+    }
+
+    /// Regression test: `q`/`Q` as the *argument* char to `r`/`f`/`t`/`F`/`T`
+    /// (not as the standalone macro-toggle/replay command) must remain
+    /// `.`-repeatable. An earlier revision excluded `'q' | 'Q'` unconditionally
+    /// from `is_repeatable_command`, which is applied per-key via
+    /// `key_events.iter().all(is_repeatable_command)`
+    /// (`simulator/commands/mod.rs`), so it silently broke `.`-repeating
+    /// `rq`, `fq`, `tq`, `Fq`, `Tq` - not just the standalone `q`/`Q` command,
+    /// which never reaches this function to begin with (see the module doc
+    /// on `is_repeatable_command`).
+    #[test]
+    fn test_q_and_shift_q_as_argument_chars_remain_repeatable() {
+        assert!(is_repeatable_command(&make_key('q')));
+        assert!(is_repeatable_command(&make_key('Q')));
     }
 }

@@ -169,6 +169,13 @@ fn render_playing(
                 .add_modifier(Modifier::BOLD),
         ));
     }
+    if session.is_recording_macro() {
+        title_spans.push(Span::raw("  "));
+        title_spans.push(Span::styled(
+            "[q: REC]",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ));
+    }
     let title = Paragraph::new(Line::from(title_spans))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));

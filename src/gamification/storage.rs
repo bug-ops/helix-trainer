@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
+use crate::security::{limits::MAX_PROFILE_FILE_SIZE, path_validator};
+
 use super::{GamificationError, Result, UserProfile};
 
 /// Per-process counter used to make temporary save files unique.
@@ -182,6 +184,10 @@ impl ProfileStorage {
         if !self.file_path.exists() {
             return Ok(UserProfile::new());
         }
+
+        path_validator::validate_file_size(&self.file_path, MAX_PROFILE_FILE_SIZE).map_err(
+            |e| GamificationError::StorageError(format!("Profile file too large: {}", e)),
+        )?;
 
         let contents = fs::read_to_string(&self.file_path).map_err(|e| {
             GamificationError::StorageError(format!("Failed to read profile: {}", e))
@@ -431,6 +437,37 @@ mod tests {
         assert_eq!(loaded.level, profile.level);
         assert_eq!(loaded.total_xp, profile.total_xp);
         assert_eq!(loaded.current_streak, profile.current_streak);
+    }
+
+    #[test]
+    fn test_load_oversized_file_rejected() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("profile.json");
+        let storage = ProfileStorage::with_path(&file_path);
+
+        // Otherwise-valid JSON padded with an oversized unknown field: since
+        // `ProfileData` doesn't `deny_unknown_fields`, `serde_json` would
+        // happily parse this and ignore "padding" if the size guard weren't
+        // there first. This proves the rejection below comes from the size
+        // cap, not from a JSON parse failure that a smaller-but-still-broken
+        // payload would trigger regardless of the cap.
+        let mut value = serde_json::to_value(&ProfileData {
+            profile: UserProfile::new(),
+        })
+        .unwrap();
+        value["padding"] =
+            serde_json::Value::String("a".repeat(MAX_PROFILE_FILE_SIZE as usize + 1));
+        let oversized = serde_json::to_string(&value).unwrap();
+        assert!(oversized.len() as u64 > MAX_PROFILE_FILE_SIZE);
+        fs::write(&file_path, &oversized).unwrap();
+
+        let err = storage
+            .load()
+            .expect_err("an oversized profile file must be rejected");
+        assert!(
+            err.to_string().contains("too large"),
+            "expected a 'too large' error, got: {err}"
+        );
     }
 
     #[test]

@@ -298,6 +298,19 @@ pub mod limits {
     /// Maximum number of keymap bindings (top-level plus minor-mode
     /// entries combined) accepted from a single Helix config file.
     pub const MAX_KEYMAP_BINDINGS: usize = 1000;
+
+    /// Maximum size of `profile.json` (1 MB). At the current curriculum
+    /// size (148 scenarios, 76 distinct commands tracked by FSRS), a
+    /// saturated profile — every scenario completed, every command with a
+    /// full review history — serializes to roughly 70 KB, so this cap
+    /// leaves about 14x headroom for curriculum growth before it needs
+    /// revisiting.
+    pub const MAX_PROFILE_FILE_SIZE: u64 = 1024 * 1024;
+
+    /// Maximum size of `config.json` (1 MB). `AppConfig` today is a
+    /// handful of booleans (well under 1 KB serialized), so this leaves
+    /// generous headroom for new settings fields.
+    pub const MAX_CONFIG_FILE_SIZE: u64 = 1024 * 1024;
 }
 
 /// Path validation utilities

@@ -3,13 +3,9 @@
 use std::sync::Arc;
 
 use crate::config::Scenario;
-use crate::constants::{
-    FLASH_TIME_RATIO, MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER,
-    SPEED_DEMON_TIME_RATIO,
-};
+use crate::constants::{MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER};
 use crate::game::format_key_for_display;
 use crate::game::services::ScenarioCompletionService;
-use crate::gamification::{Achievement, AchievementEngine, speed_time_ratio};
 use crate::input::typestate::{HandlerResult, command_to_key_event};
 use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
@@ -184,10 +180,6 @@ fn execute_minigame_command(
             // the arcade UI only ever badges "Excellent" can still unlock
             // FirstPerfect/Perfect10.
             let is_perfect = actual_count <= optimal_count;
-            // Base per-difficulty budget, not the level-scaled arcade time_limit - see
-            // `speed_time_ratio` doc comment for why the two modes share one definition
-            // of "speed" instead of computing it independently.
-            let time_ratio = speed_time_ratio(duration, scenario_difficulty);
 
             super::track_scenario_completion_for_quests(state, &scenario_id, duration);
 
@@ -200,34 +192,23 @@ fn execute_minigame_command(
             );
 
             // Track exploration/speed signals for achievements (SpeedDemon, Speedrunner,
-            // Flash, Polyglot).
-            let profile = &mut state.progress.profile;
-            if let Some(difficulty) = scenario_difficulty {
-                profile.difficulties_completed.insert(difficulty);
-            }
-            if time_ratio < SPEED_DEMON_TIME_RATIO {
-                profile.speed_run_count = profile.speed_run_count.saturating_add(1);
-            }
-            if time_ratio < FLASH_TIME_RATIO {
-                profile.flash_run_count = profile.flash_run_count.saturating_add(1);
-            }
+            // Flash, Polyglot). Base per-difficulty budget, not the level-scaled arcade
+            // time_limit - see `speed_time_ratio`'s doc comment for why the two modes
+            // share one definition of "speed" instead of computing it independently.
+            ScenarioCompletionService::track_speed_and_difficulty(
+                &mut state.progress.profile,
+                duration,
+                scenario_difficulty,
+            );
         }
 
         // Check and unlock any achievements newly satisfied by this completion
         // (mastery/exploration/speed counters all just changed above)
-        let newly_unlocked = AchievementEngine::check_and_unlock(
+        for notification in ScenarioCompletionService::check_and_notify_achievements(
             &mut state.progress.profile,
             &state.progress.performance_tracker,
-        );
-        for achievement_id in newly_unlocked {
-            let achievement = Achievement::new(achievement_id);
-            state
-                .ui
-                .notifications
-                .push(Notification::new(NotificationType::Achievement {
-                    name: achievement.name,
-                    description: achievement.description,
-                }));
+        ) {
+            state.ui.notifications.push(notification);
         }
 
         // Award XP for scenario completion in arcade mode
@@ -266,13 +247,11 @@ fn execute_minigame_command(
     // training-mode path in `record_scenario_completion`). Unlike that training-mode
     // path, this doesn't pair the notification with `save_immediate()` - arcade only
     // persists at game over, so a mid-session level-up is not durable until then.
-    if scenario_leveled_up || quest_award.leveled_up {
-        state
-            .ui
-            .notifications
-            .push(Notification::new(NotificationType::LevelUp {
-                new_level: state.progress.profile.level,
-            }));
+    let leveled_up = scenario_leveled_up || quest_award.leveled_up;
+    if let Some(notification) =
+        ScenarioCompletionService::level_up_notification(leveled_up, state.progress.profile.level)
+    {
+        state.ui.notifications.push(notification);
     }
 
     // Store total XP earned for display in the transition popup (only shown when this
@@ -1843,6 +1822,50 @@ mod tests {
             &n.notification_type,
             NotificationType::Achievement { name, .. } if name == "Flash"
         )));
+    }
+
+    /// Regression test for #358: arcade completion must NOT persist mid-session even
+    /// when it unlocks achievements and bumps speed counters - unlike Training's
+    /// `record_scenario_completion`, `execute_minigame_command`'s completion block
+    /// (via the shared `ScenarioCompletionService` methods) never calls
+    /// `save_immediate`/`save_debounced`; only `handle_minigame_game_over` persists.
+    #[test]
+    fn test_execute_minigame_command_does_not_persist_mid_session() {
+        use crate::gamification::{AchievementId, ProfileStorage};
+        use tempfile::TempDir;
+
+        let scenario =
+            create_completable_scenario_with_difficulty("speed_test", Difficulty::Beginner);
+        let mut state = create_single_scenario_state(scenario);
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+        state.progress.storage = ProfileStorage::with_path(&profile_path);
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        let _ = execute_minigame_command(&mut state, "x", "x");
+        let _ = execute_minigame_command(&mut state, "d", "d");
+
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::SpeedDemon),
+            "sanity check: this completion should unlock an achievement"
+        );
+        assert!(
+            !profile_path.exists(),
+            "arcade must not persist mid-session, even on achievement unlock"
+        );
+
+        handle_minigame_game_over(&mut state).unwrap();
+
+        assert!(profile_path.exists(), "arcade must persist at game over");
     }
 
     /// Regression coverage for #290: a completion that consumes more than half of

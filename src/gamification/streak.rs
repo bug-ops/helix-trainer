@@ -5,7 +5,8 @@ use chrono::{DateTime, Utc};
 use super::{GamificationError, Result, UserProfile};
 use crate::constants::{
     MILESTONE_7_DAY_XP, MILESTONE_30_DAY_XP, MILESTONE_90_DAY_XP, MILESTONE_365_DAY_XP,
-    STREAK_MILESTONE_MONTH, STREAK_MILESTONE_QUARTER, STREAK_MILESTONE_WEEK, STREAK_MILESTONE_YEAR,
+    STREAK_FREEZE_MAX_GAP_DAYS, STREAK_MILESTONE_MONTH, STREAK_MILESTONE_QUARTER,
+    STREAK_MILESTONE_WEEK, STREAK_MILESTONE_YEAR,
 };
 
 /// Streak change event
@@ -30,7 +31,11 @@ impl StreakManager {
     /// Checks if user has been active since last recorded activity:
     /// - Same day: No change
     /// - Next day (completed quest): Increment streak
-    /// - Missed day: Break streak (or use freeze if available)
+    /// - Missed day(s) within [`STREAK_FREEZE_MAX_GAP_DAYS`]: Break streak, or use
+    ///   freeze if available and the prior streak was non-zero
+    /// - Missed day(s) beyond [`STREAK_FREEZE_MAX_GAP_DAYS`]: Break streak, even if
+    ///   a freeze is available - it only protects a brief lapse (e.g. a
+    ///   Friday-to-Monday weekend gap), not an arbitrary absence
     ///
     /// # Examples
     ///
@@ -77,8 +82,14 @@ impl StreakManager {
                 // Missed day(s)
                 let was_streak = profile.current_streak;
 
-                if was_streak > 0 && profile.streak_freeze_available {
-                    // Use streak freeze
+                if was_streak > 0
+                    && profile.streak_freeze_available
+                    && (2..=STREAK_FREEZE_MAX_GAP_DAYS).contains(&days_since_active)
+                {
+                    // Use streak freeze - only covers a brief lapse, not an
+                    // arbitrary absence. The lower bound also rejects a
+                    // negative gap from a backwards clock/NTP correction,
+                    // which would otherwise satisfy a `<=`-only upper bound.
                     profile.streak_freeze_available = false;
                     StreakChange::Protected
                 } else {
@@ -218,6 +229,101 @@ mod tests {
         assert_eq!(change, StreakChange::Protected);
         assert_eq!(profile.current_streak, 10); // Streak preserved
         assert!(!profile.streak_freeze_available); // Freeze consumed
+    }
+
+    /// Regression test for #325: a streak freeze must not protect a gap longer
+    /// than [`STREAK_FREEZE_MAX_GAP_DAYS`] - it should break normally, and the
+    /// freeze must remain available since it wasn't actually usable here.
+    #[test]
+    fn test_streak_freeze_does_not_cover_long_gap() {
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 10;
+        profile.streak_freeze_available = true;
+        clock.advance_days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
+
+        let change = StreakManager::update_streak(&mut profile, clock.now());
+        assert_eq!(change, StreakChange::Broken { was_streak: 10 });
+        assert_eq!(profile.current_streak, 0);
+        assert!(
+            profile.streak_freeze_available,
+            "freeze must not be consumed when the gap exceeds the coverage cap"
+        );
+    }
+
+    /// Boundary case: a gap of exactly `STREAK_FREEZE_MAX_GAP_DAYS` must still be
+    /// covered by the freeze (the cap is inclusive, per the `..=` range in
+    /// `update_streak`).
+    #[test]
+    fn test_streak_freeze_protects_at_max_gap_boundary() {
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 10;
+        profile.streak_freeze_available = true;
+        clock.advance_days(STREAK_FREEZE_MAX_GAP_DAYS);
+
+        let change = StreakManager::update_streak(&mut profile, clock.now());
+        assert_eq!(change, StreakChange::Protected);
+        assert_eq!(profile.current_streak, 10);
+        assert!(!profile.streak_freeze_available);
+    }
+
+    /// A gap beyond the cap with no freeze held must behave exactly as it did
+    /// before this fix (freeze-unavailable path was never gap-length-gated).
+    #[test]
+    fn test_streak_breaks_beyond_cap_without_freeze() {
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 10;
+        profile.streak_freeze_available = false;
+        clock.advance_days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
+
+        let change = StreakManager::update_streak(&mut profile, clock.now());
+        assert_eq!(change, StreakChange::Broken { was_streak: 10 });
+        assert_eq!(profile.current_streak, 0);
+    }
+
+    /// A gap beyond the cap with `current_streak` already 0: the #319 zero-streak
+    /// guard and the new gap-length guard must not conflict - freeze stays held
+    /// (nothing to protect either way) and the streak stays 0.
+    #[test]
+    fn test_streak_freeze_untouched_beyond_cap_when_streak_already_zero() {
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 0;
+        profile.streak_freeze_available = true;
+        clock.advance_days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
+
+        let change = StreakManager::update_streak(&mut profile, clock.now());
+        assert_eq!(change, StreakChange::Broken { was_streak: 0 });
+        assert_eq!(profile.current_streak, 0);
+        assert!(
+            profile.streak_freeze_available,
+            "freeze must not be consumed when there was no streak to protect"
+        );
+    }
+
+    /// Regression test for a backwards-clock edge case: a negative
+    /// `days_since_active` (e.g. an NTP correction moving the clock backwards)
+    /// must not be treated as a coverable gap - the lower bound of the freeze
+    /// window guards against a bare `<=` upper-bound check silently consuming
+    /// the freeze and returning `Protected` for a gap that never happened.
+    #[test]
+    fn test_streak_freeze_not_consumed_on_negative_gap() {
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 10;
+        profile.streak_freeze_available = true;
+        // Simulate a backwards clock: last_activity is after `now`.
+        profile.last_activity = clock.now() + Duration::days(1);
+
+        let change = StreakManager::update_streak(&mut profile, clock.now());
+        assert_eq!(change, StreakChange::Broken { was_streak: 10 });
+        assert_eq!(profile.current_streak, 0);
+        assert!(
+            profile.streak_freeze_available,
+            "freeze must not be consumed on a negative (backwards-clock) gap"
+        );
     }
 
     /// Regression test for #319: a streak freeze must not be consumed (nor

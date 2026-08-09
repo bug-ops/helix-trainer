@@ -842,7 +842,11 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
     }
 
     fn language(&self) -> &str {
-        self.scenario.setup.language.as_deref().unwrap_or("rs")
+        self.scenario
+            .setup
+            .language
+            .as_deref()
+            .unwrap_or(crate::config::DEFAULT_LANGUAGE)
     }
 
     fn all_cursors(&self) -> Vec<(usize, usize)> {

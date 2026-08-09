@@ -4,10 +4,10 @@
 
 use crate::security::limits::{
     MAX_ALTERNATIVES, MAX_COMMAND_SEQUENCE_LENGTH, MAX_CURSORS_PER_SCENARIO,
-    MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_LANGUAGE_LENGTH, MAX_SCENARIO_FILE_SIZE,
-    MAX_SCENARIOS_PER_FILE, MAX_SELECTIONS_PER_SCENARIO,
+    MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE, MAX_SCENARIOS_PER_FILE,
+    MAX_SELECTIONS_PER_SCENARIO,
 };
-use crate::security::validators::validate_id_field;
+use crate::security::validators::{validate_id_field, validate_language_field};
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -141,6 +141,14 @@ pub struct CursorSpec {
     pub selections: Option<Vec<[usize; 4]>>,
 }
 
+/// Effective content language used when a scenario's [`Setup::language`] is `None`.
+///
+/// Matches the syntax highlighter's original hardcoded behavior (see FR-002 in
+/// `specs/language-aware-syntax-highlighting/spec.md`). Shared by
+/// `PlayableScenario::language`'s default implementation and its `GameSession`/
+/// `ActiveMiniScenario` overrides so the fallback literal exists in exactly one place.
+pub const DEFAULT_LANGUAGE: &str = "rs";
+
 /// Initial editor setup
 #[derive(Deserialize, Debug, Clone)]
 pub struct Setup {
@@ -148,42 +156,13 @@ pub struct Setup {
 
     /// Content's language as a file-extension-style token (e.g. `"rs"`, `"md"`, `"py"`),
     /// resolved by the syntax highlighter against syntect's bundled `SyntaxSet`.
-    /// `None` (the default for scenarios that omit this field) is treated as `"rs"`,
-    /// preserving the highlighter's original hardcoded behavior.
+    /// `None` (the default for scenarios that omit this field) is treated as
+    /// [`DEFAULT_LANGUAGE`], preserving the highlighter's original hardcoded behavior.
     #[serde(default, deserialize_with = "validate_language_field")]
     pub language: Option<String>,
 
     #[serde(flatten)]
     pub cursor: CursorSpec,
-}
-
-/// Custom deserialization for `Setup.language` to validate format
-///
-/// Unlike locale/id fields elsewhere in this codebase, an explicit empty string
-/// is accepted rather than rejected: it is a valid "unsupported language" value
-/// that the highlighter resolves to plain-text rendering rather than a load-time
-/// error (see `specs/language-aware-syntax-highlighting/spec.md` edge cases).
-fn validate_language_field<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let opt: Option<String> = Option::deserialize(deserializer)?;
-
-    if let Some(ref language) = opt {
-        if language.len() > MAX_LANGUAGE_LENGTH {
-            return Err(serde::de::Error::custom(format!(
-                "Invalid language: max {} characters",
-                MAX_LANGUAGE_LENGTH
-            )));
-        }
-        if !language.chars().all(|c| c.is_ascii_alphanumeric()) {
-            return Err(serde::de::Error::custom(
-                "Invalid language: must be alphanumeric",
-            ));
-        }
-    }
-
-    Ok(opt)
 }
 
 /// Target state to achieve

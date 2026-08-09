@@ -118,16 +118,56 @@ fn test_scenario_with_oversized_language_rejected() {
 }
 
 #[test]
-fn test_scenario_with_non_alphanumeric_language_rejected() {
+fn test_scenario_with_whitespace_in_language_rejected() {
     let toml = format!(
         "{}\n",
         create_test_scenario_toml().replace(
             "file_content = \"Hello, World!\"",
-            "file_content = \"Hello, World!\"\nlanguage = \"rs; drop table\""
+            "file_content = \"Hello, World!\"\nlanguage = \"rs drop\""
         )
     );
     let result: Result<ScenariosFile, _> = toml::from_str(&toml);
     assert!(result.is_err());
+}
+
+#[test]
+fn test_scenario_with_symbolic_language_extension_accepted() {
+    // S1 regression: real syntect bundled extensions include symbols, e.g. C++'s "c++"
+    // and "h++" - the validator must not restrict `language` to alphanumeric-only.
+    let toml = format!(
+        "{}\n",
+        create_test_scenario_toml().replace(
+            "file_content = \"Hello, World!\"",
+            "file_content = \"Hello, World!\"\nlanguage = \"c++\""
+        )
+    );
+    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
+    let file = result.expect("scenario with symbolic language extension should parse");
+    assert_eq!(file.scenarios[0].setup.language, Some("c++".to_string()));
+}
+
+#[test]
+fn test_multi_scenario_toml_resolves_language_independently() {
+    // Tester gap: two scenarios in the same TOML file must each keep their own
+    // `language` value - no cross-scenario leakage between deserialized entries.
+    let toml = format!(
+        "{}\n{}\n",
+        create_test_scenario_toml().replace(
+            "file_content = \"Hello, World!\"",
+            "file_content = \"Hello, World!\"\nlanguage = \"md\""
+        ),
+        create_test_scenario_toml()
+            .replace("id = \"test_001\"", "id = \"test_002\"")
+            .replace(
+                "file_content = \"Hello, World!\"",
+                "file_content = \"Hello, World!\"\nlanguage = \"py\""
+            )
+    );
+    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
+    let file = result.expect("multi-scenario TOML with distinct languages should parse");
+    assert_eq!(file.scenarios.len(), 2);
+    assert_eq!(file.scenarios[0].setup.language, Some("md".to_string()));
+    assert_eq!(file.scenarios[1].setup.language, Some("py".to_string()));
 }
 
 #[test]

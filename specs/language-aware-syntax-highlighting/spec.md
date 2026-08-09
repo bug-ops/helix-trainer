@@ -11,7 +11,7 @@ tags:
   - architecture
   - status/proposed
 created: 2026-08-09
-status: proposed
+status: implemented
 related:
   - "[[constitution]]"
   - "[[MOC-specs]]"
@@ -25,7 +25,7 @@ related:
 > this is a scoped fix touching one struct field and one function body, no
 > new module or architecture. A full BRD/SRS/NFR/plan/tasks package would be
 > disproportionate.
-> **Status**: Proposed — not yet implemented.
+> **Status**: Implemented — see issue #360.
 
 ## 1. Overview
 
@@ -70,7 +70,16 @@ to render identically (defaulting to Rust) without any TOML changes.
   listed in [[#9. See Also|See Also]]
 - Adding new syntect syntax definitions beyond what `SyntaxSet::load_defaults_newlines`
   already bundles (covers common languages including Markdown, Python,
-  JavaScript, TypeScript, Go, C — sufficient for both dependent tracks)
+  JavaScript, Go, C — sufficient for the markdown/prose track). **Correction
+  (verified during implementation review):** the bundled default set does
+  *not* include TypeScript (`ts`/`typescript` resolve to neither
+  `find_syntax_by_extension` nor `find_syntax_by_token`), unlike the other
+  languages listed above. A `language = "ts"` scenario degrades gracefully
+  to plain text per FR-004 rather than crashing, but does not get
+  TypeScript-specific coloring. `specs/multi-language-scenario-content/`
+  must account for this — either drop TypeScript from its initial scope or
+  explicitly plan to pull in an extra `.sublime-syntax` definition (an
+  "Ask First" action per this spec's Agent Boundaries) when it is authored.
 - Per-line or embedded/mixed-language highlighting within a single scenario
   (e.g. Markdown with fenced code blocks) — one language per scenario only
 - Changing the highlighting theme (`base16-eighties.dark` stays as-is)

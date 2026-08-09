@@ -57,9 +57,11 @@ fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
 /// Primary cursor uses white background, secondary cursors use cyan background.
 /// Selections use blue background.
 ///
-/// `language` is a file-extension-style token (e.g. `"rs"`, `"md"`) resolved against
-/// syntect's bundled `SyntaxSet`; a value with no matching syntax definition falls back
-/// to plain, unhighlighted text rather than reusing another language's highlighting.
+/// `language` is resolved against syntect's bundled `SyntaxSet`, first as a file-extension
+/// token (e.g. `"rs"`, `"md"`) and, failing that, as a syntax name token (e.g. `"python"`,
+/// matching a scenario author writing the language's name instead of its extension). A
+/// value matching neither falls back to plain, unhighlighted text rather than reusing
+/// another language's highlighting.
 pub fn highlight_code_with_multi_cursor(
     content: &str,
     cursors: &[CursorInfo],
@@ -68,6 +70,7 @@ pub fn highlight_code_with_multi_cursor(
 ) -> Vec<Line<'static>> {
     let syntax = SYNTAX_SET
         .find_syntax_by_extension(language)
+        .or_else(|| SYNTAX_SET.find_syntax_by_token(language))
         .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
 
     let theme = &THEME_SET.themes["base16-eighties.dark"];
@@ -216,17 +219,48 @@ mod tests {
     }
 
     #[test]
+    fn test_highlight_with_language_name_token_falls_back_via_find_syntax_by_token() {
+        // FR-003: a scenario author writing the language's full name (as `find_syntax_by_token`
+        // resolves it) rather than a file extension still gets real highlighting, not plain text.
+        assert!(SYNTAX_SET.find_syntax_by_extension("python").is_none());
+        assert!(SYNTAX_SET.find_syntax_by_token("python").is_some());
+        let lines = highlight_code_with_multi_cursor("def f(): pass", &[], &[], "python");
+        // Plain text collapses an entire line into one uniformly-styled span (see the
+        // fallback assertion below); resolving via find_syntax_by_token instead produces
+        // multiple differently-styled tokens, proving real Python highlighting was applied.
+        assert!(lines[0].spans.len() > 1);
+    }
+
+    #[test]
     fn test_highlight_with_unknown_language_falls_back_to_plain_text() {
         // FR-004 / SC-003: an unresolved language must not panic or reuse Rust highlighting.
         assert!(SYNTAX_SET.find_syntax_by_extension("cobol").is_none());
-        let lines = highlight_code_with_multi_cursor("IDENTIFICATION DIVISION.", &[], &[], "cobol");
-        assert_eq!(lines.len(), 1);
+        assert!(SYNTAX_SET.find_syntax_by_token("cobol").is_none());
+        let lines = highlight_code_with_multi_cursor("fn main() {}", &[], &[], "cobol");
+        // Plain text has no syntax scopes, so the whole line is exactly one uniformly-styled
+        // span - unlike Rust highlighting of the same content, which splits it into multiple
+        // differently-styled tokens (asserted in test_highlight_with_multi_cursor_no_overlays'
+        // sibling below). This proves the fallback isn't silently reusing Rust's tokenization.
+        assert_eq!(lines[0].spans.len(), 1);
+        assert_eq!(lines[0].spans[0].content, "fn main() {}");
     }
 
     #[test]
     fn test_highlight_with_empty_language_falls_back_to_plain_text() {
-        // Edge case: explicit `language = ""` must not be coerced to "rs".
+        // Edge case: explicit `language = ""` must not be coerced to "rs" and must not
+        // match via either lookup strategy.
+        assert!(SYNTAX_SET.find_syntax_by_extension("").is_none());
+        assert!(SYNTAX_SET.find_syntax_by_token("").is_none());
         let lines = highlight_code_with_multi_cursor("fn main() {}", &[], &[], "");
-        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].spans.len(), 1);
+        assert_eq!(lines[0].spans[0].content, "fn main() {}");
+    }
+
+    #[test]
+    fn test_highlight_rust_produces_multiple_styled_tokens() {
+        // Baseline for the plain-text-fallback assertions above: real Rust highlighting of
+        // the same content splits it into several differently-styled spans.
+        let lines = highlight_code_with_multi_cursor("fn main() {}", &[], &[], "rs");
+        assert!(lines[0].spans.len() > 1);
     }
 }

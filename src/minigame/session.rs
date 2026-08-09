@@ -194,7 +194,11 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
     }
 
     fn language(&self) -> &str {
-        self.scenario.setup.language.as_deref().unwrap_or("rs")
+        self.scenario
+            .setup
+            .language
+            .as_deref()
+            .unwrap_or(crate::config::DEFAULT_LANGUAGE)
     }
 
     fn all_cursors(&self) -> Vec<(usize, usize)> {
@@ -1216,6 +1220,28 @@ mod tests {
 
         session.resume();
         assert!(session.state.is_playing());
+    }
+
+    #[test]
+    fn test_active_scenario_language_defaults_to_rs_when_scenario_omits_it() {
+        let scenario = create_test_scenario("s1", Difficulty::Beginner);
+        let active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+        assert_eq!(active.language(), "rs");
+    }
+
+    #[test]
+    fn test_active_scenario_language_resolves_from_scenario_setup() {
+        let scenario = ScenarioBuilder::new()
+            .id("s1")
+            .setup_content("line 1\nline 2\n")
+            .setup_language("py")
+            .setup_cursor(1, 0)
+            .target_content("line 1\n")
+            .target_cursor(1, 0)
+            .optimal_count(1)
+            .build();
+        let active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+        assert_eq!(active.language(), "py");
     }
 
     #[test]

@@ -77,11 +77,11 @@ pub trait PlayableScenario {
     /// Get the scenario's effective content language as a file-extension-style token
     /// (e.g. `"rs"`, `"md"`), used to select syntax highlighting for the target panel.
     ///
-    /// Default implementation returns `"rs"`, matching the highlighter's historical
-    /// hardcoded behavior; implementors backed by a `Scenario` should resolve this from
-    /// `Setup.language`.
+    /// Default implementation returns [`crate::config::DEFAULT_LANGUAGE`], matching the
+    /// highlighter's historical hardcoded behavior; implementors backed by a `Scenario`
+    /// should resolve this from `Setup.language`.
     fn language(&self) -> &str {
-        "rs"
+        crate::config::DEFAULT_LANGUAGE
     }
 
     /// Get current editor mode as string for UI display

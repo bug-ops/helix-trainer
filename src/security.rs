@@ -382,7 +382,7 @@ pub mod path_validator {
 
 /// Shared serde validators for scenario/quest configuration fields
 pub mod validators {
-    use super::limits::MAX_ID_LENGTH;
+    use super::limits::{MAX_ID_LENGTH, MAX_LANGUAGE_LENGTH};
     use serde::Deserialize;
 
     /// Custom deserialization for ID field to validate format
@@ -406,6 +406,42 @@ pub mod validators {
         }
 
         Ok(s)
+    }
+
+    /// Custom deserialization for `Setup.language` to validate format
+    ///
+    /// Unlike [`validate_id_field`], an explicit empty string is accepted rather than
+    /// rejected: it is a valid "unsupported language" value that the syntax highlighter
+    /// resolves to plain-text rendering rather than a load-time error (see
+    /// `specs/language-aware-syntax-highlighting/spec.md` edge cases). The character set is
+    /// deliberately permissive - real syntect extension tokens include symbols such as
+    /// `"c++"` or `"h++"` - rejecting only control characters, whitespace, and oversized
+    /// values; the value is only ever used as an exact-match lookup key into syntect's
+    /// `SyntaxSet`, never as a path or shell argument, so it carries no injection risk.
+    pub fn validate_language_field<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let opt: Option<String> = Option::deserialize(deserializer)?;
+
+        if let Some(ref language) = opt {
+            if language.len() > MAX_LANGUAGE_LENGTH {
+                return Err(serde::de::Error::custom(format!(
+                    "Invalid language: max {} characters",
+                    MAX_LANGUAGE_LENGTH
+                )));
+            }
+            if language
+                .chars()
+                .any(|c| c.is_control() || c.is_whitespace())
+            {
+                return Err(serde::de::Error::custom(
+                    "Invalid language: must not contain control characters or whitespace",
+                ));
+            }
+        }
+
+        Ok(opt)
     }
 }
 

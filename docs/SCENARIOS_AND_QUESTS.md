@@ -53,6 +53,9 @@ Scenarios are defined in TOML files under `scenarios/<locale>/`. Each file conta
 file_content = "hello world"      # Initial buffer content
 cursor_position = [0, 0]          # [row, col] - 0-indexed
 selection = [0, 0, 0, 5]          # Optional: [start_row, start_col, end_row, end_col]
+language = "rs"                   # Optional: file-extension-style token for syntax highlighting
+                                   # (e.g. "rs", "md", "py"); defaults to "rs" when omitted;
+                                   # unrecognized values fall back to plain text, never crash
 ```
 
 #### Target table

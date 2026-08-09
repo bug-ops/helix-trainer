@@ -8,9 +8,12 @@ use chrono::{DateTime, Utc};
 use helix_trainer::{
     async_state::DataLoadMessage,
     config::ScenarioCollection,
-    gamification::{QuestGenerator, QuestTemplateRegistry, StreakManager, UserProfile},
+    gamification::{
+        Achievement, AchievementEngine, QuestGenerator, QuestTemplateRegistry, StreakManager,
+        UserProfile,
+    },
     learning::PerformanceTracker,
-    ui::AppState,
+    ui::{AppState, Notification, NotificationType},
 };
 
 /// Check if daily quests should be refreshed
@@ -68,6 +71,28 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
             state.progress.performance_tracker =
                 PerformanceTracker::from_stats(updated_profile.performance_data.clone());
             state.progress.profile = updated_profile;
+
+            // Streak (and possibly quest history) may have just changed above;
+            // surface any achievements that are now satisfied.
+            let newly_unlocked = AchievementEngine::check_and_unlock(
+                &mut state.progress.profile,
+                &state.progress.performance_tracker,
+            );
+            if !newly_unlocked.is_empty() {
+                for achievement_id in newly_unlocked {
+                    let achievement = Achievement::new(achievement_id);
+                    state
+                        .ui
+                        .notifications
+                        .push(Notification::new(NotificationType::Achievement {
+                            name: achievement.name,
+                            description: achievement.description,
+                        }));
+                }
+                state.progress.storage.save(&state.progress.profile)?;
+                state.progress.mark_saved();
+            }
+
             tracing::info!("Profile loaded");
         }
 
@@ -197,6 +222,36 @@ mod tests {
         let loaded_profile = &state.progress.profile;
         assert_eq!(loaded_profile.total_xp, 500);
         assert_eq!(loaded_profile.level, 3);
+    }
+
+    /// Regression test for #256: a streak that crosses a milestone at load time (the only
+    /// place `StreakManager::update_streak` runs) must unlock the corresponding achievement
+    /// and notify the user, not just update `current_streak`.
+    #[test]
+    fn test_handle_profile_ready_unlocks_streak_achievement() {
+        use helix_trainer::gamification::AchievementId;
+
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        profile.current_streak = 6;
+        profile.completed_quests_today.insert("quest_0".to_string());
+        profile.last_activity = Utc::now() - chrono::Duration::days(1);
+
+        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        assert!(result.is_ok());
+        // Streak should have incremented from 6 to 7, crossing the Streak7Days threshold
+        assert_eq!(state.progress.profile.current_streak, 7);
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::Streak7Days)
+        );
+        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+            n.notification_type,
+            NotificationType::Achievement { ref name, .. } if name == "7-Day Warrior"
+        )));
     }
 
     #[test]

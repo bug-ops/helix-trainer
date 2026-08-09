@@ -5,8 +5,7 @@ use chrono::{DateTime, Utc};
 use super::{GamificationError, Result, UserProfile};
 use crate::constants::{
     MILESTONE_7_DAY_XP, MILESTONE_30_DAY_XP, MILESTONE_90_DAY_XP, MILESTONE_365_DAY_XP,
-    QUESTS_FOR_STREAK_FREEZE, STREAK_MILESTONE_MONTH, STREAK_MILESTONE_QUARTER,
-    STREAK_MILESTONE_WEEK, STREAK_MILESTONE_YEAR,
+    STREAK_MILESTONE_MONTH, STREAK_MILESTONE_QUARTER, STREAK_MILESTONE_WEEK, STREAK_MILESTONE_YEAR,
 };
 
 /// Streak change event
@@ -108,17 +107,20 @@ impl StreakManager {
         Ok(())
     }
 
-    /// Grant streak freeze (earned by completing 5 quests in a day)
+    /// Grant streak freeze (earned by completing all of today's daily quests)
     pub fn grant_freeze(profile: &mut UserProfile) {
         profile.streak_freeze_available = true;
     }
 
     /// Check if user should be granted a freeze
     ///
-    /// Grants freeze once per week if enough quests completed in a day
+    /// Eligible once every quest generated for today has been completed, and no
+    /// freeze is currently held. A profile with no quests generated yet is never
+    /// eligible.
     pub fn check_freeze_eligibility(profile: &UserProfile) -> bool {
         !profile.streak_freeze_available
-            && profile.completed_quests_today.len() >= QUESTS_FOR_STREAK_FREEZE as usize
+            && !profile.daily_quests.is_empty()
+            && profile.completed_quests_today.len() >= profile.daily_quests.len()
     }
 
     /// Calculate days between two dates
@@ -249,20 +251,38 @@ mod tests {
 
     #[test]
     fn test_freeze_eligibility() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
         let mut profile = UserProfile::new();
 
-        // Not eligible - no quests
+        // Not eligible - no quests generated for today
         assert!(!StreakManager::check_freeze_eligibility(&profile));
 
-        // Not eligible - already has freeze
+        for i in 0..3 {
+            profile.daily_quests.push(Quest::new(
+                format!("quest_{}", i),
+                QuestType::CommandPractice {
+                    command: "x".to_string(),
+                    target: 1,
+                    current: 0,
+                },
+                format!("Quest {}", i),
+                QuestDifficulty::Easy,
+            ));
+        }
+
+        // Not eligible - quests generated but none completed yet
+        assert!(!StreakManager::check_freeze_eligibility(&profile));
+
+        // Not eligible - already has freeze, even if all quests are completed
         profile.streak_freeze_available = true;
-        assert!(!StreakManager::check_freeze_eligibility(&profile));
-
-        // Eligible - 5 quests completed, no freeze
-        profile.streak_freeze_available = false;
-        for i in 0..5 {
+        for i in 0..3 {
             profile.complete_quest(format!("quest_{}", i));
         }
+        assert!(!StreakManager::check_freeze_eligibility(&profile));
+
+        // Eligible - all of today's quests completed, no freeze held
+        profile.streak_freeze_available = false;
         assert!(StreakManager::check_freeze_eligibility(&profile));
     }
 

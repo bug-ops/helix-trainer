@@ -153,16 +153,50 @@ impl AchievementEngine {
         unlocked
     }
 
+    /// Check achievement conditions and unlock any newly satisfied achievements on `profile`
+    ///
+    /// Returns the ids that were newly unlocked by this call, for the caller to surface
+    /// (e.g. as notifications).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::{AchievementEngine, UserProfile};
+    /// use helix_trainer::learning::PerformanceTracker;
+    ///
+    /// let mut profile = UserProfile::new();
+    /// profile.perfect_scenarios = 1;
+    ///
+    /// let tracker = PerformanceTracker::new();
+    /// let unlocked = AchievementEngine::check_and_unlock(&mut profile, &tracker);
+    ///
+    /// assert!(profile.has_achievement(&helix_trainer::gamification::AchievementId::FirstPerfect));
+    /// assert_eq!(unlocked.len(), 1);
+    /// ```
+    pub fn check_and_unlock(
+        profile: &mut UserProfile,
+        tracker: &PerformanceTracker,
+    ) -> Vec<AchievementId> {
+        let newly_unlocked = Self::check_achievements(profile, tracker);
+        for &id in &newly_unlocked {
+            profile.unlock_achievement(id);
+        }
+        newly_unlocked
+    }
+
     fn check_streak_achievements(profile: &UserProfile, unlocked: &mut Vec<AchievementId>) {
         let streak = profile.current_streak;
 
         if streak >= 365 && !profile.has_achievement(&AchievementId::Streak365Days) {
             unlocked.push(AchievementId::Streak365Days);
-        } else if streak >= 90 && !profile.has_achievement(&AchievementId::Streak90Days) {
+        }
+        if streak >= 90 && !profile.has_achievement(&AchievementId::Streak90Days) {
             unlocked.push(AchievementId::Streak90Days);
-        } else if streak >= 30 && !profile.has_achievement(&AchievementId::Streak30Days) {
+        }
+        if streak >= 30 && !profile.has_achievement(&AchievementId::Streak30Days) {
             unlocked.push(AchievementId::Streak30Days);
-        } else if streak >= 7 && !profile.has_achievement(&AchievementId::Streak7Days) {
+        }
+        if streak >= 7 && !profile.has_achievement(&AchievementId::Streak7Days) {
             unlocked.push(AchievementId::Streak7Days);
         }
     }
@@ -177,9 +211,11 @@ impl AchievementEngine {
 
         if perfect_count >= 100 && !profile.has_achievement(&AchievementId::Perfect100) {
             unlocked.push(AchievementId::Perfect100);
-        } else if perfect_count >= 10 && !profile.has_achievement(&AchievementId::Perfect10) {
+        }
+        if perfect_count >= 10 && !profile.has_achievement(&AchievementId::Perfect10) {
             unlocked.push(AchievementId::Perfect10);
-        } else if perfect_count >= 1 && !profile.has_achievement(&AchievementId::FirstPerfect) {
+        }
+        if perfect_count >= 1 && !profile.has_achievement(&AchievementId::FirstPerfect) {
             unlocked.push(AchievementId::FirstPerfect);
         }
 
@@ -197,9 +233,8 @@ impl AchievementEngine {
 
         if mastered_commands >= 10 && !profile.has_achievement(&AchievementId::MasterTenCommands) {
             unlocked.push(AchievementId::MasterTenCommands);
-        } else if mastered_commands >= 1
-            && !profile.has_achievement(&AchievementId::MasterOneCommand)
-        {
+        }
+        if mastered_commands >= 1 && !profile.has_achievement(&AchievementId::MasterOneCommand) {
             unlocked.push(AchievementId::MasterOneCommand);
         }
 
@@ -227,9 +262,11 @@ impl AchievementEngine {
 
         if completed >= 1000 && !profile.has_achievement(&AchievementId::Legend) {
             unlocked.push(AchievementId::Legend);
-        } else if completed >= 500 && !profile.has_achievement(&AchievementId::Veteran) {
+        }
+        if completed >= 500 && !profile.has_achievement(&AchievementId::Veteran) {
             unlocked.push(AchievementId::Veteran);
-        } else if completed >= 100 && !profile.has_achievement(&AchievementId::Centurion) {
+        }
+        if completed >= 100 && !profile.has_achievement(&AchievementId::Centurion) {
             unlocked.push(AchievementId::Centurion);
         }
     }
@@ -367,6 +404,23 @@ mod tests {
         assert!(unlocked.contains(&AchievementId::Legend));
     }
 
+    /// Regression test: retroactively checking an existing profile (e.g. on load) must
+    /// unlock every satisfied tier at once, not just the highest one. Previously an
+    /// `else if` cascade meant a profile with `scenarios_completed = 600` unlocked only
+    /// `Veteran` (>= 500) and could never also unlock `Centurion` (>= 100).
+    #[test]
+    fn test_milestone_achievements_unlock_all_satisfied_tiers_at_once() {
+        let tracker = PerformanceTracker::new();
+        let mut profile = UserProfile::new();
+        profile.scenarios_completed = 600;
+
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+
+        assert!(unlocked.contains(&AchievementId::Centurion));
+        assert!(unlocked.contains(&AchievementId::Veteran));
+        assert!(!unlocked.contains(&AchievementId::Legend));
+    }
+
     #[test]
     fn test_exploration_jack_of_all_trades() {
         let mut tracker = PerformanceTracker::new();
@@ -385,6 +439,22 @@ mod tests {
 
         let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
         assert!(unlocked.contains(&AchievementId::JackOfAllTrades));
+    }
+
+    #[test]
+    fn test_check_and_unlock_marks_profile_and_returns_ids() {
+        let tracker = PerformanceTracker::new();
+        let mut profile = UserProfile::new();
+        profile.perfect_scenarios = 1;
+
+        let unlocked = AchievementEngine::check_and_unlock(&mut profile, &tracker);
+
+        assert_eq!(unlocked, vec![AchievementId::FirstPerfect]);
+        assert!(profile.has_achievement(&AchievementId::FirstPerfect));
+
+        // Calling again should not re-unlock the same achievement
+        let unlocked_again = AchievementEngine::check_and_unlock(&mut profile, &tracker);
+        assert!(unlocked_again.is_empty());
     }
 
     #[test]

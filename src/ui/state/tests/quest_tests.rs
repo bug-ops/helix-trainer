@@ -4,7 +4,8 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use super::common::{create_test_app_state, create_test_scenario};
-use crate::gamification::{Quest, QuestDifficulty, QuestType};
+use crate::gamification::{Quest, QuestDifficulty, QuestType, StreakManager};
+use crate::ui::notification::NotificationType;
 use crate::ui::state::{Message, update};
 
 #[test]
@@ -342,4 +343,184 @@ fn test_quest_progress_changes_tracking() {
     assert_eq!(change.old_progress, 0);
     assert_eq!(change.new_progress, 1);
     assert!(change.quest_description.contains("x"));
+}
+
+/// Regression test for #267: completing a quest through the live message-passing
+/// flow must populate `completed_quests_today`, since `StreakManager::update_streak`
+/// gates next-day streak increments on that set being non-empty.
+#[test]
+fn test_quest_completion_populates_completed_quests_today() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+
+    {
+        let profile = &mut state.progress.profile;
+        profile.daily_quests.push(Quest::new(
+            "test_quest".to_string(),
+            QuestType::CommandPractice {
+                command: "x".to_string(),
+                target: 1,
+                current: 0,
+            },
+            "Delete 1 character".to_string(),
+            QuestDifficulty::Easy,
+        ));
+    }
+
+    assert!(state.progress.profile.completed_quests_today.is_empty());
+
+    update(
+        &mut state,
+        Message::UpdateQuestProgress {
+            command: Some("x".to_string()),
+            scenario_completed: false,
+            scenario_id: None,
+            duration: Duration::from_secs(0),
+        },
+    )
+    .unwrap();
+
+    assert!(
+        state
+            .progress
+            .profile
+            .completed_quests_today
+            .contains("test_quest")
+    );
+}
+
+/// Regression test for #267: the streak can now increment on the next session because
+/// `completed_quests_today` was populated by a live quest completion the day before.
+#[test]
+fn test_streak_increments_next_day_after_live_quest_completion() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    state.progress.profile.current_streak = 3;
+
+    {
+        let profile = &mut state.progress.profile;
+        profile.daily_quests.push(Quest::new(
+            "test_quest".to_string(),
+            QuestType::CommandPractice {
+                command: "x".to_string(),
+                target: 1,
+                current: 0,
+            },
+            "Delete 1 character".to_string(),
+            QuestDifficulty::Easy,
+        ));
+    }
+
+    update(
+        &mut state,
+        Message::UpdateQuestProgress {
+            command: Some("x".to_string()),
+            scenario_completed: false,
+            scenario_id: None,
+            duration: Duration::from_secs(0),
+        },
+    )
+    .unwrap();
+
+    // Simulate that this activity happened yesterday, as `StreakManager` would see it
+    // at the start of the next session.
+    state.progress.profile.last_activity = chrono::Utc::now() - chrono::Duration::days(1);
+
+    let change = StreakManager::update_streak(&mut state.progress.profile);
+
+    assert_eq!(
+        change,
+        crate::gamification::StreakChange::Incremented { new_streak: 4 }
+    );
+    assert_eq!(state.progress.profile.current_streak, 4);
+}
+
+/// Regression test for #257: completing *all* of today's daily quests through the live
+/// flow grants a streak freeze. Eligibility is based on completing every quest generated
+/// for the day, not a fixed count — the quest generator produces at most 4 quests/day, so
+/// the old fixed threshold of 5 was unreachable in production.
+#[test]
+fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+
+    let quest_ids = ["quest_0", "quest_1", "quest_2"];
+    for id in quest_ids {
+        state.progress.profile.daily_quests.push(Quest::new(
+            id.to_string(),
+            QuestType::CommandPractice {
+                command: id.to_string(),
+                target: 1,
+                current: 0,
+            },
+            format!("Use {}", id),
+            QuestDifficulty::Easy,
+        ));
+    }
+
+    for (i, id) in quest_ids.iter().enumerate() {
+        update(
+            &mut state,
+            Message::UpdateQuestProgress {
+                command: Some(id.to_string()),
+                scenario_completed: false,
+                scenario_id: None,
+                duration: Duration::from_secs(0),
+            },
+        )
+        .unwrap();
+
+        // Freeze must not be granted until every daily quest is completed
+        let is_last = i == quest_ids.len() - 1;
+        assert_eq!(state.progress.profile.streak_freeze_available, is_last);
+    }
+
+    assert!(
+        state
+            .ui
+            .notifications
+            .visible()
+            .iter()
+            .any(|n| n.notification_type == NotificationType::StreakFreezeGranted)
+    );
+}
+
+/// A freeze already held must not be granted (or notified) again, even if the
+/// "all daily quests completed" condition is met again.
+#[test]
+fn test_streak_freeze_not_granted_twice() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    state.progress.profile.streak_freeze_available = true;
+    state.progress.profile.daily_quests.push(Quest::new(
+        "quest_0".to_string(),
+        QuestType::CommandPractice {
+            command: "x".to_string(),
+            target: 1,
+            current: 0,
+        },
+        "Use x".to_string(),
+        QuestDifficulty::Easy,
+    ));
+
+    update(
+        &mut state,
+        Message::UpdateQuestProgress {
+            command: Some("x".to_string()),
+            scenario_completed: false,
+            scenario_id: None,
+            duration: Duration::from_secs(0),
+        },
+    )
+    .unwrap();
+
+    assert!(state.progress.profile.streak_freeze_available);
+    assert!(
+        !state
+            .ui
+            .notifications
+            .visible()
+            .iter()
+            .any(|n| n.notification_type == NotificationType::StreakFreezeGranted)
+    );
 }

@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `paste_after`/`paste_before` (`p`/`P`) now insert at the correct end of a range selection regardless of its direction, instead of always using the raw (possibly backward) `head` position (#266)
 - `redo` (`U`, `Ctrl-r`) now restores the most recently undone change via a redo stack built on the existing document history, instead of being a no-op; repeated redo walks forward through history and round-trips correctly with undo (#265)
 - Applying a transaction with no actual document changes no longer records a spurious undo step or discards pending redo history (#265)
+- Wire up daily-streak, streak-freeze, and achievement triggers that were fully implemented but never invoked outside of unit tests (#267, #257, #256):
+  - Quest completion now marks `UserProfile::completed_quests_today`, so `StreakManager::update_streak` (still evaluated once per app launch, at profile load) can increment `current_streak` on the following day's session instead of the set staying permanently empty (#267)
+  - Streak-freeze eligibility now requires completing every quest generated for the day rather than a fixed count of 5, which the quest generator can never produce (max 4/day) and was therefore unreachable; eligible completion grants a freeze via `StreakManager::grant_freeze`, surfaced with a new `StreakFreezeGranted` notification (#257)
+  - Scenario completion and profile load now check `AchievementEngine::check_achievements` and unlock newly satisfied achievements — including retroactively unlocking every tier a profile already qualifies for, not just the highest one — surfaced via the existing `Achievement` notification (#256)
 
 ### Changed
 

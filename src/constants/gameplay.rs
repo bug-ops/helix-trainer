@@ -31,10 +31,6 @@ pub const OPTIMAL_EFFICIENCY_BONUS: f64 = 0.25;
 /// Efficiency bonus for >80% efficiency (12.5%)
 pub const MAX_EFFICIENCY_BONUS: f64 = 0.125;
 
-// Streak system
-/// Number of quests completed to earn a streak freeze
-pub const QUESTS_FOR_STREAK_FREEZE: u32 = 5;
-
 // Streak milestones (in days)
 /// Week streak milestone (7 days)
 pub const STREAK_MILESTONE_WEEK: u32 = 7;

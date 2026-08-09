@@ -26,6 +26,9 @@ pub enum NotificationType {
     /// Streak milestone reached
     StreakMilestone { streak: u32 },
 
+    /// Streak freeze earned (protects the streak if a day is missed)
+    StreakFreezeGranted,
+
     /// Informational message
     Info { message: String },
 
@@ -122,6 +125,7 @@ impl Notification {
             NotificationType::Achievement { name, .. } => format!("Achievement Unlocked: {}", name),
             NotificationType::QuestComplete { .. } => "Quest Complete!".to_string(),
             NotificationType::StreakMilestone { streak } => format!("{} Day Streak!", streak),
+            NotificationType::StreakFreezeGranted => "Streak Freeze Earned!".to_string(),
             NotificationType::Info { .. } => "Info".to_string(),
             NotificationType::ReviewSessionComplete { .. } => "Review Complete!".to_string(),
             NotificationType::MasteryLevelUp { command, .. } => {
@@ -145,6 +149,9 @@ impl Notification {
             }
             NotificationType::StreakMilestone { streak } => {
                 format!("Keep it up! {} days in a row", streak)
+            }
+            NotificationType::StreakFreezeGranted => {
+                "Miss a day without breaking your streak".to_string()
             }
             NotificationType::Info { message } => message.clone(),
             NotificationType::ReviewSessionComplete {
@@ -171,6 +178,7 @@ impl Notification {
             NotificationType::Achievement { .. } => Color::Magenta,
             NotificationType::QuestComplete { .. } => Color::Green,
             NotificationType::StreakMilestone { .. } => Color::Cyan,
+            NotificationType::StreakFreezeGranted => Color::Cyan,
             NotificationType::Info { .. } => Color::Blue,
             NotificationType::ReviewSessionComplete { .. } => Color::Green,
             NotificationType::MasteryLevelUp { .. } => Color::Yellow,
@@ -376,6 +384,13 @@ mod tests {
         assert_eq!(info.title(), "Info");
         assert_eq!(info.message(), "Test info message");
 
+        let freeze_granted = Notification::new(NotificationType::StreakFreezeGranted);
+        assert_eq!(freeze_granted.title(), "Streak Freeze Earned!");
+        assert_eq!(
+            freeze_granted.message(),
+            "Miss a day without breaking your streak"
+        );
+
         let review_complete = Notification::new(NotificationType::ReviewSessionComplete {
             completed: 5,
             success_count: 4,
@@ -413,6 +428,9 @@ mod tests {
 
         let streak = Notification::new(NotificationType::StreakMilestone { streak: 5 });
         assert_eq!(streak.color(), Color::Cyan);
+
+        let freeze_granted = Notification::new(NotificationType::StreakFreezeGranted);
+        assert_eq!(freeze_granted.color(), Color::Cyan);
 
         let info = Notification::new(NotificationType::Info {
             message: "Test".to_string(),

@@ -13,6 +13,11 @@
 #   -h, --help              Show this help message
 #
 # Windows users: run install.ps1 instead.
+#
+# Archive extraction prefers exarch (https://github.com/bug-ops/exarch), a
+# memory-safe extractor with path-traversal/zip-bomb/symlink protections,
+# bootstrapping it into a scratch directory when not already on PATH. Falls
+# back to the system tar if exarch is unavailable or unsupported on this host.
 
 set -eu
 
@@ -84,6 +89,29 @@ fetch_stdout() {
     fi
 }
 
+EXARCH_BIN=""
+
+resolve_exarch() {
+    if command -v exarch >/dev/null 2>&1 && exarch --version >/dev/null 2>&1; then
+        EXARCH_BIN="exarch"
+        return 0
+    fi
+    # exarch's own installer only ships gnu/darwin builds (no musl, no Windows);
+    # the OS-ARCH gate below is the host running this script, not the release
+    # target picked by --static, so a musl host (e.g. Alpine) still needs the
+    # --version smoke test below to reject a glibc binary that can't execute.
+    case "${OS}-${ARCH}" in
+        linux-x86_64 | linux-aarch64 | macos-x86_64 | macos-aarch64) ;;
+        *) return 1 ;;
+    esac
+    EXARCH_SCRIPT="${TMP_DIR}/exarch-install.sh"
+    fetch "https://raw.githubusercontent.com/bug-ops/exarch/main/scripts/install.sh" "$EXARCH_SCRIPT" 2>/dev/null || return 1
+    EXARCH_DIR="${TMP_DIR}/exarch-bin"
+    EXARCH_INSTALL_DIR="$EXARCH_DIR" sh "$EXARCH_SCRIPT" >/dev/null 2>&1 || return 1
+    [ -x "${EXARCH_DIR}/exarch" ] && "${EXARCH_DIR}/exarch" --version >/dev/null 2>&1 || return 1
+    EXARCH_BIN="${EXARCH_DIR}/exarch"
+}
+
 detect_os() {
     case "$(uname -s)" in
         Linux) echo linux ;;
@@ -149,8 +177,13 @@ log "Verifying checksum..."
     fi
 )
 
-log "Extracting..."
-tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "$TMP_DIR"
+if resolve_exarch; then
+    log "Extracting (via exarch)..."
+    "$EXARCH_BIN" extract --quiet "${TMP_DIR}/${ARCHIVE}" "$TMP_DIR"
+else
+    log "Extracting..."
+    tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "$TMP_DIR"
+fi
 
 mkdir -p "$INSTALL_DIR"
 install -m 755 "${TMP_DIR}/helix-trainer-v${VERSION}-${TARGET}/${BINARY}" "${INSTALL_DIR}/${BINARY}"

@@ -166,6 +166,45 @@ fn test_map_single_key_clipboard() {
         map_single_key_command('P', KeyModifiers::SHIFT),
         Some(CMD_PASTE_BEFORE)
     );
+    assert_eq!(
+        map_single_key_command('R', KeyModifiers::SHIFT),
+        Some(CMD_REPLACE_WITH_YANKED)
+    );
+}
+
+#[test]
+fn test_map_single_key_page_movement() {
+    assert_eq!(
+        map_single_key_command('b', KeyModifiers::CONTROL),
+        Some(CMD_PAGE_UP)
+    );
+    assert_eq!(
+        map_single_key_command('f', KeyModifiers::CONTROL),
+        Some(CMD_PAGE_DOWN)
+    );
+    assert_eq!(
+        map_single_key_command('u', KeyModifiers::CONTROL),
+        Some(CMD_HALF_PAGE_UP)
+    );
+    assert_eq!(
+        map_single_key_command('d', KeyModifiers::CONTROL),
+        Some(CMD_HALF_PAGE_DOWN)
+    );
+}
+
+#[test]
+fn test_map_single_key_control_does_not_fall_back_to_bare_key_commands() {
+    // Regression test for issue #198: Ctrl-modified keys must not resolve to
+    // their unmodified counterparts (e.g. Ctrl-d must not become 'd' / delete).
+    assert_eq!(
+        map_single_key_command('d', KeyModifiers::CONTROL),
+        Some(CMD_HALF_PAGE_DOWN)
+    );
+    assert_ne!(
+        map_single_key_command('d', KeyModifiers::CONTROL),
+        map_single_key_command('d', KeyModifiers::NONE)
+    );
+    assert_eq!(map_single_key_command('a', KeyModifiers::CONTROL), None);
 }
 
 #[test]

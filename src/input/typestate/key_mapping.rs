@@ -232,6 +232,20 @@ fn parse_key_code(s: &str, modifiers: &mut KeyModifiers) -> Option<KeyCode> {
 /// Returns None for invalid commands or prefix commands.
 /// Handles SHIFT and ALT modifiers for proper command dispatch.
 pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'static str> {
+    // Ctrl commands are checked first and return early: unlike Alt, CONTROL
+    // is not otherwise reflected in the (char, is_shift, is_alt) match below,
+    // so a Ctrl-modified char would otherwise silently fall into the bare-key
+    // arms (e.g. Ctrl-d resolving to plain 'd' / delete_selection).
+    if modifiers.contains(KeyModifiers::CONTROL) {
+        return match c {
+            'b' => Some(CMD_PAGE_UP),        // Ctrl-b
+            'f' => Some(CMD_PAGE_DOWN),      // Ctrl-f
+            'u' => Some(CMD_HALF_PAGE_UP),   // Ctrl-u
+            'd' => Some(CMD_HALF_PAGE_DOWN), // Ctrl-d
+            _ => None,
+        };
+    }
+
     let is_shift = modifiers.contains(KeyModifiers::SHIFT);
     let is_alt = modifiers.contains(KeyModifiers::ALT);
 
@@ -301,6 +315,7 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
         ('y', false, false) => Some(CMD_YANK),
         ('p', false, false) => Some(CMD_PASTE_AFTER),
         ('P', _, false) => Some(CMD_PASTE_BEFORE),
+        ('R', _, false) => Some(CMD_REPLACE_WITH_YANKED),
 
         // Undo/Redo (no Alt)
         ('u', false, false) => Some(CMD_UNDO),

@@ -74,6 +74,16 @@ pub trait PlayableScenario {
     /// Get elapsed time since scenario start
     fn elapsed(&self) -> Duration;
 
+    /// Get the scenario's effective content language as a file-extension-style token
+    /// (e.g. `"rs"`, `"md"`), used to select syntax highlighting for the target panel.
+    ///
+    /// Default implementation returns `"rs"`, matching the highlighter's historical
+    /// hardcoded behavior; implementors backed by a `Scenario` should resolve this from
+    /// `Setup.language`.
+    fn language(&self) -> &str {
+        "rs"
+    }
+
     /// Get current editor mode as string for UI display
     fn mode_name(&self) -> &'static str {
         if self.is_insert_mode() {

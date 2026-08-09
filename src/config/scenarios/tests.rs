@@ -63,6 +63,74 @@ fn test_valid_scenario_loading() {
 }
 
 #[test]
+fn test_scenario_without_language_field_defaults_to_none() {
+    // FR-001/FR-002: existing scenarios omitting `language` must keep parsing
+    // and resolve to `None` (treated as "rs" by the highlighter).
+    let toml = create_test_scenario_toml();
+    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
+    let file = result.expect("scenario without language field should parse");
+    assert_eq!(file.scenarios[0].setup.language, None);
+}
+
+#[test]
+fn test_scenario_with_valid_language_field() {
+    let toml = format!(
+        "{}\n",
+        create_test_scenario_toml().replace(
+            "file_content = \"Hello, World!\"",
+            "file_content = \"Hello, World!\"\nlanguage = \"md\""
+        )
+    );
+    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
+    let file = result.expect("scenario with valid language field should parse");
+    assert_eq!(file.scenarios[0].setup.language, Some("md".to_string()));
+}
+
+#[test]
+fn test_scenario_with_empty_language_field_accepted() {
+    // Edge case: explicit `language = ""` must load successfully rather than
+    // being rejected at parse time - the highlighter treats it as unsupported
+    // and falls back to plain text at render time (see highlight.rs tests).
+    let toml = format!(
+        "{}\n",
+        create_test_scenario_toml().replace(
+            "file_content = \"Hello, World!\"",
+            "file_content = \"Hello, World!\"\nlanguage = \"\""
+        )
+    );
+    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
+    let file = result.expect("scenario with empty language field should parse");
+    assert_eq!(file.scenarios[0].setup.language, Some(String::new()));
+}
+
+#[test]
+fn test_scenario_with_oversized_language_rejected() {
+    let oversized = "a".repeat(crate::security::limits::MAX_LANGUAGE_LENGTH + 1);
+    let toml = format!(
+        "{}\n",
+        create_test_scenario_toml().replace(
+            "file_content = \"Hello, World!\"",
+            &format!("file_content = \"Hello, World!\"\nlanguage = \"{oversized}\"")
+        )
+    );
+    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_scenario_with_non_alphanumeric_language_rejected() {
+    let toml = format!(
+        "{}\n",
+        create_test_scenario_toml().replace(
+            "file_content = \"Hello, World!\"",
+            "file_content = \"Hello, World!\"\nlanguage = \"rs; drop table\""
+        )
+    );
+    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
+    assert!(result.is_err());
+}
+
+#[test]
 fn test_invalid_id_rejection() {
     let toml = r#"
 [[scenarios]]
@@ -1083,6 +1151,7 @@ tolerance = 0
 fn test_setup_effective_cursor_position() {
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: Some((1, 5)),
             selection: None,
@@ -1094,6 +1163,7 @@ fn test_setup_effective_cursor_position() {
 
     let setup_multi = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1108,6 +1178,7 @@ fn test_setup_effective_cursor_position() {
 fn test_setup_all_cursors() {
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: Some((1, 5)),
             selection: None,
@@ -1119,6 +1190,7 @@ fn test_setup_all_cursors() {
 
     let setup_multi = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1133,6 +1205,7 @@ fn test_setup_all_cursors() {
 fn test_setup_all_selections() {
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: Some((0, 0)),
             selection: Some([0, 0, 0, 5]),
@@ -1144,6 +1217,7 @@ fn test_setup_all_selections() {
 
     let setup_multi = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1161,6 +1235,7 @@ fn test_setup_all_selections() {
 fn test_setup_is_multi_cursor() {
     let single = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: Some((0, 0)),
             selection: None,
@@ -1172,6 +1247,7 @@ fn test_setup_is_multi_cursor() {
 
     let multi_cursors = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1183,6 +1259,7 @@ fn test_setup_is_multi_cursor() {
 
     let multi_selections = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1281,6 +1358,7 @@ fn test_setup_effective_cursor_from_selections() {
     // When only selections are present, cursor is at first selection's head
     let setup = Setup {
         file_content: "test content".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1297,6 +1375,7 @@ fn test_setup_all_cursors_derived_from_selections() {
     // all_cursors should derive from selections when cursors is None
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1316,6 +1395,7 @@ fn test_setup_all_selections_derived_from_cursors() {
     // all_selections should create point selections from cursors
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1335,6 +1415,7 @@ fn test_setup_all_selections_none_when_no_selection_info() {
     // When no selection/selections/cursors, all_selections returns None
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: Some((0, 0)),
             selection: None,
@@ -1349,6 +1430,7 @@ fn test_setup_all_selections_none_when_no_selection_info() {
 fn test_setup_empty_cursors_array() {
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: Some((0, 2)),
             selection: None,
@@ -1366,6 +1448,7 @@ fn test_setup_empty_cursors_array() {
 fn test_setup_empty_selections_array() {
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: Some((0, 2)),
             selection: None,
@@ -1413,6 +1496,7 @@ fn test_target_all_cursors_derived_from_selections() {
 fn test_cursors_ref_returns_reference() {
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1429,6 +1513,7 @@ fn test_cursors_ref_returns_reference() {
 fn test_selections_ref_returns_reference() {
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: None,
             selection: None,
@@ -1445,6 +1530,7 @@ fn test_selections_ref_returns_reference() {
 fn test_cursors_ref_none_when_not_set() {
     let setup = Setup {
         file_content: "test".to_string(),
+        language: None,
         cursor: CursorSpec {
             cursor_position: Some((0, 0)),
             selection: None,

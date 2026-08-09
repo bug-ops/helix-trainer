@@ -27,6 +27,7 @@ fn create_scenario(
         description: "Test scenario".to_string(),
         setup: Setup {
             file_content: "line 1\nline 2\nline 3\n".to_string(),
+            language: None,
             cursor: CursorSpec {
                 cursor_position: Some((0, 0)),
                 selection: None,

@@ -279,6 +279,10 @@ pub mod limits {
     /// Maximum locale string length
     pub const MAX_LOCALE_LENGTH: usize = 10;
 
+    /// Maximum length of a scenario `Setup.language` token (file-extension-style,
+    /// e.g. "rs", "md", "py" — longest bundled syntect extensions are well under this)
+    pub const MAX_LANGUAGE_LENGTH: usize = 20;
+
     /// Maximum required conditions count
     pub const MAX_REQUIRED_CONDITIONS: usize = 20;
 

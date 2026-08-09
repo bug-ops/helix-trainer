@@ -244,6 +244,7 @@ impl ScenarioBuilder {
             description: self.description,
             setup: Setup {
                 file_content: self.setup_content,
+                language: None,
                 cursor: CursorSpec {
                     cursor_position: Some(self.setup_cursor),
                     selection: self.setup_selection,

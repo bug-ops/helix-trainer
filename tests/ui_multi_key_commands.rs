@@ -44,6 +44,7 @@ fn create_test_scenario(
         description: "Test scenario for integration testing".to_string(),
         setup: Setup {
             file_content: setup_content.to_string(),
+            language: None,
             cursor: CursorSpec {
                 cursor_position: Some(setup_cursor),
                 selection: None,

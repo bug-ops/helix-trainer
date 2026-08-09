@@ -841,6 +841,10 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
         S::session_elapsed(self.started_at, self.completed_at)
     }
 
+    fn language(&self) -> &str {
+        self.scenario.setup.language.as_deref().unwrap_or("rs")
+    }
+
     fn all_cursors(&self) -> Vec<(usize, usize)> {
         self.simulator.display().all_cursor_positions()
     }

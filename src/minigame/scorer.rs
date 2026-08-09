@@ -214,6 +214,7 @@ mod tests {
             description: "A test scenario".to_string(),
             setup: Setup {
                 file_content: "test content".to_string(),
+                language: None,
                 cursor: CursorSpec {
                     cursor_position: Some((0, 0)),
                     selection: None,

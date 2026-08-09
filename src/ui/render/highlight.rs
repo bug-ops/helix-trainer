@@ -56,13 +56,18 @@ fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
 /// Uses syntect for syntax highlighting while overlaying cursor and selection styles.
 /// Primary cursor uses white background, secondary cursors use cyan background.
 /// Selections use blue background.
+///
+/// `language` is a file-extension-style token (e.g. `"rs"`, `"md"`) resolved against
+/// syntect's bundled `SyntaxSet`; a value with no matching syntax definition falls back
+/// to plain, unhighlighted text rather than reusing another language's highlighting.
 pub fn highlight_code_with_multi_cursor(
     content: &str,
     cursors: &[CursorInfo],
     selections: &[SelectionBounds],
+    language: &str,
 ) -> Vec<Line<'static>> {
     let syntax = SYNTAX_SET
-        .find_syntax_by_extension("rs")
+        .find_syntax_by_extension(language)
         .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
 
     let theme = &THEME_SET.themes["base16-eighties.dark"];
@@ -180,13 +185,13 @@ mod tests {
     #[test]
     fn test_highlight_with_multi_cursor_no_overlays() {
         let code = "fn main() {\n    println!(\"Hello\");\n}";
-        let lines = highlight_code_with_multi_cursor(code, &[], &[]);
+        let lines = highlight_code_with_multi_cursor(code, &[], &[], "rs");
         assert_eq!(lines.len(), 3);
     }
 
     #[test]
     fn test_highlight_with_multi_cursor_empty() {
-        let lines = highlight_code_with_multi_cursor("", &[], &[]);
+        let lines = highlight_code_with_multi_cursor("", &[], &[], "rs");
         assert!(lines.is_empty());
     }
 
@@ -198,7 +203,30 @@ mod tests {
             col: 2,
             is_primary: true,
         };
-        let lines = highlight_code_with_multi_cursor(code, &[cursor], &[]);
+        let lines = highlight_code_with_multi_cursor(code, &[cursor], &[], "rs");
+        assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn test_highlight_with_markdown_language() {
+        // FR-003: a bundled non-Rust extension resolves to its own syntax definition.
+        assert!(SYNTAX_SET.find_syntax_by_extension("md").is_some());
+        let lines = highlight_code_with_multi_cursor("# Heading", &[], &[], "md");
+        assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn test_highlight_with_unknown_language_falls_back_to_plain_text() {
+        // FR-004 / SC-003: an unresolved language must not panic or reuse Rust highlighting.
+        assert!(SYNTAX_SET.find_syntax_by_extension("cobol").is_none());
+        let lines = highlight_code_with_multi_cursor("IDENTIFICATION DIVISION.", &[], &[], "cobol");
+        assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn test_highlight_with_empty_language_falls_back_to_plain_text() {
+        // Edge case: explicit `language = ""` must not be coerced to "rs".
+        let lines = highlight_code_with_multi_cursor("fn main() {}", &[], &[], "");
         assert_eq!(lines.len(), 1);
     }
 }

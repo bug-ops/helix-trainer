@@ -193,6 +193,10 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
         ActiveMiniScenario::elapsed(self)
     }
 
+    fn language(&self) -> &str {
+        self.scenario.setup.language.as_deref().unwrap_or("rs")
+    }
+
     fn all_cursors(&self) -> Vec<(usize, usize)> {
         self.simulator.display().all_cursor_positions()
     }

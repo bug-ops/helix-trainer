@@ -63,18 +63,21 @@ fn warn_if_other_instance_running(state: &mut AppState) {
 /// stored on the just-loaded profile, and notify if FSRS review history
 /// was recorded under a different mapping.
 ///
-/// Always converges `profile.keymap_fingerprint` to the current overlay's
-/// fingerprint afterward, so this only fires once per keymap change, not
+/// The stock keymap fingerprints identically to `KeymapOverlay::identity()`
+/// (an overlay with no entries) regardless of *why* it's active - disabled,
+/// never configured, or a malformed config falling back - so it acts as its
+/// own distinct "mapping" here rather than a no-tracking gap. That's
+/// intentional (#348): a disable -> stock-play -> re-enable cycle must not
+/// let a stale fingerprint silently match the re-enabled mapping and hide
+/// that history was recorded partly under the stock keymap in between, and
+/// treating stock as a real mapping catches that uniformly, the same way
+/// switching between two different custom mappings would be caught.
+///
+/// Always converges `profile.keymap_fingerprint` to the current
+/// fingerprint afterward, so this only fires once per mapping change, not
 /// on every subsequent launch with the same (still-mismatched-from-some-
 /// older-history) mapping.
 fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
-    if state.config.keymap.is_empty() {
-        // Stock keymap - fingerprinting only matters once a custom mapping
-        // is active, and clearing a previously-set fingerprint here would
-        // spuriously "mismatch" the next time a keymap is re-enabled.
-        return;
-    }
-
     let current = state.config.keymap.fingerprint();
     if let Some(stored) = state.progress.profile.keymap_fingerprint
         && stored != current
@@ -356,17 +359,11 @@ mod tests {
         assert_eq!(loaded_profile.level, 3);
     }
 
-    fn app_state_with_keymap() -> AppState {
+    fn app_state_with_keymap_toml(toml: &str) -> AppState {
         use helix_trainer::config::keymap::resolve_str;
         use helix_trainer::ui::state::ConfigState;
 
-        let (keymap, _) = resolve_str(
-            r#"
-            [keys.normal]
-            j = "move_char_left"
-            "#,
-        )
-        .unwrap();
+        let (keymap, _) = resolve_str(toml).unwrap();
         assert!(!keymap.is_empty());
 
         AppState::with_config(
@@ -378,6 +375,15 @@ mod tests {
                 keymap,
                 ..ConfigState::default()
             },
+        )
+    }
+
+    fn app_state_with_keymap() -> AppState {
+        app_state_with_keymap_toml(
+            r#"
+            [keys.normal]
+            j = "move_char_left"
+            "#,
         )
     }
 
@@ -409,6 +415,34 @@ mod tests {
         );
     }
 
+    /// Steady state: an ordinary restart with the same custom keymap still
+    /// enabled and no intervening change must stay silent - the stored
+    /// fingerprint already matches the currently active one, so there is no
+    /// mapping transition to report.
+    #[test]
+    fn test_handle_profile_ready_no_notification_when_keymap_unchanged() {
+        let mut state = app_state_with_keymap();
+        let current_fingerprint = state.config.keymap.fingerprint();
+        let mut profile = UserProfile::new();
+        profile.keymap_fingerprint = Some(current_fingerprint);
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+
+        assert!(
+            !state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            "an unchanged custom keymap must not renotify on every launch"
+        );
+        assert_eq!(
+            state.progress.profile.keymap_fingerprint,
+            Some(current_fingerprint)
+        );
+    }
+
     /// First-ever activation of a keymap (`keymap_fingerprint` is `None`)
     /// must not be treated as a mismatch - there's no prior mapping to
     /// have diverged from.
@@ -435,15 +469,16 @@ mod tests {
         );
     }
 
-    /// With the stock keymap (no overlay), a stale `keymap_fingerprint` on
-    /// the loaded profile must be left untouched and never notified -
-    /// fingerprinting only matters once a custom mapping is active.
+    /// A brand-new profile that has never played under any keymap
+    /// (`keymap_fingerprint` is `None`) must not be treated as a mismatch
+    /// when the stock keymap is active - the stock keymap's fingerprint is
+    /// a real "first activation" case too, not a special no-tracking gap.
     #[test]
-    fn test_handle_profile_ready_no_keymap_notification_when_disabled() {
+    fn test_handle_profile_ready_no_notification_on_first_stock_activation() {
         let mut state = empty_test_app_state();
         assert!(state.config.keymap.is_empty());
         let mut profile = UserProfile::new();
-        profile.keymap_fingerprint = Some(42);
+        profile.keymap_fingerprint = None;
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
 
@@ -454,9 +489,166 @@ mod tests {
                 .visible()
                 .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
-            "stock keymap must never produce a fingerprint mismatch notification"
+            "first-ever activation (even of the stock keymap) must not notify a mismatch"
         );
-        assert_eq!(state.progress.profile.keymap_fingerprint, Some(42));
+        assert_eq!(
+            state.progress.profile.keymap_fingerprint,
+            Some(state.config.keymap.fingerprint())
+        );
+    }
+
+    /// With the stock keymap active, a `keymap_fingerprint` recorded while
+    /// a custom mapping was previously active must still be flagged as a
+    /// mismatch (#348): the stock keymap fingerprints as its own distinct
+    /// "mapping" (see `warn_keymap_fingerprint_mismatch`'s doc comment), so
+    /// disabling a custom keymap is itself a genuine mapping change worth
+    /// surfacing, not something to silently swallow.
+    #[test]
+    fn test_handle_profile_ready_notifies_when_keymap_disabled_after_custom_mapping() {
+        let custom_fingerprint = app_state_with_keymap().config.keymap.fingerprint();
+        let mut state = empty_test_app_state();
+        assert!(state.config.keymap.is_empty());
+        let stock_fingerprint = state.config.keymap.fingerprint();
+        assert_ne!(custom_fingerprint, stock_fingerprint);
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile {
+                keymap_fingerprint: Some(custom_fingerprint),
+                ..UserProfile::new()
+            }),
+        )
+        .unwrap();
+
+        assert!(
+            state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            "disabling a custom keymap must notify that history now spans a different mapping"
+        );
+        assert_eq!(
+            state.progress.profile.keymap_fingerprint,
+            Some(stock_fingerprint)
+        );
+    }
+
+    /// Regression test for #348: disabling a custom keymap, playing under
+    /// stock, then re-enabling the *same* custom keymap must notify at
+    /// *each* mapping transition. The stock keymap fingerprints as its own
+    /// distinct mapping, so re-enabling can no longer silently look like an
+    /// unbroken continuation of the original custom mapping just because
+    /// the fingerprint value happens to match again.
+    #[test]
+    fn test_keymap_disable_reenable_cycle_detects_mismatch_at_each_transition() {
+        let mut state = app_state_with_keymap();
+        let custom_fingerprint = state.config.keymap.fingerprint();
+
+        // Step 1: disable the custom keymap (stock is now active) and reload
+        // a profile carrying the fingerprint recorded while it was active -
+        // stock is a different mapping, so this must notify.
+        let mut disabled_state = empty_test_app_state();
+        let stock_fingerprint = disabled_state.config.keymap.fingerprint();
+        handle_data_message(
+            &mut disabled_state,
+            DataLoadMessage::ProfileReady(UserProfile {
+                keymap_fingerprint: Some(custom_fingerprint),
+                ..UserProfile::new()
+            }),
+        )
+        .unwrap();
+        assert!(
+            disabled_state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            "disabling a custom keymap must notify that history now spans a different mapping"
+        );
+        assert_eq!(
+            disabled_state.progress.profile.keymap_fingerprint,
+            Some(stock_fingerprint)
+        );
+
+        // Step 2: re-enable the same custom keymap. The intervening stock
+        // play recorded `stock_fingerprint`, which again differs from
+        // `custom_fingerprint` - so this must notify too, correctly
+        // surfacing that history spans two mappings, not silently matching
+        // a stale value.
+        let carried_over_profile = disabled_state.progress.profile;
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(carried_over_profile),
+        )
+        .unwrap();
+
+        assert!(
+            state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            "re-enabling after a stock-keymap gap must notify, not silently match a stale fingerprint"
+        );
+        assert_eq!(
+            state.progress.profile.keymap_fingerprint,
+            Some(custom_fingerprint)
+        );
+    }
+
+    /// Regression test for the impl-critic's S2 finding: re-enabling a
+    /// *different* custom keymap after an intervening stock-keymap gap must
+    /// still be flagged as a mismatch - clearing/sentinel-izing the
+    /// fingerprint during the stock gap must not accidentally make this
+    /// look like a fresh first activation.
+    #[test]
+    fn test_keymap_disable_then_different_keymap_reenable_still_mismatches() {
+        let fingerprint_a = app_state_with_keymap().config.keymap.fingerprint();
+        let mut state_b = app_state_with_keymap_toml(
+            r#"
+            [keys.normal]
+            k = "move_char_left"
+            "#,
+        );
+        let fingerprint_b = state_b.config.keymap.fingerprint();
+        assert_ne!(fingerprint_a, fingerprint_b);
+
+        // Disable keymap A (stock active), reload a profile carrying A's fingerprint.
+        let mut disabled_state = empty_test_app_state();
+        handle_data_message(
+            &mut disabled_state,
+            DataLoadMessage::ProfileReady(UserProfile {
+                keymap_fingerprint: Some(fingerprint_a),
+                ..UserProfile::new()
+            }),
+        )
+        .unwrap();
+        let carried_over_profile = disabled_state.progress.profile;
+
+        // Re-enable a *different* custom keymap B.
+        handle_data_message(
+            &mut state_b,
+            DataLoadMessage::ProfileReady(carried_over_profile),
+        )
+        .unwrap();
+
+        assert!(
+            state_b
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            "switching to a different custom keymap after a stock gap must still notify"
+        );
+        assert_eq!(
+            state_b.progress.profile.keymap_fingerprint,
+            Some(fingerprint_b)
+        );
     }
 
     /// Regression test for #256: a streak that crosses a milestone at load time (the only

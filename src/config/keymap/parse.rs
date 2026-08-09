@@ -9,6 +9,7 @@
 //! different prefix key) is reported as an ignored binding rather than
 //! silently dropped.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -49,6 +50,18 @@ pub enum KeymapWarningReason {
     /// The resolved canonical sequence didn't cleanly resolve when replayed
     /// from `Base` (rare; usually a registry/tokenizer mismatch).
     DidNotResolve,
+    /// This binding's physical key normalizes to the same `(context, key)`
+    /// pair as another binding (`by`, its dotted TOML path), e.g. `G` and
+    /// `S-g`, or a bare `` ` `` and `` A-` `` on macOS. Bindings are
+    /// resolved in `toml::Table`'s iteration order, which is lexicographic
+    /// by key (no `preserve_order` feature enabled) — *not* the order the
+    /// keys were written in the config file. Whichever of the two is
+    /// resolved last wins the slot in the overlay; this one is shadowed by
+    /// it and is not actually live.
+    Shadowed {
+        /// Dotted TOML path of the binding that overrides this one.
+        by: String,
+    },
 }
 
 /// Applied + ignored bindings from resolving one Helix config file.
@@ -117,17 +130,39 @@ pub fn resolve_str(content: &str) -> Result<(KeymapOverlay, KeymapReport), Secur
 /// `resolve()` pass. Bundling these together keeps the per-binding helper
 /// functions' argument counts down to "the data needed to resolve one
 /// binding" rather than also threading three separate output collections.
+///
+/// `entries` is keyed the same way `KeymapOverlay::from_entries` collects
+/// its table, so a collision (two TOML keys normalizing to the same
+/// `(KeyContext, PhysicalKey)`) is detected here, at `apply()`'s
+/// `HashMap::insert` call, instead of being decided implicitly by whichever
+/// entry a later `collect` happens to keep. The winner is whichever binding
+/// is resolved last during iteration over the TOML table (lexicographic key
+/// order — see [`KeymapWarningReason::Shadowed`]), not an unspecified
+/// `HashMap` detail — `applied` is always exactly `entries.len()`, matching
+/// the overlay that's actually built (#347).
 #[derive(Default)]
 struct Resolution {
-    entries: Vec<((KeyContext, PhysicalKey), CanonicalKeys)>,
+    entries: HashMap<(KeyContext, PhysicalKey), (CanonicalKeys, String)>,
     warnings: Vec<KeymapWarning>,
-    applied: usize,
 }
 
 impl Resolution {
-    fn apply(&mut self, context: KeyContext, key: PhysicalKey, canonical: CanonicalKeys) {
-        self.entries.push(((context, key), canonical));
-        self.applied += 1;
+    fn apply(
+        &mut self,
+        context: KeyContext,
+        key: PhysicalKey,
+        canonical: CanonicalKeys,
+        path: String,
+    ) {
+        if let Some((_, shadowed_path)) = self
+            .entries
+            .insert((context, key), (canonical, path.clone()))
+        {
+            self.warnings.push(KeymapWarning {
+                path: shadowed_path,
+                reason: KeymapWarningReason::Shadowed { by: path },
+            });
+        }
     }
 
     fn ignore(&mut self, path: String, reason: KeymapWarningReason) {
@@ -138,10 +173,15 @@ impl Resolution {
         for warning in &self.warnings {
             tracing::warn!(path = %warning.path, reason = ?warning.reason, "ignored keymap binding");
         }
+        let applied = self.entries.len();
+        let entries = self
+            .entries
+            .into_iter()
+            .map(|(key, (canonical, _path))| (key, canonical));
         (
-            KeymapOverlay::from_entries(self.entries),
+            KeymapOverlay::from_entries(entries),
             KeymapReport {
-                applied: self.applied,
+                applied,
                 ignored: self.warnings,
             },
         )
@@ -244,7 +284,7 @@ fn apply_base_binding(
         resolution.ignore(path, KeymapWarningReason::DidNotResolve);
         return;
     }
-    resolution.apply(KeyContext::Base, physical, canonical);
+    resolution.apply(KeyContext::Base, physical, canonical, path);
 }
 
 /// A minor-mode remap can only retarget a command reachable *within the
@@ -282,7 +322,7 @@ fn apply_minor_mode_binding(
         return;
     };
     let remainder = CanonicalKeys::from_owned(tokens[1].to_string());
-    resolution.apply(context, physical, remainder);
+    resolution.apply(context, physical, remainder, path);
 }
 
 /// Replay `canonical`'s tokens through a throwaway `InputStateMachine`
@@ -528,6 +568,81 @@ mod tests {
             report.ignored[0].reason,
             KeymapWarningReason::UnparsableKey(_)
         ));
+    }
+
+    #[test]
+    fn colliding_physical_keys_report_accurate_applied_count() {
+        // "G" and "S-g" both normalize to the same PhysicalKey (Char('G') + SHIFT),
+        // per crossterm's shift convention (see PhysicalKey's doc comment).
+        //
+        // `toml::Table` iterates lexicographically here (no `preserve_order`
+        // feature enabled), not in file-declaration order - "G" < "S-g" as
+        // strings too, so "S-g" is resolved second and wins the slot,
+        // shadowing "G". That happens to coincide with file order in this
+        // example; it is not what determines the winner.
+        let (overlay, report) = resolve_str(
+            r#"
+            [keys.normal]
+            G = "goto_last_line"
+            "S-g" = "goto_file_start"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(overlay.len(), 1);
+        assert_eq!(
+            report.applied,
+            overlay.len(),
+            "applied count must match the number of bindings actually live in the overlay"
+        );
+        assert_eq!(report.ignored.len(), 1);
+        assert_eq!(report.ignored[0].path, "keys.normal.G");
+        assert_eq!(
+            report.ignored[0].reason,
+            KeymapWarningReason::Shadowed {
+                by: "keys.normal.S-g".to_string()
+            }
+        );
+        let key = PhysicalKey::try_from("G").unwrap();
+        assert_eq!(
+            overlay.lookup(KeyContext::Base, key),
+            Some(&CanonicalKeys::from_static("gg"))
+        );
+    }
+
+    #[test]
+    fn colliding_macos_composed_key_reports_accurate_applied_count() {
+        // A bare "`" and an explicit "A-`" both normalize to the same
+        // PhysicalKey (Char('`') + ALT): macOS's Option-` dead key produces
+        // a literal backtick character, which `map_macos_composed_char`
+        // maps back to ALT + backtick (see `PhysicalKey::normalize`) - the
+        // same collision mechanism the original issue cited, distinct from
+        // the shift-normalization one covered above.
+        //
+        // Lexicographically "A-`" < "`" (uppercase letters sort before
+        // backtick in ASCII), so "`" is resolved second and wins.
+        let (overlay, report) = resolve_str(
+            r#"
+            [keys.normal]
+            "`" = "goto_last_line"
+            "A-`" = "goto_file_start"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(overlay.len(), 1);
+        assert_eq!(report.applied, overlay.len());
+        assert_eq!(report.ignored.len(), 1);
+        assert_eq!(report.ignored[0].path, "keys.normal.A-`");
+        assert_eq!(
+            report.ignored[0].reason,
+            KeymapWarningReason::Shadowed {
+                by: "keys.normal.`".to_string()
+            }
+        );
+        let key = PhysicalKey::try_from("`").unwrap();
+        assert_eq!(
+            overlay.lookup(KeyContext::Base, key),
+            Some(&CanonicalKeys::from_static("ge"))
+        );
     }
 
     #[test]

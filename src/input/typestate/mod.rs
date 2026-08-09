@@ -61,10 +61,11 @@ pub use key_mapping::{
     command_to_key_event, handle_insert_mode_input, map_key_to_helix_command, normalize_key_event,
     parse_helix_key_string,
 };
-pub use state_machine::{InputStateMachine, SurroundPreview};
+pub use state_machine::{InputStateMachine, RegisterPreview, SurroundPreview};
 pub use state_types::{
-    BaseState, CountPending, FindCharPending, FindType, GotoPending, HandlerState, MatchPending,
-    ReplaceCharPending, SurroundAddPending, SurroundDeletePending, SurroundReplaceFromPending,
+    BaseState, CommandLinePending, CountPending, FindCharPending, FindType, GotoPending,
+    HandlerState, MatchPending, RegisterOpPending, RegisterPending, ReplaceCharPending,
+    SurroundAddPending, SurroundDeletePending, SurroundReplaceFromPending,
     SurroundReplaceToPending, TextObjectAroundPending, TextObjectInsidePending,
     UnmatchedNextPending, UnmatchedPrevPending, ViewPending,
 };

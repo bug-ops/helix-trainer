@@ -12,6 +12,7 @@ use helix_trainer::game::command_context::{
     ParsedCommand, extract_count_and_command, parse_command_buffer,
 };
 use helix_trainer::game::{GameSession, PlayableScenario};
+use helix_trainer::helix::simulator::command_line::CommandLine;
 
 #[test]
 fn test_all_scenarios_load_successfully() {
@@ -121,6 +122,20 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
             continue;
         }
 
+        // Handle ':'-prefixed command-line invocations - these are assembled
+        // atomically by `CommandLinePending` (not resolved char-by-char through
+        // the KeyTrie, which has no notion of a command-line buffer), so
+        // validate them by parsing directly instead.
+        if cmd.starts_with(':') {
+            if let Err(e) = CommandLine::parse(cmd) {
+                return Err(format!(
+                    "Command {} '{}': :-command failed to parse: {:?}",
+                    i, cmd, e
+                ));
+            }
+            continue;
+        }
+
         // In insert mode, single characters are text input, not commands
         if in_insert_mode {
             // Only single chars are valid in insert mode (text input)
@@ -183,6 +198,34 @@ fn validate_single_command(cmd: &str) -> Result<(), String> {
 
     // Buffer should have resolved by now
     Err("Never completed".to_string())
+}
+
+#[test]
+fn test_all_scenario_command_line_entries_parse() {
+    let loader = ScenarioLoader::new();
+    let scenarios = loader
+        .load_from_embedded("en")
+        .expect("Failed to load embedded scenarios");
+
+    let mut checked = 0;
+    for scenario in &scenarios {
+        for cmd in &scenario.solution.commands {
+            if let Some(colon_cmd) = cmd.strip_prefix(':').map(|_| cmd) {
+                CommandLine::parse(colon_cmd).unwrap_or_else(|e| {
+                    panic!(
+                        "scenario '{}': ':' entry '{}' failed to parse: {:?}",
+                        scenario.id, colon_cmd, e
+                    )
+                });
+                checked += 1;
+            }
+        }
+    }
+
+    assert!(
+        checked > 0,
+        "expected at least one ':'-prefixed solution entry across all scenarios"
+    );
 }
 
 #[test]

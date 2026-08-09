@@ -22,9 +22,12 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 
+use crate::ui::state::InputStateAccess;
 use crate::ui::{AppState, Message, Screen, state::TypedScreen};
 
-use super::typestate::{handle_insert_mode_input, map_key_to_helix_command, normalize_key_event};
+use super::typestate::{
+    InputStateMachine, handle_insert_mode_input, map_key_to_helix_command, normalize_key_event,
+};
 
 /// Handle keyboard events on profile and statistics screens
 pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
@@ -308,6 +311,19 @@ fn is_gameplay_insert_mode(state: &AppState) -> bool {
     }
 }
 
+/// Get the gameplay `InputStateMachine` for the current screen, if any.
+///
+/// Works for both training mode (Task screen) and arcade mode (MiniGame
+/// screen). Used to check for a pending prefix/command-line state before
+/// routing keys that would otherwise bypass the state machine (Esc, arrows).
+fn gameplay_input_state(state: &AppState) -> Option<&InputStateMachine> {
+    match &state.screen {
+        TypedScreen::Task(task_data) => Some(task_data.input_state()),
+        TypedScreen::MiniGame(minigame_data) => Some(minigame_data.input_state()),
+        _ => None,
+    }
+}
+
 /// Map arrow keys to movement commands
 ///
 /// Returns the corresponding movement command if the key is an arrow key,
@@ -338,8 +354,13 @@ where
     } else {
         // Normal mode: check if arrow keys should be mapped to movement commands
         // Only map if no modifiers are pressed (to avoid conflicts with Ctrl+Arrow, Alt+Arrow, etc.)
+        // and no command-line is pending (its buffer needs raw arrow keys ignored,
+        // not letters appended - see the CommandLinePending handler's Stay-on-arrow rule).
         if state.config.persistent.enable_arrow_keys_in_normal_mode
             && key.modifiers.is_empty()
+            && gameplay_input_state(state)
+                .map(|s| s.pending_command_line().is_none())
+                .unwrap_or(true)
             && let Some(mapped_cmd) = map_arrow_to_movement(key.code)
         {
             return Some(make_message(Cow::Borrowed(mapped_cmd)));
@@ -370,11 +391,25 @@ fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
     }
 
     // For unknown commands (prefix keys like 'g', 'm', 'f', etc.),
-    // normalize and return the character for the state machine to process
+    // normalize and return the character for the state machine to process.
+    // Guard is applied AFTER normalization so macOS Option-composed chars
+    // are judged on their post-normalization modifiers.
     let key = normalize_key_event(key);
 
     match key.code {
-        KeyCode::Char(c) => Some(Cow::Owned(c.to_string())),
+        // Only bare ASCII chars fall through here: known ALT/CTRL commands
+        // are already returned above by `map_key_to_helix_command`, so an
+        // ALT/CTRL-carrying char reaching this arm is unmapped and must be
+        // dropped rather than silently serialized as the bare character
+        // (previously: unmapped Alt-x reached the state machine as plain
+        // "x", executing `select line` instead of being ignored).
+        KeyCode::Char(c)
+            if c.is_ascii()
+                && !key.modifiers.contains(KeyModifiers::ALT)
+                && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
+            Some(Cow::Owned(c.to_string()))
+        }
         KeyCode::Enter => Some(Cow::Borrowed("Enter")),
         KeyCode::Tab => Some(Cow::Borrowed("Tab")),
         _ => None,
@@ -533,8 +568,17 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
             return handle_gameplay_input(key, state, Message::MiniGameCommand);
         }
 
-        // Normal mode - Esc pauses, other keys are commands
+        // Normal mode - Esc cancels a pending prefix/command-line state
+        // (count, g, m, register-select, command-line, ...) if one is
+        // active; otherwise it pauses. Without this, a pending state traps
+        // every keystroke until it resolves or times out, costing lives.
         if key.code == KeyCode::Esc {
+            let has_pending_state = gameplay_input_state(state)
+                .map(|s| s.is_prefix_state())
+                .unwrap_or(false);
+            if has_pending_state {
+                return handle_gameplay_input(key, state, Message::MiniGameCommand);
+            }
             return Some(Message::PauseMiniGame);
         }
 
@@ -1486,6 +1530,23 @@ mod tests {
             let key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
             assert_eq!(key_to_command_string(key), None);
         }
+
+        /// Regression test: an unmapped Alt-modified key must be dropped by
+        /// the fallback, not silently serialized as the bare character. Prior
+        /// to this fix, an unmapped Alt-z would reach the state machine as
+        /// plain "z", executing whatever "z" resolves to (view mode prefix)
+        /// instead of being ignored as an unrecognized command.
+        #[test]
+        fn test_unmapped_alt_key_is_dropped_not_serialized_as_bare_char() {
+            let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::ALT);
+            assert_eq!(key_to_command_string(key), None);
+        }
+
+        #[test]
+        fn test_unmapped_ctrl_key_is_dropped_not_serialized_as_bare_char() {
+            let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL);
+            assert_eq!(key_to_command_string(key), None);
+        }
     }
 
     mod handle_category_filters_keys_tests {
@@ -1576,6 +1637,90 @@ mod tests {
         fn test_unknown_key_returns_none() {
             let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
             assert_eq!(handle_category_filters_keys(key), None);
+        }
+    }
+
+    // Arcade Esc-routing tests (S4a): Esc must cancel a pending prefix
+    // state instead of pausing, and must still pause when nothing is
+    // pending (the pre-existing behavior for every other state).
+    mod minigame_esc_routing_tests {
+        use super::*;
+        use crate::config::Difficulty;
+        use crate::minigame::MiniGameSession;
+        use crate::testing::ScenarioBuilder;
+        use crate::ui::state::{InputStateAccess, MiniGameData};
+        use std::sync::Arc;
+
+        fn playing_minigame_state() -> AppState {
+            let mut state = create_test_app_state();
+
+            let scenario = ScenarioBuilder::new()
+                .id("test_minigame")
+                .difficulty(Difficulty::Beginner)
+                .build();
+            let mut session = MiniGameSession::new(Arc::new(vec![scenario]), None);
+            session.start();
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+            assert!(session.state().is_playing());
+
+            state.game.minigame_session = Some(session);
+            state.screen = TypedScreen::MiniGame(MiniGameData::default());
+            state
+        }
+
+        #[test]
+        fn esc_with_no_pending_state_pauses() {
+            let state = playing_minigame_state();
+            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            assert_eq!(
+                handle_minigame_keys(key, &state),
+                Some(Message::PauseMiniGame)
+            );
+        }
+
+        #[test]
+        fn esc_with_pending_count_cancels_instead_of_pausing() {
+            let mut state = playing_minigame_state();
+            if let TypedScreen::MiniGame(data) = &mut state.screen {
+                let result = data
+                    .input_state_mut()
+                    .process_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+                assert!(matches!(
+                    result,
+                    crate::input::typestate::HandlerResult::Transition(_)
+                ));
+                assert!(data.input_state().is_prefix_state());
+            }
+
+            let esc_msg =
+                handle_minigame_keys(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state);
+            // Esc while a count is pending must route through the state
+            // machine (Cancel), not pause the game.
+            assert!(
+                matches!(esc_msg, Some(Message::MiniGameCommand(_))),
+                "expected Esc to route as a MiniGameCommand (cancel) while a prefix state is pending, got {:?}",
+                esc_msg
+            );
+        }
+
+        #[test]
+        fn esc_with_pending_register_cancels_instead_of_pausing() {
+            let mut state = playing_minigame_state();
+            if let TypedScreen::MiniGame(data) = &mut state.screen {
+                data.input_state_mut()
+                    .process_key(KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE));
+                assert!(data.input_state().is_prefix_state());
+            }
+
+            let esc_msg =
+                handle_minigame_keys(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state);
+            assert!(
+                matches!(esc_msg, Some(Message::MiniGameCommand(_))),
+                "expected Esc to route as a MiniGameCommand (cancel) while RegisterPending, got {:?}",
+                esc_msg
+            );
         }
     }
 }

@@ -84,6 +84,12 @@ pub const CMD_FLIP_SELECTIONS: &str = "Alt-;";
 pub const CMD_MATCH_MODE: &str = "m";
 pub const CMD_MATCH_BRACKETS: &str = "mm";
 
+// Named register selection (prefix for register-scoped yank/paste: "<reg><op>)
+pub const CMD_SELECT_REGISTER: &str = "\"";
+
+// Command-line mode (prefix for `:`-typed commands, e.g. ":goto 3")
+pub const CMD_COMMAND_LINE: &str = ":";
+
 // Match mode surround commands (ms{char}, mr{from}{to}, md{char})
 pub const CMD_SURROUND_ADD_PREFIX: &str = "ms";
 pub const CMD_SURROUND_REPLACE_PREFIX: &str = "mr";
@@ -140,3 +146,96 @@ pub const CMD_VIEW_BOTTOM: &str = "zb";
 pub const CMD_VIEW_CENTER_HORIZONTAL: &str = "zm";
 pub const CMD_SCROLL_DOWN: &str = "zj";
 pub const CMD_SCROLL_UP: &str = "zk";
+
+/// Canonicalize a raw executed command string to a stable FSRS/quest card id.
+///
+/// Two families of commands otherwise mint a separate learning card per
+/// operand, which fragments spaced-repetition data for what is really one
+/// skill:
+///
+/// - Register-scoped clipboard ops (`"ay`, `"by`, ...) collapse to `"y`
+///   (the register letter is not the thing being taught).
+/// - Command-line invocations (`:goto 3`, `:g 7`, ...) collapse to their
+///   canonical name (`:goto`), folding aliases (`:g` -> `:goto`) so both
+///   spellings share one card.
+///
+/// Every other command string is returned unchanged.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::helix::commands::normalize_command_id;
+///
+/// assert_eq!(normalize_command_id("\"ay"), "\"y");
+/// assert_eq!(normalize_command_id(":goto 3"), ":goto");
+/// assert_eq!(normalize_command_id(":g 3"), ":goto");
+/// assert_eq!(normalize_command_id("h"), "h");
+/// ```
+pub fn normalize_command_id(cmd: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+
+    if cmd.starts_with(CMD_SELECT_REGISTER) {
+        // Destructure via `chars()`, not `len() == 3` (bytes) + `.nth(2)`:
+        // a multi-byte register char would make `len()` 3 for only 2 chars,
+        // and `.nth(2).expect(...)` would then panic on `None`. This form
+        // only matches when there are exactly 3 chars total.
+        let mut chars = cmd.chars();
+        chars.next(); // the leading '"', already confirmed by starts_with
+        if let (Some(_register), Some(op), None) = (chars.next(), chars.next(), chars.next()) {
+            return Cow::Owned(format!("{CMD_SELECT_REGISTER}{op}"));
+        }
+    }
+
+    if let Some(body) = cmd.strip_prefix(CMD_COMMAND_LINE) {
+        let name = body.split_whitespace().next().unwrap_or("");
+        let canonical = match name {
+            "g" => "goto",
+            other => other,
+        };
+        return Cow::Owned(format!("{CMD_COMMAND_LINE}{canonical}"));
+    }
+
+    Cow::Borrowed(cmd)
+}
+
+#[cfg(test)]
+mod normalize_command_id_tests {
+    use super::*;
+
+    #[test]
+    fn register_op_normalizes_to_bare_op() {
+        assert_eq!(normalize_command_id("\"ay"), "\"y");
+        assert_eq!(normalize_command_id("\"bp"), "\"p");
+    }
+
+    #[test]
+    fn command_line_normalizes_to_canonical_name() {
+        assert_eq!(normalize_command_id(":goto 3"), ":goto");
+        assert_eq!(normalize_command_id(":g 3"), ":goto");
+        assert_eq!(normalize_command_id(":g"), ":goto");
+    }
+
+    /// Regression test: a multi-byte register char used to panic via
+    /// `len() == 3` (bytes) succeeding while `.nth(2)` (chars) returned
+    /// `None`.
+    #[test]
+    fn malformed_register_strings_do_not_panic() {
+        assert_eq!(normalize_command_id("\"é"), "\"é"); // 2 chars, 3 bytes - no op char
+        assert_eq!(normalize_command_id("\""), "\"");
+        assert_eq!(normalize_command_id("\"aay"), "\"aay");
+    }
+
+    #[test]
+    fn register_op_with_non_ascii_register_still_normalizes() {
+        // 3 chars (quote + register + op), 4 bytes - well-formed despite
+        // the multi-byte register char.
+        assert_eq!(normalize_command_id("\"éy"), "\"y");
+    }
+
+    #[test]
+    fn unrelated_commands_are_unchanged() {
+        assert_eq!(normalize_command_id("h"), "h");
+        assert_eq!(normalize_command_id("gg"), "gg");
+        assert_eq!(normalize_command_id("ms("), "ms(");
+    }
+}

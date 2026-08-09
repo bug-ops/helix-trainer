@@ -79,6 +79,40 @@ fn test_state_machine_cancel_returns_to_base() {
     assert!(sm.state().is_base());
 }
 
+/// M4: `3"ay` cancels at the count->register boundary (`'"'` is not a
+/// count-compatible command) and leaves no pending state.
+#[test]
+fn test_state_machine_count_then_register_cancels_to_base() {
+    let mut sm = InputStateMachine::new();
+
+    sm.process_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+    assert!(sm.state().is_count_pending());
+
+    let result = sm.process_key(KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE));
+    assert!(result.is_cancel());
+    assert!(sm.state().is_base());
+
+    // The register/op characters that would have followed are now plain
+    // Base-state input, not part of a leaked pending sequence.
+    let result = sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+    assert!(result.is_execute());
+}
+
+/// M4: `"a3y` cancels at the register-op boundary (a digit is not a
+/// register-scoped operator) and leaves no pending state.
+#[test]
+fn test_state_machine_register_then_digit_cancels_to_base() {
+    let mut sm = InputStateMachine::new();
+
+    sm.process_key(KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE));
+    sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+    assert!(sm.state().is_waiting_for_char()); // RegisterOpPending
+
+    let result = sm.process_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+    assert!(result.is_cancel());
+    assert!(sm.state().is_base());
+}
+
 #[test]
 fn test_state_machine_reset() {
     let mut sm = InputStateMachine::new();

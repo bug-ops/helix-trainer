@@ -13,16 +13,22 @@ use std::time::Duration;
 ///
 /// Shared between training and arcade modes.
 /// Updates command practice and exploration quests.
+///
+/// Normalizes register ops (`"ay` -> `"y`) and command-line invocations
+/// (`:g 3` -> `:goto`) before tracking, so quest matching (exact equality)
+/// and FSRS see the same command id for the same skill.
 pub fn track_command_for_quests(state: &mut AppState, command: &str) {
+    let normalized = crate::helix::commands::normalize_command_id(command);
+
     // Track for exploration quests
     state
         .progress
         .commands_used_today
-        .insert(command.to_string());
+        .insert(normalized.to_string());
 
     // Update command progress in quests
     let profile = &mut state.progress.profile;
-    QuestTracker::update_command_progress(&mut profile.daily_quests, command);
+    QuestTracker::update_command_progress(&mut profile.daily_quests, &normalized);
 }
 
 /// Track scenario completion for quests

@@ -270,6 +270,32 @@ pub(super) fn execute_normal_mode_command_internal(
         return Ok(());
     }
 
+    if cmd.starts_with(CMD_SELECT_REGISTER) {
+        // Destructure via `chars()` rather than `len() == 3` + `.nth(k).unwrap()`:
+        // `len()` counts bytes, so a multi-byte register char (e.g. `"é`,
+        // 1 char but 2 bytes) would make `len() == 3` true for only 2 chars,
+        // and `.nth(2)` would then panic on `None`. This form only matches
+        // when there are exactly 3 chars total (quote + register + op).
+        let mut chars = cmd.chars();
+        chars.next(); // the leading '"', already confirmed by starts_with
+        if let (Some(register), Some(op), None) = (chars.next(), chars.next(), chars.next()) {
+            return match op {
+                'y' => clipboard::yank_to_register(sim, Some(register)),
+                'p' => clipboard::paste_after_from_register(sim, Some(register)),
+                'P' => clipboard::paste_before_from_register(sim, Some(register)),
+                'R' => editing::replace_with_yanked_from_register(sim, Some(register)),
+                _ => Err(UserError::command_failed(format!(
+                    "unknown register operation '{}'",
+                    op
+                ))),
+            };
+        }
+    }
+
+    if cmd.starts_with(CMD_COMMAND_LINE) {
+        return crate::helix::simulator::command_line::CommandLine::parse(cmd)?.execute(sim);
+    }
+
     if cmd == CMD_ESCAPE {
         return Ok(());
     }
@@ -348,6 +374,21 @@ pub(super) fn execute_command_any_mode(
             } else {
                 (result, AnyModeSimulator::Normal(normal_sim))
             }
+        }
+        AnyModeSimulator::Insert(insert_sim)
+            if cmd.len() > 1 && cmd.starts_with(CMD_COMMAND_LINE) =>
+        {
+            // Command-line strings are assembled by `CommandLinePending` in
+            // Normal mode only; guarded here too so an *assembled* `:`-prefixed
+            // string (e.g. ":goto 3") can never be inserted as literal text.
+            // `cmd.len() > 1` matters: insert mode delivers every typed
+            // character as its own one-char command, so without this a
+            // literal ':' keystroke (len 1) would hit this arm and be
+            // rejected instead of inserted.
+            let result = Err(UserError::command_failed(
+                "command-line is not available in insert mode",
+            ));
+            (result, AnyModeSimulator::Insert(insert_sim))
         }
         AnyModeSimulator::Insert(mut insert_sim) => {
             let exiting = cmd == CMD_ESCAPE;
@@ -515,6 +556,20 @@ mod tests {
             assert!(events.is_empty());
         }
 
+        /// Named regression test for S3/Q2: register ops and command-line
+        /// invocations are deliberately not `.`-repeatable. `cmd_to_key_events`
+        /// has no dedicated arm for either shape, so both fall through to the
+        /// generic "unmatched, len != 1" branch and produce no key events -
+        /// `record_command_if_needed_normal` then skips recording entirely
+        /// (an empty `key_events` slice is never recorded), so `.` after
+        /// `"ay` or `:goto 3` is a no-op, matching Helix (`.` repeats changes,
+        /// not yanks or navigation).
+        #[test]
+        fn test_cmd_to_key_events_register_op_and_command_line_are_not_repeatable() {
+            assert!(cmd_to_key_events("\"ay").is_empty());
+            assert!(cmd_to_key_events(":goto 3").is_empty());
+        }
+
         #[test]
         fn test_cmd_to_key_events_all_modifiers_none() {
             let events = cmd_to_key_events("a");
@@ -583,6 +638,90 @@ mod tests {
             assert_eq!(events[0].code, KeyCode::Char('m'));
             assert_eq!(events[1].code, KeyCode::Char('i'));
             assert_eq!(events[2].code, KeyCode::Char('p'));
+        }
+    }
+
+    // Register and command-line dispatch regression tests
+    mod register_and_command_line_dispatch_tests {
+        use super::*;
+        use crate::helix::simulator::{AnyModeSimulator, HelixSimulator, NormalMode};
+
+        #[test]
+        fn insert_mode_literal_colon_is_inserted_not_rejected() {
+            // Regression: the insert-mode ':' guard must only reject an
+            // *assembled* command-line string (len > 1), not a single typed
+            // ':' character, which insert mode delivers as its own one-char
+            // command.
+            let mut sim = AnyModeSimulator::Insert(
+                HelixSimulator::<NormalMode>::new(String::new()).enter_insert_mode(),
+            );
+            sim.execute_command(":").unwrap();
+            assert_eq!(sim.to_editor_state().unwrap().content(), ":");
+        }
+
+        #[test]
+        fn insert_mode_assembled_command_line_is_rejected() {
+            let mut sim = AnyModeSimulator::Insert(
+                HelixSimulator::<NormalMode>::new(String::new()).enter_insert_mode(),
+            );
+            assert!(sim.execute_command(":goto 3").is_err());
+        }
+
+        /// Named-register round-trip for `P` (paste before), not just `y`/`p`.
+        #[test]
+        fn register_paste_before_with_explicit_named_register() {
+            let mut sim: HelixSimulator<NormalMode> =
+                HelixSimulator::new("hello world".to_string());
+            sim.selection = helix_core::Selection::single(0, 5); // "hello"
+
+            execute_normal_mode_command_internal(&mut sim, "\"ay").unwrap(); // register a = "hello"
+
+            sim.selection = helix_core::Selection::point(6); // on 'w' in "world"
+            execute_normal_mode_command_internal(&mut sim, "\"aP").unwrap();
+
+            assert_eq!(sim.doc.to_string(), "hello helloworld");
+        }
+
+        /// Named-register round-trip for `R` (replace selection with
+        /// register content), not just `y`/`p`.
+        #[test]
+        fn register_replace_with_explicit_named_register() {
+            let mut sim: HelixSimulator<NormalMode> =
+                HelixSimulator::new("hello world".to_string());
+            sim.selection = helix_core::Selection::single(0, 5); // "hello"
+            execute_normal_mode_command_internal(&mut sim, "\"ay").unwrap(); // register a = "hello"
+
+            sim.selection = helix_core::Selection::single(6, 11); // "world"
+            execute_normal_mode_command_internal(&mut sim, "\"aR").unwrap();
+
+            assert_eq!(sim.doc.to_string(), "hello hello");
+        }
+
+        #[test]
+        fn register_dispatch_handles_non_ascii_register_without_panicking() {
+            // Regression: byte-length gating on a char index used to panic
+            // for a multi-byte register char (e.g. "é" is 1 char, 2 bytes).
+            // A well-formed 3-char command (quote + register + op) with a
+            // non-ASCII register succeeds like any other register letter.
+            let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+            assert!(execute_normal_mode_command_internal(&mut sim, "\"éy").is_ok());
+
+            // An unsupported op with the same non-ASCII register is a clean
+            // error, not a panic.
+            let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+            assert!(execute_normal_mode_command_internal(&mut sim, "\"éz").is_err());
+        }
+
+        #[test]
+        fn register_dispatch_does_not_panic_on_malformed_length() {
+            let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+            // Too short: just the prefix, no register/op.
+            assert!(execute_normal_mode_command_internal(&mut sim, "\"").is_err());
+            // Too short: prefix + register, missing op - also a multi-byte
+            // register char (2 chars, 3 bytes), the original panic trigger.
+            assert!(execute_normal_mode_command_internal(&mut sim, "\"é").is_err());
+            // Too long: register + op + trailing char.
+            assert!(execute_normal_mode_command_internal(&mut sim, "\"aay").is_err());
         }
     }
 }

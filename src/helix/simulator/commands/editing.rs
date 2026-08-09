@@ -218,9 +218,19 @@ pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
     Ok(())
 }
 
-/// Replace selection with yanked text (Helix 'R' command)
+/// Replace selection with the unnamed register's content (Helix 'R' command)
 pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let Some(yanked) = &sim.clipboard else {
+    replace_with_yanked_from_register(sim, None)
+}
+
+/// Replace selection with a named register's content (Helix 'R' command)
+///
+/// `register: None` addresses the unnamed register. See [`replace_with_yanked`].
+pub fn replace_with_yanked_from_register<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    register: Option<char>,
+) -> Result<(), UserError> {
+    let Some(yanked) = sim.registers.get(register) else {
         return Ok(()); // Nothing yanked
     };
 
@@ -228,11 +238,10 @@ pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
         return Ok(()); // Nothing to paste
     }
 
-    let yanked = yanked.clone();
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = range.to();
-        (start, end, Some(yanked.clone().into()))
+        (start, end, Some(yanked.into()))
     });
 
     sim.apply_transaction(transaction);
@@ -592,7 +601,7 @@ mod tests {
     #[test]
     fn test_replace_with_yanked() {
         let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
-        sim.clipboard = Some("REPLACED".to_string());
+        sim.registers.set(None, "REPLACED".to_string());
         sim.selection = Selection::single(0, 5);
 
         replace_with_yanked(&mut sim).unwrap();
@@ -603,7 +612,6 @@ mod tests {
     #[test]
     fn test_replace_with_yanked_no_clipboard() {
         let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
-        sim.clipboard = None;
         sim.selection = Selection::single(0, 5);
 
         replace_with_yanked(&mut sim).unwrap();

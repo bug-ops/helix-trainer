@@ -150,12 +150,18 @@ impl ScenarioCompletionService {
     }
 
     /// Extract command strings from feedback
+    ///
+    /// Normalizes register ops (`"ay` -> `"y`) and command-line invocations
+    /// (`:g 3` -> `:goto`) so FSRS mints one learning card per skill rather
+    /// than one per register letter or argument value.
     #[must_use]
     pub fn extract_commands(feedback: &Feedback) -> Vec<String> {
         feedback
             .user_actions
             .iter()
-            .map(|action| action.command.clone())
+            .map(|action| {
+                crate::helix::commands::normalize_command_id(&action.command).into_owned()
+            })
             .collect()
     }
 }

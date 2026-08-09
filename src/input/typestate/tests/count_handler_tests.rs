@@ -72,6 +72,21 @@ fn test_count_pending_overflow_protection() {
     }
 }
 
+/// M4: `3"ay` cancels rather than combining a count with a register
+/// selection - `'"'` has no arm in `is_count_compatible_command`, so it
+/// falls to the "invalid command" branch, same as any other incompatible
+/// key. Verifies the state resets to `Base` (no leaked pending state), as
+/// the architect's plan explicitly asked for.
+#[test]
+fn test_count_pending_register_prefix_cancels() {
+    let state = CountPending { count: 3 };
+    let result = KeyHandler::handle_key(
+        &state,
+        KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
+    );
+    assert!(matches!(result, HandlerResult::Cancel));
+}
+
 #[test]
 fn test_count_pending_clamps_at_max() {
     // Test that count is clamped to MAX_COUNT

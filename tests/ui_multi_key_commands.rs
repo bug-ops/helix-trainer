@@ -336,3 +336,162 @@ fn test_undo_integration() {
     // Note: Redo functionality (ctrl-r, U) is not yet implemented in HelixSimulator
     // The redo() method is currently a placeholder
 }
+
+#[test]
+fn test_register_yank_paste_multi_key() {
+    // "ay yanks into register a; a later plain 'y' overwrites only the
+    // default register; "ap then proves register a survived independently.
+    let scenario =
+        create_test_scenario("test_register", "alpha beta", (0, 0), "aalpha beta", (0, 1));
+
+    let mut state = create_test_app_state(vec![scenario.clone()]);
+    update(&mut state, Message::StartScenario(0)).unwrap();
+
+    // '"' - transitions to RegisterPending
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("\""))).unwrap();
+    if let TypedScreen::Task(task_data) = &state.screen {
+        assert!(matches!(
+            task_data.input_state().state(),
+            helix_trainer::input::typestate::InputState::RegisterPending
+        ));
+    } else {
+        panic!("Should be on Task screen");
+    }
+
+    // 'a' - selects register a, transitions to RegisterOpPending
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("a"))).unwrap();
+    if let TypedScreen::Task(task_data) = &state.screen {
+        assert!(matches!(
+            task_data.input_state().state(),
+            helix_trainer::input::typestate::InputState::RegisterOpPending { register: 'a' }
+        ));
+        // Nothing executed yet
+        assert_eq!(task_data.session.current_content(), "alpha beta");
+    } else {
+        panic!("Should be on Task screen");
+    }
+
+    // 'y' - completes "ay, yanking the char under cursor ('a') into register a
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("y"))).unwrap();
+    if let TypedScreen::Task(task_data) = &state.screen {
+        assert!(task_data.input_state().state().is_base());
+        assert_eq!(task_data.session.current_content(), "alpha beta");
+    } else {
+        panic!("Should be on Task screen (scenario incomplete)");
+    }
+
+    // Overwrite the default register - must not disturb register a
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("y"))).unwrap();
+
+    // '"' -> 'a' -> 'p' pastes register a's content ('a') after the cursor
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("\""))).unwrap();
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("a"))).unwrap();
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("p"))).unwrap();
+
+    if state.ui.completion_time.is_some() {
+        let pending = state.game.pending_completed_session.as_ref();
+        assert!(pending.is_some(), "Should have pending completed session");
+        assert_eq!(pending.unwrap().current_content(), "aalpha beta");
+    } else if let TypedScreen::Task(task_data) = &state.screen {
+        assert!(task_data.input_state().state().is_base());
+        assert_eq!(task_data.session.current_content(), "aalpha beta");
+    } else {
+        panic!("Should be on Task screen (or completed) after the register sequence");
+    }
+}
+
+#[test]
+fn test_register_op_cancels_on_out_of_scope_operator() {
+    // Register scope is limited to y/p/P/R; any other operator cancels back
+    // to Base rather than executing a bare command.
+    let scenario = create_test_scenario("test_register_cancel", "hello", (0, 0), "world", (0, 0));
+
+    let mut state = create_test_app_state(vec![scenario.clone()]);
+    update(&mut state, Message::StartScenario(0)).unwrap();
+
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("\""))).unwrap();
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("a"))).unwrap();
+    // 'd' is not register-scoped - should cancel, not delete anything
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("d"))).unwrap();
+
+    if let TypedScreen::Task(task_data) = &state.screen {
+        assert!(task_data.input_state().state().is_base());
+        assert_eq!(task_data.session.current_content(), "hello");
+    } else {
+        panic!("Should be on Task screen");
+    }
+}
+
+#[test]
+fn test_command_line_goto_multi_key() {
+    // ':' -> "goto 3" -> Enter assembles and executes ":goto 3" atomically.
+    let scenario = create_test_scenario(
+        "test_command_line",
+        "line1\nline2\nline3\nline4",
+        (0, 0),
+        "line1\nline2\nline3\nline4",
+        (2, 0),
+    );
+
+    let mut state = create_test_app_state(vec![scenario.clone()]);
+    update(&mut state, Message::StartScenario(0)).unwrap();
+
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed(":"))).unwrap();
+    if let TypedScreen::Task(task_data) = &state.screen {
+        assert_eq!(task_data.input_state().pending_command_line(), Some(""));
+    } else {
+        panic!("Should be on Task screen");
+    }
+
+    for c in "goto 3".chars() {
+        let owned = c.to_string();
+        update(&mut state, Message::ExecuteCommand(Cow::Owned(owned))).unwrap();
+    }
+    if let TypedScreen::Task(task_data) = &state.screen {
+        assert_eq!(
+            task_data.input_state().pending_command_line(),
+            Some("goto 3")
+        );
+        // Nothing executed yet - the buffer only assembles until Enter
+        assert_eq!(task_data.session.current_cursor(), (0, 0));
+    } else {
+        panic!("Should be on Task screen");
+    }
+
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("Enter"))).unwrap();
+
+    // ':goto 3' reaches the target cursor exactly, so the scenario completes
+    // immediately; the completed session lives in `pending_completed_session`
+    // while the screen stays on Task for the success popup (see
+    // `process_session_result`), matching the pattern other multi-key tests
+    // in this file use to check post-completion state.
+    if state.ui.completion_time.is_some() {
+        let pending = state.game.pending_completed_session.as_ref();
+        assert!(pending.is_some(), "Should have pending completed session");
+        assert_eq!(pending.unwrap().current_cursor(), (2, 0));
+    } else if let TypedScreen::Task(task_data) = &state.screen {
+        assert!(task_data.input_state().state().is_base());
+        assert_eq!(task_data.session.current_cursor(), (2, 0));
+    } else {
+        panic!("Should be on Task screen (or completed) after ':goto 3'");
+    }
+}
+
+#[test]
+fn test_command_line_escape_cancels_buffer() {
+    let scenario = create_test_scenario("test_cmdline_cancel", "hello", (0, 0), "world", (0, 0));
+
+    let mut state = create_test_app_state(vec![scenario.clone()]);
+    update(&mut state, Message::StartScenario(0)).unwrap();
+
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed(":"))).unwrap();
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("g"))).unwrap();
+    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("Escape"))).unwrap();
+
+    if let TypedScreen::Task(task_data) = &state.screen {
+        assert!(task_data.input_state().state().is_base());
+        assert_eq!(task_data.session.current_content(), "hello");
+    } else {
+        panic!("Should be on Task screen");
+    }
+}

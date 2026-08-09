@@ -47,7 +47,7 @@ pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
     if session.state().is_countdown() {
         render_countdown(frame, area, session);
     } else if session.state().is_playing() {
-        render_playing(frame, area, session);
+        render_playing(frame, area, session, &minigame_data.input_state);
         // Show key history popup after first keypress (reset on scenario transitions)
         // Reserve space for the Timer + Stats bars (3 + 3) so the popup never
         // overlaps them.
@@ -55,7 +55,13 @@ pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
             super::popups::render_key_history_popup(frame, minigame_data.key_history.keys(), 6);
         }
     } else if session.state().is_transition() {
-        render_transition(frame, area, session, minigame_data.last_xp_earned);
+        render_transition(
+            frame,
+            area,
+            session,
+            minigame_data.last_xp_earned,
+            &minigame_data.input_state,
+        );
     } else if session.state().is_paused() {
         render_paused(frame, area, session);
     } else if session.state().is_game_over() {
@@ -123,7 +129,12 @@ fn render_countdown(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
 }
 
 /// Render playing screen with active scenario
-fn render_playing(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGameSession) {
+fn render_playing(
+    frame: &mut Frame,
+    area: Rect,
+    session: &crate::minigame::MiniGameSession,
+    input_state: &crate::input::typestate::InputStateMachine,
+) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -135,8 +146,11 @@ fn render_playing(frame: &mut Frame, area: Rect, session: &crate::minigame::Mini
         ])
         .split(area);
 
-    // Title + controls
-    let title_line = Line::from(vec![
+    // Title + controls, with live feedback for an in-progress '"'-register
+    // selection or ':'-command-line buffer (both live in Arcade mode too -
+    // see the Esc-cancel and reset_input_state wiring in input/handlers.rs).
+    let pending_text = super::helpers::pending_input_indicator(input_state);
+    let mut title_spans = vec![
         Span::styled(
             mode_title(session),
             Style::default()
@@ -145,8 +159,17 @@ fn render_playing(frame: &mut Frame, area: Rect, session: &crate::minigame::Mini
         ),
         Span::raw("        "),
         Span::styled("[Esc] Pause", Style::default().fg(Color::Gray)),
-    ]);
-    let title = Paragraph::new(title_line)
+    ];
+    if !pending_text.is_empty() {
+        title_spans.push(Span::raw("  "));
+        title_spans.push(Span::styled(
+            pending_text,
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    let title = Paragraph::new(Line::from(title_spans))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(title, chunks[0]);
@@ -354,9 +377,10 @@ fn render_transition(
     area: Rect,
     session: &crate::minigame::MiniGameSession,
     last_xp: Option<u64>,
+    input_state: &crate::input::typestate::InputStateMachine,
 ) {
     // Render playing screen as background (shows final editor state)
-    render_playing(frame, area, session);
+    render_playing(frame, area, session, input_state);
 
     // Render popup overlay on top using shared function
     let is_success = session.state().transition_success().unwrap_or(true);
@@ -579,6 +603,52 @@ mod tests {
 
         let result = terminal.draw(|f| render_minigame(f, &state));
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_render_minigame_playing_shows_pending_command_line() {
+        use ratatui::buffer::Buffer;
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenarios = Arc::new(vec![create_test_scenario("s1")]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(session.state().is_playing());
+
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            ProfileStorage::for_test(),
+            PerformanceTracker::new(),
+        );
+        let mut minigame_data = MiniGameData::default();
+        minigame_data
+            .input_state
+            .process_key(crossterm::event::KeyEvent::new(
+                crossterm::event::KeyCode::Char(':'),
+                crossterm::event::KeyModifiers::NONE,
+            ));
+        assert_eq!(minigame_data.input_state.pending_command_line(), Some(""));
+        state.screen = TypedScreen::MiniGame(minigame_data);
+        state.game.minigame_session = Some(session);
+
+        // Regression: must not panic when a command-line/register pending
+        // state is live during Arcade rendering, and must actually render
+        // the indicator text somewhere in the frame.
+        let result = terminal.draw(|f| render_minigame(f, &state));
+        assert!(result.is_ok());
+
+        let buffer: &Buffer = terminal.backend().buffer();
+        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(
+            rendered.contains(':'),
+            "expected the pending ':' command-line buffer to be visible in the rendered frame"
+        );
     }
 
     #[test]

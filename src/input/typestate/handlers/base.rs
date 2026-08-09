@@ -68,6 +68,16 @@ impl InputHandler<BaseState> for KeyHandler {
                 HandlerResult::Transition(InputState::ReplaceCharPending)
             }
 
+            // Named register selection - transition to register pending
+            (KeyCode::Char('"'), false) => HandlerResult::Transition(InputState::RegisterPending),
+
+            // Command-line mode - transition to command-line pending
+            (KeyCode::Char(':'), false) => {
+                HandlerResult::Transition(InputState::CommandLinePending {
+                    buffer: String::new(),
+                })
+            }
+
             // Count prefix - digits 1-9 start a count
             (KeyCode::Char(c @ '1'..='9'), false) => {
                 let count = c

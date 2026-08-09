@@ -840,12 +840,15 @@ impl MiniGameSession {
             let optimal_count = scenario.scenario.scoring.optimal_count.get();
             let optimal_time_per_command = scenario.time_limit / optimal_count as u32;
 
-            // Record each unique command used
+            // Record each unique command used, normalized to the same card
+            // id training mode uses (`"ay` -> `"y`, `:g 3` -> `:goto`) so
+            // arcade and training practice of the same skill share one card.
             let mut recorded_commands = std::collections::HashSet::new();
             for command in actions {
-                if recorded_commands.insert(command.clone()) {
+                let normalized = crate::helix::commands::normalize_command_id(command).into_owned();
+                if recorded_commands.insert(normalized.clone()) {
                     tracker.record_attempt(
-                        command,
+                        &normalized,
                         time_per_command,
                         success,
                         optimal_time_per_command,
@@ -1285,6 +1288,48 @@ mod tests {
             let (row, _col) = scenario.current_cursor();
             assert_eq!(row, 2, "Cursor should be on last line (row 2)");
         }
+    }
+
+    /// Regression test: `record_to_fsrs` is the one normalization call site
+    /// the original plan missed (per the critic's M2/M3 finding). Without
+    /// normalizing before dedup+record, `"ay` and `"by` would mint two
+    /// separate FSRS cards instead of collapsing to one `"y` card.
+    #[test]
+    fn test_record_to_fsrs_normalizes_register_ops_to_one_card() {
+        let scenario = ScenarioBuilder::new()
+            .id("test_register_fsrs")
+            .setup_content("alpha beta")
+            .target_content("zzz")
+            .optimal_count(1)
+            .difficulty(Difficulty::Beginner)
+            .build();
+
+        let scenarios = Arc::new(vec![scenario]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(session.state.is_playing());
+
+        session.handle_command("\"ay").unwrap();
+        session.handle_command("\"by").unwrap();
+
+        let mut tracker = PerformanceTracker::new();
+        session.record_to_fsrs(&mut tracker, true);
+
+        assert!(
+            tracker.get_performance("\"y").is_some(),
+            "expected the normalized '\"y' card to exist"
+        );
+        assert!(
+            tracker.get_performance("\"ay").is_none(),
+            "raw '\"ay' must not exist as its own card"
+        );
+        assert!(
+            tracker.get_performance("\"by").is_none(),
+            "raw '\"by' must not exist as its own card"
+        );
     }
 
     #[test]

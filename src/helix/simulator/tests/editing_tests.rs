@@ -8,6 +8,8 @@
 //! - Character replacement: r
 //! - Change command: c
 
+use crate::game::EditorState;
+use crate::game::editor_state::{CursorPosition, Selection};
 use crate::helix::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, Mode};
 
@@ -387,4 +389,201 @@ fn test_change_selection_noyank() {
     assert_eq!(state.content(), "ello");
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.cursor_position().1, 0); // Cursor stays at start
+}
+
+#[test]
+fn test_change_selection_deletes_full_multichar_range() {
+    // "world" as a forward range (anchor=6 < head=11) in "hello world"
+    let cursor = CursorPosition::new(0, 11).unwrap();
+    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
+    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+
+    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    sim.execute_command(CMD_CHANGE).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(
+        state.content(),
+        "hello ",
+        "'c' must delete the full selection range, not just the head character"
+    );
+    assert_eq!(sim.mode(), Mode::Insert);
+    // Selection collapses to the start of the deleted range before insert mode
+    assert_eq!(state.cursor_position().1, 6);
+}
+
+#[test]
+fn test_delete_selection_populates_register_for_paste() {
+    let mut sim = AnyModeSimulator::new("abc".to_string());
+
+    // 'd' deletes 'a' and should write it to the default register
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "bc");
+
+    // Move to end and paste - the deleted 'a' should come back
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_PASTE_AFTER).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(state.content(), "bca");
+}
+
+#[test]
+fn test_change_selection_populates_register_for_paste() {
+    let mut sim = AnyModeSimulator::new("abc".to_string());
+
+    // 'c' deletes 'a' and should write it to the default register
+    sim.execute_command(CMD_CHANGE).unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "bc");
+
+    // Move to end and paste - the changed-away 'a' should come back
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_PASTE_AFTER).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(state.content(), "bca");
+}
+
+#[test]
+fn test_change_selection_noyank_does_not_clobber_existing_register() {
+    // Pre-populate the register with text DISTINCT from what Alt-c deletes
+    // ('y' vs 'a'), so a later paste can only succeed if Alt-c left the
+    // pre-existing register content alone (a fresh/empty register would
+    // make a no-op paste pass trivially, which is what the old, weaker
+    // version of this test did).
+    let mut sim = AnyModeSimulator::new("y abc".to_string());
+
+    // Yank 'y' into the default register
+    sim.execute_command(CMD_YANK).unwrap();
+
+    // Move onto 'a' and Alt-c it away - must not touch the register
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_CHANGE_SELECTION_NOYANK).unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "y bc");
+
+    // Paste before at document start must produce the ORIGINAL 'y', not
+    // the 'a' that Alt-c just deleted
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
+    sim.execute_command(CMD_PASTE_BEFORE).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(
+        state.content(),
+        "yy bc",
+        "Alt-c must leave a pre-existing register ('y') untouched"
+    );
+}
+
+#[test]
+fn test_delete_and_change_register_round_trip_exact_multichar_text() {
+    // "world" as a forward range (anchor=6 < head=11) in "hello world"
+    let cursor = CursorPosition::new(0, 11).unwrap();
+    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
+    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+
+    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "hello ");
+
+    // Paste-after restores the exact multi-char deleted text, not just a
+    // single character or some non-empty placeholder
+    sim.execute_command(CMD_PASTE_AFTER).unwrap();
+    assert_eq!(
+        sim.state().unwrap().content(),
+        "hello world",
+        "'d' must round-trip the EXACT deleted multi-char text through 'p'"
+    );
+
+    // Same check for 'c', on a fresh selection
+    let cursor = CursorPosition::new(0, 11).unwrap();
+    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
+    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
+    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    sim.execute_command(CMD_CHANGE).unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "hello ");
+
+    sim.execute_command(CMD_PASTE_AFTER).unwrap();
+    assert_eq!(
+        sim.state().unwrap().content(),
+        "hello world",
+        "'c' must round-trip the EXACT deleted multi-char text through 'p'"
+    );
+}
+
+#[test]
+fn test_delete_selection_register_round_trips_through_paste_before() {
+    // Same as the 'p' round trip, but exercising 'P' (paste_before), which
+    // is a distinct code path (inserts at range.from() instead of head+1).
+    let mut sim = AnyModeSimulator::new("abc".to_string());
+
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // deletes 'a'
+    assert_eq!(sim.state().unwrap().content(), "bc");
+
+    sim.execute_command(CMD_PASTE_BEFORE).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(state.content(), "abc");
+}
+
+#[test]
+fn test_change_selection_multi_range_maps_cursor_through_earlier_deletions() {
+    // Repro: doc "ab\ncd", cursor 0, 'C' (copy_selection_next_line) adds a
+    // second cursor on the next line and makes it primary. 'c' must delete
+    // BOTH single-char ranges and map the (still-primary) second cursor to
+    // its correct post-deletion position - not a stale pre-transaction
+    // offset that lands past the end of the document once the first
+    // range's deletion has shifted everything after it left by one.
+    //
+    // Note: `enter_insert_mode` (pre-existing, unrelated to this fix, and
+    // shared by every insert-entry command such as `a`/`i`/`o`/`O`)
+    // collapses the selection to its primary range before Insert mode
+    // starts, so only ONE cursor - the correctly mapped primary - survives
+    // here. Fixing that shared single-cursor-insert-mode limitation is a
+    // separate, larger change out of scope for #395/#396.
+    let mut sim = AnyModeSimulator::new("ab\ncd".to_string());
+
+    sim.execute_command(CMD_COPY_SELECTION_NEXT).unwrap();
+    sim.execute_command(CMD_CHANGE).unwrap();
+
+    let snapshot = sim.to_snapshot();
+    assert_eq!(snapshot.content, "b\nd");
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(
+        snapshot.selections.len(),
+        1,
+        "insert mode carries a single cursor (enter_insert_mode collapses to primary)"
+    );
+    assert_eq!(
+        snapshot.selections[0].head, 2,
+        "primary cursor must map through the FIRST range's deletion too, \
+         landing on 'd' (position 2), not the stale pre-transaction offset 3"
+    );
+
+    // Typing at the (correctly mapped) cursor must land between the
+    // newline and 'd', not after 'd'
+    sim.execute_command("X").unwrap();
+    assert_eq!(sim.state().unwrap().content(), "b\nXd");
+}
+
+#[test]
+fn test_delete_selection_multi_range_maps_cursor_through_earlier_deletions() {
+    // Same repro as above for 'd', which stays in Normal mode.
+    let mut sim = AnyModeSimulator::new("ab\ncd".to_string());
+
+    sim.execute_command(CMD_COPY_SELECTION_NEXT).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+
+    let snapshot = sim.to_snapshot();
+    assert_eq!(snapshot.content, "b\nd");
+    assert_eq!(snapshot.selections.len(), 2);
+    assert_eq!(snapshot.selections[0].head, 0);
+    assert_eq!(snapshot.selections[1].head, 2);
+    assert_eq!(snapshot.primary_idx, 1);
+    assert_eq!(sim.mode(), Mode::Normal);
 }

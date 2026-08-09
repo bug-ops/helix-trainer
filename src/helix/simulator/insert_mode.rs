@@ -1,5 +1,6 @@
 //! Insert mode operations
 
+use super::commands::clipboard::yank_to_register;
 use super::{HelixSimulator, InsertMode, NormalMode};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
@@ -130,29 +131,28 @@ impl HelixSimulator<NormalMode> {
         Ok(())
     }
 
-    /// Change selection: delete current character (prepare for insert mode)
+    /// Change selection: delete the full selection and write it to the
+    /// default register (prepare for insert mode; Helix 'c').
     pub fn change_selection(&mut self) -> Result<(), UserError> {
-        // Delete current character (similar to delete_char)
-        let head = self.selection.primary().head;
+        yank_to_register(self, None)?;
+        self.change_selection_impl()
+    }
 
-        // Don't delete if at end of document
-        if head >= self.doc.len_chars() {
-            return Ok(());
-        }
+    /// Change selection without yanking: delete the full selection, leaving
+    /// registers untouched (prepare for insert mode; Helix 'Alt-c').
+    pub fn change_selection_noyank(&mut self) -> Result<(), UserError> {
+        self.change_selection_impl()
+    }
 
-        // Delete current character (don't delete newlines)
-        let current_char = self.doc.char(head);
-        if current_char != '\n' {
-            let transaction =
-                Transaction::change_by_selection(&self.doc, &self.selection, |range| {
-                    let start = range.from();
-                    let end = start.saturating_add(1).min(self.doc.len_chars()).max(start);
-                    (start, end, None)
-                });
-
-            self.apply_transaction(transaction);
-        }
-
+    /// Delete the full active selection (respecting multi-range selections,
+    /// each mapped to its own correct post-deletion position) and leave the
+    /// mapped selection for `enter_insert_mode` to collapse - it reduces any
+    /// selection to a single (correctly positioned) cursor at the dispatch
+    /// call site, since this simulator's Insert mode only ever carries one
+    /// cursor, matching every other insert-entry command (`a`, `i`, `o`,
+    /// `O`, ...).
+    fn change_selection_impl(&mut self) -> Result<(), UserError> {
+        self.selection = super::commands::editing::delete_active_selection(self);
         Ok(())
     }
 }

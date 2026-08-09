@@ -317,3 +317,38 @@ fn test_timer_fixed_on_completion() {
         }
     }
 }
+
+#[test]
+fn test_playable_scenario_elapsed_fixed_after_completion() {
+    // Regression test for the PlayableScenario trait impl specifically: called
+    // via UFCS so it can't silently resolve to the inherent `elapsed()` method,
+    // which method-call syntax would otherwise prefer.
+    use crate::game::PlayableScenario;
+
+    let scenario = create_test_scenario();
+    let session = GameSession::new(scenario).unwrap();
+
+    let result = session.record_action("x".to_string()).unwrap();
+    let session = match result {
+        SessionAfterAction::StillActive(s) => s,
+        SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+    };
+    let result = session.record_action("d".to_string()).unwrap();
+
+    match result {
+        SessionAfterAction::Completed(completed) => {
+            let elapsed1 = PlayableScenario::elapsed(&completed);
+
+            std::thread::sleep(std::time::Duration::from_millis(50));
+
+            let elapsed2 = PlayableScenario::elapsed(&completed);
+            assert_eq!(
+                elapsed1, elapsed2,
+                "PlayableScenario::elapsed() should be frozen once the session is completed"
+            );
+        }
+        SessionAfterAction::StillActive(_) => {
+            panic!("Session should be completed after 'x' + 'd' commands");
+        }
+    }
+}

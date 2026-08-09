@@ -787,8 +787,10 @@ impl GameSession<Abandoned> {
 /// Typestate pattern markers for compile-time state machine enforcement
 pub mod typestate;
 
-// Implement PlayableScenario trait for GameSession<Active>
-impl super::PlayableScenario for GameSession<Active> {
+// Implement PlayableScenario trait for GameSession in any state.
+// Shared logic lives here; only `elapsed()` differs per state, delegated to
+// `SessionState::session_elapsed`.
+impl<S: SessionState> super::PlayableScenario for GameSession<S> {
     fn current_content(&self) -> String {
         self.simulator.display().content()
     }
@@ -814,83 +816,15 @@ impl super::PlayableScenario for GameSession<Active> {
     }
 
     fn action_count(&self) -> usize {
-        self.user_actions.len()
+        self.action_count()
     }
 
     fn is_insert_mode(&self) -> bool {
-        self.simulator.mode() == crate::helix::Mode::Insert
+        self.is_insert_mode()
     }
 
-    fn elapsed(&self) -> std::time::Duration {
-        self.started_at.elapsed()
-    }
-
-    fn all_cursors(&self) -> Vec<(usize, usize)> {
-        self.simulator.display().all_cursor_positions()
-    }
-
-    fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        self.simulator
-            .display()
-            .all_selection_bounds()
-            .into_iter()
-            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
-            .collect()
-    }
-
-    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
-        with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
-    }
-
-    fn all_target_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        with_target_display(&self.target_snapshot, |d| {
-            d.all_selection_bounds()
-                .into_iter()
-                .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
-                .collect()
-        })
-    }
-}
-
-// Implement PlayableScenario trait for GameSession<Completed>
-impl super::PlayableScenario for GameSession<Completed> {
-    fn current_content(&self) -> String {
-        self.simulator.display().content()
-    }
-
-    fn target_content(&self) -> String {
-        self.target_snapshot.content.clone()
-    }
-
-    fn current_cursor(&self) -> (usize, usize) {
-        self.simulator.display().cursor_position()
-    }
-
-    fn target_cursor(&self) -> (usize, usize) {
-        with_target_display(&self.target_snapshot, |d| d.cursor_position())
-    }
-
-    fn current_selection(&self) -> Option<crate::helix::SelectionBounds> {
-        self.simulator.display().selection()
-    }
-
-    fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
-        with_target_display(&self.target_snapshot, |d| d.selection())
-    }
-
-    fn action_count(&self) -> usize {
-        self.user_actions.len()
-    }
-
-    fn is_insert_mode(&self) -> bool {
-        self.simulator.mode() == crate::helix::Mode::Insert
-    }
-
-    fn elapsed(&self) -> std::time::Duration {
-        // For completed sessions, return duration from start to completion
-        self.completed_at
-            .map(|end| end.duration_since(self.started_at))
-            .unwrap_or_else(|| self.started_at.elapsed())
+    fn elapsed(&self) -> Duration {
+        S::session_elapsed(self.started_at, self.completed_at)
     }
 
     fn all_cursors(&self) -> Vec<(usize, usize)> {

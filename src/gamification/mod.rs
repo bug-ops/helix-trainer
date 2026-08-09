@@ -32,6 +32,17 @@ pub enum GamificationError {
     #[error("Streak freeze not available")]
     StreakFreezeUnavailable,
 
+    #[error("No active streak to protect with a freeze")]
+    StreakFreezeNothingToProtect,
+
+    #[error(
+        "Streak freeze cannot cover a gap of {days_since_active} days (coverable range is 2..={max_gap_days})"
+    )]
+    StreakFreezeGapOutOfRange {
+        days_since_active: i64,
+        max_gap_days: i64,
+    },
+
     #[error("Achievement already unlocked: {0:?}")]
     AchievementAlreadyUnlocked(AchievementId),
 }

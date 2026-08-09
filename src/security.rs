@@ -167,6 +167,8 @@ impl From<crate::gamification::GamificationError> for UserError {
             GamificationError::QuestNotFound(_) => UserError::OperationFailed,
             GamificationError::InvalidLevel(_) => UserError::invalid_state("Invalid level"),
             GamificationError::StreakFreezeUnavailable => UserError::OperationFailed,
+            GamificationError::StreakFreezeNothingToProtect => UserError::OperationFailed,
+            GamificationError::StreakFreezeGapOutOfRange { .. } => UserError::OperationFailed,
             GamificationError::AchievementAlreadyUnlocked(_) => UserError::OperationFailed,
         }
     }

@@ -2,10 +2,12 @@
 
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
+use crate::security::limits::MAX_REGEX_SELECTION_MATCHES;
 use helix_core::Range;
 use helix_core::Selection;
 use helix_core::comment::toggle_line_comments;
-use helix_core::selection::split_on_newline;
+use helix_core::selection::{select_on_matches, split_on_matches, split_on_newline};
+use helix_stdx::rope::Regex;
 
 /// Trim whitespace from selections (_ command)
 pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
@@ -168,13 +170,50 @@ pub fn merge_consecutive_selections<M: EditorMode>(
     merge_selections(sim)
 }
 
-/// Select regex matches (s command)
-pub fn select_regex<M: EditorMode>(_sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+/// Truncate a selection to at most `max` ranges.
+///
+/// Belt-and-suspenders bound for `select_on_matches`/`split_on_matches`,
+/// which loop `find_iter` unbounded and accept no cap parameter themselves.
+fn truncate_matches(selection: Selection, max: usize) -> Selection {
+    if selection.len() <= max {
+        return selection;
+    }
+    let ranges: Vec<Range> = selection.ranges().iter().take(max).copied().collect();
+    Selection::new(ranges.into(), 0)
+}
+
+/// Select regex matches within the current selection (s command)
+///
+/// `pattern` has already been prompt-validated by `RegexPromptPending`
+/// (invalid regex cancels the prompt rather than reaching here), but the
+/// regex is compiled again here since the dispatch pipeline carries only
+/// the raw pattern string, not a compiled `Regex`.
+pub fn select_regex<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    pattern: &str,
+) -> Result<(), UserError> {
+    let regex = Regex::new(pattern)
+        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+    let slice = sim.doc.slice(..);
+    if let Some(new_selection) = select_on_matches(slice, &sim.selection, &regex) {
+        sim.selection = truncate_matches(new_selection, MAX_REGEX_SELECTION_MATCHES);
+    }
     Ok(())
 }
 
-/// Split selection on regex (S command)
-pub fn split_selection<M: EditorMode>(_sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+/// Split the current selection on a regex delimiter (S command)
+///
+/// See [`select_regex`] for why the pattern is compiled here rather than
+/// passed through as an already-compiled `Regex`.
+pub fn split_selection<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    pattern: &str,
+) -> Result<(), UserError> {
+    let regex = Regex::new(pattern)
+        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+    let slice = sim.doc.slice(..);
+    let new_selection = split_on_matches(slice, &sim.selection, &regex);
+    sim.selection = truncate_matches(new_selection, MAX_REGEX_SELECTION_MATCHES);
     Ok(())
 }
 
@@ -762,5 +801,78 @@ mod tests {
         assert_eq!(ranges[0].head, 10); // Original at col 10
         assert_eq!(ranges[1].head, 20); // "short" is 5 chars, so clamped to end (15 + 5 = 20)
         assert_eq!(ranges[2].head, 25); // "tiny" is 4 chars, so clamped to end (21 + 4 = 25)
+    }
+
+    // Regex selection tests (s / S commands)
+
+    #[test]
+    fn test_select_regex_matches_within_selection() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("foo bar foo baz foo".to_string());
+        sim.selection = Selection::single(0, 19);
+
+        select_regex(&mut sim, "foo").unwrap();
+
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges.len(), 3);
+        assert_eq!((ranges[0].from(), ranges[0].to()), (0, 3));
+        assert_eq!((ranges[1].from(), ranges[1].to()), (8, 11));
+        assert_eq!((ranges[2].from(), ranges[2].to()), (16, 19));
+    }
+
+    #[test]
+    fn test_select_regex_no_match_leaves_selection_unchanged() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
+        sim.selection = Selection::single(0, 11);
+
+        select_regex(&mut sim, "zzz").unwrap();
+
+        // No matches -> `select_on_matches` returns None -> selection untouched.
+        let range = sim.selection.primary();
+        assert_eq!((range.from(), range.to()), (0, 11));
+    }
+
+    #[test]
+    fn test_select_regex_invalid_pattern_errors() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+        sim.selection = Selection::single(0, 5);
+
+        assert!(select_regex(&mut sim, "(").is_err());
+    }
+
+    #[test]
+    fn test_split_selection_on_regex_delimiter() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("foo,bar,baz".to_string());
+        sim.selection = Selection::single(0, 11);
+
+        split_selection(&mut sim, ",").unwrap();
+
+        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
+        assert_eq!(ranges.len(), 3);
+        assert_eq!((ranges[0].from(), ranges[0].to()), (0, 3));
+        assert_eq!((ranges[1].from(), ranges[1].to()), (4, 7));
+        assert_eq!((ranges[2].from(), ranges[2].to()), (8, 11));
+    }
+
+    #[test]
+    fn test_split_selection_invalid_pattern_errors() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("a,b,c".to_string());
+        sim.selection = Selection::single(0, 5);
+
+        assert!(split_selection(&mut sim, "[").is_err());
+    }
+
+    #[test]
+    fn test_select_regex_truncates_to_max_matches() {
+        // One match per character (empty-selection edge cases aside), so a
+        // long run of "a"s produces far more matches than the cap.
+        let content = "a".repeat(MAX_REGEX_SELECTION_MATCHES + 50);
+        let len = content.chars().count();
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new(content);
+        sim.selection = Selection::single(0, len);
+
+        select_regex(&mut sim, "a").unwrap();
+
+        assert_eq!(sim.selection.len(), MAX_REGEX_SELECTION_MATCHES);
     }
 }

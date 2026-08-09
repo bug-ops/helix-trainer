@@ -53,6 +53,12 @@ const MOVEMENT_WORD_BASICS: &str = include_str!("../../../scenarios/en/movement/
 const MOVEMENT_WORD: &str = include_str!("../../../scenarios/en/movement/word.toml");
 
 // ============================================================================
+// Macro scenarios
+// ============================================================================
+
+const MACROS_BASIC: &str = include_str!("../../../scenarios/en/macros/basic-macros.toml");
+
+// ============================================================================
 // Register scenarios
 // ============================================================================
 
@@ -118,6 +124,8 @@ const EN_SCENARIOS: &[&str] = &[
     MOVEMENT_SCROLL,
     MOVEMENT_WORD_BASICS,
     MOVEMENT_WORD,
+    // Macros
+    MACROS_BASIC,
     // Registers
     REGISTERS_NAMED,
     // Repeat
@@ -174,7 +182,7 @@ mod tests {
     #[test]
     fn test_get_embedded_scenarios_en() {
         let scenarios = get_embedded_scenarios("en");
-        assert_eq!(scenarios.len(), 31, "Expected 31 scenario files");
+        assert_eq!(scenarios.len(), 32, "Expected 32 scenario files");
     }
 
     #[test]

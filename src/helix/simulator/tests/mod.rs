@@ -14,6 +14,7 @@
 mod basic_tests;
 mod clipboard_tests;
 mod editing_tests;
+mod macro_tests;
 mod mode_tests;
 mod movement_tests;
 mod multi_cursor_tests;

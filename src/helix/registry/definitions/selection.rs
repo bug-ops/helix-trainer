@@ -1,6 +1,8 @@
 //! Selection command definitions
 //!
-//! Registers selection commands (x, X, %, ;, s, S, Alt-s, &, _, Alt--, Alt-_, C, Alt-C, K, Alt-K, Ctrl-c, ,, Alt-,)
+//! Registers selection commands (x, X, %, ;, Alt-s, &, _, Alt--, Alt-_, C, Alt-C, K, Alt-K, Ctrl-c, ,, Alt-,).
+//! `s`/`S` (regex select/split) are dispatched separately - see the comment
+//! above the registration block below.
 
 use crate::helix::commands::*;
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
@@ -65,31 +67,14 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     ));
 
     // Selection manipulation commands
-    registry.register(Command::new(
-        CommandMetadata::new(
-            "select_regex",
-            CMD_SELECT_REGEX,
-            "Select regex",
-            "Select all matches of a regex pattern within the current selection.",
-            Category::Selection,
-            false,
-            None,
-        ),
-        selection::select_regex,
-    ));
-
-    registry.register(Command::new(
-        CommandMetadata::new(
-            "split_selection",
-            CMD_SPLIT_SELECTION,
-            "Split selection",
-            "Split the selection on a regex pattern delimiter.",
-            Category::Selection,
-            false,
-            None,
-        ),
-        selection::split_selection,
-    ));
+    //
+    // 's'/'S' (select_regex/split_selection) are NOT registered here: both
+    // take a regex pattern argument, which `CommandHandler`'s fixed
+    // `fn(&mut HelixSimulator<M>) -> Result<(), UserError>` signature cannot
+    // carry. They are dispatched directly from `execute_normal_mode_command_internal`
+    // via the atomic `"s <pattern>"` / `"S <pattern>"` command encoding
+    // assembled by `RegexPromptPending`, the same way register-scoped ops
+    // and `:`-command-line invocations bypass the registry.
 
     registry.register(Command::new(
         CommandMetadata::new(

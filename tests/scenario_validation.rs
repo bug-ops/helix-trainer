@@ -12,6 +12,9 @@ use helix_trainer::game::command_context::{
     ParsedCommand, extract_count_and_command, parse_command_buffer,
 };
 use helix_trainer::game::{GameSession, PlayableScenario};
+use helix_trainer::helix::commands::{
+    CMD_REPLAY_MACRO, CMD_SELECT_REGEX, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
+};
 use helix_trainer::helix::simulator::command_line::CommandLine;
 
 #[test]
@@ -130,6 +133,35 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
             if let Err(e) = CommandLine::parse(cmd) {
                 return Err(format!(
                     "Command {} '{}': :-command failed to parse: {:?}",
+                    i, cmd, e
+                ));
+            }
+            continue;
+        }
+
+        // Handle 'q'/'Q' (macro record toggle/replay) - dispatched directly
+        // by `execute_command_any_mode`'s early return, not the
+        // registry-backed KeyTrie that `parse_command_buffer` walks, so
+        // char-by-char validation has no entry for them.
+        if cmd == CMD_TOGGLE_MACRO_RECORDING || cmd == CMD_REPLAY_MACRO {
+            continue;
+        }
+
+        // Handle "s <pattern>" / "S <pattern>" regex-selection prompt
+        // invocations - assembled atomically by `RegexPromptPending` (also
+        // not resolved char-by-char through the KeyTrie), so validate by
+        // checking the pattern compiles as a regex directly instead.
+        let regex_pattern = cmd
+            .strip_prefix(CMD_SELECT_REGEX)
+            .and_then(|rest| rest.strip_prefix(' '))
+            .or_else(|| {
+                cmd.strip_prefix(CMD_SPLIT_SELECTION)
+                    .and_then(|rest| rest.strip_prefix(' '))
+            });
+        if let Some(pattern) = regex_pattern {
+            if let Err(e) = helix_stdx::rope::Regex::new(pattern) {
+                return Err(format!(
+                    "Command {} '{}': regex-selection pattern failed to compile: {:?}",
                     i, cmd, e
                 ));
             }

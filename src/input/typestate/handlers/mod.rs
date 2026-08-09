@@ -9,6 +9,7 @@ pub mod count;
 mod find;
 mod goto;
 mod match_mode;
+mod regex_prompt;
 mod register;
 mod replace;
 mod text_object;

@@ -253,14 +253,10 @@ fn test_map_single_key_search() {
 
 #[test]
 fn test_map_single_key_selection_manipulation() {
-    assert_eq!(
-        map_single_key_command('s', KeyModifiers::NONE),
-        Some(CMD_SELECT_REGEX)
-    );
-    assert_eq!(
-        map_single_key_command('S', KeyModifiers::SHIFT),
-        Some(CMD_SPLIT_SELECTION)
-    );
+    // 's'/'S' are handled by a dedicated `base.rs` arm (regex-selection
+    // prompt transition), not `map_single_key_command`.
+    assert_eq!(map_single_key_command('s', KeyModifiers::NONE), None);
+    assert_eq!(map_single_key_command('S', KeyModifiers::SHIFT), None);
     assert_eq!(
         map_single_key_command('&', KeyModifiers::SHIFT),
         Some(CMD_ALIGN_SELECTIONS)
@@ -887,11 +883,9 @@ fn test_alt_does_not_affect_normal_commands() {
         Some(CMD_SELECT_LINE)
     );
 
-    // Without Alt, 's' should be select_regex, not split_on_newlines
-    assert_eq!(
-        map_single_key_command('s', KeyModifiers::NONE),
-        Some(CMD_SELECT_REGEX)
-    );
+    // Without Alt, 's' is unmapped here (handled by a dedicated `base.rs`
+    // arm for the regex-selection prompt), not split_on_newlines.
+    assert_eq!(map_single_key_command('s', KeyModifiers::NONE), None);
 
     // Without Alt, ';' should be collapse_selection, not flip_selections
     assert_eq!(

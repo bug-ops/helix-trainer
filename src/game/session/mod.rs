@@ -276,6 +276,11 @@ impl<S: SessionState> GameSession<S> {
         self.simulator.mode() == Mode::Insert
     }
 
+    /// Check if a `q`/`Q` macro is currently being recorded
+    pub fn is_recording_macro(&self) -> bool {
+        self.simulator.is_recording_macro()
+    }
+
     /// Get number of hints shown so far
     pub fn hints_shown(&self) -> usize {
         self.hints_shown

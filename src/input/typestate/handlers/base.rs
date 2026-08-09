@@ -84,6 +84,28 @@ impl InputHandler<BaseState> for KeyHandler {
                 })
             }
 
+            // Regex-selection prompt - transition to regex prompt pending
+            (KeyCode::Char('s'), false) => {
+                HandlerResult::Transition(InputState::RegexPromptPending {
+                    kind: crate::input::typestate::RegexPromptKind::SelectRegex,
+                    buffer: String::new(),
+                })
+            }
+            (KeyCode::Char('S'), _) => HandlerResult::Transition(InputState::RegexPromptPending {
+                kind: crate::input::typestate::RegexPromptKind::SplitSelection,
+                buffer: String::new(),
+            }),
+
+            // Macro recording ('q') and replay ('Q'). This handler only runs
+            // in Normal mode (Insert mode input bypasses the state machine
+            // entirely - see `handle_insert_mode_input`), so these always
+            // mean "toggle recording" / "replay macro" here; dispatched as
+            // plain commands so `execute_command_any_mode` does the work.
+            (KeyCode::Char('q'), false) => {
+                HandlerResult::Execute(Cow::Borrowed(CMD_TOGGLE_MACRO_RECORDING))
+            }
+            (KeyCode::Char('Q'), _) => HandlerResult::Execute(Cow::Borrowed(CMD_REPLAY_MACRO)),
+
             // Count prefix - digits 1-9 start a count
             (KeyCode::Char(c @ '1'..='9'), false) => {
                 let count = c

@@ -351,8 +351,10 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
         ('*', _, false) => Some(CMD_SEARCH_WORD),
 
         // Selection manipulation (no Alt)
-        ('s', false, false) => Some(CMD_SELECT_REGEX),
-        ('S', _, false) => Some(CMD_SPLIT_SELECTION),
+        //
+        // 's'/'S' (select_regex/split_selection) are NOT mapped here: they
+        // open the regex-selection prompt (`RegexPromptPending`) rather than
+        // executing immediately, handled by a dedicated `base.rs` arm.
         ('&', _, false) => Some(CMD_ALIGN_SELECTIONS),
         ('_', _, false) => Some(CMD_TRIM_SELECTIONS),
         ('C', _, false) => Some(CMD_COPY_SELECTION_NEXT),

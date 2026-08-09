@@ -104,6 +104,15 @@ pub struct CommandLinePending {
     pub buffer: String,
 }
 
+/// Accumulating an `s`/`S` regex-selection prompt buffer
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegexPromptPending {
+    /// Which command (`s` or `S`) this prompt was opened for
+    pub kind: super::input_state::RegexPromptKind,
+    /// Buffer contents typed after the leading 's'/'S'
+    pub buffer: String,
+}
+
 /// Building a count prefix (digits 1-9, then 0-9)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CountPending {
@@ -142,6 +151,7 @@ impl private::Sealed for ReplaceCharPending {}
 impl private::Sealed for RegisterPending {}
 impl private::Sealed for RegisterOpPending {}
 impl private::Sealed for CommandLinePending {}
+impl private::Sealed for RegexPromptPending {}
 impl private::Sealed for CountPending {}
 impl private::Sealed for UnmatchedPrevPending {}
 impl private::Sealed for UnmatchedNextPending {}
@@ -241,6 +251,12 @@ impl HandlerState for RegisterOpPending {
 impl HandlerState for CommandLinePending {
     fn state_name() -> &'static str {
         "COMMAND_LINE_PENDING"
+    }
+}
+
+impl HandlerState for RegexPromptPending {
+    fn state_name() -> &'static str {
+        "REGEX_PROMPT_PENDING"
     }
 }
 

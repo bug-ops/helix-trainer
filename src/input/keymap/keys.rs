@@ -310,10 +310,15 @@ mod tests {
         );
     }
 
-    /// Total-function gate (R2): every one of the registry's 86 real key
+    /// Total-function gate (R2): every one of the registry's 84 real key
     /// strings must tokenize into tokens that each round-trip through
     /// `parse_helix_key_string`, so the tokenizer and the parser can never
     /// silently drift apart.
+    ///
+    /// Was 86 before `select_regex`/`split_selection` (`s`/`S`) were pulled
+    /// out of the registry — their handlers take a `pattern` argument that
+    /// doesn't fit the registry's fixed `CommandHandler` signature, so they
+    /// dispatch directly instead of through a registered entry.
     #[test]
     fn tokenizes_all_registry_keys_into_reparsable_tokens() {
         let registry = normal_registry();
@@ -329,6 +334,6 @@ mod tests {
                 );
             }
         }
-        assert!(checked >= 86);
+        assert!(checked >= 84);
     }
 }

@@ -10,7 +10,11 @@ pub enum Category {
     Movement,
     /// Editing commands (d, c, J, etc.)
     Editing,
-    /// Selection commands (x, X, %, ;, v, s, S, C, K, etc.)
+    /// Selection commands (x, X, %, ;, v, C, K, etc.). `s`/`S` (regex
+    /// select/split) are conceptually part of this category but are not
+    /// registered here - they take a pattern argument the registry's
+    /// fixed `CommandHandler` signature can't carry, so they're dispatched
+    /// directly in `execute_normal_mode_command_internal` instead.
     Selection,
     /// Clipboard commands (y, p, P)
     Clipboard,

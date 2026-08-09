@@ -304,6 +304,26 @@ pub(super) fn execute_normal_mode_command_internal(
         return Ok(());
     }
 
+    // Regex-selection commands ("s <pattern>" / "S <pattern>"), assembled
+    // atomically by `RegexPromptPending`. Splitting only the leading space
+    // (not `split(' ')`) since patterns can themselves contain spaces. The
+    // `s`/`S` prefix alone (no space) cannot collide with the
+    // `cmd.len() == 2` f/t/r/F/T block above. Bypasses the registry (whose
+    // `CommandHandler` type cannot carry a pattern argument), the same way
+    // register-scoped ops and `:`-command-line invocations do above.
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_SELECT_REGEX)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return selection::select_regex(sim, pattern);
+    }
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_SPLIT_SELECTION)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return selection::split_selection(sim, pattern);
+    }
+
     registry.execute(sim, cmd)?;
 
     Ok(())
@@ -335,6 +355,38 @@ pub(super) fn execute_command_any_mode(
 ) -> Result<(), UserError> {
     if cmd == CMD_REPEAT {
         return sim.execute_repeat();
+    }
+
+    // `q`/`Q` only mean "toggle macro recording" / "replay macro" while in
+    // Normal mode. The early return sits above the `match old_sim` below
+    // (which is what would otherwise tell us the mode), so it tests the
+    // mode itself. In Insert mode, both fall through unhandled here and are
+    // inserted as literal characters by the Insert arm further down - this
+    // is how a single "q"/"Q" command string serves both the live Normal-mode
+    // keypress (routed here via `base.rs`) and literal Insert-mode typing
+    // (routed here via `handle_insert_mode_input`, which never touches
+    // `base.rs`).
+    if cmd == CMD_TOGGLE_MACRO_RECORDING && matches!(sim, AnyModeSimulator::Normal(_)) {
+        if let AnyModeSimulator::Normal(normal_sim) = sim {
+            normal_sim.toggle_macro_recording();
+        }
+        return Ok(());
+    }
+
+    if cmd == CMD_REPLAY_MACRO
+        && let AnyModeSimulator::Normal(normal_sim) = sim
+    {
+        // `Q` while recording is a no-op, not a replay: the recording tap
+        // below is skipped while `execute_macro_replay` sets `is_replaying`,
+        // so replayed effects would apply to the document while silently
+        // NOT being captured into the macro currently being recorded - a
+        // training tool producing a macro that doesn't match what the user
+        // watched happen on screen. See `macro_recorder.rs` module docs.
+        if normal_sim.is_recording_macro() {
+            return Ok(());
+        }
+        return sim.execute_macro_replay();
+        // Insert mode: falls through, 'Q' is inserted as literal text.
     }
 
     let placeholder = AnyModeSimulator::Normal(HelixSimulator::new(String::new()));
@@ -407,6 +459,17 @@ pub(super) fn execute_command_any_mode(
 
     // Put the new simulator back
     *sim = new_sim;
+
+    // Single tap covering all three dispatch arms above (Normal, Insert,
+    // and the insert-mode ':' rejection). Only successful commands are
+    // recorded - a macro is a record of what actually happened, and
+    // replaying a command that failed would reproduce the failure at best.
+    // `record_macro_command` is itself a no-op unless recording is active
+    // and this isn't itself part of a replay.
+    if result.is_ok() {
+        sim.record_macro_command(cmd);
+    }
+
     result
 }
 
@@ -722,6 +785,68 @@ mod tests {
             assert!(execute_normal_mode_command_internal(&mut sim, "\"é").is_err());
             // Too long: register + op + trailing char.
             assert!(execute_normal_mode_command_internal(&mut sim, "\"aay").is_err());
+        }
+    }
+
+    // Regex-selection ("s <pattern>" / "S <pattern>") dispatch tests
+    mod regex_selection_dispatch_tests {
+        use super::*;
+        use crate::helix::simulator::{HelixSimulator, NormalMode};
+        use helix_core::Selection;
+
+        #[test]
+        fn dispatches_select_regex() {
+            let mut sim: HelixSimulator<NormalMode> =
+                HelixSimulator::new("foo bar foo".to_string());
+            sim.selection = Selection::single(0, 11);
+
+            execute_normal_mode_command_internal(&mut sim, "s foo").unwrap();
+
+            assert_eq!(sim.selection.len(), 2);
+        }
+
+        #[test]
+        fn dispatches_split_selection() {
+            let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("a,b,c".to_string());
+            sim.selection = Selection::single(0, 5);
+
+            execute_normal_mode_command_internal(&mut sim, "S ,").unwrap();
+
+            assert_eq!(sim.selection.len(), 3);
+        }
+
+        /// Pattern containing a literal space must survive intact - this is
+        /// exactly why dispatch splits only the leading space rather than
+        /// using `split(' ')` or `split_whitespace()`.
+        #[test]
+        fn pattern_with_space_is_preserved() {
+            let mut sim: HelixSimulator<NormalMode> =
+                HelixSimulator::new("foo bar foo bar".to_string());
+            sim.selection = Selection::single(0, 15);
+
+            execute_normal_mode_command_internal(&mut sim, "s foo bar").unwrap();
+
+            assert_eq!(sim.selection.len(), 2);
+        }
+
+        #[test]
+        fn invalid_regex_returns_err_not_panic() {
+            let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+            sim.selection = Selection::single(0, 5);
+
+            assert!(execute_normal_mode_command_internal(&mut sim, "s (").is_err());
+        }
+
+        /// A bare "s"/"S" (no trailing space - never emitted by
+        /// `RegexPromptPending`, which cancels on an empty buffer) falls
+        /// through to the registry, which no longer has these registered
+        /// (see `registry/definitions/selection.rs`), so it errors instead
+        /// of silently no-op'ing like the old stub.
+        #[test]
+        fn bare_s_without_pattern_is_unknown_command() {
+            let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+            assert!(execute_normal_mode_command_internal(&mut sim, "s").is_err());
+            assert!(execute_normal_mode_command_internal(&mut sim, "S").is_err());
         }
     }
 }

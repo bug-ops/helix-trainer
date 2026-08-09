@@ -1355,6 +1355,7 @@ dependencies = [
  "fsrs",
  "futures",
  "helix-core",
+ "helix-stdx",
  "proptest",
  "rand 0.10.2",
  "ratatui",

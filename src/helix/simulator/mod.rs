@@ -25,6 +25,7 @@ mod tests;
 
 use crate::game::EditorState;
 use crate::game::editor_state::{CursorPosition, Selection as GameSelection};
+use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
 use crate::security::UserError;
 use helix_core::{Rope, Selection, Transaction};
@@ -97,6 +98,13 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
 
     /// Repeat buffer for recording and replaying actions
     pub(super) repeat_buffer: RepeatBuffer,
+
+    /// Macro recorder for `q`/`Q` recording and replay
+    ///
+    /// Lives on the generic `HelixSimulator<M>`, not `NormalMode`-only, and
+    /// is threaded across every mode-transition struct literal so that
+    /// recording survives an Insert-mode excursion inside a macro.
+    pub(super) macro_recorder: MacroRecorder,
 
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
@@ -249,6 +257,16 @@ impl<M: EditorMode> HelixSimulator<M> {
         &self.repeat_buffer
     }
 
+    /// Whether a `q`/`Q` macro is currently being recorded
+    pub fn is_recording_macro(&self) -> bool {
+        self.macro_recorder.is_recording()
+    }
+
+    /// Toggle `q`/`Q` macro recording on/off
+    pub(super) fn toggle_macro_recording(&mut self) {
+        self.macro_recorder.toggle();
+    }
+
     /// Apply transaction and save history
     ///
     /// No-op transactions (empty change set) are skipped entirely: they
@@ -284,6 +302,7 @@ impl HelixSimulator<NormalMode> {
             search_state: SearchState::new(),
             view_state: ViewState::new(),
             find_state: FindState::new(),
+            macro_recorder: MacroRecorder::new(),
             _mode: PhantomData,
         }
     }
@@ -326,6 +345,7 @@ impl HelixSimulator<NormalMode> {
             search_state: SearchState::new(),
             view_state: ViewState::new(),
             find_state: FindState::new(),
+            macro_recorder: MacroRecorder::new(),
             _mode: PhantomData,
         }
     }
@@ -395,6 +415,7 @@ impl HelixSimulator<NormalMode> {
             search_state: SearchState::new(),
             view_state: ViewState::new(),
             find_state: FindState::new(),
+            macro_recorder: MacroRecorder::new(),
             _mode: PhantomData,
         }
     }
@@ -419,6 +440,7 @@ impl HelixSimulator<NormalMode> {
             search_state: self.search_state,
             view_state: self.view_state,
             find_state: self.find_state,
+            macro_recorder: self.macro_recorder,
             _mode: PhantomData,
         }
     }
@@ -460,6 +482,7 @@ impl HelixSimulator<InsertMode> {
             search_state: self.search_state,
             view_state: self.view_state,
             find_state: self.find_state,
+            macro_recorder: self.macro_recorder,
             _mode: PhantomData,
         }
     }
@@ -491,6 +514,23 @@ impl AnyModeSimulator {
     /// Check if currently in Insert mode
     pub fn is_insert_mode(&self) -> bool {
         matches!(self, Self::Insert(_))
+    }
+
+    /// Whether a `q`/`Q` macro is currently being recorded
+    pub fn is_recording_macro(&self) -> bool {
+        match self {
+            Self::Normal(sim) => sim.is_recording_macro(),
+            Self::Insert(sim) => sim.is_recording_macro(),
+        }
+    }
+
+    /// Record a successfully-executed command into the active macro, if
+    /// currently recording. No-op if not recording or mid-replay.
+    fn record_macro_command(&mut self, cmd: &str) {
+        match self {
+            Self::Normal(sim) => sim.macro_recorder.record(cmd),
+            Self::Insert(sim) => sim.macro_recorder.record(cmd),
+        }
     }
 
     /// Get current mode as enum
@@ -616,11 +656,19 @@ impl AnyModeSimulator {
             None => return Ok(()),
         };
 
-        // Set repeating flag and increment depth
-        if let Self::Normal(sim) = self {
-            sim.is_repeating = true;
-            sim.repeat_depth += 1;
-        }
+        // Set repeating flag and increment depth, capturing the prior value
+        // of `is_repeating` so it can be restored (not just cleared) below.
+        // Only reachable here from the Normal arm - Insert already returned
+        // above.
+        let prior_is_repeating = match self {
+            Self::Normal(sim) => {
+                let prior = sim.is_repeating;
+                sim.is_repeating = true;
+                sim.repeat_depth += 1;
+                prior
+            }
+            Self::Insert(_) => unreachable!("Insert mode returns Ok(()) above"),
+        };
 
         // Execute action
         let result = match &action {
@@ -671,10 +719,59 @@ impl AnyModeSimulator {
             }
         };
 
-        // Reset repeating flag and depth
-        if let Self::Normal(sim) = self {
-            sim.is_repeating = false;
-            sim.repeat_depth -= 1;
+        // Restore the repeating flag and depth unconditionally, on whichever
+        // mode replay ended in - unlike `.`, a macro replay containing an
+        // insert excursion with no trailing Escape can end in Insert mode.
+        // Restoring (not clearing) `is_repeating` matters for nested replay:
+        // clearing it would drop the outer replay's flag. `saturating_sub`
+        // also avoids a debug-build underflow panic if depth is ever 0 here.
+        match self {
+            Self::Normal(sim) => {
+                sim.is_repeating = prior_is_repeating;
+                sim.repeat_depth = sim.repeat_depth.saturating_sub(1);
+            }
+            Self::Insert(sim) => {
+                sim.is_repeating = prior_is_repeating;
+                sim.repeat_depth = sim.repeat_depth.saturating_sub(1);
+            }
+        }
+
+        result
+    }
+
+    /// Execute the macro replay (`Q`) command
+    ///
+    /// Replays the stored macro by feeding each recorded command string back
+    /// through `execute_command_any_mode` - the same dispatch path as live
+    /// input, so replay never duplicates dispatch logic. No-op if nothing is
+    /// stored, if already inside a replay (prevents runaway recursion), or
+    /// if the replay-depth budget is exhausted. Only callable from Normal
+    /// mode - callers must check this first.
+    pub(super) fn execute_macro_replay(&mut self) -> Result<(), UserError> {
+        let commands = match self {
+            Self::Normal(sim) => {
+                if !sim.macro_recorder.begin_replay() {
+                    return Ok(());
+                }
+                sim.macro_recorder.stored().to_vec()
+            }
+            Self::Insert(_) => return Ok(()),
+        };
+
+        let mut result = Ok(());
+        for cmd in &commands {
+            result = commands::execute_command_any_mode(self, cmd);
+            if result.is_err() {
+                break;
+            }
+        }
+
+        // Replay may have ended in either mode (e.g. a stored macro that
+        // enters Insert with no trailing Escape), so end_replay must run
+        // regardless of self's current variant.
+        match self {
+            Self::Normal(sim) => sim.macro_recorder.end_replay(),
+            Self::Insert(sim) => sim.macro_recorder.end_replay(),
         }
 
         result

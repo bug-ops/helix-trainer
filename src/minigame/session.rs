@@ -148,6 +148,11 @@ impl ActiveMiniScenario {
     pub fn is_insert_mode(&self) -> bool {
         self.simulator.is_insert_mode()
     }
+
+    /// Check if a `q`/`Q` macro is currently being recorded
+    pub fn is_recording_macro(&self) -> bool {
+        self.simulator.is_recording_macro()
+    }
 }
 
 // Implement PlayableScenario trait for ActiveMiniScenario
@@ -873,6 +878,14 @@ impl MiniGameSession {
         self.current
             .as_ref()
             .map(|s| s.is_insert_mode())
+            .unwrap_or(false)
+    }
+
+    /// Check if a `q`/`Q` macro is currently being recorded
+    pub fn is_recording_macro(&self) -> bool {
+        self.current
+            .as_ref()
+            .map(|s| s.is_recording_macro())
             .unwrap_or(false)
     }
 

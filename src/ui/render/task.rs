@@ -223,8 +223,10 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         }
 
         // Show key history popup if visible
+        // Reserve space for the Stats + Instructions bars (3 + 3) plus the
+        // screen's outer margin(1) so the popup never overlaps them.
         if state.ui.show_key_history {
-            render_key_history_popup(frame, task_data.key_history.keys());
+            render_key_history_popup(frame, task_data.key_history.keys(), 7);
         }
 
         // Show success message if scenario just completed

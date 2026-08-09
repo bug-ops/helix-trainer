@@ -54,6 +54,12 @@ pub struct ActiveMiniScenario {
 
     /// Actions taken so far
     actions: Vec<String>,
+
+    /// When the current pause span began, if paused
+    paused_at: Option<Instant>,
+
+    /// Total duration accumulated across all completed pause spans
+    total_paused: Duration,
 }
 
 impl ActiveMiniScenario {
@@ -73,6 +79,8 @@ impl ActiveMiniScenario {
             started_at: Instant::now(),
             time_limit,
             actions: Vec::new(),
+            paused_at: None,
+            total_paused: Duration::ZERO,
         })
     }
 
@@ -81,9 +89,32 @@ impl ActiveMiniScenario {
         self.simulator.matches_snapshot(&self.target_snapshot)
     }
 
-    /// Get elapsed time since scenario started
+    /// Freeze the countdown timer
+    ///
+    /// Idempotent: calling this while already paused has no effect.
+    pub fn pause(&mut self) {
+        if self.paused_at.is_none() {
+            self.paused_at = Some(Instant::now());
+        }
+    }
+
+    /// Resume the countdown timer, accumulating the just-finished pause span
+    ///
+    /// Idempotent: calling this while not paused has no effect.
+    pub fn resume(&mut self) {
+        if let Some(paused_at) = self.paused_at.take() {
+            self.total_paused += paused_at.elapsed();
+        }
+    }
+
+    /// Get elapsed time since scenario started, excluding any paused duration
     pub fn elapsed(&self) -> Duration {
-        self.started_at.elapsed()
+        let paused = self.total_paused
+            + self
+                .paused_at
+                .map(|p| p.elapsed())
+                .unwrap_or(Duration::ZERO);
+        self.started_at.elapsed().saturating_sub(paused)
     }
 
     /// Get remaining time before timeout
@@ -154,7 +185,7 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
     }
 
     fn elapsed(&self) -> std::time::Duration {
-        self.started_at.elapsed()
+        ActiveMiniScenario::elapsed(self)
     }
 
     fn all_cursors(&self) -> Vec<(usize, usize)> {
@@ -649,6 +680,9 @@ impl MiniGameSession {
     pub fn pause(&mut self) {
         if self.state.is_playing() {
             self.state = MiniGameState::Paused;
+            if let Some(ref mut current) = self.current {
+                current.pause();
+            }
         }
     }
 
@@ -667,6 +701,9 @@ impl MiniGameSession {
     pub fn resume(&mut self) {
         if self.state.is_paused() {
             self.state = MiniGameState::Playing;
+            if let Some(ref mut current) = self.current {
+                current.resume();
+            }
         }
     }
 
@@ -1067,6 +1104,108 @@ mod tests {
 
         session.pause();
         assert!(session.state.is_paused());
+
+        session.resume();
+        assert!(session.state.is_playing());
+    }
+
+    #[test]
+    fn test_active_scenario_pause_freezes_elapsed_time() {
+        let scenario = create_test_scenario("s1", Difficulty::Beginner);
+        let mut active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+
+        let elapsed_before_pause = active.elapsed();
+        active.pause();
+
+        std::thread::sleep(Duration::from_millis(50));
+        let elapsed_while_paused = active.elapsed();
+
+        // Elapsed time must not advance while paused, even though real time passed.
+        assert!(
+            elapsed_while_paused < elapsed_before_pause + Duration::from_millis(20),
+            "elapsed grew while paused: before={elapsed_before_pause:?} during={elapsed_while_paused:?}"
+        );
+
+        active.resume();
+        std::thread::sleep(Duration::from_millis(30));
+        let elapsed_after_resume = active.elapsed();
+
+        // Once resumed, elapsed time should advance again.
+        assert!(
+            elapsed_after_resume > elapsed_while_paused,
+            "elapsed did not advance after resume: during={elapsed_while_paused:?} after={elapsed_after_resume:?}"
+        );
+    }
+
+    #[test]
+    fn test_active_scenario_repeated_pause_resume_accumulates_total_paused() {
+        let scenario = create_test_scenario("s1", Difficulty::Beginner);
+        let mut active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+
+        // First pause/resume cycle.
+        active.pause();
+        std::thread::sleep(Duration::from_millis(30));
+        active.resume();
+        let total_paused_after_first = active.total_paused;
+        assert!(total_paused_after_first >= Duration::from_millis(20));
+
+        // Second pause/resume cycle should add to the accumulated total, not reset it.
+        active.pause();
+        std::thread::sleep(Duration::from_millis(30));
+        active.resume();
+        let total_paused_after_second = active.total_paused;
+
+        assert!(
+            total_paused_after_second > total_paused_after_first,
+            "second pause cycle did not accumulate: first={total_paused_after_first:?} second={total_paused_after_second:?}"
+        );
+    }
+
+    #[test]
+    fn test_active_scenario_pause_resume_idempotent() {
+        let scenario = create_test_scenario("s1", Difficulty::Beginner);
+        let mut active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+
+        // Resuming without a prior pause is a no-op.
+        active.resume();
+        assert_eq!(active.total_paused, Duration::ZERO);
+        assert!(active.paused_at.is_none());
+
+        // Pausing twice in a row should not reset the paused_at anchor.
+        active.pause();
+        let paused_at_first = active.paused_at;
+        std::thread::sleep(Duration::from_millis(10));
+        active.pause();
+        assert_eq!(active.paused_at, paused_at_first);
+
+        active.resume();
+        assert!(active.total_paused >= Duration::from_millis(5));
+    }
+
+    #[test]
+    fn test_minigame_session_pause_resume_freezes_scenario_elapsed() {
+        let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.state = MiniGameState::Playing;
+        let _ = session.load_next_scenario();
+
+        session.pause();
+        assert!(session.state.is_paused());
+
+        let elapsed_at_pause = session
+            .current_scenario()
+            .expect("scenario should be active")
+            .elapsed();
+        std::thread::sleep(Duration::from_millis(40));
+
+        let elapsed_while_paused = session
+            .current_scenario()
+            .expect("scenario should still be active")
+            .elapsed();
+        assert!(
+            elapsed_while_paused < elapsed_at_pause + Duration::from_millis(20),
+            "session-level pause did not freeze scenario elapsed time"
+        );
 
         session.resume();
         assert!(session.state.is_playing());

@@ -100,6 +100,7 @@ pub(in crate::ui::state) fn handle_select_arcade_mode(
 ) -> Result<HandlerOutcome, UserError> {
     // Use shared session creation with FSRS tracker for weighted selection
     super::minigame::create_minigame_session(ctx.game, Some(&ctx.progress.performance_tracker));
+    ctx.ui.show_key_history = false;
 
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
         MiniGameData::default(),
@@ -139,6 +140,7 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
     let mut session = MiniGameSession::with_mode(Arc::new(scenarios), tracker_clone, mode);
     session.start(); // Begin countdown
     ctx.game.minigame_session = Some(session);
+    ctx.ui.show_key_history = false;
 
     // Create MiniGameData with mode info
     let minigame_data = MiniGameData {
@@ -273,6 +275,33 @@ mod tests {
         if let HandlerOutcome::Transition(screen) = outcome {
             assert!(matches!(*screen, TypedScreen::MiniGame(_)));
         }
+    }
+
+    #[test]
+    fn test_select_arcade_mode_hides_key_history() {
+        // Regression test for S1: this is a live dispatch path (unlike
+        // handle_start_minigame, which nothing emits), so it must reset the
+        // flag itself rather than relying on a caller to do it.
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        ui.show_key_history = true;
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        handle_select_arcade_mode(&mut ctx).unwrap();
+
+        assert!(!ctx.ui.show_key_history);
+    }
+
+    #[test]
+    fn test_launch_minigame_mode_hides_key_history() {
+        // Regression test for S1 on the second live dispatch path.
+        let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
+        ui.show_key_history = true;
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let mode = crate::minigame::MiniGameMode::default();
+        handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+
+        assert!(!ctx.ui.show_key_history);
     }
 
     #[test]

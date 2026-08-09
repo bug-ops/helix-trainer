@@ -60,6 +60,7 @@ pub(in crate::ui::state) fn handle_start_minigame(
 ) -> Result<HandlerOutcome, UserError> {
     // Pass performance tracker for FSRS-weighted scenario selection
     create_minigame_session(ctx.game, Some(&ctx.progress.performance_tracker));
+    ctx.ui.show_key_history = false;
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
         MiniGameData::default(),
     ))))
@@ -108,6 +109,9 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
     if let TypedScreen::MiniGame(ref mut data) = state.screen {
         data.add_key_to_history(format_key_for_display(command));
     }
+
+    // Show key history popup after first keypress (reset on scenario transitions)
+    state.ui.show_key_history = true;
 
     // Snapshot quest completion status before updates
     let was_completed = super::snapshot_quest_completion(state);
@@ -194,14 +198,10 @@ pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
     command: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
-    // Get minigame data for input state machine
-    let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
+    // Only handle if we're on the MiniGame screen
+    if !matches!(state.screen, TypedScreen::MiniGame(_)) {
         return Ok(());
-    };
-
-    // Add key to history for display
-    let display_key = format_key_for_display(&command);
-    minigame_data.add_key_to_history(display_key);
+    }
 
     // Check if we're in insert mode
     let is_insert_mode = state
@@ -220,7 +220,6 @@ pub(in crate::ui::state) fn handle_minigame_command(
     // Convert the command string to a KeyEvent for the state machine
     let key_event = command_to_key_event(&command);
 
-    // Need to re-borrow minigame_data after getting is_insert_mode
     let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
         return Ok(());
     };
@@ -264,12 +263,18 @@ pub(in crate::ui::state) fn handle_minigame_scenario_complete(
 
 /// Handle advancing to next scenario (after transition delay)
 pub(in crate::ui::state) fn handle_minigame_next_scenario(
-    ctx: &mut HandlerContext<'_>,
+    state: &mut AppState,
 ) -> Result<HandlerOutcome, UserError> {
-    if let Some(ref mut session) = ctx.game.minigame_session
+    if let Some(ref mut session) = state.game.minigame_session
         && let Err(e) = session.complete_transition()
     {
         tracing::warn!("Failed to load next mini-game scenario: {:?}", e);
+    }
+    // Hide the key history popup and clear its buffered keys so the previous
+    // scenario's keys don't leak into the new scenario's display
+    state.ui.show_key_history = false;
+    if let TypedScreen::MiniGame(ref mut data) = state.screen {
+        data.clear_key_history();
     }
     Ok(HandlerOutcome::Stay)
 }
@@ -414,6 +419,72 @@ mod tests {
 
         if let Some(ref session) = state.game.minigame_session {
             assert!(session.state().is_countdown());
+        }
+    }
+
+    #[test]
+    fn test_start_minigame_hides_key_history() {
+        let mut state = create_test_state();
+        // Default UIState starts with show_key_history true; starting a session
+        // must reset it so a stale popup from a previous session isn't shown.
+        state.ui.show_key_history = true;
+
+        start_minigame(&mut state);
+
+        assert!(!state.ui.show_key_history);
+    }
+
+    #[test]
+    fn test_execute_minigame_command_shows_key_history() {
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+        state.ui.show_key_history = false;
+
+        // Transition to playing
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        let _ = execute_minigame_command(&mut state, "h");
+
+        assert!(
+            state.ui.show_key_history,
+            "first keypress should reveal the key history popup"
+        );
+    }
+
+    #[test]
+    fn test_handle_minigame_next_scenario_hides_key_history() {
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+
+        // Transition to playing and simulate a keypress that revealed the popup
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+            session.advance_to_next();
+        }
+        state.ui.show_key_history = true;
+        if let TypedScreen::MiniGame(ref mut data) = state.screen {
+            data.add_key_to_history("h".to_string());
+        }
+
+        handle_minigame_next_scenario(&mut state).unwrap();
+
+        assert!(
+            !state.ui.show_key_history,
+            "advancing to the next scenario should hide the stale key history popup"
+        );
+        if let TypedScreen::MiniGame(ref data) = state.screen {
+            assert!(
+                data.key_history.is_empty(),
+                "advancing to the next scenario should clear the previous scenario's buffered keys"
+            );
+        } else {
+            panic!("expected MiniGame screen");
         }
     }
 
@@ -789,6 +860,36 @@ mod tests {
     }
 
     #[test]
+    fn test_handle_minigame_command_pushes_key_history_once_per_keypress() {
+        use std::borrow::Cow;
+
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+
+        // Transition to playing
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        // Regression test for S3: handle_minigame_command used to push to key
+        // history itself AND call execute_minigame_command (which also pushes),
+        // double-counting every resolved keystroke.
+        let _ = handle_minigame_command(&mut state, Cow::Borrowed("j"));
+
+        if let TypedScreen::MiniGame(ref data) = state.screen {
+            assert_eq!(
+                data.key_history.len(),
+                1,
+                "a single resolved keypress must add exactly one history entry"
+            );
+        } else {
+            panic!("expected MiniGame screen");
+        }
+    }
+
+    #[test]
     fn test_handle_minigame_command_no_session() {
         use std::borrow::Cow;
 
@@ -887,13 +988,7 @@ mod tests {
             session.advance_to_next();
         }
 
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-        let outcome = handle_minigame_next_scenario(&mut ctx).unwrap();
+        let outcome = handle_minigame_next_scenario(&mut state).unwrap();
 
         assert!(matches!(outcome, HandlerOutcome::Stay));
     }

@@ -18,6 +18,7 @@
 //! - State transitions are testable and reproducible
 //! - UI rendering is pure (no side effects)
 
+use crate::async_state::SaveRequest;
 use crate::config::{Difficulty, Scenario, ScenarioCategory, SortMode};
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
@@ -27,6 +28,7 @@ use crate::time::Clock;
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
 
 // Message handlers in separate modules
 mod handlers;
@@ -437,24 +439,25 @@ impl AppState {
         self.game.scenario_collection.get_filtered_by_index(index)
     }
 
-    /// Save profile with debouncing (only if enough time has passed)
-    ///
-    /// # Errors
-    ///
-    /// Returns error if save operation fails
-    // NOTE: Debounce saves to reduce I/O overhead (5-second delay)
-    // OPTIMIZE: Performance audit suggested this optimization (50-80% I/O reduction)
-    pub fn save_profile_debounced(&mut self) -> Result<(), crate::gamification::GamificationError> {
-        self.progress.save_debounced()
+    /// Wire up the channel used to dispatch mid-session profile saves to
+    /// the serialized save writer, off the event-loop thread. See
+    /// [`ProgressState::set_save_channel`].
+    pub fn set_save_channel(&mut self, tx: mpsc::Sender<SaveRequest>) {
+        self.progress.set_save_channel(tx);
     }
 
-    /// Force immediate save (for level-up, achievements, exit)
-    ///
-    /// # Errors
-    ///
-    /// Returns error if save operation fails
-    pub fn save_profile_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
-        self.progress.save_immediate()
+    /// Drop this instance's clone of the save channel. See
+    /// [`ProgressState::close_save_channel`] — call this on the exit path
+    /// before awaiting the save writer's drain.
+    pub fn close_save_channel(&mut self) {
+        self.progress.close_save_channel();
+    }
+
+    /// Prepare the application's exit-time save. See
+    /// [`ProgressState::prepare_final_save_request`] for the ordering
+    /// guarantee this depends on the caller upholding.
+    pub fn prepare_final_save_request(&mut self) -> SaveRequest {
+        self.progress.prepare_final_save_request()
     }
 }
 

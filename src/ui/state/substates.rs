@@ -3,6 +3,7 @@
 //! This module defines focused sub-structures that group related fields
 //! from AppState, improving code organization and maintainability.
 
+use crate::async_state::SaveRequest;
 use crate::config::{AppConfig, Difficulty, ScenarioCategory, ScenarioCollection, SortMode};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
@@ -13,6 +14,7 @@ use crate::time::Clock;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::mpsc;
 
 use super::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 use crate::ui::notification::NotificationQueue;
@@ -188,6 +190,18 @@ pub struct ProgressState {
     /// Reassigning the field directly after construction would not re-point those fields
     /// and would silently reintroduce clock drift between them.
     clock: Arc<dyn Clock>,
+
+    /// Channel to the serialized save writer (see
+    /// [`crate::data_loader::spawn_save_writer`]), used to dispatch profile
+    /// saves off the event-loop thread.
+    ///
+    /// `None` (the default) makes [`ProgressState::save_immediate`] and
+    /// [`ProgressState::save_debounced`] fall back to a synchronous save —
+    /// this is what every test fixture gets, since dispatching to a writer
+    /// task without one running to receive the request would be pointless.
+    /// The real application wires this up via
+    /// [`ProgressState::set_save_channel`] during startup.
+    save_tx: Option<mpsc::Sender<SaveRequest>>,
 }
 
 impl ProgressState {
@@ -234,6 +248,7 @@ impl ProgressState {
             last_save_time: None,
             sound_manager,
             clock,
+            save_tx: None,
         }
     }
 
@@ -253,6 +268,32 @@ impl ProgressState {
         self.clock.clone()
     }
 
+    /// Wire up the channel used to dispatch profile saves to the serialized
+    /// save writer (see [`crate::data_loader::spawn_save_writer`]), off the
+    /// event-loop thread.
+    ///
+    /// Once set, [`ProgressState::save_immediate`] and
+    /// [`ProgressState::save_debounced`] hand the write off to the writer
+    /// task instead of running it inline, and learn the outcome later via
+    /// [`crate::async_state::DataLoadMessage::ProfileSaved`] /
+    /// [`crate::async_state::DataLoadMessage::ProfileSaveError`].
+    pub fn set_save_channel(&mut self, tx: mpsc::Sender<SaveRequest>) {
+        self.save_tx = Some(tx);
+    }
+
+    /// Drop this instance's clone of the save channel, reverting
+    /// [`ProgressState::save_immediate`]/[`ProgressState::save_debounced`]
+    /// to their synchronous fallback.
+    ///
+    /// The serialized save writer's receive loop only exits once every
+    /// clone of its sender is dropped — including this one. Call this
+    /// explicitly on the exit path (rather than relying solely on dropping
+    /// the whole `ProgressState`/`AppState`) so that invariant holds
+    /// regardless of how long the surrounding value happens to stay alive.
+    pub fn close_save_channel(&mut self) {
+        self.save_tx = None;
+    }
+
     /// Check if enough time has passed since last save
     pub fn should_save(&self) -> bool {
         match self.last_save_time {
@@ -266,6 +307,26 @@ impl ProgressState {
         self.last_save_time = Some(Instant::now());
     }
 
+    /// Mark the profile as needing a save again.
+    ///
+    /// Used when an off-thread save dispatched by
+    /// [`ProgressState::save_immediate`] later turns out to have failed
+    /// (`DataLoadMessage::ProfileSaveError`): the optimistic
+    /// [`ProgressState::mark_saved`] call made at dispatch time was wrong,
+    /// so the debounce gate must be reset — otherwise the next attempt
+    /// would be skipped for up to [`PROFILE_SAVE_DEBOUNCE`] as if the
+    /// failed write had actually succeeded.
+    pub fn mark_unsaved(&mut self) {
+        self.last_save_time = None;
+    }
+
+    /// Synchronously write the profile to disk, bypassing off-thread dispatch.
+    fn save_sync(&mut self) -> Result<(), crate::gamification::GamificationError> {
+        self.storage.save(&self.profile)?;
+        self.mark_saved();
+        Ok(())
+    }
+
     /// Sync FSRS performance data from the live tracker and persist the profile immediately.
     ///
     /// This is the single source of truth for saving progress: every call site that
@@ -273,14 +334,77 @@ impl ProgressState {
     /// [`ProgressState::save_debounced`]) rather than calling `storage.save` directly,
     /// otherwise `profile.performance_data` silently goes stale.
     ///
+    /// When a save channel has been wired up via
+    /// [`ProgressState::set_save_channel`] (the case for the real app, never
+    /// for test fixtures), the write is handed off to the serialized save
+    /// writer rather than performed inline — important because `fsync` can
+    /// take tens of milliseconds and this is called from the TUI
+    /// event-loop thread on every review answer, session completion, and
+    /// mini-game round. Routing every save through one writer (rather than
+    /// each spawning its own independent write task) also guarantees
+    /// writes apply in the order they were requested, so a save can never
+    /// be raced by, and lose to, an earlier one still in flight.
+    ///
+    /// If the writer has shut down, this falls back to a synchronous write
+    /// so a save is never silently dropped; the same fallback applies when
+    /// no channel is configured at all (mainly tests), so callers there
+    /// still observe the write completing before this method returns. If
+    /// the writer's queue is merely full (pathologically behind), this
+    /// save is skipped rather than written inline — see the comment on the
+    /// `Full` arm below for why an inline write there would be actively
+    /// harmful, not just redundant.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the save operation fails.
+    /// Returns an error if the save could not be dispatched or (on the
+    /// synchronous fallback path) failed outright — the async path's real
+    /// write outcome otherwise arrives later as a
+    /// [`crate::async_state::DataLoadMessage`].
     pub fn save_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
         self.profile.performance_data = self.performance_tracker.get_stats_clone();
-        self.storage.save(&self.profile)?;
-        self.mark_saved();
-        Ok(())
+
+        let Some(tx) = &self.save_tx else {
+            return self.save_sync();
+        };
+
+        let request = SaveRequest {
+            storage: self.storage.clone(),
+            profile: self.profile.clone(),
+        };
+
+        match tx.try_send(request) {
+            Ok(()) => {
+                // Mark saved optimistically so a debounced save requested
+                // while this one is still queued/in flight doesn't enqueue
+                // a redundant write; the real outcome is confirmed once the
+                // writer completes it and sends
+                // `ProfileSaved`/`ProfileSaveError` back (the latter also
+                // calls `mark_unsaved` to undo this).
+                self.mark_saved();
+                Ok(())
+            }
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                // The writer is pathologically behind, with up to
+                // `PROFILE_SAVE_QUEUE_CAPACITY` older snapshots still
+                // queued ahead of this one. Writing inline here (as the
+                // `Closed` arm does) would race ahead of those — the
+                // writer would then replay the stale queued snapshots
+                // *over* this fresher one, exactly the unordered-write bug
+                // this whole serialized-writer design exists to prevent.
+                // Skipping is safe: the profile is cumulative in-memory
+                // state, and the exit path always enqueues its snapshot
+                // last regardless of debounce/queue state, so this data
+                // isn't lost — only deferred to the next save that
+                // successfully enqueues.
+                self.mark_unsaved();
+                Ok(())
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                // The writer task is gone: fall back to a synchronous
+                // write rather than silently losing this save.
+                self.save_sync()
+            }
+        }
     }
 
     /// Save the profile only if the debounce interval has elapsed since the last save.
@@ -296,6 +420,25 @@ impl ProgressState {
             return Ok(());
         }
         self.save_immediate()
+    }
+
+    /// Sync FSRS data and snapshot the profile for the application's
+    /// exit-time save, without performing any I/O.
+    ///
+    /// The caller (`main`) must enqueue the returned [`SaveRequest`] as the
+    /// *last* item sent to the serialized save writer, then drop every
+    /// sender clone and await the writer's `JoinHandle` before the process
+    /// exits. Because the writer processes requests strictly in order, and
+    /// nothing enqueues further requests once the event loop has stopped,
+    /// this guarantees the final, most up-to-date snapshot is written last
+    /// — and so is never overwritten by an older mid-session save that was
+    /// still in flight when the app exited.
+    pub fn prepare_final_save_request(&mut self) -> SaveRequest {
+        self.profile.performance_data = self.performance_tracker.get_stats_clone();
+        SaveRequest {
+            storage: self.storage.clone(),
+            profile: self.profile.clone(),
+        }
     }
 }
 
@@ -647,5 +790,255 @@ mod tests {
             &progress.performance_tracker.get_stats_clone()
         ));
         assert!(!persisted.performance_data.is_empty());
+    }
+
+    /// Regression test for #294: once a save channel is wired up,
+    /// `save_immediate` must not block the caller on the write/fsync — it
+    /// should return immediately and report the outcome later via
+    /// `DataLoadMessage::ProfileSaved`.
+    #[tokio::test]
+    async fn test_save_immediate_dispatches_off_thread_when_channel_configured() {
+        use crate::async_state::DataLoadMessage;
+        use crate::data_loader::spawn_save_writer;
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::with_path(&profile_path),
+        );
+        let (result_tx, mut result_rx) = mpsc::channel(4);
+        let (save_tx, writer_handle) = spawn_save_writer(result_tx);
+        progress.set_save_channel(save_tx.clone());
+        progress.profile.add_xp(100);
+
+        progress.save_immediate().unwrap();
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(5), result_rx.recv())
+            .await
+            .expect("save result should arrive")
+            .expect("channel should not be closed");
+        assert!(matches!(msg, DataLoadMessage::ProfileSaved));
+
+        let expected_xp = progress.profile.total_xp;
+        // Drop every sender clone — including the one `progress` holds
+        // internally — so the writer's receive loop sees the channel close
+        // and its `JoinHandle` actually resolves.
+        drop(save_tx);
+        drop(progress);
+        writer_handle.await.unwrap();
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert_eq!(persisted.total_xp, expected_xp);
+    }
+
+    /// Regression test for review finding N1: when the writer's queue is
+    /// full, `save_immediate` must skip rather than fall back to an inline
+    /// synchronous write — an inline write there would race ahead of the
+    /// older snapshots still queued, which the writer would then apply
+    /// *after* it, silently reverting to stale data.
+    #[tokio::test]
+    async fn test_save_immediate_skips_inline_write_when_queue_is_full() {
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::with_path(&profile_path),
+        );
+
+        // No writer task drains this, and its capacity is 1, so the first
+        // dispatch fills it and the second is guaranteed to see `Full`.
+        let (save_tx, mut save_rx) = mpsc::channel::<SaveRequest>(1);
+        progress.set_save_channel(save_tx);
+
+        progress.profile.total_xp = 100;
+        progress.save_immediate().unwrap();
+        assert!(
+            !progress.should_save(),
+            "the first dispatch marks saved optimistically"
+        );
+
+        progress.profile.total_xp = 999;
+        progress.save_immediate().unwrap();
+
+        assert!(
+            progress.should_save(),
+            "a save skipped because the queue is full must re-dirty the profile"
+        );
+        assert!(
+            !profile_path.exists(),
+            "a skipped save must never write inline — that would race ahead of \
+             the older snapshot still sitting in the queue"
+        );
+
+        let queued = save_rx
+            .try_recv()
+            .expect("the first request must still be queued");
+        assert_eq!(
+            queued.profile.total_xp, 100,
+            "the queued snapshot must be the older one, not overwritten by the skipped save"
+        );
+    }
+
+    /// Regression test for #294: the debounce gate must still be respected
+    /// when saves are dispatched off-thread — a call within the debounce
+    /// window must not enqueue a second write.
+    #[tokio::test]
+    async fn test_save_debounced_skips_dispatch_within_window_when_channel_configured() {
+        use crate::data_loader::spawn_save_writer;
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::with_path(&profile_path),
+        );
+        let (result_tx, mut result_rx) = mpsc::channel(4);
+        let (save_tx, _writer_handle) = spawn_save_writer(result_tx);
+        progress.set_save_channel(save_tx);
+
+        progress.save_immediate().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), result_rx.recv())
+            .await
+            .expect("first save result should arrive")
+            .expect("channel should not be closed");
+
+        // Within the debounce window: should not dispatch another save.
+        progress.save_debounced().unwrap();
+        assert!(
+            matches!(result_rx.try_recv(), Err(mpsc::error::TryRecvError::Empty)),
+            "debounced call within the window must not dispatch a second save"
+        );
+    }
+
+    /// Regression test for critique finding B1: several `save_immediate`
+    /// calls made back-to-back (not gated by the debounce check
+    /// `save_debounced` uses) must be applied by the serialized save writer
+    /// strictly in the order they were requested, so the *last* call's data
+    /// always wins on disk. Before this fix, each call spawned its own
+    /// independent write task with no ordering guarantee between them, so
+    /// an earlier call could race ahead of (and overwrite) a later one.
+    #[tokio::test]
+    async fn test_save_immediate_calls_are_applied_in_request_order() {
+        use crate::async_state::DataLoadMessage;
+        use crate::data_loader::spawn_save_writer;
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::with_path(&profile_path),
+        );
+        let (result_tx, mut result_rx) = mpsc::channel(8);
+        let (save_tx, writer_handle) = spawn_save_writer(result_tx);
+        progress.set_save_channel(save_tx.clone());
+
+        const REQUESTED_XP_VALUES: [u64; 5] = [100, 150, 200, 250, 300];
+        for &xp in &REQUESTED_XP_VALUES {
+            progress.profile.total_xp = xp;
+            progress.save_immediate().unwrap();
+        }
+
+        for _ in REQUESTED_XP_VALUES {
+            let msg = tokio::time::timeout(std::time::Duration::from_secs(5), result_rx.recv())
+                .await
+                .expect("save result should arrive")
+                .expect("channel should not be closed");
+            assert!(
+                matches!(msg, DataLoadMessage::ProfileSaved),
+                "every save must succeed, got {msg:?}"
+            );
+        }
+
+        // Drop every sender clone — including the one `progress` holds
+        // internally — so the writer's receive loop sees the channel close
+        // and its `JoinHandle` actually resolves.
+        drop(save_tx);
+        drop(progress);
+        writer_handle.await.unwrap();
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert_eq!(
+            persisted.total_xp,
+            *REQUESTED_XP_VALUES.last().unwrap(),
+            "the last-requested save must be the one left on disk"
+        );
+    }
+
+    /// Regression test for critique finding B1's exit-ordering scenario:
+    /// [`ProgressState::prepare_final_save_request`] must produce a
+    /// snapshot that, once enqueued after an already-dispatched mid-session
+    /// save and drained, is the one left on disk — mirroring exactly what
+    /// `main` does around process exit.
+    #[tokio::test]
+    async fn test_final_save_request_wins_over_earlier_in_flight_save() {
+        use crate::async_state::DataLoadMessage;
+        use crate::data_loader::spawn_save_writer;
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::with_path(&profile_path),
+        );
+        let (result_tx, mut result_rx) = mpsc::channel(8);
+        let (save_tx, writer_handle) = spawn_save_writer(result_tx);
+        progress.set_save_channel(save_tx.clone());
+
+        // A mid-session save dispatched moments before exit (e.g. a
+        // review-session completion), still possibly in flight.
+        progress.profile.total_xp = 100;
+        progress.save_immediate().unwrap();
+
+        // More happens before the user quits.
+        progress.profile.total_xp = 999;
+
+        // The exit path: build the final snapshot, enqueue it last, drop
+        // every sender clone, and drain.
+        let final_request = progress.prepare_final_save_request();
+        save_tx.send(final_request).await.unwrap();
+        drop(save_tx);
+        drop(progress);
+        writer_handle.await.unwrap();
+
+        for _ in 0..2 {
+            let msg = tokio::time::timeout(std::time::Duration::from_secs(5), result_rx.recv())
+                .await
+                .expect("save result should arrive")
+                .expect("channel should not be closed");
+            assert!(matches!(msg, DataLoadMessage::ProfileSaved));
+        }
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert_eq!(
+            persisted.total_xp, 999,
+            "the exit-time snapshot must win over the earlier in-flight save"
+        );
     }
 }

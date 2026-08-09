@@ -6,11 +6,13 @@
 //! Scenarios are loaded from compile-time embedded data, while
 //! profiles are loaded from the user's config directory.
 
-use crate::async_state::DataLoadMessage;
+use crate::async_state::{DataLoadMessage, SaveRequest, SaveWriterOutcome};
 use crate::config::{Scenario, ScenarioLoader};
+use crate::constants::PROFILE_SAVE_QUEUE_CAPACITY;
 use crate::gamification::{ProfileStorage, QuestTemplateRegistry, UserProfile};
 use anyhow::Result;
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 /// Spawn background data loaders for scenarios, profile, and quest registry
 ///
@@ -68,6 +70,94 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
             tracing::warn!("Failed to send profile message: receiver dropped");
         }
     });
+}
+
+/// Spawn the single serialized profile-save writer.
+///
+/// Every profile save — mid-session (`ProgressState::save_immediate`/
+/// `save_debounced`) and the final exit-time save — is funneled through
+/// the returned sender rather than writing directly. The writer processes
+/// requests strictly one at a time, awaiting each write's completion
+/// before starting the next, so a later save can never be raced by (and
+/// lose to) an earlier one still in flight. Each write's outcome is
+/// reported back via `result_tx` as [`DataLoadMessage::ProfileSaved`] or
+/// [`DataLoadMessage::ProfileSaveError`].
+///
+/// The caller is responsible for draining on shutdown: drop every clone
+/// of the returned sender (closing the queue) and `.await` the returned
+/// [`JoinHandle`] so the process does not exit while a write is still
+/// queued or in progress. That `JoinHandle` resolves to a
+/// [`SaveWriterOutcome`] carrying the *last* processed save's outcome —
+/// `Ok(())` from `JoinHandle::await` only means the writer task didn't
+/// panic, not that the save actually succeeded, and nothing else drains
+/// `result_tx` once the caller has stopped polling it (as is the case once
+/// the application's event loop has exited), so this is the only place
+/// that outcome is still observable.
+///
+/// # Examples
+///
+/// ```no_run
+/// use helix_trainer::async_state::{SaveRequest, SaveWriterOutcome};
+/// use helix_trainer::data_loader::spawn_save_writer;
+/// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let (result_tx, _result_rx) = tokio::sync::mpsc::channel(32);
+///     let (save_tx, writer_handle) = spawn_save_writer(result_tx);
+///
+///     save_tx
+///         .send(SaveRequest {
+///             storage: ProfileStorage::with_path("/tmp/example-profile.json"),
+///             profile: UserProfile::new(),
+///         })
+///         .await
+///         .unwrap();
+///
+///     drop(save_tx);
+///     let outcome = writer_handle.await.unwrap();
+///     assert_eq!(outcome, SaveWriterOutcome::LastSaveSucceeded);
+/// }
+/// ```
+pub fn spawn_save_writer(
+    result_tx: mpsc::Sender<DataLoadMessage>,
+) -> (mpsc::Sender<SaveRequest>, JoinHandle<SaveWriterOutcome>) {
+    let (save_tx, mut save_rx) = mpsc::channel::<SaveRequest>(PROFILE_SAVE_QUEUE_CAPACITY);
+
+    let handle = tokio::spawn(async move {
+        let mut outcome = SaveWriterOutcome::NoRequestsProcessed;
+        while let Some(request) = save_rx.recv().await {
+            let SaveRequest { storage, profile } = request;
+            let result = tokio::task::spawn_blocking(move || storage.save(&profile)).await;
+            let (msg, latest_outcome) = match result {
+                Ok(Ok(())) => (
+                    DataLoadMessage::ProfileSaved,
+                    SaveWriterOutcome::LastSaveSucceeded,
+                ),
+                Ok(Err(e)) => {
+                    let error = e.to_string();
+                    (
+                        DataLoadMessage::ProfileSaveError(error.clone()),
+                        SaveWriterOutcome::LastSaveFailed(error),
+                    )
+                }
+                Err(join_err) => {
+                    let error = join_err.to_string();
+                    (
+                        DataLoadMessage::ProfileSaveError(error.clone()),
+                        SaveWriterOutcome::LastSaveFailed(error),
+                    )
+                }
+            };
+            outcome = latest_outcome;
+            if result_tx.send(msg).await.is_err() {
+                tracing::warn!("Failed to send profile save result: receiver dropped");
+            }
+        }
+        outcome
+    });
+
+    (save_tx, handle)
 }
 
 /// Async scenario loading from embedded data

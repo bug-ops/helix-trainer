@@ -4,23 +4,59 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use std::time::Duration;
 
 use helix_trainer::{
     async_state::DataLoadMessage,
     config::ScenarioCollection,
     gamification::{
-        Achievement, AchievementEngine, QuestGenerator, QuestTemplateRegistry, StreakManager,
-        UserProfile,
+        Achievement, AchievementEngine, LockStatus, QuestGenerator, QuestTemplateRegistry,
+        StreakManager, UserProfile,
     },
     learning::PerformanceTracker,
     ui::{AppState, Notification, NotificationType},
 };
+
+/// How long a data-loss-risk warning notification stays visible.
+///
+/// Longer than the default notification duration (3s) since these warn
+/// about possible silent data loss, not a routine gameplay event, and the
+/// user needs time to notice and act on it.
+const WARNING_NOTIFICATION_DURATION: Duration = Duration::from_secs(8);
 
 /// Check if daily quests should be refreshed
 ///
 /// Returns true if the current date differs from the last quest refresh date.
 pub fn should_refresh_quests(profile: &UserProfile, now: DateTime<Utc>) -> bool {
     now.date_naive() != profile.last_quest_refresh.date_naive()
+}
+
+/// Warn the user if another live instance already appears to be using this
+/// profile — two instances writing the same file independently means
+/// "last save wins" silently discards one side's progress.
+///
+/// Called for every path that establishes `state.progress.profile`
+/// (`ProfileReady` and `ProfileError`'s fallback), not just the happy
+/// path: the fallback case is the highest-stakes one, since a fresh
+/// fallback profile silently clobbering a genuinely live instance's real
+/// profile on the next save is exactly the scenario this warning exists
+/// to prevent.
+fn warn_if_other_instance_running(state: &mut AppState) {
+    if let LockStatus::OtherInstanceRunning(pid) = state.progress.storage.check_and_refresh_lock() {
+        tracing::warn!(
+            other_pid = pid,
+            "Another instance of helix-trainer appears to be running"
+        );
+        state.ui.notifications.push(Notification::with_duration(
+            NotificationType::Info {
+                message: format!(
+                    "Another instance (pid {pid}) appears to be running. \
+                     Progress may be overwritten if both instances save."
+                ),
+            },
+            WARNING_NOTIFICATION_DURATION,
+        ));
+    }
 }
 
 /// Handle messages from background data loaders
@@ -84,6 +120,8 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
             );
             state.progress.profile = updated_profile;
 
+            warn_if_other_instance_running(state);
+
             // Streak (and possibly quest history) may have just changed above;
             // surface any achievements that are now satisfied.
             let newly_unlocked = AchievementEngine::check_and_unlock(
@@ -111,6 +149,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
         DataLoadMessage::ProfileError { error, fallback } => {
             state.progress.profile = fallback;
             tracing::warn!("Profile load failed, using default: {}", error);
+            warn_if_other_instance_running(state);
         }
 
         DataLoadMessage::QuestRegistryReady(_registry) => {
@@ -128,6 +167,17 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
 
         DataLoadMessage::ProfileSaveError(err) => {
             tracing::error!("Failed to save profile: {}", err);
+            // The optimistic `mark_saved()` made when the save was
+            // dispatched was wrong: re-dirty so the next debounced or
+            // immediate save retries, instead of the debounce gate
+            // treating this failure as a successful save indefinitely.
+            state.progress.mark_unsaved();
+            state.ui.notifications.push(Notification::with_duration(
+                NotificationType::Info {
+                    message: format!("Failed to save progress: {err}. Will retry automatically."),
+                },
+                WARNING_NOTIFICATION_DURATION,
+            ));
         }
     }
 
@@ -298,6 +348,50 @@ mod tests {
         )));
     }
 
+    /// Regression test for #298: if another live process already holds the
+    /// PID lock for this profile, loading the profile must warn the user
+    /// instead of silently proceeding as if only one instance were running.
+    #[cfg(unix)]
+    #[test]
+    fn test_handle_profile_ready_warns_on_other_live_instance() {
+        let storage = test_profile_storage();
+        let lock_path = storage.path().with_file_name(format!(
+            "{}.lock",
+            storage.path().file_name().unwrap().to_string_lossy()
+        ));
+
+        let mut child = std::process::Command::new("sleep")
+            .arg("5")
+            .spawn()
+            .unwrap();
+        let other_pid = child.id();
+        std::fs::write(&lock_path, other_pid.to_string()).unwrap();
+
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            storage,
+            PerformanceTracker::new(),
+        );
+
+        let result = handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+
+        assert!(result.is_ok());
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                &n.notification_type,
+                NotificationType::Info { message } if message.contains(&other_pid.to_string())
+            )),
+            "expected a notification warning about the other running instance"
+        );
+    }
+
     #[test]
     fn test_handle_profile_error_uses_fallback() {
         let mut state = empty_test_app_state();
@@ -317,6 +411,55 @@ mod tests {
         assert_eq!(loaded_profile.total_xp, 100); // Fallback was used
     }
 
+    /// Regression test for a non-blocking finding in the #298 critique: the
+    /// `ProfileError` fallback arm is the highest-stakes multi-instance
+    /// case (a fresh fallback profile can clobber another live instance's
+    /// real profile on the next save), so it must warn too, not just the
+    /// `ProfileReady` happy path.
+    #[cfg(unix)]
+    #[test]
+    fn test_handle_profile_error_warns_on_other_live_instance() {
+        let storage = test_profile_storage();
+        let lock_path = storage.path().with_file_name(format!(
+            "{}.lock",
+            storage.path().file_name().unwrap().to_string_lossy()
+        ));
+
+        let mut child = std::process::Command::new("sleep")
+            .arg("5")
+            .spawn()
+            .unwrap();
+        let other_pid = child.id();
+        std::fs::write(&lock_path, other_pid.to_string()).unwrap();
+
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            storage,
+            PerformanceTracker::new(),
+        );
+
+        let result = handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileError {
+                error: "Corrupted file".to_string(),
+                fallback: UserProfile::new(),
+            },
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+
+        assert!(result.is_ok());
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                &n.notification_type,
+                NotificationType::Info { message } if message.contains(&other_pid.to_string())
+            )),
+            "expected a notification warning about the other running instance"
+        );
+    }
+
     #[test]
     fn test_handle_profile_saved() {
         let mut state = empty_test_app_state();
@@ -326,17 +469,35 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    /// Regression test for critique finding B2: a failed async save must
+    /// not be silently swallowed. Before this fix, `ProfileSaveError` was
+    /// only logged — the optimistic `mark_saved()` made at dispatch time
+    /// stood uncorrected, so the debounce gate treated the failed write as
+    /// a successful one, and the user had no way to know their progress
+    /// wasn't actually persisted.
     #[test]
     fn test_handle_profile_save_error() {
         let mut state = empty_test_app_state();
+        state.progress.mark_saved();
+        assert!(!state.progress.should_save());
 
         let result = handle_data_message(
             &mut state,
             DataLoadMessage::ProfileSaveError("Disk full".to_string()),
         );
 
-        // Should not panic, just log error
         assert!(result.is_ok());
+        assert!(
+            state.progress.should_save(),
+            "a failed save must re-dirty the profile so the next save retries"
+        );
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                &n.notification_type,
+                NotificationType::Info { message } if message.contains("Disk full")
+            )),
+            "a failed save must surface a user-facing notification"
+        );
     }
 
     #[test]

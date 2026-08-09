@@ -71,6 +71,32 @@ All modes feature:
 
 ### Pre-built binaries (recommended)
 
+#### Install script
+
+Downloads the right archive for your platform, verifies its SHA-256 checksum, and installs the binary:
+
+```bash
+# Linux/macOS — installs to ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/bug-ops/helix-trainer/main/install.sh | sh
+```
+
+```powershell
+# Windows — installs to %LOCALAPPDATA%\helix-trainer\bin
+irm https://raw.githubusercontent.com/bug-ops/helix-trainer/main/install.ps1 | iex
+```
+
+Pin a specific version or install directory:
+
+```bash
+./install.sh --version 0.5.12 --dir /usr/local/bin
+./install.sh --static   # Linux: static musl build, no audio feature
+```
+
+> [!TIP]
+> Review any install script before piping it into a shell. Read [`install.sh`](install.sh) / [`install.ps1`](install.ps1), or download and run it locally instead of piping from `curl`/`irm`.
+
+#### Manual download
+
 Download for your platform from [**Releases**](https://github.com/bug-ops/helix-trainer/releases/latest):
 
 | Platform | Architecture | Archive |

@@ -368,6 +368,34 @@ mod screen_render_tests {
     }
 
     #[test]
+    fn test_render_end_game_summary_screen_via_dispatch() {
+        use crate::config::ScenarioCategory;
+        use crate::ui::state::{EndGameSummaryData, NextStep};
+
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+        state.screen = TypedScreen::EndGameSummary(EndGameSummaryData {
+            scenarios_total: 1,
+            perfected: 1,
+            imperfect: 0,
+            total_completions: 1,
+            total_xp: 50,
+            level: 1,
+            command_success_rate: 1.0,
+            journey_days: 0,
+            commands_mastered: 0,
+            category_breakdown: vec![(ScenarioCategory::Movement, 1, 1)],
+            next_steps: vec![NextStep::ArcadeMode],
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    #[test]
     fn test_render_profile_screen() {
         let mut terminal = create_terminal();
         let mut state = create_test_app_state(vec![create_test_scenario()]);
@@ -1074,6 +1102,111 @@ mod results_tests {
                 super::super::render(f, &mut state);
             })
             .unwrap();
+    }
+
+    #[test]
+    fn test_render_results_screen_shows_curriculum_complete_hint() {
+        use ratatui::buffer::Buffer;
+
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+        state.progress.profile.scenario_history.record_completion(
+            &scenario.id,
+            100,
+            50,
+            chrono::Utc::now(),
+        );
+
+        let results_data = create_abandoned_results_data(scenario);
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+
+        let buffer: Buffer = terminal.backend().buffer().clone();
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(
+            text.contains("All scenarios complete"),
+            "expected the curriculum-complete hint to render, got: {text}"
+        );
+    }
+
+    /// Regression test for S2: the hint must not show when the curriculum is
+    /// complete but this scenario isn't the last one in the current filtered
+    /// list - `(n)` from here starts the next scenario, not the summary.
+    #[test]
+    fn test_render_results_screen_hides_hint_when_not_at_end_of_filtered_list() {
+        use ratatui::buffer::Buffer;
+
+        let mut terminal = create_terminal();
+        let scenario1 = create_completable_scenario();
+        let scenario2 = ScenarioBuilder::new()
+            .id("test_results_002")
+            .description("Second scenario")
+            .setup_content("line 1\nline 2\n")
+            .setup_cursor(1, 0)
+            .target_content("line 1\n")
+            .target_cursor(0, 0)
+            .hint("Use dd to delete the line")
+            .optimal_count(1)
+            .build();
+        let mut state = create_test_app_state(vec![scenario1.clone(), scenario2.clone()]);
+        state.progress.profile.scenario_history.record_completion(
+            &scenario1.id,
+            100,
+            50,
+            chrono::Utc::now(),
+        );
+        state.progress.profile.scenario_history.record_completion(
+            &scenario2.id,
+            100,
+            50,
+            chrono::Utc::now(),
+        );
+
+        // scenario_index Some(0) out of 2 filtered scenarios - not the last one.
+        let results_data = create_abandoned_results_data(scenario1);
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+
+        let buffer: Buffer = terminal.backend().buffer().clone();
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(
+            !text.contains("All scenarios complete"),
+            "hint must not show mid-list even when the curriculum is complete"
+        );
+    }
+
+    #[test]
+    fn test_render_results_screen_hides_curriculum_complete_hint_when_incomplete() {
+        use ratatui::buffer::Buffer;
+
+        let mut terminal = create_terminal();
+        let scenario = create_completable_scenario();
+        let mut state = create_test_app_state(vec![scenario.clone()]);
+        // No completion recorded - curriculum is not complete.
+
+        let results_data = create_abandoned_results_data(scenario);
+        state.screen = TypedScreen::Results(results_data);
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+
+        let buffer: Buffer = terminal.backend().buffer().clone();
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(!text.contains("All scenarios complete"));
     }
 
     #[test]

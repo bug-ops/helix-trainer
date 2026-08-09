@@ -5,6 +5,7 @@
 //! unrepresentable at compile time - you can't be on the Task screen without
 //! an active GameSession.
 
+use crate::config::ScenarioCategory;
 use crate::game::{Abandoned, Active, Completed, Feedback, GameSession};
 use crate::input::typestate::InputStateMachine;
 use crate::learning::ScenarioMastery;
@@ -96,6 +97,10 @@ pub enum TypedScreen {
 
     /// Mini-game mode (arcade-style training)
     MiniGame(MiniGameData),
+
+    /// Curriculum-completion summary, reached once every scenario has been
+    /// completed at least once
+    EndGameSummary(EndGameSummaryData),
 }
 
 impl TypedScreen {
@@ -112,6 +117,7 @@ impl TypedScreen {
             Self::CategoryFilters(_) => "CategoryFilters",
             Self::Review(_) => "Review",
             Self::MiniGame(_) => "MiniGame",
+            Self::EndGameSummary(_) => "EndGameSummary",
         }
     }
 
@@ -128,6 +134,7 @@ impl TypedScreen {
             Self::CategoryFilters(_) => super::Screen::CategoryFilters,
             Self::Review(_) => super::Screen::Review,
             Self::MiniGame(_) => super::Screen::MiniGame,
+            Self::EndGameSummary(_) => super::Screen::EndGameSummary,
         }
     }
 }
@@ -382,6 +389,53 @@ impl ReviewData {
     pub fn new(session: ReviewSessionState) -> Self {
         Self { session }
     }
+}
+
+/// Immutable snapshot of curriculum-completion stats for the end-game summary screen.
+///
+/// Snapshotted at transition time rather than read live from `AppState` (as
+/// `ProfileData` does) because `render()` runs on every animation tick and the
+/// numbers must not drift while the user reads the screen.
+#[derive(Debug, Clone)]
+pub struct EndGameSummaryData {
+    /// Size of the unfiltered scenario set — the "all N" in the headline.
+    pub scenarios_total: usize,
+    /// Unique scenarios with at least one 100% completion.
+    pub perfected: usize,
+    /// `scenarios_total - perfected`. Reaches 0 at full mastery.
+    pub imperfect: usize,
+    /// Lifetime completion events, replays included. Must be labelled as such
+    /// in copy — it is not the same axis as `scenarios_total`.
+    pub total_completions: u32,
+    /// Total accumulated XP.
+    pub total_xp: u64,
+    /// Current account level.
+    pub level: u32,
+    /// Mean per-command success rate, `0.0..=1.0`. Not scenario accuracy.
+    pub command_success_rate: f64,
+    /// Span from earliest to latest recorded scenario attempt, in days. 0 means
+    /// every attempt happened on the same day.
+    pub journey_days: i64,
+    /// Number of commands at `MasteryLevel::Master`.
+    pub commands_mastered: usize,
+    /// `(category, perfected_in_category, total_in_category)`, sorted by
+    /// category enum order (matches the filter screen and menu).
+    pub category_breakdown: Vec<(ScenarioCategory, usize, usize)>,
+    /// Suggested next actions, in display order.
+    pub next_steps: Vec<NextStep>,
+}
+
+/// A suggested next action offered on the end-game summary screen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NextStep {
+    /// N commands are due for spaced-repetition review.
+    DueReviews(usize),
+    /// N daily quests are still open.
+    PendingQuests(usize),
+    /// N scenarios have not yet been perfected.
+    ImperfectScenarios(usize),
+    /// Try Arcade mode — always offered, unconditional fallback.
+    ArcadeMode,
 }
 
 /// Data required for mode selection screen
@@ -897,6 +951,29 @@ mod tests {
         };
         assert_eq!(data.selected_index, 5);
         assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
+    }
+
+    #[test]
+    fn test_typed_screen_end_game_summary() {
+        let data = EndGameSummaryData {
+            scenarios_total: 1,
+            perfected: 1,
+            imperfect: 0,
+            total_completions: 1,
+            total_xp: 0,
+            level: 1,
+            command_success_rate: 1.0,
+            journey_days: 0,
+            commands_mastered: 0,
+            category_breakdown: vec![],
+            next_steps: vec![NextStep::ArcadeMode],
+        };
+        let screen = TypedScreen::EndGameSummary(data);
+        assert_eq!(screen.screen_type(), "EndGameSummary");
+        assert_eq!(
+            screen.to_screen_enum(),
+            super::super::Screen::EndGameSummary
+        );
     }
 
     #[test]

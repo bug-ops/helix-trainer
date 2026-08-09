@@ -32,6 +32,7 @@ instructions = "(r) Retry | (n) Next | (l) List | (m) Menu | (p) Profile | (q) Q
 # Navigation feedback
 no_more_scenarios = "No more scenarios in the list"
 no_scenario_index = "Returning to scenario list..."
+curriculum_complete_hint = "All scenarios complete - press (n) for your summary"
 
 # Performance ratings
 rating_perfect = "Perfect"
@@ -67,3 +68,24 @@ please_wait = "Please wait..."
 points = "%{points} points"
 multiplier = "×%{mult}"
 penalty = "-%{points} points"
+
+[end_game]
+title = "Curriculum Complete"
+banner = "All %{total} scenarios completed"
+journey_same_day = "Completed in a single day"
+journey_one_day = "A 1-day journey"
+journey_days = "A %{days}-day journey"
+total_completions = "%{count} runs completed (replays included)"
+perfected = "%{perfected} of %{total} scenarios perfected"
+level = "Level %{level} - %{xp} XP"
+command_success_rate = "Command success rate: %{pct}%"
+commands_mastered = "%{count} commands mastered"
+category_header = "Mastery by category"
+category_row = "%{category}: %{perfected}/%{total} perfected"
+review_note = "Commands keep coming due for review - curriculum complete is not training complete."
+next_steps_header = "What's next"
+next_due_reviews = "(r) %{count} commands due for review"
+next_pending_quests = "%{count} daily quests still open"
+next_imperfect = "%{count} scenarios not yet perfected"
+next_arcade = "(a) Arcade mode"
+instructions = "(r) Review | (a) Arcade | (l) List | (m) Menu | (q) Quit"

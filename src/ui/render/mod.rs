@@ -15,6 +15,7 @@ pub(super) const SELECTION_BG_COLOR: Color = Color::Rgb(60, 80, 120);
 mod achievements;
 mod category_filters;
 mod editor;
+mod end_game;
 mod helpers;
 mod highlight;
 mod menu;
@@ -73,6 +74,9 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         }
         crate::ui::state::TypedScreen::Review(_) => review::render_review_screen(frame, state),
         crate::ui::state::TypedScreen::MiniGame(_) => minigame::render_minigame(frame, state),
+        crate::ui::state::TypedScreen::EndGameSummary(data) => {
+            end_game::render_end_game_summary(frame, data)
+        }
     }
 
     // Render global notifications on top of all screens

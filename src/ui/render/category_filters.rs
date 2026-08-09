@@ -11,7 +11,10 @@ use ratatui::{
 };
 
 /// Get a human-readable display name for a category
-fn category_display_name(category: &ScenarioCategory) -> &'static str {
+///
+/// `pub(super)` so `end_game.rs` can reuse it for the category-mastery
+/// breakdown instead of duplicating the match.
+pub(super) fn category_display_name(category: &ScenarioCategory) -> &'static str {
     match category {
         ScenarioCategory::Movement => "Movement",
         ScenarioCategory::Editing => "Editing",

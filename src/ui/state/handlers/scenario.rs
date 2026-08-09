@@ -6,13 +6,15 @@ use crate::config::Difficulty;
 use crate::constants::{FLASH_TIME_RATIO, SPEED_DEMON_TIME_RATIO};
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
-use crate::gamification::{Achievement, AchievementEngine, speed_time_ratio};
+use crate::gamification::{Achievement, AchievementEngine, UserProfile, speed_time_ratio};
+use crate::learning::Analytics;
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
-    AppState, HandlerContext, HandlerOutcome, MenuData, Message, ResultsData, TaskData,
-    TypedScreen, XPBreakdown, update,
+    AppState, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData, Message, NextStep,
+    ResultsData, TaskData, TypedScreen, XPBreakdown, update,
 };
+use rust_i18n::t;
 
 /// Handle StartScenario message
 ///
@@ -387,12 +389,113 @@ pub fn handle_next_lesson(
 
     // Check if at end of list
     if next_index >= scenario_count {
-        // Stay on results screen - notification will be handled in Phase 6
+        if ctx
+            .game
+            .scenario_collection
+            .is_curriculum_complete(&ctx.progress.profile)
+        {
+            let data = build_end_game_summary(ctx);
+            return Ok(HandlerOutcome::Transition(Box::new(
+                TypedScreen::EndGameSummary(data),
+            )));
+        }
+        ctx.ui
+            .notifications
+            .push(Notification::new(NotificationType::Info {
+                message: t!("results.no_more_scenarios").to_string(),
+            }));
         return Ok(HandlerOutcome::Stay);
     }
 
     // Start next scenario using existing handler
     handle_start_scenario(ctx, next_index)
+}
+
+/// Build the immutable snapshot shown on the end-game summary screen.
+///
+/// Reads only from `ctx.game.scenario_collection` and `ctx.progress` - the
+/// screen is strictly read-only and awards nothing.
+fn build_end_game_summary(ctx: &HandlerContext<'_>) -> EndGameSummaryData {
+    let stats = ctx
+        .game
+        .scenario_collection
+        .curriculum_stats(&ctx.progress.profile);
+    let imperfect = stats.total.saturating_sub(stats.perfected);
+    let profile = &ctx.progress.profile;
+    let tracker = &ctx.progress.performance_tracker;
+
+    EndGameSummaryData {
+        scenarios_total: stats.total,
+        perfected: stats.perfected,
+        imperfect,
+        total_completions: profile.scenarios_completed,
+        total_xp: profile.total_xp,
+        level: profile.level,
+        command_success_rate: Analytics::avg_success_rate(tracker),
+        journey_days: journey_days(profile),
+        commands_mastered: Analytics::get_mastery_summary(tracker).master,
+        category_breakdown: stats.per_category,
+        next_steps: next_steps(ctx, imperfect),
+    }
+}
+
+/// Span between the earliest and latest recorded scenario attempt, in days.
+///
+/// Returns 0 for a profile with no completion history (never actually reached
+/// by the end-game summary, since that requires a complete curriculum).
+/// Clamped to non-negative: `earliest`/`latest` come from different
+/// timestamp fields (`first_attempt` min, `last_attempt` max) with no
+/// ordering guarantee between them, so a backwards wall-clock jump (NTP
+/// correction, VM snapshot restore) between two attempts could otherwise
+/// produce a negative span.
+fn journey_days(profile: &UserProfile) -> i64 {
+    let mut history = profile.scenario_history.iter();
+    let Some(first) = history.next() else {
+        return 0;
+    };
+    let mut earliest = first.first_attempt;
+    let mut latest = first.last_attempt;
+    for completion in history {
+        earliest = earliest.min(completion.first_attempt);
+        latest = latest.max(completion.last_attempt);
+    }
+    (latest - earliest).num_days().max(0)
+}
+
+/// Suggested next actions for the end-game summary, in priority order.
+///
+/// Reviews and quests come first (most time-sensitive), then imperfect
+/// scenarios - all three are kept when applicable (none is dropped even
+/// when every condition is true, since imperfect scenarios are arguably the
+/// most on-topic suggestion for a curriculum-completion screen) - and the
+/// unconditional Arcade fallback always comes last. Result has 1 to 4
+/// entries.
+fn next_steps(ctx: &HandlerContext<'_>, imperfect: usize) -> Vec<NextStep> {
+    let due_reviews = ctx
+        .progress
+        .scheduler
+        .get_due_reviews(&ctx.progress.performance_tracker)
+        .len();
+    let pending_quests = ctx
+        .progress
+        .profile
+        .daily_quests
+        .iter()
+        .filter(|q| !q.completed)
+        .count();
+
+    let mut steps = Vec::new();
+    if due_reviews > 0 {
+        steps.push(NextStep::DueReviews(due_reviews));
+    }
+    if pending_quests > 0 {
+        steps.push(NextStep::PendingQuests(pending_quests));
+    }
+    if imperfect > 0 {
+        steps.push(NextStep::ImperfectScenarios(imperfect));
+    }
+    steps.push(NextStep::ArcadeMode);
+    steps
 }
 
 /// Handle GoToScenarioList message
@@ -1883,5 +1986,209 @@ mod tests {
         } else {
             panic!("Expected Transition outcome");
         }
+    }
+
+    #[test]
+    fn test_handle_next_lesson_transitions_to_end_game_summary_when_curriculum_complete() {
+        let mut state = create_multi_scenario_state();
+        for id in ["scenario_1", "scenario_2", "scenario_3"] {
+            state.progress.profile.scenario_history.record_completion(
+                id,
+                100,
+                50,
+                chrono::Utc::now(),
+            );
+        }
+        let results_data = create_results_data_with_index(Some(2));
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_next_lesson(&results_data, &mut ctx).unwrap();
+
+        if let HandlerOutcome::Transition(screen) = outcome {
+            if let TypedScreen::EndGameSummary(data) = *screen {
+                assert_eq!(data.scenarios_total, 3);
+                assert_eq!(data.perfected, 3);
+                assert_eq!(data.imperfect, 0);
+            } else {
+                panic!("Expected EndGameSummary screen");
+            }
+        } else {
+            panic!("Expected Transition outcome");
+        }
+    }
+
+    #[test]
+    fn test_handle_next_lesson_at_end_of_incomplete_curriculum_notifies_and_stays() {
+        let mut state = create_multi_scenario_state();
+        // Only 2 of 3 scenarios completed - curriculum is not complete.
+        for id in ["scenario_1", "scenario_2"] {
+            state.progress.profile.scenario_history.record_completion(
+                id,
+                100,
+                50,
+                chrono::Utc::now(),
+            );
+        }
+        let results_data = create_results_data_with_index(Some(2));
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let outcome = handle_next_lesson(&results_data, &mut ctx).unwrap();
+
+        assert!(matches!(outcome, HandlerOutcome::Stay));
+        assert!(
+            ctx.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::Info { .. }
+            )),
+            "expected the no-more-scenarios notification"
+        );
+    }
+
+    #[test]
+    fn test_next_steps_all_conditions_true_keeps_all_three_plus_arcade() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let mut state = create_test_state();
+        state.progress.performance_tracker.record_attempt(
+            "x",
+            std::time::Duration::from_secs(1),
+            true,
+            std::time::Duration::from_secs(1),
+        );
+        state.progress.profile.daily_quests = vec![Quest {
+            id: "quest_1".to_string(),
+            quest_type: QuestType::ScenarioCompletion {
+                target: 1,
+                current: 0,
+            },
+            description: "Complete 1 scenario".to_string(),
+            difficulty: QuestDifficulty::Easy,
+            xp_reward: 10,
+            completed: false,
+        }];
+
+        let ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let steps = next_steps(&ctx, 5);
+
+        assert_eq!(
+            steps,
+            vec![
+                NextStep::DueReviews(1),
+                NextStep::PendingQuests(1),
+                NextStep::ImperfectScenarios(5),
+                NextStep::ArcadeMode
+            ],
+            "no conditional suggestion is dropped when all three apply"
+        );
+    }
+
+    #[test]
+    fn test_next_steps_partial_conditions_true_keeps_only_those_plus_arcade() {
+        let mut state = create_test_state();
+        state.progress.performance_tracker.record_attempt(
+            "x",
+            std::time::Duration::from_secs(1),
+            true,
+            std::time::Duration::from_secs(1),
+        );
+        // No pending quests, no imperfect scenarios.
+
+        let ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let steps = next_steps(&ctx, 0);
+
+        assert_eq!(steps, vec![NextStep::DueReviews(1), NextStep::ArcadeMode]);
+    }
+
+    #[test]
+    fn test_next_steps_no_conditions_true_yields_only_arcade() {
+        let mut state = create_test_state();
+        let ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        let steps = next_steps(&ctx, 0);
+
+        assert_eq!(steps, vec![NextStep::ArcadeMode]);
+    }
+
+    #[test]
+    fn test_journey_days_empty_history_is_zero() {
+        let profile = crate::gamification::UserProfile::new();
+        assert_eq!(journey_days(&profile), 0);
+    }
+
+    #[test]
+    fn test_journey_days_same_day_is_zero() {
+        let mut profile = crate::gamification::UserProfile::new();
+        let now = chrono::Utc::now();
+        profile
+            .scenario_history
+            .record_completion("a", 100, 50, now);
+        assert_eq!(journey_days(&profile), 0);
+    }
+
+    /// Regression test for M4: a backwards wall-clock jump between two
+    /// attempts of the *same* scenario can leave `last_attempt < first_attempt`
+    /// for that completion (`ScenarioCompletion::record_attempt` has no
+    /// monotonicity guard). `journey_days` must clamp to 0 rather than
+    /// return a negative span.
+    #[test]
+    fn test_journey_days_clamped_non_negative_on_backwards_clock_jump() {
+        let mut profile = crate::gamification::UserProfile::new();
+        let day_ten = chrono::DateTime::parse_from_rfc3339("2026-01-10T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let day_one = day_ten - chrono::Duration::days(9);
+        profile
+            .scenario_history
+            .record_completion("a", 100, 50, day_ten);
+        // Clock jumped backwards for the second attempt on the same scenario.
+        profile
+            .scenario_history
+            .record_completion("a", 100, 50, day_one);
+        assert_eq!(journey_days(&profile), 0);
+    }
+
+    #[test]
+    fn test_journey_days_spans_multiple_completions() {
+        let mut profile = crate::gamification::UserProfile::new();
+        let day_one = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let day_four = day_one + chrono::Duration::days(3);
+        profile
+            .scenario_history
+            .record_completion("a", 100, 50, day_one);
+        profile
+            .scenario_history
+            .record_completion("b", 100, 50, day_four);
+        assert_eq!(journey_days(&profile), 3);
     }
 }

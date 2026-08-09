@@ -43,9 +43,9 @@ pub fn handle_navigate_to(screen: Screen) -> Result<HandlerOutcome, UserError> {
         Screen::Achievements => TypedScreen::Achievements(AchievementsData::default()),
         Screen::CategoryFilters => TypedScreen::CategoryFilters(CategoryFiltersData::default()),
         Screen::MiniGame => TypedScreen::MiniGame(MiniGameData::default()),
-        // NOTE: Task, Results, and Review screens require data and should not be
-        // navigated to via NavigateTo - they have their own handlers
-        Screen::Task | Screen::Results | Screen::Review => {
+        // NOTE: Task, Results, Review, and EndGameSummary screens require data and
+        // should not be navigated to via NavigateTo - they have their own handlers
+        Screen::Task | Screen::Results | Screen::Review | Screen::EndGameSummary => {
             // Stay on current screen if trying to navigate to a data-dependent screen
             return Ok(HandlerOutcome::Stay);
         }
@@ -337,6 +337,12 @@ mod tests {
     #[test]
     fn test_navigate_to_review_stays_on_current() {
         let outcome = handle_navigate_to(Screen::Review).unwrap();
+        assert!(outcome.is_stay());
+    }
+
+    #[test]
+    fn test_navigate_to_end_game_summary_stays_on_current() {
+        let outcome = handle_navigate_to(Screen::EndGameSummary).unwrap();
         assert!(outcome.is_stay());
     }
 

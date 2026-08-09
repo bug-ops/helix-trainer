@@ -466,6 +466,36 @@ pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
     }
 }
 
+/// Handle keyboard events on the end-game summary screen
+///
+/// Key bindings:
+/// - `r` - Start a review session
+/// - `a` - Select Arcade mode
+/// - `l` - Navigate to scenario list (Menu screen)
+/// - `m` / `Esc` - Return to mode selection (main menu)
+/// - `q` - Quit application
+/// - `Ctrl-Q` - Return to mode selection
+///
+/// No `p` (profile) key: this screen is reached only via the Results `(n)`
+/// key and has no `ReturnDestination` variant to return to, so a Profile
+/// detour would strand the user - see `ReturnDestination` in `ui::state::screen`.
+pub fn handle_end_game_summary_keys(key: KeyEvent) -> Option<Message> {
+    // Ctrl-Q returns to menu (unified exit key)
+    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(Message::BackToMenu);
+    }
+
+    match key.code {
+        KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Char('r') => Some(Message::StartReviewSession),
+        KeyCode::Char('a') => Some(Message::SelectArcadeMode),
+        KeyCode::Char('l') => Some(Message::NavigateTo(Screen::MainMenu)),
+        KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
+        KeyCode::Char('M') => Some(Message::ToggleSound),
+        _ => None,
+    }
+}
+
 /// Handle keyboard events on the review session screen
 pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q abandons review session (unified exit key)
@@ -1637,6 +1667,83 @@ mod tests {
         fn test_unknown_key_returns_none() {
             let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
             assert_eq!(handle_category_filters_keys(key), None);
+        }
+    }
+
+    mod handle_end_game_summary_keys_tests {
+        use super::*;
+
+        #[test]
+        fn test_r_starts_review_session() {
+            let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
+            assert_eq!(
+                handle_end_game_summary_keys(key),
+                Some(Message::StartReviewSession)
+            );
+        }
+
+        #[test]
+        fn test_a_selects_arcade_mode() {
+            let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+            assert_eq!(
+                handle_end_game_summary_keys(key),
+                Some(Message::SelectArcadeMode)
+            );
+        }
+
+        #[test]
+        fn test_l_navigates_to_main_menu() {
+            let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
+            assert_eq!(
+                handle_end_game_summary_keys(key),
+                Some(Message::NavigateTo(Screen::MainMenu))
+            );
+        }
+
+        #[test]
+        fn test_m_returns_to_menu() {
+            let key = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE);
+            assert_eq!(handle_end_game_summary_keys(key), Some(Message::BackToMenu));
+        }
+
+        #[test]
+        fn test_esc_returns_to_menu() {
+            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            assert_eq!(handle_end_game_summary_keys(key), Some(Message::BackToMenu));
+        }
+
+        #[test]
+        fn test_q_quits() {
+            let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+            assert_eq!(handle_end_game_summary_keys(key), Some(Message::QuitApp));
+        }
+
+        #[test]
+        fn test_ctrl_q_returns_to_menu() {
+            let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+            assert_eq!(handle_end_game_summary_keys(key), Some(Message::BackToMenu));
+        }
+
+        #[test]
+        fn test_shift_m_toggles_sound() {
+            let key = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::NONE);
+            assert_eq!(
+                handle_end_game_summary_keys(key),
+                Some(Message::ToggleSound)
+            );
+        }
+
+        #[test]
+        fn test_p_is_not_bound() {
+            // No re-entry from this screen via Profile - see the function's doc comment.
+            let key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+            assert_eq!(handle_end_game_summary_keys(key), None);
+        }
+
+        #[test]
+        fn test_unknown_key_returns_none() {
+            let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+            assert_eq!(handle_end_game_summary_keys(key), None);
         }
     }
 

@@ -48,8 +48,12 @@ pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
         render_countdown(frame, area, session);
     } else if session.state().is_playing() {
         render_playing(frame, area, session);
-        // Show key history during gameplay
-        super::popups::render_key_history_popup(frame, minigame_data.key_history.keys());
+        // Show key history popup after first keypress (reset on scenario transitions)
+        // Reserve space for the Timer + Stats bars (3 + 3) so the popup never
+        // overlaps them.
+        if state.ui.show_key_history {
+            super::popups::render_key_history_popup(frame, minigame_data.key_history.keys(), 6);
+        }
     } else if session.state().is_transition() {
         render_transition(frame, area, session, minigame_data.last_xp_earned);
     } else if session.state().is_paused() {

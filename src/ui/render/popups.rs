@@ -52,8 +52,17 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 
 /// Render key history popup showing last 5 keys pressed with large text
 ///
-/// Used by both training mode and arcade mode.
-pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String]) {
+/// Used by both training mode and arcade mode. `reserved_bottom` is the height
+/// (in rows) of the fixed-height status/HUD bars anchored to the bottom of the
+/// screen (e.g. stats, timer, instructions bars); the popup is positioned
+/// directly above that reserved strip so it never overlaps those panes, and is
+/// skipped entirely if there isn't enough room to render without corrupting
+/// the editor panes above it.
+pub(super) fn render_key_history_popup(
+    frame: &mut Frame,
+    key_history: &[String],
+    reserved_bottom: u16,
+) {
     if key_history.is_empty() {
         return;
     }
@@ -74,24 +83,34 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String]
     }
 
     // Calculate required dimensions before consuming key_text
-    // Each character in Full size is approximately 4 cells wide, plus spacing
+    // PixelSize::HalfHeight only halves the glyph height, not the width - each
+    // character (including the space separators) is still BIG_TEXT_CHAR_WIDTH_CELLS wide
     let chars_count = key_text.chars().count();
     let popup_width =
         ((chars_count * BIG_TEXT_CHAR_WIDTH_CELLS).max(KEY_HISTORY_MIN_WIDTH as usize) as u16)
             .min(area.width.saturating_sub(4));
-    let popup_height = BIG_TEXT_HEIGHT_LINES + 2; // +2 for borders
+    // HalfHeight halves the glyph height (BIG_TEXT_HEIGHT_LINES) so the popup fits
+    // within the space reserved above the bottom HUD bars instead of spilling
+    // into the editor panes.
+    let popup_height = BIG_TEXT_HEIGHT_LINES / 2 + 2; // +2 for borders
+
+    // Not enough vertical room above the reserved HUD strip - skip rendering
+    // rather than overlapping the editor panes or the HUD bars themselves.
+    if area.height < reserved_bottom + popup_height {
+        return;
+    }
 
     // Create BigText widget with large font and cyan color
     let big_text = BigText::builder()
-        .pixel_size(PixelSize::Full)
+        .pixel_size(PixelSize::HalfHeight)
         .style(Style::default().fg(Color::Cyan))
         .lines(vec![key_text.into()])
         .centered()
         .build();
 
-    // Position in bottom right corner
+    // Position in bottom right corner, directly above the reserved HUD strip
     let popup_x = area.width.saturating_sub(popup_width + 2);
-    let popup_y = area.height.saturating_sub(popup_height + 2);
+    let popup_y = area.height.saturating_sub(reserved_bottom + popup_height);
 
     let popup_area = Rect {
         x: popup_x,
@@ -213,5 +232,79 @@ pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
             );
 
         frame.render_widget(paragraph, popup_area);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{Terminal, backend::TestBackend, buffer::Buffer};
+
+    /// `BIG_TEXT_HEIGHT_LINES / 2 + 2` from `render_key_history_popup`.
+    const POPUP_HEIGHT: u16 = BIG_TEXT_HEIGHT_LINES / 2 + 2;
+
+    fn render_popup(width: u16, height: u16, reserved_bottom: u16, keys: &[String]) -> Buffer {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render_key_history_popup(frame, keys, reserved_bottom))
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn is_blank(buffer: &Buffer) -> bool {
+        buffer
+            .content
+            .iter()
+            .all(|cell| cell.symbol() == " " || cell.symbol().is_empty())
+    }
+
+    fn row_is_blank(buffer: &Buffer, y: u16) -> bool {
+        (0..buffer.area.width).all(|x| {
+            let symbol = buffer[(x, y)].symbol();
+            symbol == " " || symbol.is_empty()
+        })
+    }
+
+    #[test]
+    fn test_render_key_history_popup_empty_history_skips_render() {
+        let buffer = render_popup(80, 20, 6, &[]);
+        assert!(is_blank(&buffer), "empty key history must render nothing");
+    }
+
+    #[test]
+    fn test_render_key_history_popup_skips_when_not_enough_room() {
+        let reserved_bottom = 6;
+        // One row short of the minimum height the popup needs above the reserved strip.
+        let height = reserved_bottom + POPUP_HEIGHT - 1;
+        let buffer = render_popup(80, height, reserved_bottom, &["a".to_string()]);
+
+        assert!(
+            is_blank(&buffer),
+            "popup must not render when there isn't enough vertical room"
+        );
+    }
+
+    #[test]
+    fn test_render_key_history_popup_reserves_space_above_bar() {
+        let reserved_bottom = 6;
+        let height = 20;
+        let buffer = render_popup(80, height, reserved_bottom, &["a".to_string()]);
+
+        // The reserved HUD strip (the bottom `reserved_bottom` rows) must stay untouched.
+        for y in (height - reserved_bottom)..height {
+            assert!(
+                row_is_blank(&buffer, y),
+                "reserved bottom row {y} was overwritten by the popup"
+            );
+        }
+
+        // The popup itself must have rendered directly above the reserved strip
+        // (its bottom border sits on the row just above the reserved area).
+        let popup_bottom_row = height - reserved_bottom - 1;
+        assert!(
+            !row_is_blank(&buffer, popup_bottom_row),
+            "popup was not rendered directly above the reserved strip"
+        );
     }
 }

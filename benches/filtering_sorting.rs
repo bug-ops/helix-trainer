@@ -46,7 +46,7 @@ fn create_scenario(
         alternatives: vec![],
         hints: vec!["Use x to delete a line".to_string()],
         scoring: ScoringConfig {
-            optimal_count: 1,
+            optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },

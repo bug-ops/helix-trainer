@@ -705,7 +705,7 @@ impl GameSession<Completed> {
     /// ```
     pub fn feedback(&self) -> Result<Feedback, SecurityError> {
         let actions_taken = self.user_actions.len();
-        let optimal_actions = self.scenario.scoring.optimal_count;
+        let optimal_actions = self.scenario.scoring.optimal_count.get();
         let max_points = self.scenario.scoring.max_points;
 
         let score = self.score()?;
@@ -771,7 +771,7 @@ impl GameSession<Abandoned> {
             max_points: self.scenario.scoring.max_points,
             rating: PerformanceRating::Poor,
             actions_taken: self.user_actions.len(),
-            optimal_actions: self.scenario.scoring.optimal_count,
+            optimal_actions: self.scenario.scoring.optimal_count.get(),
             duration: self.started_at.elapsed(),
             hint: Some(format!(
                 "Solution: {}. {}",

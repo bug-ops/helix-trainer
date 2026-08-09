@@ -52,7 +52,7 @@ fn create_test_scenario(
         alternatives: vec![],
         hints: vec![],
         scoring: ScoringConfig {
-            optimal_count: 1,
+            optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },

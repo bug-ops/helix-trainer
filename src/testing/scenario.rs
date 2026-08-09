@@ -6,6 +6,7 @@ use crate::config::{
     AlternativeSolution, Difficulty, Scenario, ScenarioCategory, ScenarioMetadata, ScoringConfig,
     Setup, Solution, TargetState,
 };
+use std::num::NonZeroUsize;
 
 /// Builder for creating test scenarios with sensible defaults
 ///
@@ -180,6 +181,10 @@ impl ScenarioBuilder {
     }
 
     /// Set the optimal command count
+    ///
+    /// # Panics
+    /// [`Self::build`] panics if `count` is 0, since `ScoringConfig::optimal_count`
+    /// requires a non-zero value.
     pub fn optimal_count(mut self, count: usize) -> Self {
         self.optimal_count = count;
         self
@@ -258,7 +263,8 @@ impl ScenarioBuilder {
             alternatives: self.alternatives,
             hints: self.hints,
             scoring: ScoringConfig {
-                optimal_count: self.optimal_count,
+                optimal_count: NonZeroUsize::new(self.optimal_count)
+                    .expect("optimal_count must be non-zero"),
                 max_points: self.max_points,
                 tolerance: self.tolerance,
             },
@@ -339,6 +345,6 @@ mod tests {
         assert_eq!(scenario.setup.file_content, "hello");
         assert_eq!(scenario.target.file_content, "world");
         assert_eq!(scenario.hints.len(), 1);
-        assert_eq!(scenario.scoring.optimal_count, 3);
+        assert_eq!(scenario.scoring.optimal_count.get(), 3);
     }
 }

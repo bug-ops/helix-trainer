@@ -15,7 +15,7 @@
 //!
 //! // Using scenario configuration
 //! let config = ScoringConfig {
-//!     optimal_count: 5,
+//!     optimal_count: std::num::NonZeroUsize::new(5).unwrap(),
 //!     max_points: 100,
 //!     tolerance: 2,
 //! };
@@ -115,7 +115,7 @@ impl Scorer {
     /// use helix_trainer::config::ScoringConfig;
     ///
     /// let config = ScoringConfig {
-    ///     optimal_count: 5,
+    ///     optimal_count: std::num::NonZeroUsize::new(5).unwrap(),
     ///     max_points: 100,
     ///     tolerance: 2,
     /// };
@@ -128,7 +128,7 @@ impl Scorer {
         actual_count: usize,
     ) -> Result<u32, SecurityError> {
         Self::calculate_score(
-            config.optimal_count,
+            config.optimal_count.get(),
             actual_count,
             config.tolerance,
             config.max_points,
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn test_score_with_config() {
         let config = ScoringConfig {
-            optimal_count: 5,
+            optimal_count: std::num::NonZeroUsize::new(5).unwrap(),
             max_points: 100,
             tolerance: 2,
         };

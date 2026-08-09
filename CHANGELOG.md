@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Pausing an arcade/survival/challenge mini-game session no longer lets the active scenario's countdown timer keep draining in real time; elapsed time now excludes accumulated paused duration (#271)
 - Arcade mode's key-history popup is now gated behind a visibility flag reset on scenario transitions instead of staying permanently visible after the first keypress, matching Training mode's behavior; the popup is also repositioned/capped to avoid overlapping the Target/Timer/Score HUD or corrupting editor pane borders in both modes (#272)
+- Scenario `id` fields with an empty string now fail validation, matching quest template behavior (#275)
+
+### Changed
+
+- **BREAKING**: `ScoringConfig.optimal_count` is now `NonZeroUsize` instead of `usize`; TOML layout is unchanged, but zero rejection now happens at parse time, so `optimal_count = 0` now surfaces as "Failed to load scenario file..." instead of "Operation failed..." (#277)
+- **BREAKING**: Removed the now-unreachable `SecurityError::InvalidScoringConfig` variant (#277)
+- Unified scenario and quest ID validation into `security::validators::validate_id_field` (#275)
+- Consolidated scenario/quest TOML parsing, count-limit enforcement, and per-item validation into a shared `config::loader::parse_and_validate` pipeline (#276)
 
 ## [0.5.12] - 2026-07-27
 

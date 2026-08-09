@@ -119,7 +119,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
 
         // Stats with mode indicator and progress
         // Use PlayableScenario trait for common stats, completion_progress is specific to Active
-        let optimal = scenario.scoring.optimal_count;
+        let optimal = scenario.scoring.optimal_count.get();
         let actions = playable.action_count();
         let elapsed = playable.elapsed();
         let mode = playable.mode_name();

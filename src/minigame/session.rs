@@ -493,7 +493,7 @@ impl MiniGameSession {
         if let Some(ref scenario) = self.current {
             // Calculate metrics for scoring
             let time_ratio = scenario.progress_percent();
-            let optimal_count = scenario.scenario.scoring.optimal_count.max(1);
+            let optimal_count = scenario.scenario.scoring.optimal_count.get();
             let actual_count = scenario.action_count().max(1);
             let efficiency = (optimal_count as f64 / actual_count as f64).min(1.0);
             let scenario_difficulty = scenario
@@ -867,7 +867,7 @@ impl MiniGameSession {
 
             // Optimal time estimate: time_limit / action_count would be "perfect"
             // We'll use optimal_count from scenario as reference
-            let optimal_count = scenario.scenario.scoring.optimal_count.max(1);
+            let optimal_count = scenario.scenario.scoring.optimal_count.get();
             let optimal_time_per_command = scenario.time_limit / optimal_count as u32;
 
             // Record each unique command used

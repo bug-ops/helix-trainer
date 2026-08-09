@@ -4,17 +4,19 @@ use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
-/// Yank (copy) the primary selection to the unnamed register
+/// Yank (copy) the active selection to the unnamed register
 ///
-/// Copies the full `anchor..head` range of the primary selection, normalized
-/// regardless of selection direction. A point selection (`anchor == head`),
-/// as used for a plain cursor with no active selection, falls back to
-/// yanking the single character under the cursor.
+/// Copies the full `anchor..head` range of every range in the selection,
+/// each normalized regardless of its direction and concatenated in range
+/// order. A point range (`anchor == head`), as used for a plain cursor with
+/// no active selection, falls back to yanking the single character under
+/// that cursor. If every range is empty (e.g. all cursors sit past the end
+/// of the document), the register is left untouched.
 pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     yank_to_register(sim, None)
 }
 
-/// Yank (copy) the primary selection to a named register
+/// Yank (copy) the active selection to a named register
 ///
 /// `register: None` addresses the unnamed register, matching Helix where
 /// `""y` and `y` behave identically. See [`yank`] for the selection rules.
@@ -22,19 +24,31 @@ pub fn yank_to_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
 ) -> Result<(), UserError> {
-    let range = sim.selection.primary();
+    let slice = sim.doc.slice(..);
+    let len_chars = sim.doc.len_chars();
 
-    if range.anchor == range.head {
-        let head = range.head;
-        if head >= sim.doc.len_chars() {
-            return Ok(());
-        }
-        let text = sim.doc.char(head).to_string();
-        sim.registers.set(register, text);
-    } else {
-        let text = range.fragment(sim.doc.slice(..)).into_owned();
-        sim.registers.set(register, text);
+    let fragments: Vec<String> = sim
+        .selection
+        .ranges()
+        .iter()
+        .map(|range| {
+            if range.anchor == range.head {
+                if range.head >= len_chars {
+                    String::new()
+                } else {
+                    sim.doc.char(range.head).to_string()
+                }
+            } else {
+                range.fragment(slice).into_owned()
+            }
+        })
+        .collect();
+
+    if fragments.iter().all(String::is_empty) {
+        return Ok(());
     }
+
+    sim.registers.set(register, fragments.concat());
 
     Ok(())
 }

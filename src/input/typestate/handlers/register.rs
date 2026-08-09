@@ -5,10 +5,12 @@
 //! - `"` - select a register (waiting for the register character)
 //! - `"{register}` - register selected (waiting for y/p/P/R)
 //!
-//! Register scope is deliberately limited to the four commands that read or
-//! write a register in this trainer (`y`, `p`, `P`, `R`); any other key
-//! cancels rather than executing a bare command, keeping `"<reg><op>` an
-//! atomic 3-key sequence with no partial side effects.
+//! Register scope is deliberately limited to the four commands that can be
+//! targeted at a *named* register via this `"<reg>` prefix (`y`, `p`, `P`,
+//! `R`); any other key cancels rather than executing a bare command, keeping
+//! `"<reg><op>` an atomic 3-key sequence with no partial side effects. `d`
+//! and `c` also read/write the *default* (unnamed) register directly when
+//! invoked bare, but cannot be routed through this prefix to a named one.
 
 use std::borrow::Cow;
 

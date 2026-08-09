@@ -1,10 +1,11 @@
 //! Editing commands (delete, join, indent, dedent)
 
+use super::clipboard::yank_to_register;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::surround::find_nth_pairs_pos;
 use helix_core::textobject::{TextObject, textobject_paragraph, textobject_word};
-use helix_core::{Selection, Transaction};
+use helix_core::{Range, Selection, Transaction};
 
 /// Join current line with next line
 pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
@@ -84,10 +85,18 @@ pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
     Ok(())
 }
 
-/// Delete selection (single 'd' - deletes current selection)
-pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let start_pos = sim.selection.primary().from();
-
+/// Delete every range of the active selection (respecting multi-range
+/// selections) and return the selection mapped through the deletion.
+///
+/// Each original range collapses to a point at its post-deletion position;
+/// range count and order are preserved (unlike rebuilding a fresh
+/// `Selection::point`, which would discard every range but the primary).
+/// Positions are derived via [`helix_core::Selection::map`] over the
+/// transaction's changes rather than a manual pre-transaction offset, so a
+/// multi-range deletion (e.g. from `C`) lands each cursor correctly even
+/// when an earlier range's deletion shifts the document underneath a later
+/// one.
+pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Selection {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = range.to();
@@ -99,10 +108,22 @@ pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
         (start, end, None)
     });
 
+    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(transaction);
+    mapped
+}
 
-    let new_pos = start_pos.min(sim.doc.len_chars().saturating_sub(1));
-    sim.selection = Selection::point(new_pos);
+/// Delete selection (single 'd' - deletes current selection)
+///
+/// Stays in Normal mode, so each resulting cursor is clamped to the last
+/// valid character rather than resting one-past-the-end (unlike
+/// `change_selection`, which hands the raw mapped positions to Insert mode).
+pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    yank_to_register(sim, None)?;
+
+    let mapped = delete_active_selection(sim);
+    let last_valid_pos = sim.doc.len_chars().saturating_sub(1);
+    sim.selection = mapped.transform(|range| Range::point(range.head.min(last_valid_pos)));
 
     Ok(())
 }

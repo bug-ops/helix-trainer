@@ -153,9 +153,11 @@ pub fn handle_menu_select(
         );
         super::profile::handle_show_statistics(&mut ctx)
     } else if selected == scenario_count + 3 {
-        // Quit (index = scenario_count + 3)
-        state.ui.running = false;
-        Ok(HandlerOutcome::Stay)
+        // Quit (index = scenario_count + 3). Routes through `handle_quit_app`
+        // (not a direct `state.ui.running = false`) so a live paused arcade
+        // session reachable from the menu still gets its game-over
+        // bookkeeping awarded - see #324.
+        super::handle_quit_app(state)
     } else {
         Ok(HandlerOutcome::Stay)
     }

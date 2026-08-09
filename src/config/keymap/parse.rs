@@ -434,6 +434,26 @@ mod tests {
     }
 
     #[test]
+    fn plain_key_remap_reaches_option_composed_alt_command() {
+        // Alt-s is unreachable via Option+s composition on macOS Terminal.app
+        // (see #386); remapping a plain key to the same command name is the
+        // documented workaround and must resolve to the canonical "Alt-s".
+        let (overlay, report) = resolve_str(
+            r#"
+            [keys.normal]
+            "C-s" = "split_selection_on_newline"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(report.applied, 1);
+        let key = PhysicalKey::try_from("C-s").unwrap();
+        assert_eq!(
+            overlay.lookup(KeyContext::Base, key),
+            Some(&CanonicalKeys::from_static("Alt-s"))
+        );
+    }
+
+    #[test]
     fn multi_token_target_resolves_and_applies() {
         // G -> goto_last_line, canonical "ge" (2 tokens), applied only from Base.
         let (overlay, report) = resolve_str(

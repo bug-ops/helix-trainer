@@ -212,6 +212,22 @@ This is **gameplay-only**: menus, results, filter screens, and scenario hint pro
 
 A handful of keys are reserved by the trainer's own UI and intercepted before gameplay dispatch, so remapping onto them has no effect: <kbd>F1</kbd>, <kbd>?</kbd>, <kbd>Shift</kbd>+<kbd>/</kbd>, and <kbd>Ctrl</kbd>+<kbd>Q</kbd> everywhere; in Arcade mode, also <kbd>Esc</kbd>, <kbd>q</kbd>, <kbd>m</kbd>, <kbd>p</kbd>, <kbd>s</kbd>, <kbd>a</kbd>, and <kbd>M</kbd> while paused or on the game-over screen.
 
+#### macOS Terminal.app and other non-kitty terminals
+
+The Option-composed <kbd>Alt</kbd>+<kbd>s</kbd> chord is unreachable on macOS terminals that don't implement the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) (Terminal.app is the common case). This is an accepted trade-off, not a bug: the same physical key also types a plain, directly-typeable character on other keyboard layouts (e.g. `ß` on German QWERTZ), and a `KeyEvent` alone can't tell the two apart, so the trainer no longer guesses. (`Alt-c` has the same reachability gap but currently has no executable command behind it in the trainer regardless of terminal — tracked separately in [#389](https://github.com/bug-ops/helix-trainer/issues/389) — so there is nothing to work around for it here.)
+
+Two ways around it:
+
+- Switch to a kitty-protocol-capable terminal (Kitty, WezTerm, Ghostty, iTerm2 with the beta protocol enabled), or enable "Use Option as Meta key" in your terminal's settings if it offers one.
+- Remap the affected command to a key your terminal delivers unambiguously, using the custom keymap above. For example, to reach `split_selection_on_newline` (bound to `Alt-s`) via <kbd>Ctrl</kbd>+<kbd>y</kbd> instead:
+
+  ```toml
+  [keys.normal]
+  "C-y" = "split_selection_on_newline"
+  ```
+
+  The trainer resolves the command name to the same canonical `Alt-s` a real keystroke would produce, so this completes any scenario that asks for `Alt-s`. Since this is the same `config.toml` real Helix reads, the remap also applies inside Helix itself — pick a key that isn't already meaningful to you there; `C-y` is unbound upstream, unlike e.g. `C-s` (`save_selection`).
+
 ## Why this project exists
 
 **Traditional editor tutorials teach commands. Real development requires workflows.**

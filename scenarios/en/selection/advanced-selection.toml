@@ -189,6 +189,7 @@ description = "Use 'Alt-s' to split a multi-line selection into per-line selecti
 hints = [
     "'Alt-s' creates one selection per line",
     "Useful for applying edits to each line individually",
+    "On macOS Terminal.app, Option+s may not register as Alt-s - see the README's custom keymap section for a workaround",
 ]
 [scenarios.setup]
 file_content = """let a = 1;

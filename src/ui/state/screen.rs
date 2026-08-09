@@ -545,8 +545,6 @@ pub struct MiniGameData {
     pub key_history: KeyHistory,
     /// Current game mode (for display purposes)
     pub mode: Option<crate::minigame::MiniGameMode>,
-    /// Challenge progress for tracking attempts (for Challenge mode)
-    pub challenge_progress: Option<crate::minigame::ChallengeProgress>,
 }
 
 impl MiniGameData {

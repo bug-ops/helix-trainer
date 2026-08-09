@@ -1877,6 +1877,54 @@ mod mode_selection_extended_tests {
             .unwrap();
     }
 
+    /// Regression test for critique S4: the FR-006 "attempts remaining"
+    /// indicator must actually reach the rendered buffer, not just be
+    /// constructed and then silently truncated by the submenu's fixed
+    /// 43-column inner width (the original bug: appending to the
+    /// description line pushed the whole suffix past that width).
+    ///
+    /// Uses a taller-than-minimum backend (100x40, not the usual 80x24
+    /// `create_terminal()`) deliberately: at 80x24 `render_minigame_mode_submenu`
+    /// clamps its own height to `parent_area.height.saturating_sub(3)` = 7, which
+    /// only leaves room to render 2 of the 3 submenu entries at all (Challenge,
+    /// index 2, never draws regardless of its text) - a separate, pre-existing
+    /// vertical-clipping bug independent of S4's horizontal one, out of scope
+    /// here. A taller terminal isolates this test to the S4 fix under test.
+    #[test]
+    fn test_render_mode_selection_submenu_shows_challenge_attempts_remaining() {
+        use ratatui::backend::TestBackend;
+        use ratatui::buffer::Buffer;
+
+        let backend = TestBackend::new(100, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+        let today = state.progress.today();
+        state
+            .progress
+            .profile
+            .challenge_progress
+            .start_attempt(today);
+
+        state.screen = TypedScreen::ModeSelection(ModeSelectionData {
+            selected_mode: 1,
+            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+
+        let buffer: Buffer = terminal.backend().buffer().clone();
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(
+            text.contains("(2/3)"),
+            "Daily Challenge entry must show attempts remaining, got buffer text: {text}"
+        );
+    }
+
     #[test]
     fn test_render_mode_selection_small_terminal() {
         let backend = TestBackend::new(40, 15);

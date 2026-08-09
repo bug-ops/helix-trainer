@@ -38,6 +38,22 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         HelixSimulator::change_selection,
     ));
 
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "change_selection_noyank",
+            CMD_CHANGE_SELECTION_NOYANK,
+            "Change selection without yanking",
+            "Delete the selection and enter insert mode.",
+            Category::ModeChange,
+            true,
+            Some(ModeTransition::ToInsert),
+        ),
+        // Same handler: this simulator never writes registers on change/delete, so yank/noyank
+        // are behaviorally identical today. If register writes are ever added to
+        // `change_selection`, this registration must be split into its own noyank handler.
+        HelixSimulator::change_selection,
+    ));
+
     // Join lines
     registry.register(Command::new(
         CommandMetadata::new(

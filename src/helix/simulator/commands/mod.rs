@@ -145,6 +145,7 @@ fn is_insert_command(cmd: &str) -> bool {
         || cmd == CMD_OPEN_BELOW
         || cmd == CMD_OPEN_ABOVE
         || cmd == CMD_CHANGE
+        || cmd == CMD_CHANGE_SELECTION_NOYANK
 }
 
 fn execute_insert_mode_command_internal(
@@ -514,6 +515,11 @@ mod tests {
         #[test]
         fn test_insert_command_change() {
             assert!(is_insert_command(CMD_CHANGE));
+        }
+
+        #[test]
+        fn test_insert_command_change_selection_noyank() {
+            assert!(is_insert_command(CMD_CHANGE_SELECTION_NOYANK));
         }
 
         #[test]

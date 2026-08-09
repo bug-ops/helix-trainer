@@ -214,7 +214,7 @@ A handful of keys are reserved by the trainer's own UI and intercepted before ga
 
 #### macOS Terminal.app and other non-kitty terminals
 
-The Option-composed <kbd>Alt</kbd>+<kbd>s</kbd> chord is unreachable on macOS terminals that don't implement the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) (Terminal.app is the common case). This is an accepted trade-off, not a bug: the same physical key also types a plain, directly-typeable character on other keyboard layouts (e.g. `ß` on German QWERTZ), and a `KeyEvent` alone can't tell the two apart, so the trainer no longer guesses. (`Alt-c` has the same reachability gap but currently has no executable command behind it in the trainer regardless of terminal — tracked separately in [#389](https://github.com/bug-ops/helix-trainer/issues/389) — so there is nothing to work around for it here.)
+The Option-composed <kbd>Alt</kbd>+<kbd>s</kbd> chord is unreachable on macOS terminals that don't implement the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) (Terminal.app is the common case). This is an accepted trade-off, not a bug: the same physical key also types a plain, directly-typeable character on other keyboard layouts (e.g. `ß` on German QWERTZ), and a `KeyEvent` alone can't tell the two apart, so the trainer no longer guesses. (`Alt-c` (`change_selection_noyank`) has the same Terminal.app reachability gap and the same remap workaround described below.)
 
 Two ways around it:
 

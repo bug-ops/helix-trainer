@@ -937,10 +937,11 @@ impl MiniGameSession {
         }
 
         // Arcade and Survival use difficulty controller
+        let mut rng = rand::rng();
         while self.queue.len() < QUEUE_SIZE {
-            if let Some(scenario) = self
-                .difficulty
-                .next_scenario(&self.scenarios, self.tracker.as_ref())
+            if let Some(scenario) =
+                self.difficulty
+                    .next_scenario(&self.scenarios, self.tracker.as_ref(), &mut rng)
             {
                 self.queue.push_back(scenario);
             } else {

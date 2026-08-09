@@ -10,6 +10,7 @@ use crate::security::limits::{
 use crate::security::validators::validate_id_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -262,6 +263,17 @@ impl CursorSpec {
 }
 
 /// Secure scenario loader with path validation and content verification
+///
+/// Two loading paths exist:
+///
+/// - [`load_from_embedded`](Self::load_from_embedded) reads scenarios compiled
+///   into the binary. This is the only path production code takes
+///   (`src/data_loader.rs`).
+/// - [`load`](Self::load), [`load_directory`](Self::load_directory) and
+///   [`available_locales`](Self::available_locales) read from the filesystem,
+///   restricted to `allowed_base_paths`. They are retained deliberately for a
+///   planned "load custom scenario packs from disk" feature and are currently
+///   exercised only by unit tests — they are not dead code awaiting removal.
 pub struct ScenarioLoader {
     allowed_base_paths: Vec<PathBuf>,
 }
@@ -279,41 +291,45 @@ impl ScenarioLoader {
         }
     }
 
-    /// Detect available locales by scanning the scenarios directory
+    /// Detect available locales by scanning the allowed scenario directories
     ///
-    /// Returns a list of locale codes (e.g., ["en", "ru"]) found as subdirectories
-    /// in the scenarios directory.
-    pub fn available_locales() -> Vec<String> {
-        let scenarios_path = Path::new("./scenarios");
+    /// Returns the union of locale codes (e.g. `["en", "ru"]`) found as
+    /// two-letter lowercase subdirectories across `allowed_base_paths`,
+    /// deduplicated and sorted. Falls back to `["en"]` when nothing is found.
+    ///
+    /// Not reached from production code today — see the [`ScenarioLoader`] type
+    /// docs for why this filesystem path is retained.
+    pub fn available_locales(&self) -> Vec<String> {
+        // Enumerating the configured roots themselves, not caller-supplied
+        // input, so there is no traversal surface for path_validator to guard.
+        let mut locales: BTreeSet<String> = BTreeSet::new();
 
-        if !scenarios_path.exists() || !scenarios_path.is_dir() {
-            tracing::warn!("Scenarios directory not found");
-            return vec!["en".to_string()]; // Fallback to English
-        }
-
-        let mut locales = Vec::new();
-
-        if let Ok(entries) = fs::read_dir(scenarios_path) {
+        for base in &self.allowed_base_paths {
+            let Ok(entries) = fs::read_dir(base) else {
+                continue;
+            };
             for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type()
-                    && file_type.is_dir()
-                    && let Some(name) = entry.file_name().to_str()
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                if !file_type.is_dir() {
+                    continue;
+                }
+                if let Some(name) = entry.file_name().to_str()
+                    && name.len() == 2
+                    && name.chars().all(|c| c.is_ascii_lowercase())
                 {
-                    // Validate locale code: 2-letter ISO code
-                    if name.len() == 2 && name.chars().all(|c| c.is_ascii_lowercase()) {
-                        locales.push(name.to_string());
-                    }
+                    locales.insert(name.to_string());
                 }
             }
         }
 
-        // Always ensure English is available as fallback
         if locales.is_empty() {
-            locales.push("en".to_string());
+            tracing::warn!("No scenario locales found; falling back to English");
+            return vec!["en".to_string()];
         }
 
-        locales.sort();
-        locales
+        locales.into_iter().collect()
     }
 
     /// Create a loader with custom allowed paths for testing
@@ -332,6 +348,9 @@ impl ScenarioLoader {
     ///
     /// # Errors
     /// Returns UserError if any file fails to load or validation fails
+    ///
+    /// Not reached from production code today — see the [`ScenarioLoader`] type
+    /// docs for why this filesystem path is retained.
     pub fn load_directory(&self, dir_path: &Path) -> Result<Vec<Scenario>, UserError> {
         // Validate directory path
         let canonical = path_validator::validate_path(dir_path, &self.allowed_base_paths)
@@ -367,6 +386,9 @@ impl ScenarioLoader {
     /// Recursively visit all .toml files in a directory
     ///
     /// Returns tuple of (scenarios, file_count)
+    ///
+    /// Not reached from production code today — see the [`ScenarioLoader`] type
+    /// docs for why this filesystem path is retained.
     fn visit_toml_files(&self, dir: &Path) -> Result<(Vec<Scenario>, usize), UserError> {
         let entries = fs::read_dir(dir).map_err(|e| {
             tracing::error!("Failed to read directory: {}", e);
@@ -419,6 +441,9 @@ impl ScenarioLoader {
     ///
     /// # Errors
     /// Returns UserError with sanitized message if any validation fails
+    ///
+    /// Not reached from production code today — see the [`ScenarioLoader`] type
+    /// docs for why this filesystem path is retained.
     pub fn load(&self, path: &Path) -> Result<Vec<Scenario>, UserError> {
         // Validate path to prevent path traversal attacks
         let canonical = path_validator::validate_path(path, &self.allowed_base_paths)

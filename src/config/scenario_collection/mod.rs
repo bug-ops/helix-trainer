@@ -37,17 +37,33 @@ pub struct ScenarioFilter {
     /// Include only scenarios teaching these commands (None = no filter)
     pub commands: Option<HashSet<String>>,
 
-    /// Include only completed scenarios
-    pub completed_only: bool,
-
-    /// Include only not-yet-completed scenarios
-    pub not_completed_only: bool,
+    /// Completion-status criterion (defaults to [`CompletionFilter::Any`])
+    pub completion: CompletionFilter,
 
     /// Include only scenarios with prerequisites met (None = no check)
     pub has_prerequisites: Option<bool>,
 
     /// Include only scenarios with specific tags
     pub tags: Option<HashSet<String>>,
+}
+
+/// Completion-status criterion for [`ScenarioFilter`].
+///
+/// Replaces the previous pair of independent `completed_only` /
+/// `not_completed_only` booleans, whose both-true combination silently
+/// filtered out every scenario. The three states are mutually exclusive by
+/// construction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CompletionFilter {
+    /// No completion-status restriction.
+    #[default]
+    Any,
+
+    /// Keep only scenarios present in the profile's completion history.
+    CompletedOnly,
+
+    /// Keep only scenarios absent from the profile's completion history.
+    NotCompletedOnly,
 }
 
 /// Sorting strategies for scenario display
@@ -319,11 +335,12 @@ impl ScenarioCollection {
         if let Some(prof) = profile {
             let is_completed = prof.scenario_history.get(&scenario.id).is_some();
 
-            if filter.completed_only && !is_completed {
-                return false;
-            }
-
-            if filter.not_completed_only && is_completed {
+            let keep = match filter.completion {
+                CompletionFilter::Any => true,
+                CompletionFilter::CompletedOnly => is_completed,
+                CompletionFilter::NotCompletedOnly => !is_completed,
+            };
+            if !keep {
                 return false;
             }
         }

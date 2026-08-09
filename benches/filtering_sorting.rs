@@ -7,8 +7,8 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use helix_trainer::config::{
-    CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioCollection, ScenarioFilter,
-    ScenarioMetadata, ScoringConfig, Setup, Solution, SortMode, TargetState,
+    CompletionFilter, CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioCollection,
+    ScenarioFilter, ScenarioMetadata, ScoringConfig, Setup, Solution, SortMode, TargetState,
 };
 use helix_trainer::gamification::UserProfile;
 use std::collections::HashSet;
@@ -219,7 +219,7 @@ fn bench_filter_by_completion(c: &mut Criterion) {
                     let collection = ScenarioCollection::new(scenarios);
 
                     let filter = ScenarioFilter {
-                        not_completed_only: true,
+                        completion: CompletionFilter::NotCompletedOnly,
                         ..Default::default()
                     };
 
@@ -261,7 +261,7 @@ fn bench_filter_multi_criteria(c: &mut Criterion) {
                     let filter = ScenarioFilter {
                         categories: Some(filter_categories),
                         difficulties: Some(filter_difficulties),
-                        not_completed_only: true,
+                        completion: CompletionFilter::NotCompletedOnly,
                         ..Default::default()
                     };
 
@@ -615,7 +615,7 @@ fn bench_filter_sort_access_workflow(c: &mut Criterion) {
 
                 let filter = ScenarioFilter {
                     categories: Some(filter_categories),
-                    not_completed_only: true,
+                    completion: CompletionFilter::NotCompletedOnly,
                     ..Default::default()
                 };
 

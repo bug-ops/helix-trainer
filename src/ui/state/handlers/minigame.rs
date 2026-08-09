@@ -147,7 +147,7 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
             .play(SoundEffect::ScenarioComplete);
 
         // Get current streak before advancing
-        let current_streak = session.stats().streak;
+        let current_streak = session.stats().streak();
 
         // Record to FSRS before advancing (only if we have actions)
         if let Some(scenario) = session.current_scenario() {
@@ -361,7 +361,7 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
 
         // 2. Calculate XP earned
         use crate::gamification::XPCalculator;
-        let xp = XPCalculator::minigame_xp(stats.score, stats.level, stats.best_streak);
+        let xp = XPCalculator::minigame_xp(stats.score, stats.level(), stats.best_streak());
 
         // 3. Update profile with XP and high scores
         let profile = &mut state.progress.profile;
@@ -374,8 +374,8 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
             new_high_score = true;
         }
 
-        if stats.best_streak > profile.minigame_best_streak {
-            profile.minigame_best_streak = stats.best_streak;
+        if stats.best_streak() > profile.minigame_best_streak {
+            profile.minigame_best_streak = stats.best_streak();
         }
 
         // Increment total games played counter
@@ -385,8 +385,8 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
         tracing::info!(
             xp_earned = xp,
             score = stats.score,
-            level = stats.level,
-            streak = stats.best_streak,
+            level = stats.level(),
+            streak = stats.best_streak(),
             leveled_up = leveled_up,
             new_high_score = new_high_score,
             "Mini-game session completed"
@@ -694,8 +694,11 @@ mod tests {
         if let Some(ref mut session) = state.game.minigame_session {
             // Simulate game progress
             session.stats.score = 5000;
-            session.stats.level = 3;
-            session.stats.best_streak = 10;
+            session.stats.increase_level();
+            session.stats.increase_level();
+            for _ in 0..10 {
+                session.stats.record_completion();
+            }
         }
 
         // Trigger game over
@@ -1290,7 +1293,9 @@ mod tests {
             session.tick_countdown();
             session.tick_countdown();
             session.tick_countdown();
-            session.stats.best_streak = 15;
+            for _ in 0..15 {
+                session.stats.record_completion();
+            }
         }
 
         handle_minigame_game_over(&mut state).unwrap();

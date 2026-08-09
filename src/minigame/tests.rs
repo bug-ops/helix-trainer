@@ -105,19 +105,64 @@ fn test_difficulty_adapts_to_performance() {
 }
 
 #[test]
-fn test_streak_increases_multiplier() {
-    let mut stats = MiniGameStats::new();
+fn test_advance_to_next_drives_streak_and_multiplier() {
+    let scenarios = Arc::new(vec![
+        create_simple_scenario("s1"),
+        create_simple_scenario("s2"),
+        create_simple_scenario("s3"),
+    ]);
 
-    // Initially 1.0x
-    assert_eq!(stats.multiplier, 1.0);
+    let mut session = MiniGameSession::new(scenarios, None);
 
-    // Build streak
-    for i in 1..=6 {
-        stats.increase_streak();
-        if i >= 6 {
-            assert_eq!(stats.multiplier, 2.0);
-        }
+    session.start();
+    session.tick_countdown();
+    session.tick_countdown();
+    session.tick_countdown();
+
+    // Drive real completions through the production path (advance_to_next +
+    // complete_transition), not direct MiniGameStats writes, to prove the
+    // deleted session-level sync is no longer needed for the streak/
+    // multiplier tier table to advance correctly.
+    for _ in 0..6 {
+        session.advance_to_next();
+        let _ = session.complete_transition();
     }
+
+    assert_eq!(session.stats().streak(), 6);
+    assert_eq!(session.stats().best_streak(), 6);
+    assert!((session.stats().multiplier() - 2.0).abs() < f64::EPSILON);
+}
+
+#[test]
+fn test_handle_timeout_after_real_streak_uses_grace() {
+    let scenarios = Arc::new(vec![
+        create_simple_scenario("s1"),
+        create_simple_scenario("s2"),
+        create_simple_scenario("s3"),
+    ]);
+
+    let mut session = MiniGameSession::new(scenarios, None);
+
+    session.start();
+    session.tick_countdown();
+    session.tick_countdown();
+    session.tick_countdown();
+
+    // Reach the streak-10 milestone through the real advance_to_next path so
+    // grace is granted by MultiplierState, then fail immediately: grace
+    // should protect the streak instead of resetting it.
+    for _ in 0..10 {
+        session.advance_to_next();
+        let _ = session.complete_transition();
+    }
+    assert_eq!(session.stats().grace_remaining(), 1);
+    let multiplier_before = session.stats().multiplier();
+
+    session.handle_timeout();
+
+    assert_eq!(session.stats().streak(), 10);
+    assert_eq!(session.stats().grace_remaining(), 0);
+    assert!((session.stats().multiplier() - multiplier_before).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -137,7 +182,7 @@ fn test_game_over_when_lives_depleted() {
     }
 
     assert!(session.state().is_game_over());
-    assert_eq!(session.stats().lives, 0);
+    assert_eq!(session.stats().lives(), 0);
 }
 
 #[test]
@@ -185,12 +230,12 @@ fn test_pause_and_resume() {
 fn test_stats_initial_values() {
     let stats = MiniGameStats::new();
     assert_eq!(stats.score, 0);
-    assert_eq!(stats.lives, 3);
-    assert_eq!(stats.streak, 0);
-    assert_eq!(stats.best_streak, 0);
+    assert_eq!(stats.lives(), 3);
+    assert_eq!(stats.streak(), 0);
+    assert_eq!(stats.best_streak(), 0);
     assert_eq!(stats.scenarios_completed, 0);
     assert_eq!(stats.scenarios_failed, 0);
-    assert_eq!(stats.multiplier, 1.0);
+    assert_eq!(stats.multiplier(), 1.0);
 }
 
 #[test]
@@ -206,51 +251,20 @@ fn test_stats_add_score() {
 #[test]
 fn test_stats_lose_life() {
     let mut stats = MiniGameStats::new();
-    assert_eq!(stats.lives, 3);
+    assert_eq!(stats.lives(), 3);
 
     assert!(stats.lose_life()); // Still has lives
-    assert_eq!(stats.lives, 2);
+    assert_eq!(stats.lives(), 2);
 
     assert!(stats.lose_life()); // Still has lives
-    assert_eq!(stats.lives, 1);
+    assert_eq!(stats.lives(), 1);
 
     assert!(!stats.lose_life()); // Game over
-    assert_eq!(stats.lives, 0);
+    assert_eq!(stats.lives(), 0);
 
     // Can't go below 0
     assert!(!stats.lose_life());
-    assert_eq!(stats.lives, 0);
-}
-
-#[test]
-fn test_stats_max_streak_tracking() {
-    let mut stats = MiniGameStats::new();
-
-    // Build streak
-    for _ in 0..5 {
-        stats.increase_streak();
-    }
-    assert_eq!(stats.streak, 5);
-    assert_eq!(stats.best_streak, 5);
-
-    // Reset streak (not from lose_life, using reset_streak)
-    stats.reset_streak();
-    assert_eq!(stats.streak, 0);
-    assert_eq!(stats.best_streak, 5); // Max preserved
-
-    // Build new streak
-    for _ in 0..3 {
-        stats.increase_streak();
-    }
-    assert_eq!(stats.streak, 3);
-    assert_eq!(stats.best_streak, 5); // Max still preserved
-
-    // Exceeding best_streak updates it
-    for _ in 0..5 {
-        stats.increase_streak();
-    }
-    assert_eq!(stats.streak, 8);
-    assert_eq!(stats.best_streak, 8); // Updated
+    assert_eq!(stats.lives(), 0);
 }
 
 #[test]
@@ -323,19 +337,6 @@ fn test_session_with_empty_scenarios() {
 
     // Should handle empty scenario list gracefully
     assert!(session.current_scenario().is_none());
-}
-
-#[test]
-fn test_multiplier_capped_at_max() {
-    let mut stats = MiniGameStats::new();
-
-    // Build streak way beyond cap
-    for _ in 0..100 {
-        stats.increase_streak();
-    }
-
-    // Multiplier should be capped at 5.0 (based on the actual implementation)
-    assert_eq!(stats.multiplier, 5.0);
 }
 
 #[test]

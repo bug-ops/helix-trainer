@@ -422,7 +422,10 @@ mod tests {
 
         // Verify session is created with 1 life
         assert!(ctx.game.minigame_session.is_some());
-        assert_eq!(ctx.game.minigame_session.as_ref().unwrap().stats().lives, 1);
+        assert_eq!(
+            ctx.game.minigame_session.as_ref().unwrap().stats().lives(),
+            1
+        );
     }
 
     #[test]
@@ -441,7 +444,10 @@ mod tests {
 
         // Verify session is created with 3 lives
         assert!(ctx.game.minigame_session.is_some());
-        assert_eq!(ctx.game.minigame_session.as_ref().unwrap().stats().lives, 3);
+        assert_eq!(
+            ctx.game.minigame_session.as_ref().unwrap().stats().lives(),
+            3
+        );
     }
 
     #[test]

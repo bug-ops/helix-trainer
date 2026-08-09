@@ -1,0 +1,37 @@
+# Blockquote Prefixing (Writing track)
+# Scenario for citing a source with a Markdown blockquote prefix
+
+[[scenarios]]
+id = "writing_blockquote_001"
+name = "Turn a line into a blockquote"
+description = "Prefix a line with '> ' to quote it in Markdown"
+
+hints = [
+    "'I' moves to the first non-blank character and enters insert mode",
+    "Typing '> ' before the text turns it into a blockquote",
+]
+
+[scenarios.setup]
+file_content = """This is a quoted passage."""
+language = "md"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """> This is a quoted passage."""
+cursor_position = [0, 2]
+
+[scenarios.solution]
+commands = ["I", ">", " ", "Escape"]
+description = "Move to line start with 'I', type '> ', then Escape"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 1
+
+[scenarios.metadata]
+category = "writing"
+difficulty = "beginner"
+tags = ["blockquote", "markdown"]
+commands_taught = ["I"]
+estimated_time_seconds = 10

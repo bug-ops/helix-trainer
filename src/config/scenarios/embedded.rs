@@ -26,6 +26,8 @@ const EDITING_ADVANCED: &str = include_str!("../../../scenarios/en/editing/advan
 const EDITING_DELETE_SELECTION: &str =
     include_str!("../../../scenarios/en/editing/delete-selection.toml");
 const EDITING_INDENTATION: &str = include_str!("../../../scenarios/en/editing/indentation.toml");
+const EDITING_INDENTATION_PYTHON: &str =
+    include_str!("../../../scenarios/en/editing/indentation-python.toml");
 const EDITING_JOIN: &str = include_str!("../../../scenarios/en/editing/join.toml");
 const EDITING_SURROUND: &str = include_str!("../../../scenarios/en/editing/surround.toml");
 
@@ -51,6 +53,7 @@ const MOVEMENT_PRECISION: &str = include_str!("../../../scenarios/en/movement/pr
 const MOVEMENT_SCROLL: &str = include_str!("../../../scenarios/en/movement/scroll.toml");
 const MOVEMENT_WORD_BASICS: &str = include_str!("../../../scenarios/en/movement/word-basics.toml");
 const MOVEMENT_WORD: &str = include_str!("../../../scenarios/en/movement/word.toml");
+const MOVEMENT_WORD_PYTHON: &str = include_str!("../../../scenarios/en/movement/word-python.toml");
 
 // ============================================================================
 // Macro scenarios
@@ -89,6 +92,18 @@ const SELECTION_TEXT_OBJECTS: &str =
     include_str!("../../../scenarios/en/selection/text-objects.toml");
 
 // ============================================================================
+// Writing scenarios
+// ============================================================================
+
+const WRITING_EMPHASIS: &str = include_str!("../../../scenarios/en/writing/emphasis.toml");
+const WRITING_LINKS: &str = include_str!("../../../scenarios/en/writing/links.toml");
+const WRITING_LIST_INDENT: &str = include_str!("../../../scenarios/en/writing/list-indent.toml");
+const WRITING_HEADING_LEVEL: &str =
+    include_str!("../../../scenarios/en/writing/heading-level.toml");
+const WRITING_BLOCKQUOTE: &str = include_str!("../../../scenarios/en/writing/blockquote.toml");
+const WRITING_CODE_FENCE: &str = include_str!("../../../scenarios/en/writing/code-fence.toml");
+
+// ============================================================================
 // Public API
 // ============================================================================
 
@@ -107,6 +122,7 @@ const EN_SCENARIOS: &[&str] = &[
     EDITING_ADVANCED,
     EDITING_DELETE_SELECTION,
     EDITING_INDENTATION,
+    EDITING_INDENTATION_PYTHON,
     EDITING_JOIN,
     EDITING_SURROUND,
     // Movement
@@ -124,6 +140,7 @@ const EN_SCENARIOS: &[&str] = &[
     MOVEMENT_SCROLL,
     MOVEMENT_WORD_BASICS,
     MOVEMENT_WORD,
+    MOVEMENT_WORD_PYTHON,
     // Macros
     MACROS_BASIC,
     // Registers
@@ -137,6 +154,13 @@ const EN_SCENARIOS: &[&str] = &[
     SELECTION_LINE,
     SELECTION_ALL_REPLACE,
     SELECTION_TEXT_OBJECTS,
+    // Writing
+    WRITING_EMPHASIS,
+    WRITING_LINKS,
+    WRITING_LIST_INDENT,
+    WRITING_HEADING_LEVEL,
+    WRITING_BLOCKQUOTE,
+    WRITING_CODE_FENCE,
 ];
 
 /// Returns all embedded scenario TOML strings for the specified locale.
@@ -182,7 +206,7 @@ mod tests {
     #[test]
     fn test_get_embedded_scenarios_en() {
         let scenarios = get_embedded_scenarios("en");
-        assert_eq!(scenarios.len(), 32, "Expected 32 scenario files");
+        assert_eq!(scenarios.len(), 40, "Expected 40 scenario files");
     }
 
     #[test]

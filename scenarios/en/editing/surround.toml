@@ -1,6 +1,6 @@
 # Surround Commands
 # Scenarios for md (delete surround) and mr (replace surround)
-# Note: ms (add surround) is not yet implemented
+# Note: ms (add surround) scenarios live under scenarios/en/writing/
 
 # ============================================================================
 # DELETE SURROUND (md{char})

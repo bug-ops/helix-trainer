@@ -1,0 +1,37 @@
+# Markdown Link Construction (Writing track)
+# Scenario for building a Markdown link: select word, wrap in [ ], append (url)
+
+[[scenarios]]
+id = "writing_link_construction_001"
+name = "Turn a word into a Markdown link"
+description = "Select a word, wrap it in brackets, then append a URL in parentheses"
+
+hints = [
+    "'miw' selects the word, 'ms[' wraps it in [ ]",
+    "';' collapses the selection to the cursor so 'a' appends right after the closing bracket",
+]
+
+[scenarios.setup]
+file_content = """See documentation for details."""
+language = "md"
+cursor_position = [0, 4]
+
+[scenarios.target]
+file_content = """See [documentation](url) for details."""
+cursor_position = [0, 24]
+
+[scenarios.solution]
+commands = ["miw", "ms[", ";", "a", "(", "u", "r", "l", ")", "Escape"]
+description = "Select the word, wrap it in brackets, collapse the selection, then append the URL"
+
+[scenarios.scoring]
+optimal_count = 14
+max_points = 100
+tolerance = 1
+
+[scenarios.metadata]
+category = "writing"
+difficulty = "intermediate"
+tags = ["surround", "link", "markdown"]
+commands_taught = ["ms", "miw"]
+estimated_time_seconds = 20

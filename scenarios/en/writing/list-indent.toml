@@ -1,0 +1,80 @@
+# List Item Indent/Outdent (Writing track)
+# Scenarios for restructuring a Markdown list outline with '>' and '<'
+
+[[scenarios]]
+id = "writing_list_indent_001"
+name = "Indent a list item"
+description = "Use '>' to nest a list item under the item above it"
+
+hints = [
+    "'>' adds indentation to the current line",
+    "Useful for turning a flat list into a nested outline",
+]
+
+[scenarios.setup]
+file_content = """- Item one
+- Item two
+- Item three"""
+language = "md"
+cursor_position = [1, 0]
+
+[scenarios.target]
+file_content = """- Item one
+  - Item two
+- Item three"""
+cursor_position = [1, 2]
+
+[scenarios.solution]
+commands = [">"]
+description = "Press '>' to indent the list item"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "writing"
+difficulty = "beginner"
+tags = ["indent", "list", "markdown"]
+commands_taught = [">"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "writing_list_outdent_001"
+name = "Outdent a list item"
+description = "Use '<' to promote a nested list item back to the top level"
+
+hints = [
+    "'<' removes indentation from the current line",
+    "Undoes a nested list item back to the top level",
+]
+
+[scenarios.setup]
+file_content = """- Item one
+  - Item two
+- Item three"""
+language = "md"
+cursor_position = [1, 2]
+
+[scenarios.target]
+file_content = """- Item one
+- Item two
+- Item three"""
+cursor_position = [1, 0]
+
+[scenarios.solution]
+commands = ["<"]
+description = "Press '<' to outdent the list item"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "writing"
+difficulty = "beginner"
+tags = ["dedent", "indent", "list", "markdown"]
+commands_taught = ["<"]
+estimated_time_seconds = 10

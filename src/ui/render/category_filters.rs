@@ -26,6 +26,7 @@ pub(super) fn category_display_name(category: &ScenarioCategory) -> &'static str
         ScenarioCategory::Registers => "Registers",
         ScenarioCategory::Multi => "Multi",
         ScenarioCategory::Other => "Other",
+        ScenarioCategory::Writing => "Writing",
     }
 }
 
@@ -42,6 +43,7 @@ fn category_icon(category: &ScenarioCategory) -> &'static str {
         ScenarioCategory::Registers => "\"\"",
         ScenarioCategory::Multi => "**",
         ScenarioCategory::Other => "..",
+        ScenarioCategory::Writing => "wr",
     }
 }
 

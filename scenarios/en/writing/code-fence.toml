@@ -1,0 +1,39 @@
+# Code Fence Wrapping (Writing track)
+# Scenario for wrapping a code sample in a Markdown fenced code block
+
+[[scenarios]]
+id = "writing_code_fence_001"
+name = "Wrap a line in a code fence"
+description = "Surround a code sample with triple-backtick fence lines"
+
+hints = [
+    "'O' opens a new line above and enters insert mode",
+    "'o' opens a new line below and enters insert mode",
+]
+
+[scenarios.setup]
+file_content = """print("hello")"""
+language = "md"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """```
+print("hello")
+```"""
+cursor_position = [2, 3]
+
+[scenarios.solution]
+commands = ["O", "`", "`", "`", "Escape", "j", "o", "`", "`", "`", "Escape"]
+description = "Open a fence line above with 'O', then a fence line below with 'o'"
+
+[scenarios.scoring]
+optimal_count = 11
+max_points = 100
+tolerance = 1
+
+[scenarios.metadata]
+category = "writing"
+difficulty = "intermediate"
+tags = ["code-fence", "markdown"]
+commands_taught = ["O", "o"]
+estimated_time_seconds = 20

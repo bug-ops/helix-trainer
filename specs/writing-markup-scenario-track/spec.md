@@ -8,9 +8,9 @@ tags:
   - scenarios
   - ui
   - config
-  - status/proposed
+  - status/implemented
 created: 2026-08-09
-status: proposed
+status: implemented
 related:
   - "[[constitution]]"
   - "[[MOC-specs]]"
@@ -23,7 +23,7 @@ related:
 > filed by @fabiosirna, labeled `enhancement`, `P4`, `scenarios`
 > (repo-assigned priority). This spec's own triage priority is **P3** —
 > see rationale below.
-> **Status**: Proposed — research/evaluation complete, not yet built.
+> **Status**: Implemented — see issue #361.
 > **Depth**: Lightweight spec only, per this project's SDD scaling
 > guidance. No dedicated new engine capability is required (see FR-001
 > rationale) — this is primarily new scenario content plus one closed-enum
@@ -189,11 +189,11 @@ Use EARS notation. Prefix with FR-NNN.
 |----|------------|----------|
 | FR-001 | WHEN this feature is implemented THE SYSTEM SHALL NOT require any new `HelixSimulator`, tree-sitter, or filetype-aware textobject capability — all scenarios SHALL be expressible with existing `setup`/`target`/`solution` TOML fields and existing simulator commands | must |
 | FR-002 | WHEN a scenario is authored under the Writing track THE SYSTEM SHALL classify it via a new `ScenarioCategory::Writing` enum variant, and every existing exhaustive `match` over `ScenarioCategory` (filtering UI, quest generation, and any other call site) SHALL be updated to handle it | must |
-| FR-003 | WHEN authoring scenarios for issue #152's "Structural movement" use case (move a paragraph/list item, analogous to Obsidian's Alt+Up/Down) THE SYSTEM SHALL either omit this use case from the initial scope or implement it via an approximation using existing select/delete/paste commands — `[NEEDS CLARIFICATION: Helix has no single built-in "move block" keybinding; confirm whether to (a) scope this out entirely, (b) approximate via select-line(s) + delete + move + paste, or (c) treat as a candidate for a future dedicated command outside this spec's scope]` | must |
-| FR-004 | WHEN authoring scenarios for issue #152's "convert a list to a numbered list" use case THE SYSTEM SHALL treat it as out of scope, since no direct Helix command performs this transformation — `[NEEDS CLARIFICATION: confirm this exclusion is acceptable, or identify a keystroke sequence that approximates it (e.g., manual per-line find/replace) worth drilling anyway]` | should |
+| FR-003 | WHEN authoring scenarios for issue #152's "Structural movement" use case (move a paragraph/list item, analogous to Obsidian's Alt+Up/Down) THE SYSTEM SHALL either omit this use case from the initial scope or implement it via an approximation using existing select/delete/paste commands — **Decision: scoped out entirely for this pilot.** No move-paragraph/list-item scenario was authored; Helix has no single built-in "move block" keybinding, and an artificial select+delete+paste workaround was judged not worth presenting as canonical technique. Revisit as a future dedicated-command request if there's demand. | must |
+| FR-004 | WHEN authoring scenarios for issue #152's "convert a list to a numbered list" use case THE SYSTEM SHALL treat it as out of scope, since no direct Helix command performs this transformation — **Decision: exclusion confirmed.** No worthwhile approximate drill was identified; not implemented in this pilot. | should |
 | FR-005 | WHEN authoring Writing-track scenarios THE SYSTEM SHALL cover, at minimum, the following concrete use cases from issue #152: (a) bold/italic emphasis via `ms`, (b) Markdown link construction (select word, wrap `[ ]`, append `(url)`), (c) list item indent/outdent (`>`/`<`), (d) heading level change (e.g., `##` ↔ `###`), (e) blockquote prefixing (`> `), (f) code-fence wrapping (triple backtick) | must |
 | FR-006 | WHEN this feature is implemented THE SYSTEM SHALL correct the stale header comment in `scenarios/en/editing/surround.toml` ("Note: ms (add surround) is not yet implemented") as a drive-by fix, since `ms` has been fully implemented since the surround feature landed | must |
-| FR-007 | WHEN Writing-track scenarios are authored with Markdown or Typst content THE SYSTEM SHALL render them with correct language-specific syntax highlighting, which depends on [[../language-aware-syntax-highlighting/spec|Language-Aware Syntax Highlighting]] landing first — `[NEEDS CLARIFICATION: is Markdown-only sufficient for v1, with Typst deferred until the highlighting prerequisite confirms Typst support, or must both ship together?]` | must |
+| FR-007 | WHEN Writing-track scenarios are authored with Markdown or Typst content THE SYSTEM SHALL render them with correct language-specific syntax highlighting, which depends on [[../language-aware-syntax-highlighting/spec|Language-Aware Syntax Highlighting]] landing first — **Decision: Markdown-only for v1.** All six Writing-track scenarios set `setup.language = "md"`; Typst is deferred until a dedicated need arises. | must |
 | FR-008 | WHEN a Writing-track scenario TOML file is added to the repository THE SYSTEM SHALL pass `cargo nextest run scenario` schema validation, identical to every other scenario category | must |
 
 ## 4. Non-Functional Requirements
@@ -262,9 +262,9 @@ any other data model outside the `ScenarioCategory` enum itself.
 
 ## 9. Open Questions
 
-- [NEEDS CLARIFICATION: FR-003 — should "structural paragraph/list movement" be scoped out entirely, approximated with select+delete+paste, or deferred as a future dedicated-command request?]
-- [NEEDS CLARIFICATION: FR-004 — is excluding "convert list to numbered list" acceptable, or is there a worthwhile approximate drill?]
-- [NEEDS CLARIFICATION: FR-007 — does v1 require both Markdown and Typst highlighting support, or can Typst scenarios be deferred until the prerequisite spec confirms Typst support specifically?]
+- **Resolved (FR-003)**: "structural paragraph/list movement" is scoped out entirely for this pilot — no scenario was authored for it.
+- **Resolved (FR-004)**: "convert list to numbered list" is excluded — no worthwhile approximate drill was identified.
+- **Resolved (FR-007)**: v1 ships Markdown-only; Typst is deferred.
 - Should Writing-track scenarios support a language other than English content-wise (this repo's existing scenarios live under `scenarios/en/`), or is English-only prose content acceptable for v1 given the trainer's existing i18n scope is UI strings, not scenario content?
 
 ## 10. See Also

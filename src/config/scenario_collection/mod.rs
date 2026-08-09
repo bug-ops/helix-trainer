@@ -215,8 +215,8 @@ impl ScenarioCollection {
         }
     }
 
-    /// Get filtered scenarios (references)
-    pub fn get_filtered(&self) -> Vec<&Scenario> {
+    /// Filtered scenarios (references)
+    pub fn filtered(&self) -> Vec<&Scenario> {
         self.filtered_indices
             .iter()
             .map(|&idx| &self.scenarios[idx])
@@ -246,8 +246,8 @@ impl ScenarioCollection {
         self.filtered_indices = (0..self.scenarios.len()).collect();
     }
 
-    /// Get all unique categories present in the collection
-    pub fn get_categories(&self) -> Vec<ScenarioCategory> {
+    /// All unique categories present in the collection
+    pub fn categories(&self) -> Vec<ScenarioCategory> {
         let mut categories: Vec<ScenarioCategory> = self
             .scenarios
             .iter()
@@ -261,8 +261,8 @@ impl ScenarioCollection {
         categories
     }
 
-    /// Get all unique difficulties present in the collection
-    pub fn get_difficulties(&self) -> Vec<Difficulty> {
+    /// All unique difficulties present in the collection
+    pub fn difficulties(&self) -> Vec<Difficulty> {
         let mut difficulties: Vec<Difficulty> = self
             .scenarios
             .iter()
@@ -592,7 +592,7 @@ pub struct CurriculumStats {
     /// Scenarios with at least one 100% completion (`perfect_count > 0`).
     pub perfected: usize,
     /// `(category, perfected_in_category, total_in_category)`, sorted the same
-    /// way as [`ScenarioCollection::get_categories`] (`*category as u8`).
+    /// way as [`ScenarioCollection::categories`] (`*category as u8`).
     pub per_category: Vec<(ScenarioCategory, usize, usize)>,
 }
 

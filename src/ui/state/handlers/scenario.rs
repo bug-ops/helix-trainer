@@ -3,10 +3,9 @@
 //! Handles starting, completing, retrying, and abandoning scenarios
 
 use crate::config::Difficulty;
-use crate::constants::{FLASH_TIME_RATIO, SPEED_DEMON_TIME_RATIO};
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
-use crate::gamification::{Achievement, AchievementEngine, UserProfile, speed_time_ratio};
+use crate::gamification::UserProfile;
 use crate::learning::Analytics;
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
@@ -65,26 +64,15 @@ fn record_scenario_completion(
     let leveled_up = ctx.progress.profile.add_xp(total_xp) || ctx.ui.quest_leveled_up;
     ScenarioCompletionService::update_profile_counters(&mut ctx.progress.profile, is_perfect);
 
-    if let Some(difficulty) = difficulty {
-        ctx.progress
-            .profile
-            .difficulties_completed
-            .insert(difficulty);
-    }
-
     // Speed achievements (SpeedDemon/Speedrunner/Flash) previously only fired from
     // arcade play; Training mode has no `DifficultyController` to scale a time budget,
     // but the same base per-difficulty budget `speed_time_ratio` uses is enough to
     // judge a completion as a speed run here too.
-    let time_ratio = speed_time_ratio(feedback.duration, difficulty);
-    if time_ratio < SPEED_DEMON_TIME_RATIO {
-        ctx.progress.profile.speed_run_count =
-            ctx.progress.profile.speed_run_count.saturating_add(1);
-    }
-    if time_ratio < FLASH_TIME_RATIO {
-        ctx.progress.profile.flash_run_count =
-            ctx.progress.profile.flash_run_count.saturating_add(1);
-    }
+    ScenarioCompletionService::track_speed_and_difficulty(
+        &mut ctx.progress.profile,
+        feedback.duration,
+        difficulty,
+    );
 
     ctx.progress.scenarios_completed_today += 1;
 
@@ -125,19 +113,13 @@ fn record_scenario_completion(
 
     // Check and unlock any achievements newly satisfied by this completion
     // (perfect/scenario counters and command mastery all just changed above)
-    let newly_unlocked = AchievementEngine::check_and_unlock(
+    let newly_unlocked_notifications = ScenarioCompletionService::check_and_notify_achievements(
         &mut ctx.progress.profile,
         &ctx.progress.performance_tracker,
     );
-    if !newly_unlocked.is_empty() {
-        for achievement_id in newly_unlocked {
-            let achievement = Achievement::new(achievement_id);
-            ctx.ui
-                .notifications
-                .push(Notification::new(NotificationType::Achievement {
-                    name: achievement.name,
-                    description: achievement.description,
-                }));
+    if !newly_unlocked_notifications.is_empty() {
+        for notification in newly_unlocked_notifications {
+            ctx.ui.notifications.push(notification);
         }
         // Persist through the shared save path (non-fatal, matches the policy
         // above) instead of a raw `storage.save`, which would skip the FSRS
@@ -151,12 +133,10 @@ fn record_scenario_completion(
     // per-command mastery level ups above). Pushed last so it lands inside the
     // notification queue's fixed-size visible window even when mastery or
     // achievement notifications also fire during this completion.
-    if leveled_up {
-        ctx.ui
-            .notifications
-            .push(Notification::new(NotificationType::LevelUp {
-                new_level: ctx.progress.profile.level,
-            }));
+    if let Some(notification) =
+        ScenarioCompletionService::level_up_notification(leveled_up, ctx.progress.profile.level)
+    {
+        ctx.ui.notifications.push(notification);
     }
 
     Ok(())

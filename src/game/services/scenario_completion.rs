@@ -2,9 +2,12 @@
 //!
 //! Handles XP calculation, mastery tracking, and FSRS recording
 
+use crate::config::Difficulty;
+use crate::constants::{FLASH_TIME_RATIO, SPEED_DEMON_TIME_RATIO};
 use crate::game::Feedback;
-use crate::gamification::UserProfile;
+use crate::gamification::{Achievement, AchievementEngine, UserProfile, speed_time_ratio};
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
+use crate::ui::notification::{Notification, NotificationType};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
 
@@ -163,6 +166,122 @@ impl ScenarioCompletionService {
                 crate::helix::commands::normalize_command_id(&action.command).into_owned()
             })
             .collect()
+    }
+
+    /// Track exploration/speed achievement signals for a scenario completion:
+    /// records the completed difficulty tier and increments the speed/flash
+    /// run counters when the completion fell under the respective time budget.
+    ///
+    /// Shared by Training and Arcade so speed/exploration achievements
+    /// (SpeedDemon, Speedrunner, Flash, Polyglot) are reachable identically
+    /// from either mode - see [`speed_time_ratio`]'s doc comment for why both
+    /// modes derive "speed" from the same base per-difficulty budget.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::config::Difficulty;
+    /// use helix_trainer::game::services::ScenarioCompletionService;
+    /// use helix_trainer::gamification::UserProfile;
+    /// use std::time::Duration;
+    ///
+    /// let mut profile = UserProfile::new();
+    /// // Beginner budget is 10s; 1s elapsed is under both the 50% speed-run and
+    /// // 25% flash-run thresholds.
+    /// ScenarioCompletionService::track_speed_and_difficulty(
+    ///     &mut profile,
+    ///     Duration::from_secs(1),
+    ///     Some(Difficulty::Beginner),
+    /// );
+    ///
+    /// assert!(profile.difficulties_completed.contains(&Difficulty::Beginner));
+    /// assert_eq!(profile.speed_run_count, 1);
+    /// assert_eq!(profile.flash_run_count, 1);
+    /// ```
+    pub fn track_speed_and_difficulty(
+        profile: &mut UserProfile,
+        duration: Duration,
+        difficulty: Option<Difficulty>,
+    ) {
+        if let Some(difficulty) = difficulty {
+            profile.difficulties_completed.insert(difficulty);
+        }
+        let time_ratio = speed_time_ratio(duration, difficulty);
+        if time_ratio < SPEED_DEMON_TIME_RATIO {
+            profile.speed_run_count = profile.speed_run_count.saturating_add(1);
+        }
+        if time_ratio < FLASH_TIME_RATIO {
+            profile.flash_run_count = profile.flash_run_count.saturating_add(1);
+        }
+    }
+
+    /// Check for achievements newly unlocked by this completion and build
+    /// their notifications, without pushing them anywhere.
+    ///
+    /// Training and Arcade hold different context types (`HandlerContext` vs
+    /// `AppState`), so the resulting notifications are returned for the
+    /// caller to push into its own notification queue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::game::services::ScenarioCompletionService;
+    /// use helix_trainer::gamification::UserProfile;
+    /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::ui::NotificationType;
+    ///
+    /// let mut profile = UserProfile::new();
+    /// profile.perfect_scenarios = 1;
+    ///
+    /// let tracker = PerformanceTracker::new();
+    /// let notifications =
+    ///     ScenarioCompletionService::check_and_notify_achievements(&mut profile, &tracker);
+    ///
+    /// // Should unlock FirstPerfect
+    /// assert_eq!(notifications.len(), 1);
+    /// assert!(matches!(
+    ///     notifications[0].notification_type,
+    ///     NotificationType::Achievement { .. }
+    /// ));
+    /// ```
+    #[must_use]
+    pub fn check_and_notify_achievements(
+        profile: &mut UserProfile,
+        tracker: &PerformanceTracker,
+    ) -> Vec<Notification> {
+        AchievementEngine::check_and_unlock(profile, tracker)
+            .into_iter()
+            .map(|achievement_id| {
+                let achievement = Achievement::new(achievement_id);
+                Notification::new(NotificationType::Achievement {
+                    name: achievement.name,
+                    description: achievement.description,
+                })
+            })
+            .collect()
+    }
+
+    /// Build a `LevelUp` notification if this completion crossed an
+    /// account-level threshold, for the caller to push into its own
+    /// notification queue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::game::services::ScenarioCompletionService;
+    /// use helix_trainer::ui::NotificationType;
+    ///
+    /// let notification = ScenarioCompletionService::level_up_notification(true, 5);
+    /// assert!(matches!(
+    ///     notification.unwrap().notification_type,
+    ///     NotificationType::LevelUp { new_level: 5 }
+    /// ));
+    ///
+    /// assert!(ScenarioCompletionService::level_up_notification(false, 5).is_none());
+    /// ```
+    #[must_use]
+    pub fn level_up_notification(leveled_up: bool, new_level: u32) -> Option<Notification> {
+        leveled_up.then(|| Notification::new(NotificationType::LevelUp { new_level }))
     }
 }
 

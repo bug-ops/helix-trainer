@@ -27,6 +27,27 @@ pub struct CompletionResult {
     pub leveled_up: bool,
 }
 
+/// Result of recording a scenario completion and scaling its XP by mastery
+///
+/// Mixes one post-recording field with three pre-recording fields, each
+/// documented individually below to avoid ambiguity.
+#[derive(Debug, Clone)]
+pub struct XpScalingResult {
+    /// XP actually awarded for this completion, after mastery/repeat scaling
+    pub actual_xp: u64,
+    /// Mastery level *after* recording this completion, for display purposes
+    pub mastery_level: ScenarioMastery,
+    /// Combined multiplier (`applied_mastery_factor * applied_repeat_penalty`)
+    /// that was applied to this completion, captured *before* recording
+    pub applied_multiplier: f64,
+    /// Mastery-level XP factor that was applied to this completion,
+    /// captured *before* recording
+    pub applied_mastery_factor: f64,
+    /// Session repeat-penalty factor that was applied to this completion,
+    /// captured *before* recording
+    pub applied_repeat_penalty: f64,
+}
+
 /// Service for scenario completion operations
 pub struct ScenarioCompletionService;
 
@@ -52,8 +73,8 @@ impl ScenarioCompletionService {
 
     /// Record scenario completion and return mastery-scaled XP
     ///
-    /// Returns: (actual_xp, mastery_level, applied_multiplier, applied_mastery_factor, applied_repeat_penalty)
-    /// Note: multipliers returned are what was APPLIED to this completion, not current state
+    /// See [`XpScalingResult`] for the distinction between the post-recording
+    /// `mastery_level` field and the pre-recording multiplier fields.
     #[must_use]
     pub fn record_and_scale_xp(
         profile: &mut UserProfile,
@@ -61,7 +82,7 @@ impl ScenarioCompletionService {
         score: u32,
         base_xp: u64,
         now: DateTime<Utc>,
-    ) -> (u64, ScenarioMastery, f64, f64, f64) {
+    ) -> XpScalingResult {
         // Capture multipliers BEFORE recording (what will be applied)
         let (_pre_mastery_level, pre_mastery_factor, pre_repeat_penalty) = profile
             .scenario_history
@@ -84,13 +105,13 @@ impl ScenarioCompletionService {
         let applied_multiplier = pre_mastery_factor * pre_repeat_penalty;
 
         // Return post-mastery level (for display) but pre-multipliers (what was applied)
-        (
+        XpScalingResult {
             actual_xp,
-            post_mastery_level,
+            mastery_level: post_mastery_level,
             applied_multiplier,
-            pre_mastery_factor,
-            pre_repeat_penalty,
-        )
+            applied_mastery_factor: pre_mastery_factor,
+            applied_repeat_penalty: pre_repeat_penalty,
+        }
     }
 
     /// Update profile counters after scenario completion
@@ -311,22 +332,21 @@ mod tests {
     #[test]
     fn test_record_and_scale_xp_first_completion() {
         let mut profile = UserProfile::new();
-        let (actual_xp, mastery, multiplier, mastery_factor, repeat_penalty) =
-            ScenarioCompletionService::record_and_scale_xp(
-                &mut profile,
-                "test_scenario",
-                100,
-                50,
-                Utc::now(),
-            );
+        let result = ScenarioCompletionService::record_and_scale_xp(
+            &mut profile,
+            "test_scenario",
+            100,
+            50,
+            Utc::now(),
+        );
 
         // First completion gets full XP (no penalty)
-        assert_eq!(actual_xp, 50);
-        assert_eq!(mastery, ScenarioMastery::Learning);
+        assert_eq!(result.actual_xp, 50);
+        assert_eq!(result.mastery_level, ScenarioMastery::Learning);
         // Pre-recording multipliers were 1.0 (no prior completion)
-        assert!((multiplier - 1.0).abs() < 0.01);
-        assert!((mastery_factor - 1.0).abs() < 0.01);
-        assert!((repeat_penalty - 1.0).abs() < 0.01);
+        assert!((result.applied_multiplier - 1.0).abs() < 0.01);
+        assert!((result.applied_mastery_factor - 1.0).abs() < 0.01);
+        assert!((result.applied_repeat_penalty - 1.0).abs() < 0.01);
     }
 
     #[test]

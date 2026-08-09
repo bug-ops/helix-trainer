@@ -11,7 +11,7 @@ use helix_trainer::{
     config::ScenarioCollection,
     gamification::{
         Achievement, AchievementEngine, LockStatus, QuestGenerator, QuestTemplateRegistry,
-        StreakManager, UserProfile,
+        StreakChange, StreakManager, UserProfile,
     },
     learning::PerformanceTracker,
     ui::{AppState, Notification, NotificationType},
@@ -87,6 +87,12 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
             let mut updated_profile = profile;
             let streak_change = StreakManager::update_streak(&mut updated_profile, now);
             tracing::debug!("Streak status: {:?}", streak_change);
+            if let StreakChange::Protected { used_freeze: true } = streak_change {
+                state
+                    .ui
+                    .notifications
+                    .push(Notification::new(NotificationType::StreakFreezeUsed));
+            }
 
             // Check if we need to refresh daily quests
             if should_refresh_quests(&updated_profile, now)
@@ -389,6 +395,35 @@ mod tests {
                 NotificationType::Info { message } if message.contains(&other_pid.to_string())
             )),
             "expected a notification warning about the other running instance"
+        );
+    }
+
+    /// Regression test for #292 finding 2: consuming a streak freeze to protect a missed
+    /// day was previously silent (logged only). It must now push a
+    /// `NotificationType::StreakFreezeUsed` notification, mirroring the existing
+    /// `StreakFreezeGranted` notification pushed when a freeze is earned.
+    #[test]
+    fn test_handle_profile_ready_notifies_on_streak_freeze_used() {
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        profile.current_streak = 5;
+        profile.streak_freeze_available = true;
+        // Missed more than one day, so `update_streak` takes the "missed day(s)" branch.
+        profile.last_activity = Utc::now() - chrono::Duration::days(2);
+
+        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        assert!(result.is_ok());
+        assert!(!state.progress.profile.streak_freeze_available);
+        assert_eq!(state.progress.profile.current_streak, 5);
+        assert!(
+            state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| n.notification_type == NotificationType::StreakFreezeUsed),
+            "expected a StreakFreezeUsed notification when a freeze protects a missed day"
         );
     }
 

@@ -40,11 +40,12 @@ pub(super) fn render_profile_screen(frame: &mut Frame, state: &AppState) {
     render_profile_content(frame, state, chunks[1]);
 
     // Instructions
-    let instructions =
-        Paragraph::new("Press 's' for detailed statistics | Press 'm' to return to menu")
-            .style(Style::default().fg(Color::Gray))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
+    let instructions = Paragraph::new(
+        "Press 's' for detailed statistics | Press 'a' for achievements | Press 'm' to return to menu",
+    )
+    .style(Style::default().fg(Color::Gray))
+    .alignment(Alignment::Center)
+    .block(Block::default().borders(Borders::ALL));
     frame.render_widget(instructions, chunks[2]);
 }
 

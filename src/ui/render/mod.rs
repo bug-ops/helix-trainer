@@ -12,6 +12,7 @@ use ratatui::style::Color;
 /// Provides better text readability than bright blue.
 pub(super) const SELECTION_BG_COLOR: Color = Color::Rgb(60, 80, 120);
 
+mod achievements;
 mod category_filters;
 mod editor;
 mod helpers;
@@ -53,6 +54,9 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         crate::ui::state::TypedScreen::Profile(_) => profile::render_profile_screen(frame, state),
         crate::ui::state::TypedScreen::Statistics(_) => {
             statistics::render_statistics_screen(frame, state)
+        }
+        crate::ui::state::TypedScreen::Achievements(_) => {
+            achievements::render_achievements_screen(frame, state)
         }
         crate::ui::state::TypedScreen::CategoryFilters(filters_data) => {
             // Render background screen first based on return destination

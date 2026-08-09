@@ -29,6 +29,9 @@ pub enum NotificationType {
     /// Streak freeze earned (protects the streak if a day is missed)
     StreakFreezeGranted,
 
+    /// Streak freeze consumed (a missed day was protected by an earned freeze)
+    StreakFreezeUsed,
+
     /// Informational message
     Info { message: String },
 
@@ -126,6 +129,7 @@ impl Notification {
             NotificationType::QuestComplete { .. } => "Quest Complete!".to_string(),
             NotificationType::StreakMilestone { streak } => format!("{} Day Streak!", streak),
             NotificationType::StreakFreezeGranted => "Streak Freeze Earned!".to_string(),
+            NotificationType::StreakFreezeUsed => "Streak Freeze Used".to_string(),
             NotificationType::Info { .. } => "Info".to_string(),
             NotificationType::ReviewSessionComplete { .. } => "Review Complete!".to_string(),
             NotificationType::MasteryLevelUp { command, .. } => {
@@ -153,6 +157,9 @@ impl Notification {
             NotificationType::StreakFreezeGranted => {
                 "Miss a day without breaking your streak".to_string()
             }
+            NotificationType::StreakFreezeUsed => {
+                "Your streak was protected after a missed day".to_string()
+            }
             NotificationType::Info { message } => message.clone(),
             NotificationType::ReviewSessionComplete {
                 completed,
@@ -179,6 +186,7 @@ impl Notification {
             NotificationType::QuestComplete { .. } => Color::Green,
             NotificationType::StreakMilestone { .. } => Color::Cyan,
             NotificationType::StreakFreezeGranted => Color::Cyan,
+            NotificationType::StreakFreezeUsed => Color::Cyan,
             NotificationType::Info { .. } => Color::Blue,
             NotificationType::ReviewSessionComplete { .. } => Color::Green,
             NotificationType::MasteryLevelUp { .. } => Color::Yellow,

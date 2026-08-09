@@ -44,9 +44,9 @@ pub use substates::{ConfigState, GameState, ProgressState, UIState};
 // Type-safe screen variants with required data
 pub mod screen;
 pub use screen::{
-    CategoryFiltersData, CommandBufferAccess, CompletedOrAbandoned, InputStateAccess, KeyHistory,
-    MenuData, MiniGameData, MiniGameModeSelection, ModeSelectionData, ProfileData, ResultsData,
-    ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
+    AchievementsData, CategoryFiltersData, CommandBufferAccess, CompletedOrAbandoned,
+    InputStateAccess, KeyHistory, MenuData, MiniGameData, MiniGameModeSelection, ModeSelectionData,
+    ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario
@@ -103,6 +103,8 @@ pub enum Screen {
     Profile,
     /// Statistics screen showing command mastery and analytics
     Statistics,
+    /// Achievements screen showing unlocked/locked achievements
+    Achievements,
     /// Category filters configuration screen
     CategoryFilters,
     /// Review session screen for spaced repetition
@@ -228,6 +230,12 @@ pub enum Message {
 
     /// Navigate to statistics screen
     ShowStatistics,
+
+    /// Navigate to achievements screen
+    ShowAchievements,
+
+    /// Scroll the achievements list (positive = down, negative = up)
+    ScrollAchievements(i32),
 
     /// Update quest progress based on gameplay
     UpdateQuestProgress {
@@ -885,6 +893,20 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             let outcome = handlers::handle_show_statistics(&mut ctx)?;
             apply_outcome(state, outcome);
             Ok(())
+        }
+        Message::ShowAchievements => {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            let outcome = handlers::handle_show_achievements(&mut ctx)?;
+            apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::ScrollAchievements(delta) => {
+            extract_screen!(state, Achievements, data => handlers::handle_scroll_achievements(data, delta))
         }
 
         // Quest messages

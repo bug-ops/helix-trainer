@@ -6,8 +6,8 @@
 
 use crate::security::UserError;
 use crate::ui::state::{
-    CategoryFiltersData, HandlerContext, HandlerOutcome, MenuData, MiniGameData, ModeSelectionData,
-    ProfileData, ReturnDestination, Screen, StatisticsData, TypedScreen,
+    AchievementsData, CategoryFiltersData, HandlerContext, HandlerOutcome, MenuData, MiniGameData,
+    ModeSelectionData, ProfileData, ReturnDestination, Screen, StatisticsData, TypedScreen,
 };
 
 /// Handle QuitApp message
@@ -30,6 +30,7 @@ pub fn handle_navigate_to(screen: Screen) -> Result<HandlerOutcome, UserError> {
         Screen::MainMenu => TypedScreen::Menu(MenuData::default()),
         Screen::Profile => TypedScreen::Profile(ProfileData::default()),
         Screen::Statistics => TypedScreen::Statistics(StatisticsData::default()),
+        Screen::Achievements => TypedScreen::Achievements(AchievementsData::default()),
         Screen::CategoryFilters => TypedScreen::CategoryFilters(CategoryFiltersData::default()),
         Screen::MiniGame => TypedScreen::MiniGame(MiniGameData::default()),
         // NOTE: Task, Results, and Review screens require data and should not be
@@ -68,6 +69,7 @@ pub fn handle_back_to_menu(
     let return_to_minigame = match current_screen {
         TypedScreen::Profile(data) => data.return_to == ReturnDestination::PausedMiniGame,
         TypedScreen::Statistics(data) => data.return_to == ReturnDestination::PausedMiniGame,
+        TypedScreen::Achievements(data) => data.return_to == ReturnDestination::PausedMiniGame,
         _ => false,
     };
 
@@ -177,6 +179,40 @@ mod tests {
     }
 
     #[test]
+    fn test_back_to_menu_from_achievements_returns_to_mode_selection() {
+        let screen = TypedScreen::Achievements(AchievementsData {
+            return_to: ReturnDestination::Menu,
+            scroll_offset: 0,
+        });
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let outcome = handle_back_to_menu(&screen, &mut ctx).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(new_screen) = outcome {
+            assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+        }
+    }
+
+    #[test]
+    fn test_back_to_menu_from_achievements_returns_to_paused_minigame() {
+        let screen = TypedScreen::Achievements(AchievementsData {
+            return_to: ReturnDestination::PausedMiniGame,
+            scroll_offset: 0,
+        });
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let outcome = handle_back_to_menu(&screen, &mut ctx).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(new_screen) = outcome {
+            assert!(matches!(*new_screen, TypedScreen::MiniGame(_)));
+        }
+    }
+
+    #[test]
     fn test_back_to_menu_from_profile_returns_to_paused_minigame() {
         let screen = TypedScreen::Profile(ProfileData {
             return_to: ReturnDestination::PausedMiniGame,
@@ -239,6 +275,16 @@ mod tests {
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
             assert!(matches!(*screen, TypedScreen::Statistics(_)));
+        }
+    }
+
+    #[test]
+    fn test_navigate_to_achievements() {
+        let outcome = handle_navigate_to(Screen::Achievements).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(screen) = outcome {
+            assert!(matches!(*screen, TypedScreen::Achievements(_)));
         }
     }
 

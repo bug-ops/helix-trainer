@@ -37,11 +37,39 @@ pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Mess
         KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('q') => Some(Message::QuitApp),
         KeyCode::Char('r') => Some(Message::StartReviewSession),
-        KeyCode::Char('s') if matches!(state.screen, TypedScreen::Profile(_)) => {
+        KeyCode::Char('s')
+            if matches!(
+                state.screen,
+                TypedScreen::Profile(_) | TypedScreen::Achievements(_)
+            ) =>
+        {
             Some(Message::ShowStatistics)
         }
-        KeyCode::Char('p') if matches!(state.screen, TypedScreen::Statistics(_)) => {
+        KeyCode::Char('p')
+            if matches!(
+                state.screen,
+                TypedScreen::Statistics(_) | TypedScreen::Achievements(_)
+            ) =>
+        {
             Some(Message::ShowProfile)
+        }
+        KeyCode::Char('a')
+            if matches!(
+                state.screen,
+                TypedScreen::Profile(_) | TypedScreen::Statistics(_)
+            ) =>
+        {
+            Some(Message::ShowAchievements)
+        }
+        KeyCode::Down | KeyCode::Char('j')
+            if matches!(state.screen, TypedScreen::Achievements(_)) =>
+        {
+            Some(Message::ScrollAchievements(1))
+        }
+        KeyCode::Up | KeyCode::Char('k')
+            if matches!(state.screen, TypedScreen::Achievements(_)) =>
+        {
+            Some(Message::ScrollAchievements(-1))
         }
         KeyCode::Char('M') => Some(Message::ToggleSound),
         _ => None,
@@ -207,6 +235,7 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
                 'r' => return Some(Message::StartReviewSession),
                 'p' => return Some(Message::ShowProfile),
                 's' => return Some(Message::ShowStatistics),
+                'a' => return Some(Message::ShowAchievements),
                 'f' => return Some(Message::ShowCategoryFilters),
                 'G' => return Some(Message::MenuJumpToLast),
                 'M' => return Some(Message::ToggleSound),
@@ -459,6 +488,7 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Char('r') => Some(Message::StartReviewSession),
         KeyCode::Char('p') => Some(Message::ShowProfile),
         KeyCode::Char('s') => Some(Message::ShowStatistics),
+        KeyCode::Char('a') => Some(Message::ShowAchievements),
         KeyCode::Char('M') => Some(Message::ToggleSound),
         _ => None,
     }
@@ -490,6 +520,7 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
             KeyCode::Char('q') => Some(Message::MiniGameBackToMenu),
             KeyCode::Char('p') => Some(Message::ShowProfile),
             KeyCode::Char('s') => Some(Message::ShowStatistics),
+            KeyCode::Char('a') => Some(Message::ShowAchievements),
             KeyCode::Char('M') => Some(Message::ToggleSound),
             _ => None,
         };
@@ -727,6 +758,67 @@ mod tests {
         let state = create_test_app_state();
         let msg = handle_profile_stats_keys(key, &state);
         assert_eq!(msg, Some(Message::BackToMenu));
+    }
+
+    #[test]
+    fn test_profile_key_a_shows_achievements() {
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Profile(crate::ui::state::ProfileData::default());
+        let msg = handle_profile_stats_keys(key, &state);
+        assert_eq!(msg, Some(Message::ShowAchievements));
+    }
+
+    #[test]
+    fn test_statistics_key_a_shows_achievements() {
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Statistics(crate::ui::state::StatisticsData::default());
+        let msg = handle_profile_stats_keys(key, &state);
+        assert_eq!(msg, Some(Message::ShowAchievements));
+    }
+
+    #[test]
+    fn test_achievements_key_p_shows_profile() {
+        let key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Achievements(crate::ui::state::AchievementsData::default());
+        let msg = handle_profile_stats_keys(key, &state);
+        assert_eq!(msg, Some(Message::ShowProfile));
+    }
+
+    #[test]
+    fn test_achievements_key_s_shows_statistics() {
+        let key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Achievements(crate::ui::state::AchievementsData::default());
+        let msg = handle_profile_stats_keys(key, &state);
+        assert_eq!(msg, Some(Message::ShowStatistics));
+    }
+
+    #[test]
+    fn test_achievements_key_m_returns_menu() {
+        let key = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Achievements(crate::ui::state::AchievementsData::default());
+        let msg = handle_profile_stats_keys(key, &state);
+        assert_eq!(msg, Some(Message::BackToMenu));
+    }
+
+    #[test]
+    fn test_mode_selection_key_a_shows_achievements() {
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        let msg = handle_mode_selection_keys(key);
+        assert_eq!(msg, Some(Message::ShowAchievements));
+    }
+
+    #[test]
+    fn test_menu_key_a_shows_achievements() {
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        let mut state = create_test_app_state();
+        state.screen = TypedScreen::Menu(MenuData::default());
+        let msg = handle_menu_keys(key, &mut state);
+        assert_eq!(msg, Some(Message::ShowAchievements));
     }
 
     #[test]

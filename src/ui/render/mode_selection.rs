@@ -82,7 +82,7 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
     let instructions_text = if mode_data.minigame_mode_selection.is_some() {
         "↑/↓ j/k: Navigate  |  Enter: Start  |  Esc: Back  |  q: Quit"
     } else {
-        "↑/↓ j/k: Navigate  |  Enter: Select  |  r: Review  |  p: Profile  |  s: Stats  |  q: Quit"
+        "↑/↓ j/k: Navigate  |  Enter: Select  |  r: Review  |  p: Profile  |  s: Stats  |  a: Achievements  |  q: Quit"
     };
     let instructions = Paragraph::new(instructions_text)
         .style(Style::default().fg(Color::Gray))

@@ -5,7 +5,7 @@
 //! (Loading, Ready, Failed) to ensure compile-time safety for resource access.
 
 use crate::config::Scenario;
-use crate::gamification::{QuestTemplateRegistry, UserProfile};
+use crate::gamification::{ProfileStorage, QuestTemplateRegistry, UserProfile};
 
 /// Represents the loading state of an async resource
 ///
@@ -111,6 +111,47 @@ pub enum DataLoadMessage {
 
     /// Profile save failed
     ProfileSaveError(String),
+}
+
+/// A pending profile write, sent to the serialized save writer spawned by
+/// [`crate::data_loader::spawn_save_writer`].
+///
+/// Every save (mid-session or on exit) is funneled through that writer's
+/// queue rather than writing directly, so writes execute strictly in the
+/// order they were requested. Without this, each save spawning its own
+/// independent write task lets `fs::rename` calls complete out of order,
+/// so a save carrying older data can race ahead of — and silently
+/// overwrite — one carrying newer data (most concretely: a mid-session
+/// save still in flight when the app exits could finish writing after,
+/// and clobber, the exit-time save).
+#[derive(Debug)]
+pub struct SaveRequest {
+    /// Where to write the profile.
+    pub storage: ProfileStorage,
+
+    /// The profile snapshot to persist.
+    pub profile: UserProfile,
+}
+
+/// Final outcome reported by [`crate::data_loader::spawn_save_writer`]'s
+/// `JoinHandle` once its queue closes and drains.
+///
+/// The `JoinHandle` alone only tells a caller that the writer task didn't
+/// panic — not whether the save it cared about actually succeeded. This
+/// carries the real answer for the *last* request the writer processed,
+/// which is what the application's exit path needs: it always enqueues its
+/// final snapshot last, so "last processed" and "the exit save" are the
+/// same request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SaveWriterOutcome {
+    /// The writer's queue closed before it ever received a request.
+    NoRequestsProcessed,
+
+    /// The most recently processed save succeeded.
+    LastSaveSucceeded,
+
+    /// The most recently processed save failed, with its error message.
+    LastSaveFailed(String),
 }
 
 #[cfg(test)]

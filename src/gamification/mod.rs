@@ -13,7 +13,7 @@ pub use profile::{UserProfile, XPCalculator};
 pub use quests::{
     Quest, QuestDifficulty, QuestGenerator, QuestTemplateRegistry, QuestTracker, QuestType,
 };
-pub use storage::ProfileStorage;
+pub use storage::{LockStatus, ProfileStorage};
 pub use streak::{StreakChange, StreakManager};
 
 use thiserror::Error;

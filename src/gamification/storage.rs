@@ -16,13 +16,84 @@ use super::{GamificationError, Result, UserProfile};
 /// tests) never share a temp file name and race each other's rename.
 static TMP_SUFFIX_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Fsync a file's parent directory so a preceding `fs::rename` into it is
+/// durable across a power loss, not just visible after a normal process
+/// restart. POSIX does not guarantee a directory-entry update is on disk
+/// until the directory itself is synced; Windows/NTFS has no equivalent
+/// "open a directory as a file" operation, so this is Unix-only.
+#[cfg(unix)]
+fn fsync_parent_dir(path: &Path) {
+    // `Path::parent()` returns `Some("")` (not `None`) for a bare relative
+    // filename with no directory component; treat that the same as "no
+    // parent given" and fsync the current directory instead of no-op'ing.
+    let parent = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+    if let Ok(dir) = fs::File::open(parent) {
+        let _ = dir.sync_all();
+    }
+}
+
+/// Check whether a process with the given pid is currently alive.
+///
+/// Shells out to a platform utility (`kill -0` on Unix, `tasklist` on
+/// Windows) rather than a raw process API: the standard library has no
+/// portable "is this pid alive" check, and the usual FFI-based approaches
+/// require `unsafe`, which this crate forbids. Uses the absolute path
+/// `/bin/kill` rather than a bare `kill` so this can't be fooled by an
+/// unrelated `kill` earlier on `$PATH`.
+#[cfg(unix)]
+fn is_process_alive(pid: u32) -> bool {
+    match std::process::Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .output()
+    {
+        Ok(output) => output.status.success(),
+        Err(e) => {
+            // Could not even run `/bin/kill` — treat as "not alive" (the
+            // safe direction: reclaiming a lock is silently recoverable,
+            // a missed warning is not), but this is a distinct failure
+            // mode from an actually-dead pid and worth surfacing.
+            tracing::debug!("Failed to run /bin/kill to check pid {pid}: {e}");
+            false
+        }
+    }
+}
+
+#[cfg(windows)]
+fn is_process_alive(pid: u32) -> bool {
+    match std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+        .output()
+    {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).contains(&pid.to_string()),
+        Err(e) => {
+            tracing::debug!("Failed to run tasklist to check pid {pid}: {e}");
+            false
+        }
+    }
+}
+
 /// Wrapper for profile serialization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProfileData {
     profile: UserProfile,
 }
 
+/// Outcome of [`ProfileStorage::check_and_refresh_lock`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockStatus {
+    /// No other live instance was using this profile; the lock file now
+    /// records the current process's pid.
+    Acquired,
+
+    /// Another live process appears to already be using this profile file.
+    OtherInstanceRunning(u32),
+}
+
 /// Handles profile persistence to disk
+#[derive(Debug, Clone)]
 pub struct ProfileStorage {
     file_path: PathBuf,
 }
@@ -126,11 +197,15 @@ impl ProfileStorage {
     /// Save profile to disk
     ///
     /// Creates parent directory if needed. Writes to a temporary file in the
-    /// same directory, `fsync`s it, and renames it into place, so a crash,
-    /// kill, or power loss mid-write cannot leave a truncated `profile.json`
-    /// behind — `fs::rename` is atomic on the same filesystem on both POSIX
-    /// and Windows, and the prior `sync_all` ensures the renamed data is
-    /// actually durable rather than sitting in a write-back cache.
+    /// same directory, `fsync`s it, and renames it into place: `fs::rename`
+    /// is atomic on the same filesystem on both POSIX and Windows, so a
+    /// crash or kill mid-write can never leave a truncated or
+    /// partially-written `profile.json` behind — a reader always sees
+    /// either the old file or the fully-written new one, and this guarantee
+    /// holds regardless of power loss too. On Unix, the parent directory is
+    /// additionally `fsync`'d after the rename, so the directory-entry
+    /// update itself (not just the file's contents) is durable across a
+    /// power loss, not only a process crash or kill.
     ///
     /// # Errors
     ///
@@ -196,7 +271,102 @@ impl ProfileStorage {
             GamificationError::StorageError(format!("Failed to persist profile: {}", e))
         })?;
 
+        #[cfg(unix)]
+        fsync_parent_dir(&self.file_path);
+
+        // Best-effort: keep the PID lock pointed at this process on every
+        // save, not just at startup, so a second instance launched mid-way
+        // through a long session still finds an accurate, live lock rather
+        // than one written only once minutes or hours earlier.
+        self.refresh_lock();
+
         Ok(())
+    }
+
+    /// Path of the PID lock file that sits alongside the profile file.
+    fn lock_path(&self) -> PathBuf {
+        let mut lock_file_name = self
+            .file_path
+            .file_name()
+            .unwrap_or_default()
+            .to_os_string();
+        lock_file_name.push(".lock");
+        self.file_path.with_file_name(lock_file_name)
+    }
+
+    /// Best-effort: write this process's pid into the lock file, claiming or
+    /// refreshing ownership without checking who (if anyone) held it before.
+    ///
+    /// Writes via a pid-suffixed temp file plus rename, same shape as
+    /// [`ProfileStorage::save`], rather than a direct truncating
+    /// `fs::write`: the lock file's own path is shared by every instance
+    /// pointed at the same profile, so a plain write racing against a
+    /// concurrent reader (another instance's
+    /// [`ProfileStorage::check_and_refresh_lock`]) could hand back a
+    /// truncated or partial read. No `fsync` here, unlike `save` — the
+    /// lock is advisory only, so atomicity against partial reads matters,
+    /// durability across a power loss does not.
+    fn refresh_lock(&self) {
+        let lock_path = self.lock_path();
+        // Same `pid` + `TMP_SUFFIX_COUNTER` scheme as `save`'s temp file
+        // (see its comment): guarantees this doesn't collide with another
+        // `refresh_lock`/`save` call racing on the same process, e.g. the
+        // save writer refreshing the lock while a concurrent
+        // `check_and_refresh_lock` call is also mid-refresh.
+        let suffix = TMP_SUFFIX_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let mut tmp_file_name = lock_path.file_name().unwrap_or_default().to_os_string();
+        tmp_file_name.push(format!(".{}.{}.tmp", std::process::id(), suffix));
+        let tmp_path = lock_path.with_file_name(tmp_file_name);
+
+        if fs::write(&tmp_path, std::process::id().to_string()).is_ok() {
+            let _ = fs::rename(&tmp_path, &lock_path);
+        } else {
+            let _ = fs::remove_file(&tmp_path);
+        }
+    }
+
+    /// Check whether another live process already has this profile open,
+    /// then claim (or refresh) the lock file for the current process.
+    ///
+    /// The lock is advisory only — a small text file containing the owning
+    /// process's pid, next to `profile.json`. It does not prevent concurrent
+    /// writes; [`ProfileStorage::save`] already guarantees a save can never
+    /// corrupt the file regardless of how many processes write to it. This
+    /// exists purely to warn the user when two instances point at the same
+    /// profile, since without it the "last save wins" behavior would
+    /// silently discard one instance's progress with no indication why.
+    ///
+    /// A lock file left behind by a crashed process (a pid that is no
+    /// longer running) is treated as stale and silently reclaimed — startup
+    /// is never blocked by a leftover lock.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use helix_trainer::gamification::{LockStatus, ProfileStorage};
+    ///
+    /// let storage = ProfileStorage::new();
+    /// match storage.check_and_refresh_lock() {
+    ///     LockStatus::Acquired => {}
+    ///     LockStatus::OtherInstanceRunning(pid) => {
+    ///         eprintln!("Another instance (pid {pid}) appears to be running");
+    ///     }
+    /// }
+    /// ```
+    pub fn check_and_refresh_lock(&self) -> LockStatus {
+        let current_pid = std::process::id();
+
+        let other_live_pid = fs::read_to_string(self.lock_path())
+            .ok()
+            .and_then(|contents| contents.trim().parse::<u32>().ok())
+            .filter(|&pid| pid != current_pid && is_process_alive(pid));
+
+        self.refresh_lock();
+
+        match other_live_pid {
+            Some(pid) => LockStatus::OtherInstanceRunning(pid),
+            None => LockStatus::Acquired,
+        }
     }
 
     /// Check if profile file exists
@@ -205,6 +375,11 @@ impl ProfileStorage {
     }
 
     /// Delete profile file
+    ///
+    /// Also best-effort removes the PID lock file alongside it (see
+    /// [`ProfileStorage::check_and_refresh_lock`]) so a deleted profile
+    /// doesn't leave a stale lock behind; this is never an error condition
+    /// since the lock file is advisory and may legitimately not exist.
     ///
     /// # Errors
     ///
@@ -215,6 +390,7 @@ impl ProfileStorage {
                 GamificationError::StorageError(format!("Failed to delete profile: {}", e))
             })?;
         }
+        let _ = fs::remove_file(self.lock_path());
         Ok(())
     }
 
@@ -373,5 +549,121 @@ mod tests {
         assert!(json.contains("\"profile\""));
         assert!(json.contains("\"level\""));
         assert!(json.contains("\"total_xp\""));
+    }
+
+    #[test]
+    fn test_check_and_refresh_lock_acquires_when_no_lock_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+
+        let status = storage.check_and_refresh_lock();
+
+        assert_eq!(status, LockStatus::Acquired);
+        let lock_contents = fs::read_to_string(temp_dir.path().join("profile.json.lock")).unwrap();
+        assert_eq!(lock_contents.trim(), std::process::id().to_string());
+    }
+
+    #[test]
+    fn test_check_and_refresh_lock_own_pid_is_not_other_instance() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        fs::write(
+            temp_dir.path().join("profile.json.lock"),
+            std::process::id().to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(storage.check_and_refresh_lock(), LockStatus::Acquired);
+    }
+
+    /// Regression test for #298: a lock file left behind by a process that is
+    /// no longer running must never block startup or be reported as another
+    /// live instance.
+    #[test]
+    fn test_check_and_refresh_lock_reclaims_stale_pid() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+
+        // A pid guaranteed to no longer be running: spawn a trivial child
+        // process and wait for it to exit so the pid is reclaimed by the OS.
+        #[cfg(unix)]
+        let mut dead_pid_child = std::process::Command::new("true").spawn().unwrap();
+        #[cfg(windows)]
+        let mut dead_pid_child = std::process::Command::new("cmd.exe")
+            .args(["/C", "exit"])
+            .spawn()
+            .unwrap();
+        let dead_pid = dead_pid_child.id();
+        dead_pid_child.wait().unwrap();
+
+        fs::write(
+            temp_dir.path().join("profile.json.lock"),
+            dead_pid.to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            storage.check_and_refresh_lock(),
+            LockStatus::Acquired,
+            "a stale pid must be treated as no other instance running"
+        );
+    }
+
+    /// Regression test for #298: a lock file pointing at a genuinely running
+    /// process must be reported as `OtherInstanceRunning`, not silently
+    /// reclaimed.
+    #[cfg(unix)]
+    #[test]
+    fn test_check_and_refresh_lock_detects_other_live_instance() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+
+        let mut child = std::process::Command::new("sleep")
+            .arg("5")
+            .spawn()
+            .unwrap();
+        let other_pid = child.id();
+        fs::write(
+            temp_dir.path().join("profile.json.lock"),
+            other_pid.to_string(),
+        )
+        .unwrap();
+
+        let status = storage.check_and_refresh_lock();
+
+        let _ = child.kill();
+        let _ = child.wait();
+
+        assert_eq!(status, LockStatus::OtherInstanceRunning(other_pid));
+    }
+
+    #[test]
+    fn test_save_refreshes_lock_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("profile.json");
+        let storage = ProfileStorage::with_path(&file_path);
+
+        storage.save(&UserProfile::new()).unwrap();
+
+        let lock_contents = fs::read_to_string(temp_dir.path().join("profile.json.lock")).unwrap();
+        assert_eq!(lock_contents.trim(), std::process::id().to_string());
+    }
+
+    /// Non-blocking finding from the #298 critique: a deleted profile must
+    /// not leave a stale lock file behind that could later misreport a
+    /// long-dead (or PID-reused) process as still running.
+    #[test]
+    fn test_delete_removes_lock_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("profile.json");
+        let storage = ProfileStorage::with_path(&file_path);
+        let lock_path = temp_dir.path().join("profile.json.lock");
+
+        storage.save(&UserProfile::new()).unwrap();
+        assert!(lock_path.exists());
+
+        storage.delete().unwrap();
+
+        assert!(!lock_path.exists());
     }
 }

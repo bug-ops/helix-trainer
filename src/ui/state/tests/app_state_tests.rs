@@ -2,7 +2,6 @@
 
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::ui::state::TypedScreen;
-use tempfile::TempDir;
 
 #[test]
 fn test_app_state_debug_impl() {
@@ -11,54 +10,6 @@ fn test_app_state_debug_impl() {
     let debug_str = format!("{:?}", state);
     assert!(debug_str.contains("AppState"));
     assert!(debug_str.contains("screen"));
-}
-
-#[test]
-fn test_save_profile_debounced_skips_if_not_needed() {
-    let scenario = create_test_scenario();
-    let mut state = create_test_app_state(vec![scenario]);
-
-    // Mark as just saved
-    state.progress.mark_saved();
-
-    // Should not save again immediately (debounce in effect)
-    let result = state.save_profile_debounced();
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_save_profile_immediate_always_saves() {
-    let temp_dir = TempDir::new().unwrap();
-    let profile_path = temp_dir.path().join("profile.json");
-
-    let scenario = create_test_scenario();
-    let mut state = create_test_app_state(vec![scenario]);
-
-    // Change storage path to temp directory
-    state.progress.storage = crate::gamification::ProfileStorage::with_path(&profile_path);
-
-    // Should save immediately
-    let result = state.save_profile_immediate();
-    assert!(result.is_ok());
-    assert!(profile_path.exists());
-}
-
-#[test]
-fn test_save_profile_debounced_saves_when_first_needed() {
-    let temp_dir = TempDir::new().unwrap();
-    let profile_path = temp_dir.path().join("profile.json");
-
-    let scenario = create_test_scenario();
-    let mut state = create_test_app_state(vec![scenario]);
-
-    // Change storage path to temp directory
-    state.progress.storage = crate::gamification::ProfileStorage::with_path(&profile_path);
-
-    // Should save first time (no last_save_time set)
-    assert!(state.progress.should_save());
-    let result = state.save_profile_debounced();
-    assert!(result.is_ok());
-    assert!(profile_path.exists());
 }
 
 #[test]

@@ -24,6 +24,7 @@ jobs:
       # (compile-time embedded, see src/config/scenarios.rs), locales (compile-time
       # codegen via rust_i18n::i18n! in src/lib.rs), manifests, or the CI workflow itself.
       run-heavy: ${{ steps.filter.outputs.rust == 'true' || steps.filter.outputs.ci == 'true' }}
+      install-script: ${{ steps.filter.outputs.install-script }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -46,6 +47,8 @@ jobs:
               - 'rust-toolchain*'
             ci:
               - '.github/workflows/**'
+            install-script:
+              - 'install.sh'
 
   test:
     name: Test Suite
@@ -135,6 +138,21 @@ jobs:
 
       - name: Security audit with cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
+
+  shellcheck:
+    name: Shellcheck (install.sh)
+    needs: [changes]
+    if: needs.changes.outputs.install-script == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Run shellcheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: '.'
+          ignore_paths: 'target scenarios locales'
 
   msrv:
     name: Check MSRV
@@ -336,7 +354,7 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [changes, test, fmt, clippy, security, msrv, build, coverage]
+    needs: [changes, test, fmt, clippy, security, shellcheck, msrv, build, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs
@@ -349,6 +367,7 @@ jobs:
           # job never ran despite being required, so it must fail the gate.
           changes_result="${{ needs.changes.result }}"
           run_heavy="${{ needs.changes.outputs.run-heavy }}"
+          install_script="${{ needs.changes.outputs.install-script }}"
 
           if [[ "$changes_result" != "success" ]]; then
             echo "::error::changes detection job failed or was cancelled"
@@ -366,11 +385,11 @@ jobs:
           }
 
           check_gated() {
-            local name="$1" result="$2"
+            local name="$1" result="$2" gate_value="$3"
             if [[ "$result" == "success" ]]; then
               return
             fi
-            if [[ "$result" == "skipped" && "$run_heavy" == "false" ]]; then
+            if [[ "$result" == "skipped" && "$gate_value" == "false" ]]; then
               return
             fi
             echo "::error::$name failed, was cancelled, or was skipped unexpectedly"
@@ -380,10 +399,11 @@ jobs:
           check_required "fmt" "${{ needs.fmt.result }}"
           check_required "clippy" "${{ needs.clippy.result }}"
           check_required "security" "${{ needs.security.result }}"
-          check_gated "test" "${{ needs.test.result }}"
-          check_gated "msrv" "${{ needs.msrv.result }}"
-          check_gated "build" "${{ needs.build.result }}"
-          check_gated "coverage" "${{ needs.coverage.result }}"
+          check_gated "test" "${{ needs.test.result }}" "$run_heavy"
+          check_gated "msrv" "${{ needs.msrv.result }}" "$run_heavy"
+          check_gated "build" "${{ needs.build.result }}" "$run_heavy"
+          check_gated "coverage" "${{ needs.coverage.result }}" "$run_heavy"
+          check_gated "shellcheck" "${{ needs.shellcheck.result }}" "$install_script"
 
           if [[ "$fail" -ne 0 ]]; then
             exit 1

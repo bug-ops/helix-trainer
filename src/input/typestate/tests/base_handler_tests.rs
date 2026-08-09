@@ -134,3 +134,44 @@ fn test_base_state_unknown_key_stays() {
     );
     assert!(matches!(result, HandlerResult::Stay));
 }
+
+#[test]
+fn test_base_state_page_movement_commands() {
+    // Regression test for issue #198: Ctrl-b/f/u/d must reach the
+    // page/half-page movement commands, not be swallowed by the generic
+    // "ignore other modifier combinations" CONTROL fallback.
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL),
+    );
+    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_PAGE_UP));
+
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL),
+    );
+    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_PAGE_DOWN));
+
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+    );
+    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_HALF_PAGE_UP));
+
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+    );
+    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_HALF_PAGE_DOWN));
+}
+
+#[test]
+fn test_base_state_replace_with_yanked() {
+    // Regression test for issue #198: bare 'R' must resolve to
+    // replace_with_yanked instead of staying unmapped.
+    let result = KeyHandler::handle_key(
+        &BaseState,
+        KeyEvent::new(KeyCode::Char('R'), KeyModifiers::SHIFT),
+    );
+    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_REPLACE_WITH_YANKED));
+}

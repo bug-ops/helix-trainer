@@ -35,6 +35,12 @@ impl InputHandler<BaseState> for KeyHandler {
                 HandlerResult::Execute(Cow::Borrowed(CMD_TOGGLE_COMMENTS))
             }
 
+            // Page/half-page movement - let through for Ctrl-b/f/u/d
+            (KeyCode::Char('b'), true) => HandlerResult::Execute(Cow::Borrowed(CMD_PAGE_UP)),
+            (KeyCode::Char('f'), true) => HandlerResult::Execute(Cow::Borrowed(CMD_PAGE_DOWN)),
+            (KeyCode::Char('u'), true) => HandlerResult::Execute(Cow::Borrowed(CMD_HALF_PAGE_UP)),
+            (KeyCode::Char('d'), true) => HandlerResult::Execute(Cow::Borrowed(CMD_HALF_PAGE_DOWN)),
+
             // Ignore other modifier combinations
             (_, true) => HandlerResult::Stay,
 

@@ -1,0 +1,155 @@
+# Select-All and Replace-With-Yanked
+# Scenarios for '%' (select entire file) and 'R' (replace selection with yanked text)
+# NOTE: 's' (select regex matches) and 'S' (split selection on regex) are registered
+# commands but their handlers are currently no-op stubs in this simulator
+# (src/helix/simulator/commands/selection.rs) - no regex engine is wired in yet.
+# Scenarios for them are omitted until that implementation lands; see issue #198.
+
+[[scenarios]]
+id = "select_all_001"
+name = "Select entire file"
+description = "Use '%' to select the entire document"
+
+hints = [
+    "'%' selects from the very start to the very end of the file",
+    "Useful before running a whole-file operation",
+]
+
+[scenarios.setup]
+file_content = """fn main() {
+    let x = 1;
+}"""
+cursor_position = [1, 8]
+
+[scenarios.target]
+file_content = """fn main() {
+    let x = 1;
+}"""
+cursor_position = [2, 1]
+selection = [0, 0, 2, 1]
+
+[scenarios.solution]
+commands = ["%"]
+description = "Press '%' to select the whole document"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "beginner"
+tags = ["selection", "select-all"]
+commands_taught = ["%"]
+estimated_time_seconds = 5
+
+[[scenarios]]
+id = "replace_with_yanked_001"
+name = "Replace selection with yanked text"
+description = "Yank a line, select another line, and use 'R' to replace it with the yanked text"
+
+hints = [
+    "'y' yanks the current selection into the unnamed register",
+    "'R' replaces the current selection with the unnamed register's content",
+    "Unlike 'p'/'P', 'R' overwrites the selection instead of inserting next to it",
+]
+
+[scenarios.setup]
+file_content = """AAAA
+BBBB
+CCCC"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """AAAA
+AAAA
+CCCC"""
+cursor_position = [1, 0]
+selection = [1, 0, 2, 0]
+
+[scenarios.solution]
+commands = ["x", "y", "j", "x", "R"]
+description = "Select and yank line 1, select line 2, then press 'R' to replace it with the yanked text"
+
+[scenarios.scoring]
+optimal_count = 5
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["selection", "replace", "yank", "register"]
+commands_taught = ["R"]
+estimated_time_seconds = 15
+
+# ============================================================================
+# SELECT REGEX MATCHES (s command)
+# DISABLED: 'select_regex' is a no-op stub in src/helix/simulator/commands/selection.rs
+# ============================================================================
+
+# [[scenarios]]
+# id = "select_regex_001"
+# name = "Select regex matches within selection"
+# description = "Use 's' to select all regex matches within the current selection"
+# hints = [
+#     "'s' opens a prompt for a regex pattern",
+#     "Every match within the current selection becomes its own selection",
+# ]
+# [scenarios.setup]
+# file_content = """foo bar foo baz foo"""
+# cursor_position = [0, 0]
+# selection = [0, 0, 0, 19]
+# [scenarios.target]
+# file_content = """foo bar foo baz foo"""
+# cursor_position = [0, 19]
+# selections = [[0, 0, 0, 3], [0, 8, 0, 11], [0, 16, 0, 19]]
+# [scenarios.solution]
+# commands = ["s", "foo", "Enter"]
+# description = "Press 's', type 'foo', then Enter to select every 'foo' match"
+# [scenarios.scoring]
+# optimal_count = 3
+# max_points = 100
+# tolerance = 0
+# [scenarios.metadata]
+# category = "selection"
+# difficulty = "advanced"
+# tags = ["selection", "regex"]
+# commands_taught = ["s"]
+# estimated_time_seconds = 15
+
+# ============================================================================
+# SPLIT SELECTION ON REGEX (S command)
+# DISABLED: 'split_selection' is a no-op stub in src/helix/simulator/commands/selection.rs
+# ============================================================================
+
+# [[scenarios]]
+# id = "split_selection_001"
+# name = "Split selection on regex"
+# description = "Use 'S' to split the current selection on a regex delimiter"
+# hints = [
+#     "'S' opens a prompt for a regex delimiter pattern",
+#     "The selection is split into ranges between the delimiter matches",
+# ]
+# [scenarios.setup]
+# file_content = """foo,bar,baz"""
+# cursor_position = [0, 0]
+# selection = [0, 0, 0, 11]
+# [scenarios.target]
+# file_content = """foo,bar,baz"""
+# cursor_position = [0, 11]
+# selections = [[0, 0, 0, 3], [0, 4, 0, 7], [0, 8, 0, 11]]
+# [scenarios.solution]
+# commands = ["S", ",", "Enter"]
+# description = "Press 'S', type ',', then Enter to split on commas"
+# [scenarios.scoring]
+# optimal_count = 3
+# max_points = 100
+# tolerance = 0
+# [scenarios.metadata]
+# category = "selection"
+# difficulty = "advanced"
+# tags = ["selection", "regex", "split"]
+# commands_taught = ["S"]
+# estimated_time_seconds = 15

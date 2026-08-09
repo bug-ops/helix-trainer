@@ -48,6 +48,7 @@ const MOVEMENT_MATCH_BRACKETS: &str =
     include_str!("../../../scenarios/en/movement/match-brackets.toml");
 const MOVEMENT_PARAGRAPH: &str = include_str!("../../../scenarios/en/movement/paragraph.toml");
 const MOVEMENT_PRECISION: &str = include_str!("../../../scenarios/en/movement/precision.toml");
+const MOVEMENT_SCROLL: &str = include_str!("../../../scenarios/en/movement/scroll.toml");
 const MOVEMENT_WORD_BASICS: &str = include_str!("../../../scenarios/en/movement/word-basics.toml");
 const MOVEMENT_WORD: &str = include_str!("../../../scenarios/en/movement/word.toml");
 
@@ -76,6 +77,8 @@ const SEARCH_BASIC: &str = include_str!("../../../scenarios/en/search/basic-sear
 const SELECTION_ADVANCED: &str =
     include_str!("../../../scenarios/en/selection/advanced-selection.toml");
 const SELECTION_LINE: &str = include_str!("../../../scenarios/en/selection/line-selection.toml");
+const SELECTION_ALL_REPLACE: &str =
+    include_str!("../../../scenarios/en/selection/select-all-replace.toml");
 const SELECTION_TEXT_OBJECTS: &str =
     include_str!("../../../scenarios/en/selection/text-objects.toml");
 
@@ -112,6 +115,7 @@ const EN_SCENARIOS: &[&str] = &[
     MOVEMENT_MATCH_BRACKETS,
     MOVEMENT_PARAGRAPH,
     MOVEMENT_PRECISION,
+    MOVEMENT_SCROLL,
     MOVEMENT_WORD_BASICS,
     MOVEMENT_WORD,
     // Registers
@@ -123,6 +127,7 @@ const EN_SCENARIOS: &[&str] = &[
     // Selection
     SELECTION_ADVANCED,
     SELECTION_LINE,
+    SELECTION_ALL_REPLACE,
     SELECTION_TEXT_OBJECTS,
 ];
 
@@ -169,7 +174,7 @@ mod tests {
     #[test]
     fn test_get_embedded_scenarios_en() {
         let scenarios = get_embedded_scenarios("en");
-        assert_eq!(scenarios.len(), 29, "Expected 29 scenario files");
+        assert_eq!(scenarios.len(), 31, "Expected 31 scenario files");
     }
 
     #[test]

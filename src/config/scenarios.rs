@@ -7,7 +7,7 @@ use crate::security::limits::{
     MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE, MAX_SCENARIOS_PER_FILE,
     MAX_SELECTIONS_PER_SCENARIO,
 };
-use crate::security::validators::validate_id_field;
+use crate::security::validators::{validate_id_field, validate_language_field};
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -141,10 +141,25 @@ pub struct CursorSpec {
     pub selections: Option<Vec<[usize; 4]>>,
 }
 
+/// Effective content language used when a scenario's [`Setup::language`] is `None`.
+///
+/// Matches the syntax highlighter's original hardcoded behavior (see FR-002 in
+/// `specs/language-aware-syntax-highlighting/spec.md`). Shared by
+/// `PlayableScenario::language`'s default implementation and its `GameSession`/
+/// `ActiveMiniScenario` overrides so the fallback literal exists in exactly one place.
+pub const DEFAULT_LANGUAGE: &str = "rs";
+
 /// Initial editor setup
 #[derive(Deserialize, Debug, Clone)]
 pub struct Setup {
     pub file_content: String,
+
+    /// Content's language as a file-extension-style token (e.g. `"rs"`, `"md"`, `"py"`),
+    /// resolved by the syntax highlighter against syntect's bundled `SyntaxSet`.
+    /// `None` (the default for scenarios that omit this field) is treated as
+    /// [`DEFAULT_LANGUAGE`], preserving the highlighter's original hardcoded behavior.
+    #[serde(default, deserialize_with = "validate_language_field")]
+    pub language: Option<String>,
 
     #[serde(flatten)]
     pub cursor: CursorSpec,

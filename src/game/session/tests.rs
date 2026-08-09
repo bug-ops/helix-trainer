@@ -18,6 +18,27 @@ fn test_session_creation() {
 }
 
 #[test]
+fn test_language_defaults_to_rs_when_scenario_omits_it() {
+    use crate::game::PlayableScenario;
+
+    let scenario = create_test_scenario();
+    let session = GameSession::new(scenario).unwrap();
+    assert_eq!(session.language(), "rs");
+}
+
+#[test]
+fn test_language_resolves_from_scenario_setup() {
+    use crate::game::PlayableScenario;
+
+    let scenario = ScenarioBuilder::new()
+        .id("test_lang")
+        .setup_language("md")
+        .build();
+    let session = GameSession::new(scenario).unwrap();
+    assert_eq!(session.language(), "md");
+}
+
+#[test]
 fn test_initial_state() {
     let scenario = create_test_scenario();
     let session = GameSession::new(scenario).unwrap();

@@ -25,6 +25,7 @@ pub struct ScenarioBuilder {
     name: Option<String>,
     description: String,
     setup_content: String,
+    setup_language: Option<String>,
     setup_cursor: (usize, usize),
     setup_selection: Option<[usize; 4]>,
     target_content: String,
@@ -56,6 +57,7 @@ impl ScenarioBuilder {
             name: None,
             description: "Test scenario description".to_string(),
             setup_content: "line 1\nline 2\nline 3\n".to_string(),
+            setup_language: None,
             setup_cursor: (0, 0),
             setup_selection: None,
             target_content: "line 2\nline 3\n".to_string(),
@@ -95,6 +97,12 @@ impl ScenarioBuilder {
     /// Set the initial file content
     pub fn setup_content(mut self, content: impl Into<String>) -> Self {
         self.setup_content = content.into();
+        self
+    }
+
+    /// Set the setup content's language (file-extension-style token, e.g. `"md"`, `"py"`)
+    pub fn setup_language(mut self, language: impl Into<String>) -> Self {
+        self.setup_language = Some(language.into());
         self
     }
 
@@ -244,6 +252,7 @@ impl ScenarioBuilder {
             description: self.description,
             setup: Setup {
                 file_content: self.setup_content,
+                language: self.setup_language,
                 cursor: CursorSpec {
                     cursor_position: Some(self.setup_cursor),
                     selection: self.setup_selection,

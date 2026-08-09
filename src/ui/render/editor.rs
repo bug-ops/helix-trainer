@@ -437,6 +437,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
         &target_content,
         &target_cursors,
         &target_selections,
+        scenario.language(),
     );
     let target = Paragraph::new(target_lines)
         .block(

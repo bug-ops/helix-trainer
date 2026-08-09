@@ -95,6 +95,8 @@ description = "Clear description of what to achieve"
 [scenarios.setup]
 file_content = "initial text"
 cursor_position = [0, 0]
+# language = "rs"           # Optional: file-extension-style token for syntax
+                             # highlighting (e.g. "md", "py"); defaults to "rs"
 
 [scenarios.target]
 file_content = "expected result"

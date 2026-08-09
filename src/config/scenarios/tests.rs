@@ -597,7 +597,7 @@ fn test_repeat_insert_scenario_loads_correctly() {
 #[test]
 fn test_available_locales_returns_at_least_en() {
     // available_locales should always return at least "en"
-    let locales = ScenarioLoader::available_locales();
+    let locales = ScenarioLoader::new().available_locales();
     assert!(
         locales.contains(&"en".to_string()),
         "Should include English locale"

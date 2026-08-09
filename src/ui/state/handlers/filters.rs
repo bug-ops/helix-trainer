@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 use std::hash::Hash;
 
-use crate::config::{Difficulty, ScenarioCategory, SortMode};
+use crate::config::{CompletionFilter, Difficulty, ScenarioCategory, SortMode};
 use crate::security::UserError;
 use crate::ui::state::{HandlerContext, HandlerOutcome};
 
@@ -84,28 +84,11 @@ pub fn handle_toggle_completed_filter(
     let mut new_filter = current_filter.clone();
 
     // Cycle through completion filter states
-    match (new_filter.completed_only, new_filter.not_completed_only) {
-        (false, false) => {
-            // Show all -> Show only completed
-            new_filter.completed_only = true;
-            new_filter.not_completed_only = false;
-        }
-        (true, false) => {
-            // Show only completed -> Show only not completed
-            new_filter.completed_only = false;
-            new_filter.not_completed_only = true;
-        }
-        (false, true) => {
-            // Show only not completed -> Show all
-            new_filter.completed_only = false;
-            new_filter.not_completed_only = false;
-        }
-        (true, true) => {
-            // Invalid state, reset to show all
-            new_filter.completed_only = false;
-            new_filter.not_completed_only = false;
-        }
-    }
+    new_filter.completion = match new_filter.completion {
+        CompletionFilter::Any => CompletionFilter::CompletedOnly,
+        CompletionFilter::CompletedOnly => CompletionFilter::NotCompletedOnly,
+        CompletionFilter::NotCompletedOnly => CompletionFilter::Any,
+    };
 
     ctx.game
         .scenario_collection

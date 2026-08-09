@@ -1,7 +1,7 @@
 //! Tests for filter and sorting handlers
 
 use super::common::{create_test_app_state, create_test_scenario};
-use crate::config::{Difficulty, ScenarioCategory, SortMode};
+use crate::config::{CompletionFilter, Difficulty, ScenarioCategory, SortMode};
 use crate::testing::ScenarioBuilder;
 use crate::ui::state::{Message, update};
 
@@ -184,21 +184,33 @@ fn test_toggle_completed_filter_cycle() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    // Initially showing all (completed_only=false, not_completed_only=false)
+    // Initially showing all
+    assert_eq!(
+        state.game.scenario_collection.active_filter().completion,
+        CompletionFilter::Any
+    );
     assert_eq!(state.game.scenario_collection.count(), 1);
 
     // First toggle: Show only completed (should show 0, nothing completed)
     update(&mut state, Message::ToggleCompletedFilter).unwrap();
-    // Filter is "completed_only=true" now, but no scenarios are completed
-    // This might show 0 scenarios
+    assert_eq!(
+        state.game.scenario_collection.active_filter().completion,
+        CompletionFilter::CompletedOnly
+    );
 
     // Second toggle: Show only not completed
     update(&mut state, Message::ToggleCompletedFilter).unwrap();
-    // Should show all not completed (1)
+    assert_eq!(
+        state.game.scenario_collection.active_filter().completion,
+        CompletionFilter::NotCompletedOnly
+    );
 
     // Third toggle: Show all again
     update(&mut state, Message::ToggleCompletedFilter).unwrap();
-    // Back to showing all
+    assert_eq!(
+        state.game.scenario_collection.active_filter().completion,
+        CompletionFilter::Any
+    );
     assert_eq!(state.game.scenario_collection.count(), 1);
 }
 

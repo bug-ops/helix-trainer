@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::config::{CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
+use chrono::Utc;
 
 /// Helper to create a test scenario with metadata
 fn create_scenario(
@@ -239,6 +240,67 @@ fn test_filter_multiple_criteria() {
 
     assert_eq!(collection.count(), 1); // Only beginner movement
     assert_eq!(collection.get_filtered()[0].name, "Easy Movement");
+}
+
+#[test]
+fn test_filter_by_completion_status() {
+    let scenarios = vec![
+        create_scenario(
+            "001",
+            "Completed1",
+            Some(ScenarioCategory::Movement),
+            Some(Difficulty::Beginner),
+            vec!["h"],
+        ),
+        create_scenario(
+            "002",
+            "NotCompleted1",
+            Some(ScenarioCategory::Editing),
+            Some(Difficulty::Beginner),
+            vec!["d"],
+        ),
+        create_scenario(
+            "003",
+            "Completed2",
+            Some(ScenarioCategory::Clipboard),
+            Some(Difficulty::Beginner),
+            vec!["y"],
+        ),
+    ];
+
+    let mut profile = UserProfile::new();
+    profile
+        .scenario_history
+        .record_completion("001", 100, 50, Utc::now());
+    profile
+        .scenario_history
+        .record_completion("003", 100, 50, Utc::now());
+
+    let mut collection = ScenarioCollection::new(scenarios);
+
+    let completed_filter = ScenarioFilter {
+        completion: CompletionFilter::CompletedOnly,
+        ..Default::default()
+    };
+    collection.apply_filter(&completed_filter, Some(&profile));
+    let completed_names: Vec<&str> = collection
+        .get_filtered()
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
+    assert_eq!(completed_names, vec!["Completed1", "Completed2"]);
+
+    let not_completed_filter = ScenarioFilter {
+        completion: CompletionFilter::NotCompletedOnly,
+        ..Default::default()
+    };
+    collection.apply_filter(&not_completed_filter, Some(&profile));
+    let not_completed_names: Vec<&str> = collection
+        .get_filtered()
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
+    assert_eq!(not_completed_names, vec!["NotCompleted1"]);
 }
 
 #[test]

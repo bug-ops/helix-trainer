@@ -164,6 +164,17 @@ where
 }
 
 /// Quest loader with security validation
+///
+/// Two loading paths exist:
+///
+/// - [`load_from_embedded`](Self::load_from_embedded) reads quests compiled
+///   into the binary. This is the only path production code takes
+///   (`src/gamification/quests.rs`).
+/// - [`load_for_locale`](Self::load_for_locale) and [`load`](Self::load) read
+///   from the filesystem, restricted to `allowed_base_paths`. They are
+///   retained deliberately for a planned "load custom quest packs from disk"
+///   feature and are currently exercised only by unit tests — they are not
+///   dead code awaiting removal.
 pub struct QuestLoader {
     allowed_base_paths: Vec<PathBuf>,
 }
@@ -188,11 +199,24 @@ impl QuestLoader {
 
     /// Load all quest templates for a given locale
     ///
+    /// Tries `<base>/<locale>/daily.toml` under each of `allowed_base_paths`
+    /// in order and returns the first that loads successfully.
+    ///
     /// # Errors
-    /// Returns UserError if file cannot be loaded or validation fails
+    /// Returns UserError if no candidate path loads or validation fails
+    ///
+    /// Not reached from production code today — see the [`QuestLoader`] type
+    /// docs for why this filesystem path is retained.
     pub fn load_for_locale(&self, locale: &str) -> Result<Vec<QuestTemplate>, UserError> {
-        let path = PathBuf::from("./quests").join(locale).join("daily.toml");
-        self.load(&path)
+        let mut last_err = None;
+        for base in &self.allowed_base_paths {
+            let path = base.join(locale).join("daily.toml");
+            match self.load(&path) {
+                Ok(templates) => return Ok(templates),
+                Err(e) => last_err = Some(e),
+            }
+        }
+        Err(last_err.unwrap_or(UserError::ScenarioLoadError))
     }
 
     /// Load quest templates from a TOML file
@@ -206,6 +230,9 @@ impl QuestLoader {
     ///
     /// # Errors
     /// Returns UserError with sanitized message if any validation fails
+    ///
+    /// Not reached from production code today — see the [`QuestLoader`] type
+    /// docs for why this filesystem path is retained.
     pub fn load(&self, path: &Path) -> Result<Vec<QuestTemplate>, UserError> {
         // Validate path to prevent path traversal attacks
         let canonical = path_validator::validate_path(path, &self.allowed_base_paths)

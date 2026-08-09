@@ -14,7 +14,7 @@ pub use quests::{
     QuestConditions, QuestDifficulty, QuestLoader, QuestSpec, QuestTemplate, QuestsFile,
     QuestsMetadata, XpConfig,
 };
-pub use scenario_collection::{ScenarioCollection, ScenarioFilter, SortMode};
+pub use scenario_collection::{CompletionFilter, ScenarioCollection, ScenarioFilter, SortMode};
 pub use scenarios::{
     AlternativeSolution, CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioLoader,
     ScenarioMetadata, ScenariosFile, ScoringConfig, Setup, Solution, TargetState,

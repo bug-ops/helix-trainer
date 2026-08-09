@@ -27,6 +27,7 @@ use crate::constants::{
 };
 use crate::learning::PerformanceTracker;
 use crate::minigame::ScenarioScorer;
+use rand::RngExt;
 use rand::distr::weighted::WeightedIndex;
 use rand::prelude::Distribution;
 use std::collections::VecDeque;
@@ -370,6 +371,8 @@ impl DifficultyController {
     /// * `tracker` - Optional performance tracker for FSRS-based weighted selection.
     ///   When `Some`, scenarios with commands needing practice are prioritized.
     ///   When `None`, random selection is used (backward compatibility).
+    /// * `rng` - Random source, injected so selection can be seeded
+    ///   deterministically in tests; production behavior is unchanged.
     ///
     /// # Returns
     ///
@@ -387,19 +390,20 @@ impl DifficultyController {
     /// let tracker = PerformanceTracker::new();
     ///
     /// // With FSRS weighting
-    /// if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+    /// if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker), &mut rand::rng()) {
     ///     println!("Selected: {}", scenario.name);
     /// }
     ///
     /// // Without FSRS weighting (backward compat)
-    /// if let Some(scenario) = controller.next_scenario(&scenarios, None) {
+    /// if let Some(scenario) = controller.next_scenario(&scenarios, None, &mut rand::rng()) {
     ///     println!("Selected: {}", scenario.name);
     /// }
     /// ```
-    pub fn next_scenario(
+    pub fn next_scenario<R: RngExt + ?Sized>(
         &mut self,
         scenarios: &[Scenario],
         tracker: Option<&PerformanceTracker>,
+        rng: &mut R,
     ) -> Option<Scenario> {
         if scenarios.is_empty() {
             return None;
@@ -425,18 +429,14 @@ impl DifficultyController {
 
         if candidates.is_empty() {
             // Fallback: pick any random scenario
-            use rand::RngExt;
-            let mut rng = rand::rng();
             let idx = rng.random_range(0..scenarios.len());
             return Some(scenarios[idx].clone());
         }
 
         // Use FSRS-weighted selection if tracker provided, otherwise random
         match tracker {
-            Some(t) => self.weighted_select(&candidates, t),
+            Some(t) => self.weighted_select(&candidates, t, rng),
             None => {
-                use rand::RngExt;
-                let mut rng = rand::rng();
                 let idx = rng.random_range(0..candidates.len());
                 Some(candidates[idx].clone())
             }
@@ -453,15 +453,18 @@ impl DifficultyController {
     ///
     /// * `candidates` - Filtered scenarios matching current difficulty
     /// * `tracker` - Performance tracker containing FSRS data
+    /// * `rng` - Random source; production passes `rand::rng()`, tests pass a
+    ///   seeded `StdRng`
     ///
     /// # Returns
     ///
     /// Returns `Some(Scenario)` selected via weighted random, or `None` if
     /// weight distribution construction fails (should not happen with positive base weight).
-    fn weighted_select(
+    fn weighted_select<R: RngExt + ?Sized>(
         &mut self,
         candidates: &[&Scenario],
         tracker: &PerformanceTracker,
+        rng: &mut R,
     ) -> Option<Scenario> {
         let scorer = ScenarioScorer::new(tracker);
 
@@ -473,8 +476,7 @@ impl DifficultyController {
 
         // Weighted random selection
         let dist = WeightedIndex::new(&weights).ok()?;
-        let mut rng = rand::rng();
-        let idx = dist.sample(&mut rng);
+        let idx = dist.sample(rng);
 
         Some(candidates[idx].clone())
     }
@@ -887,6 +889,7 @@ mod tests {
     use super::*;
     use crate::config::{Difficulty, Scenario};
     use crate::testing::ScenarioBuilder;
+    use rand::{SeedableRng, rngs::StdRng};
 
     fn create_test_scenario(difficulty: Difficulty, id: &str) -> Scenario {
         ScenarioBuilder::new()
@@ -1094,7 +1097,9 @@ mod tests {
         // Level 1-3: only beginner
         controller.level = 1;
         for _ in 0..10 {
-            let selected = controller.next_scenario(&scenarios, None).unwrap();
+            let selected = controller
+                .next_scenario(&scenarios, None, &mut rand::rng())
+                .unwrap();
             if let Some(ref metadata) = selected.metadata {
                 assert_eq!(metadata.difficulty, Some(Difficulty::Beginner));
             }
@@ -1106,7 +1111,9 @@ mod tests {
         let mut found_advanced = false;
 
         for _ in 0..50 {
-            let selected = controller.next_scenario(&scenarios, None).unwrap();
+            let selected = controller
+                .next_scenario(&scenarios, None, &mut rand::rng())
+                .unwrap();
             if let Some(ref metadata) = selected.metadata
                 && let Some(diff) = metadata.difficulty
             {
@@ -1546,9 +1553,12 @@ mod tests {
             // Count selections over many iterations
             let mut selection_counts: HashMap<String, u32> = HashMap::new();
             let iterations = 1000;
+            let mut rng = StdRng::seed_from_u64(42);
 
             for _ in 0..iterations {
-                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+                if let Some(scenario) =
+                    controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
+                {
                     *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
                 }
             }
@@ -1583,9 +1593,10 @@ mod tests {
 
             // Without tracker, should use random selection (backward compatibility)
             let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let mut rng = StdRng::seed_from_u64(42);
 
             for _ in 0..300 {
-                if let Some(scenario) = controller.next_scenario(&scenarios, None) {
+                if let Some(scenario) = controller.next_scenario(&scenarios, None, &mut rng) {
                     *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
                 }
             }
@@ -1640,9 +1651,12 @@ mod tests {
             // Even with extreme mastery difference, both should be selectable
             let mut mastered_selected = false;
             let mut novel_selected = false;
+            let mut rng = StdRng::seed_from_u64(42);
 
             for _ in 0..500 {
-                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+                if let Some(scenario) =
+                    controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
+                {
                     match scenario.id.as_str() {
                         "mastered" => mastered_selected = true,
                         "novel" => novel_selected = true,
@@ -1674,9 +1688,12 @@ mod tests {
 
             // With empty tracker, all commands are novel and should have equal weight
             let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let mut rng = StdRng::seed_from_u64(42);
 
             for _ in 0..300 {
-                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+                if let Some(scenario) =
+                    controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
+                {
                     *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
                 }
             }
@@ -1705,7 +1722,7 @@ mod tests {
 
             // Should always return the single scenario
             for _ in 0..10 {
-                let result = controller.next_scenario(&scenarios, Some(&tracker));
+                let result = controller.next_scenario(&scenarios, Some(&tracker), &mut rand::rng());
                 assert!(result.is_some());
                 assert_eq!(result.unwrap().id, "single");
             }
@@ -1719,7 +1736,7 @@ mod tests {
             let scenarios: Vec<Scenario> = vec![];
 
             // Should return None for empty scenarios
-            let result = controller.next_scenario(&scenarios, Some(&tracker));
+            let result = controller.next_scenario(&scenarios, Some(&tracker), &mut rand::rng());
             assert!(result.is_none());
         }
 
@@ -1753,8 +1770,11 @@ mod tests {
 
             // At level 1, only beginner scenarios should be selected
             controller.level = 1;
+            let mut rng = StdRng::seed_from_u64(42);
             for _ in 0..20 {
-                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker)) {
+                if let Some(scenario) =
+                    controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
+                {
                     assert_eq!(
                         scenario.id, "beginner",
                         "At level 1, only beginner scenarios should be selected"
@@ -1765,9 +1785,11 @@ mod tests {
             // At level 7+, intermediate and advanced are available
             // (but our test only has advanced, so advanced should be selected)
             controller.level = 7;
+            let mut rng = StdRng::seed_from_u64(42);
             let mut found_advanced = false;
             for _ in 0..20 {
-                if let Some(scenario) = controller.next_scenario(&scenarios, Some(&tracker))
+                if let Some(scenario) =
+                    controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
                     && scenario.id == "advanced"
                 {
                     found_advanced = true;

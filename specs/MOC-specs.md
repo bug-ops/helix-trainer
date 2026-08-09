@@ -32,6 +32,16 @@ superseded)
 | [[register-command-mode-support/README\|Named Register and Command-Line (`:`) Mode Support]] | review | implemented (command-line mode narrower than drafted — `:goto`/`:g` only, no `:s` substitute) |
 | [[arcade-gamification-session-fixes/spec\|Arcade Gamification Session Bookkeeping Fixes]] | specify (lightweight, per SDD scaling guidance) | implemented |
 
+## Proposed Specs
+
+Not yet built. Drafted for review/prioritization only.
+
+| Feature | Phase | Status |
+|---------|-------|--------|
+| [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting for Scenario Content]] | specify (lightweight, per SDD scaling guidance) | proposed — shared prerequisite for the two specs below |
+| [[writing-markup-scenario-track/spec\|Writing / Markup Scenario Track]] | specify (lightweight, per SDD scaling guidance) | proposed — evaluates GitHub issue #152, depends on [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting]] |
+| [[multi-language-scenario-content/spec\|Multi-Language Scenario Content]] | specify (lightweight, per SDD scaling guidance) | proposed — depends on [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting]] |
+
 ## Project Foundation
 
 - [[constitution]] — non-negotiable project principles. Created 2026-08-09,

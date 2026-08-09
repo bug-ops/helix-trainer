@@ -1,0 +1,86 @@
+# Indentation Operations (Python variant)
+# Python-syntax parallel of indentation.toml, exercising '>' / '<' against
+# indentation-significant blocks (if/for) — the syntax dimension with no
+# Rust equivalent, since Rust's blocks are brace-delimited.
+
+[[scenarios]]
+id = "indent_line_python_001"
+name = "Indent code line (Python)"
+description = "Add indentation to a line so it sits inside its enclosing if-block"
+
+hints = [
+    "'>' adds 2 spaces of indentation at the start of the line",
+    "Use multiple times to add more indentation",
+]
+
+[scenarios.setup]
+language = "py"
+file_content = """def process(items):
+    if items:
+    result = compute(items)
+    return result"""
+cursor_position = [2, 4]
+
+[scenarios.target]
+file_content = """def process(items):
+    if items:
+      result = compute(items)
+    return result"""
+cursor_position = [2, 6]
+
+[scenarios.solution]
+commands = [">"]
+description = "Press '>' to indent the line into the if-block"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["indent", "python"]
+commands_taught = [">"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "dedent_line_python_001"
+name = "Remove indentation (Python)"
+description = "Remove excess indentation from a line inside a for-loop body"
+
+hints = [
+    "'<' removes up to 2 spaces of indentation from the start of the line",
+    "Use multiple times to remove more indentation",
+]
+
+[scenarios.setup]
+language = "py"
+file_content = """def process(items):
+    for item in items:
+          result = item
+    return result"""
+cursor_position = [2, 0]
+
+[scenarios.target]
+file_content = """def process(items):
+    for item in items:
+        result = item
+    return result"""
+cursor_position = [2, 0]
+
+[scenarios.solution]
+commands = ["<"]
+description = "Press '<' to remove excess indentation"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["dedent", "indent", "python"]
+commands_taught = ["<"]
+estimated_time_seconds = 10

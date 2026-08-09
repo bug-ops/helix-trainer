@@ -1,0 +1,54 @@
+# Word Movement Operations (Python variant)
+# Python-syntax parallel of word.toml's word_movement_001, exercising the
+# same 'w' motion against indentation-significant, bracket-sparse content.
+
+[[scenarios]]
+id = "word_movement_python_001"
+name = "Navigate by words (Python)"
+description = "Move cursor forward through words in Python code to reach the target position"
+
+hints = [
+    "'w' moves to the start of the next word",
+    "'b' moves backwards to the start of the previous word",
+    "'e' moves to the end of the current/next word",
+]
+
+[scenarios.setup]
+language = "py"
+file_content = """def process_data(items, config):
+    total = count + offset
+    values = list(items)
+
+    for value in values:
+        total += value
+
+    return total"""
+cursor_position = [1, 4]
+
+[scenarios.target]
+file_content = """def process_data(items, config):
+    total = count + offset
+    values = list(items)
+
+    for value in values:
+        total += value
+
+    return total"""
+cursor_position = [1, 18]
+selection = [1, 12, 1, 18]
+
+[scenarios.solution]
+commands = ["w", "w", "w"]
+description = "Press 'w' three times to move forward by words"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "navigation", "python"]
+commands_taught = ["w"]
+estimated_time_seconds = 20

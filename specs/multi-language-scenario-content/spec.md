@@ -8,9 +8,9 @@ tags:
   - scenarios
   - i18n
   - content
-  - status/proposed
+  - status/implemented
 created: 2026-08-09
-status: proposed
+status: implemented
 related:
   - "[[constitution]]"
   - "[[MOC-specs]]"
@@ -26,6 +26,9 @@ related:
 > guidance ("feature (1-3 files)" tier) — this is content diversification
 > within existing categories, not a new content type or architecture
 > change. No BRD/SRS/NFR/plan/tasks package.
+> **Status**: Implemented — see issue #362. The pilot shipped exactly as
+> scoped: `movement` and `editing` categories, Python only, no
+> `ScenarioCategory` changes (SC-004).
 
 ## 1. Overview
 

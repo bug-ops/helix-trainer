@@ -31,16 +31,15 @@ superseded)
 | [[arcade-game-mode-variety/README\|Arcade Game Mode Variety]] | rejected | NO-GO — full decision-record package, not built |
 | [[register-command-mode-support/README\|Named Register and Command-Line (`:`) Mode Support]] | review | implemented (command-line mode narrower than drafted — `:goto`/`:g` only, no `:s` substitute) |
 | [[arcade-gamification-session-fixes/spec\|Arcade Gamification Session Bookkeeping Fixes]] | specify (lightweight, per SDD scaling guidance) | implemented |
+| [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting for Scenario Content]] | specify (lightweight, per SDD scaling guidance) | implemented — shared prerequisite for the two specs below |
+| [[writing-markup-scenario-track/spec\|Writing / Markup Scenario Track]] | specify (lightweight, per SDD scaling guidance) | implemented — evaluates GitHub issue #152 (#361) |
+| [[multi-language-scenario-content/spec\|Multi-Language Scenario Content]] | specify (lightweight, per SDD scaling guidance) | implemented — pilot shipped as scoped (#362) |
 
 ## Proposed Specs
 
 Not yet built. Drafted for review/prioritization only.
 
-| Feature | Phase | Status |
-|---------|-------|--------|
-| [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting for Scenario Content]] | specify (lightweight, per SDD scaling guidance) | proposed — shared prerequisite for the two specs below |
-| [[writing-markup-scenario-track/spec\|Writing / Markup Scenario Track]] | specify (lightweight, per SDD scaling guidance) | proposed — evaluates GitHub issue #152, depends on [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting]] |
-| [[multi-language-scenario-content/spec\|Multi-Language Scenario Content]] | specify (lightweight, per SDD scaling guidance) | proposed — depends on [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting]] |
+(none)
 
 ## Project Foundation
 

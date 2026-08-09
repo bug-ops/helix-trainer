@@ -1,0 +1,72 @@
+# Heading Level Changes (Writing track)
+# Scenarios for bumping a Markdown heading between levels
+
+[[scenarios]]
+id = "writing_heading_demote_001"
+name = "Demote a heading (## to ###)"
+description = "Insert a '#' at the start of the line to drop the heading one level"
+
+hints = [
+    "'i' enters insert mode before the cursor",
+    "Adding one '#' turns a level-2 heading into a level-3 heading",
+]
+
+[scenarios.setup]
+file_content = """## Section Title"""
+language = "md"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """### Section Title"""
+cursor_position = [0, 1]
+
+[scenarios.solution]
+commands = ["i", "#", "Escape"]
+description = "Insert one '#' before the existing heading markers"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 1
+
+[scenarios.metadata]
+category = "writing"
+difficulty = "beginner"
+tags = ["heading", "markdown"]
+commands_taught = ["i"]
+estimated_time_seconds = 10
+
+[[scenarios]]
+id = "writing_heading_promote_001"
+name = "Promote a heading (### to ##)"
+description = "Delete one '#' from the start of the line to raise the heading one level"
+
+hints = [
+    "'d' deletes the character under the cursor",
+    "Removing one '#' turns a level-3 heading into a level-2 heading",
+]
+
+[scenarios.setup]
+file_content = """### Section Title"""
+language = "md"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """## Section Title"""
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["d"]
+description = "Delete the leading '#' to promote the heading"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "writing"
+difficulty = "beginner"
+tags = ["heading", "markdown"]
+commands_taught = ["d"]
+estimated_time_seconds = 10

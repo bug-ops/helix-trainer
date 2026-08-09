@@ -2,7 +2,7 @@
 # Scenarios covering joining lines
 
 [[scenarios]]
-id = "join_lines_001"
+id = "join_lines_basic_001"
 name = "Join two lines"
 description = "Join the current line with the line below"
 

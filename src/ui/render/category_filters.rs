@@ -20,6 +20,7 @@ fn category_display_name(category: &ScenarioCategory) -> &'static str {
         ScenarioCategory::Selection => "Selection",
         ScenarioCategory::TextObjects => "Text Objects",
         ScenarioCategory::Advanced => "Advanced",
+        ScenarioCategory::Registers => "Registers",
         ScenarioCategory::Multi => "Multi",
         ScenarioCategory::Other => "Other",
     }
@@ -35,6 +36,7 @@ fn category_icon(category: &ScenarioCategory) -> &'static str {
         ScenarioCategory::Selection => "##",
         ScenarioCategory::TextObjects => "{}",
         ScenarioCategory::Advanced => "++",
+        ScenarioCategory::Registers => "\"\"",
         ScenarioCategory::Multi => "**",
         ScenarioCategory::Other => "..",
     }
@@ -321,6 +323,10 @@ mod tests {
             category_display_name(&ScenarioCategory::Advanced),
             "Advanced"
         );
+        assert_eq!(
+            category_display_name(&ScenarioCategory::Registers),
+            "Registers"
+        );
         assert_eq!(category_display_name(&ScenarioCategory::Multi), "Multi");
         assert_eq!(category_display_name(&ScenarioCategory::Other), "Other");
     }
@@ -335,6 +341,7 @@ mod tests {
         assert!(!category_icon(&ScenarioCategory::Selection).is_empty());
         assert!(!category_icon(&ScenarioCategory::TextObjects).is_empty());
         assert!(!category_icon(&ScenarioCategory::Advanced).is_empty());
+        assert!(!category_icon(&ScenarioCategory::Registers).is_empty());
         assert!(!category_icon(&ScenarioCategory::Multi).is_empty());
         assert!(!category_icon(&ScenarioCategory::Other).is_empty());
     }
@@ -348,6 +355,7 @@ mod tests {
         assert_eq!(category_icon(&ScenarioCategory::Selection), "##");
         assert_eq!(category_icon(&ScenarioCategory::TextObjects), "{}");
         assert_eq!(category_icon(&ScenarioCategory::Advanced), "++");
+        assert_eq!(category_icon(&ScenarioCategory::Registers), "\"\"");
         assert_eq!(category_icon(&ScenarioCategory::Multi), "**");
         assert_eq!(category_icon(&ScenarioCategory::Other), "..");
     }
@@ -406,8 +414,9 @@ mod tests {
             create_test_scenario_with_category("s5", ScenarioCategory::Selection),
             create_test_scenario_with_category("s6", ScenarioCategory::TextObjects),
             create_test_scenario_with_category("s7", ScenarioCategory::Advanced),
-            create_test_scenario_with_category("s8", ScenarioCategory::Multi),
-            create_test_scenario_with_category("s9", ScenarioCategory::Other),
+            create_test_scenario_with_category("s8", ScenarioCategory::Registers),
+            create_test_scenario_with_category("s9", ScenarioCategory::Multi),
+            create_test_scenario_with_category("s10", ScenarioCategory::Other),
         ];
 
         let mut state = AppState {
@@ -442,7 +451,7 @@ mod tests {
 
         let mut state = create_state_with_all_categories();
         state.screen = TypedScreen::CategoryFilters(CategoryFiltersData {
-            selected_index: 8, // Last item (9 categories, 0-indexed)
+            selected_index: 9, // Last item (10 categories, 0-indexed)
             return_to: crate::ui::state::ReturnDestination::Menu,
         });
 

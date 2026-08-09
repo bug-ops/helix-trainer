@@ -35,6 +35,8 @@ const EDITING_SURROUND: &str = include_str!("../../../scenarios/en/editing/surro
 
 const MOVEMENT_BASIC: &str = include_str!("../../../scenarios/en/movement/basic-movement.toml");
 const MOVEMENT_COMBINED: &str = include_str!("../../../scenarios/en/movement/combined.toml");
+const MOVEMENT_COMMAND_LINE_GOTO: &str =
+    include_str!("../../../scenarios/en/movement/command-line-goto.toml");
 const MOVEMENT_DOCUMENT: &str = include_str!("../../../scenarios/en/movement/document.toml");
 const MOVEMENT_FIND_TILL: &str = include_str!("../../../scenarios/en/movement/find-till.toml");
 const MOVEMENT_GOTO_COMMANDS: &str =
@@ -48,6 +50,12 @@ const MOVEMENT_PARAGRAPH: &str = include_str!("../../../scenarios/en/movement/pa
 const MOVEMENT_PRECISION: &str = include_str!("../../../scenarios/en/movement/precision.toml");
 const MOVEMENT_WORD_BASICS: &str = include_str!("../../../scenarios/en/movement/word-basics.toml");
 const MOVEMENT_WORD: &str = include_str!("../../../scenarios/en/movement/word.toml");
+
+// ============================================================================
+// Register scenarios
+// ============================================================================
+
+const REGISTERS_NAMED: &str = include_str!("../../../scenarios/en/registers/named-registers.toml");
 
 // ============================================================================
 // Repeat scenarios
@@ -95,6 +103,7 @@ const EN_SCENARIOS: &[&str] = &[
     // Movement
     MOVEMENT_BASIC,
     MOVEMENT_COMBINED,
+    MOVEMENT_COMMAND_LINE_GOTO,
     MOVEMENT_DOCUMENT,
     MOVEMENT_FIND_TILL,
     MOVEMENT_GOTO_COMMANDS,
@@ -105,6 +114,8 @@ const EN_SCENARIOS: &[&str] = &[
     MOVEMENT_PRECISION,
     MOVEMENT_WORD_BASICS,
     MOVEMENT_WORD,
+    // Registers
+    REGISTERS_NAMED,
     // Repeat
     REPEAT_BASIC,
     // Search
@@ -158,7 +169,7 @@ mod tests {
     #[test]
     fn test_get_embedded_scenarios_en() {
         let scenarios = get_embedded_scenarios("en");
-        assert_eq!(scenarios.len(), 27, "Expected 27 scenario files");
+        assert_eq!(scenarios.len(), 29, "Expected 29 scenario files");
     }
 
     #[test]

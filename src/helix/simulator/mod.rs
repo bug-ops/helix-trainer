@@ -9,10 +9,12 @@
 //! The simulator uses the typestate pattern to enforce mode-specific operations
 //! at compile time. See the `mode` module for details.
 
+pub mod command_line;
 pub mod commands;
 pub mod find_state;
 mod insert_mode;
 mod mode;
+pub mod register_file;
 pub mod search_state;
 pub mod snapshot;
 mod undo;
@@ -32,7 +34,9 @@ use std::marker::PhantomData;
 pub use mode::{EditorMode, InsertMode, NormalMode};
 
 // Re-export state types
+pub use command_line::CommandLine;
 pub use find_state::{FindDirection, FindState, FindType};
+pub use register_file::RegisterFile;
 pub use search_state::{SearchDirection, SearchState};
 pub use snapshot::{EditorDisplay, EditorSnapshot, SelectionBounds, SerializableRange};
 pub use view_state::ViewState;
@@ -85,8 +89,11 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// applied, matching standard editor undo/redo semantics.
     pub(super) redo_stack: Vec<Rope>,
 
-    /// Clipboard for yank and paste operations
-    pub(super) clipboard: Option<String>,
+    /// Named registers for yank, paste, and replace operations
+    ///
+    /// Plain `y`/`p`/`P`/`R` (with no `"<reg>` prefix) read and write the
+    /// unnamed register; see [`RegisterFile`].
+    pub(super) registers: RegisterFile,
 
     /// Repeat buffer for recording and replaying actions
     pub(super) repeat_buffer: RepeatBuffer,
@@ -270,7 +277,7 @@ impl HelixSimulator<NormalMode> {
             selection: Selection::point(0),
             history: Vec::new(),
             redo_stack: Vec::new(),
-            clipboard: None,
+            registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
             repeat_depth: 0,
@@ -312,7 +319,7 @@ impl HelixSimulator<NormalMode> {
             selection,
             history: Vec::new(),
             redo_stack: Vec::new(),
-            clipboard: None,
+            registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
             repeat_depth: 0,
@@ -381,7 +388,7 @@ impl HelixSimulator<NormalMode> {
             selection,
             history: Vec::new(),
             redo_stack: Vec::new(),
-            clipboard: None,
+            registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
             is_repeating: false,
             repeat_depth: 0,
@@ -405,7 +412,7 @@ impl HelixSimulator<NormalMode> {
             selection: collapsed_selection,
             history: self.history,
             redo_stack: self.redo_stack,
-            clipboard: self.clipboard,
+            registers: self.registers,
             repeat_buffer: self.repeat_buffer,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
@@ -446,7 +453,7 @@ impl HelixSimulator<InsertMode> {
             selection: self.selection,
             history: self.history,
             redo_stack: self.redo_stack,
-            clipboard: self.clipboard,
+            registers: self.registers,
             repeat_buffer: self.repeat_buffer,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,

@@ -4,10 +4,12 @@
 //! The handlers are dispatched based on the current state.
 
 mod base;
+mod command_line;
 pub mod count;
 mod find;
 mod goto;
 mod match_mode;
+mod register;
 mod replace;
 mod text_object;
 mod unmatched;

@@ -72,6 +72,19 @@ impl InputStateMachine {
                 key,
             ),
             InputState::ReplaceCharPending => KeyHandler::handle_key(&ReplaceCharPending, key),
+            InputState::RegisterPending => KeyHandler::handle_key(&RegisterPending, key),
+            InputState::RegisterOpPending { register } => KeyHandler::handle_key(
+                &RegisterOpPending {
+                    register: *register,
+                },
+                key,
+            ),
+            InputState::CommandLinePending { buffer } => KeyHandler::handle_key(
+                &CommandLinePending {
+                    buffer: buffer.clone(),
+                },
+                key,
+            ),
             InputState::CountPending { count } => {
                 KeyHandler::handle_key(&CountPending { count: *count }, key)
             }
@@ -128,6 +141,30 @@ impl InputStateMachine {
         }
     }
 
+    /// Get info about a pending register-select sequence, for UI feedback.
+    ///
+    /// Returns `None` outside of `"`/`"<reg>` input.
+    pub fn pending_register(&self) -> Option<RegisterPreview> {
+        match &self.state {
+            InputState::RegisterPending => Some(RegisterPreview::SelectingRegister),
+            InputState::RegisterOpPending { register } => {
+                Some(RegisterPreview::AwaitingOperator(*register))
+            }
+            _ => None,
+        }
+    }
+
+    /// Get the in-progress `:`-prefixed command-line buffer, if pending.
+    ///
+    /// Returns the text typed after the colon (not including the colon
+    /// itself), for rendering a live prompt line.
+    pub fn pending_command_line(&self) -> Option<&str> {
+        match &self.state {
+            InputState::CommandLinePending { buffer } => Some(buffer.as_str()),
+            _ => None,
+        }
+    }
+
     /// Get a preview character for surround operations
     ///
     /// Returns Some(char) when in a state that should show bracket preview:
@@ -152,4 +189,13 @@ pub enum SurroundPreview {
     Replace(char),
     /// Preview for surround delete - shows which brackets will be deleted
     Delete(char),
+}
+
+/// State of a pending named-register selection sequence, for UI feedback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegisterPreview {
+    /// Waiting for the register character after `"`.
+    SelectingRegister,
+    /// Register selected; waiting for the operator (y/p/P/R).
+    AwaitingOperator(char),
 }

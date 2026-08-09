@@ -208,9 +208,13 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
             String::new()
         };
 
+        // Live feedback for an in-progress '"'-register selection or
+        // ':'-command-line buffer, so the user can see what they're typing.
+        let pending_text = super::helpers::pending_input_indicator(&task_data.input_state);
+
         let instructions = Paragraph::new(format!(
-            "{}{}| Ctrl-Q: Abandon | Ctrl-C: Quit",
-            hint_indicator, last_cmd_text
+            "{}{}{}| Ctrl-Q: Abandon | Ctrl-C: Quit",
+            pending_text, hint_indicator, last_cmd_text
         ))
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)

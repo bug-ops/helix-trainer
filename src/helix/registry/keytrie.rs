@@ -166,6 +166,33 @@ impl KeyTrie {
         let len = buffer.len();
         let first_char = buffer.chars().next().unwrap();
 
+        // Named register prefix ("<reg><op>): "<reg> is always partial,
+        // waiting for the operator character. No allow-list on the register
+        // char itself, same as the 'r' replace-char prefix - but the
+        // operator IS allow-listed to y/p/P/R, matching `RegisterOpPending`
+        // (`src/input/typestate/handlers/register.rs`), which cancels on
+        // any other key. Uses `chars().count()`, not the byte-based `len`
+        // above: a multi-byte register char (e.g. `"é`) would otherwise make
+        // `len() == 3` true for only 2 actual chars (missing the operator).
+        if first_char == '"' {
+            let char_count = buffer.chars().count();
+            if char_count <= 2 {
+                return KeyMatch::Partial;
+            }
+            if char_count == 3 {
+                let op = buffer
+                    .chars()
+                    .nth(2)
+                    .expect("char_count == 3 checked above");
+                return if matches!(op, 'y' | 'p' | 'P' | 'R') {
+                    KeyMatch::Complete(buffer.to_string())
+                } else {
+                    KeyMatch::Invalid
+                };
+            }
+            return KeyMatch::Invalid;
+        }
+
         // Check for multi-key command
         if len == 2 {
             // Multi-key goto commands
@@ -485,5 +512,49 @@ mod tests {
         // 4-char sequences that don't start with 'mr' are invalid
         assert_eq!(trie.resolve("miwa"), KeyMatch::Invalid);
         assert_eq!(trie.resolve("mawx"), KeyMatch::Invalid);
+    }
+
+    // Named register prefix tests
+
+    #[test]
+    fn test_register_prefix_partial() {
+        let trie = KeyTrie::new();
+        assert_eq!(trie.resolve("\""), KeyMatch::Partial);
+        assert_eq!(trie.resolve("\"a"), KeyMatch::Partial);
+    }
+
+    #[test]
+    fn test_register_op_complete_for_scoped_ops() {
+        let trie = KeyTrie::new();
+        assert_eq!(trie.resolve("\"ay"), KeyMatch::Complete("\"ay".to_string()));
+        assert_eq!(trie.resolve("\"ap"), KeyMatch::Complete("\"ap".to_string()));
+        assert_eq!(trie.resolve("\"aP"), KeyMatch::Complete("\"aP".to_string()));
+        assert_eq!(trie.resolve("\"aR"), KeyMatch::Complete("\"aR".to_string()));
+    }
+
+    /// Regression test: the KeyTrie must reject register ops outside y/p/P/R,
+    /// matching `RegisterOpPending`'s cancel behavior, instead of reporting
+    /// `Complete` for an operator the real UI would never execute.
+    #[test]
+    fn test_register_op_invalid_for_out_of_scope_operator() {
+        let trie = KeyTrie::new();
+        assert_eq!(trie.resolve("\"ad"), KeyMatch::Invalid);
+        assert_eq!(trie.resolve("\"ax"), KeyMatch::Invalid);
+    }
+
+    /// Regression test: byte length must not be confused with char count for
+    /// a multi-byte register char (`"é` is 1 char, 2 bytes -> 3 bytes total,
+    /// but only 2 chars, so it must still be `Partial`, not `Complete`).
+    #[test]
+    fn test_register_prefix_multibyte_register_char_is_partial() {
+        let trie = KeyTrie::new();
+        assert_eq!(trie.resolve("\"é"), KeyMatch::Partial);
+        assert_eq!(trie.resolve("\"éy"), KeyMatch::Complete("\"éy".to_string()));
+    }
+
+    #[test]
+    fn test_register_op_invalid_too_long() {
+        let trie = KeyTrie::new();
+        assert_eq!(trie.resolve("\"aay"), KeyMatch::Invalid);
     }
 }

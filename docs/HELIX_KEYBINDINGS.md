@@ -516,6 +516,15 @@ Access command mode with <kbd>:</kbd> in normal mode. Common commands:
 | `:rsort` | | Sort selections in reverse |
 | `:run-shell-command` | `:sh` | Run shell command and show output |
 
+**Implemented in the trainer:** only `:goto`/`:g` (line clamping, trailing-blank-line
+rule, `:goto 0` as a silent no-op, cursor moves to line start). Every other
+command above is a reference for real Helix behavior; typing it in the
+trainer's command line raises an "unknown command" error rather than running
+it — the trainer has no file, buffer, LSP, shell, or theme concepts to back
+them, and none are planned. `:clear-register` and `:sort` were considered and
+explicitly deferred (not shippable as a verifiable lesson with the current
+scenario completion model — see the register/command-mode design notes).
+
 ---
 
 ## Implementation Checklist
@@ -570,7 +579,7 @@ Track which commands have been implemented in the simulator:
 | ✅ | <kbd>y</kbd> | Yank (copy) selection |
 | ✅ | <kbd>p</kbd> | Paste after selection |
 | ✅ | <kbd>P</kbd> | Paste before selection |
-| ❌ | <kbd>"</kbd> + reg | Select register for yank/paste |
+| ✅ | <kbd>"</kbd> + reg | Select register for yank/paste (scoped to y/p/P/R; see Command Mode Commands) |
 | ✅ | <kbd>></kbd> | Indent selection |
 | ✅ | <kbd><</kbd> | Unindent selection |
 | ❌ | <kbd>=</kbd> | Format selection (LSP) |
@@ -656,6 +665,13 @@ Track which commands have been implemented in the simulator:
 | ✅ | <kbd>ma</kbd> + object | Select around text object |
 | ✅ | <kbd>mi</kbd> + object | Select inside text object |
 
+### Command Mode
+
+| Status | Keys | Description |
+|:------:|------|-------------|
+| ✅ | <kbd>:</kbd>goto N, <kbd>:</kbd>g N | Go to line N (1-based, clamped, cursor to line start) |
+| ❌ | everything else in the Command Mode Commands table above | No file/buffer/LSP/shell/theme concepts in the trainer |
+
 ---
 
 ## Implementation Summary
@@ -679,6 +695,8 @@ Track which commands have been implemented in the simulator:
 | **Indentation** | 2 | <kbd>></kbd> <kbd><</kbd> |
 | **Line ops** | 3 | <kbd>J</kbd> <kbd>Alt+J</kbd> <kbd>Ctrl+c</kbd> |
 | **Clipboard** | 3 | <kbd>y</kbd> <kbd>p</kbd> <kbd>P</kbd> |
+| **Registers** | 1 | <kbd>"</kbd> + reg (scopes y/p/P/R to a named register) |
+| **Command Mode** | 1 | <kbd>:goto</kbd> / <kbd>:g</kbd> |
 | **Repeat** | 2 | <kbd>.</kbd> <kbd>Alt+.</kbd> |
 
 ### Training Scenarios Coverage
@@ -694,7 +712,7 @@ Track which commands have been implemented in the simulator:
 
 - Tree-sitter selections (<kbd>Alt+o</kbd>, <kbd>Alt+i</kbd>, etc.)
 - LSP integration commands
-- Macros and registers (<kbd>Q</kbd>, <kbd>q</kbd>, <kbd>"</kbd>)
+- Macros (<kbd>Q</kbd>, <kbd>q</kbd>) — named registers (<kbd>"</kbd>) are implemented, scoped to y/p/P/R
 - Window mode (<kbd>Ctrl+w</kbd>)
 - Space mode (<kbd>Space</kbd>)
 - Jumplist (<kbd>Ctrl+i</kbd>, <kbd>Ctrl+o</kbd>)

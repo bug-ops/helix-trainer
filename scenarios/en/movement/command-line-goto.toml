@@ -1,0 +1,45 @@
+# Command-line Goto
+# Scenarios for the ':' command-line mode's ':goto'/':g' command
+
+[[scenarios]]
+id = "command_line_goto_001"
+name = "Go to line with :goto"
+description = "Use the ':' command line and ':goto N' to jump to a specific line number"
+
+hints = [
+    "':' opens the command line",
+    "'goto N' (or its alias 'g N') moves the cursor to the start of line N",
+    "Press Enter to run the command",
+]
+
+[scenarios.setup]
+file_content = """line one
+line two
+line three
+line four
+"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """line one
+line two
+line three
+line four
+"""
+cursor_position = [2, 0]
+
+[scenarios.solution]
+commands = [":goto 3"]
+description = "Type ':goto 3' and press Enter to jump to line 3"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["goto", "command-line", "navigation"]
+commands_taught = [":goto"]
+estimated_time_seconds = 15

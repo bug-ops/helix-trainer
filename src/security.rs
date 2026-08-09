@@ -208,6 +208,13 @@ pub mod limits {
     /// Maximum command sequence length
     pub const MAX_COMMAND_SEQUENCE_LENGTH: usize = 100;
 
+    /// Maximum length of the `:`-prefixed command-line buffer
+    ///
+    /// `InputState` is cloned on every keystroke transition, so this bounds
+    /// the per-keystroke clone cost (O(n²) in the worst case) as well as the
+    /// rendered prompt line length.
+    pub const MAX_COMMAND_LINE_LEN: usize = 256;
+
     /// Command timeout
     pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 

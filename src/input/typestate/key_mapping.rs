@@ -142,9 +142,13 @@ pub fn parse_helix_key_string(s: &str) -> Option<KeyEvent> {
 
 /// Parse the key code from a string, updating modifiers for uppercase letters
 fn parse_key_code(s: &str, modifiers: &mut KeyModifiers) -> Option<KeyCode> {
-    // Single character (byte length check is correct for ASCII-only key inputs)
-    if s.len() == 1 {
-        let c = s.chars().next()?;
+    // Single character - counts chars, not bytes, so a non-ASCII char (which
+    // is multi-byte in UTF-8) is correctly rejected as "not a single key"
+    // rather than silently falling through to the space fallback.
+    let mut chars = s.chars();
+    if let Some(c) = chars.next()
+        && chars.next().is_none()
+    {
         // Uppercase ASCII letter implies Shift modifier
         if c.is_ascii_uppercase() {
             *modifiers |= KeyModifiers::SHIFT;

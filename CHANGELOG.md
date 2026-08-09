@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New `src/time.rs` module: `Clock` trait abstraction over the current time, with a `SystemClock` production implementation and a `FakeClock` for deterministic tests (#269)
 - A persistent, scrollable Achievements screen (`p`/`s`/`a` cycles between Profile, Statistics, and Achievements from the mode selection, menu, profile, statistics, and paused-arcade screens) listing every achievement with its unlocked/locked status, so players can review the full roster outside the transient unlock toast (#292)
+- Named registers: `"<reg><op>` (e.g. `"ay`, `"ap`) scopes `y`/`p`/`P`/`R` to a named register instead of the default one, via a new `RegisterFile` on the simulator; unnamed `y`/`p`/`P`/`R` are unchanged and remain equivalent to `""y`/`""p`/`""P`/`""R` (#282)
+- Command-line mode: `:` opens a command-line prompt; only `:goto N` (alias `:g N`) is implemented, transcribed from real Helix `:goto` semantics (1-based line number, clamped to the last real line, `:goto 0` is a silent no-op, cursor moves to line start) — no other typed command (`:w`, `:sort`, `:clear-register`, shell commands, etc.) is implemented, since the trainer has no file/buffer/LSP/shell concepts to back them (#282)
+- New scenarios: one named-register scenario (`scenarios/en/registers/named-registers.toml`) and one `:goto` scenario (`scenarios/en/movement/command-line-goto.toml`); new `ScenarioCategory::Registers`
+- `helix::commands::normalize_command_id` canonicalizes register ops and command-line invocations (`"ay` -> `"y`, `:g 3` -> `:goto`) to a stable FSRS/quest card id, applied at all three places a raw command string is recorded for learning/quest tracking
 
 ### Changed
 
@@ -36,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Arcade mode's Esc key now cancels a pending prefix state (count, `g`/`m`/`z`, register selection, command-line buffer) instead of always pausing the game — **behavior change**: previously the first Esc while e.g. a count prefix was building would pause the mini-game; it now cancels the prefix on the first Esc and pauses on the second. Without this fix the new command-line buffer was an unrecoverable trap in arcade mode, draining the scenario timer until Enter or a lucky escape (#282)
+- Arcade mode's input state (pending count/prefix/register/command-line buffer) is now reset when advancing to the next scenario, instead of potentially leaking into the next scenario's fresh input (#282)
+- An unmapped Alt- or Ctrl-modified key reaching the fallback key-to-command path is now dropped instead of being silently serialized as the bare character — previously an unmapped Alt-x reached the input state machine as plain `x`, executing whatever `x` resolves to instead of being ignored (#282)
+- `parse_key_code`'s single-key check now counts chars instead of bytes, so a non-ASCII character (or a macOS Option-composed character not otherwise mapped) is correctly rejected instead of silently falling through to a literal space (#282)
 - Arcade mode now fires the `LevelUp` notification for level-ups driven by quest XP, scenario-completion XP, and end-of-game XP, matching the training-mode path; previously all three `add_xp` calls in the arcade handlers discarded their `leveled_up` result (#309)
 - Breaking a daily streak (a missed day with no freeze available) now surfaces a `StreakBroken` notification instead of only being logged, mirroring the existing `StreakFreezeGranted`/`StreakFreezeUsed` notifications (#310)
 - Returning to the menu from the arcade game-over screen no longer re-runs game-over XP/stat/FSRS bookkeeping a second time; `handle_minigame_back_to_menu` now only invokes `handle_minigame_game_over` when the session hasn't already reached the `GameOver` state (#317)

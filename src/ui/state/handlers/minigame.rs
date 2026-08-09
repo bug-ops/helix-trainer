@@ -362,6 +362,9 @@ pub(in crate::ui::state) fn handle_minigame_next_scenario(
     state.ui.show_key_history = false;
     if let TypedScreen::MiniGame(ref mut data) = state.screen {
         data.clear_key_history();
+        // A pending prefix/register/command-line state from the previous
+        // scenario must not leak into the next one's fresh input.
+        data.reset_input_state();
     }
     Ok(HandlerOutcome::Stay)
 }
@@ -1359,6 +1362,47 @@ mod tests {
         let outcome = handle_minigame_next_scenario(&mut state).unwrap();
 
         assert!(matches!(outcome, HandlerOutcome::Stay));
+    }
+
+    /// Regression test for S4b: a half-typed prefix/register/command-line
+    /// state must not leak into the next scenario after
+    /// `handle_minigame_next_scenario` advances.
+    #[test]
+    fn test_handle_minigame_next_scenario_resets_pending_input_state() {
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+            session.advance_to_next();
+        }
+
+        // Leave a pending register-select state, as if the player started
+        // typing `"a` right before the transition kicked in.
+        if let TypedScreen::MiniGame(ref mut data) = state.screen {
+            data.input_state_mut()
+                .process_key(crossterm::event::KeyEvent::new(
+                    crossterm::event::KeyCode::Char('"'),
+                    crossterm::event::KeyModifiers::NONE,
+                ));
+            assert!(data.input_state().is_prefix_state());
+        } else {
+            panic!("expected MiniGame screen");
+        }
+
+        handle_minigame_next_scenario(&mut state).unwrap();
+
+        if let TypedScreen::MiniGame(ref data) = state.screen {
+            assert!(
+                data.input_state().state().is_base(),
+                "pending input state must reset when advancing to the next scenario, got {:?}",
+                data.input_state().state()
+            );
+        } else {
+            panic!("expected MiniGame screen");
+        }
     }
 
     #[test]

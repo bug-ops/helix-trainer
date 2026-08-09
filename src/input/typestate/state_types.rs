@@ -86,6 +86,24 @@ impl FindType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReplaceCharPending;
 
+/// Waiting for the register character after '"' (named register selection)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RegisterPending;
+
+/// Waiting for the operator character after '"{register}' (y/p/P/R)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RegisterOpPending {
+    /// The register selected to scope the upcoming operator
+    pub register: char,
+}
+
+/// Accumulating a `:`-prefixed command-line buffer
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandLinePending {
+    /// Buffer contents typed after the leading ':'
+    pub buffer: String,
+}
+
 /// Building a count prefix (digits 1-9, then 0-9)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CountPending {
@@ -121,6 +139,9 @@ impl private::Sealed for TextObjectAroundPending {}
 impl private::Sealed for TextObjectInsidePending {}
 impl private::Sealed for FindCharPending {}
 impl private::Sealed for ReplaceCharPending {}
+impl private::Sealed for RegisterPending {}
+impl private::Sealed for RegisterOpPending {}
+impl private::Sealed for CommandLinePending {}
 impl private::Sealed for CountPending {}
 impl private::Sealed for UnmatchedPrevPending {}
 impl private::Sealed for UnmatchedNextPending {}
@@ -202,6 +223,24 @@ impl HandlerState for FindCharPending {
 impl HandlerState for ReplaceCharPending {
     fn state_name() -> &'static str {
         "REPLACE_CHAR_PENDING"
+    }
+}
+
+impl HandlerState for RegisterPending {
+    fn state_name() -> &'static str {
+        "REGISTER_PENDING"
+    }
+}
+
+impl HandlerState for RegisterOpPending {
+    fn state_name() -> &'static str {
+        "REGISTER_OP_PENDING"
+    }
+}
+
+impl HandlerState for CommandLinePending {
+    fn state_name() -> &'static str {
+        "COMMAND_LINE_PENDING"
     }
 }
 

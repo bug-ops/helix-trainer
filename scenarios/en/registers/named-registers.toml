@@ -1,0 +1,45 @@
+# Named Registers
+# Scenarios covering register-scoped yank/paste ("<reg><op>)
+
+[[scenarios]]
+id = "named_register_yank_paste_001"
+name = "Yank into a named register"
+description = "Yank a line into register 'a', overwrite the default register, then paste from 'a' to prove it survived independently"
+
+hints = [
+    "'\"a' selects register 'a' for the next yank or paste",
+    "'\"ay' yanks the current selection into register 'a' instead of the default register",
+    "Register 'a' is untouched by a later plain 'y', which only overwrites the default register",
+    "'\"aP' pastes register 'a's content before the cursor",
+]
+
+[scenarios.setup]
+file_content = """alpha
+beta
+gamma
+"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """alpha
+beta
+alpha
+gamma
+"""
+cursor_position = [2, 5]
+
+[scenarios.solution]
+commands = ["x", '"ay', "j", "x", "y", "j", '"aP']
+description = "Select and yank 'alpha' into register a, select and yank 'beta' into the default register, then paste register a's content before 'gamma'"
+
+[scenarios.scoring]
+optimal_count = 7
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "registers"
+difficulty = "intermediate"
+tags = ["yank", "paste", "register"]
+commands_taught = ['"y', '"P']
+estimated_time_seconds = 30

@@ -72,3 +72,25 @@ pub(super) fn inner_rect(outer: Rect) -> Rect {
 
 // Re-export find_surrounding_brackets from helix module
 pub(super) use crate::helix::find_surrounding_brackets;
+
+/// Build a live feedback string for an in-progress `"`-register selection or
+/// `:`-command-line buffer, so the user can see what they're typing.
+///
+/// Returns an empty string when neither is pending. Shared between Training
+/// (`task.rs`) and Arcade (`minigame.rs`) rendering, since both screens'
+/// `InputStateMachine` can be in either pending state.
+pub(super) fn pending_input_indicator(
+    input_state: &crate::input::typestate::InputStateMachine,
+) -> String {
+    if let Some(buffer) = input_state.pending_command_line() {
+        return format!(" :{} ", buffer);
+    }
+    if let Some(preview) = input_state.pending_register() {
+        use crate::input::typestate::RegisterPreview;
+        return match preview {
+            RegisterPreview::SelectingRegister => " [Register: _] ".to_string(),
+            RegisterPreview::AwaitingOperator(r) => format!(" [Register: {}] ", r),
+        };
+    }
+    String::new()
+}

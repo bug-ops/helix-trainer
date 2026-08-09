@@ -36,6 +36,12 @@ pub enum InputState {
     FindCharPending { find_type: FindType },
     /// After 'r' - waiting for replacement character
     ReplaceCharPending,
+    /// After '"' - waiting for register character
+    RegisterPending,
+    /// After '"{register}' - waiting for operator character (y/p/P/R)
+    RegisterOpPending { register: char },
+    /// After ':' - accumulating a command-line buffer
+    CommandLinePending { buffer: String },
     /// After digit 1-9 - building count prefix
     CountPending { count: usize },
     /// After '[' - waiting for unmatched previous command second key
@@ -90,6 +96,8 @@ impl InputState {
                 | Self::SurroundDeletePending
                 | Self::SurroundReplaceFromPending
                 | Self::SurroundReplaceToPending { .. }
+                | Self::RegisterPending
+                | Self::RegisterOpPending { .. }
         )
     }
 
@@ -142,6 +150,9 @@ impl InputState {
             Self::TextObjectInsidePending => "TEXT_OBJECT_INSIDE_PENDING",
             Self::FindCharPending { .. } => "FIND_CHAR_PENDING",
             Self::ReplaceCharPending => "REPLACE_CHAR_PENDING",
+            Self::RegisterPending => "REGISTER_PENDING",
+            Self::RegisterOpPending { .. } => "REGISTER_OP_PENDING",
+            Self::CommandLinePending { .. } => "COMMAND_LINE_PENDING",
             Self::CountPending { .. } => "COUNT_PENDING",
             Self::UnmatchedPrevPending => "UNMATCHED_PREV_PENDING",
             Self::UnmatchedNextPending => "UNMATCHED_NEXT_PENDING",

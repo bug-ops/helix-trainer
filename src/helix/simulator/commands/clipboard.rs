@@ -4,13 +4,24 @@ use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Selection, Transaction};
 
-/// Yank (copy) the primary selection to clipboard
+/// Yank (copy) the primary selection to the unnamed register
 ///
 /// Copies the full `anchor..head` range of the primary selection, normalized
 /// regardless of selection direction. A point selection (`anchor == head`),
 /// as used for a plain cursor with no active selection, falls back to
 /// yanking the single character under the cursor.
 pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    yank_to_register(sim, None)
+}
+
+/// Yank (copy) the primary selection to a named register
+///
+/// `register: None` addresses the unnamed register, matching Helix where
+/// `""y` and `y` behave identically. See [`yank`] for the selection rules.
+pub fn yank_to_register<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    register: Option<char>,
+) -> Result<(), UserError> {
     let range = sim.selection.primary();
 
     if range.anchor == range.head {
@@ -18,20 +29,31 @@ pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError>
         if head >= sim.doc.len_chars() {
             return Ok(());
         }
-        sim.clipboard = Some(sim.doc.char(head).to_string());
+        let text = sim.doc.char(head).to_string();
+        sim.registers.set(register, text);
     } else {
         let text = range.fragment(sim.doc.slice(..)).into_owned();
-        sim.clipboard = Some(text);
+        sim.registers.set(register, text);
     }
 
     Ok(())
 }
 
-/// Paste clipboard content after cursor
+/// Paste the unnamed register's content after cursor
 ///
 /// In Helix, cursor stays on the last pasted character
 pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    if let Some(text) = &sim.clipboard {
+    paste_after_from_register(sim, None)
+}
+
+/// Paste a named register's content after cursor
+///
+/// `register: None` addresses the unnamed register. See [`paste_after`].
+pub fn paste_after_from_register<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    register: Option<char>,
+) -> Result<(), UserError> {
+    if let Some(text) = sim.registers.get(register) {
         let range = sim.selection.primary();
         // A point selection (plain cursor) sits ON its char, so "after" is
         // one past it. A range selection's `to()` is already one past its
@@ -45,7 +67,7 @@ pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
         let transaction = Transaction::change(
             &sim.doc,
-            [(insert_pos, insert_pos, Some(text.as_str().into()))].into_iter(),
+            [(insert_pos, insert_pos, Some(text.into()))].into_iter(),
         );
 
         sim.apply_transaction(transaction);
@@ -57,11 +79,21 @@ pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
     Ok(())
 }
 
-/// Paste clipboard content before cursor
+/// Paste the unnamed register's content before cursor
 ///
 /// In Helix, cursor stays on the last pasted character
 pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    if let Some(text) = &sim.clipboard {
+    paste_before_from_register(sim, None)
+}
+
+/// Paste a named register's content before cursor
+///
+/// `register: None` addresses the unnamed register. See [`paste_before`].
+pub fn paste_before_from_register<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    register: Option<char>,
+) -> Result<(), UserError> {
+    if let Some(text) = sim.registers.get(register) {
         // Insert before the start of the selection (or at the cursor for a
         // point selection, where `from()` equals `head`).
         let insert_pos = sim.selection.primary().from();
@@ -69,7 +101,7 @@ pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Us
 
         let transaction = Transaction::change(
             &sim.doc,
-            [(insert_pos, insert_pos, Some(text.as_str().into()))].into_iter(),
+            [(insert_pos, insert_pos, Some(text.into()))].into_iter(),
         );
 
         sim.apply_transaction(transaction);

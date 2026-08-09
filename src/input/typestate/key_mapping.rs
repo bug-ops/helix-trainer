@@ -16,14 +16,26 @@ use crate::helix::commands::*;
 /// This function converts them back to proper Alt + key combinations.
 ///
 /// Common macOS Option compositions:
-/// - Option+c = ç, Option+Shift+C = Ç
-/// - Option+s = ß, Option+j = ∆, Option+k = ˚
+/// - Option+Shift+C = Ç
+/// - Option+j = ∆, Option+k = ˚
 /// - Option+x = ≈, Option+; = …, Option+, = ≤
 pub(crate) fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> {
     match ch {
         // Alt+lowercase
-        'ç' => Some(('c', KeyModifiers::ALT)),
-        'ß' => Some(('s', KeyModifiers::ALT)),
+        // NOTE: ç and ß are intentionally NOT mapped here (issue #381), for
+        // the same reason backtick isn't (see the NOTE below): 'ç' is a
+        // plain, directly-typeable key on French AZERTY and Portuguese/
+        // Brazilian ABNT layouts, and 'ß' is a plain key on German QWERTZ.
+        // Rewriting them unconditionally to Alt-c/Alt-s made those real
+        // keystrokes indistinguishable from actual Alt-c/Alt-s on macOS's US
+        // Option-composition artifacts. This makes Alt-c/Alt-s unreachable
+        // via Option-key composition on macOS terminals without kitty
+        // keyboard protocol support - tracked separately as #386.
+        //
+        // 'Ç', '¬', and '˚' below have the same class of collision on other
+        // layouts (e.g. Ç is a plain Shift+key on Brazilian ABNT2 and
+        // Portuguese; ¬ is Shift-` on British PC) and are NOT addressed by
+        // this fix - left as-is, out of scope for #381.
         '∆' => Some(('j', KeyModifiers::ALT)),
         '˚' => Some(('k', KeyModifiers::ALT)),
         '≈' => Some(('x', KeyModifiers::ALT)),
@@ -39,9 +51,24 @@ pub(crate) fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> 
         // silently breaking `switch_case_alt` (see issue #377).
         // Alt+Shift (uppercase or shifted symbols)
         'Ç' => Some(('C', KeyModifiers::ALT)), // Alt-C (copy_selection_prev)
-        '˝' => Some(('J', KeyModifiers::ALT)), // Alt-J (join_selections_space)
+        // Corrected per issue #382: on the standard macOS US keyboard layout,
+        // Option+Shift+G produces U+02DD (˝, double acute accent), not
+        // Option+Shift+J (which produces Ô, U+00D4, not otherwise mapped
+        // here). Verified against the actual "U.S." system keylayout. No
+        // stock command is bound to Alt-G (`map_single_key_command` has no
+        // ('G', _, true) arm), so this is currently only useful for the
+        // custom-keymap overlay.
+        '˝' => Some(('G', KeyModifiers::ALT)),
         '\u{F8FF}' => Some(('K', KeyModifiers::ALT)), // Alt-K (remove_matching) - Apple logo
-        '¯' => Some(('_', KeyModifiers::ALT)), // Alt-_ (merge_consecutive)
+        // Corrected per issue #382: Option+Shift+, produces U+00AF (¯,
+        // macron), not Option+Shift+- (which produces U+2014, em dash, not
+        // otherwise mapped here). Verified against the actual "U.S." system
+        // keylayout. Mapped to the *shifted* char '<' (Shift+,), matching
+        // this table's convention for shifted compositions ('Ç'->'C',
+        // U+F8FF->'K') - mapping to bare ',' would alias with the existing
+        // '≤' => (',', ALT) entry above, making Opt+, and Opt+Shift+,
+        // indistinguishable.
+        '¯' => Some(('<', KeyModifiers::ALT)),
         '¬' => Some(('l', KeyModifiers::ALT)), // Alt-l if needed
         _ => None,
     }
@@ -50,7 +77,7 @@ pub(crate) fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> 
 /// Normalize a KeyEvent to canonical form (like Helix does)
 ///
 /// This ensures consistent representation regardless of terminal behavior:
-/// - macOS composed chars (ç, Ç) → base char + ALT modifier
+/// - macOS composed chars (Ç, ˝, ...) → base char + ALT modifier
 /// - lowercase + SHIFT → uppercase (SHIFT removed)
 /// - uppercase + SHIFT → uppercase (SHIFT removed, already uppercase)
 ///

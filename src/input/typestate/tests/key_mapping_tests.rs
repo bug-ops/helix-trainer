@@ -174,6 +174,57 @@ fn test_normalize_key_event_does_not_touch_plain_backtick() {
     assert_eq!(normalize_key_event(key), key);
 }
 
+// Regression tests for issue #382: on the standard macOS US keyboard layout,
+// Option+Shift+G composes U+02DD (˝) and Option+Shift+, composes U+00AF (¯).
+// The table previously mismapped these to Alt-J and Alt-_ respectively.
+#[test]
+fn test_normalize_key_event_double_acute_accent_maps_to_alt_shift_g() {
+    let key = KeyEvent::new(KeyCode::Char('˝'), KeyModifiers::NONE);
+    let normalized = normalize_key_event(key);
+    assert_eq!(normalized.code, KeyCode::Char('G'));
+    assert!(normalized.modifiers.contains(KeyModifiers::ALT));
+}
+
+#[test]
+fn test_normalize_key_event_macron_maps_to_alt_less_than() {
+    // Mapped to the *shifted* char '<' (Shift+,), not bare ',', so it
+    // doesn't alias the existing Alt-, entry for '≤' (see below).
+    let key = KeyEvent::new(KeyCode::Char('¯'), KeyModifiers::NONE);
+    let normalized = normalize_key_event(key);
+    assert_eq!(normalized.code, KeyCode::Char('<'));
+    assert!(normalized.modifiers.contains(KeyModifiers::ALT));
+}
+
+#[test]
+fn test_normalize_key_event_almost_equal_and_macron_do_not_collide() {
+    // Regression test for issue #382: '≤' (Option+,) and '¯' (Option+Shift+,)
+    // must normalize to *distinct* KeyEvents. Mapping '¯' to bare ',' + ALT
+    // (as originally proposed) would have made it indistinguishable from
+    // '≤', the same class of aliasing bug the backtick fix (#377) guards
+    // against for PhysicalKey lookups.
+    let almost_equal = normalize_key_event(KeyEvent::new(KeyCode::Char('≤'), KeyModifiers::NONE));
+    let macron = normalize_key_event(KeyEvent::new(KeyCode::Char('¯'), KeyModifiers::NONE));
+    assert_ne!(almost_equal, macron);
+    assert_eq!(almost_equal.code, KeyCode::Char(','));
+    assert_eq!(macron.code, KeyCode::Char('<'));
+}
+
+// Regression tests for issue #381: ç and ß are plain, directly-typeable keys
+// on AZERTY/ABNT (ç) and QWERTZ (ß) layouts, so they must pass through
+// unmodified rather than being rewritten to Alt-c/Alt-s (same class of bug
+// as the backtick fix in #377).
+#[test]
+fn test_normalize_key_event_does_not_touch_plain_c_cedilla() {
+    let key = KeyEvent::new(KeyCode::Char('ç'), KeyModifiers::NONE);
+    assert_eq!(normalize_key_event(key), key);
+}
+
+#[test]
+fn test_normalize_key_event_does_not_touch_plain_sharp_s() {
+    let key = KeyEvent::new(KeyCode::Char('ß'), KeyModifiers::NONE);
+    assert_eq!(normalize_key_event(key), key);
+}
+
 #[test]
 fn test_map_single_key_clipboard() {
     assert_eq!(

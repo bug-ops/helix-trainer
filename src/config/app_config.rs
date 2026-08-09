@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::security::{limits::MAX_CONFIG_FILE_SIZE, path_validator};
+
 /// Application configuration
 ///
 /// `#[serde(default)]` on the struct is load-bearing: without it, adding
@@ -114,6 +116,9 @@ impl ConfigStorage {
             return Ok(AppConfig::default());
         }
 
+        path_validator::validate_file_size(&self.file_path, MAX_CONFIG_FILE_SIZE)
+            .context("Config file too large")?;
+
         let contents = fs::read_to_string(&self.file_path).context("Failed to read config file")?;
 
         let data: ConfigData =
@@ -199,6 +204,36 @@ mod tests {
         assert_eq!(
             loaded.enable_arrow_keys_in_normal_mode,
             config.enable_arrow_keys_in_normal_mode
+        );
+    }
+
+    #[test]
+    fn test_load_oversized_file_rejected() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.json");
+        let storage = ConfigStorage::with_path(&file_path);
+
+        // Otherwise-valid JSON padded with an oversized unknown field: since
+        // `ConfigData` doesn't `deny_unknown_fields`, `serde_json` would
+        // happily parse this and ignore "padding" if the size guard weren't
+        // there first. This proves the rejection below comes from the size
+        // cap, not from a JSON parse failure that a smaller-but-still-broken
+        // payload would trigger regardless of the cap.
+        let mut value = serde_json::to_value(&ConfigData {
+            config: AppConfig::default(),
+        })
+        .unwrap();
+        value["padding"] = serde_json::Value::String("a".repeat(MAX_CONFIG_FILE_SIZE as usize + 1));
+        let oversized = serde_json::to_string(&value).unwrap();
+        assert!(oversized.len() as u64 > MAX_CONFIG_FILE_SIZE);
+        fs::write(&file_path, &oversized).unwrap();
+
+        let err = storage
+            .load()
+            .expect_err("an oversized config file must be rejected");
+        assert!(
+            err.to_string().contains("too large"),
+            "expected a 'too large' error, got: {err}"
         );
     }
 

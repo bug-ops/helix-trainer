@@ -544,6 +544,24 @@ fn apply_outcome(state: &mut AppState, outcome: HandlerOutcome) {
     }
 }
 
+/// Clamps `MenuData::selected_item` after a filter change may have shrunk the
+/// filtered scenario list.
+///
+/// `ToggleCategoryFilter`/`ToggleDifficultyFilter`/`ToggleCompletedFilter` are dispatched
+/// screen-agnostically via `HandlerContext`, which structurally excludes `state.screen`, so
+/// the filter handlers themselves cannot perform this clamp. This is a no-op unless the menu
+/// screen is currently active. `ui::render::menu::render_main_menu` performs an equivalent
+/// clamp on every render as a backstop for paths (e.g. the `CategoryFilterToggle` filter
+/// popup) that mutate the filter while `MenuData` isn't the active screen.
+fn clamp_menu_selection_to_filtered_count(state: &mut AppState) {
+    if let TypedScreen::Menu(ref mut menu_data) = state.screen {
+        let max_index =
+            handlers::menu::total_menu_items_for_count(state.game.scenario_collection.count())
+                .saturating_sub(1);
+        menu_data.selected_item = menu_data.selected_item.min(max_index);
+    }
+}
+
 /// Pure update function for state transitions
 ///
 /// This function is the heart of the Elm Architecture pattern.
@@ -944,6 +962,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             );
             let outcome = handlers::handle_toggle_category_filter(&mut ctx, category)?;
             apply_outcome(state, outcome);
+            clamp_menu_selection_to_filtered_count(state);
             Ok(())
         }
         Message::ToggleDifficultyFilter(difficulty) => {
@@ -955,6 +974,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             );
             let outcome = handlers::handle_toggle_difficulty_filter(&mut ctx, difficulty)?;
             apply_outcome(state, outcome);
+            clamp_menu_selection_to_filtered_count(state);
             Ok(())
         }
         Message::ToggleCompletedFilter => {
@@ -966,6 +986,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             );
             let outcome = handlers::handle_toggle_completed_filter(&mut ctx)?;
             apply_outcome(state, outcome);
+            clamp_menu_selection_to_filtered_count(state);
             Ok(())
         }
         Message::ResetFilters => {

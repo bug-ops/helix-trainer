@@ -491,6 +491,59 @@ mod tests {
         assert!(filter.categories.is_none());
     }
 
+    /// Regression test for #312/S1: `handle_category_filter_toggle` runs while
+    /// `state.screen == CategoryFilters`, not `Menu`, so it has no way to touch
+    /// `MenuData::selected_item` itself even though it can shrink the filtered list. The
+    /// render-time clamp in `render_main_menu` is defensive coverage for a `selected_item`
+    /// left stale by a toggle like this one — today `handle_back_to_menu` always resets
+    /// `MenuData` to default when leaving `CategoryFilters`, so this path doesn't currently
+    /// produce a stale index in production, but the same clamp also guards the
+    /// `ui.last_menu_selected` restore paths in `src/ui/state/handlers/scenario.rs`.
+    #[test]
+    fn test_category_filter_toggle_live_path_leaves_stale_selection_for_render_to_clamp() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let mut state = create_test_state_with_categories(); // 3 scenarios, one per category
+        state.screen = TypedScreen::Menu(MenuData {
+            selected_item: 6, // last valid index: 3 scenarios + 4 fixed entries - 1
+            ..MenuData::default()
+        });
+
+        let data = CategoryFiltersData {
+            selected_index: 0,
+            return_to: ReturnDestination::Menu,
+        };
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        // The real production handler behind the live CategoryFilterToggle message.
+        handle_category_filter_toggle(&data, &mut ctx).unwrap();
+
+        let filtered_count = state.game.scenario_collection.count();
+        assert_eq!(
+            filtered_count, 1,
+            "toggling one of three single-scenario categories should shrink to 1"
+        );
+
+        // state.screen is still Menu with the stale selected_item=6 here — nothing about
+        // handle_category_filter_toggle touches it. Rendering the Menu screen is the only
+        // remaining point that can catch it.
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| crate::ui::render::render(f, &mut state))
+            .unwrap();
+
+        let TypedScreen::Menu(menu_data) = &state.screen else {
+            panic!("expected TypedScreen::Menu");
+        };
+        assert_eq!(menu_data.selected_item, 4); // filtered_count(1) + FIXED_MENU_ITEMS(4) - 1
+    }
+
     #[test]
     fn test_category_filter_toggle_out_of_bounds() {
         let mut state = create_test_state_with_categories();

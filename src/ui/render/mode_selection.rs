@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 
 /// Render the mode selection screen
@@ -140,9 +140,16 @@ fn render_minigame_mode_submenu(
     today: chrono::NaiveDate,
     challenge_progress: &crate::minigame::ChallengeProgress,
 ) {
+    // Vertical stride per entry (1 content row + 1 blank spacer row); also used
+    // below to derive submenu_height, keeping the two in lockstep.
+    const ENTRY_STRIDE: u16 = 2;
+
     // Position submenu to the right of "Arcade Mode" option
     let submenu_width = 45;
-    let submenu_height = 11;
+    // Exact inner height needed for MODE_COUNT entries at ENTRY_STRIDE spacing,
+    // plus 2 for the top/bottom border. Derived from MODE_COUNT so an added mode
+    // grows the submenu instead of silently clipping (see #385).
+    let submenu_height = (MiniGameModeSelection::MODE_COUNT as u16 - 1) * ENTRY_STRIDE + 1 + 2;
     let submenu_x = parent_area.x + 20;
     let submenu_y = parent_area.y + 3;
 
@@ -153,7 +160,9 @@ fn render_minigame_mode_submenu(
         submenu_height.min(parent_area.height.saturating_sub(3)),
     );
 
-    // Clear background
+    // Clear whatever the parent screen already painted here — Block styling
+    // alone only restyles cells and leaves stale symbols behind (#385 S1).
+    frame.render_widget(Clear, submenu_area);
     let clear = Block::default().style(Style::default().bg(Color::Black));
     frame.render_widget(clear, submenu_area);
 
@@ -174,7 +183,7 @@ fn render_minigame_mode_submenu(
 
     for (idx, (mode, icon)) in modes.iter().zip(ICONS.iter()).enumerate() {
         let is_selected = idx == selection.selected_index;
-        let y_offset = (idx * 3) as u16;
+        let y_offset = idx as u16 * ENTRY_STRIDE;
 
         if inner.y + y_offset >= inner.bottom() {
             break;
@@ -194,10 +203,8 @@ fn render_minigame_mode_submenu(
 
         // Mode name line — for Challenge mode, append today's remaining
         // attempts (FR-006) so the cap is visible before the player is
-        // blocked. Kept on the name line, not the description line: the
-        // submenu's 43-column inner width already clips the Challenge
-        // description close to its limit, and a short "(N/3)" suffix here
-        // fits comfortably where an appended description suffix would not.
+        // blocked. Entries are single-line (no description) so all three
+        // modes fit within the minimum supported terminal height (80x24).
         let name_text = if mode.is_challenge() {
             format!(
                 "{} {} ({}/{})",
@@ -214,14 +221,8 @@ fn render_minigame_mode_submenu(
             Span::styled(name_text, name_style),
         ]);
 
-        // Description line
-        let desc_line = Line::from(vec![
-            Span::raw("      "),
-            Span::styled(mode.description(), Style::default().fg(Color::DarkGray)),
-        ]);
-
-        let paragraph = Paragraph::new(vec![name_line, desc_line]);
-        let item_area = Rect::new(inner.x, inner.y + y_offset, inner.width, 2);
+        let paragraph = Paragraph::new(name_line);
+        let item_area = Rect::new(inner.x, inner.y + y_offset, inner.width, 1);
         frame.render_widget(paragraph, item_area);
     }
 }

@@ -16,8 +16,41 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      # true when files that affect compiled behavior changed: source, scenarios
+      # (compile-time embedded, see src/config/scenarios.rs), locales (compile-time
+      # codegen via rust_i18n::i18n! in src/lib.rs), manifests, or the CI workflow itself.
+      run-heavy: ${{ steps.filter.outputs.rust == 'true' || steps.filter.outputs.ci == 'true' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            rust:
+              - 'src/**'
+              - 'scenarios/**'
+              - 'locales/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'build.rs'
+              - 'tests/**'
+              - 'benches/**'
+              - '.cargo/**'
+              - 'rust-toolchain*'
+            ci:
+              - '.github/workflows/**'
+
   test:
     name: Test Suite
+    needs: [changes]
+    if: needs.changes.outputs.run-heavy == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -105,6 +138,8 @@ jobs:
 
   msrv:
     name: Check MSRV
+    needs: [changes]
+    if: needs.changes.outputs.run-heavy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -136,6 +171,8 @@ jobs:
 
   build:
     name: Build
+    needs: [changes]
+    if: needs.changes.outputs.run-heavy == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -247,6 +284,8 @@ jobs:
 
   coverage:
     name: Generate Coverage Report
+    needs: [changes]
+    if: needs.changes.outputs.run-heavy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -297,24 +336,56 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [test, fmt, clippy, security, msrv, build, coverage]
+    needs: [changes, test, fmt, clippy, security, msrv, build, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs
         run: |
-          results=(
-            "${{ needs.test.result }}"
-            "${{ needs.fmt.result }}"
-            "${{ needs.clippy.result }}"
-            "${{ needs.security.result }}"
-            "${{ needs.msrv.result }}"
-            "${{ needs.build.result }}"
-            "${{ needs.coverage.result }}"
-          )
-          for result in "${results[@]}"; do
+          # `changes` and the always-on jobs (fmt/clippy/security) must succeed outright.
+          # test/msrv/build/coverage are gated behind changes.outputs.run-heavy: a
+          # "skipped" result is only acceptable for them when run-heavy is exactly
+          # "false", i.e. the path filter deliberately excluded the job. If run-heavy
+          # was "true" (or the changes job itself failed), "skipped" here means the
+          # job never ran despite being required, so it must fail the gate.
+          changes_result="${{ needs.changes.result }}"
+          run_heavy="${{ needs.changes.outputs.run-heavy }}"
+
+          if [[ "$changes_result" != "success" ]]; then
+            echo "::error::changes detection job failed or was cancelled"
+            exit 1
+          fi
+
+          fail=0
+
+          check_required() {
+            local name="$1" result="$2"
             if [[ "$result" != "success" ]]; then
-              echo "::error::One or more CI jobs failed or were cancelled"
-              exit 1
+              echo "::error::$name failed or was cancelled"
+              fail=1
             fi
-          done
-          echo "All CI jobs passed"
+          }
+
+          check_gated() {
+            local name="$1" result="$2"
+            if [[ "$result" == "success" ]]; then
+              return
+            fi
+            if [[ "$result" == "skipped" && "$run_heavy" == "false" ]]; then
+              return
+            fi
+            echo "::error::$name failed, was cancelled, or was skipped unexpectedly"
+            fail=1
+          }
+
+          check_required "fmt" "${{ needs.fmt.result }}"
+          check_required "clippy" "${{ needs.clippy.result }}"
+          check_required "security" "${{ needs.security.result }}"
+          check_gated "test" "${{ needs.test.result }}"
+          check_gated "msrv" "${{ needs.msrv.result }}"
+          check_gated "build" "${{ needs.build.result }}"
+          check_gated "coverage" "${{ needs.coverage.result }}"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+          echo "All CI jobs passed (or were correctly skipped for docs-only changes)"

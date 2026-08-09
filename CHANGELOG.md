@@ -84,6 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ProfileStorage::save` now also `fsync`s the profile directory itself (Unix only) after the atomic rename, so the directory-entry update — not just the file's contents — survives a power loss, not only a process crash or kill; the doc comment on `save` no longer overclaims what the pre-existing atomic-rename protection covered (#297)
 - Two instances of the trainer running against the same profile now warn the user on startup instead of silently overwriting each other's progress: `ProfileStorage` maintains an advisory PID lock file (`profile.json.lock`) refreshed on every save; a stale lock left by a crashed process is reclaimed silently, but a lock held by a genuinely live process surfaces a notification, checked both when the profile loads successfully and when it fails and falls back to a fresh profile — the latter being the highest-stakes case, since a fresh fallback profile can otherwise clobber a genuinely live instance's real profile on the next save (#298). `ProfileStorage::delete` now also removes the lock file so a deleted profile doesn't leave a stale one behind.
 
+### CI
+
+- Added a `changes` job (`dorny/paths-filter`) to `ci.yml` that skips the 3-OS `test` matrix, `msrv`, the 3-OS `build` matrix, and `coverage` when a push/PR only touches docs/metadata (no `src/`, `scenarios/`, `locales/`, manifests, or workflow files changed); `fmt`/`clippy`/`security` remain always-on since they're cheap and also cover config files like `Cargo.toml`. Any change under `.github/workflows/**` still forces every job to run. The `gate` job's pass/fail check now accepts a `skipped` result for the gated jobs only when the path filter deliberately excluded them, so a real failure or an unexpected skip still fails the gate.
+
 ### Changed
 
 - **BREAKING**: `ScoringConfig.optimal_count` is now `NonZeroUsize` instead of `usize`; TOML layout is unchanged, but zero rejection now happens at parse time, so `optimal_count = 0` now surfaces as "Failed to load scenario file..." instead of "Operation failed..." (#277)

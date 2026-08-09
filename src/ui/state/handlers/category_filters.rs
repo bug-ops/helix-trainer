@@ -182,7 +182,7 @@ mod tests {
             progress: ProgressState::new(
                 UserProfile::new(),
                 PerformanceTracker::new(),
-                ProfileStorage::new(),
+                ProfileStorage::for_test(),
             ),
             config: ConfigState::default(),
         }
@@ -196,7 +196,7 @@ mod tests {
             progress: ProgressState::new(
                 UserProfile::new(),
                 PerformanceTracker::new(),
-                ProfileStorage::new(),
+                ProfileStorage::for_test(),
             ),
             config: ConfigState::default(),
         }

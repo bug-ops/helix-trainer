@@ -98,7 +98,7 @@ mod tests {
             ProgressState::new(
                 UserProfile::new(),
                 PerformanceTracker::new(),
-                ProfileStorage::new(),
+                ProfileStorage::for_test(),
             ),
             ConfigState::default(),
         )

@@ -54,11 +54,7 @@ pub fn handle_award_xp(ctx: &mut HandlerContext<'_>, amount: u64) -> Result<(), 
         );
         ctx.ui.notifications.push(notification);
 
-        ctx.progress
-            .storage
-            .save(&ctx.progress.profile)
-            .map_err(UserError::from)?;
-        ctx.progress.mark_saved();
+        ctx.progress.save_immediate().map_err(UserError::from)?;
     }
     Ok(())
 }
@@ -101,7 +97,7 @@ mod tests {
             progress: ProgressState::new(
                 UserProfile::new(),
                 PerformanceTracker::new(),
-                ProfileStorage::new(),
+                ProfileStorage::for_test(),
             ),
             config: ConfigState::default(),
         }
@@ -296,9 +292,12 @@ mod tests {
 
     #[test]
     fn test_award_xp_with_level_up() {
-        use crate::gamification::XPCalculator;
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use tempfile::TempDir;
 
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
         // Set XP just below level 2 threshold
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
@@ -336,9 +335,12 @@ mod tests {
 
     #[test]
     fn test_award_xp_multiple_levels() {
-        use crate::gamification::XPCalculator;
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use tempfile::TempDir;
 
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         state.progress.profile.total_xp = 0;
         state.progress.profile.level = 1;
 
@@ -383,9 +385,12 @@ mod tests {
 
     #[test]
     fn test_award_xp_calls_save_on_level_up() {
-        use crate::gamification::XPCalculator;
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use tempfile::TempDir;
 
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
         // Set XP just below next level
         let xp_for_next = XPCalculator::xp_for_level(2);
@@ -427,5 +432,48 @@ mod tests {
 
         // XP should increase correctly
         assert_eq!(state.progress.profile.total_xp, initial_xp + large_xp);
+    }
+
+    /// Regression test for #258: `handle_award_xp`'s level-up save must go through
+    /// `ProgressState::save_immediate`, which syncs `performance_tracker` into
+    /// `profile.performance_data` before writing, not a raw `storage.save` that would
+    /// persist a stale/empty `performance_data`.
+    #[test]
+    fn test_award_xp_level_up_persists_synced_fsrs_data() {
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut state = create_test_state();
+        state.progress.storage = ProfileStorage::with_path(&profile_path);
+
+        // Seed tracker state as if a review happened earlier in the session.
+        state.progress.performance_tracker.record_attempt(
+            "x",
+            Duration::from_millis(500),
+            true,
+            Duration::from_millis(500),
+        );
+
+        let xp_for_next = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_next - 10;
+        state.progress.profile.level = 1;
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        handle_award_xp(&mut ctx, 100).unwrap();
+        assert_eq!(ctx.progress.profile.level, 2);
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert!(!persisted.performance_data.is_empty());
+        assert!(persisted.performance_data.contains_key("x"));
     }
 }

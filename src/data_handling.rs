@@ -130,11 +130,24 @@ mod tests {
         gamification::ProfileStorage,
     };
 
-    // Binary crate tests cannot access the library's #[cfg(test)] modules,
-    // so we define minimal local helpers here
+    // Binary crate tests cannot access the library's #[cfg(test)]-gated
+    // `ProfileStorage::for_test()`, so we mirror it locally here: a unique file
+    // under a process-lifetime temp dir, never the real user profile path.
+    fn test_profile_storage() -> ProfileStorage {
+        use std::sync::OnceLock;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static TEST_DIR: OnceLock<tempfile::TempDir> = OnceLock::new();
+        static FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        let dir = TEST_DIR.get_or_init(|| tempfile::TempDir::new().expect("create test temp dir"));
+        let id = FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+        ProfileStorage::with_path(dir.path().join(format!("profile-{id}.json")))
+    }
+
     fn empty_test_app_state() -> AppState {
         let profile = UserProfile::new();
-        let storage = ProfileStorage::new();
+        let storage = test_profile_storage();
         let tracker = PerformanceTracker::new();
         AppState::new(vec![], profile, storage, tracker)
     }

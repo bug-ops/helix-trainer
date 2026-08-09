@@ -35,8 +35,13 @@ fn test_start_invalid_scenario_index() {
 
 #[test]
 fn test_complete_scenario_navigates_to_results() {
+    use crate::gamification::ProfileStorage;
+    use tempfile::TempDir;
+
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
+    let temp_dir = TempDir::new().unwrap();
+    state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
     update(&mut state, Message::StartScenario(0)).unwrap();
     assert!(matches!(state.screen, TypedScreen::Task(_)));
@@ -150,10 +155,13 @@ fn test_next_scenario_clears_session() {
 
 #[test]
 fn test_previously_completed_quests_tracking() {
-    use crate::gamification::{Quest, QuestDifficulty, QuestType};
+    use crate::gamification::{ProfileStorage, Quest, QuestDifficulty, QuestType};
+    use tempfile::TempDir;
 
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario.clone()]);
+    let temp_dir = TempDir::new().unwrap();
+    state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
     // Add a quest that will be completed on first scenario
     // In Helix, use 'x' (select_line) for line-based quests

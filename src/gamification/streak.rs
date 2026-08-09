@@ -18,7 +18,7 @@ pub enum StreakChange {
     /// Streak broken (missed day)
     Broken { was_streak: u32 },
     /// Streak protected by freeze
-    Protected { used_freeze: bool },
+    Protected,
 }
 
 /// Manages daily practice streaks
@@ -80,7 +80,7 @@ impl StreakManager {
                 if profile.streak_freeze_available {
                     // Use streak freeze
                     profile.streak_freeze_available = false;
-                    StreakChange::Protected { used_freeze: true }
+                    StreakChange::Protected
                 } else {
                     // Break streak
                     profile.current_streak = 0;
@@ -215,7 +215,7 @@ mod tests {
         clock.advance_days(2);
 
         let change = StreakManager::update_streak(&mut profile, clock.now());
-        assert_eq!(change, StreakChange::Protected { used_freeze: true });
+        assert_eq!(change, StreakChange::Protected);
         assert_eq!(profile.current_streak, 10); // Streak preserved
         assert!(!profile.streak_freeze_available); // Freeze consumed
     }

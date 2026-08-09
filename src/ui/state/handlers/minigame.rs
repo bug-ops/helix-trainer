@@ -442,7 +442,14 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
 pub(in crate::ui::state) fn handle_minigame_back_to_menu(
     state: &mut AppState,
 ) -> Result<HandlerOutcome, UserError> {
-    if state.game.minigame_session.is_some() {
+    // `handle_minigame_timeout` already runs `handle_minigame_game_over` once the
+    // session reaches `GameOver` (out of lives); re-running it here on the same
+    // session would double-award XP/stats and could push a second LevelUp
+    // notification. Only quitting mid-game (session not yet `GameOver`) still needs
+    // it run here.
+    if let Some(ref session) = state.game.minigame_session
+        && !session.state().is_game_over()
+    {
         handle_minigame_game_over(state)?;
     }
     state.game.minigame_session = None;
@@ -1831,6 +1838,61 @@ mod tests {
             )),
             "expected a LevelUp notification reporting the post-award profile level"
         );
+    }
+
+    /// Regression test for #317: `handle_minigame_back_to_menu` used to unconditionally
+    /// re-run `handle_minigame_game_over` on a session that had already reached
+    /// `GameOver` via `handle_minigame_timeout` (e.g. Esc/`m`/Ctrl-q on the game-over
+    /// screen), double-awarding XP, `minigame_games_played`, and FSRS bookkeeping, and
+    /// potentially pushing a second `LevelUp` notification. Backing out to the menu
+    /// after the session already reached `GameOver` must be a no-op for those.
+    #[test]
+    fn test_minigame_back_to_menu_after_game_over_does_not_double_award() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
+        let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        // Deplete all lives via timeout - this already runs `handle_minigame_game_over`
+        // once, via `handle_minigame_timeout`.
+        for _ in 0..3 {
+            handle_minigame_timeout(&mut state).unwrap();
+        }
+        assert!(
+            state
+                .game
+                .minigame_session
+                .as_ref()
+                .map(|s| s.state().is_game_over())
+                .unwrap_or(false)
+        );
+
+        let xp_after_first_game_over = state.progress.profile.total_xp;
+        let games_played_after_first_game_over = state.progress.profile.minigame_games_played;
+
+        // Simulate Esc/`m`/Ctrl-q on the game-over screen.
+        let outcome = handle_minigame_back_to_menu(&mut state).unwrap();
+        crate::ui::state::apply_outcome(&mut state, outcome);
+
+        assert_eq!(
+            state.progress.profile.total_xp, xp_after_first_game_over,
+            "returning to menu from an already-processed game-over must not award XP again"
+        );
+        assert_eq!(
+            state.progress.profile.minigame_games_played, games_played_after_first_game_over,
+            "returning to menu from an already-processed game-over must not increment games_played again"
+        );
+        assert!(state.game.minigame_session.is_none());
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     }
 
     /// Regression test for #309: a game-over that doesn't cross a level threshold must

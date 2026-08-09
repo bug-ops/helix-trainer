@@ -482,6 +482,36 @@ mod tests {
         );
     }
 
+    /// Regression test for #319: a freeze must not be consumed (and no
+    /// `StreakFreezeUsed` notification pushed) when `current_streak` is already 0 -
+    /// there is nothing to protect, even though a freeze is held.
+    #[test]
+    fn test_handle_profile_ready_no_freeze_used_for_never_started_streak() {
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        profile.streak_freeze_available = true;
+        // current_streak is already 0 - nothing to protect.
+        profile.last_activity = Utc::now() - chrono::Duration::days(2);
+
+        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        assert!(result.is_ok());
+        assert_eq!(state.progress.profile.current_streak, 0);
+        assert!(
+            state.progress.profile.streak_freeze_available,
+            "freeze must not be consumed when there was no streak to protect"
+        );
+        assert!(
+            !state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| n.notification_type == NotificationType::StreakFreezeUsed),
+            "no streak was ever active, so no StreakFreezeUsed notification should fire"
+        );
+    }
+
     #[test]
     fn test_handle_profile_error_uses_fallback() {
         let mut state = empty_test_app_state();

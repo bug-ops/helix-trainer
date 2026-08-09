@@ -84,6 +84,9 @@ pub enum SecurityError {
 
     #[error("Invalid state: {0}")]
     InvalidState(String),
+
+    #[error("Too many keymap bindings (max {max}, got {actual})")]
+    TooManyKeymapBindings { max: usize, actual: usize },
 }
 
 /// User-facing error messages (sanitized)
@@ -265,6 +268,14 @@ pub mod limits {
 
     /// Maximum length of a scenario or quest ID
     pub const MAX_ID_LENGTH: usize = 64;
+
+    /// Maximum size of the user's Helix `config.toml` we'll read for
+    /// keymap remapping (1 MB — real configs are a few KB at most).
+    pub const MAX_KEYMAP_FILE_SIZE: u64 = 1024 * 1024;
+
+    /// Maximum number of keymap bindings (top-level plus minor-mode
+    /// entries combined) accepted from a single Helix config file.
+    pub const MAX_KEYMAP_BINDINGS: usize = 1000;
 }
 
 /// Path validation utilities

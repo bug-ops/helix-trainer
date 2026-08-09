@@ -4,6 +4,7 @@
 //! pattern for runtime use while still benefiting from the type-safe design.
 
 use super::state_types::FindType;
+use crate::input::keymap::KeyContext;
 
 /// Runtime representation of input state
 ///
@@ -135,6 +136,40 @@ impl InputState {
         matches!(self, Self::UnmatchedNextPending)
     }
 
+    /// Which [`KeyContext`] this state's next keypress should be translated
+    /// under, or `None` if this state consumes the next key literally and
+    /// must never be translated by the keymap overlay.
+    ///
+    /// `CountPending` and `RegisterOpPending` map to [`KeyContext::Base`]:
+    /// both dispatch through the same top-level `[keys.normal]` table as
+    /// `Base` itself (a count prefix or a register selector doesn't change
+    /// which command a key invokes, only how it's recorded). States that
+    /// consume a literal character argument (find/replace targets,
+    /// register names, surround/text-object characters, the command-line
+    /// buffer) return `None`.
+    pub fn key_context(&self) -> Option<KeyContext> {
+        match self {
+            Self::Base | Self::CountPending { .. } | Self::RegisterOpPending { .. } => {
+                Some(KeyContext::Base)
+            }
+            Self::GotoPending => Some(KeyContext::Goto),
+            Self::ViewPending => Some(KeyContext::View),
+            Self::MatchPending => Some(KeyContext::Match),
+            Self::UnmatchedPrevPending => Some(KeyContext::UnmatchedPrev),
+            Self::UnmatchedNextPending => Some(KeyContext::UnmatchedNext),
+            Self::SurroundAddPending
+            | Self::SurroundDeletePending
+            | Self::SurroundReplaceFromPending
+            | Self::SurroundReplaceToPending { .. }
+            | Self::TextObjectAroundPending
+            | Self::TextObjectInsidePending
+            | Self::FindCharPending { .. }
+            | Self::ReplaceCharPending
+            | Self::RegisterPending
+            | Self::CommandLinePending { .. } => None,
+        }
+    }
+
     /// Get the state name for display
     pub fn name(&self) -> &'static str {
         match self {
@@ -156,6 +191,71 @@ impl InputState {
             Self::CountPending { .. } => "COUNT_PENDING",
             Self::UnmatchedPrevPending => "UNMATCHED_PREV_PENDING",
             Self::UnmatchedNextPending => "UNMATCHED_NEXT_PENDING",
+        }
+    }
+}
+
+#[cfg(test)]
+mod key_context_tests {
+    use super::*;
+
+    #[test]
+    fn base_and_count_and_register_op_map_to_base_context() {
+        assert_eq!(InputState::Base.key_context(), Some(KeyContext::Base));
+        assert_eq!(
+            InputState::CountPending { count: 3 }.key_context(),
+            Some(KeyContext::Base)
+        );
+        assert_eq!(
+            InputState::RegisterOpPending { register: 'a' }.key_context(),
+            Some(KeyContext::Base)
+        );
+    }
+
+    #[test]
+    fn minor_mode_pending_states_map_to_their_context() {
+        assert_eq!(
+            InputState::GotoPending.key_context(),
+            Some(KeyContext::Goto)
+        );
+        assert_eq!(
+            InputState::ViewPending.key_context(),
+            Some(KeyContext::View)
+        );
+        assert_eq!(
+            InputState::MatchPending.key_context(),
+            Some(KeyContext::Match)
+        );
+        assert_eq!(
+            InputState::UnmatchedPrevPending.key_context(),
+            Some(KeyContext::UnmatchedPrev)
+        );
+        assert_eq!(
+            InputState::UnmatchedNextPending.key_context(),
+            Some(KeyContext::UnmatchedNext)
+        );
+    }
+
+    #[test]
+    fn literal_consuming_states_are_never_translated() {
+        let literal_states = [
+            InputState::SurroundAddPending,
+            InputState::SurroundDeletePending,
+            InputState::SurroundReplaceFromPending,
+            InputState::SurroundReplaceToPending { from_char: '(' },
+            InputState::TextObjectAroundPending,
+            InputState::TextObjectInsidePending,
+            InputState::FindCharPending {
+                find_type: FindType::FindForward,
+            },
+            InputState::ReplaceCharPending,
+            InputState::RegisterPending,
+            InputState::CommandLinePending {
+                buffer: String::new(),
+            },
+        ];
+        for state in literal_states {
+            assert_eq!(state.key_context(), None, "{:?} must not translate", state);
         }
     }
 }

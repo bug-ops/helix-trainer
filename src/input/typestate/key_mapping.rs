@@ -19,7 +19,7 @@ use crate::helix::commands::*;
 /// - Option+c = ç, Option+Shift+C = Ç
 /// - Option+s = ß, Option+j = ∆, Option+k = ˚
 /// - Option+x = ≈, Option+; = …, Option+, = ≤
-fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> {
+pub(crate) fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> {
     match ch {
         // Alt+lowercase
         'ç' => Some(('c', KeyModifiers::ALT)),
@@ -156,7 +156,20 @@ fn parse_key_code(s: &str, modifiers: &mut KeyModifiers) -> Option<KeyCode> {
         return Some(KeyCode::Char(c));
     }
 
-    // Special keys (case-insensitive comparison without heap allocation)
+    named_key_code(s)
+}
+
+/// Resolve a multi-character named key (`"esc"`, `"Enter"`, `"F1"`, ...) to
+/// its `KeyCode`.
+///
+/// This is the single source of truth for the named-key vocabulary this
+/// crate understands: [`parse_key_code`] uses it to parse Helix key
+/// strings, and `CanonicalKeys::tokens` (`src/input/keymap/keys.rs`) uses
+/// [`is_named_key`] (backed by this same function) to recognize a whole
+/// canonical-key string as one token rather than splitting it character by
+/// character. The two must never drift, since a canonical key produced by
+/// the tokenizer is later re-parsed by `parse_helix_key_string`.
+pub(crate) fn named_key_code(s: &str) -> Option<KeyCode> {
     if s.eq_ignore_ascii_case("escape") || s.eq_ignore_ascii_case("esc") {
         return Some(KeyCode::Esc);
     }
@@ -225,6 +238,12 @@ fn parse_key_code(s: &str, modifiers: &mut KeyModifiers) -> Option<KeyCode> {
 
     // Multi-character strings that are not recognized special keys
     None
+}
+
+/// Whether `s`, taken as a whole string, is a recognized named key (as
+/// opposed to a sequence of single-character tokens). See [`named_key_code`].
+pub(crate) fn is_named_key(s: &str) -> bool {
+    named_key_code(s).is_some()
 }
 
 /// Map a single-key command character to its command string

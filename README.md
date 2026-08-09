@@ -62,6 +62,7 @@ All modes feature:
 - **70 Daily Quests** — Easy, medium, and hard challenges across all commands
 - **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
 - **Arrow Key Navigation** — Optional `enable_arrow_keys_in_normal_mode` configuration for cursor movement
+- **Custom Keymap Support** — Optional `use_helix_keymap` configuration trains against your own Helix `config.toml` remaps instead of the stock keymap (gameplay only — see [Custom Helix keymap](#custom-helix-keymap-optional))
 
 ## Installation
 
@@ -166,6 +167,24 @@ Mode Selection
 | **Arrow Keys** *(optional)* | <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> for cursor movement in Normal mode via `enable_arrow_keys_in_normal_mode` |
 
 All commands powered by `helix-core` v25.07.1 for 100% accuracy.
+
+### Custom Helix keymap (optional)
+
+If you've remapped keys in your own Helix `config.toml`, the trainer can train against *your* bindings instead of the stock ones. Opt in by setting `use_helix_keymap: true` in `~/.config/helix-trainer/config.json`:
+
+```json
+{
+  "config": {
+    "use_helix_keymap": true
+  }
+}
+```
+
+When enabled, the trainer reads `~/.config/helix/config.toml` (the same file Helix itself reads) at startup and translates your gameplay keypresses through it — `[keys.normal]` remaps, plus nested `[keys.normal.g]`/`[keys.normal.m]`/`[keys.normal.z]`/`[keys.normal.[]`/`[keys.normal.]]` minor-mode remaps. Unsupported forms (key sequences, `@`-macros, `:`-typable commands, minor-mode relocation to a different prefix) are reported via a startup notification rather than silently ignored.
+
+This is **gameplay-only**: menus, results, filter screens, and scenario hint prose always use the stock keymap (`j`/`k`/`gg`), even with a custom keymap active, since remapping trainer UI chrome would break the canonical command identity FSRS review history depends on. A malformed config, a missing file, or an oversized/excessive config falls back to the stock keymap without blocking startup.
+
+A handful of keys are reserved by the trainer's own UI and intercepted before gameplay dispatch, so remapping onto them has no effect: <kbd>F1</kbd>, <kbd>?</kbd>, <kbd>Shift</kbd>+<kbd>/</kbd>, and <kbd>Ctrl</kbd>+<kbd>Q</kbd> everywhere; in Arcade mode, also <kbd>Esc</kbd>, <kbd>q</kbd>, <kbd>m</kbd>, <kbd>p</kbd>, <kbd>s</kbd>, <kbd>a</kbd>, and <kbd>M</kbd> while paused or on the game-over screen.
 
 ## Why this project exists
 

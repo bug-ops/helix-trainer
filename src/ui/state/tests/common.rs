@@ -1,8 +1,19 @@
 //! Common test utilities for UI state tests
 
 use crate::config::Scenario;
+use crate::input::keymap::CanonicalKeys;
 use crate::testing::{ScenarioBuilder, test_app_state_with_scenarios};
-use crate::ui::AppState;
+use crate::ui::{AppState, Message};
+
+/// Build an `ExecuteCommand` message for a single physical key with no
+/// keymap remap active - `keys` and `typed` are identical, matching every
+/// keystroke these tests simulate.
+pub fn exec(key: &'static str) -> Message {
+    Message::ExecuteCommand {
+        keys: CanonicalKeys::from_static(key),
+        typed: std::borrow::Cow::Borrowed(key),
+    }
+}
 
 /// Create a test scenario with default content
 pub fn create_test_scenario() -> Scenario {

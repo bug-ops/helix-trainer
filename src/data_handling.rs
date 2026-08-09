@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use helix_trainer::{
     async_state::DataLoadMessage,
-    config::ScenarioCollection,
+    config::{ScenarioCollection, keymap::keymap_fingerprint_mismatch_message},
     gamification::{
         Achievement, AchievementEngine, LockStatus, QuestGenerator, QuestTemplateRegistry,
         StreakChange, StreakManager, UserProfile,
@@ -57,6 +57,36 @@ fn warn_if_other_instance_running(state: &mut AppState) {
             WARNING_NOTIFICATION_DURATION,
         ));
     }
+}
+
+/// Compare the resolved gameplay keymap's fingerprint against the one
+/// stored on the just-loaded profile, and notify if FSRS review history
+/// was recorded under a different mapping.
+///
+/// Always converges `profile.keymap_fingerprint` to the current overlay's
+/// fingerprint afterward, so this only fires once per keymap change, not
+/// on every subsequent launch with the same (still-mismatched-from-some-
+/// older-history) mapping.
+fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
+    if state.config.keymap.is_empty() {
+        // Stock keymap - fingerprinting only matters once a custom mapping
+        // is active, and clearing a previously-set fingerprint here would
+        // spuriously "mismatch" the next time a keymap is re-enabled.
+        return;
+    }
+
+    let current = state.config.keymap.fingerprint();
+    if let Some(stored) = state.progress.profile.keymap_fingerprint
+        && stored != current
+    {
+        state.ui.notifications.push(Notification::with_duration(
+            NotificationType::Info {
+                message: keymap_fingerprint_mismatch_message(),
+            },
+            WARNING_NOTIFICATION_DURATION,
+        ));
+    }
+    state.progress.profile.keymap_fingerprint = Some(current);
 }
 
 /// Handle messages from background data loaders
@@ -133,6 +163,8 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                 state.progress.clock(),
             );
             state.progress.profile = updated_profile;
+
+            warn_keymap_fingerprint_mismatch(state);
 
             warn_if_other_instance_running(state);
 
@@ -315,6 +347,109 @@ mod tests {
         let loaded_profile = &state.progress.profile;
         assert_eq!(loaded_profile.total_xp, 500);
         assert_eq!(loaded_profile.level, 3);
+    }
+
+    fn app_state_with_keymap() -> AppState {
+        use helix_trainer::config::keymap::resolve_str;
+        use helix_trainer::ui::state::ConfigState;
+
+        let (keymap, _) = resolve_str(
+            r#"
+            [keys.normal]
+            j = "move_char_left"
+            "#,
+        )
+        .unwrap();
+        assert!(!keymap.is_empty());
+
+        AppState::with_config(
+            vec![],
+            UserProfile::new(),
+            test_profile_storage(),
+            PerformanceTracker::new(),
+            ConfigState {
+                keymap,
+                ..ConfigState::default()
+            },
+        )
+    }
+
+    /// A stale `keymap_fingerprint` (recorded under a different mapping)
+    /// must notify when the currently active keymap doesn't match.
+    #[test]
+    fn test_handle_profile_ready_notifies_on_keymap_fingerprint_mismatch() {
+        let mut state = app_state_with_keymap();
+        let current_fingerprint = state.config.keymap.fingerprint();
+        let mut profile = UserProfile::new();
+        profile.keymap_fingerprint = Some(current_fingerprint.wrapping_add(1));
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+
+        assert!(
+            state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(&n.notification_type, NotificationType::Info { message }
+                    if message == &helix_trainer::config::keymap::keymap_fingerprint_mismatch_message())),
+            "expected a keymap fingerprint mismatch notification"
+        );
+        assert_eq!(
+            state.progress.profile.keymap_fingerprint,
+            Some(current_fingerprint),
+            "fingerprint must converge to the current keymap after notifying"
+        );
+    }
+
+    /// First-ever activation of a keymap (`keymap_fingerprint` is `None`)
+    /// must not be treated as a mismatch - there's no prior mapping to
+    /// have diverged from.
+    #[test]
+    fn test_handle_profile_ready_no_notification_on_first_keymap_activation() {
+        let mut state = app_state_with_keymap();
+        let mut profile = UserProfile::new();
+        profile.keymap_fingerprint = None;
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+
+        assert!(
+            !state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            "first-time keymap activation must not notify a mismatch"
+        );
+        assert_eq!(
+            state.progress.profile.keymap_fingerprint,
+            Some(state.config.keymap.fingerprint())
+        );
+    }
+
+    /// With the stock keymap (no overlay), a stale `keymap_fingerprint` on
+    /// the loaded profile must be left untouched and never notified -
+    /// fingerprinting only matters once a custom mapping is active.
+    #[test]
+    fn test_handle_profile_ready_no_keymap_notification_when_disabled() {
+        let mut state = empty_test_app_state();
+        assert!(state.config.keymap.is_empty());
+        let mut profile = UserProfile::new();
+        profile.keymap_fingerprint = Some(42);
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+
+        assert!(
+            !state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            "stock keymap must never produce a fingerprint mismatch notification"
+        );
+        assert_eq!(state.progress.profile.keymap_fingerprint, Some(42));
     }
 
     /// Regression test for #256: a streak that crosses a milestone at load time (the only

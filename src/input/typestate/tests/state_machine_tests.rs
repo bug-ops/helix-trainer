@@ -368,3 +368,50 @@ fn test_pending_surround_replace_char_various_brackets() {
         );
     }
 }
+
+#[test]
+fn test_apply_canonical_expansion_multi_token_commits_and_resolves() {
+    let mut sm = InputStateMachine::new();
+    let resolved = sm.apply_canonical_expansion(&["g", "e"]);
+    assert_eq!(resolved, Some(CMD_GOTO_LAST_LINE.to_string()));
+    assert!(sm.state().is_base());
+}
+
+#[test]
+fn test_apply_canonical_expansion_single_token_landing_on_a_prefix_is_discarded() {
+    // A single-token target that itself lands on a further-pending state
+    // (e.g. remapping a key to `find_next_char`) is never actually routed
+    // through this method in production - callers bypass it entirely for
+    // single-token expansions (see S6 rule 3) and dispatch that one token
+    // directly instead, which *does* leave the machine pending exactly
+    // like un-remapped "f" -> FindCharPending. This method's own contract
+    // requires the final token to execute, so given this input it
+    // correctly discards rather than committing a half-resolved state.
+    let mut sm = InputStateMachine::new();
+    let resolved = sm.apply_canonical_expansion(&["f"]);
+    assert_eq!(resolved, None);
+    assert!(
+        sm.state().is_base(),
+        "a discarded expansion must not mutate state"
+    );
+}
+
+#[test]
+fn test_apply_canonical_expansion_discards_on_cancel() {
+    let mut sm = InputStateMachine::new();
+    // "gx" is not a valid goto second key - GotoPending cancels on it.
+    let resolved = sm.apply_canonical_expansion(&["g", "x"]);
+    assert_eq!(resolved, None);
+    assert!(
+        sm.state().is_base(),
+        "a discarded expansion must not mutate state"
+    );
+}
+
+#[test]
+fn test_apply_canonical_expansion_discards_on_unparsable_token() {
+    let mut sm = InputStateMachine::new();
+    let resolved = sm.apply_canonical_expansion(&["g", "not-a-key"]);
+    assert_eq!(resolved, None);
+    assert!(sm.state().is_base());
+}

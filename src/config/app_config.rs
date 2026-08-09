@@ -10,7 +10,13 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Application configuration
+///
+/// `#[serde(default)]` on the struct is load-bearing: without it, adding
+/// any new field would make every existing `config.json` on disk fail to
+/// deserialize (missing field), silently discarding the user's whole
+/// config back to defaults instead of just defaulting the new field.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppConfig {
     /// Enable arrow keys for movement in normal mode (for exotic keyboard layouts like bépo).
     ///
@@ -28,10 +34,20 @@ pub struct AppConfig {
     /// If the configuration file does not exist, default values (false) are used in memory.
     /// The configuration file is only written when configuration changes are saved.
     pub enable_arrow_keys_in_normal_mode: bool,
+
+    /// Translate gameplay keypresses through the user's real Helix
+    /// `config.toml` keymap (read from `dirs::config_dir()/helix/config.toml`).
+    ///
+    /// Disabled by default: an exotic or malformed Helix config should
+    /// never silently change training semantics for a user who didn't ask
+    /// for it. Applies to gameplay only — menus, results, and filter
+    /// screens keep the stock keymap.
+    pub use_helix_keymap: bool,
 }
 
 /// Wrapper for config serialization
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 struct ConfigData {
     config: AppConfig,
 }
@@ -171,6 +187,7 @@ mod tests {
         // Create config
         let config = AppConfig {
             enable_arrow_keys_in_normal_mode: true,
+            ..AppConfig::default()
         };
 
         // Save
@@ -219,6 +236,7 @@ mod tests {
 
         let config = AppConfig {
             enable_arrow_keys_in_normal_mode: true,
+            ..AppConfig::default()
         };
 
         storage.save(&config).unwrap();
@@ -249,16 +267,38 @@ mod tests {
     }
 
     #[test]
-    fn test_load_missing_config_field_returns_error() {
+    fn test_load_missing_config_field_uses_defaults() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("config.json");
         let storage = ConfigStorage::with_path(&file_path);
 
-        // Write JSON without "config" field
+        // A missing "config" field (or a missing field within it) must not
+        // fail the whole load — `#[serde(default)]` degrades gracefully so
+        // a config file from an older version keeps working after an
+        // upgrade adds new fields.
         fs::write(&file_path, r#"{"other": "value"}"#).unwrap();
 
-        let result = storage.load();
-        assert!(result.is_err());
+        let config = storage.load().unwrap();
+        assert!(!config.enable_arrow_keys_in_normal_mode);
+        assert!(!config.use_helix_keymap);
+    }
+
+    #[test]
+    fn test_load_config_missing_new_field_defaults_to_false() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.json");
+        let storage = ConfigStorage::with_path(&file_path);
+
+        // Simulates an old config.json written before `use_helix_keymap` existed.
+        fs::write(
+            &file_path,
+            r#"{"config": {"enable_arrow_keys_in_normal_mode": true}}"#,
+        )
+        .unwrap();
+
+        let config = storage.load().unwrap();
+        assert!(config.enable_arrow_keys_in_normal_mode);
+        assert!(!config.use_helix_keymap);
     }
 
     #[test]

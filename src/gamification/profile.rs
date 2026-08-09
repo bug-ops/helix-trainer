@@ -109,6 +109,17 @@ pub struct UserProfile {
     /// Difficulty levels completed at least once, across any mode. Powers `Polyglot`.
     #[serde(default)]
     pub difficulties_completed: HashSet<Difficulty>,
+
+    /// Hash over the sorted resolved keymap bindings active when review
+    /// history was last recorded, or `None` if no custom keymap has ever
+    /// been active for this profile.
+    ///
+    /// Compared at startup against the currently resolved keymap: a
+    /// mismatch means FSRS review history was built under a different key
+    /// mapping than the one now active, which callers surface as a
+    /// notification rather than silently trusting stale scheduling data.
+    #[serde(default)]
+    pub keymap_fingerprint: Option<u64>,
 }
 
 impl UserProfile {
@@ -166,6 +177,7 @@ impl UserProfile {
             speed_run_count: 0,
             flash_run_count: 0,
             difficulties_completed: HashSet::new(),
+            keymap_fingerprint: None,
         }
     }
 

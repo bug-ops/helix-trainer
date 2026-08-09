@@ -70,11 +70,19 @@ pub fn handle_show_hint(state: &mut AppState) -> Result<HandlerOutcome, UserErro
 /// Processes user commands in normal or insert mode, tracks for quests.
 /// Uses the typestate-based `InputStateMachine` for multi-key command handling.
 ///
+/// `keys` is the canonical command (post keymap-overlay translation) to
+/// dispatch; `typed` is the physically-pressed key, recorded to
+/// `KeyHistory` instead of the translated command so the popup shows what
+/// the user actually pressed. A multi-token `keys` (a keymap remap whose
+/// target spans more than one canonical key, e.g. `G` -> `"ge"`) is
+/// applied atomically via [`InputStateMachine::apply_canonical_expansion`].
+///
 /// Note: This handler operates on TaskData screen and calls update() for quest progress,
 /// so it requires full AppState access
 pub fn handle_execute_command(
     state: &mut AppState,
-    command: Cow<'static, str>,
+    keys: crate::input::keymap::CanonicalKeys,
+    typed: Cow<'static, str>,
 ) -> Result<HandlerOutcome, UserError> {
     // Only handle if we're on Task screen
     if !matches!(state.screen, TypedScreen::Task(_)) {
@@ -90,8 +98,11 @@ pub fn handle_execute_command(
         unreachable!("Already checked above")
     };
 
-    // Add key to history for display (format for readability)
-    let display_key = format_key_for_display(command.as_ref());
+    // Add key to history for display (format for readability). Uses the
+    // physically-typed key, not the translated command - and, matching
+    // pre-keymap-overlay behavior, happens for every keystroke
+    // unconditionally, including ones that only extend a pending prefix.
+    let display_key = format_key_for_display(typed.as_ref());
     task_data.add_key_to_history(display_key);
 
     // Show key history popup after first keypress
@@ -101,12 +112,12 @@ pub fn handle_execute_command(
 
     // Track command for quest progress (only execute once per complete command)
     let mut executed_command: Option<String> = None;
-    let mut session_completed = false;
+    let session_completed;
 
     if is_insert_mode {
-        // In insert mode, execute command directly (bypass input state machine)
-        // Use into_owned() to avoid allocation when Cow is already Owned
-        let cmd = command.into_owned();
+        // R1: never translated in insert mode - `keys` is a single token
+        // identical to `typed`. Execute directly (bypass input state machine).
+        let cmd = keys.into_cow().into_owned();
 
         // Store last command for display (only for Escape)
         if cmd == CMD_ESCAPE {
@@ -123,51 +134,66 @@ pub fn handle_execute_command(
         session_completed = process_session_result(result, &mut task_data, state)?;
         state.screen = TypedScreen::Task(task_data);
     } else {
-        // Normal mode - use InputStateMachine for multi-key command handling
-        // Convert the command string to a KeyEvent for the state machine
-        let key_event = command_to_key_event(&command);
-
-        // Process through the input state machine
-        let handler_result = task_data.input_state_mut().process_key(key_event);
-
-        match handler_result {
-            HandlerResult::Execute(cmd) => {
-                let cmd_str = cmd.to_string();
-
-                // Store last command for display
-                task_data.last_command = Some(cmd_str.clone());
-                executed_command = Some(cmd_str.clone());
-
-                // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
-                let (count, base_cmd) = crate::game::extract_count_and_command(&cmd_str);
-                let base_cmd = base_cmd.to_string();
-
-                // Clone scenario before taking session (to avoid borrow conflict)
-                let scenario = task_data.session.scenario().clone();
-
-                // Take session for state transition
-                let session = std::mem::replace(
-                    &mut task_data.session,
-                    crate::game::GameSession::new(scenario)?,
-                );
-
-                // Execute command with count - records as ONE action
-                let result = session.record_action_with_count(cmd_str, &base_cmd, count)?;
-                session_completed = process_session_result(result, &mut task_data, state)?;
-
-                // Always restore Task screen - even when completed, we show success popup
-                state.screen = TypedScreen::Task(task_data);
+        // Normal mode - use InputStateMachine for multi-key command handling.
+        let tokens = keys.tokens();
+        let resolved = if tokens.len() > 1 {
+            task_data
+                .input_state_mut()
+                .apply_canonical_expansion(&tokens)
+        } else {
+            match task_data
+                .input_state_mut()
+                .process_key(command_to_key_event(tokens[0]))
+            {
+                HandlerResult::Execute(cmd) => Some(cmd.to_string()),
+                HandlerResult::Transition(_) => {
+                    // Waiting for more keys - state machine already updated
+                    state.screen = TypedScreen::Task(task_data);
+                    return Ok(HandlerOutcome::Stay);
+                }
+                HandlerResult::Cancel | HandlerResult::Stay => {
+                    // Cancelled or unknown key - restore screen and stay
+                    state.screen = TypedScreen::Task(task_data);
+                    return Ok(HandlerOutcome::Stay);
+                }
             }
-            HandlerResult::Transition(_) => {
-                // Waiting for more keys - state machine already updated
-                state.screen = TypedScreen::Task(task_data);
-            }
-            HandlerResult::Cancel | HandlerResult::Stay => {
-                // Cancelled or unknown key - restore screen and stay
-                state.screen = TypedScreen::Task(task_data);
-                return Ok(HandlerOutcome::Stay);
-            }
-        }
+        };
+
+        let Some(cmd_str) = resolved else {
+            // Multi-token expansion didn't resolve cleanly (see
+            // `apply_canonical_expansion`'s doc comment) - discard, leave
+            // state untouched.
+            tracing::warn!(
+                keys = keys.as_str(),
+                "keymap expansion did not resolve; discarding"
+            );
+            state.screen = TypedScreen::Task(task_data);
+            return Ok(HandlerOutcome::Stay);
+        };
+
+        // Store last command for display
+        task_data.last_command = Some(cmd_str.clone());
+        executed_command = Some(cmd_str.clone());
+
+        // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
+        let (count, base_cmd) = crate::game::extract_count_and_command(&cmd_str);
+        let base_cmd = base_cmd.to_string();
+
+        // Clone scenario before taking session (to avoid borrow conflict)
+        let scenario = task_data.session.scenario().clone();
+
+        // Take session for state transition
+        let session = std::mem::replace(
+            &mut task_data.session,
+            crate::game::GameSession::new(scenario)?,
+        );
+
+        // Execute command with count - records as ONE action
+        let result = session.record_action_with_count(cmd_str, &base_cmd, count)?;
+        session_completed = process_session_result(result, &mut task_data, state)?;
+
+        // Always restore Task screen - even when completed, we show success popup
+        state.screen = TypedScreen::Task(task_data);
     }
 
     // Update quest progress for executed command (after releasing session borrow)

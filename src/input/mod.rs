@@ -18,6 +18,7 @@
 //! See [`typestate`] for the state machine implementation.
 
 pub mod handlers;
+pub mod keymap;
 pub mod typestate;
 
 use crossterm::event::KeyEvent;

@@ -31,7 +31,12 @@ pub(crate) fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> 
         '≤' => Some((',', KeyModifiers::ALT)),
         '–' => Some(('-', KeyModifiers::ALT)),
         '≥' => Some(('.', KeyModifiers::ALT)),
-        '`' => Some(('`', KeyModifiers::ALT)), // dead key produces same char
+        // NOTE: backtick is intentionally NOT mapped here. Unlike every other
+        // entry in this table, the macOS Option-` dead-key composition
+        // produces the same plain '`' char as a real, directly-typeable key
+        // (unmodified backtick). Rewriting it unconditionally to ALT made a
+        // plain backtick keystroke indistinguishable from real Alt-backtick,
+        // silently breaking `switch_case_alt` (see issue #377).
         // Alt+Shift (uppercase or shifted symbols)
         'Ç' => Some(('C', KeyModifiers::ALT)), // Alt-C (copy_selection_prev)
         '˝' => Some(('J', KeyModifiers::ALT)), // Alt-J (join_selections_space)

@@ -102,10 +102,13 @@ fn record_scenario_completion(
 
     // Save after FSRS data has been recorded so `performance_data` reflects this
     // scenario's review history, not the state before it.
+    // (non-fatal error - log but continue, matches handle_minigame_game_over's policy)
     if leveled_up {
-        ctx.progress.save_immediate().map_err(UserError::from)?;
-    } else {
-        ctx.progress.save_debounced().map_err(UserError::from)?;
+        if let Err(e) = ctx.progress.save_immediate() {
+            tracing::error!("Failed to save profile after scenario completion: {:?}", e);
+        }
+    } else if let Err(e) = ctx.progress.save_debounced() {
+        tracing::error!("Failed to save profile after scenario completion: {:?}", e);
     }
 
     // Generate notifications for mastery level ups
@@ -134,11 +137,24 @@ fn record_scenario_completion(
                     description: achievement.description,
                 }));
         }
-        ctx.progress
-            .storage
-            .save(&ctx.progress.profile)
-            .map_err(UserError::from)?;
-        ctx.progress.mark_saved();
+        // Persist through the shared save path (non-fatal, matches the policy
+        // above) instead of a raw `storage.save`, which would skip the FSRS
+        // sync and leave `profile.performance_data` stale.
+        if let Err(e) = ctx.progress.save_immediate() {
+            tracing::error!("Failed to save profile after achievement unlock: {:?}", e);
+        }
+    }
+
+    // Generate a notification for an account-level level up (distinct from the
+    // per-command mastery level ups above). Pushed last so it lands inside the
+    // notification queue's fixed-size visible window even when mastery or
+    // achievement notifications also fire during this completion.
+    if leveled_up {
+        ctx.ui
+            .notifications
+            .push(Notification::new(NotificationType::LevelUp {
+                new_level: ctx.progress.profile.level,
+            }));
     }
 
     Ok(())
@@ -857,6 +873,58 @@ mod tests {
         ));
     }
 
+    /// Regression test for #296/S1/S2: an achievement unlock (independent of any
+    /// level-up) must persist through `ProgressState::save_immediate` - not a raw
+    /// `storage.save` - so `profile.performance_data` reflects the FSRS tracker even
+    /// when the earlier `save_debounced` call in the same completion was skipped
+    /// (debounce window not yet elapsed).
+    #[test]
+    fn test_record_scenario_completion_achievement_save_syncs_fsrs_data() {
+        use crate::gamification::{AchievementId, ProfileStorage};
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut state = create_test_state();
+        state.progress.storage = ProfileStorage::with_path(&profile_path);
+        // One completion away from the Centurion milestone, independent of level-up.
+        state.progress.profile.scenarios_completed = 99;
+        // Simulate a save that just happened, so the debounced save below is skipped.
+        state.progress.mark_saved();
+        assert!(!state.progress.should_save());
+
+        let feedback = completed_feedback_with_commands();
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Small XP amount that should not trigger a level-up, exercising the
+        // skipped save_debounced branch alongside the achievement-unlock save.
+        record_scenario_completion(&mut ctx, &feedback, 1).unwrap();
+
+        assert!(
+            ctx.progress
+                .profile
+                .has_achievement(&AchievementId::Centurion),
+            "expected Centurion to unlock at 100 completed scenarios"
+        );
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert!(
+            !persisted.performance_data.is_empty(),
+            "persisted profile should contain FSRS data even though save_debounced was skipped"
+        );
+        assert!(stats_match(
+            &persisted.performance_data,
+            &ctx.progress.performance_tracker.get_stats_clone()
+        ));
+    }
+
     /// Same as above but through the level-up (save_immediate) branch.
     #[test]
     fn test_record_scenario_completion_persists_fsrs_data_on_level_up() {
@@ -890,6 +958,99 @@ mod tests {
             &persisted.performance_data,
             &ctx.progress.performance_tracker.get_stats_clone()
         ));
+
+        // Regression test for #293/S3: this feedback also triggers mastery-level-up
+        // and achievement-unlock notifications (>= 3 total alongside LevelUp), which
+        // would evict LevelUp from the notification queue's fixed-size (3-slot)
+        // `visible()` window if it were pushed first instead of last.
+        assert!(
+            ctx.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { .. }
+            )),
+            "LevelUp notification must remain visible even when mastery/achievement \
+             notifications also fire in the same completion"
+        );
+    }
+
+    /// Minimal feedback with no user actions, used to isolate the `LevelUp`
+    /// notification from mastery/achievement notifications that a full
+    /// completion (like `completed_feedback_with_commands`) would also trigger.
+    fn minimal_feedback() -> crate::game::Feedback {
+        use crate::game::PerformanceRating;
+        crate::game::Feedback {
+            scenario_id: "test_scenario".to_string(),
+            success: true,
+            score: 1,
+            max_points: 2,
+            rating: PerformanceRating::Good,
+            actions_taken: 1,
+            optimal_actions: 1,
+            duration: std::time::Duration::from_secs(5),
+            hint: None,
+            is_optimal: false,
+            user_actions: vec![],
+        }
+    }
+
+    /// Regression test for #293: `handle_award_xp`'s dead `LevelUp` notification path
+    /// was removed; the live scenario-completion path must notify on level up instead.
+    #[test]
+    fn test_record_scenario_completion_notifies_on_level_up() {
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let mut state = create_test_state();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        let xp_for_level_2 = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_level_2 - 10;
+        state.progress.profile.level = 1;
+
+        let feedback = minimal_feedback();
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        record_scenario_completion(&mut ctx, &feedback, 100).unwrap();
+        assert!(ctx.progress.profile.level >= 2, "expected a level-up");
+
+        assert!(
+            ctx.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { .. }
+            )),
+            "expected a LevelUp notification on account level up"
+        );
+    }
+
+    /// Regression test for #293: a scenario completion that does NOT level up the
+    /// account must not push a `LevelUp` notification.
+    #[test]
+    fn test_record_scenario_completion_no_level_up_notification_without_level_up() {
+        let mut state = create_test_state();
+        let feedback = minimal_feedback();
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Small XP amount that should not trigger a level-up.
+        record_scenario_completion(&mut ctx, &feedback, 1).unwrap();
+
+        assert!(
+            !ctx.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { .. }
+            )),
+            "no LevelUp notification should fire without an actual level up"
+        );
     }
 
     #[test]

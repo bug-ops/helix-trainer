@@ -146,10 +146,10 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
 /// Regression test for #258/C1: a level-up during a review session must persist the
 /// leveled-up profile via the session-complete save.
 ///
-/// Note: review sessions intentionally do not surface a `LevelUp` notification (unlike
-/// `handlers/profile.rs`'s dead `handle_award_xp`) - `scenario.rs`, the app's primary XP
-/// path, does not notify on level-up either, so adding one only here would be an
-/// inconsistent, unrelated behavior change riding along with this persistence fix.
+/// Note: review sessions intentionally do not surface a `LevelUp` notification. Unlike
+/// `scenario.rs` (the app's primary XP path, which does notify on level-up), review
+/// completions don't have an established notification for this, so adding one here
+/// would be an unrelated behavior change riding along with this persistence fix.
 #[test]
 fn test_review_session_completion_persists_level_up() {
     use crate::gamification::{ProfileStorage, XPCalculator};

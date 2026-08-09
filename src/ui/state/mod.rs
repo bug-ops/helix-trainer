@@ -225,9 +225,6 @@ pub enum Message {
     /// Navigate to statistics screen
     ShowStatistics,
 
-    /// Award XP to the user
-    AwardXP { amount: u64 },
-
     /// Update quest progress based on gameplay
     UpdateQuestProgress {
         command: Option<String>,
@@ -856,15 +853,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             let outcome = handlers::handle_show_statistics(&mut ctx)?;
             apply_outcome(state, outcome);
             Ok(())
-        }
-        Message::AwardXP { amount } => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            handlers::handle_award_xp(&mut ctx, amount)
         }
 
         // Quest messages

@@ -109,7 +109,8 @@ pub fn handle_next_review_command(
 
             // Award XP for review session
             let xp = (completed as u64 * 10) + (success_rate * 20.0) as u64;
-            ctx.progress.profile.add_xp(xp);
+            let leveled_up = ctx.progress.profile.add_xp(xp);
+            let new_level = ctx.progress.profile.level;
 
             // Show session summary notification
             ctx.ui
@@ -119,6 +120,12 @@ pub fn handle_next_review_command(
                     success_count,
                     xp_earned: xp,
                 }));
+
+            if leveled_up {
+                ctx.ui
+                    .notifications
+                    .push(Notification::new(NotificationType::LevelUp { new_level }));
+            }
 
             // Clear review session
             ctx.game.review_session = None;

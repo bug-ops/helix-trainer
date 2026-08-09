@@ -145,11 +145,6 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
 
 /// Regression test for #258/C1: a level-up during a review session must persist the
 /// leveled-up profile via the session-complete save.
-///
-/// Note: review sessions intentionally do not surface a `LevelUp` notification. Unlike
-/// `scenario.rs` (the app's primary XP path, which does notify on level-up), review
-/// completions don't have an established notification for this, so adding one here
-/// would be an unrelated behavior change riding along with this persistence fix.
 #[test]
 fn test_review_session_completion_persists_level_up() {
     use crate::gamification::{ProfileStorage, XPCalculator};
@@ -174,6 +169,59 @@ fn test_review_session_completion_persists_level_up() {
         .load()
         .unwrap();
     assert_eq!(persisted.level, 2);
+}
+
+/// Regression test for #318: `handle_next_review_command` discarded the `leveled_up`
+/// result of `profile.add_xp(xp)`, so a level-up crossed during a review session's
+/// final XP award produced no `LevelUp` notification (unlike training and arcade mode).
+#[test]
+fn test_review_session_completion_notifies_on_level_up() {
+    use crate::gamification::XPCalculator;
+    use crate::ui::notification::NotificationType;
+
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+
+    let xp_for_level_2 = XPCalculator::xp_for_level(2);
+    state.progress.profile.total_xp = xp_for_level_2 - 10;
+    state.progress.profile.level = 1;
+
+    state.game.review_session = Some(review_session_with_commands(vec!["x".to_string()]));
+
+    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+
+    assert_eq!(state.progress.profile.level, 2);
+    assert!(
+        state.ui.notifications.visible().iter().any(|n| matches!(
+            n.notification_type,
+            NotificationType::LevelUp { new_level } if new_level == 2
+        )),
+        "expected a LevelUp notification reporting the post-award profile level"
+    );
+}
+
+/// Regression test for #318: a review session completion that doesn't cross a level
+/// threshold must not push a `LevelUp` notification.
+#[test]
+fn test_review_session_completion_no_level_up_notification_without_level_up() {
+    use crate::ui::notification::NotificationType;
+
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+
+    state.game.review_session = Some(review_session_with_commands(vec!["x".to_string()]));
+
+    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+
+    assert!(
+        !state
+            .ui
+            .notifications
+            .visible()
+            .iter()
+            .any(|n| matches!(n.notification_type, NotificationType::LevelUp { .. })),
+        "no LevelUp notification should fire without an actual level up"
+    );
 }
 
 /// Regression test for M4: abandoning a review session (e.g. pressing Esc mid-session)

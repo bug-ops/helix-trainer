@@ -77,12 +77,12 @@ impl StreakManager {
                 // Missed day(s)
                 let was_streak = profile.current_streak;
 
-                if profile.streak_freeze_available {
+                if was_streak > 0 && profile.streak_freeze_available {
                     // Use streak freeze
                     profile.streak_freeze_available = false;
                     StreakChange::Protected
                 } else {
-                    // Break streak
+                    // Break streak (no-op if already 0 - nothing was there to protect)
                     profile.current_streak = 0;
                     StreakChange::Broken { was_streak }
                 }
@@ -218,6 +218,26 @@ mod tests {
         assert_eq!(change, StreakChange::Protected);
         assert_eq!(profile.current_streak, 10); // Streak preserved
         assert!(!profile.streak_freeze_available); // Freeze consumed
+    }
+
+    /// Regression test for #319: a streak freeze must not be consumed (nor
+    /// `StreakChange::Protected` returned) when `current_streak` is already 0 - there
+    /// is nothing to protect, so this should behave like an ordinary (no-op) break.
+    #[test]
+    fn test_streak_freeze_not_consumed_when_streak_already_zero() {
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 0;
+        profile.streak_freeze_available = true;
+        clock.advance_days(2);
+
+        let change = StreakManager::update_streak(&mut profile, clock.now());
+        assert_eq!(change, StreakChange::Broken { was_streak: 0 });
+        assert_eq!(profile.current_streak, 0);
+        assert!(
+            profile.streak_freeze_available,
+            "freeze must not be consumed when there was no streak to protect"
+        );
     }
 
     #[test]

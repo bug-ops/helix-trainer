@@ -351,11 +351,22 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     // Get all target selections
     let target_selections = scenario.all_target_selections();
 
-    // Split into two columns
+    // Split into two columns of guaranteed-equal width. Percentage(50)/Percentage(50)
+    // hands the leftover column to one side unpredictably on odd widths, which made the
+    // two panels wrap the same line differently and desynced their rendered rows (#192).
+    // A middle spacer of the (0 or 1) leftover column keeps both sides equal instead.
+    let half_width = area.width / 2;
+    let spare_width = area.width - half_width * 2;
     let editor_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([
+            Constraint::Length(half_width),
+            Constraint::Length(spare_width),
+            Constraint::Length(half_width),
+        ])
         .split(area);
+    let current_area = editor_chunks[0];
+    let target_area = editor_chunks[2];
 
     // Current state with multi-cursor and diff highlighting
     let current_lines = render_editor_with_diff(
@@ -373,7 +384,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
                 .border_style(Style::default().fg(Color::Cyan)),
         )
         .wrap(Wrap { trim: false });
-    frame.render_widget(current, editor_chunks[0]);
+    frame.render_widget(current, current_area);
 
     // Target state with syntax highlighting and multi-cursor
     let target_lines = super::highlight::highlight_code_with_multi_cursor(
@@ -389,7 +400,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
                 .border_style(Style::default().fg(Color::Green)),
         )
         .wrap(Wrap { trim: false });
-    frame.render_widget(target, editor_chunks[1]);
+    frame.render_widget(target, target_area);
 }
 
 #[cfg(test)]
@@ -723,5 +734,106 @@ mod tests {
             assert_eq!(span.style.fg, Some(Color::Green));
             assert!(span.style.bg.is_none());
         }
+    }
+
+    // ==================== render_editor_pair panel-width regression tests (#192) ====================
+    //
+    // Percentage(50)/Percentage(50) used to hand the odd leftover column to one panel
+    // unpredictably, so Current/Target wrapped the same line differently and desynced
+    // their rendered rows. These tests pin the invariant that both panels always get
+    // identical widths. Odd widths are the load-bearing case (see the odd-width test
+    // below); even widths are a baseline sanity check only.
+
+    fn render_editor_pair_buffer(area_width: u16) -> ratatui::buffer::Buffer {
+        use crate::game::GameSession;
+        use crate::testing::ScenarioBuilder;
+        use ratatui::{Terminal, backend::TestBackend};
+
+        let scenario = ScenarioBuilder::new()
+            .id("panel_width_test")
+            .setup_content("fn calculate_total(prices: &[f64]) -> f64 {\n")
+            .target_content("fn calculate_total(prices: &[f64]) -> f64 {\n")
+            .build();
+        let session = GameSession::new(scenario).unwrap();
+
+        let backend = TestBackend::new(area_width, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_editor_pair(frame, area, &session, " Current ", " Target ", None);
+            })
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    /// Scans the top border row for the `┌`/`┐` corners of both panels and returns
+    /// their widths in left-to-right (Current, Target) order.
+    fn top_border_panel_widths(buffer: &ratatui::buffer::Buffer) -> (u16, u16) {
+        let width = buffer.area.width;
+        let mut corners = Vec::new();
+        for x in 0..width {
+            let symbol = buffer[(x, 0)].symbol();
+            if symbol == "┌" || symbol == "┐" {
+                corners.push(x);
+            }
+        }
+        assert_eq!(
+            corners.len(),
+            4,
+            "expected exactly 2 top-left + 2 top-right border corners on row 0, found at columns {corners:?}"
+        );
+        let current_width = corners[1] - corners[0] + 1;
+        let target_width = corners[3] - corners[2] + 1;
+        (current_width, target_width)
+    }
+
+    #[test]
+    fn test_render_editor_pair_panels_have_equal_width_at_odd_terminal_widths() {
+        // ODD widths are the only case that distinguishes the fix from the old
+        // Percentage(50)/Percentage(50) split: at EVEN widths both implementations
+        // divide evenly and this assertion would pass either way (see critic finding
+        // S1, .local/handoff/2026-08-09T17-42-20-critic.md) - it is the odd-width
+        // case that actually exercises the leftover-column handling.
+        for area_width in [41u16, 43, 81, 89, 91, 99, 121, 201] {
+            assert!(area_width % 2 == 1, "test bug: {area_width} is not odd");
+            let buffer = render_editor_pair_buffer(area_width);
+            let (current_width, target_width) = top_border_panel_widths(&buffer);
+            assert_eq!(
+                current_width, target_width,
+                "Current/Target panel widths differ at odd terminal width {area_width}: \
+                 current={current_width}, target={target_width}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_render_editor_pair_panels_have_equal_width_at_even_terminal_widths() {
+        // EVEN widths split evenly under both the old and new implementations, so this
+        // is a baseline sanity check, not a regression test for #192 by itself -
+        // the odd-width test above is what actually catches a reverted fix.
+        for area_width in [20u16, 42, 80, 90, 100, 200] {
+            assert!(area_width % 2 == 0, "test bug: {area_width} is not even");
+            let buffer = render_editor_pair_buffer(area_width);
+            let (current_width, target_width) = top_border_panel_widths(&buffer);
+            assert_eq!(
+                current_width, target_width,
+                "Current/Target panel widths differ at even terminal width {area_width}: \
+                 current={current_width}, target={target_width}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_render_editor_pair_odd_width_regression_91() {
+        // Direct regression test for the exact live-tester repro from issue #192:
+        // total terminal width 91 (editor area 89 cols) -> Current inner width 43,
+        // Target inner width 42 under the old Percentage(50)/Percentage(50) split.
+        let buffer = render_editor_pair_buffer(91);
+        let (current_width, target_width) = top_border_panel_widths(&buffer);
+        assert_eq!(
+            current_width, target_width,
+            "issue #192 regressed: Current={current_width}, Target={target_width} at width 91"
+        );
     }
 }

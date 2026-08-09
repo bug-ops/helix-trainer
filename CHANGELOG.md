@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Setup` and `TargetState` now share their cursor/selection fields and logic through a single `CursorSpec` type (`#[serde(flatten)]`) instead of duplicating both; scenario TOML files are unaffected (#268)
 - Quest templates now use a single adjacently-tagged `QuestSpec` enum instead of a separate `type` discriminator and untagged `params` enum, making a `type`/`params` mismatch a deserialization error instead of a runtime-only check; quest TOML files are unaffected (#274)
+- **BREAKING**: `MiniGameStats` now embeds `MultiplierState` as its sole owner of the streak/multiplier tier table instead of duplicating it; the `multiplier`, `streak`, and `best_streak` fields are removed (read them via the new `multiplier()`, `streak()`, `best_streak()` accessors), and `lives`/`level` are now private with `lives()`/`level()` accessors. `MiniGameStats`'s `Serialize`/`Deserialize` wire format changes accordingly (three scalar fields become a nested `multiplier_state` object); nothing in-tree persists `MiniGameStats` today. `MiniGameStats::increase_streak`/`reset_streak`/`calculate_multiplier` and `MiniGameSession::multiplier_state`/`streak_for_next_tier` are removed as dead duplicate paths (#259)
 
 ### Fixed
 

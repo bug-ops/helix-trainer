@@ -10,7 +10,7 @@ use crate::helix::{AnyModeSimulator, EditorSnapshot};
 use crate::learning::PerformanceTracker;
 use crate::minigame::{
     DifficultyController, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
-    MultiplierChange, MultiplierState, PerformancePoint, ScoreBreakdown, ScoreCalculator,
+    MultiplierChange, PerformancePoint, ScoreBreakdown, ScoreCalculator,
     select_challenge_scenarios,
 };
 use crate::security::UserError;
@@ -253,9 +253,6 @@ pub struct MiniGameSession {
     /// Score calculator with combo tracking
     score_calculator: ScoreCalculator,
 
-    /// Multiplier state with grace mechanics
-    multiplier_state: MultiplierState,
-
     /// Last score breakdown (for UI display)
     last_score_breakdown: Option<ScoreBreakdown>,
 
@@ -335,7 +332,7 @@ impl MiniGameSession {
     /// // Create Survival mode session
     /// let mode = MiniGameMode::Survival(SurvivalConfig::default());
     /// let session = MiniGameSession::with_mode(scenarios, None, mode);
-    /// assert_eq!(session.stats().lives, 1); // Survival mode has 1 life
+    /// assert_eq!(session.stats().lives(), 1); // Survival mode has 1 life
     /// ```
     pub fn with_mode(
         scenarios: Arc<Vec<Scenario>>,
@@ -356,7 +353,6 @@ impl MiniGameSession {
             stats: MiniGameStats::new_with_lives(starting_lives),
             difficulty: DifficultyController::new(),
             score_calculator: ScoreCalculator::new(),
-            multiplier_state: MultiplierState::new(),
             last_score_breakdown: None,
             state: MiniGameState::default(),
             scenarios,
@@ -503,13 +499,9 @@ impl MiniGameSession {
                 .and_then(|m| m.difficulty)
                 .unwrap_or(Difficulty::Beginner);
 
-            // Update multiplier state (handles streak, grace, milestones)
-            self.multiplier_state.record_success();
-
-            // Sync multiplier to stats for scoring and display
-            self.stats.multiplier = self.multiplier_state.current();
-            self.stats.streak = self.multiplier_state.streak();
-            self.stats.best_streak = self.multiplier_state.best_streak();
+            // Update completion counter and multiplier state (streak, grace, milestones).
+            // Must precede scoring: the new multiplier feeds `calculate` and `add_score`.
+            self.stats.record_completion();
 
             // Calculate score using enhanced ScoreCalculator
             let base_points = self.base_points_for(scenario);
@@ -518,7 +510,7 @@ impl MiniGameSession {
                 time_ratio,
                 efficiency,
                 scenario_difficulty,
-                self.multiplier_state.current(),
+                self.stats.multiplier(),
             );
 
             // Store breakdown for UI display
@@ -526,9 +518,6 @@ impl MiniGameSession {
 
             // Award points (total already includes difficulty multiplier)
             self.stats.add_score(breakdown.total);
-
-            // Update completion counter
-            self.stats.record_completion();
 
             // Create performance point with full data
             let performance_point =
@@ -593,18 +582,11 @@ impl MiniGameSession {
     /// session.handle_timeout();
     /// ```
     pub fn handle_timeout(&mut self) {
-        // Update multiplier state (handles grace mechanics)
-        self.multiplier_state.record_failure();
-
-        // Sync multiplier to stats
-        self.stats.multiplier = self.multiplier_state.current();
-        self.stats.streak = self.multiplier_state.streak();
+        // Update multiplier state (handles grace mechanics) and failure counter
+        self.stats.record_failure();
 
         // Lose life
         let has_lives = self.stats.lose_life();
-
-        // Update statistics
-        self.stats.record_failure();
 
         // Reset combo via score calculator
         let breakdown = self.score_calculator.calculate_failure();
@@ -806,28 +788,16 @@ impl MiniGameSession {
         self.score_calculator.best_combo()
     }
 
-    /// Get reference to multiplier state
-    pub fn multiplier_state(&self) -> &MultiplierState {
-        &self.multiplier_state
-    }
-
     /// Take multiplier change event (for UI animations)
     ///
     /// Returns the change event if one occurred since last call.
     pub fn take_multiplier_change(&mut self) -> Option<MultiplierChange> {
-        self.multiplier_state.take_change()
-    }
-
-    /// Get streak count needed for next multiplier tier
-    ///
-    /// Returns None if already at maximum tier.
-    pub fn streak_for_next_tier(&self) -> Option<u32> {
-        self.multiplier_state.streak_for_next_tier()
+        self.stats.take_multiplier_change()
     }
 
     /// Get grace failures remaining
     pub fn grace_remaining(&self) -> u8 {
-        self.multiplier_state.grace_remaining()
+        self.stats.grace_remaining()
     }
 
     /// Record commands from completed scenario for FSRS learning
@@ -993,11 +963,11 @@ impl MiniGameSession {
         match &self.mode {
             MiniGameMode::Arcade(_) | MiniGameMode::Survival(_) => {
                 // Lives depleted
-                self.stats.lives == 0
+                self.stats.is_game_over()
             }
             MiniGameMode::Challenge(config) => {
                 // Lives depleted or all scenarios completed
-                self.stats.lives == 0
+                self.stats.is_game_over()
                     || self.stats.scenarios_completed >= config.scenario_count as u32
             }
         }
@@ -1052,7 +1022,7 @@ mod tests {
 
         let session = MiniGameSession::new(scenarios, None);
 
-        assert_eq!(session.stats.lives, 3);
+        assert_eq!(session.stats.lives(), 3);
         assert_eq!(session.stats.score, 0);
         assert!(session.state.is_countdown());
         assert_eq!(session.queue.len(), QUEUE_SIZE);
@@ -1083,16 +1053,16 @@ mod tests {
         session.state = MiniGameState::Playing;
         let _ = session.load_next_scenario();
 
-        assert_eq!(session.stats.lives, 3);
+        assert_eq!(session.stats.lives(), 3);
 
         session.handle_timeout();
-        assert_eq!(session.stats.lives, 2);
+        assert_eq!(session.stats.lives(), 2);
 
         session.handle_timeout();
-        assert_eq!(session.stats.lives, 1);
+        assert_eq!(session.stats.lives(), 1);
 
         session.handle_timeout();
-        assert_eq!(session.stats.lives, 0);
+        assert_eq!(session.stats.lives(), 0);
         assert!(session.state.is_game_over());
     }
 
@@ -1216,13 +1186,12 @@ mod tests {
         let mut stats = MiniGameStats::new();
 
         assert_eq!(stats.scenarios_completed, 0);
-        assert_eq!(stats.streak, 0);
+        assert_eq!(stats.streak(), 0);
 
         stats.record_completion();
-        stats.increase_streak();
 
         assert_eq!(stats.scenarios_completed, 1);
-        assert_eq!(stats.streak, 1);
+        assert_eq!(stats.streak(), 1);
     }
 
     #[test]
@@ -1239,11 +1208,13 @@ mod tests {
         session.tick_countdown();
         session.tick_countdown();
 
-        // Manually set streak high
-        session.stats.streak = 5;
+        // Build up a real streak
+        for _ in 0..5 {
+            session.stats.record_completion();
+        }
         session.handle_timeout();
 
-        assert_eq!(session.stats().streak, 0);
+        assert_eq!(session.stats().streak(), 0);
     }
 
     #[test]
@@ -1325,7 +1296,7 @@ mod tests {
         let mode = MiniGameMode::Survival(SurvivalConfig::default());
         let session = MiniGameSession::with_mode(scenarios, None, mode);
 
-        assert_eq!(session.stats().lives, 1);
+        assert_eq!(session.stats().lives(), 1);
         assert!(session.mode().is_survival());
     }
 
@@ -1347,7 +1318,7 @@ mod tests {
         // Single timeout should end the game
         session.handle_timeout();
 
-        assert_eq!(session.stats().lives, 0);
+        assert_eq!(session.stats().lives(), 0);
         assert!(session.state().is_game_over());
     }
 
@@ -1361,7 +1332,7 @@ mod tests {
         let mode = MiniGameMode::Challenge(ChallengeConfig::for_today());
         let session = MiniGameSession::with_mode(scenarios, None, mode);
 
-        assert_eq!(session.stats().lives, 3);
+        assert_eq!(session.stats().lives(), 3);
         assert!(session.mode().is_challenge());
     }
 
@@ -1391,7 +1362,7 @@ mod tests {
         // Default constructor uses Arcade mode
         let session = MiniGameSession::new(scenarios, None);
 
-        assert_eq!(session.stats().lives, 3);
+        assert_eq!(session.stats().lives(), 3);
         assert!(session.mode().is_arcade());
         assert!(session.mode().has_session_timer());
     }
@@ -1416,7 +1387,7 @@ mod tests {
         assert!(!session.check_game_over());
 
         // Game over when lives depleted
-        session.stats.lives = 0;
+        while session.stats.lose_life() {}
         assert!(session.check_game_over());
     }
 
@@ -1439,7 +1410,7 @@ mod tests {
 
         // Also game over when lives depleted
         session.stats.scenarios_completed = 5;
-        session.stats.lives = 0;
+        while session.stats.lose_life() {}
         assert!(session.check_game_over());
         assert!(!session.is_challenge_complete());
     }

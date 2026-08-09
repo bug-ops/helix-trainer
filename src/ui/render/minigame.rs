@@ -267,7 +267,7 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
 
     // Lives as hearts
     let lives_str: String = (0..5)
-        .map(|i| if i < stats.lives { '♥' } else { '♡' })
+        .map(|i| if i < stats.lives() { '♥' } else { '♡' })
         .collect();
 
     // Grace indicator (shield when available)
@@ -275,7 +275,7 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     let grace_str = if grace > 0 { " [G]" } else { "" };
 
     // Multiplier color based on value
-    let mult_color = match stats.multiplier as u32 {
+    let mult_color = match stats.multiplier() as u32 {
         0..=1 => Color::Gray,
         2 => Color::Green,
         3 => Color::Yellow,
@@ -297,7 +297,7 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         Span::raw("  "),
         Span::styled("MULT: ", Style::default().fg(Color::Gray)),
         Span::styled(
-            format!("x{:.1}", stats.multiplier),
+            format!("x{:.1}", stats.multiplier()),
             Style::default().fg(mult_color).add_modifier(Modifier::BOLD),
         ),
         Span::styled(grace_str, Style::default().fg(Color::Cyan)),
@@ -322,7 +322,7 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         Span::raw("  "),
         Span::styled("STREAK: ", Style::default().fg(Color::Gray)),
         Span::styled(
-            format!("{:>2}", stats.streak),
+            format!("{:>2}", stats.streak()),
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
@@ -336,7 +336,7 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         Span::raw("  "),
         Span::styled("BEST: ", Style::default().fg(Color::Gray)),
         Span::styled(
-            format!("{}", stats.best_streak),
+            format!("{}", stats.best_streak()),
             Style::default().fg(Color::Green),
         ),
     ]);
@@ -484,7 +484,7 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         Line::from(vec![
             Span::styled("Best Streak: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                format!("{}", stats.best_streak),
+                format!("{}", stats.best_streak()),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),

@@ -594,13 +594,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
     match msg {
         // Navigation messages (don't require specific screen)
         Message::QuitApp => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_quit_app(&mut ctx)?;
+            let outcome = handlers::handle_quit_app(state)?;
             apply_outcome(state, outcome);
             Ok(())
         }

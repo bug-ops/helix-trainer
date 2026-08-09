@@ -6,16 +6,26 @@
 
 use crate::security::UserError;
 use crate::ui::state::{
-    AchievementsData, CategoryFiltersData, HandlerContext, HandlerOutcome, MenuData, MiniGameData,
-    ModeSelectionData, ProfileData, ReturnDestination, Screen, StatisticsData, TypedScreen,
+    AchievementsData, AppState, CategoryFiltersData, HandlerContext, HandlerOutcome, MenuData,
+    MiniGameData, ModeSelectionData, ProfileData, ReturnDestination, Screen, StatisticsData,
+    TypedScreen,
 };
 
 /// Handle QuitApp message
 ///
-/// Sets the running flag to false to exit the application.
-/// Does not require screen data - operates on UIState.
-pub fn handle_quit_app(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
-    ctx.ui.running = false;
+/// The single sink for exiting the application: sets the running flag to
+/// false so the event loop stops. Every code path that quits the app (the
+/// global Ctrl-C shortcut, the main-menu "Quit" item, etc.) must route
+/// through this function rather than setting `ui.running` directly, so a
+/// mid-session arcade quit always awards its XP/score/FSRS bookkeeping via
+/// [`super::minigame::handle_minigame_game_over`] - idempotent per session,
+/// so calling it here is safe even if bookkeeping already ran for this
+/// session through another path (e.g. an in-game timeout).
+pub fn handle_quit_app(state: &mut AppState) -> Result<HandlerOutcome, UserError> {
+    if state.game.minigame_session.is_some() {
+        super::minigame::handle_minigame_game_over(state)?;
+    }
+    state.ui.running = false;
     Ok(HandlerOutcome::Stay)
 }
 
@@ -106,16 +116,26 @@ mod tests {
         )
     }
 
+    fn create_test_app_state() -> AppState {
+        let (ui, game, progress, config) = create_test_context();
+        AppState {
+            screen: TypedScreen::ModeSelection(ModeSelectionData::default()),
+            ui,
+            game,
+            progress,
+            config,
+        }
+    }
+
     #[test]
     fn test_quit_app() {
-        let (mut ui, mut game, mut progress, config) = create_test_context();
-        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+        let mut state = create_test_app_state();
 
-        assert!(ctx.ui.running);
-        let outcome = handle_quit_app(&mut ctx).unwrap();
+        assert!(state.ui.running);
+        let outcome = handle_quit_app(&mut state).unwrap();
 
         assert!(outcome.is_stay());
-        assert!(!ctx.ui.running);
+        assert!(!state.ui.running);
     }
 
     #[test]

@@ -112,6 +112,52 @@ fn test_menu_select_quit() {
     assert!(!state.ui.running);
 }
 
+/// Regression test for #324 (impl-critic finding S1): `ui.running` has a
+/// second writer besides `QuitApp` - the main-menu "Quit" item - which
+/// previously set it directly and skipped arcade game-over bookkeeping. A
+/// live arcade session reaches this menu without ever passing through
+/// `QuitApp`: pausing arcade and then abandoning a review session (started
+/// as a detour, e.g. via `p` -> Profile -> `r`) unconditionally lands on
+/// `TypedScreen::Menu` without touching `game.minigame_session`. Selecting
+/// Quit from there must still award that session's XP/score.
+#[test]
+fn test_menu_select_quit_awards_live_minigame_session_reached_via_review_detour() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+
+    update(&mut state, Message::StartMiniGame).unwrap();
+    assert!(state.game.minigame_session.is_some());
+    if let Some(ref mut session) = state.game.minigame_session {
+        session.stats.score = 7777;
+    }
+
+    // Abandoning a review session unconditionally lands on Menu, regardless
+    // of whether a review was actually in progress, and never touches
+    // `minigame_session` - reproducing the menu-Quit-reachable-with-a-live-
+    // session path without needing due reviews to be seeded.
+    update(&mut state, Message::AbandonReviewSession).unwrap();
+    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert!(
+        state.game.minigame_session.is_some(),
+        "the paused arcade session must still be live once the Menu screen is reached"
+    );
+
+    let scenario_count = state.game.scenario_collection.count();
+    if let TypedScreen::Menu(menu_data) = &mut state.screen {
+        menu_data.selected_item = scenario_count + 3; // Quit
+    }
+    let initial_xp = state.progress.profile.total_xp;
+
+    update(&mut state, Message::MenuSelect).unwrap();
+
+    assert!(!state.ui.running);
+    assert!(
+        state.progress.profile.total_xp > initial_xp,
+        "quitting via the main menu's Quit item must award the still-live session's XP too"
+    );
+    assert_eq!(state.progress.profile.minigame_high_score, 7777);
+}
+
 #[test]
 fn test_menu_select_profile() {
     let scenario = create_test_scenario();

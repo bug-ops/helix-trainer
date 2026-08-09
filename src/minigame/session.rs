@@ -288,6 +288,16 @@ pub struct MiniGameSession {
 
     /// Index into selected_scenarios for Challenge mode
     challenge_scenario_index: usize,
+
+    /// Whether game-over bookkeeping (FSRS recording, XP award, profile save)
+    /// has already run for this session.
+    ///
+    /// Guards against double-processing when independent call sites can each
+    /// try to run bookkeeping for the same session - e.g. a per-scenario
+    /// timeout that reaches [`MiniGameState::GameOver`] and a later manual
+    /// quit both reacting to the same finished session. See
+    /// [`Self::try_begin_game_over`].
+    game_over_processed: bool,
 }
 
 impl MiniGameSession {
@@ -373,6 +383,7 @@ impl MiniGameSession {
             mode,
             selected_scenarios,
             challenge_scenario_index: 0,
+            game_over_processed: false,
         };
 
         // Pre-fill queue
@@ -777,6 +788,33 @@ impl MiniGameSession {
         self.state
     }
 
+    /// Check-and-set, in a single call, whether game-over bookkeeping should
+    /// run for this session.
+    ///
+    /// Returns `true` the first time it is called for a given session, and
+    /// `false` on every subsequent call. Callers that run game-over
+    /// bookkeeping (FSRS recording, XP award, profile save) should call this
+    /// unconditionally and skip the work when it returns `false`, instead of
+    /// inferring "already processed" from [`MiniGameState::GameOver`] - that
+    /// state can be reached, or bookkeeping can be requested mid-session,
+    /// from more than one call site.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let mut session = MiniGameSession::new(scenarios, None);
+    /// assert!(session.try_begin_game_over());
+    /// assert!(!session.try_begin_game_over());
+    /// ```
+    pub(crate) fn try_begin_game_over(&mut self) -> bool {
+        if self.game_over_processed {
+            false
+        } else {
+            self.game_over_processed = true;
+            true
+        }
+    }
+
     /// Get difficulty level
     pub fn difficulty_level(&self) -> u8 {
         self.difficulty.current_level()
@@ -1098,6 +1136,18 @@ mod tests {
         assert_eq!(session.stats.score, 0);
         assert!(session.state.is_countdown());
         assert_eq!(session.queue.len(), QUEUE_SIZE);
+    }
+
+    /// Regression test for #323: `try_begin_game_over` must only return `true`
+    /// once per session, regardless of how many independent call sites ask.
+    #[test]
+    fn test_try_begin_game_over_is_idempotent() {
+        let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
+        let mut session = MiniGameSession::new(scenarios, None);
+
+        assert!(session.try_begin_game_over());
+        assert!(!session.try_begin_game_over());
+        assert!(!session.try_begin_game_over());
     }
 
     #[test]

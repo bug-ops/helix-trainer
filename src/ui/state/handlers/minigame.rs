@@ -387,7 +387,13 @@ pub(in crate::ui::state) fn handle_minigame_next_scenario(
 
 /// Handle game over - calculate XP, update profile, save progress
 ///
-/// Called when the mini-game ends (player runs out of lives).
+/// Called whenever a mini-game session ends or is abandoned: out-of-lives
+/// timeout, session-level time limit, or a mid-session quit. Idempotent per
+/// session via [`MiniGameSession::try_begin_game_over`] - callers may invoke
+/// this unconditionally whenever a session exists, without checking
+/// [`MiniGameState::GameOver`](crate::minigame::MiniGameState::GameOver)
+/// themselves; a second call for the same session is a no-op.
+///
 /// Performs final integration with progression systems:
 /// - Records final FSRS data for last scenario
 /// - Calculates and awards XP
@@ -396,6 +402,16 @@ pub(in crate::ui::state) fn handle_minigame_next_scenario(
 pub(in crate::ui::state) fn handle_minigame_game_over(
     state: &mut AppState,
 ) -> Result<(), UserError> {
+    let should_process = state
+        .game
+        .minigame_session
+        .as_mut()
+        .is_some_and(|session| session.try_begin_game_over());
+
+    if !should_process {
+        return Ok(());
+    }
+
     if let Some(ref session) = state.game.minigame_session {
         let stats = session.stats();
 
@@ -461,14 +477,10 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
 pub(in crate::ui::state) fn handle_minigame_back_to_menu(
     state: &mut AppState,
 ) -> Result<HandlerOutcome, UserError> {
-    // `handle_minigame_timeout` already runs `handle_minigame_game_over` once the
-    // session reaches `GameOver` (out of lives); re-running it here on the same
-    // session would double-award XP/stats and could push a second LevelUp
-    // notification. Only quitting mid-game (session not yet `GameOver`) still needs
-    // it run here.
-    if let Some(ref session) = state.game.minigame_session
-        && !session.state().is_game_over()
-    {
+    // `handle_minigame_game_over` is idempotent per session (see its doc comment),
+    // so it's safe to call unconditionally here even if a prior timeout already
+    // ran it for this same session.
+    if state.game.minigame_session.is_some() {
         handle_minigame_game_over(state)?;
     }
     state.game.minigame_session = None;

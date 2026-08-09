@@ -8,7 +8,9 @@
 //!
 //! Notifications auto-dismiss after a configurable duration (default 3 seconds).
 
-use crate::constants::{DEFAULT_NOTIFICATION_DURATION, MAX_VISIBLE_NOTIFICATIONS};
+use crate::constants::{
+    DEFAULT_NOTIFICATION_DURATION, MAX_VISIBLE_NOTIFICATIONS, STREAK_FREEZE_MAX_GAP_DAYS,
+};
 use std::time::{Duration, Instant};
 
 /// Type of notification to display
@@ -26,14 +28,24 @@ pub enum NotificationType {
     /// Streak milestone reached
     StreakMilestone { streak: u32 },
 
-    /// Streak freeze earned (protects the streak if a day is missed)
+    /// Streak freeze earned (protects the streak across a brief absence)
     StreakFreezeGranted,
 
-    /// Streak freeze consumed (a missed day was protected by an earned freeze)
+    /// Streak freeze consumed (an absence was protected by an earned freeze)
     StreakFreezeUsed,
 
-    /// Streak broken (a missed day with no freeze available reset it to zero)
-    StreakBroken { was_streak: u32 },
+    /// Streak broken (reset to zero)
+    ///
+    /// `freeze_could_not_cover_gap` distinguishes a break that happened
+    /// despite a held freeze (the gap was longer than the freeze covers)
+    /// from every other break reason (no freeze held, or a
+    /// non-positive/backwards-clock gap). Only meaningful when
+    /// `was_streak > 0` - this notification is only ever raised for an
+    /// actual streak at stake.
+    StreakBroken {
+        was_streak: u32,
+        freeze_could_not_cover_gap: bool,
+    },
 
     /// Informational message
     Info { message: String },
@@ -159,16 +171,29 @@ impl Notification {
                 format!("Keep it up! {} days in a row", streak)
             }
             NotificationType::StreakFreezeGranted => {
-                "Miss a day without breaking your streak".to_string()
+                format!(
+                    "Away for up to {} days without breaking your streak",
+                    STREAK_FREEZE_MAX_GAP_DAYS
+                )
             }
             NotificationType::StreakFreezeUsed => {
-                "Your streak was protected after a missed day".to_string()
+                "Your streak was protected while you were away".to_string()
             }
-            NotificationType::StreakBroken { was_streak } => {
-                format!(
-                    "Your {} day streak was reset after a missed day",
-                    was_streak
-                )
+            NotificationType::StreakBroken {
+                was_streak,
+                freeze_could_not_cover_gap,
+            } => {
+                if *freeze_could_not_cover_gap {
+                    format!(
+                        "Your {} day streak was reset - you were away longer than your freeze covers ({} days max)",
+                        was_streak, STREAK_FREEZE_MAX_GAP_DAYS
+                    )
+                } else {
+                    format!(
+                        "Your {} day streak was reset after a missed day",
+                        was_streak
+                    )
+                }
             }
             NotificationType::Info { message } => message.clone(),
             NotificationType::ReviewSessionComplete {
@@ -407,7 +432,43 @@ mod tests {
         assert_eq!(freeze_granted.title(), "Streak Freeze Earned!");
         assert_eq!(
             freeze_granted.message(),
-            "Miss a day without breaking your streak"
+            format!(
+                "Away for up to {} days without breaking your streak",
+                STREAK_FREEZE_MAX_GAP_DAYS
+            )
+        );
+
+        let freeze_used = Notification::new(NotificationType::StreakFreezeUsed);
+        assert_eq!(freeze_used.title(), "Streak Freeze Used");
+        assert_eq!(
+            freeze_used.message(),
+            "Your streak was protected while you were away"
+        );
+
+        // Regression coverage for #345: the two `StreakBroken` reject reasons
+        // must render distinct copy so a cap-exceeded break (freeze held but
+        // insufficient) doesn't read like a plain missed-day break.
+        let streak_broken_no_freeze = Notification::new(NotificationType::StreakBroken {
+            was_streak: 5,
+            freeze_could_not_cover_gap: false,
+        });
+        assert_eq!(streak_broken_no_freeze.title(), "Streak Broken");
+        assert_eq!(
+            streak_broken_no_freeze.message(),
+            "Your 5 day streak was reset after a missed day"
+        );
+
+        let streak_broken_freeze_insufficient = Notification::new(NotificationType::StreakBroken {
+            was_streak: 5,
+            freeze_could_not_cover_gap: true,
+        });
+        assert_eq!(streak_broken_freeze_insufficient.title(), "Streak Broken");
+        assert_eq!(
+            streak_broken_freeze_insufficient.message(),
+            format!(
+                "Your 5 day streak was reset - you were away longer than your freeze covers ({} days max)",
+                STREAK_FREEZE_MAX_GAP_DAYS
+            )
         );
 
         let review_complete = Notification::new(NotificationType::ReviewSessionComplete {

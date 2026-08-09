@@ -124,9 +124,15 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                         .notifications
                         .push(Notification::new(NotificationType::StreakFreezeUsed));
                 }
-                StreakChange::Broken { was_streak } if was_streak > 0 => {
+                StreakChange::Broken {
+                    was_streak,
+                    freeze_could_not_cover_gap,
+                } if was_streak > 0 => {
                     state.ui.notifications.push(Notification::new(
-                        NotificationType::StreakBroken { was_streak },
+                        NotificationType::StreakBroken {
+                            was_streak,
+                            freeze_could_not_cover_gap,
+                        },
                     ));
                 }
                 _ => {}
@@ -235,6 +241,7 @@ mod tests {
     use super::*;
     use helix_trainer::{
         config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState},
+        constants::STREAK_FREEZE_MAX_GAP_DAYS,
         gamification::ProfileStorage,
     };
 
@@ -590,8 +597,49 @@ mod tests {
                 .notifications
                 .visible()
                 .iter()
-                .any(|n| n.notification_type == NotificationType::StreakBroken { was_streak: 5 }),
+                .any(|n| n.notification_type
+                    == NotificationType::StreakBroken {
+                        was_streak: 5,
+                        freeze_could_not_cover_gap: false
+                    }),
             "expected a StreakBroken notification when a streak breaks with no freeze available"
+        );
+    }
+
+    /// Regression test for #345: when a gap exceeds the freeze's coverage cap
+    /// even though a freeze was held, the freeze stays held (per #325/#344)
+    /// and the resulting `StreakBroken` notification must flag that the
+    /// freeze couldn't cover this specific gap, rather than reading like a
+    /// plain missed-day break.
+    #[test]
+    fn test_handle_profile_ready_notifies_on_streak_broken_beyond_freeze_cap() {
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        profile.current_streak = 5;
+        profile.streak_freeze_available = true;
+        // Gap exceeds the freeze coverage cap, so the freeze can't protect it.
+        profile.last_activity = Utc::now() - chrono::Duration::days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
+
+        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        assert!(result.is_ok());
+        assert_eq!(state.progress.profile.current_streak, 0);
+        assert!(
+            state.progress.profile.streak_freeze_available,
+            "freeze must remain held since it couldn't cover this gap"
+        );
+        assert!(
+            state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| n.notification_type
+                    == NotificationType::StreakBroken {
+                        was_streak: 5,
+                        freeze_could_not_cover_gap: true
+                    }),
+            "expected a StreakBroken notification flagging that a freeze was held but insufficient"
         );
     }
 

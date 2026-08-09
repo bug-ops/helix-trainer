@@ -9,7 +9,33 @@ use ratatui::{
 };
 use rust_i18n::t;
 
+/// Number of fixed, selectable menu entries after the scenario list: Review, Profile, Statistics, Quit.
+///
+/// Mirrors `handlers::menu::FIXED_MENU_ITEMS`. Duplicated here because `ui::render` and
+/// `ui::state::handlers` are separate module trees (handlers stays private to `ui::state`);
+/// keep the two literals in sync.
+const FIXED_MENU_ITEMS: usize = 4;
+
+/// Number of rendered rows appended after the scenario list: the `FIXED_MENU_ITEMS`
+/// selectable entries plus the non-selectable separator row `build_menu_items` inserts
+/// before them. Used for scroll-offset/scrollbar math, which operates on rendered rows —
+/// NOT for user-facing item counts (see `FIXED_MENU_ITEMS` for those).
+const RENDERED_FIXED_ROWS: usize = FIXED_MENU_ITEMS + 1;
+
+/// Converts a logical selection index into its rendered-row index.
+///
+/// `selected_item` is a scenario index (`0..scenario_count`) or one of the fixed entries
+/// (`scenario_count..scenario_count+FIXED_MENU_ITEMS`). `build_menu_items` inserts a
+/// separator row between the two groups, so any fixed-entry selection sits one row further
+/// down than its logical index suggests.
+fn selection_to_row(selected_item: usize, scenario_count: usize) -> usize {
+    selected_item + usize::from(selected_item >= scenario_count)
+}
+
 /// Calculate menu scroll offset to keep selected item visible
+///
+/// Both `selected` and `total_items` must be in the same coordinate space as the rendered
+/// row list (see `selection_to_row`) — this function has no way to detect a space mismatch.
 ///
 /// Returns (scroll_offset, visible_count) tuple
 fn calculate_menu_scroll(
@@ -253,7 +279,11 @@ pub(super) fn render_main_menu_background(frame: &mut Frame, state: &AppState) {
 
     // Calculate visible area height for menu (excluding borders)
     let menu_height = chunks[2].height.saturating_sub(2) as usize;
-    let total_items = state.game.scenario_collection.count() + 4; // +4 for Review, Profile, Statistics, Quit
+    let scenario_count = state.game.scenario_collection.count();
+    // display_total is the user-facing item count (title, instructions threshold);
+    // row_total is the rendered row count (includes the separator) for scroll/scrollbar math.
+    let display_total = scenario_count + FIXED_MENU_ITEMS;
+    let row_total = scenario_count + RENDERED_FIXED_ROWS;
 
     // Use default scroll offset (0) for background render - no selection
     let scroll_offset = 0;
@@ -269,18 +299,18 @@ pub(super) fn render_main_menu_background(frame: &mut Frame, state: &AppState) {
         .collect();
 
     // Add scroll indicator to title if list is scrollable
-    let menu_title = if total_items > menu_height {
+    let menu_title = if row_total > menu_height {
         let first_visible = scroll_offset + 1;
-        let last_visible = (scroll_offset + menu_height).min(total_items);
+        let last_visible = (scroll_offset + menu_height).min(display_total);
         t!(
             "menu.main_menu_with_scroll",
             first = first_visible,
             last = last_visible,
-            total = total_items
+            total = display_total
         )
         .to_string()
     } else {
-        t!("menu.main_menu_total", total = total_items).to_string()
+        t!("menu.main_menu_total", total = display_total).to_string()
     };
 
     let menu = List::new(visible_items)
@@ -292,12 +322,12 @@ pub(super) fn render_main_menu_background(frame: &mut Frame, state: &AppState) {
     render_quest_panel(frame, chunks[3], state);
 
     // Draw scrollbar if needed
-    if total_items > menu_height {
-        render_scrollbar(frame, chunks[2], scroll_offset, total_items, menu_height);
+    if row_total > menu_height {
+        render_scrollbar(frame, chunks[2], scroll_offset, row_total, menu_height);
     }
 
     // Instructions
-    let instructions = if total_items > 9 {
+    let instructions = if display_total > 9 {
         Paragraph::new(t!("menu.instructions_with_numbers").to_string())
     } else {
         Paragraph::new(t!("menu.instructions").to_string())
@@ -348,19 +378,31 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
 
     // Calculate visible area height for menu (excluding borders)
     let menu_height = chunks[2].height.saturating_sub(2) as usize;
-    let total_items = state.game.scenario_collection.count() + 4; // +4 for Review, Profile, Statistics, Quit
+    let scenario_count = state.game.scenario_collection.count();
+    // display_total is the user-facing item count (title, instructions threshold);
+    // row_total is the rendered row count (includes the separator) for scroll/scrollbar math.
+    let display_total = scenario_count + FIXED_MENU_ITEMS;
+    let row_total = scenario_count + RENDERED_FIXED_ROWS;
 
     // Get mutable access to menu_data for adjusting scroll
     let TypedScreen::Menu(menu_data) = &mut state.screen else {
         unreachable!("Already checked above")
     };
 
-    // Calculate scroll offset
+    // A filter change may have shrunk the scenario list since selected_item was last set
+    // (e.g. toggling a category filter while a later item was selected); clamp here, the
+    // single point every path that can select a menu item funnels through before display.
+    menu_data.selected_item = menu_data.selected_item.min(display_total.saturating_sub(1));
+
+    // Calculate scroll offset (in rendered-row space, matching row_total and the skip()
+    // below — build_menu_items' separator row shifts fixed entries one row past their
+    // logical index, see selection_to_row)
+    let selected_row = selection_to_row(menu_data.selected_item, scenario_count);
     let (scroll_offset, _) = calculate_menu_scroll(
-        menu_data.selected_item,
+        selected_row,
         menu_data.scroll_offset,
         menu_height,
-        total_items,
+        row_total,
     );
     menu_data.scroll_offset = scroll_offset;
 
@@ -378,18 +420,18 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
         .collect();
 
     // Add scroll indicator to title if list is scrollable
-    let menu_title = if total_items > menu_height {
+    let menu_title = if row_total > menu_height {
         let first_visible = scroll_offset + 1;
-        let last_visible = (scroll_offset + menu_height).min(total_items);
+        let last_visible = (scroll_offset + menu_height).min(display_total);
         t!(
             "menu.main_menu_with_scroll",
             first = first_visible,
             last = last_visible,
-            total = total_items
+            total = display_total
         )
         .to_string()
     } else {
-        t!("menu.main_menu_total", total = total_items).to_string()
+        t!("menu.main_menu_total", total = display_total).to_string()
     };
 
     let menu = List::new(visible_items)
@@ -401,12 +443,12 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &mut AppState) {
     render_quest_panel(frame, chunks[3], state);
 
     // Draw scrollbar if needed
-    if total_items > menu_height {
-        render_scrollbar(frame, chunks[2], scroll_offset, total_items, menu_height);
+    if row_total > menu_height {
+        render_scrollbar(frame, chunks[2], scroll_offset, row_total, menu_height);
     }
 
     // Instructions
-    let instructions = if total_items > 9 {
+    let instructions = if display_total > 9 {
         Paragraph::new(t!("menu.instructions_with_numbers").to_string())
     } else {
         Paragraph::new(t!("menu.instructions").to_string())
@@ -585,6 +627,121 @@ mod tests {
         fn test_calculate_menu_scroll_returns_visible_height() {
             let (_, visible) = calculate_menu_scroll(5, 0, 10, 20);
             assert_eq!(visible, 10);
+        }
+    }
+
+    // Regression tests for #311: Quit must be scrollable into view.
+    //
+    // `calculate_menu_scroll` operates purely on whatever index space it's given, so a test
+    // that only checks its output in isolation (as `calculate_menu_scroll_tests` above does)
+    // cannot catch a caller passing it the wrong space. These tests instead combine
+    // `selection_to_row` with `calculate_menu_scroll` exactly as `render_main_menu` does, and
+    // assert on the property that actually matters: the selected item's *rendered row* must
+    // fall inside the visible window after scrolling. A caller that skips `selection_to_row`
+    // (passing the logical `scenario_count + FIXED_MENU_ITEMS - 1` index straight through, as
+    // the original code and the first, inert `RENDERED_FIXED_ROWS`-only fix both did) computes
+    // an offset that is exactly one row short of this for every case below.
+    mod quit_reachability_tests {
+        use super::*;
+
+        fn assert_quit_row_visible(scenario_count: usize, visible_height: usize) {
+            let quit_selected_item = scenario_count + FIXED_MENU_ITEMS - 1;
+            let row_total = scenario_count + RENDERED_FIXED_ROWS;
+
+            // Ground truth, independent of `selection_to_row` (the function under test):
+            // `build_menu_items` always lays out scenario rows, then 1 separator row, then
+            // the 4 fixed entries, so Quit's physical row is always `row_total - 1`. Deriving
+            // this from `selection_to_row` instead would make the assertion vacuous against a
+            // broken (e.g. identity) `selection_to_row`, since `calculate_menu_scroll` always
+            // makes whatever row it's given visible.
+            let true_quit_row = row_total - 1;
+
+            let scroll_input_row = selection_to_row(quit_selected_item, scenario_count);
+            let (offset, _) = calculate_menu_scroll(scroll_input_row, 0, visible_height, row_total);
+
+            assert!(
+                offset <= true_quit_row && true_quit_row < offset + visible_height,
+                "Quit's true rendered row {true_quit_row} not inside visible window \
+                 [{offset}, {}) for scenario_count={scenario_count}, visible_height={visible_height} \
+                 (selection_to_row produced {scroll_input_row})",
+                offset + visible_height
+            );
+        }
+
+        #[test]
+        fn test_quit_reachable_critic_counterexample_10_5() {
+            assert_quit_row_visible(10, 5);
+        }
+
+        #[test]
+        fn test_quit_reachable_critic_counterexample_20_10() {
+            assert_quit_row_visible(20, 10);
+        }
+
+        #[test]
+        fn test_quit_reachable_critic_counterexample_50_12() {
+            assert_quit_row_visible(50, 12);
+        }
+
+        #[test]
+        fn test_quit_reachable_large_scenario_count() {
+            assert_quit_row_visible(200, 20);
+        }
+
+        #[test]
+        fn test_quit_reachable_visible_height_of_one() {
+            // Degenerate but valid: a single visible row must still be able to show Quit.
+            assert_quit_row_visible(10, 1);
+        }
+    }
+
+    // Regression test for #311: end-to-end through the real update()/render_main_menu()
+    // pipeline, not just the scroll-math helpers directly.
+    mod quit_reachable_end_to_end {
+        use super::*;
+        use crate::testing::{ScenarioBuilder, test_app_state_with_scenarios};
+        use crate::ui::state::{MenuData, Message, TypedScreen, update};
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        #[test]
+        fn test_quit_visible_after_scrolling_down_through_long_menu() {
+            let scenarios: Vec<_> = (0..30)
+                .map(|i| {
+                    ScenarioBuilder::new()
+                        .id(format!("scenario_{i}"))
+                        .setup_content("line 1\n")
+                        .target_content("line 2\n")
+                        .optimal_count(1)
+                        .build()
+                })
+                .collect();
+            let scenario_count = scenarios.len();
+            let mut state = test_app_state_with_scenarios(scenarios);
+            state.screen = TypedScreen::Menu(MenuData::default());
+
+            let backend = TestBackend::new(80, 24);
+            let mut terminal = Terminal::new(backend).unwrap();
+
+            let mut last_text = String::new();
+            for _ in 0..(scenario_count + FIXED_MENU_ITEMS) {
+                update(&mut state, Message::MenuDown).unwrap();
+                terminal.draw(|f| render_main_menu(f, &mut state)).unwrap();
+                let buffer = terminal.backend().buffer().clone();
+                last_text = buffer.content.iter().map(|c| c.symbol()).collect();
+            }
+
+            let TypedScreen::Menu(menu_data) = &state.screen else {
+                panic!("expected TypedScreen::Menu");
+            };
+            assert_eq!(
+                menu_data.selected_item,
+                scenario_count + FIXED_MENU_ITEMS - 1
+            );
+            assert!(
+                last_text.contains("Quit"),
+                "Quit not visible after scrolling to the end of a {scenario_count}-scenario menu: {last_text}"
+            );
         }
     }
 }

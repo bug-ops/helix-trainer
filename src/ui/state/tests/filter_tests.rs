@@ -3,7 +3,7 @@
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::config::{CompletionFilter, Difficulty, ScenarioCategory, SortMode};
 use crate::testing::ScenarioBuilder;
-use crate::ui::state::{Message, update};
+use crate::ui::state::{Message, TypedScreen, update};
 
 /// Create scenarios with different categories and difficulties
 fn create_diverse_scenarios() -> Vec<crate::config::Scenario> {
@@ -282,4 +282,125 @@ fn test_filter_with_empty_result() {
 
     // Selection+Beginner doesn't exist, should show 0
     assert_eq!(state.game.scenario_collection.count(), 0);
+}
+
+// ==================== Regression tests for #312 ====================
+// Filter toggles that shrink the filtered scenario list must clamp
+// MenuData::selected_item back into bounds, or the menu can end up
+// pointing at an index past the end of the (now shorter) item list.
+
+fn selected_menu_item(state: &crate::ui::state::AppState) -> usize {
+    match &state.screen {
+        TypedScreen::Menu(menu_data) => menu_data.selected_item,
+        other => panic!("expected TypedScreen::Menu, got {other:?}"),
+    }
+}
+
+fn set_selected_menu_item(state: &mut crate::ui::state::AppState, index: usize) {
+    match &mut state.screen {
+        TypedScreen::Menu(menu_data) => menu_data.selected_item = index,
+        other => panic!("expected TypedScreen::Menu, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_toggle_category_filter_clamps_selection_when_list_shrinks() {
+    let scenarios = create_diverse_scenarios();
+    let mut state = create_test_app_state(scenarios);
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // 4 scenarios + 4 fixed entries = 8 items, last valid index is 7 (Quit)
+    set_selected_menu_item(&mut state, 7);
+
+    // Movement filter shrinks the list to 2 scenarios: 2 + 4 = 6 items, last index 5
+    update(
+        &mut state,
+        Message::ToggleCategoryFilter(ScenarioCategory::Movement),
+    )
+    .unwrap();
+
+    assert_eq!(state.game.scenario_collection.count(), 2);
+    assert_eq!(selected_menu_item(&state), 5);
+}
+
+#[test]
+fn test_toggle_difficulty_filter_clamps_selection_when_list_shrinks() {
+    let scenarios = create_diverse_scenarios();
+    let mut state = create_test_app_state(scenarios);
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    set_selected_menu_item(&mut state, 7);
+
+    // Beginner filter shrinks the list to 2 scenarios (both movement_*): last index 5
+    update(
+        &mut state,
+        Message::ToggleDifficultyFilter(Difficulty::Beginner),
+    )
+    .unwrap();
+
+    assert_eq!(state.game.scenario_collection.count(), 2);
+    assert_eq!(selected_menu_item(&state), 5);
+}
+
+#[test]
+fn test_toggle_completed_filter_clamps_selection_to_fixed_entries_when_list_becomes_empty() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // 1 scenario + 4 fixed entries = 5 items, last valid index is 4 (Quit)
+    set_selected_menu_item(&mut state, 4);
+
+    // "Completed only" filter hides the one (uncompleted) scenario entirely
+    update(&mut state, Message::ToggleCompletedFilter).unwrap();
+
+    assert_eq!(state.game.scenario_collection.count(), 0);
+    // The 4 fixed entries remain selectable even with an empty scenario list
+    assert_eq!(selected_menu_item(&state), 3);
+}
+
+#[test]
+fn test_toggle_category_filter_clamps_selection_across_sequential_toggles_to_empty() {
+    let scenarios = create_diverse_scenarios();
+    let mut state = create_test_app_state(scenarios);
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    set_selected_menu_item(&mut state, 7);
+
+    // Selection category alone leaves 1 scenario: 1 + 4 = 5 items, last index 4
+    update(
+        &mut state,
+        Message::ToggleCategoryFilter(ScenarioCategory::Selection),
+    )
+    .unwrap();
+    assert_eq!(state.game.scenario_collection.count(), 1);
+    assert_eq!(selected_menu_item(&state), 4);
+
+    // Combined with Beginner, Selection+Beginner has no matches: 0 + 4 = 4 items, last index 3
+    update(
+        &mut state,
+        Message::ToggleDifficultyFilter(Difficulty::Beginner),
+    )
+    .unwrap();
+    assert_eq!(state.game.scenario_collection.count(), 0);
+    assert_eq!(selected_menu_item(&state), 3);
+}
+
+#[test]
+fn test_toggle_filter_does_not_change_selection_when_already_in_bounds() {
+    let scenarios = create_diverse_scenarios();
+    let mut state = create_test_app_state(scenarios);
+    update(&mut state, Message::SelectTrainingMode).unwrap();
+
+    // Selection stays at 0, well within bounds of the shrunk list too
+    set_selected_menu_item(&mut state, 0);
+
+    update(
+        &mut state,
+        Message::ToggleCategoryFilter(ScenarioCategory::Movement),
+    )
+    .unwrap();
+
+    assert_eq!(state.game.scenario_collection.count(), 2);
+    assert_eq!(selected_menu_item(&state), 0);
 }

@@ -11,9 +11,14 @@ use crate::ui::state::{AppState, HandlerContext, HandlerOutcome, MenuData};
 /// Number of fixed menu entries appended after the scenario list: Review, Profile, Statistics, Quit.
 const FIXED_MENU_ITEMS: usize = 4;
 
+/// Total number of menu items for a given filtered scenario count: scenarios plus the fixed trailing entries.
+pub(crate) fn total_menu_items_for_count(scenario_count: usize) -> usize {
+    scenario_count + FIXED_MENU_ITEMS
+}
+
 /// Total number of menu items: filtered scenarios plus the fixed trailing entries.
 fn total_menu_items(ctx: &HandlerContext<'_>) -> usize {
-    ctx.game.scenario_collection.count() + FIXED_MENU_ITEMS
+    total_menu_items_for_count(ctx.game.scenario_collection.count())
 }
 
 /// Handle MenuUp message

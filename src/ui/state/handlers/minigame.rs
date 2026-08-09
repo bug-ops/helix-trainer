@@ -38,7 +38,7 @@ pub(in crate::ui::state) fn create_minigame_session(
 ) -> bool {
     let scenarios: Vec<Scenario> = game
         .scenario_collection
-        .get_filtered()
+        .filtered()
         .into_iter()
         .cloned()
         .collect();

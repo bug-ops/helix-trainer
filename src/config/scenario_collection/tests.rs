@@ -119,7 +119,7 @@ fn test_filter_by_category() {
     collection.apply_filter(&filter, None);
 
     assert_eq!(collection.count(), 2); // Only Movement scenarios
-    let filtered = collection.get_filtered();
+    let filtered = collection.filtered();
     assert_eq!(filtered[0].name, "Movement1");
     assert_eq!(filtered[1].name, "Movement2");
 }
@@ -198,7 +198,7 @@ fn test_filter_by_command() {
     collection.apply_filter(&filter, None);
 
     assert_eq!(collection.count(), 2); // Scenarios teaching 'd' command
-    let filtered = collection.get_filtered();
+    let filtered = collection.filtered();
     assert_eq!(filtered[0].name, "Delete");
     assert_eq!(filtered[1].name, "Mixed");
 }
@@ -240,7 +240,7 @@ fn test_filter_multiple_criteria() {
     collection.apply_filter(&filter, None);
 
     assert_eq!(collection.count(), 1); // Only beginner movement
-    assert_eq!(collection.get_filtered()[0].name, "Easy Movement");
+    assert_eq!(collection.filtered()[0].name, "Easy Movement");
 }
 
 #[test]
@@ -285,7 +285,7 @@ fn test_filter_by_completion_status() {
     };
     collection.apply_filter(&completed_filter, Some(&profile));
     let completed_names: Vec<&str> = collection
-        .get_filtered()
+        .filtered()
         .iter()
         .map(|s| s.name.as_str())
         .collect();
@@ -297,7 +297,7 @@ fn test_filter_by_completion_status() {
     };
     collection.apply_filter(&not_completed_filter, Some(&profile));
     let not_completed_names: Vec<&str> = collection
-        .get_filtered()
+        .filtered()
         .iter()
         .map(|s| s.name.as_str())
         .collect();
@@ -333,7 +333,7 @@ fn test_sort_by_name() {
     let mut collection = ScenarioCollection::new(scenarios);
     collection.sort(SortMode::ByName, None);
 
-    let sorted = collection.get_filtered();
+    let sorted = collection.filtered();
     assert_eq!(sorted[0].name, "Apple");
     assert_eq!(sorted[1].name, "Middle");
     assert_eq!(sorted[2].name, "Zebra");
@@ -368,7 +368,7 @@ fn test_sort_by_difficulty() {
     let mut collection = ScenarioCollection::new(scenarios);
     collection.sort(SortMode::ByDifficulty, None);
 
-    let sorted = collection.get_filtered();
+    let sorted = collection.filtered();
     assert_eq!(sorted[0].name, "Beginner");
     assert_eq!(sorted[1].name, "Intermediate");
     assert_eq!(sorted[2].name, "Advanced");
@@ -403,7 +403,7 @@ fn test_sort_by_category() {
     let mut collection = ScenarioCollection::new(scenarios);
     collection.sort(SortMode::ByCategory, None);
 
-    let sorted = collection.get_filtered();
+    let sorted = collection.filtered();
     // Categories are sorted by enum order
     assert_eq!(sorted[0].name, "Movement");
     assert_eq!(sorted[1].name, "Editing");
@@ -446,7 +446,7 @@ fn test_sort_by_category_then_difficulty() {
     let mut collection = ScenarioCollection::new(scenarios);
     collection.sort(SortMode::ByCategoryThenDifficulty, None);
 
-    let sorted = collection.get_filtered();
+    let sorted = collection.filtered();
     // Should group by category, then sort by difficulty within each group
     assert_eq!(sorted[0].name, "Movement Beginner");
     assert_eq!(sorted[1].name, "Movement Advanced");
@@ -490,7 +490,7 @@ fn test_sort_by_difficulty_then_category() {
     let mut collection = ScenarioCollection::new(scenarios);
     collection.sort(SortMode::ByDifficultyThenCategory, None);
 
-    let sorted = collection.get_filtered();
+    let sorted = collection.filtered();
     // Should sort by difficulty first, then by category within each difficulty level
     // Beginner: Movement, Editing (category order)
     // Advanced: Movement, Editing (category order)
@@ -561,7 +561,7 @@ fn test_get_categories() {
     ];
 
     let collection = ScenarioCollection::new(scenarios);
-    let categories = collection.get_categories();
+    let categories = collection.categories();
 
     assert_eq!(categories.len(), 2); // Movement and Editing
     assert!(categories.contains(&ScenarioCategory::Movement));
@@ -595,7 +595,7 @@ fn test_get_difficulties() {
     ];
 
     let collection = ScenarioCollection::new(scenarios);
-    let difficulties = collection.get_difficulties();
+    let difficulties = collection.difficulties();
 
     assert_eq!(difficulties.len(), 3);
     assert_eq!(difficulties[0], Difficulty::Beginner);
@@ -649,7 +649,7 @@ fn test_filter_empty_result() {
     collection.apply_filter(&filter, None);
 
     assert_eq!(collection.count(), 0); // No matching scenarios
-    assert!(collection.get_filtered().is_empty());
+    assert!(collection.filtered().is_empty());
 }
 
 #[test]
@@ -715,7 +715,7 @@ fn test_scenarios_without_metadata() {
     filtered_collection.apply_filter(&filter, None);
 
     assert_eq!(filtered_collection.count(), 1);
-    assert_eq!(filtered_collection.get_filtered()[0].name, "With Metadata");
+    assert_eq!(filtered_collection.filtered()[0].name, "With Metadata");
 }
 
 #[test]

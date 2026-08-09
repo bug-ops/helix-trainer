@@ -494,7 +494,7 @@ fn bench_get_filtered_scenarios(c: &mut Criterion) {
                     ScenarioCollection::new(scenarios)
                 },
                 |collection| {
-                    let filtered = collection.get_filtered();
+                    let filtered = collection.filtered();
                     let count = filtered.len();
                     black_box(count)
                 },
@@ -573,7 +573,7 @@ fn bench_menu_render_simulation(c: &mut Criterion) {
                 },
                 |(collection, profile)| {
                     // Simulate menu rendering: access all filtered scenarios
-                    let filtered = collection.get_filtered();
+                    let filtered = collection.filtered();
 
                     // Check completion status for each scenario (like menu does)
                     let mut count = 0;
@@ -633,7 +633,7 @@ fn bench_filter_sort_access_workflow(c: &mut Criterion) {
                 );
 
                 // Access all filtered scenarios
-                let filtered = collection.get_filtered();
+                let filtered = collection.filtered();
                 let count = filtered.len();
                 black_box(count)
             },
@@ -692,11 +692,8 @@ fn bench_clone_avoidance(c: &mut Criterion) {
             },
             |collection| {
                 // Worst case: clone all scenarios
-                let filtered: Vec<Scenario> = collection
-                    .get_filtered()
-                    .iter()
-                    .map(|&s| s.clone())
-                    .collect();
+                let filtered: Vec<Scenario> =
+                    collection.filtered().iter().map(|&s| s.clone()).collect();
                 black_box(filtered)
             },
             criterion::BatchSize::SmallInput,
@@ -711,7 +708,7 @@ fn bench_clone_avoidance(c: &mut Criterion) {
             },
             |collection| {
                 // Best case: use references (current implementation)
-                let filtered = collection.get_filtered();
+                let filtered = collection.filtered();
                 let count = filtered.len();
                 black_box(count)
             },

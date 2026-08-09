@@ -41,7 +41,7 @@ pub fn handle_category_filter_up(
     data: &mut CategoryFiltersData,
     ctx: &HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    let category_count = ctx.game.scenario_collection.get_categories().len();
+    let category_count = ctx.game.scenario_collection.categories().len();
 
     if category_count == 0 {
         return Ok(HandlerOutcome::Stay);
@@ -69,7 +69,7 @@ pub fn handle_category_filter_down(
     data: &mut CategoryFiltersData,
     ctx: &HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    let category_count = ctx.game.scenario_collection.get_categories().len();
+    let category_count = ctx.game.scenario_collection.categories().len();
 
     if category_count == 0 {
         return Ok(HandlerOutcome::Stay);
@@ -94,7 +94,7 @@ pub fn handle_category_filter_toggle(
     data: &CategoryFiltersData,
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    let categories = ctx.game.scenario_collection.get_categories();
+    let categories = ctx.game.scenario_collection.categories();
 
     // Bounds check: ensure selected_index is valid
     let Some(category) = categories.get(data.selected_index) else {
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn test_category_filter_down_wraparound() {
         let mut state = create_test_state_with_categories();
-        let category_count = state.game.scenario_collection.get_categories().len();
+        let category_count = state.game.scenario_collection.categories().len();
         let mut data = CategoryFiltersData {
             selected_index: category_count - 1,
             return_to: ReturnDestination::Menu,

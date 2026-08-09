@@ -75,7 +75,7 @@ fn calculate_menu_scroll(
 ///
 /// Returns list of menu items with proper styling and indicators
 fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>> {
-    let filtered_scenarios = state.game.scenario_collection.get_filtered();
+    let filtered_scenarios = state.game.scenario_collection.filtered();
     let profile = &state.progress.profile;
 
     let mut menu_items: Vec<ListItem> = filtered_scenarios

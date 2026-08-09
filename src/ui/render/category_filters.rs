@@ -56,7 +56,7 @@ pub(super) fn render_category_filters(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
     // Calculate popup dimensions based on content
-    let categories = state.game.scenario_collection.get_categories();
+    let categories = state.game.scenario_collection.categories();
     // Height: categories + 2 padding lines + 1 summary + 1 spacing + 1 instructions
     let content_height = categories.len() as u16 + 5;
     // Add 2 for popup borders
@@ -92,7 +92,7 @@ fn render_popup_content(
     selected_index: usize,
     area: ratatui::layout::Rect,
 ) {
-    let categories = state.game.scenario_collection.get_categories();
+    let categories = state.game.scenario_collection.categories();
 
     if categories.is_empty() {
         let empty_msg = Paragraph::new("No categories available")

@@ -120,7 +120,7 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
     let scenarios: Vec<Scenario> = ctx
         .game
         .scenario_collection
-        .get_filtered()
+        .filtered()
         .into_iter()
         .cloned()
         .collect();

@@ -4,6 +4,7 @@
 
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
+use crate::gamification::{Achievement, AchievementEngine};
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
@@ -123,6 +124,29 @@ fn record_scenario_completion(
                 command,
                 new_level,
             }));
+    }
+
+    // Check and unlock any achievements newly satisfied by this completion
+    // (perfect/scenario counters and command mastery all just changed above)
+    let newly_unlocked = AchievementEngine::check_and_unlock(
+        &mut ctx.progress.profile,
+        &ctx.progress.performance_tracker,
+    );
+    if !newly_unlocked.is_empty() {
+        for achievement_id in newly_unlocked {
+            let achievement = Achievement::new(achievement_id);
+            ctx.ui
+                .notifications
+                .push(Notification::new(NotificationType::Achievement {
+                    name: achievement.name,
+                    description: achievement.description,
+                }));
+        }
+        ctx.progress
+            .storage
+            .save(&ctx.progress.profile)
+            .map_err(UserError::from)?;
+        ctx.progress.mark_saved();
     }
 
     Ok(())
@@ -712,6 +736,52 @@ mod tests {
 
         assert!(state.progress.profile.total_xp > initial_xp);
         assert_eq!(state.progress.scenarios_completed_today, 1);
+    }
+
+    /// Regression test for #256: achievements must unlock through the live scenario
+    /// completion path (`handle_complete_scenario`), not just via direct
+    /// `AchievementEngine::check_achievements` calls.
+    #[test]
+    fn test_handle_complete_scenario_unlocks_achievement() {
+        use crate::game::SessionAfterAction;
+        use crate::gamification::AchievementId;
+
+        let mut state = create_test_state();
+        // One completion away from the Centurion milestone (100 scenarios completed),
+        // regardless of this scenario's score.
+        state.progress.profile.scenarios_completed = 99;
+
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+
+        let result = session.record_action("x".to_string()).unwrap();
+        let session = match result {
+            SessionAfterAction::StillActive(s) => s,
+            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+        };
+        let result = session.record_action("d".to_string()).unwrap();
+        let completed = match result {
+            SessionAfterAction::Completed(c) => c,
+            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+        };
+
+        let feedback = completed.feedback().unwrap();
+        state.ui.last_feedback = Some(feedback);
+        state.game.pending_completed_session = Some(completed);
+
+        handle_complete_scenario(&mut state).unwrap();
+
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::Centurion)
+        );
+        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+            n.notification_type,
+            crate::ui::notification::NotificationType::Achievement { ref name, .. }
+                if name == "Centurion"
+        )));
     }
 
     #[test]

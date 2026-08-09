@@ -2,8 +2,9 @@
 //!
 //! Handles quest progress updates and tracking
 
-use crate::gamification::{QuestTracker, QuestType};
+use crate::gamification::{QuestTracker, QuestType, StreakManager};
 use crate::security::UserError;
+use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{AppState, QuestProgressChange};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -39,9 +40,11 @@ pub fn track_scenario_completion_for_quests(
 
 /// Check and award XP for newly completed quests
 ///
-/// Returns total XP awarded for quest completions.
+/// Marks each newly completed quest on the profile's `completed_quests_today` set (which
+/// gates next-day streak increments), grants a streak freeze once every quest generated
+/// for today is completed, and returns total XP awarded for quest completions.
 pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -> u64 {
-    let newly_completed: Vec<(String, u32)> = {
+    let newly_completed: Vec<(String, String, u32)> = {
         let profile = &state.progress.profile;
         profile
             .daily_quests
@@ -49,7 +52,7 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
             .enumerate()
             .filter_map(|(idx, quest)| {
                 if idx < was_completed.len() && !was_completed[idx] && quest.completed {
-                    Some((quest.description.clone(), quest.xp_reward))
+                    Some((quest.id.clone(), quest.description.clone(), quest.xp_reward))
                 } else {
                     None
                 }
@@ -57,26 +60,38 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
             .collect()
     };
 
-    if !newly_completed.is_empty() {
-        let total_bonus_xp: u64 = newly_completed.iter().map(|(_, xp)| *xp as u64).sum();
-        let profile = &mut state.progress.profile;
-        profile.add_xp(total_bonus_xp);
-
-        // Show notifications for each completed quest
-        for (description, xp_reward) in newly_completed {
-            let notification = crate::ui::notification::Notification::new(
-                crate::ui::notification::NotificationType::QuestComplete {
-                    description,
-                    xp_reward,
-                },
-            );
-            state.ui.notifications.push(notification);
-        }
-
-        total_bonus_xp
-    } else {
-        0
+    if newly_completed.is_empty() {
+        return 0;
     }
+
+    let total_bonus_xp: u64 = newly_completed.iter().map(|(_, _, xp)| *xp as u64).sum();
+    let profile = &mut state.progress.profile;
+    profile.add_xp(total_bonus_xp);
+    for (quest_id, _, _) in &newly_completed {
+        profile.complete_quest(quest_id.clone());
+    }
+
+    // Show notifications for each completed quest
+    for (_, description, xp_reward) in newly_completed {
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::QuestComplete {
+                description,
+                xp_reward,
+            }));
+    }
+
+    // Grant a streak freeze once every quest generated for today is completed
+    if StreakManager::check_freeze_eligibility(&state.progress.profile) {
+        StreakManager::grant_freeze(&mut state.progress.profile);
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::StreakFreezeGranted));
+    }
+
+    total_bonus_xp
 }
 
 /// Snapshot quest completion status before updates

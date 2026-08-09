@@ -379,15 +379,29 @@ fn test_scenario_xp_calculation() {
 fn test_freeze_eligibility() {
     let mut profile = UserProfile::new();
 
-    // Not eligible initially
+    // Not eligible initially - no quests generated for today
     assert!(!StreakManager::check_freeze_eligibility(&profile));
 
-    // Complete 5 quests
-    for i in 0..5 {
+    // Generate today's quests
+    for i in 0..3 {
+        profile.daily_quests.push(Quest::new(
+            format!("quest_{}", i),
+            QuestType::CommandPractice {
+                command: "x".to_string(),
+                target: 1,
+                current: 0,
+            },
+            format!("Quest {}", i),
+            QuestDifficulty::Easy,
+        ));
+    }
+
+    // Complete all of today's quests
+    for i in 0..3 {
         profile.complete_quest(format!("quest_{}", i));
     }
 
-    // Now eligible
+    // Now eligible - all of today's quests completed
     assert!(StreakManager::check_freeze_eligibility(&profile));
 
     // Grant freeze

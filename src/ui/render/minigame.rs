@@ -98,7 +98,7 @@ fn render_countdown(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         .constraints([
             Constraint::Length(3), // Title
             Constraint::Min(10),   // Countdown number
-            Constraint::Length(3), // Stats
+            Constraint::Length(4), // Stats (bordered, 2 content lines)
         ])
         .split(area);
 
@@ -151,7 +151,12 @@ fn render_playing(
             Constraint::Length(3), // Next scenarios queue
             Constraint::Min(8),    // Editor content
             Constraint::Length(3), // Timer bar
-            Constraint::Length(3), // Stats bar
+            // Stats bar (bordered, 2 content lines). At the 80x24 minimum
+            // terminal size this leaves the editor chunk with zero spare
+            // rows below the key-history popup's visibility threshold -
+            // see `render_key_history_popup` in popups.rs. Do not grow the
+            // other fixed chunks in this layout without re-checking that.
+            Constraint::Length(4),
         ])
         .split(area);
 
@@ -426,7 +431,7 @@ fn render_paused(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniG
         .constraints([
             Constraint::Min(8),
             Constraint::Length(7),
-            Constraint::Length(3),
+            Constraint::Length(4), // Stats bar (bordered, 2 content lines)
         ])
         .split(area);
 
@@ -755,6 +760,106 @@ mod tests {
                 "Target panel right border corrupted at row {y}"
             );
         }
+    }
+
+    /// Regression test for #393: the bordered stats block has 2 content
+    /// lines, so it needs height 4 (1 top border + 2 content + 1 bottom
+    /// border). A `Length(3)` layout chunk leaves only 1 usable inner row,
+    /// silently clipping `stats_line2` (COMBO/STREAK/level/BEST).
+    #[test]
+    fn test_render_playing_stats_bar_second_line_not_clipped() {
+        use ratatui::buffer::Buffer;
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenarios = Arc::new(vec![create_test_scenario("s1")]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(session.state().is_playing());
+
+        let input_state = crate::input::typestate::InputStateMachine::default();
+        let area = Rect::new(0, 0, 80, 24);
+        terminal
+            .draw(|f| {
+                render_playing(f, area, &session, &input_state);
+            })
+            .unwrap();
+
+        let buffer: &Buffer = terminal.backend().buffer();
+        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(
+            rendered.contains("COMBO") && rendered.contains("STREAK") && rendered.contains("BEST"),
+            "expected second stats line (COMBO/STREAK/BEST) to be visible in the rendered frame, not clipped by the bordered stats block"
+        );
+    }
+
+    /// Regression test for #393 (`render_countdown` call site): same
+    /// clipping defect as `test_render_playing_stats_bar_second_line_not_clipped`,
+    /// verified for the countdown screen's own stats bar chunk.
+    #[test]
+    fn test_render_countdown_stats_bar_second_line_not_clipped() {
+        use ratatui::buffer::Buffer;
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenarios = Arc::new(vec![create_test_scenario("s1")]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        assert!(session.state().is_countdown());
+
+        let area = Rect::new(0, 0, 80, 24);
+        terminal
+            .draw(|f| {
+                render_countdown(f, area, &session);
+            })
+            .unwrap();
+
+        let buffer: &Buffer = terminal.backend().buffer();
+        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(
+            rendered.contains("COMBO") && rendered.contains("STREAK") && rendered.contains("BEST"),
+            "expected second stats line (COMBO/STREAK/BEST) to be visible in the rendered frame, not clipped by the bordered stats block"
+        );
+    }
+
+    /// Regression test for #393 (`render_paused` call site): same clipping
+    /// defect as `test_render_playing_stats_bar_second_line_not_clipped`,
+    /// verified for the paused screen's own stats bar chunk.
+    #[test]
+    fn test_render_paused_stats_bar_second_line_not_clipped() {
+        use ratatui::buffer::Buffer;
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let scenarios = Arc::new(vec![create_test_scenario("s1")]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(session.state().is_playing());
+        session.pause();
+        assert!(session.state().is_paused());
+
+        let area = Rect::new(0, 0, 80, 24);
+        terminal
+            .draw(|f| {
+                render_paused(f, area, &session);
+            })
+            .unwrap();
+
+        let buffer: &Buffer = terminal.backend().buffer();
+        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(
+            rendered.contains("COMBO") && rendered.contains("STREAK") && rendered.contains("BEST"),
+            "expected second stats line (COMBO/STREAK/BEST) to be visible in the rendered frame, not clipped by the bordered stats block"
+        );
     }
 
     #[test]

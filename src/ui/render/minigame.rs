@@ -47,12 +47,18 @@ pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
     if session.state().is_countdown() {
         render_countdown(frame, area, session);
     } else if session.state().is_playing() {
-        render_playing(frame, area, session, &minigame_data.input_state);
-        // Show key history popup after first keypress (reset on scenario transitions)
-        // Reserve space for the Timer + Stats bars (3 + 3) so the popup never
-        // overlaps them.
-        if state.ui.show_key_history {
-            super::popups::render_key_history_popup(frame, minigame_data.key_history.keys(), 6);
+        let target_area = render_playing(frame, area, session, &minigame_data.input_state);
+        // Show key history popup after first keypress (reset on scenario transitions),
+        // bounded to the Target panel's own inner area so it can never draw
+        // over that panel's border.
+        if let Some(target_area) = target_area
+            && state.ui.show_key_history
+        {
+            super::popups::render_key_history_popup(
+                frame,
+                minigame_data.key_history.keys(),
+                target_area,
+            );
         }
     } else if session.state().is_transition() {
         render_transition(
@@ -129,12 +135,15 @@ fn render_countdown(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
 }
 
 /// Render playing screen with active scenario
+///
+/// Returns the Target editor panel's outer `Rect` (when a scenario is
+/// current), so the caller can bound the key-history popup to stay inside it.
 fn render_playing(
     frame: &mut Frame,
     area: Rect,
     session: &crate::minigame::MiniGameSession,
     input_state: &crate::input::typestate::InputStateMachine,
-) {
+) -> Option<Rect> {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -185,9 +194,9 @@ fn render_playing(
     render_queue(frame, chunks[1], session);
 
     // Editor content (current scenario)
-    if let Some(current) = session.current_scenario() {
-        render_scenario_editor(frame, chunks[2], current, &current.scenario.description);
-    }
+    let target_area = session.current_scenario().map(|current| {
+        render_scenario_editor(frame, chunks[2], current, &current.scenario.description)
+    });
 
     // Timer bar
     if let Some(current) = session.current_scenario() {
@@ -196,6 +205,8 @@ fn render_playing(
 
     // Stats bar
     render_stats_bar(frame, chunks[4], session);
+
+    target_area
 }
 
 /// Render scenario queue (next 3 scenarios)
@@ -229,7 +240,7 @@ fn render_scenario_editor<S: PlayableScenario>(
     area: Rect,
     scenario: &S,
     description: &str,
-) {
+) -> Rect {
     // Layout: task description | editor views (current + target)
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -248,7 +259,7 @@ fn render_scenario_editor<S: PlayableScenario>(
 
     // Editor views - reuse common rendering function
     // No preview highlight in arcade mode
-    render_editor_pair(frame, chunks[1], scenario, " Current ", " Target ", None);
+    render_editor_pair(frame, chunks[1], scenario, " Current ", " Target ", None)
 }
 
 /// Render timer bar
@@ -656,6 +667,94 @@ mod tests {
             rendered.contains(':'),
             "expected the pending ':' command-line buffer to be visible in the rendered frame"
         );
+    }
+
+    /// Arcade-mode analog of `task.rs`'s
+    /// `test_render_key_history_popup_does_not_corrupt_target_panel_border`:
+    /// a wide key history must not corrupt the Target editor panel's border
+    /// in the Arcade playing screen either (regression test for #364,
+    /// mirroring the #272 Arcade fix this fix must not regress).
+    #[test]
+    fn test_render_playing_key_history_popup_does_not_corrupt_target_panel_border() {
+        use ratatui::buffer::Buffer;
+
+        let render = |wide_history: bool| -> (Buffer, Rect) {
+            let backend = TestBackend::new(80, 24);
+            let mut terminal = Terminal::new(backend).unwrap();
+
+            let scenarios = Arc::new(vec![create_test_scenario("s1")]);
+            let mut session = MiniGameSession::new(scenarios, None);
+            session.start();
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+            assert!(session.state().is_playing());
+
+            let mut minigame_data = MiniGameData::default();
+            if wide_history {
+                for key in ["regex-pattern", "Space", "⌫", "↵", "Esc"] {
+                    minigame_data.key_history.push(key.to_string());
+                }
+            }
+
+            let area = Rect::new(0, 0, 80, 24);
+            let mut target_area = None;
+            terminal
+                .draw(|f| {
+                    // Mirrors `render_minigame`'s `is_playing()` branch exactly:
+                    // render the playing screen, then the key-history popup
+                    // bounded to the returned Target panel `Rect`.
+                    target_area = render_playing(f, area, &session, &minigame_data.input_state);
+                    if let Some(target_area) = target_area {
+                        super::super::popups::render_key_history_popup(
+                            f,
+                            minigame_data.key_history.keys(),
+                            target_area,
+                        );
+                    }
+                })
+                .unwrap();
+            (
+                terminal.backend().buffer().clone(),
+                target_area.expect("playing screen must report its Target panel Rect"),
+            )
+        };
+
+        let (baseline, baseline_target_area) = render(false);
+        let (with_popup, target_area) = render(true);
+        assert_eq!(
+            baseline_target_area, target_area,
+            "Target panel layout must not depend on key history content"
+        );
+
+        assert_ne!(baseline, with_popup, "expected the popup to render");
+
+        for x in target_area.x..target_area.x + target_area.width {
+            assert_eq!(
+                baseline[(x, target_area.y)],
+                with_popup[(x, target_area.y)],
+                "Target panel top border corrupted at column {x}"
+            );
+            let bottom_y = target_area.y + target_area.height - 1;
+            assert_eq!(
+                baseline[(x, bottom_y)],
+                with_popup[(x, bottom_y)],
+                "Target panel bottom border corrupted at column {x}"
+            );
+        }
+        for y in target_area.y..target_area.y + target_area.height {
+            assert_eq!(
+                baseline[(target_area.x, y)],
+                with_popup[(target_area.x, y)],
+                "Target panel left border corrupted at row {y}"
+            );
+            let right_x = target_area.x + target_area.width - 1;
+            assert_eq!(
+                baseline[(right_x, y)],
+                with_popup[(right_x, y)],
+                "Target panel right border corrupted at row {y}"
+            );
+        }
     }
 
     #[test]

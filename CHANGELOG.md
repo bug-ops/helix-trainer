@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING**: Removed the now-unreachable `SecurityError::InvalidScoringConfig` variant (#277)
 - Unified scenario and quest ID validation into `security::validators::validate_id_field` (#275)
 - Consolidated scenario/quest TOML parsing, count-limit enforcement, and per-item validation into a shared `config::loader::parse_and_validate` pipeline (#276)
+- Collapsed the duplicated `PlayableScenario` trait implementations for `GameSession<Active>` and `GameSession<Completed>` into a single `impl<S: SessionState> PlayableScenario for GameSession<S>` block; the per-state `elapsed()` behavior is now dispatched through a new `SessionState::session_elapsed` associated function (#280)
 
 ## [0.5.12] - 2026-07-27
 

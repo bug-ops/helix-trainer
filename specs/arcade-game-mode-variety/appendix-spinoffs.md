@@ -9,7 +9,7 @@ tags:
   - bug
   - architecture
 created: 2026-08-09
-status: findings-only
+status: resolved
 related:
   - "[[README]]"
   - "[[plan]]"
@@ -24,6 +24,22 @@ related:
 > regardless of what happens with #264. This appendix documents them
 > precisely enough for team-lead to file as GitHub issues verbatim. This
 > record does **not** file them.
+
+> [!success] Resolved 2026-08-09
+> Both spin-offs were filed as #327 (Spin-off A) and #328 (Spin-off B) and
+> fixed in the same change. `MiniGameSession` now carries a pause-aware
+> session-level clock; `is_session_expired()` gates a new
+> `Message::MiniGameSessionTimeout`, evaluated on every tick while the
+> session is `Playing` or `Transition`, ending the session at
+> `session_duration()` without consuming a life. All previously
+> non-exhaustive `match`/`matches!` sites are now exhaustive, including the
+> ninth site this appendix did not originally enumerate
+> (`render_minigame_mode_submenu`'s hardcoded mode array in
+> `src/ui/render/mode_selection.rs`, found during review and also fixed).
+> `has_session_timer()` is now defined as `session_duration().is_some()`, so
+> the two can no longer disagree by construction. Left as-is below for the
+> historical record of what was found; see `## Resolution` under each
+> spin-off for specifics.
 
 ## Spin-off A — Arcade's Advertised Session Time Limit Is Not Implemented
 
@@ -91,6 +107,19 @@ choosing `Arcade` for a short session will instead play until they lose all
 - **Actual**: Session runs indefinitely until 3 lives are lost, regardless of
   elapsed time.
 
+### Resolution
+
+Filed and fixed as #327. `MiniGameSession` gained `session_started_at` /
+`session_paused_at` / `session_total_paused` fields and
+`is_session_expired()`; `src/event_loop.rs` evaluates it on every tick while
+`Playing` or `Transition` (session expiry takes precedence over per-scenario
+timeout and transition auto-advance on the same tick) and dispatches
+`Message::MiniGameSessionTimeout`, handled by
+`handle_minigame_session_timeout`, which calls
+`MiniGameSession::end_session_on_timeout()` (jumps to `GameOver`, no life
+consumed) then reuses `handle_minigame_game_over`'s bookkeeping path
+unchanged.
+
 ## Spin-off B — Silent Non-Exhaustive `_ =>` Fallthroughs in Mode-Selection Code
 
 ### Summary
@@ -149,6 +178,19 @@ through the type system that the rest of this project relies on
   consuming `match` fails to compile.
 - **Actual**: Compiles cleanly; wrong mode is silently selected or labeled at
   runtime.
+
+### Resolution
+
+Filed and fixed as #328, along with a ninth site this appendix missed
+(`render_minigame_mode_submenu`'s own hardcoded mode array in
+`src/ui/render/mode_selection.rs`, caught during review). `has_session_timer`,
+`session_duration`, `is_arcade`, `is_survival`, `is_challenge`
+(`src/minigame/modes.rs`) are now exhaustive matches. `screen.rs`'s three
+`usize`-keyed functions are consolidated onto one `MiniGameModeSelection::
+all_modes(today)` array sized by `MODE_COUNT`; the renderer now consumes
+`all_modes()` directly (zipped with a `MODE_COUNT`-sized icon array) instead
+of maintaining its own copy, so a `MODE_COUNT` bump without extending both
+arrays is a compile error, not a silent runtime mismatch.
 
 ## See Also
 

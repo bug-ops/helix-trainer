@@ -75,7 +75,7 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
 
     // Render mini-game mode submenu if active
     if let Some(ref selection) = mode_data.minigame_mode_selection {
-        render_minigame_mode_submenu(frame, inner, selection);
+        render_minigame_mode_submenu(frame, inner, selection, state.progress.today());
     }
 
     // Instructions - different when submenu is open
@@ -131,9 +131,8 @@ fn render_minigame_mode_submenu(
     frame: &mut Frame,
     parent_area: Rect,
     selection: &MiniGameModeSelection,
+    today: chrono::NaiveDate,
 ) {
-    use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
-
     // Position submenu to the right of "Arcade Mode" option
     let submenu_width = 45;
     let submenu_height = 11;
@@ -159,18 +158,14 @@ fn render_minigame_mode_submenu(
     let inner = block.inner(submenu_area);
     frame.render_widget(block, submenu_area);
 
-    // Mode options with descriptions
-    let modes: [(MiniGameMode, &str); 3] = [
-        (MiniGameMode::Arcade(ArcadeConfig::default()), "🎮"),
-        (MiniGameMode::Survival(SurvivalConfig::default()), "💀"),
-        // Display-only placeholder icon; not tied to a live clock, so wall-clock is fine here.
-        (
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive())),
-            "📅",
-        ),
-    ];
+    // Mode options with descriptions. Modes come from `MiniGameModeSelection::all_modes`
+    // (the same single source of truth `selected_mode`/`mode_name`/`mode_description`
+    // use) so this menu can't silently omit or misdescribe a mode; icons are a
+    // render-only concern paired on by index.
+    const ICONS: [&str; MiniGameModeSelection::MODE_COUNT] = ["🎮", "💀", "📅"];
+    let modes = MiniGameModeSelection::all_modes(today);
 
-    for (idx, (mode, icon)) in modes.iter().enumerate() {
+    for (idx, (mode, icon)) in modes.iter().zip(ICONS.iter()).enumerate() {
         let is_selected = idx == selection.selected_index;
         let y_offset = (idx * 3) as u16;
 

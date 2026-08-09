@@ -150,6 +150,16 @@ under any of the following:
 | A second reference project ships an equivalent reflex/targeting mechanic | Strengthens the evidence basis beyond "single reference project"; re-evaluate |
 | The kill-criterion experiment is run and yields a strong positive signal | Necessary but not sufficient alone — combine with at least one of the above before proposing a build |
 
+> [!info] Trigger fired 2026-08-09
+> The session-clock bug ([[appendix-spinoffs#Spin-off A]]) was fixed as #327.
+> Per this table, the cost basis has dropped further and the priority/
+> evidence check (Section 1, reason 1) should be re-run fresh before anyone
+> proposes building the continuous variant. That re-check was not performed
+> as part of #327 — it is a scoped bug fix, not a #264 revisit — and remains
+> an open action for whoever next considers this decision. Reason 1 (P3
+> priority, single-reference-project evidence, no user demand) has not been
+> re-evaluated and this NO-GO decision still stands unless and until it is.
+
 ## 5. Constitution Compliance
 
 No project constitution exists yet for helix-trainer (`.local/specs/

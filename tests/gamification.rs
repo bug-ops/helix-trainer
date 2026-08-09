@@ -19,7 +19,12 @@ fn test_complete_user_flow() {
     let registry = test_registry();
 
     // Day 1: Generate quests
-    let mut quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+    let mut quests = QuestGenerator::generate_quests(
+        &profile,
+        &tracker,
+        &registry,
+        chrono::Utc::now().date_naive(),
+    );
     assert_eq!(quests.len(), 3); // Beginner gets 3 quests
 
     // Complete a command quest
@@ -35,7 +40,7 @@ fn test_complete_user_flow() {
     }
 
     // Update streak
-    let change = StreakManager::update_streak(&mut profile);
+    let change = StreakManager::update_streak(&mut profile, chrono::Utc::now());
     assert!(matches!(
         change,
         StreakChange::Continued | StreakChange::Incremented { .. }
@@ -78,17 +83,32 @@ fn test_quest_generation_adapts_to_level() {
     // Level 1: Easy quests
     let mut profile = UserProfile::new();
     profile.level = 1;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+    let quests = QuestGenerator::generate_quests(
+        &profile,
+        &tracker,
+        &registry,
+        chrono::Utc::now().date_naive(),
+    );
     assert_eq!(quests.len(), 3); // 2 easy + 1 medium
 
     // Level 10: Mixed difficulty
     profile.level = 10;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+    let quests = QuestGenerator::generate_quests(
+        &profile,
+        &tracker,
+        &registry,
+        chrono::Utc::now().date_naive(),
+    );
     assert_eq!(quests.len(), 4); // 1 easy + 2 medium + 1 hard
 
     // Level 20: Hard quests
     profile.level = 20;
-    let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+    let quests = QuestGenerator::generate_quests(
+        &profile,
+        &tracker,
+        &registry,
+        chrono::Utc::now().date_naive(),
+    );
     assert_eq!(quests.len(), 4); // 1 medium + 2 hard + 1 exploration
 }
 
@@ -116,8 +136,9 @@ fn test_quest_type_variations() {
     let registry = test_registry();
 
     // Generate multiple times and check variety
-    let quests1 = QuestGenerator::generate_quests(&profile, &tracker, &registry);
-    let quests2 = QuestGenerator::generate_quests(&profile, &tracker, &registry);
+    let today = chrono::Utc::now().date_naive();
+    let quests1 = QuestGenerator::generate_quests(&profile, &tracker, &registry, today);
+    let quests2 = QuestGenerator::generate_quests(&profile, &tracker, &registry, today);
 
     // Since they use the same date seed, they should be identical
     assert_eq!(quests1.len(), quests2.len());
@@ -156,14 +177,17 @@ fn test_achievement_progression() {
 
 #[test]
 fn test_streak_freeze_mechanics() {
-    let mut profile = UserProfile::new();
+    use helix_trainer::time::{Clock, FakeClock};
+
+    let clock = FakeClock::at("2026-01-15T12:00:00Z");
+    let mut profile = UserProfile::new_at(clock.now());
     profile.current_streak = 10;
     profile.streak_freeze_available = true;
 
     // Simulate missing a day
-    profile.last_activity = chrono::Utc::now() - chrono::Duration::days(2);
+    clock.advance_days(2);
 
-    let change = StreakManager::update_streak(&mut profile);
+    let change = StreakManager::update_streak(&mut profile, clock.now());
     assert_eq!(change, StreakChange::Protected { used_freeze: true });
     assert_eq!(profile.current_streak, 10); // Preserved
     assert!(!profile.streak_freeze_available); // Used up
@@ -264,7 +288,7 @@ fn test_daily_quest_reset() {
     assert_eq!(profile.completed_quests_today.len(), 2);
 
     // Reset daily quests
-    profile.reset_daily_quests();
+    profile.reset_daily_quests(chrono::Utc::now());
     assert_eq!(profile.completed_quests_today.len(), 0);
     assert_eq!(profile.daily_quests.len(), 0);
 }
@@ -413,21 +437,24 @@ fn test_freeze_eligibility() {
 
 #[test]
 fn test_longest_streak_tracking() {
-    let mut profile = UserProfile::new();
+    use helix_trainer::time::{Clock, FakeClock};
+
+    let clock = FakeClock::at("2026-01-15T12:00:00Z");
+    let mut profile = UserProfile::new_at(clock.now());
     profile.current_streak = 5;
     profile.longest_streak = 5;
 
     // Increment streak
-    profile.last_activity = chrono::Utc::now() - chrono::Duration::days(1);
     profile.complete_quest("test".to_string());
-    StreakManager::update_streak(&mut profile);
+    clock.advance_days(1);
+    StreakManager::update_streak(&mut profile, clock.now());
 
     assert_eq!(profile.current_streak, 6);
     assert_eq!(profile.longest_streak, 6);
 
     // Break streak
-    profile.last_activity = chrono::Utc::now() - chrono::Duration::days(2);
-    StreakManager::update_streak(&mut profile);
+    clock.advance_days(2);
+    StreakManager::update_streak(&mut profile, clock.now());
 
     assert_eq!(profile.current_streak, 0);
     assert_eq!(profile.longest_streak, 6); // Preserved

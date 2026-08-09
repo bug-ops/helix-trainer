@@ -5,7 +5,9 @@
 use crate::config::Scenario;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
-use crate::ui::state::AppState;
+use crate::time::Clock;
+use crate::ui::state::{AppState, ConfigState};
+use std::sync::Arc;
 
 /// Create a test AppState with no scenarios
 ///
@@ -30,6 +32,7 @@ pub struct TestAppStateBuilder {
     profile: Option<UserProfile>,
     storage: Option<ProfileStorage>,
     tracker: Option<PerformanceTracker>,
+    clock: Option<Arc<dyn Clock>>,
 }
 
 impl Default for TestAppStateBuilder {
@@ -46,6 +49,7 @@ impl TestAppStateBuilder {
             profile: None,
             storage: None,
             tracker: None,
+            clock: None,
         }
     }
 
@@ -79,12 +83,28 @@ impl TestAppStateBuilder {
         self
     }
 
+    /// Set a custom clock (e.g. [`crate::time::FakeClock`]) for deterministic time-based tests
+    pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
     /// Build the AppState
     pub fn build(self) -> AppState {
         let profile = self.profile.unwrap_or_default();
         let storage = self.storage.unwrap_or_else(ProfileStorage::for_test);
         let tracker = self.tracker.unwrap_or_default();
-        AppState::new(self.scenarios, profile, storage, tracker)
+        match self.clock {
+            Some(clock) => AppState::with_clock(
+                self.scenarios,
+                profile,
+                storage,
+                tracker,
+                ConfigState::default(),
+                clock,
+            ),
+            None => AppState::new(self.scenarios, profile, storage, tracker),
+        }
     }
 }
 

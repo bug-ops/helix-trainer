@@ -1329,7 +1329,8 @@ mod tests {
             create_test_scenario("s2", Difficulty::Beginner),
         ]);
 
-        let mode = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let mode =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
         let session = MiniGameSession::with_mode(scenarios, None, mode);
 
         assert_eq!(session.stats().lives(), 3);
@@ -1342,7 +1343,8 @@ mod tests {
             .map(|i| create_test_scenario(&format!("s{}", i), Difficulty::Beginner))
             .collect();
 
-        let mode = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let mode =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
         let session = MiniGameSession::with_mode(Arc::new(scenarios), None, mode);
 
         let progress = session.challenge_scenarios_completed();
@@ -1371,7 +1373,8 @@ mod tests {
     fn test_mode_has_session_timer() {
         let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
         let survival = MiniGameMode::Survival(SurvivalConfig::default());
-        let challenge = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let challenge =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
 
         assert!(arcade.has_session_timer());
         assert!(!survival.has_session_timer());
@@ -1397,7 +1400,8 @@ mod tests {
             .map(|i| create_test_scenario(&format!("s{}", i), Difficulty::Beginner))
             .collect();
 
-        let mode = MiniGameMode::Challenge(ChallengeConfig::for_today());
+        let mode =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
         let mut session = MiniGameSession::with_mode(Arc::new(scenarios), None, mode);
 
         // Not game over initially

@@ -393,8 +393,18 @@ fn test_quest_completion_populates_completed_quests_today() {
 /// `completed_quests_today` was populated by a live quest completion the day before.
 #[test]
 fn test_streak_increments_next_day_after_live_quest_completion() {
+    use crate::gamification::UserProfile;
+    use crate::testing::TestAppStateBuilder;
+    use crate::time::{Clock, FakeClock};
+    use std::sync::Arc;
+
     let scenario = create_test_scenario();
-    let mut state = create_test_app_state(vec![scenario]);
+    let clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
+    let mut state = TestAppStateBuilder::new()
+        .scenario(scenario)
+        .profile(UserProfile::new_at(clock.now()))
+        .with_clock(clock.clone())
+        .build();
     state.progress.profile.current_streak = 3;
 
     {
@@ -422,11 +432,12 @@ fn test_streak_increments_next_day_after_live_quest_completion() {
     )
     .unwrap();
 
-    // Simulate that this activity happened yesterday, as `StreakManager` would see it
-    // at the start of the next session.
-    state.progress.profile.last_activity = chrono::Utc::now() - chrono::Duration::days(1);
+    // Advance the injected clock to the next day, as the next session's load would see it,
+    // instead of backdating `last_activity` directly.
+    clock.advance_days(1);
 
-    let change = StreakManager::update_streak(&mut state.progress.profile);
+    let now = state.progress.now();
+    let change = StreakManager::update_streak(&mut state.progress.profile, now);
 
     assert_eq!(
         change,

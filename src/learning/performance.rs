@@ -2,9 +2,11 @@ use chrono::{DateTime, Utc};
 use fsrs::{FSRS, MemoryState};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use super::traits::ProgressionTier;
+use crate::time::{Clock, SystemClock};
 
 const DEFAULT_DIFFICULTY: f32 = 5.0; // Mixle difficulty (0-10 scale)
 const DEFAULT_DESIRED_RETENTION: f32 = 0.9; // 90% target retention
@@ -89,8 +91,7 @@ impl super::traits::ProgressionTier for MasteryLevel {
 }
 
 impl CommandPerformance {
-    pub fn new(command: String) -> Self {
-        let now = Utc::now();
+    pub fn new(command: String, now: DateTime<Utc>) -> Self {
         Self {
             command,
             stability: 0.0,
@@ -147,6 +148,7 @@ impl CommandPerformance {
         memory: MemoryState,
         interval: f32,
         rating_index: usize,
+        now: DateTime<Utc>,
     ) {
         // Determine new state based on rating and current state
         self.state = match (self.state, rating_index) {
@@ -178,7 +180,7 @@ impl CommandPerformance {
         self.stability = memory.stability;
         self.difficulty = memory.difficulty;
         self.scheduled_days = interval.round().max(1.0) as u32;
-        self.last_review = Utc::now();
+        self.last_review = now;
 
         // For first review (reps == 0), make command immediately due
         // This allows users to practice new commands right away
@@ -222,14 +224,28 @@ mod duration_serde {
 pub struct PerformanceTracker {
     stats: HashMap<String, CommandPerformance>,
     fsrs: FSRS, // FSRS scheduler instance
+    clock: Arc<dyn Clock>,
 }
 
 impl PerformanceTracker {
     pub fn new() -> Self {
+        Self::with_clock(Arc::new(SystemClock))
+    }
+
+    pub fn with_clock(clock: Arc<dyn Clock>) -> Self {
         Self {
             stats: HashMap::new(),
             fsrs: FSRS::new(&[]).unwrap(),
+            clock,
         }
+    }
+
+    /// Replace the clock this tracker reads time from.
+    ///
+    /// Used by [`crate::ui::state::ProgressState::with_clock`] to keep this tracker and its
+    /// sibling [`super::Scheduler`] reading from the same injected clock instance.
+    pub fn set_clock(&mut self, clock: Arc<dyn Clock>) {
+        self.clock = clock;
     }
 
     pub fn record_attempt(
@@ -239,11 +255,16 @@ impl PerformanceTracker {
         success: bool,
         optimal_time: Duration,
     ) {
+        // Single `now` read shared by CommandPerformance::new (first-attempt case),
+        // update_fsrs_state's elapsed-days calculation, and the persisted last_review
+        // timestamp — previously each read Utc::now() independently.
+        let now = self.clock.now();
+
         // Get or create performance entry
         let perf = self
             .stats
             .entry(command.to_string())
-            .or_insert_with(|| CommandPerformance::new(command.to_string()));
+            .or_insert_with(|| CommandPerformance::new(command.to_string(), now));
 
         // Update attempt counters
         perf.attempts += 1;
@@ -255,7 +276,7 @@ impl PerformanceTracker {
         perf.avg_time = perf.total_time / perf.attempts;
 
         // Update FSRS state
-        self.update_fsrs_state(command, duration, success, optimal_time);
+        self.update_fsrs_state(command, duration, success, optimal_time, now);
 
         // Update mastery level
         if let Some(perf) = self.stats.get_mut(command) {
@@ -285,11 +306,11 @@ impl PerformanceTracker {
     }
 
     /// Calculate elapsed days since last review
-    fn elapsed_days_since_review(perf: &CommandPerformance) -> u32 {
+    fn elapsed_days_since_review(perf: &CommandPerformance, now: DateTime<Utc>) -> u32 {
         if perf.reps == 0 {
             0
         } else {
-            (Utc::now() - perf.last_review).num_days().max(0) as u32
+            (now - perf.last_review).num_days().max(0) as u32
         }
     }
 
@@ -299,6 +320,7 @@ impl PerformanceTracker {
         duration: Duration,
         success: bool,
         optimal_time: Duration,
+        now: DateTime<Utc>,
     ) {
         let perf = self.stats.get(command).unwrap();
 
@@ -307,14 +329,14 @@ impl PerformanceTracker {
 
         // Get current memory state and elapsed time
         let memory_state = perf.memory_state();
-        let elapsed_days = Self::elapsed_days_since_review(perf);
+        let elapsed_days = Self::elapsed_days_since_review(perf, now);
 
         // Calculate next state from FSRS
         let next_state = self.calculate_next_fsrs_state(memory_state, elapsed_days, rating_index);
 
         // Update performance with new FSRS state
         let perf = self.stats.get_mut(command).unwrap();
-        perf.update_from_next_state(next_state.memory, next_state.interval, rating_index);
+        perf.update_from_next_state(next_state.memory, next_state.interval, rating_index, now);
 
         // Update retrievability (current recall probability)
         perf.retrievability = fsrs::current_retrievability(
@@ -347,9 +369,17 @@ impl PerformanceTracker {
     }
 
     pub fn from_stats(stats: HashMap<String, CommandPerformance>) -> Self {
+        Self::from_stats_with_clock(stats, Arc::new(SystemClock))
+    }
+
+    pub fn from_stats_with_clock(
+        stats: HashMap<String, CommandPerformance>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
         Self {
             stats,
             fsrs: FSRS::new(&[]).unwrap(),
+            clock,
         }
     }
 
@@ -418,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_new_command_defaults() {
-        let perf = CommandPerformance::new("x".to_string());
+        let perf = CommandPerformance::new("x".to_string(), Utc::now());
         assert_eq!(perf.stability, 0.0);
         assert_eq!(perf.difficulty, DEFAULT_DIFFICULTY);
         assert_eq!(perf.reps, 0);
@@ -531,7 +561,7 @@ mod tests {
 
     #[test]
     fn test_memory_state_conversion() {
-        let mut perf = CommandPerformance::new("x".to_string());
+        let mut perf = CommandPerformance::new("x".to_string(), Utc::now());
         assert!(perf.memory_state().is_none());
 
         perf.stability = 5.0;
@@ -546,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_mastery_level_progression() {
-        let mut perf = CommandPerformance::new("x".to_string());
+        let mut perf = CommandPerformance::new("x".to_string(), Utc::now());
         assert_eq!(perf.mastery_level, MasteryLevel::Beginner);
 
         // Simulate progression through states
@@ -592,6 +622,28 @@ mod tests {
         let weak = tracker.get_weak_commands();
         assert!(weak.contains(&"weak".to_string()));
         // "strong" might still be beginner mastery level initially, so don't assert it's not weak
+    }
+
+    #[test]
+    fn test_record_attempt_honors_injected_clock() {
+        use crate::time::FakeClock;
+
+        let clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
+        let mut tracker = PerformanceTracker::with_clock(clock.clone());
+
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        let first_last_review = tracker.get_performance("x").unwrap().last_review;
+        assert_eq!(first_last_review, clock.now());
+
+        clock.advance_days(3);
+        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        let second_last_review = tracker.get_performance("x").unwrap().last_review;
+        assert_eq!(second_last_review, clock.now());
+        assert_eq!(
+            (second_last_review - first_last_review).num_days(),
+            3,
+            "elapsed_days_since_review must reflect the fake clock, not wall time"
+        );
     }
 
     #[test]

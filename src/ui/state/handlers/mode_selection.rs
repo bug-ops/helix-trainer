@@ -54,7 +54,7 @@ pub(in crate::ui::state) fn handle_mode_selection_select(
     // Check if mini-game mode selection is active
     if let Some(ref selection) = data.minigame_mode_selection {
         // Launch the selected mini-game mode
-        let mode = selection.selected_mode();
+        let mode = selection.selected_mode(ctx.progress.today());
         return handle_launch_minigame_mode(ctx, mode);
     }
 
@@ -433,8 +433,9 @@ mod tests {
         let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        let mode =
-            crate::minigame::MiniGameMode::Challenge(crate::minigame::ChallengeConfig::for_today());
+        let mode = crate::minigame::MiniGameMode::Challenge(
+            crate::minigame::ChallengeConfig::for_date(chrono::Utc::now().date_naive()),
+        );
         let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
 
         assert!(outcome.is_transition());

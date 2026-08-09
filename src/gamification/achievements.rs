@@ -131,8 +131,8 @@ impl Achievement {
     }
 
     /// Mark achievement as unlocked
-    pub fn unlock(&mut self) {
-        self.unlocked_at = Some(Utc::now());
+    pub fn unlock(&mut self, now: DateTime<Utc>) {
+        self.unlocked_at = Some(now);
     }
 
     /// Check if unlocked
@@ -378,7 +378,7 @@ mod tests {
         let mut achievement = Achievement::new(AchievementId::FirstPerfect);
         assert!(!achievement.is_unlocked());
 
-        achievement.unlock();
+        achievement.unlock(Utc::now());
         assert!(achievement.is_unlocked());
         assert!(achievement.unlocked_at.is_some());
     }

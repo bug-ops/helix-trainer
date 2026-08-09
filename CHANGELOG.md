@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New `src/time.rs` module: `Clock` trait abstraction over the current time, with a `SystemClock` production implementation and a `FakeClock` for deterministic tests (#269)
+
 ### Changed
 
+- **BREAKING**: Introduced a `Clock` abstraction (`helix_trainer::time::Clock`/`SystemClock`/`FakeClock`) so day-boundary and scheduling logic no longer calls `chrono::Utc::now()` directly, enabling deterministic tests (#269):
+  - `PerformanceTracker` and `Scheduler` now hold an injected `clock: Arc<dyn Clock>`; `new()` defaults to `SystemClock`, `with_clock()` accepts an explicit clock. `PerformanceTracker::from_stats_with_clock` added alongside `from_stats`; `PerformanceTracker::set_clock` added so an existing tracker can be re-pointed at a shared clock.
+  - `ProgressState` gained a private `clock: Arc<dyn Clock>` field (accessed via `now()`/`today()`/`clock()`, not exposed directly — reassigning it post-construction would not re-point `performance_tracker`/`scheduler`) and a `with_clock()` constructor that propagates the same clock instance to both; `AppState::with_clock` and `TestAppStateBuilder::with_clock` plumb it through from the composition root.
+  - The following now take a mandatory trailing `now: DateTime<Utc>` (or `today: NaiveDate`) parameter instead of reading the system clock internally: `StreakManager::update_streak`, `UserProfile::reset_daily_quests`, `Achievement::unlock`, `QuestGenerator::generate_quests`, `ScenarioCompletion::new`/`record_attempt`, `ScenarioHistory::record_completion`, `Analytics::get_progress_over_time`, `ChallengeProgress::{can_attempt, attempts_remaining, start_attempt, is_today}`, `ChallengeConfig::is_today`, `ScenarioCompletionService::record_and_scale_xp`.
+  - `ChallengeConfig::for_today()` and `impl Default for ChallengeConfig` were removed; use `ChallengeConfig::for_date(today)` instead.
+  - `UserProfile::new()` is unchanged (still the one sanctioned `Utc::now()` call site); added `UserProfile::new_at(now)`.
+  - As part of this refactor, `PerformanceTracker::record_attempt`, `ScenarioCompletion::record_attempt`/`check_and_reset_daily`, and the profile-load streak/quest-refresh checks in `data_handling.rs` now read the clock once per operation instead of twice (or more) independently — a deliberate fix for latent midnight-boundary races, not just a mechanical rename.
+  - Monotonic/`Instant`-based timing (arcade/survival countdowns, notification durations) is unaffected and deferred to a follow-up issue.
 - `Setup` and `TargetState` now share their cursor/selection fields and logic through a single `CursorSpec` type (`#[serde(flatten)]`) instead of duplicating both; scenario TOML files are unaffected (#268)
 - Quest templates now use a single adjacently-tagged `QuestSpec` enum instead of a separate `type` discriminator and untagged `params` enum, making a `type`/`params` mismatch a deserialization error instead of a runtime-only check; quest TOML files are unaffected (#274)
 - **BREAKING**: `MiniGameStats` now embeds `MultiplierState` as its sole owner of the streak/multiplier tier table instead of duplicating it; the `multiplier`, `streak`, and `best_streak` fields are removed (read them via the new `multiplier()`, `streak()`, `best_streak()` accessors), and `lives`/`level` are now private with `lives()`/`level()` accessors. `MiniGameStats`'s `Serialize`/`Deserialize` wire format changes accordingly (three scalar fields become a nested `multiplier_state` object); nothing in-tree persists `MiniGameStats` today. `MiniGameStats::increase_streak`/`reset_streak`/`calculate_multiplier` and `MiniGameSession::multiplier_state`/`streak_for_next_tier` are removed as dead duplicate paths (#259)

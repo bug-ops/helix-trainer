@@ -112,7 +112,7 @@ fn test_complete_learning_workflow() {
     );
 
     // Check progress over time
-    let progress = Analytics::get_progress_over_time(&tracker, 7);
+    let progress = Analytics::get_progress_over_time(&tracker, 7, chrono::Utc::now());
     // Progress data should exist (even if placeholder for new tracker)
     assert!(progress.len() <= 8); // 0..=days = 8 entries for 7 days
 }
@@ -157,7 +157,7 @@ fn test_analytics_empty_tracker() {
     assert_eq!(mastery_summary.total_commands, 0);
     assert_eq!(mastery_summary.beginner, 0);
 
-    let progress = Analytics::get_progress_over_time(&tracker, 7);
+    let progress = Analytics::get_progress_over_time(&tracker, 7, chrono::Utc::now());
     // Returns placeholder data even for empty tracker (for UI consistency)
     assert!(progress.len() <= 8);
 

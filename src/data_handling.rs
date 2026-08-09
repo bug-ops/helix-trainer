@@ -40,19 +40,25 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
         }
 
         DataLoadMessage::ProfileReady(profile) => {
+            // Single `now` read shared by every day-boundary decision below (streak,
+            // quest refresh, daily reset). Previously each check called Utc::now()
+            // independently, which could straddle a midnight boundary; this also fixes
+            // a latent race where the streak and quest-refresh checks could disagree
+            // about what day it is.
+            let now = state.progress.now();
+
             // Update streak and refresh quests if needed
             let mut updated_profile = profile;
-            let streak_change = StreakManager::update_streak(&mut updated_profile);
+            let streak_change = StreakManager::update_streak(&mut updated_profile, now);
             tracing::debug!("Streak status: {:?}", streak_change);
 
             // Check if we need to refresh daily quests
-            let now = Utc::now();
             if should_refresh_quests(&updated_profile, now)
                 || updated_profile.daily_quests.is_empty()
             {
                 tracing::info!("Refreshing daily quests for new day");
                 let tracker = PerformanceTracker::new();
-                updated_profile.reset_daily_quests();
+                updated_profile.reset_daily_quests(now);
 
                 // Load quest registry synchronously
                 let quest_registry = QuestTemplateRegistry::load_from_default_path("en")
@@ -64,12 +70,18 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                         QuestTemplateRegistry::new()
                     });
 
-                updated_profile.daily_quests =
-                    QuestGenerator::generate_quests(&updated_profile, &tracker, &quest_registry);
+                updated_profile.daily_quests = QuestGenerator::generate_quests(
+                    &updated_profile,
+                    &tracker,
+                    &quest_registry,
+                    now.date_naive(),
+                );
             }
 
-            state.progress.performance_tracker =
-                PerformanceTracker::from_stats(updated_profile.performance_data.clone());
+            state.progress.performance_tracker = PerformanceTracker::from_stats_with_clock(
+                updated_profile.performance_data.clone(),
+                state.progress.clock(),
+            );
             state.progress.profile = updated_profile;
 
             // Streak (and possibly quest history) may have just changed above;
@@ -247,12 +259,27 @@ mod tests {
     #[test]
     fn test_handle_profile_ready_unlocks_streak_achievement() {
         use helix_trainer::gamification::AchievementId;
+        use helix_trainer::time::{Clock, FakeClock};
+        use helix_trainer::ui::state::{AppState, ConfigState};
+        use std::sync::Arc;
 
-        let mut state = empty_test_app_state();
-        let mut profile = UserProfile::new();
+        // Construct AppState via with_clock directly (rather than building it with the
+        // default SystemClock and reassigning `progress.clock` afterward) so the injected
+        // clock is shared by every clock-consuming field from the start, not just read back.
+        let clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
+        let mut state = AppState::with_clock(
+            vec![],
+            UserProfile::new(),
+            test_profile_storage(),
+            PerformanceTracker::new(),
+            ConfigState::default(),
+            clock.clone(),
+        );
+
+        let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 6;
         profile.completed_quests_today.insert("quest_0".to_string());
-        profile.last_activity = Utc::now() - chrono::Duration::days(1);
+        clock.advance_days(1);
 
         let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 

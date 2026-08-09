@@ -41,6 +41,14 @@ pub const STREAK_MILESTONE_QUARTER: u32 = 90;
 /// Year streak milestone (365 days)
 pub const STREAK_MILESTONE_YEAR: u32 = 365;
 
+/// Maximum gap (in days since last activity) a single streak freeze can cover.
+///
+/// Set to 3 so a freeze covers a Friday-to-Monday weekend absence
+/// (`days_since_active == 3`, i.e. two missed days) without protecting an
+/// arbitrarily long absence: if `days_since_active` exceeds this cap, the
+/// streak breaks normally even when a freeze is available.
+pub const STREAK_FREEZE_MAX_GAP_DAYS: i64 = 3;
+
 // Milestone XP bonuses
 /// XP bonus for 7-day streak milestone
 pub const MILESTONE_7_DAY_XP: u64 = 50;

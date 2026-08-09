@@ -13,7 +13,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // z or zz - center view on cursor
     registry.register(Command::new(
         CommandMetadata::new(
-            "view_center",
+            "align_view_center",
             CMD_VIEW_CENTER,
             "Center view",
             "Center the viewport vertically on the cursor line.",
@@ -27,7 +27,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // zt - align cursor to top
     registry.register(Command::new(
         CommandMetadata::new(
-            "view_align_top",
+            "align_view_top",
             CMD_VIEW_TOP,
             "Align top",
             "Align the cursor line to the top of the viewport.",
@@ -41,7 +41,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // zb - align cursor to bottom
     registry.register(Command::new(
         CommandMetadata::new(
-            "view_align_bottom",
+            "align_view_bottom",
             CMD_VIEW_BOTTOM,
             "Align bottom",
             "Align the cursor line to the bottom of the viewport.",
@@ -55,7 +55,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // zm - center horizontally
     registry.register(Command::new(
         CommandMetadata::new(
-            "view_center_horizontal",
+            "align_view_middle",
             CMD_VIEW_CENTER_HORIZONTAL,
             "Center horizontal",
             "Center the viewport horizontally on the cursor column.",

@@ -160,7 +160,15 @@ pub enum Message {
     MiniGameTick,
 
     /// Execute Helix command during mini-game
-    MiniGameCommand(std::borrow::Cow<'static, str>),
+    ///
+    /// `keys` is the canonical command to dispatch (post keymap-overlay
+    /// translation); `typed` is the physically-pressed key, for
+    /// `KeyHistory` display. Equal on every keystroke when the overlay is
+    /// disabled or misses.
+    MiniGameCommand {
+        keys: crate::input::keymap::CanonicalKeys,
+        typed: std::borrow::Cow<'static, str>,
+    },
 
     /// Timeout on current mini-game scenario
     MiniGameTimeout,
@@ -214,7 +222,15 @@ pub enum Message {
     ShowHint,
 
     /// Execute a Helix command during gameplay
-    ExecuteCommand(std::borrow::Cow<'static, str>),
+    ///
+    /// `keys` is the canonical command to dispatch (post keymap-overlay
+    /// translation); `typed` is the physically-pressed key, for
+    /// `KeyHistory` display. Equal on every keystroke when the overlay is
+    /// disabled or misses.
+    ExecuteCommand {
+        keys: crate::input::keymap::CanonicalKeys,
+        typed: std::borrow::Cow<'static, str>,
+    },
 
     /// Retry the current scenario
     RetryScenario,
@@ -701,7 +717,9 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             apply_outcome(state, outcome);
             Ok(())
         }
-        Message::MiniGameCommand(command) => handlers::handle_minigame_command(state, command),
+        Message::MiniGameCommand { keys, typed } => {
+            handlers::handle_minigame_command(state, keys, typed)
+        }
         Message::MiniGameTimeout => handlers::handle_minigame_timeout(state),
         Message::MiniGameSessionTimeout => handlers::handle_minigame_session_timeout(state),
         Message::MiniGameScenarioComplete => {
@@ -891,8 +909,8 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             apply_outcome(state, outcome);
             Ok(())
         }
-        Message::ExecuteCommand(command) => {
-            let outcome = handlers::handle_execute_command(state, command)?;
+        Message::ExecuteCommand { keys, typed } => {
+            let outcome = handlers::handle_execute_command(state, keys, typed)?;
             apply_outcome(state, outcome);
             Ok(())
         }

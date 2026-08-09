@@ -110,10 +110,20 @@ pub(in crate::ui::state) fn handle_minigame_tick(
 ///
 /// Handles command execution, quest progress updates, and completion detection.
 /// Uses shared quest tracking functions from quests module.
-fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), UserError> {
+///
+/// `command` is the canonical command to dispatch; `display` is what's
+/// shown in `KeyHistory` (the physically-typed key when this resolution
+/// came from a single, directly-executed keystroke; otherwise the
+/// resolved command itself, matching pre-keymap-overlay behavior for
+/// multi-keystroke stock sequences like `"gg"`).
+fn execute_minigame_command(
+    state: &mut AppState,
+    command: &str,
+    display: &str,
+) -> Result<(), UserError> {
     // Record key to history for display (using shared formatter)
     if let TypedScreen::MiniGame(ref mut data) = state.screen {
-        data.add_key_to_history(format_key_for_display(command));
+        data.add_key_to_history(format_key_for_display(display));
     }
 
     // Show key history popup after first keypress (reset on scenario transitions)
@@ -281,9 +291,16 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
 /// Handle executing a Helix command during mini-game
 ///
 /// Uses typestate-based InputStateMachine for multi-key commands (dd, gg, rx).
+///
+/// `keys` is the canonical command (post keymap-overlay translation) to
+/// dispatch; `typed` is the physically-pressed key, for `KeyHistory`
+/// display. A multi-token `keys` (a keymap remap whose target spans more
+/// than one canonical key, e.g. `G` -> `"ge"`) is applied atomically via
+/// [`InputStateMachine::apply_canonical_expansion`].
 pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
-    command: std::borrow::Cow<'static, str>,
+    keys: crate::input::keymap::CanonicalKeys,
+    typed: std::borrow::Cow<'static, str>,
 ) -> Result<(), UserError> {
     // Only handle if we're on the MiniGame screen
     if !matches!(state.screen, TypedScreen::MiniGame(_)) {
@@ -299,23 +316,55 @@ pub(in crate::ui::state) fn handle_minigame_command(
         .unwrap_or(false);
 
     if is_insert_mode {
-        // In insert mode, execute command directly (bypass input state machine)
-        return execute_minigame_command(state, &command);
+        // Insert mode is never translated (R1), so `keys` is always a
+        // single token identical to `typed`. Execute directly, bypassing
+        // the input state machine.
+        return execute_minigame_command(state, keys.as_str(), typed.as_ref());
     }
 
-    // Normal mode - use InputStateMachine for multi-key command handling
-    // Convert the command string to a KeyEvent for the state machine
-    let key_event = command_to_key_event(&command);
+    let tokens = keys.tokens();
 
     let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
         return Ok(());
     };
 
-    // Process through the input state machine
+    if tokens.len() > 1 {
+        let resolved = minigame_data
+            .input_state_mut()
+            .apply_canonical_expansion(&tokens);
+        return match resolved {
+            Some(cmd) => execute_minigame_command(state, &cmd, typed.as_ref()),
+            None => {
+                tracing::warn!(
+                    keys = keys.as_str(),
+                    "keymap expansion did not resolve; discarding"
+                );
+                Ok(())
+            }
+        };
+    }
+
+    // Single token - the common, un-remapped-or-simply-remapped path,
+    // dispatched exactly as before the keymap overlay existed.
+    let was_base = minigame_data.input_state().state().is_base();
+    let key_event = command_to_key_event(tokens[0]);
     let handler_result = minigame_data.input_state_mut().process_key(key_event);
 
     match handler_result {
-        HandlerResult::Execute(cmd) => execute_minigame_command(state, cmd.as_ref()),
+        HandlerResult::Execute(cmd) => {
+            // Only the physically-typed key is more informative than the
+            // resolved command when this single keystroke, from Base,
+            // resolved it directly. A multi-keystroke stock sequence
+            // (e.g. "gg") only calls this on its final keystroke, from a
+            // non-Base context - showing the resolved command there
+            // matches pre-keymap-overlay behavior.
+            let display = if was_base {
+                typed.as_ref()
+            } else {
+                cmd.as_ref()
+            };
+            execute_minigame_command(state, cmd.as_ref(), display)
+        }
         HandlerResult::Transition(_) => Ok(()), // Waiting for more keys
         HandlerResult::Cancel | HandlerResult::Stay => Ok(()), // Cancelled or unknown
     }
@@ -610,7 +659,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, "h");
+        let _ = execute_minigame_command(&mut state, "h", "h");
 
         assert!(
             state.ui.show_key_history,
@@ -652,7 +701,7 @@ mod tests {
         }
         let initial_xp = state.progress.profile.total_xp;
 
-        execute_minigame_command(&mut state, "h").unwrap();
+        execute_minigame_command(&mut state, "h", "h").unwrap();
 
         // The scenario itself must not have completed - only the quest should have.
         if let Some(ref session) = state.game.minigame_session {
@@ -710,7 +759,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        execute_minigame_command(&mut state, "h").unwrap();
+        execute_minigame_command(&mut state, "h", "h").unwrap();
 
         assert!(
             state.progress.profile.level >= 2,
@@ -738,7 +787,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        execute_minigame_command(&mut state, "h").unwrap();
+        execute_minigame_command(&mut state, "h", "h").unwrap();
 
         assert!(
             !state.ui.notifications.visible().iter().any(|n| matches!(
@@ -770,8 +819,8 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, "x");
-        let _ = execute_minigame_command(&mut state, "d");
+        let _ = execute_minigame_command(&mut state, "x", "x");
+        let _ = execute_minigame_command(&mut state, "d", "d");
 
         assert!(
             state.progress.profile.level >= 2,
@@ -1228,7 +1277,11 @@ mod tests {
 
         // Test that handle_minigame_command processes input without panic
         // Command might fail (OperationFailed) but function should return gracefully
-        let _ = handle_minigame_command(&mut state, Cow::Borrowed("j"));
+        let _ = handle_minigame_command(
+            &mut state,
+            crate::input::keymap::CanonicalKeys::from_static("j"),
+            Cow::Borrowed("j"),
+        );
 
         // Test should verify the handler doesn't panic, not that command succeeds
         // (command success depends on scenario state)
@@ -1250,10 +1303,18 @@ mod tests {
 
         // Test multi-key command sequence (dd) doesn't panic
         // First 'd' may be buffered or rejected depending on mode
-        let _ = handle_minigame_command(&mut state, Cow::Borrowed("d"));
+        let _ = handle_minigame_command(
+            &mut state,
+            crate::input::keymap::CanonicalKeys::from_static("d"),
+            Cow::Borrowed("d"),
+        );
 
         // Second 'd' should attempt to complete sequence (might fail but shouldn't panic)
-        let _ = handle_minigame_command(&mut state, Cow::Borrowed("d"));
+        let _ = handle_minigame_command(
+            &mut state,
+            crate::input::keymap::CanonicalKeys::from_static("d"),
+            Cow::Borrowed("d"),
+        );
 
         // Test passes if no panic occurred
     }
@@ -1275,7 +1336,11 @@ mod tests {
         // Regression test for S3: handle_minigame_command used to push to key
         // history itself AND call execute_minigame_command (which also pushes),
         // double-counting every resolved keystroke.
-        let _ = handle_minigame_command(&mut state, Cow::Borrowed("j"));
+        let _ = handle_minigame_command(
+            &mut state,
+            crate::input::keymap::CanonicalKeys::from_static("j"),
+            Cow::Borrowed("j"),
+        );
 
         if let TypedScreen::MiniGame(ref data) = state.screen {
             assert_eq!(
@@ -1283,6 +1348,50 @@ mod tests {
                 1,
                 "a single resolved keypress must add exactly one history entry"
             );
+        } else {
+            panic!("expected MiniGame screen");
+        }
+    }
+
+    /// M7 regression test: with `KeymapOverlay::identity()` (the default -
+    /// no remap active), the `was_base` display-label switch in
+    /// `handle_minigame_command` must produce byte-identical `KeyHistory`
+    /// contents to the pre-keymap-overlay behavior of always showing the
+    /// resolved command, for both single-keystroke and multi-keystroke
+    /// (count-prefixed, find-char, and stock two-key) sequences.
+    #[test]
+    fn test_handle_minigame_command_key_history_matches_stock_dispatch_under_identity_overlay() {
+        use crate::input::keymap::CanonicalKeys;
+        use std::borrow::Cow;
+
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+        assert!(
+            state.config.keymap.is_empty(),
+            "test assumes the default identity overlay"
+        );
+
+        let press = |state: &mut AppState, key: &'static str| {
+            handle_minigame_command(state, CanonicalKeys::from_static(key), Cow::Borrowed(key))
+                .unwrap();
+        };
+
+        press(&mut state, "x"); // single-key, executes immediately
+        press(&mut state, "3"); // count prefix - no history push
+        press(&mut state, "j"); // "3j" resolves and executes
+        press(&mut state, "f"); // find-char prefix - no history push
+        press(&mut state, "x"); // "fx" resolves and executes
+        press(&mut state, "g"); // goto prefix - no history push
+        press(&mut state, "g"); // "gg" resolves and executes
+
+        if let TypedScreen::MiniGame(ref data) = state.screen {
+            // `keys()` is newest-first.
+            assert_eq!(data.key_history.keys(), ["gg", "fx", "3j", "x"]);
         } else {
             panic!("expected MiniGame screen");
         }
@@ -1296,7 +1405,11 @@ mod tests {
         // Don't start minigame
 
         // Should handle gracefully without session
-        let result = handle_minigame_command(&mut state, Cow::Borrowed("j"));
+        let result = handle_minigame_command(
+            &mut state,
+            crate::input::keymap::CanonicalKeys::from_static("j"),
+            Cow::Borrowed("j"),
+        );
         assert!(result.is_ok());
     }
 
@@ -1307,7 +1420,11 @@ mod tests {
         let mut state = create_test_state();
         // Keep on ModeSelection screen, don't transition to MiniGame
 
-        let result = handle_minigame_command(&mut state, Cow::Borrowed("j"));
+        let result = handle_minigame_command(
+            &mut state,
+            crate::input::keymap::CanonicalKeys::from_static("j"),
+            Cow::Borrowed("j"),
+        );
         assert!(result.is_ok());
     }
 
@@ -1446,7 +1563,7 @@ mod tests {
         }
 
         // Execute command (might fail validation but should add to history)
-        let _ = execute_minigame_command(&mut state, "h");
+        let _ = execute_minigame_command(&mut state, "h", "h");
 
         // Key should be added to history regardless of command success
         if let TypedScreen::MiniGame(ref data) = state.screen {
@@ -1462,7 +1579,7 @@ mod tests {
         state.screen = TypedScreen::MiniGame(MiniGameData::default());
 
         // Should handle gracefully without session
-        let result = execute_minigame_command(&mut state, "j");
+        let result = execute_minigame_command(&mut state, "j", "j");
         assert!(result.is_ok());
     }
 
@@ -1691,8 +1808,8 @@ mod tests {
 
         // Complete the scenario ("x" selects the line, "d" deletes it) essentially
         // immediately, so time_ratio stays near 0.0.
-        let _ = execute_minigame_command(&mut state, "x");
-        let _ = execute_minigame_command(&mut state, "d");
+        let _ = execute_minigame_command(&mut state, "x", "x");
+        let _ = execute_minigame_command(&mut state, "d", "d");
 
         assert_eq!(state.progress.profile.speed_run_count, 1);
         assert_eq!(state.progress.profile.flash_run_count, 1);
@@ -1740,8 +1857,8 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_millis(3_500));
 
-        let _ = execute_minigame_command(&mut state, "x");
-        let _ = execute_minigame_command(&mut state, "d");
+        let _ = execute_minigame_command(&mut state, "x", "x");
+        let _ = execute_minigame_command(&mut state, "d", "d");
 
         assert_eq!(state.progress.profile.speed_run_count, 0);
         assert_eq!(state.progress.profile.flash_run_count, 0);
@@ -1782,8 +1899,8 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, "x");
-        let _ = execute_minigame_command(&mut state, "d");
+        let _ = execute_minigame_command(&mut state, "x", "x");
+        let _ = execute_minigame_command(&mut state, "d", "d");
 
         assert_eq!(state.progress.profile.scenarios_completed, 1);
         assert_eq!(state.progress.profile.perfect_scenarios, 1);
@@ -1820,8 +1937,8 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, "x");
-        let _ = execute_minigame_command(&mut state, "d");
+        let _ = execute_minigame_command(&mut state, "x", "x");
+        let _ = execute_minigame_command(&mut state, "d", "d");
 
         assert_eq!(state.progress.profile.scenarios_completed, 1);
         assert_eq!(state.progress.profile.perfect_scenarios, 0);

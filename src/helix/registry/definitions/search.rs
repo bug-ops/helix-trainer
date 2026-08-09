@@ -12,7 +12,7 @@ use crate::helix::simulator::commands::search;
 pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     registry.register(Command::new(
         CommandMetadata::new(
-            "search_forward",
+            "search",
             CMD_SEARCH_FORWARD,
             "Search forward",
             "Search forward for a regex pattern. Type the pattern and press Enter to find matches.",
@@ -25,7 +25,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "search_backward",
+            "rsearch",
             CMD_SEARCH_BACKWARD,
             "Search backward",
             "Search backward for a regex pattern. Type the pattern and press Enter to find matches.",
@@ -64,7 +64,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "search_word",
+            "search_selection_detect_word_boundaries",
             CMD_SEARCH_WORD,
             "Search word",
             "Search for the word under cursor with word boundaries.",

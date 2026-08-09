@@ -22,6 +22,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 
+use crate::input::keymap::{CanonicalKeys, PhysicalKey};
 use crate::ui::state::InputStateAccess;
 use crate::ui::{AppState, Message, Screen, state::TypedScreen};
 
@@ -344,32 +345,71 @@ fn map_arrow_to_movement(key_code: KeyCode) -> Option<&'static str> {
 /// Shared logic for both training and arcade modes.
 /// In normal mode, passes keys directly to the message handler where
 /// `InputStateMachine` processes multi-key sequences (gg, dd, fx, rx, 3j).
+///
+/// `make_message` receives both the canonical key(s) to dispatch and the
+/// physically-typed key (for `KeyHistory` display, which must show what
+/// the user actually pressed, not the translated command).
 fn handle_gameplay_input<F>(key: KeyEvent, state: &AppState, make_message: F) -> Option<Message>
 where
-    F: FnOnce(Cow<'static, str>) -> Message,
+    F: FnOnce(CanonicalKeys, Cow<'static, str>) -> Message,
 {
     if is_gameplay_insert_mode(state) {
-        // Insert mode: use dedicated handler
-        handle_insert_mode_input(key).map(make_message)
-    } else {
-        // Normal mode: check if arrow keys should be mapped to movement commands
-        // Only map if no modifiers are pressed (to avoid conflicts with Ctrl+Arrow, Alt+Arrow, etc.)
-        // and no command-line is pending (its buffer needs raw arrow keys ignored,
-        // not letters appended - see the CommandLinePending handler's Stay-on-arrow rule).
-        if state.config.persistent.enable_arrow_keys_in_normal_mode
-            && key.modifiers.is_empty()
-            && gameplay_input_state(state)
-                .map(|s| s.pending_command_line().is_none())
-                .unwrap_or(true)
-            && let Some(mapped_cmd) = map_arrow_to_movement(key.code)
-        {
-            return Some(make_message(Cow::Borrowed(mapped_cmd)));
-        }
-
-        // Normal mode: convert key to string for InputStateMachine
-        // State machine handles multi-key commands in gameplay.rs/minigame.rs
-        key_to_command_string(key).map(make_message)
+        // Insert mode is raw character insertion, never translated by the
+        // keymap overlay: only the normal-mode branch below consults it.
+        // Translating here would corrupt typing for any remapped letter.
+        return handle_insert_mode_input(key)
+            .map(|typed| make_message(typed.clone().into(), typed));
     }
+
+    // Normal mode: the keymap overlay is consulted first, directly on the
+    // raw physical key, before the stock arrow-key mapping and before
+    // `key_to_command_string` - only a miss falls through to the stock
+    // path. States that consume the next key literally (command-line
+    // buffer, find/replace targets, register names, ...) report
+    // `key_context() == None` and are therefore never translated here.
+    //
+    // `key_context()` maps `CountPending`/`RegisterOpPending` to the same
+    // `KeyContext::Base` lookup table as literal `Base` (a count prefix or
+    // register selector doesn't change which command a key invokes), but
+    // a *multi-token* expansion can only ever be dispatched by resetting
+    // to `Base` (see `InputStateMachine::apply_canonical_expansion`) - so
+    // it must not be used while the machine is actually mid-count or
+    // mid-register-select, or the count/register context would be
+    // silently discarded from underneath it. A single-token translation
+    // has no such restriction: it's dispatched by continuing from
+    // wherever the machine currently is (e.g. `3` + a remapped `G` ->
+    // `k` still yields "3k", exactly like the un-remapped key would).
+    if let Some(machine) = gameplay_input_state(state)
+        && let Some(context) = machine.state().key_context()
+        && let Some(canonical) = state
+            .config
+            .keymap
+            .lookup(context, PhysicalKey::from_event(key))
+        && (canonical.tokens().len() == 1 || machine.state().is_base())
+    {
+        let typed = Cow::Owned(PhysicalKey::from_event(key).label());
+        return Some(make_message(canonical.clone(), typed));
+    }
+
+    // Normal mode: check if arrow keys should be mapped to movement commands
+    // Only map if no modifiers are pressed (to avoid conflicts with Ctrl+Arrow, Alt+Arrow, etc.)
+    // and no command-line is pending (its buffer needs raw arrow keys ignored,
+    // not letters appended - see the CommandLinePending handler's Stay-on-arrow rule).
+    if state.config.persistent.enable_arrow_keys_in_normal_mode
+        && key.modifiers.is_empty()
+        && gameplay_input_state(state)
+            .map(|s| s.pending_command_line().is_none())
+            .unwrap_or(true)
+        && let Some(mapped_cmd) = map_arrow_to_movement(key.code)
+    {
+        let stock = Cow::Borrowed(mapped_cmd);
+        return Some(make_message(stock.clone().into(), stock));
+    }
+
+    // Normal mode: convert key to string for InputStateMachine
+    // State machine handles multi-key commands in gameplay.rs/minigame.rs
+    let stock = key_to_command_string(key)?;
+    Some(make_message(stock.clone().into(), stock))
 }
 
 /// Convert a key event to a command string for the state machine
@@ -435,7 +475,10 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     }
 
     // Handle gameplay input (insert mode or normal mode)
-    handle_gameplay_input(key, state, Message::ExecuteCommand)
+    handle_gameplay_input(key, state, |keys, typed| Message::ExecuteCommand {
+        keys,
+        typed,
+    })
 }
 
 /// Handle keyboard events on the results screen
@@ -595,7 +638,10 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
     if session.state().is_playing() {
         // In insert mode - use shared handler (includes Esc to exit insert)
         if is_gameplay_insert_mode(state) {
-            return handle_gameplay_input(key, state, Message::MiniGameCommand);
+            return handle_gameplay_input(key, state, |keys, typed| Message::MiniGameCommand {
+                keys,
+                typed,
+            });
         }
 
         // Normal mode - Esc cancels a pending prefix/command-line state
@@ -607,12 +653,18 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
                 .map(|s| s.is_prefix_state())
                 .unwrap_or(false);
             if has_pending_state {
-                return handle_gameplay_input(key, state, Message::MiniGameCommand);
+                return handle_gameplay_input(key, state, |keys, typed| Message::MiniGameCommand {
+                    keys,
+                    typed,
+                });
             }
             return Some(Message::PauseMiniGame);
         }
 
-        return handle_gameplay_input(key, state, Message::MiniGameCommand);
+        return handle_gameplay_input(key, state, |keys, typed| Message::MiniGameCommand {
+            keys,
+            typed,
+        });
     }
 
     // Countdown state - Esc pauses
@@ -742,7 +794,10 @@ mod tests {
         let msg = handle_task_keys(key, &state);
         assert_eq!(
             msg,
-            Some(Message::ExecuteCommand(Cow::Borrowed(CMD_MOVE_LEFT)))
+            Some(Message::ExecuteCommand {
+                keys: CanonicalKeys::from_static(CMD_MOVE_LEFT),
+                typed: Cow::Borrowed(CMD_MOVE_LEFT),
+            })
         );
     }
 
@@ -1093,9 +1148,10 @@ mod tests {
             // Escape should exit Insert mode (gameplay Escape), not dismiss the hint panel.
             assert_eq!(
                 msg,
-                Some(Message::ExecuteCommand(Cow::Borrowed(
-                    crate::helix::commands::CMD_ESCAPE
-                )))
+                Some(Message::ExecuteCommand {
+                    keys: CanonicalKeys::from_static(crate::helix::commands::CMD_ESCAPE),
+                    typed: Cow::Borrowed(crate::helix::commands::CMD_ESCAPE),
+                })
             );
         }
 
@@ -1358,12 +1414,14 @@ mod tests {
 
             // Arrow keys should be converted to "Left"/"Right" strings, not movement commands
             let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
-            let result = handle_gameplay_input(left_key, &state, Message::ExecuteCommand);
+            let result = handle_gameplay_input(left_key, &state, |keys, typed| {
+                Message::ExecuteCommand { keys, typed }
+            });
 
             // Should return "Left" string, not "h" command
             match result {
-                Some(Message::ExecuteCommand(cmd)) => {
-                    assert_eq!(cmd, "Left");
+                Some(Message::ExecuteCommand { keys, .. }) => {
+                    assert_eq!(keys.as_str(), "Left");
                 }
                 _ => panic!("Expected ExecuteCommand with 'Left'"),
             }
@@ -1422,37 +1480,45 @@ mod tests {
 
             // Arrow keys should be mapped to movement commands
             let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
-            let result = handle_gameplay_input(left_key, &state, Message::ExecuteCommand);
+            let result = handle_gameplay_input(left_key, &state, |keys, typed| {
+                Message::ExecuteCommand { keys, typed }
+            });
             match result {
-                Some(Message::ExecuteCommand(cmd)) => {
-                    assert_eq!(cmd, CMD_MOVE_LEFT);
+                Some(Message::ExecuteCommand { keys, .. }) => {
+                    assert_eq!(keys.as_str(), CMD_MOVE_LEFT);
                 }
                 _ => panic!("Expected ExecuteCommand with CMD_MOVE_LEFT"),
             }
 
             let right_key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
-            let result = handle_gameplay_input(right_key, &state, Message::ExecuteCommand);
+            let result = handle_gameplay_input(right_key, &state, |keys, typed| {
+                Message::ExecuteCommand { keys, typed }
+            });
             match result {
-                Some(Message::ExecuteCommand(cmd)) => {
-                    assert_eq!(cmd, CMD_MOVE_RIGHT);
+                Some(Message::ExecuteCommand { keys, .. }) => {
+                    assert_eq!(keys.as_str(), CMD_MOVE_RIGHT);
                 }
                 _ => panic!("Expected ExecuteCommand with CMD_MOVE_RIGHT"),
             }
 
             let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
-            let result = handle_gameplay_input(up_key, &state, Message::ExecuteCommand);
+            let result = handle_gameplay_input(up_key, &state, |keys, typed| {
+                Message::ExecuteCommand { keys, typed }
+            });
             match result {
-                Some(Message::ExecuteCommand(cmd)) => {
-                    assert_eq!(cmd, CMD_MOVE_UP);
+                Some(Message::ExecuteCommand { keys, .. }) => {
+                    assert_eq!(keys.as_str(), CMD_MOVE_UP);
                 }
                 _ => panic!("Expected ExecuteCommand with CMD_MOVE_UP"),
             }
 
             let down_key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
-            let result = handle_gameplay_input(down_key, &state, Message::ExecuteCommand);
+            let result = handle_gameplay_input(down_key, &state, |keys, typed| {
+                Message::ExecuteCommand { keys, typed }
+            });
             match result {
-                Some(Message::ExecuteCommand(cmd)) => {
-                    assert_eq!(cmd, CMD_MOVE_DOWN);
+                Some(Message::ExecuteCommand { keys, .. }) => {
+                    assert_eq!(keys.as_str(), CMD_MOVE_DOWN);
                 }
                 _ => panic!("Expected ExecuteCommand with CMD_MOVE_DOWN"),
             }
@@ -1514,30 +1580,36 @@ mod tests {
 
             // Arrow keys with modifiers should NOT be mapped (should use normal handler)
             let ctrl_left = KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL);
-            let result = handle_gameplay_input(ctrl_left, &state, Message::ExecuteCommand);
+            let result = handle_gameplay_input(ctrl_left, &state, |keys, typed| {
+                Message::ExecuteCommand { keys, typed }
+            });
             // Should return "Left" string, not "h" command
             match result {
-                Some(Message::ExecuteCommand(cmd)) => {
-                    assert_eq!(cmd, "Left");
+                Some(Message::ExecuteCommand { keys, .. }) => {
+                    assert_eq!(keys.as_str(), "Left");
                 }
                 _ => panic!("Expected ExecuteCommand with 'Left' for Ctrl+Left"),
             }
 
             let alt_up = KeyEvent::new(KeyCode::Up, KeyModifiers::ALT);
-            let result = handle_gameplay_input(alt_up, &state, Message::ExecuteCommand);
+            let result = handle_gameplay_input(alt_up, &state, |keys, typed| {
+                Message::ExecuteCommand { keys, typed }
+            });
             match result {
-                Some(Message::ExecuteCommand(cmd)) => {
-                    assert_eq!(cmd, "Up");
+                Some(Message::ExecuteCommand { keys, .. }) => {
+                    assert_eq!(keys.as_str(), "Up");
                 }
                 _ => panic!("Expected ExecuteCommand with 'Up' for Alt+Up"),
             }
 
             // Test with Shift modifier
             let shift_right = KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT);
-            let result = handle_gameplay_input(shift_right, &state, Message::ExecuteCommand);
+            let result = handle_gameplay_input(shift_right, &state, |keys, typed| {
+                Message::ExecuteCommand { keys, typed }
+            });
             match result {
-                Some(Message::ExecuteCommand(cmd)) => {
-                    assert_eq!(cmd, "Right");
+                Some(Message::ExecuteCommand { keys, .. }) => {
+                    assert_eq!(keys.as_str(), "Right");
                 }
                 _ => panic!("Expected ExecuteCommand with 'Right' for Shift+Right"),
             }
@@ -1806,7 +1878,7 @@ mod tests {
             // Esc while a count is pending must route through the state
             // machine (Cancel), not pause the game.
             assert!(
-                matches!(esc_msg, Some(Message::MiniGameCommand(_))),
+                matches!(esc_msg, Some(Message::MiniGameCommand { .. })),
                 "expected Esc to route as a MiniGameCommand (cancel) while a prefix state is pending, got {:?}",
                 esc_msg
             );
@@ -1824,10 +1896,142 @@ mod tests {
             let esc_msg =
                 handle_minigame_keys(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state);
             assert!(
-                matches!(esc_msg, Some(Message::MiniGameCommand(_))),
+                matches!(esc_msg, Some(Message::MiniGameCommand { .. })),
                 "expected Esc to route as a MiniGameCommand (cancel) while RegisterPending, got {:?}",
                 esc_msg
             );
+        }
+    }
+
+    /// Regression tests for the S1 review finding: a multi-token keymap
+    /// remap (e.g. `G = "goto_last_line"` -> canonical `"ge"`) looked up
+    /// while the real `InputState` is `CountPending`/`RegisterOpPending`
+    /// (not literally `Base`) must fall through to the stock key instead
+    /// of reaching `InputStateMachine::apply_canonical_expansion`, whose
+    /// `debug_assert!(is_base())` would otherwise panic in a debug build.
+    /// `key_context()` maps both those states to the same `KeyContext::Base`
+    /// *lookup table* as literal `Base`, which is correct for single-token
+    /// translations but not for multi-token ones (see `handlers.rs`'s
+    /// `handle_gameplay_input` doc comment on the guard this exercises).
+    mod multi_token_remap_outside_base_tests {
+        use super::*;
+        use crate::config::keymap::resolve_str;
+        use crate::input::keymap::CanonicalKeys;
+        use crate::ui::state::{ConfigState, TaskData, update};
+
+        /// A task-screen `AppState` with a keymap overlay remapping `G` to
+        /// `goto_last_line` (canonical `"ge"`, 2 tokens) at the top level.
+        fn state_with_multi_token_remap() -> AppState {
+            let (keymap, report) = resolve_str(
+                r#"
+                [keys.normal]
+                G = "goto_last_line"
+                "#,
+            )
+            .unwrap();
+            assert_eq!(report.applied, 1);
+            assert!(!keymap.is_empty());
+
+            let mut state = AppState::with_config(
+                vec![],
+                crate::gamification::UserProfile::new(),
+                crate::gamification::ProfileStorage::for_test(),
+                crate::learning::PerformanceTracker::new(),
+                ConfigState {
+                    keymap,
+                    ..ConfigState::default()
+                },
+            );
+            state.screen = TypedScreen::Task(TaskData::new(make_active_task_session()));
+            state
+        }
+
+        fn press(state: &mut AppState, key: KeyEvent) {
+            if let Some(msg) = handle_task_keys(key, state) {
+                update(state, msg).unwrap();
+            }
+        }
+
+        fn action_count(state: &AppState) -> usize {
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
+            };
+            task_data.session.action_count()
+        }
+
+        fn input_state(state: &AppState) -> crate::input::typestate::InputState {
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
+            };
+            task_data.input_state().state().clone()
+        }
+
+        /// Sanity check: outside of `CountPending`, the remap does resolve
+        /// to its multi-token canonical, proving the fixture overlay works.
+        #[test]
+        fn multi_token_remap_resolves_from_base() {
+            let state = state_with_multi_token_remap();
+            let msg = handle_task_keys(
+                KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),
+                &state,
+            )
+            .unwrap();
+            match msg {
+                Message::ExecuteCommand { keys, .. } => {
+                    assert_eq!(keys, CanonicalKeys::from_static("ge"));
+                }
+                other => panic!("expected ExecuteCommand, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn count_then_multi_token_remap_does_not_panic_and_cancels() {
+            let mut state = state_with_multi_token_remap();
+
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
+            );
+            assert!(input_state(&state).is_count_pending());
+
+            // Must not panic (this is the regression under test) and must
+            // fall through to the stock key, which "3" + "G" cancels (G is
+            // not a count-compatible command in this trainer).
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),
+            );
+
+            assert!(input_state(&state).is_base());
+            assert_eq!(action_count(&state), 0);
+        }
+
+        #[test]
+        fn register_op_then_multi_token_remap_does_not_panic_and_cancels() {
+            let mut state = state_with_multi_token_remap();
+
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
+            );
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+            );
+            assert!(matches!(
+                input_state(&state),
+                crate::input::typestate::InputState::RegisterOpPending { register: 'a' }
+            ));
+
+            // Must not panic and must fall through to the stock key, which
+            // RegisterOpPending cancels on (only y/p/P/R are recognized ops).
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),
+            );
+
+            assert!(input_state(&state).is_base());
+            assert_eq!(action_count(&state), 0);
         }
     }
 }

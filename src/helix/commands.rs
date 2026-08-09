@@ -55,7 +55,7 @@ pub const CMD_PASTE_BEFORE: &str = "P";
 // Undo/Redo
 pub const CMD_UNDO: &str = "u";
 pub const CMD_REDO: &str = "U";
-pub const CMD_CTRL_R: &str = "ctrl-r";
+pub const CMD_CTRL_R: &str = "Ctrl-r";
 
 // Selection commands
 pub const CMD_SELECT_LINE: &str = "x";

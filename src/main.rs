@@ -8,11 +8,11 @@
 use anyhow::Result;
 use helix_trainer::{
     async_state::SaveWriterOutcome,
-    config::{AppConfig, ConfigStorage},
+    config::{AppConfig, ConfigStorage, keymap::resolve_startup_overlay},
     data_loader::{spawn_data_loaders, spawn_save_writer},
     gamification::ProfileStorage,
     learning::PerformanceTracker,
-    ui::{self, AppState},
+    ui::{self, AppState, Notification, NotificationType},
 };
 use std::io;
 use tokio::sync::mpsc;
@@ -56,6 +56,11 @@ async fn main() -> Result<()> {
         AppConfig::default()
     });
 
+    // Resolve the gameplay keymap overlay from the user's Helix config, if
+    // `use_helix_keymap` is enabled. Degrades to the stock keymap
+    // (identity overlay) on any failure - never blocks startup.
+    let (keymap, keymap_report, keymap_startup_message) = resolve_startup_overlay(&app_config);
+
     // Initialize app state (empty, will be populated by async loaders)
     let profile_storage = ProfileStorage::new();
     let tracker = PerformanceTracker::new();
@@ -63,6 +68,8 @@ async fn main() -> Result<()> {
     // Create ConfigState from loaded AppConfig
     let config_state = ui::state::ConfigState {
         persistent: app_config,
+        keymap,
+        keymap_report,
         ..ui::state::ConfigState::default()
     };
 
@@ -73,6 +80,13 @@ async fn main() -> Result<()> {
         tracker,
         config_state,
     );
+
+    if let Some(message) = keymap_startup_message {
+        app_state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::Info { message }));
+    }
 
     // Every profile save (mid-session and exit-time) is funneled through
     // this single serialized writer rather than writing directly, so

@@ -13,7 +13,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Basic cursor movement
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_left",
+            "move_char_left",
             CMD_MOVE_LEFT,
             "Move cursor left",
             "Move the cursor one character to the left. Stops at line start.",
@@ -26,7 +26,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_right",
+            "move_char_right",
             CMD_MOVE_RIGHT,
             "Move cursor right",
             "Move the cursor one character to the right. Stops at line end.",
@@ -39,7 +39,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_down",
+            "move_visual_line_down",
             CMD_MOVE_DOWN,
             "Move cursor down",
             "Move the cursor one line down. Maintains column position.",
@@ -52,7 +52,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_up",
+            "move_visual_line_up",
             CMD_MOVE_UP,
             "Move cursor up",
             "Move the cursor one line up. Maintains column position.",
@@ -266,7 +266,7 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
     // Find char commands - metadata only, handlers are in dispatcher
     registry.register(Command::new(
         CommandMetadata::new(
-            "find_char",
+            "find_next_char",
             CMD_FIND_CHAR,
             "Find character forward",
             "Move to the next occurrence of a character on the current line.",
@@ -279,7 +279,7 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "find_char_reverse",
+            "find_prev_char",
             CMD_FIND_CHAR_REVERSE,
             "Find character backward",
             "Move to the previous occurrence of a character on the current line.",
@@ -292,7 +292,7 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "till_char",
+            "find_till_char",
             CMD_TILL_CHAR,
             "Till character forward",
             "Move just before the next occurrence of a character.",
@@ -305,7 +305,7 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "till_char_reverse",
+            "till_prev_char",
             CMD_TILL_CHAR_REVERSE,
             "Till character backward",
             "Move just after the previous occurrence of a character.",
@@ -343,9 +343,11 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
         |sim| movement::goto_next_paragraph(sim, 1),
     ));
 
-    // First non-blank (alias for gs behavior with ^ key)
+    // First non-blank (trainer convenience alias for gs; "^" is not a real
+    // Helix binding, so this is marked alias_only and excluded from the
+    // helix_name -> CanonicalKeys reverse index).
     registry.register(Command::new(
-        CommandMetadata::new(
+        CommandMetadata::new_alias(
             "goto_first_nonblank",
             CMD_GOTO_FIRST_NONBLANK,
             "First non-blank",
@@ -400,7 +402,7 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "half_page_up",
+            "page_cursor_half_up",
             CMD_HALF_PAGE_UP,
             "Half page up",
             "Move the cursor up by half a page.",
@@ -413,7 +415,7 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "half_page_down",
+            "page_cursor_half_down",
             CMD_HALF_PAGE_DOWN,
             "Half page down",
             "Move the cursor down by half a page.",

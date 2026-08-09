@@ -1,8 +1,6 @@
 //! Tests for scenario lifecycle (start, complete, abandon, retry)
 
-use std::borrow::Cow;
-
-use super::common::{create_test_app_state, create_test_scenario};
+use super::common::{create_test_app_state, create_test_scenario, exec};
 use crate::game::PlayableScenario;
 use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE};
 use crate::ui::state::{Message, TypedScreen, update};
@@ -48,16 +46,8 @@ fn test_complete_scenario_navigates_to_results() {
 
     // Execute the solution command to reach target state
     // In Helix, 'xd' = select line + delete selection (or legacy 'x')
-    update(
-        &mut state,
-        Message::ExecuteCommand(Cow::Borrowed(CMD_SELECT_LINE)),
-    )
-    .unwrap();
-    update(
-        &mut state,
-        Message::ExecuteCommand(Cow::Borrowed(CMD_DELETE_SELECTION)),
-    )
-    .unwrap();
+    update(&mut state, exec(CMD_SELECT_LINE)).unwrap();
+    update(&mut state, exec(CMD_DELETE_SELECTION)).unwrap();
 
     // After completing the scenario, completion_time is set (success animation starts)
     // Screen stays on Task until CompleteScenario message is sent after delay
@@ -119,7 +109,7 @@ fn test_retry_scenario_resets_state() {
     update(&mut state, Message::StartScenario(0)).unwrap();
 
     // Execute an action to increase action count
-    update(&mut state, Message::ExecuteCommand(Cow::Borrowed("l"))).unwrap();
+    update(&mut state, exec("l")).unwrap();
 
     // Verify we have 1 action recorded
     if let TypedScreen::Task(task_data) = &state.screen {
@@ -184,16 +174,8 @@ fn test_previously_completed_quests_tracking() {
 
     // Execute command through message to trigger quest progress tracking and complete scenario
     // In Helix, 'xd' = select line + delete selection
-    update(
-        &mut state,
-        Message::ExecuteCommand(Cow::Borrowed(CMD_SELECT_LINE)),
-    )
-    .unwrap();
-    update(
-        &mut state,
-        Message::ExecuteCommand(Cow::Borrowed(CMD_DELETE_SELECTION)),
-    )
-    .unwrap();
+    update(&mut state, exec(CMD_SELECT_LINE)).unwrap();
+    update(&mut state, exec(CMD_DELETE_SELECTION)).unwrap();
 
     // After executing the solution, completion_time is set (success animation)
     // Screen stays on Task until CompleteScenario message is sent after delay

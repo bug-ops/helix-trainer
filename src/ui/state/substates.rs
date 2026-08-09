@@ -8,6 +8,7 @@ use crate::config::{AppConfig, Difficulty, ScenarioCategory, ScenarioCollection,
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, UserProfile};
+use crate::input::keymap::KeymapOverlay;
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
 use crate::sound::SoundManager;
 use crate::time::Clock;
@@ -485,6 +486,21 @@ pub struct ConfigState {
 
     /// Whether persistent config was modified during this session
     pub config_modified: bool,
+
+    /// Resolved keymap overlay for gameplay key translation.
+    ///
+    /// [`KeymapOverlay::identity`] (the default) when `persistent.use_helix_keymap`
+    /// is `false` or no config could be loaded — every lookup misses, so
+    /// gameplay input is unaffected. Populated once at startup in `main.rs`;
+    /// menus, results, and filter screens never consult it.
+    pub keymap: KeymapOverlay,
+
+    /// What [`keymap`](Self::keymap) resolution applied and ignored from
+    /// the user's Helix config, retained for the lifetime of the session
+    /// (not just the auto-dismissing startup toast built from it) so a
+    /// future status screen can render it, and so it survives past
+    /// whatever `tracing` line accompanied it at startup.
+    pub keymap_report: crate::config::keymap::KeymapReport,
 }
 
 impl Default for ConfigState {
@@ -496,6 +512,8 @@ impl Default for ConfigState {
             difficulty_filters: HashSet::new(),
             show_completed: true,
             config_modified: false,
+            keymap_report: crate::config::keymap::KeymapReport::default(),
+            keymap: KeymapOverlay::identity(),
         }
     }
 }

@@ -50,6 +50,10 @@ pub struct CommandRegistry<M: EditorMode> {
     commands: HashMap<&'static str, Command<M>>,
     /// Commands grouped by category
     by_category: HashMap<Category, Vec<&'static str>>,
+    /// Reverse index: real Helix 25.07.1 command name -> canonical key
+    /// sequence that triggers it. Excludes `alias_only` entries, which have
+    /// no corresponding upstream Helix command name to index by.
+    by_name: HashMap<&'static str, &'static str>,
     /// KeyTrie for multi-key resolution
     key_trie: KeyTrie,
     /// Mode marker
@@ -62,6 +66,7 @@ impl<M: EditorMode> CommandRegistry<M> {
         Self {
             commands: HashMap::new(),
             by_category: HashMap::new(),
+            by_name: HashMap::new(),
             key_trie: KeyTrie::new(),
             _mode: PhantomData,
         }
@@ -75,6 +80,12 @@ impl<M: EditorMode> CommandRegistry<M> {
         // Add to category grouping
         self.by_category.entry(category).or_default().push(key);
 
+        // Add to the name -> key reverse index, unless this is a
+        // trainer-internal convenience binding with no real Helix name.
+        if !cmd.metadata.alias_only {
+            self.by_name.insert(cmd.metadata.name, key);
+        }
+
         // Register in KeyTrie for single-key commands (including modifier keys)
         // Modifier keys like "Alt-x", "Ctrl-c" are considered single commands
         if key.len() == 1 || is_modifier_key(key) {
@@ -83,6 +94,30 @@ impl<M: EditorMode> CommandRegistry<M> {
 
         // Store command
         self.commands.insert(key, cmd);
+    }
+
+    /// Look up the canonical key sequence for a real Helix 25.07.1 command name.
+    ///
+    /// Returns `None` for unknown names and for names that only exist as
+    /// `alias_only` trainer bindings, which have no upstream Helix command
+    /// name to resolve.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::registry::normal_registry;
+    ///
+    /// let registry = normal_registry();
+    /// assert_eq!(registry.key_for_name("goto_last_line"), Some("ge"));
+    /// assert_eq!(registry.key_for_name("goto_first_nonblank"), None); // alias_only
+    /// ```
+    pub fn key_for_name(&self, name: &str) -> Option<&'static str> {
+        self.by_name.get(name).copied()
+    }
+
+    /// Iterate the `helix_name -> key` reverse index (excludes `alias_only` entries).
+    pub fn name_index(&self) -> impl Iterator<Item = (&'static str, &'static str)> + '_ {
+        self.by_name.iter().map(|(&name, &key)| (name, key))
     }
 
     /// Execute a command by key (O(1) lookup)
@@ -295,5 +330,64 @@ mod tests {
         let registry: CommandRegistry<NormalMode> = CommandRegistry::new();
         assert!(!registry.contains("xyz"));
         assert!(registry.get_metadata("xyz").is_none());
+    }
+
+    /// Guards the `helix_name -> key` reverse index used to resolve a
+    /// user's Helix keymap config by command name: it must be **total**
+    /// (every non-alias command's name resolves back to its own key) and
+    /// **injective** (no two distinct non-alias commands share a `name`,
+    /// which would make resolution ambiguous). A collision here is a bug
+    /// in the registry's `CommandMetadata::name` values, not something a
+    /// tie-break rule should paper over — this test is meant to fail the
+    /// build.
+    #[test]
+    fn reverse_index_is_total_and_injective_over_non_alias_names() {
+        let mut registry: CommandRegistry<NormalMode> = CommandRegistry::new();
+        crate::helix::registry::definitions::register_all(&mut registry);
+
+        let non_alias: Vec<_> = registry.all_commands().filter(|m| !m.alias_only).collect();
+        assert!(!non_alias.is_empty());
+
+        // Injective: the index has exactly one entry per non-alias command.
+        assert_eq!(
+            registry.name_index().count(),
+            non_alias.len(),
+            "reverse index is not injective: two non-alias commands share a `name`"
+        );
+
+        // Total: every non-alias command's name resolves back to its own key.
+        for meta in &non_alias {
+            assert_eq!(
+                registry.key_for_name(meta.name),
+                Some(meta.key),
+                "reverse index missing or wrong entry for `{}`",
+                meta.name
+            );
+        }
+    }
+
+    /// Every non-alias `CommandMetadata.name` must be a real upstream Helix
+    /// 25.07.1 command name, checked against the reference list scraped
+    /// from `helix-term/src/commands.rs`'s `static_commands!` invocation.
+    /// `alias_only` entries are trainer-internal by definition and are
+    /// exempt.
+    #[test]
+    fn non_alias_names_are_real_helix_commands() {
+        let known: std::collections::HashSet<&str> = include_str!("helix-25.07-commands.txt")
+            .lines()
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .collect();
+        assert!(known.len() > 200, "reference list failed to load");
+
+        let mut registry: CommandRegistry<NormalMode> = CommandRegistry::new();
+        crate::helix::registry::definitions::register_all(&mut registry);
+
+        for meta in registry.all_commands().filter(|m| !m.alias_only) {
+            assert!(
+                known.contains(meta.name),
+                "`{}` is not a real Helix 25.07.1 command name",
+                meta.name
+            );
+        }
     }
 }

@@ -27,7 +27,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Change selection (delete and enter insert mode)
     registry.register(Command::new(
         CommandMetadata::new(
-            "change",
+            "change_selection",
             CMD_CHANGE,
             "Change selection",
             "Delete the selection and enter insert mode.",
@@ -41,7 +41,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Join lines
     registry.register(Command::new(
         CommandMetadata::new(
-            "join_lines",
+            "join_selections",
             CMD_JOIN_LINES,
             "Join lines",
             "Join the current line with the next line.",
@@ -68,7 +68,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "dedent",
+            "unindent",
             CMD_DEDENT,
             "Dedent line",
             "Remove one level of indentation from the current line.",
@@ -95,7 +95,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "switch_case_alt",
+            "switch_to_lowercase",
             CMD_SWITCH_CASE_ALT,
             "Switch case (alt)",
             "Toggle the case of the selected text (alternative key).",
@@ -148,7 +148,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Replace character (metadata only, handler in dispatcher)
     registry.register(Command::new(
         CommandMetadata::new(
-            "replace_char",
+            "replace",
             CMD_REPLACE,
             "Replace character",
             "Replace the character under cursor with the next typed character.",
@@ -162,7 +162,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Insert mode entry commands
     registry.register(Command::new(
         CommandMetadata::new(
-            "insert",
+            "insert_mode",
             CMD_INSERT,
             "Enter insert mode",
             "Enter insert mode at the cursor position.",
@@ -175,7 +175,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "append",
+            "append_mode",
             CMD_APPEND,
             "Append after cursor",
             "Enter insert mode after the cursor position.",
@@ -188,7 +188,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "insert_line_start",
+            "insert_at_line_start",
             CMD_INSERT_LINE_START,
             "Insert at line start",
             "Enter insert mode at the start of the current line.",
@@ -201,7 +201,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "append_line_end",
+            "insert_at_line_end",
             CMD_APPEND_LINE_END,
             "Append at line end",
             "Enter insert mode at the end of the current line.",
@@ -238,10 +238,10 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         HelixSimulator::open_above,
     ));
 
-    // Escape (no-op in normal mode)
+    // Escape (no-op in normal mode; real Helix command is `normal_mode`)
     registry.register(Command::new(
         CommandMetadata::new(
-            "escape",
+            "normal_mode",
             CMD_ESCAPE,
             "Escape",
             "Return to normal mode (no-op if already in normal mode).",
@@ -252,9 +252,11 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         |_sim| Ok(()), // No-op in normal mode
     ));
 
-    // Repeat (metadata only, handled specially)
+    // Repeat (metadata only, handled specially). Trainer-internal
+    // convenience concept: Helix's dot-repeat is not a `MappableCommand` in
+    // the upstream keymap, so this has no real Helix command name.
     registry.register(Command::new(
-        CommandMetadata::new(
+        CommandMetadata::new_alias(
             "repeat",
             CMD_REPEAT,
             "Repeat last action",
@@ -293,8 +295,10 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         HelixSimulator::redo,
     ));
 
+    // Trainer convenience binding: Ctrl-r is not normal-mode redo in Helix
+    // (that's `U`/`A-U` -> redo/later), so this is alias_only.
     registry.register(Command::new(
-        CommandMetadata::new(
+        CommandMetadata::new_alias(
             "redo_alt",
             CMD_CTRL_R,
             "Redo (Ctrl-r)",

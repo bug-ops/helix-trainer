@@ -77,23 +77,31 @@ Downloads the right archive for your platform, verifies its SHA-256 checksum, an
 
 ```bash
 # Linux/macOS — installs to ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/bug-ops/helix-trainer/main/install.sh | sh
+LATEST_TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/bug-ops/helix-trainer/releases/latest | sed 's#.*/tag/##')
+(T="$(mktemp)" && trap 'rm -f "$T"' EXIT && curl -fsSL "https://raw.githubusercontent.com/bug-ops/helix-trainer/${LATEST_TAG}/scripts/install.sh" -o "$T" && sh "$T")
 ```
 
 ```powershell
 # Windows — installs to %LOCALAPPDATA%\helix-trainer\bin
-irm https://raw.githubusercontent.com/bug-ops/helix-trainer/main/install.ps1 | iex
+$ErrorActionPreference = "Stop"
+$latest = (irm https://api.github.com/repos/bug-ops/helix-trainer/releases/latest).tag_name
+$installScript = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
+irm "https://raw.githubusercontent.com/bug-ops/helix-trainer/$latest/scripts/install.ps1" -OutFile $installScript
+& $installScript
+Remove-Item $installScript
 ```
+
+Both one-liners resolve and pin to the latest release tag before fetching the script, instead of fetching from the mutable `main` branch ref; download it to a freshly-generated temp file before running it, so a failed download aborts instead of silently running nothing; and use `mktemp`/`GetRandomFileName()` rather than a fixed, predictable path, which in a world-writable directory like `/tmp` could otherwise be pre-planted as a symlink to overwrite an unrelated file.
 
 Pin a specific version or install directory:
 
 ```bash
-./install.sh --version 0.5.12 --dir /usr/local/bin
-./install.sh --static   # Linux: static musl build, no audio feature
+./scripts/install.sh --version 0.5.12 --dir /usr/local/bin
+./scripts/install.sh --static   # Linux: static musl build, no audio feature
 ```
 
 > [!TIP]
-> Review any install script before piping it into a shell. Read [`install.sh`](install.sh) / [`install.ps1`](install.ps1), or download and run it locally instead of piping from `curl`/`irm`.
+> Review any install script before piping it into a shell. Read [`scripts/install.sh`](scripts/install.sh) / [`scripts/install.ps1`](scripts/install.ps1), or download and run it locally instead of piping from `curl`/`irm`.
 
 #### Manual download
 

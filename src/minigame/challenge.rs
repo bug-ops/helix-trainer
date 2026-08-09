@@ -35,7 +35,7 @@ use super::ChallengeConfig;
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChallengeProgress {
     /// Date of current/last challenge (YYYY-MM-DD format for serialization)
-    // TODO: CR-013: Consider storing chrono::NaiveDate directly with custom serde.
+    // TODO: CR-013 (tracked in #391): Consider storing chrono::NaiveDate directly with custom serde.
     // Deferred: needs a lenient deserializer so a malformed value doesn't hard-error
     // the whole profile load; see struct-level doc above.
     pub last_challenge_date: Option<String>,
@@ -75,10 +75,7 @@ impl ChallengeProgress {
 
     /// Check if player can attempt today's challenge
     pub fn can_attempt(&self, today: NaiveDate) -> bool {
-        let today = Self::today_string(today);
-
-        // Different day = reset attempts
-        if self.last_challenge_date.as_deref() != Some(&today) {
+        if self.is_new_day(today) {
             return true;
         }
 
@@ -87,9 +84,7 @@ impl ChallengeProgress {
 
     /// Get remaining attempts for today
     pub fn attempts_remaining(&self, today: NaiveDate) -> u8 {
-        let today = Self::today_string(today);
-
-        if self.last_challenge_date.as_deref() != Some(&today) {
+        if self.is_new_day(today) {
             return CHALLENGE_MAX_ATTEMPTS;
         }
 
@@ -98,11 +93,9 @@ impl ChallengeProgress {
 
     /// Start a new attempt, resetting if new day
     pub fn start_attempt(&mut self, today: NaiveDate) {
-        let today = Self::today_string(today);
-
         // Reset for new day
-        if self.last_challenge_date.as_deref() != Some(&today) {
-            self.last_challenge_date = Some(today);
+        if self.is_new_day(today) {
+            self.last_challenge_date = Some(Self::today_string(today));
             self.attempts_used_today = 0;
             self.best_score_today = 0;
             self.best_scenarios_today = 0;
@@ -141,9 +134,14 @@ impl ChallengeProgress {
         today.to_string()
     }
 
+    /// Check whether the calendar day has rolled over since `last_challenge_date`
+    fn is_new_day(&self, today: NaiveDate) -> bool {
+        self.last_challenge_date.as_deref() != Some(&Self::today_string(today))
+    }
+
     /// Check if progress is for the given date
     pub fn is_today(&self, today: NaiveDate) -> bool {
-        self.last_challenge_date.as_deref() == Some(&Self::today_string(today))
+        !self.is_new_day(today)
     }
 }
 

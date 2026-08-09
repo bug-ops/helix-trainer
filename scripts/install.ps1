@@ -17,7 +17,12 @@
     Skip adding the install directory to the user PATH.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/bug-ops/helix-trainer/main/install.ps1 | iex
+    $ErrorActionPreference = "Stop"
+    $latest = (irm https://api.github.com/repos/bug-ops/helix-trainer/releases/latest).tag_name
+    $installScript = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
+    irm "https://raw.githubusercontent.com/bug-ops/helix-trainer/$latest/scripts/install.ps1" -OutFile $installScript
+    & $installScript
+    Remove-Item $installScript
 #>
 param(
     [string]$Version = "latest",
@@ -61,7 +66,13 @@ try {
     Invoke-WebRequest -Uri "$BaseUrl/$Archive.sha256" -OutFile $ChecksumPath
 
     Write-Host "Verifying checksum..."
-    $Expected = (Get-Content $ChecksumPath) -split '\s+' | Select-Object -First 1
+    $ChecksumLine = (Get-Content $ChecksumPath) | Where-Object {
+        ($_ -split '\s+')[1].TrimStart('*') -eq $Archive
+    } | Select-Object -First 1
+    if (-not $ChecksumLine) {
+        throw "Checksum file does not reference $Archive"
+    }
+    $Expected = ($ChecksumLine -split '\s+')[0]
     $Actual = (Get-FileHash -Path $ArchivePath -Algorithm SHA256).Hash.ToLower()
     if ($Expected.ToLower() -ne $Actual) {
         throw "Checksum mismatch: expected $Expected, got $Actual"

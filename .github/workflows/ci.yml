@@ -48,7 +48,7 @@ jobs:
             ci:
               - '.github/workflows/**'
             install-script:
-              - 'install.sh'
+              - 'scripts/install.sh'
 
   test:
     name: Test Suite
@@ -140,7 +140,7 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
 
   shellcheck:
-    name: Shellcheck (install.sh)
+    name: Shellcheck (scripts/install.sh)
     needs: [changes]
     if: needs.changes.outputs.install-script == 'true'
     runs-on: ubuntu-latest

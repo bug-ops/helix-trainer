@@ -139,6 +139,7 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
     };
 
     // Check for completion
+    let mut scenario_xp = 0u64;
     if session.check_completion() {
         // Play success sound
         state
@@ -220,19 +221,10 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
 
         // Award XP for scenario completion in arcade mode
         // Base XP per scenario + bonus per streak level (encourages maintaining streaks)
-        let scenario_xp = MINIGAME_SCENARIO_BASE_XP
+        scenario_xp = MINIGAME_SCENARIO_BASE_XP
             + (current_streak.saturating_sub(1) as u64 * MINIGAME_STREAK_XP_MULTIPLIER);
         let profile = &mut state.progress.profile;
         profile.add_xp(scenario_xp);
-
-        // Award XP for newly completed quests (this function adds XP internally)
-        let quest_xp = super::award_quest_completion_xp(state, &was_completed);
-
-        // Store total XP earned for display in transition popup
-        let total_xp = scenario_xp + quest_xp;
-        if let TypedScreen::MiniGame(ref mut data) = state.screen {
-            data.last_xp_earned = Some(total_xp);
-        }
 
         // Re-borrow session after state modification
         if let Some(ref mut session) = state.game.minigame_session {
@@ -248,6 +240,24 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
             }
         }
         // Transition state will be handled by timer
+    }
+
+    // Award XP for any quests newly completed by this keystroke, from the single
+    // `was_completed` snapshot taken at the top of this function. Called exactly once
+    // per keystroke regardless of whether the scenario also completed here - unlike
+    // scenario-completion XP, a CommandPractice/Exploration quest can complete on a
+    // keystroke that doesn't finish the scenario, and this is the only place that
+    // awards it (this function adds XP internally).
+    let quest_award = super::award_quest_completion_xp(state, &was_completed);
+
+    // Store total XP earned for display in the transition popup (only shown when this
+    // keystroke completed the scenario).
+    if scenario_xp > 0 {
+        let quest_xp: u64 = quest_award.bonuses.iter().map(|(_, xp)| xp).sum();
+        let total_xp = scenario_xp + quest_xp;
+        if let TypedScreen::MiniGame(ref mut data) = state.screen {
+            data.last_xp_earned = Some(total_xp);
+        }
     }
 
     Ok(())
@@ -541,6 +551,65 @@ mod tests {
         assert!(
             state.ui.show_key_history,
             "first keypress should reveal the key history popup"
+        );
+    }
+
+    /// Regression test for #292 finding F1 (impl-critic): `award_quest_completion_xp`
+    /// was only called inside the `session.check_completion()` branch, so a
+    /// `CommandPractice`/`Exploration` quest that completes on a keystroke which does
+    /// *not* also finish the current arcade scenario got marked `completed = true` with
+    /// no XP, no `QuestComplete` notification, and no `profile.complete_quest()` call -
+    /// and since later snapshots see it as already completed, it was never awarded.
+    /// A single keystroke that only satisfies a `CommandPractice` quest (the test
+    /// scenario here is deliberately unreachable via commands) must still grant XP.
+    #[test]
+    fn test_execute_minigame_command_awards_quest_xp_without_completing_scenario() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let mut state = create_test_state();
+        state.progress.profile.daily_quests = vec![Quest {
+            id: "cmd_practice_h".to_string(),
+            quest_type: QuestType::CommandPractice {
+                command: "h".to_string(),
+                target: 1,
+                current: 0,
+            },
+            description: "Use 'h' 1 time".to_string(),
+            difficulty: QuestDifficulty::Easy,
+            xp_reward: 50,
+            completed: false,
+        }];
+
+        start_minigame(&mut state);
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+        let initial_xp = state.progress.profile.total_xp;
+
+        execute_minigame_command(&mut state, "h").unwrap();
+
+        // The scenario itself must not have completed - only the quest should have.
+        if let Some(ref session) = state.game.minigame_session {
+            assert!(!session.state().is_transition());
+        }
+        assert!(
+            state.progress.profile.daily_quests[0].completed,
+            "CommandPractice quest should complete after using 'h' once"
+        );
+        assert_eq!(
+            state.progress.profile.total_xp - initial_xp,
+            50,
+            "quest XP must be granted immediately, not lost until scenario completion"
+        );
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                &n.notification_type,
+                crate::ui::notification::NotificationType::QuestComplete { description, .. }
+                    if description == "Use 'h' 1 time"
+            )),
+            "expected a QuestComplete notification"
         );
     }
 

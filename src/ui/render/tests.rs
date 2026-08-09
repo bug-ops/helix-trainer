@@ -330,8 +330,8 @@ mod editor_tests {
 mod screen_render_tests {
     use super::*;
     use crate::ui::state::{
-        MenuData, MiniGameData, ModeSelectionData, ProfileData, ReturnDestination, StatisticsData,
-        TypedScreen,
+        AchievementsData, MenuData, MiniGameData, ModeSelectionData, ProfileData,
+        ReturnDestination, StatisticsData, TypedScreen,
     };
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -395,6 +395,85 @@ mod screen_render_tests {
                 super::super::render(f, &mut state);
             })
             .unwrap();
+    }
+
+    #[test]
+    fn test_render_achievements_screen() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+        state.screen = TypedScreen::Achievements(AchievementsData {
+            return_to: ReturnDestination::Menu,
+            scroll_offset: 0,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+    }
+
+    /// Regression test for #292 finding F4 (impl-critic): at the repo's own render-test
+    /// size (80x24), `margin(2)` plus `Length(3)+Min(15)+Length(3)` needs 21 rows but
+    /// only 20 are available, so ratatui's layout solver silently squeezed the
+    /// Instructions section down to 2 rows - just its top/bottom border, with zero rows
+    /// left for the text inside. That swallowed both the key hints and the scroll
+    /// position indicator with no visible sign anything was cut off.
+    #[test]
+    fn test_render_achievements_screen_instructions_bar_visible_at_min_size() {
+        use ratatui::buffer::Buffer;
+
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+        state.screen = TypedScreen::Achievements(AchievementsData {
+            return_to: ReturnDestination::Menu,
+            scroll_offset: 0,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+
+        let buffer: Buffer = terminal.backend().buffer().clone();
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(
+            text.contains("menu"),
+            "instructions bar text must be rendered at 80x24, got buffer text: {text}"
+        );
+    }
+
+    /// Regression test for #292 finding F4 (impl-critic): at the repo's own render-test
+    /// size (80x24), the achievement list's content area is too short to fit all 18
+    /// entries. Before scrolling was added, entries past the visible window were simply
+    /// invisible with no indicator - indistinguishable from an empty list on a fresh
+    /// profile where every entry renders the same gray color. Scrolling past the end
+    /// must clamp instead of panicking or scrolling into blank space.
+    #[test]
+    fn test_render_achievements_screen_clamps_scroll_past_content() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+        state.screen = TypedScreen::Achievements(AchievementsData {
+            return_to: ReturnDestination::Menu,
+            // Deliberately far past the end of the 18-achievement list.
+            scroll_offset: 9999,
+        });
+
+        terminal
+            .draw(|f| {
+                super::super::render(f, &mut state);
+            })
+            .unwrap();
+
+        let TypedScreen::Achievements(data) = &state.screen else {
+            panic!("expected Achievements screen");
+        };
+        assert!(
+            data.scroll_offset < 18,
+            "scroll offset must be clamped to the actual content length, got {}",
+            data.scroll_offset
+        );
     }
 
     // Note: Review screen test omitted as ReviewData requires ReviewSessionState

@@ -85,6 +85,9 @@ pub enum TypedScreen {
     /// Statistics screen
     Statistics(StatisticsData),
 
+    /// Achievements screen
+    Achievements(AchievementsData),
+
     /// Category filters configuration screen
     CategoryFilters(CategoryFiltersData),
 
@@ -105,6 +108,7 @@ impl TypedScreen {
             Self::Results(_) => "Results",
             Self::Profile(_) => "Profile",
             Self::Statistics(_) => "Statistics",
+            Self::Achievements(_) => "Achievements",
             Self::CategoryFilters(_) => "CategoryFilters",
             Self::Review(_) => "Review",
             Self::MiniGame(_) => "MiniGame",
@@ -120,6 +124,7 @@ impl TypedScreen {
             Self::Results(_) => super::Screen::Results,
             Self::Profile(_) => super::Screen::Profile,
             Self::Statistics(_) => super::Screen::Statistics,
+            Self::Achievements(_) => super::Screen::Achievements,
             Self::CategoryFilters(_) => super::Screen::CategoryFilters,
             Self::Review(_) => super::Screen::Review,
             Self::MiniGame(_) => super::Screen::MiniGame,
@@ -343,6 +348,17 @@ pub struct ProfileData {
 pub struct StatisticsData {
     /// Where to return when pressing Esc/back
     pub return_to: ReturnDestination,
+}
+
+/// Data required for achievements screen
+#[derive(Debug, Clone, Default)]
+pub struct AchievementsData {
+    /// Where to return when pressing Esc/back
+    pub return_to: ReturnDestination,
+
+    /// Scroll offset for the achievement list (top visible row index).
+    /// Clamped to the valid range on render, the same way `MenuData::scroll_offset` is.
+    pub scroll_offset: usize,
 }
 
 /// Data required for category filters screen

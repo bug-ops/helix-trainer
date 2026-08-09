@@ -49,33 +49,6 @@ pub fn handle_start_scenario(
     Ok(HandlerOutcome::Stay)
 }
 
-/// Collect quest bonuses for newly completed quests
-///
-/// Returns list of (description, xp) pairs for quests completed during this scenario
-fn collect_quest_bonuses(ctx: &mut HandlerContext<'_>) -> Vec<(String, u64)> {
-    let newly_completed_quest_ids: Vec<String> = {
-        let profile = &ctx.progress.profile;
-        profile
-            .daily_quests
-            .iter()
-            .filter(|q| q.completed && !ctx.progress.previously_completed_quests.contains(&q.id))
-            .map(|q| q.id.clone())
-            .collect()
-    };
-
-    let mut quest_bonuses = Vec::new();
-    for quest_id in newly_completed_quest_ids {
-        let profile = &ctx.progress.profile;
-        if let Some(quest) = profile.daily_quests.iter().find(|q| q.id == quest_id) {
-            let description = super::format_quest_description(&quest.quest_type);
-            let xp = quest.xp_reward as u64;
-            quest_bonuses.push((description, xp));
-            ctx.progress.previously_completed_quests.insert(quest_id);
-        }
-    }
-    quest_bonuses
-}
-
 fn record_scenario_completion(
     ctx: &mut HandlerContext<'_>,
     feedback: &crate::game::Feedback,
@@ -84,7 +57,10 @@ fn record_scenario_completion(
 ) -> Result<(), UserError> {
     let is_perfect = feedback.score == feedback.max_points;
 
-    let leveled_up = ctx.progress.profile.add_xp(total_xp);
+    // `total_xp` here is scenario XP only (quest XP was already applied separately by
+    // `award_quest_completion_xp`, see the call site below); OR in whether *that* call
+    // crossed a level threshold, since each `add_xp` call only reports its own crossing.
+    let leveled_up = ctx.progress.profile.add_xp(total_xp) || ctx.ui.quest_leveled_up;
     ScenarioCompletionService::update_profile_counters(&mut ctx.progress.profile, is_perfect);
 
     if let Some(difficulty) = difficulty {
@@ -260,8 +236,11 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     // Store mastery info for results display
     ctx.ui.scenario_mastery = Some((xp_scaling.mastery_level, xp_scaling.applied_multiplier));
 
-    // Collect quest bonuses
-    let quest_bonuses = collect_quest_bonuses(&mut ctx);
+    // Quest bonuses were already computed and applied to `profile.xp` by
+    // `award_quest_completion_xp` during the `UpdateQuestProgress` dispatch above; reuse
+    // that authoritative breakdown instead of re-deriving "newly completed" independently,
+    // so this can never diverge from what was actually awarded (see `UIState::quest_xp_bonuses`).
+    let quest_bonuses = ctx.ui.quest_xp_bonuses.clone();
     let quest_xp = quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
     let total_xp = xp_scaling.actual_xp + quest_xp;
 
@@ -277,11 +256,20 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     });
 
     // Record completion and award XP
+    // `quest_xp` was already applied to `profile.xp` inside `award_quest_completion_xp`
+    // via the `UpdateQuestProgress` dispatch above; only `actual_xp` still needs to be
+    // added here. `total_xp` (used above for the XP breakdown display) must not be
+    // passed to `record_scenario_completion`, or quest XP would be double-counted.
     let scenario_difficulty = completed_session
         .as_ref()
         .and_then(|s| s.scenario().metadata.as_ref())
         .and_then(|m| m.difficulty);
-    record_scenario_completion(&mut ctx, &feedback, total_xp, scenario_difficulty)?;
+    record_scenario_completion(
+        &mut ctx,
+        &feedback,
+        xp_scaling.actual_xp,
+        scenario_difficulty,
+    )?;
 
     // Create ResultsData with completed session and transition to Results screen
     let Some(session) = completed_session else {
@@ -614,86 +602,114 @@ mod tests {
         ));
     }
 
+    /// Regression test for #292 finding F2 (impl-critic): `xp_breakdown.quest_bonuses`
+    /// must come directly from `award_quest_completion_xp`'s return value (the same call
+    /// that actually applies the XP to `profile.xp`), not a separately re-derived
+    /// "newly completed" detector - otherwise the two can diverge. Here a quest that
+    /// completes on scenario completion itself must appear in `quest_bonuses` and its
+    /// XP must be reflected in the profile.
     #[test]
-    fn test_collect_quest_bonuses_no_quests() {
+    fn test_handle_complete_scenario_quest_bonus_reflects_awarded_xp() {
+        use crate::game::SessionAfterAction;
+
         let mut state = create_test_state();
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-
-        let bonuses = collect_quest_bonuses(&mut ctx);
-
-        assert!(bonuses.is_empty());
-    }
-
-    #[test]
-    fn test_collect_quest_bonuses_with_completed_quest() {
-        let mut state = create_test_state();
-
         state.progress.profile.daily_quests = vec![Quest {
-            id: "test_quest".to_string(),
+            id: "quest_scenario_completion".to_string(),
             quest_type: QuestType::ScenarioCompletion {
-                target: 5,
-                current: 5,
+                target: 1,
+                current: 0,
             },
-            description: "Complete scenarios".to_string(),
+            description: "Complete 1 scenario".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 100,
-            completed: true,
+            completed: false,
         }];
 
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+        let result = session.record_action("x".to_string()).unwrap();
+        let session = match result {
+            SessionAfterAction::StillActive(s) => s,
+            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+        };
+        let result = session.record_action("d".to_string()).unwrap();
+        let completed = match result {
+            SessionAfterAction::Completed(c) => c,
+            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+        };
+        let feedback = completed.feedback().unwrap();
+        state.ui.last_feedback = Some(feedback);
+        state.game.pending_completed_session = Some(completed);
 
-        let bonuses = collect_quest_bonuses(&mut ctx);
+        let outcome = handle_complete_scenario(&mut state).unwrap();
 
+        let HandlerOutcome::Transition(screen) = outcome else {
+            panic!("Expected Transition outcome");
+        };
+        let TypedScreen::Results(results_data) = *screen else {
+            panic!("Expected Results screen");
+        };
+        let bonuses = &results_data.xp_breakdown.unwrap().quest_bonuses;
         assert_eq!(bonuses.len(), 1);
         assert_eq!(bonuses[0].1, 100);
-        assert!(
-            ctx.progress
-                .previously_completed_quests
-                .contains("test_quest")
-        );
     }
 
+    /// Regression test for #292 finding F2 (impl-critic): a quest that was already
+    /// completed *before* this scenario run (e.g. completed earlier today, then the app
+    /// restarted) must not be re-awarded or re-displayed as a bonus. Session-local
+    /// "newly completed" tracking that doesn't survive restart (the old
+    /// `previously_completed_quests` field) would show a phantom bonus here even though
+    /// no XP is actually granted a second time.
     #[test]
-    fn test_collect_quest_bonuses_skips_already_tracked() {
-        let mut state = create_test_state();
+    fn test_handle_complete_scenario_no_phantom_bonus_for_already_completed_quest() {
+        use crate::game::SessionAfterAction;
 
+        let mut state = create_test_state();
         state.progress.profile.daily_quests = vec![Quest {
-            id: "test_quest".to_string(),
+            id: "quest_already_done".to_string(),
             quest_type: QuestType::ScenarioCompletion {
-                target: 5,
-                current: 5,
+                target: 1,
+                current: 1,
             },
-            description: "Complete scenarios".to_string(),
+            description: "Complete 1 scenario".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 100,
             completed: true,
         }];
 
-        state
-            .progress
-            .previously_completed_quests
-            .insert("test_quest".to_string());
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+        let result = session.record_action("x".to_string()).unwrap();
+        let session = match result {
+            SessionAfterAction::StillActive(s) => s,
+            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+        };
+        let result = session.record_action("d".to_string()).unwrap();
+        let completed = match result {
+            SessionAfterAction::Completed(c) => c,
+            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+        };
+        let feedback = completed.feedback().unwrap();
+        state.ui.last_feedback = Some(feedback);
+        state.game.pending_completed_session = Some(completed);
+        let initial_xp = state.progress.profile.total_xp;
 
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
+        let outcome = handle_complete_scenario(&mut state).unwrap();
+
+        let HandlerOutcome::Transition(screen) = outcome else {
+            panic!("Expected Transition outcome");
+        };
+        let TypedScreen::Results(results_data) = *screen else {
+            panic!("Expected Results screen");
+        };
+        assert!(
+            results_data.xp_breakdown.unwrap().quest_bonuses.is_empty(),
+            "already-completed quest must not show as a bonus"
         );
-
-        let bonuses = collect_quest_bonuses(&mut ctx);
-
-        assert!(bonuses.is_empty());
+        // Only actual scenario XP should have been granted, no quest XP.
+        let actual_xp = state.progress.profile.total_xp - initial_xp;
+        assert!(actual_xp > 0);
+        assert!(actual_xp < 100, "no quest XP should have been re-awarded");
     }
 
     #[test]
@@ -1218,6 +1234,115 @@ mod tests {
                 crate::ui::notification::NotificationType::LevelUp { .. }
             )),
             "no LevelUp notification should fire without an actual level up"
+        );
+    }
+
+    /// Regression test for #292 finding F3 (impl-critic): quest XP and scenario XP are
+    /// now applied via two separate `add_xp` calls (`award_quest_completion_xp` during
+    /// the `UpdateQuestProgress` dispatch, then `record_scenario_completion`'s own
+    /// `add_xp(actual_xp)`). Each `add_xp` call only reports whether *that* call crossed
+    /// a level boundary, so a level-up caused purely by quest XP (with `actual_xp` alone
+    /// not reaching the next threshold) must still be detected and notified - `leveled_up`
+    /// has to OR in `ctx.ui.quest_leveled_up`, not just the scenario-XP `add_xp` result.
+    #[test]
+    fn test_handle_complete_scenario_notifies_on_level_up_from_quest_xp_alone() {
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use tempfile::TempDir;
+
+        let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+
+        // One XP away from leveling up; the quest's 1 XP reward alone crosses the
+        // threshold before any scenario XP is even considered.
+        let xp_for_level_2 = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_level_2 - 1;
+        state.progress.profile.level = 1;
+        state.progress.profile.daily_quests = vec![Quest {
+            id: "quest_scenario_completion".to_string(),
+            quest_type: QuestType::ScenarioCompletion {
+                target: 1,
+                current: 0,
+            },
+            description: "Complete 1 scenario".to_string(),
+            difficulty: QuestDifficulty::Easy,
+            xp_reward: 1,
+            completed: false,
+        }];
+
+        let feedback = completed_feedback_with_commands();
+        state.ui.last_feedback = Some(feedback);
+
+        handle_complete_scenario(&mut state).unwrap();
+
+        assert!(
+            state.progress.profile.level >= 2,
+            "expected a level-up driven by quest XP"
+        );
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { .. }
+            )),
+            "expected a LevelUp notification when quest XP alone crosses the level threshold"
+        );
+    }
+
+    /// Regression test for #292 finding 3: `award_quest_completion_xp` (invoked via the
+    /// `UpdateQuestProgress` dispatch inside `handle_complete_scenario`) already applies
+    /// quest XP to `profile.xp` as a side effect. `collect_quest_bonuses` independently
+    /// re-detects the same newly-completed quest for the XP breakdown display, and its
+    /// `quest_xp` must NOT be fed into `record_scenario_completion`'s `add_xp` a second
+    /// time. Verifies total XP gained equals `actual_xp + quest_xp`, not `actual_xp + 2 *
+    /// quest_xp`.
+    #[test]
+    fn test_handle_complete_scenario_awards_quest_xp_exactly_once() {
+        use crate::gamification::{ProfileStorage, Quest, QuestDifficulty, QuestType};
+        use tempfile::TempDir;
+
+        // Baseline: identical completion, no in-progress quest - isolates `actual_xp`.
+        let mut baseline_state = create_test_state();
+        let baseline_dir = TempDir::new().unwrap();
+        baseline_state.progress.storage =
+            ProfileStorage::with_path(baseline_dir.path().join("profile.json"));
+        let feedback = completed_feedback_with_commands();
+        baseline_state.ui.last_feedback = Some(feedback);
+        let baseline_initial_xp = baseline_state.progress.profile.total_xp;
+        handle_complete_scenario(&mut baseline_state).unwrap();
+        let actual_xp = baseline_state.progress.profile.total_xp - baseline_initial_xp;
+
+        // Same completion, but with a daily quest one completion away from its target -
+        // this is the path that previously double-counted `quest_xp`.
+        let mut state = create_test_state();
+        let quest_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(quest_dir.path().join("profile.json"));
+        let quest_xp_reward = 100u32;
+        state.progress.profile.daily_quests = vec![Quest {
+            id: "quest_scenario_completion".to_string(),
+            quest_type: QuestType::ScenarioCompletion {
+                target: 1,
+                current: 0,
+            },
+            description: "Complete 1 scenario".to_string(),
+            difficulty: QuestDifficulty::Easy,
+            xp_reward: quest_xp_reward,
+            completed: false,
+        }];
+        let feedback = completed_feedback_with_commands();
+        state.ui.last_feedback = Some(feedback);
+
+        let initial_xp = state.progress.profile.total_xp;
+        handle_complete_scenario(&mut state).unwrap();
+        let total_xp_gained = state.progress.profile.total_xp - initial_xp;
+
+        assert!(
+            state.progress.profile.daily_quests[0].completed,
+            "quest should have completed on this scenario completion"
+        );
+        assert_eq!(
+            total_xp_gained,
+            actual_xp + quest_xp_reward as u64,
+            "quest XP must be added exactly once alongside scenario XP, not twice"
         );
     }
 

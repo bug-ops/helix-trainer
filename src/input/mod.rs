@@ -41,7 +41,7 @@ pub fn handle_key_event(key: KeyEvent, state: &mut AppState) -> Option<Message> 
         TypedScreen::Menu(_) => handle_menu_keys(key, state),
         TypedScreen::Task(_) => handle_task_keys(key, state),
         TypedScreen::Results(_) => handle_results_keys(key),
-        TypedScreen::Profile(_) | TypedScreen::Statistics(_) => {
+        TypedScreen::Profile(_) | TypedScreen::Statistics(_) | TypedScreen::Achievements(_) => {
             handle_profile_stats_keys(key, state)
         }
         TypedScreen::Review(_) => handle_review_keys(key),

@@ -4,7 +4,8 @@
 
 use crate::security::UserError;
 use crate::ui::state::{
-    HandlerContext, HandlerOutcome, ProfileData, ReturnDestination, StatisticsData, TypedScreen,
+    AchievementsData, HandlerContext, HandlerOutcome, ProfileData, ReturnDestination,
+    StatisticsData, TypedScreen,
 };
 
 /// Determine return destination based on current context
@@ -37,6 +38,32 @@ pub fn handle_show_statistics(ctx: &mut HandlerContext<'_>) -> Result<HandlerOut
     Ok(HandlerOutcome::Transition(Box::new(
         TypedScreen::Statistics(StatisticsData { return_to }),
     )))
+}
+
+/// Handle ShowAchievements message
+///
+/// Navigates to the achievements screen, tracking where to return
+pub fn handle_show_achievements(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
+    let return_to = determine_return_destination(ctx);
+    Ok(HandlerOutcome::Transition(Box::new(
+        TypedScreen::Achievements(AchievementsData {
+            return_to,
+            scroll_offset: 0,
+        }),
+    )))
+}
+
+/// Handle ScrollAchievements message
+///
+/// Adjusts the achievement list scroll offset by `delta` rows (negative scrolls up).
+/// Only clamped to zero here; the upper bound depends on the rendered viewport height
+/// and content length, so it's clamped in `render_achievements_screen` instead.
+pub fn handle_scroll_achievements(
+    data: &mut AchievementsData,
+    delta: i32,
+) -> Result<HandlerOutcome, UserError> {
+    data.scroll_offset = data.scroll_offset.saturating_add_signed(delta as isize);
+    Ok(HandlerOutcome::Stay)
 }
 
 #[cfg(test)]
@@ -136,6 +163,59 @@ mod tests {
                 assert_eq!(data.return_to, ReturnDestination::Menu);
             } else {
                 panic!("Expected Statistics screen");
+            }
+        }
+    }
+
+    #[test]
+    fn test_show_achievements_from_menu() {
+        let mut state = create_test_state();
+        state.screen = TypedScreen::Menu(MenuData::default());
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_show_achievements(&mut ctx).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(boxed) = outcome {
+            if let TypedScreen::Achievements(data) = *boxed {
+                assert_eq!(data.return_to, ReturnDestination::Menu);
+            } else {
+                panic!("Expected Achievements screen");
+            }
+        }
+    }
+
+    #[test]
+    fn test_show_achievements_from_paused_minigame() {
+        let mut state = create_test_state();
+
+        start_minigame(&mut state);
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+            session.pause();
+        }
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        let outcome = handle_show_achievements(&mut ctx).unwrap();
+
+        assert!(outcome.is_transition());
+        if let HandlerOutcome::Transition(boxed) = outcome {
+            if let TypedScreen::Achievements(data) = *boxed {
+                assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
+            } else {
+                panic!("Expected Achievements screen");
             }
         }
     }

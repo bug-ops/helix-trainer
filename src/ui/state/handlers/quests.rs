@@ -38,12 +38,26 @@ pub fn track_scenario_completion_for_quests(
     QuestTracker::update_scenario_progress(&mut profile.daily_quests, scenario_id, duration);
 }
 
+/// Result of [`award_quest_completion_xp`]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct QuestXpAward {
+    /// (description, xp) pairs for each quest newly completed by this call
+    pub bonuses: Vec<(String, u64)>,
+    /// Whether the XP granted here alone crossed an account level-up threshold.
+    /// Callers that also call `profile.add_xp` for other XP in the same operation
+    /// (e.g. scenario completion) must OR this into their own level-up check, since
+    /// each `add_xp` call only reports whether *that* call crossed a level boundary.
+    pub leveled_up: bool,
+}
+
 /// Check and award XP for newly completed quests
 ///
 /// Marks each newly completed quest on the profile's `completed_quests_today` set (which
 /// gates next-day streak increments), grants a streak freeze once every quest generated
-/// for today is completed, and returns total XP awarded for quest completions.
-pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -> u64 {
+/// for today is completed, and returns the (description, xp) pairs for each quest newly
+/// completed by this call, for the caller to display or total up. This is the only place
+/// quest-completion XP is applied to `profile.xp` - callers must not re-add it.
+pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -> QuestXpAward {
     let newly_completed: Vec<(String, String, u32)> = {
         let profile = &state.progress.profile;
         profile
@@ -61,17 +75,21 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
     };
 
     if newly_completed.is_empty() {
-        return 0;
+        return QuestXpAward::default();
     }
 
     let total_bonus_xp: u64 = newly_completed.iter().map(|(_, _, xp)| *xp as u64).sum();
     let profile = &mut state.progress.profile;
-    profile.add_xp(total_bonus_xp);
+    let leveled_up = profile.add_xp(total_bonus_xp);
     for (quest_id, _, _) in &newly_completed {
         profile.complete_quest(quest_id.clone());
     }
 
     // Show notifications for each completed quest
+    let bonuses: Vec<(String, u64)> = newly_completed
+        .iter()
+        .map(|(_, description, xp_reward)| (description.clone(), *xp_reward as u64))
+        .collect();
     for (_, description, xp_reward) in newly_completed {
         state
             .ui
@@ -91,7 +109,10 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
             .push(Notification::new(NotificationType::StreakFreezeGranted));
     }
 
-    total_bonus_xp
+    QuestXpAward {
+        bonuses,
+        leveled_up,
+    }
 }
 
 /// Snapshot quest completion status before updates
@@ -178,8 +199,11 @@ pub fn handle_update_quest_progress(
         }
     }
 
-    // Award XP for newly completed quests
-    award_quest_completion_xp(state, &was_completed);
+    // Award XP for newly completed quests, keeping the breakdown and level-up outcome
+    // for the caller (results display, level-up notification/save)
+    let award = award_quest_completion_xp(state, &was_completed);
+    state.ui.quest_xp_bonuses = award.bonuses;
+    state.ui.quest_leveled_up = award.leveled_up;
 
     Ok(())
 }

@@ -43,6 +43,18 @@ pub struct UIState {
     /// Quest progress changes for results display
     pub quest_progress_changes: Vec<QuestProgressChange>,
 
+    /// Quest XP bonuses awarded by the most recent `award_quest_completion_xp` call
+    /// (description, xp), for results display. Sourced directly from the function that
+    /// actually applies the XP to the profile, so this can never diverge from
+    /// `profile.total_xp` the way a separately re-derived "newly completed" detector can.
+    pub quest_xp_bonuses: Vec<(String, u64)>,
+
+    /// Whether the most recent `award_quest_completion_xp` call, on its own, crossed an
+    /// account level-up threshold. Callers that also add other XP in the same operation
+    /// (e.g. scenario completion) must OR this into their own `add_xp` level-up check,
+    /// since quest XP and scenario XP are applied via separate `add_xp` calls.
+    pub quest_leveled_up: bool,
+
     /// Scenario mastery info for results display
     pub scenario_mastery: Option<(ScenarioMastery, f64)>,
 
@@ -66,6 +78,8 @@ impl UIState {
             last_feedback: None,
             xp_breakdown: None,
             quest_progress_changes: Vec::new(),
+            quest_xp_bonuses: Vec::new(),
+            quest_leveled_up: false,
             scenario_mastery: None,
             notifications: NotificationQueue::new(),
             last_menu_selected: 0,
@@ -78,6 +92,8 @@ impl UIState {
         self.last_feedback = None;
         self.xp_breakdown = None;
         self.quest_progress_changes.clear();
+        self.quest_xp_bonuses.clear();
+        self.quest_leveled_up = false;
         self.scenario_mastery = None;
     }
 }
@@ -170,9 +186,6 @@ pub struct ProgressState {
     /// Commands used today (for exploration quests)
     pub commands_used_today: HashSet<String>,
 
-    /// Previously completed quest IDs (to detect new completions)
-    pub previously_completed_quests: HashSet<String>,
-
     /// Session start time
     pub session_start_time: Instant,
 
@@ -243,7 +256,6 @@ impl ProgressState {
             storage,
             scenarios_completed_today: 0,
             commands_used_today: HashSet::new(),
-            previously_completed_quests: HashSet::new(),
             session_start_time: Instant::now(),
             last_save_time: None,
             sound_manager,

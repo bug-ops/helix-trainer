@@ -18,6 +18,12 @@ use super::{GamificationError, Result, UserProfile};
 /// tests) never share a temp file name and race each other's rename.
 static TMP_SUFFIX_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Builds the pid+suffix-tagged temp-file path used for atomic writes, e.g.
+/// `profile.json` with pid `1234` and suffix `5` becomes `profile.json.1234.5.tmp`.
+fn tmp_write_path(base_path: &Path, suffix: u64) -> PathBuf {
+    base_path.with_added_extension(format!("{}.{}.tmp", std::process::id(), suffix))
+}
+
 /// Fsync a file's parent directory so a preceding `fs::rename` into it is
 /// durable across a power loss, not just visible after a normal process
 /// restart. POSIX does not guarantee a directory-entry update is on disk
@@ -244,13 +250,7 @@ impl ProfileStorage {
         })?;
 
         let suffix = TMP_SUFFIX_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let mut tmp_file_name = self
-            .file_path
-            .file_name()
-            .unwrap_or_default()
-            .to_os_string();
-        tmp_file_name.push(format!(".{}.{}.tmp", std::process::id(), suffix));
-        let tmp_path = self.file_path.with_file_name(tmp_file_name);
+        let tmp_path = tmp_write_path(&self.file_path, suffix);
 
         let write_result = (|| {
             let mut tmp_file = fs::File::create(&tmp_path)?;
@@ -291,13 +291,7 @@ impl ProfileStorage {
 
     /// Path of the PID lock file that sits alongside the profile file.
     fn lock_path(&self) -> PathBuf {
-        let mut lock_file_name = self
-            .file_path
-            .file_name()
-            .unwrap_or_default()
-            .to_os_string();
-        lock_file_name.push(".lock");
-        self.file_path.with_file_name(lock_file_name)
+        self.file_path.with_added_extension("lock")
     }
 
     /// Best-effort: write this process's pid into the lock file, claiming or
@@ -320,9 +314,7 @@ impl ProfileStorage {
         // save writer refreshing the lock while a concurrent
         // `check_and_refresh_lock` call is also mid-refresh.
         let suffix = TMP_SUFFIX_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let mut tmp_file_name = lock_path.file_name().unwrap_or_default().to_os_string();
-        tmp_file_name.push(format!(".{}.{}.tmp", std::process::id(), suffix));
-        let tmp_path = lock_path.with_file_name(tmp_file_name);
+        let tmp_path = tmp_write_path(&lock_path, suffix);
 
         if fs::write(&tmp_path, std::process::id().to_string()).is_ok() {
             let _ = fs::rename(&tmp_path, &lock_path);
@@ -546,9 +538,7 @@ mod tests {
         let bytes_before = fs::read_to_string(&file_path).unwrap();
 
         let next_suffix = TMP_SUFFIX_COUNTER.load(Ordering::Relaxed);
-        let mut tmp_file_name = file_path.file_name().unwrap().to_os_string();
-        tmp_file_name.push(format!(".{}.{}.tmp", std::process::id(), next_suffix));
-        let predicted_tmp_path = file_path.with_file_name(tmp_file_name);
+        let predicted_tmp_path = tmp_write_path(&file_path, next_suffix);
         fs::create_dir(&predicted_tmp_path).unwrap();
 
         let mut profile2 = profile.clone();

@@ -6,7 +6,7 @@ use crate::game::PlayableScenario;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
@@ -14,15 +14,19 @@ use ratatui::{
 use rust_i18n::t;
 
 /// Render the task screen where user plays a scenario
-pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
+///
+/// Returns the Target editor panel's outer `Rect` (when on the Task screen),
+/// so tests can assert against the panel's real, production-computed layout
+/// instead of duplicating the layout math.
+pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<Rect> {
     // Extract TaskData from TypedScreen::Task
     let TypedScreen::Task(task_data) = &state.screen else {
-        return; // Wrong screen type
+        return None; // Wrong screen type
     };
 
     let area = frame.area();
 
-    {
+    let target_area = {
         let session = &task_data.session;
         let scenario = session.scenario();
 
@@ -108,7 +112,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         // Render editor pair using shared function
         let current_title = t!("editor.current_state");
         let target_title = t!("editor.target_state");
-        render_editor_pair(
+        let target_area = render_editor_pair(
             frame,
             chunks[2],
             playable,
@@ -228,21 +232,27 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) {
         .block(Block::default().borders(Borders::ALL));
         frame.render_widget(instructions, chunks[4]);
 
+        // Show key history popup if visible, bounded to the Target panel's
+        // own inner area so it can never draw over that panel's border.
+        // Rendered before the hint/success popups so they draw on top of it
+        // instead of the reverse - the hint popup can be centered wide
+        // enough to overlap the key-history popup's bottom-right corner.
+        if state.ui.show_key_history {
+            render_key_history_popup(frame, task_data.key_history.keys(), target_area);
+        }
+
         // Render hint panel if visible
         if task_data.show_hint_panel {
             render_hint_popup(frame, state);
-        }
-
-        // Show key history popup if visible
-        // Reserve space for the Stats + Instructions bars (3 + 3) plus the
-        // screen's outer margin(1) so the popup never overlaps them.
-        if state.ui.show_key_history {
-            render_key_history_popup(frame, task_data.key_history.keys(), 7);
         }
 
         // Show success message if scenario just completed
         if state.ui.completion_time.is_some() {
             render_success_popup(frame);
         }
-    }
+
+        target_area
+    };
+
+    Some(target_area)
 }

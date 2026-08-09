@@ -2,7 +2,7 @@
 # Scenarios covering line deletion and character deletion
 
 [[scenarios]]
-id = "delete_line_001"
+id = "delete_current_line_001"
 name = "Delete current line"
 description = "Delete the current line where the cursor is located. In Helix, use 'x' to select line then 'd' to delete."
 

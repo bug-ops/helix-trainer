@@ -2240,6 +2240,87 @@ mod popup_additional_tests {
         Terminal::new(backend).unwrap()
     }
 
+    /// Full-pipeline regression test for #364: a wide key history (e.g. while
+    /// typing a regex pattern one keystroke at a time, as in `s`/`S` prompts,
+    /// macro recording, or named-register operations) must not corrupt the
+    /// Target State panel's border when rendered through the real Task
+    /// screen layout (not just the popup module in isolation).
+    #[test]
+    fn test_render_key_history_popup_does_not_corrupt_target_panel_border() {
+        // Calls the real `render_task_screen` directly (rather than
+        // duplicating its layout math here) and uses its returned `Rect` -
+        // the same one `render_editor_pair` computed - so this test tracks
+        // the production layout instead of a hand-copied formula that could
+        // silently drift out of sync with it.
+        let render = |wide_history: bool| -> (ratatui::buffer::Buffer, ratatui::layout::Rect) {
+            let mut terminal = create_terminal();
+            let scenario = create_test_scenario();
+            let mut state = create_test_app_state(vec![scenario]);
+            crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+
+            if wide_history {
+                if let TypedScreen::Task(ref mut task_data) = state.screen {
+                    for key in ["regex-pattern", "Space", "⌫", "↵", "Esc"] {
+                        task_data.key_history.push(key.to_string());
+                    }
+                }
+                // `StartScenario` resets this to false; production only flips it
+                // on the first keypress (see `handle_execute_command`).
+                state.ui.show_key_history = true;
+            }
+
+            let mut target_area = None;
+            terminal
+                .draw(|f| {
+                    target_area = super::super::task::render_task_screen(f, &state);
+                })
+                .unwrap();
+            (
+                terminal.backend().buffer().clone(),
+                target_area.expect("Task screen must report its Target panel Rect"),
+            )
+        };
+
+        let (baseline, baseline_target_area) = render(false);
+        let (with_popup, target_area) = render(true);
+        assert_eq!(
+            baseline_target_area, target_area,
+            "Target panel layout must not depend on key history content"
+        );
+
+        // The popup must have actually rendered something.
+        assert_ne!(baseline, with_popup, "expected the popup to render");
+
+        // The Target panel's border must be pixel-identical whether or not
+        // the popup is showing a wide key history.
+        for x in target_area.x..target_area.x + target_area.width {
+            assert_eq!(
+                baseline[(x, target_area.y)],
+                with_popup[(x, target_area.y)],
+                "Target panel top border corrupted at column {x}"
+            );
+            let bottom_y = target_area.y + target_area.height - 1;
+            assert_eq!(
+                baseline[(x, bottom_y)],
+                with_popup[(x, bottom_y)],
+                "Target panel bottom border corrupted at column {x}"
+            );
+        }
+        for y in target_area.y..target_area.y + target_area.height {
+            assert_eq!(
+                baseline[(target_area.x, y)],
+                with_popup[(target_area.x, y)],
+                "Target panel left border corrupted at row {y}"
+            );
+            let right_x = target_area.x + target_area.width - 1;
+            assert_eq!(
+                baseline[(right_x, y)],
+                with_popup[(right_x, y)],
+                "Target panel right border corrupted at row {y}"
+            );
+        }
+    }
+
     #[test]
     fn test_render_key_history_popup_max_keys() {
         let mut terminal = create_terminal();

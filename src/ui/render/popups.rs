@@ -52,22 +52,18 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 
 /// Render key history popup showing last 5 keys pressed with large text
 ///
-/// Used by both training mode and arcade mode. `reserved_bottom` is the height
-/// (in rows) of the fixed-height status/HUD bars anchored to the bottom of the
-/// screen (e.g. stats, timer, instructions bars); the popup is positioned
-/// directly above that reserved strip so it never overlaps those panes, and is
-/// skipped entirely if there isn't enough room to render without corrupting
-/// the editor panes above it.
-pub(super) fn render_key_history_popup(
-    frame: &mut Frame,
-    key_history: &[String],
-    reserved_bottom: u16,
-) {
+/// Used by both training mode and arcade mode. `bounds` is the outer `Rect`
+/// of the Target editor panel (as returned by `render_editor_pair`); the
+/// popup is anchored to the bottom-right corner of `bounds`'s *inner* area
+/// (i.e. inset from `bounds`'s own border) and its width is clipped to fit
+/// within that inner area, so it can never draw over the Target panel's
+/// border - regardless of how wide the key text grows. If the inner area is
+/// smaller than the minimum legible popup size, rendering is skipped for
+/// that frame instead of drawing illegibly clipped glyphs.
+pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String], bounds: Rect) {
     if key_history.is_empty() {
         return;
     }
-
-    let area = frame.area();
 
     // Build text from recent keys
     let mut key_text = String::new();
@@ -82,23 +78,27 @@ pub(super) fn render_key_history_popup(
         key_text.push_str(key);
     }
 
+    let safe_area = inner_rect(bounds);
+
+    // HalfHeight halves the glyph height (BIG_TEXT_HEIGHT_LINES) so the popup fits
+    // within the Target panel's inner area instead of spilling past its border.
+    let popup_height = BIG_TEXT_HEIGHT_LINES / 2 + 2; // +2 for borders
+
+    // The panel's inner area is too small to fit even a minimum-width,
+    // minimum-height popup - skip rather than render illegibly clipped
+    // glyphs. Never shrink `popup_height`/`KEY_HISTORY_MIN_WIDTH` below what
+    // `tui-big-text` needs to stay readable.
+    if safe_area.width < KEY_HISTORY_MIN_WIDTH || safe_area.height < popup_height {
+        return;
+    }
+
     // Calculate required dimensions before consuming key_text
     // PixelSize::HalfHeight only halves the glyph height, not the width - each
     // character (including the space separators) is still BIG_TEXT_CHAR_WIDTH_CELLS wide
     let chars_count = key_text.chars().count();
     let popup_width =
         ((chars_count * BIG_TEXT_CHAR_WIDTH_CELLS).max(KEY_HISTORY_MIN_WIDTH as usize) as u16)
-            .min(area.width.saturating_sub(4));
-    // HalfHeight halves the glyph height (BIG_TEXT_HEIGHT_LINES) so the popup fits
-    // within the space reserved above the bottom HUD bars instead of spilling
-    // into the editor panes.
-    let popup_height = BIG_TEXT_HEIGHT_LINES / 2 + 2; // +2 for borders
-
-    // Not enough vertical room above the reserved HUD strip - skip rendering
-    // rather than overlapping the editor panes or the HUD bars themselves.
-    if area.height < reserved_bottom + popup_height {
-        return;
-    }
+            .min(safe_area.width);
 
     // Create BigText widget with large font and cyan color
     let big_text = BigText::builder()
@@ -108,9 +108,11 @@ pub(super) fn render_key_history_popup(
         .centered()
         .build();
 
-    // Position in bottom right corner, directly above the reserved HUD strip
-    let popup_x = area.width.saturating_sub(popup_width + 2);
-    let popup_y = area.height.saturating_sub(reserved_bottom + popup_height);
+    // Anchor to the bottom-right corner of the panel's inner area - both
+    // dimensions were already clipped to `safe_area`, so this rect is always
+    // a subset of `safe_area` and never touches `bounds`'s border.
+    let popup_x = safe_area.x + safe_area.width.saturating_sub(popup_width);
+    let popup_y = safe_area.y + safe_area.height.saturating_sub(popup_height);
 
     let popup_area = Rect {
         x: popup_x,
@@ -240,71 +242,181 @@ mod tests {
     use super::*;
     use ratatui::{Terminal, backend::TestBackend, buffer::Buffer};
 
-    /// `BIG_TEXT_HEIGHT_LINES / 2 + 2` from `render_key_history_popup`.
-    const POPUP_HEIGHT: u16 = BIG_TEXT_HEIGHT_LINES / 2 + 2;
-
-    fn render_popup(width: u16, height: u16, reserved_bottom: u16, keys: &[String]) -> Buffer {
+    fn render_popup(width: u16, height: u16, bounds: Rect, keys: &[String]) -> Buffer {
         let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
-            .draw(|frame| render_key_history_popup(frame, keys, reserved_bottom))
+            .draw(|frame| {
+                // Simulate the Target panel's own border, matching what
+                // `render_editor_pair` renders into `bounds` in production.
+                frame.render_widget(Block::default().borders(Borders::ALL), bounds);
+                render_key_history_popup(frame, keys, bounds);
+            })
             .unwrap();
         terminal.backend().buffer().clone()
     }
 
-    fn is_blank(buffer: &Buffer) -> bool {
-        buffer
-            .content
-            .iter()
-            .all(|cell| cell.symbol() == " " || cell.symbol().is_empty())
+    fn render_bounds_only(width: u16, height: u16, bounds: Rect) -> Buffer {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                frame.render_widget(Block::default().borders(Borders::ALL), bounds);
+            })
+            .unwrap();
+        terminal.backend().buffer().clone()
     }
 
-    fn row_is_blank(buffer: &Buffer, y: u16) -> bool {
-        (0..buffer.area.width).all(|x| {
-            let symbol = buffer[(x, y)].symbol();
-            symbol == " " || symbol.is_empty()
-        })
+    /// Assert every cell on `bounds`'s own border rectangle is unchanged
+    /// between the two buffers - i.e. the popup never drew over it.
+    fn assert_border_unchanged(bounds: Rect, baseline: &Buffer, other: &Buffer) {
+        for x in bounds.x..bounds.x + bounds.width {
+            assert_eq!(
+                baseline[(x, bounds.y)],
+                other[(x, bounds.y)],
+                "top border cell ({x}, {}) was overwritten",
+                bounds.y
+            );
+            let bottom_y = bounds.y + bounds.height - 1;
+            assert_eq!(
+                baseline[(x, bottom_y)],
+                other[(x, bottom_y)],
+                "bottom border cell ({x}, {bottom_y}) was overwritten"
+            );
+        }
+        for y in bounds.y..bounds.y + bounds.height {
+            assert_eq!(
+                baseline[(bounds.x, y)],
+                other[(bounds.x, y)],
+                "left border cell ({}, {y}) was overwritten",
+                bounds.x
+            );
+            let right_x = bounds.x + bounds.width - 1;
+            assert_eq!(
+                baseline[(right_x, y)],
+                other[(right_x, y)],
+                "right border cell ({right_x}, {y}) was overwritten"
+            );
+        }
     }
 
     #[test]
     fn test_render_key_history_popup_empty_history_skips_render() {
-        let buffer = render_popup(80, 20, 6, &[]);
-        assert!(is_blank(&buffer), "empty key history must render nothing");
-    }
-
-    #[test]
-    fn test_render_key_history_popup_skips_when_not_enough_room() {
-        let reserved_bottom = 6;
-        // One row short of the minimum height the popup needs above the reserved strip.
-        let height = reserved_bottom + POPUP_HEIGHT - 1;
-        let buffer = render_popup(80, height, reserved_bottom, &["a".to_string()]);
-
-        assert!(
-            is_blank(&buffer),
-            "popup must not render when there isn't enough vertical room"
+        let bounds = Rect::new(10, 5, 40, 12);
+        let buffer = render_popup(80, 20, bounds, &[]);
+        let baseline = render_bounds_only(80, 20, bounds);
+        assert_eq!(
+            buffer, baseline,
+            "empty key history must render nothing beyond the panel border"
         );
     }
 
     #[test]
-    fn test_render_key_history_popup_reserves_space_above_bar() {
-        let reserved_bottom = 6;
-        let height = 20;
-        let buffer = render_popup(80, height, reserved_bottom, &["a".to_string()]);
+    fn test_render_key_history_popup_skips_when_bounds_too_small() {
+        // Inner area (after the panel's own border) is only 1x1 - too small
+        // to fit a bordered popup without touching `bounds`'s own border.
+        let bounds = Rect::new(10, 5, 3, 3);
+        let buffer = render_popup(80, 20, bounds, &["a".to_string()]);
+        let baseline = render_bounds_only(80, 20, bounds);
+        assert_eq!(
+            buffer, baseline,
+            "popup must not render when bounds leave no room for it"
+        );
+    }
 
-        // The reserved HUD strip (the bottom `reserved_bottom` rows) must stay untouched.
-        for y in (height - reserved_bottom)..height {
-            assert!(
-                row_is_blank(&buffer, y),
-                "reserved bottom row {y} was overwritten by the popup"
-            );
+    /// Regression test: an inner area narrower than `KEY_HISTORY_MIN_WIDTH`
+    /// (but still >= 3 cells) must be skipped entirely rather than rendered
+    /// as an illegibly squished/clipped popup - the popup's minimum legible
+    /// size must never be silently shrunk below what `tui-big-text` needs.
+    #[test]
+    fn test_render_key_history_popup_skips_rather_than_render_illegibly_narrow() {
+        // Inner width is well above 3 cells but well below KEY_HISTORY_MIN_WIDTH.
+        let bounds = Rect::new(10, 5, 20, 12);
+        assert!(inner_rect(bounds).width < KEY_HISTORY_MIN_WIDTH);
+
+        let buffer = render_popup(80, 20, bounds, &["a".to_string()]);
+        let baseline = render_bounds_only(80, 20, bounds);
+        assert_eq!(
+            buffer, baseline,
+            "popup must be skipped, not squished, when narrower than the minimum legible width"
+        );
+    }
+
+    /// Regression test: an inner area shorter than the minimum popup height
+    /// (but still >= 3 cells) must be skipped entirely rather than rendered
+    /// with a vertically clipped glyph.
+    #[test]
+    fn test_render_key_history_popup_skips_rather_than_render_illegibly_short() {
+        let min_height = BIG_TEXT_HEIGHT_LINES / 2 + 2;
+        // Inner height is well above 3 cells but below the minimum popup height.
+        let bounds = Rect::new(10, 5, 40, min_height);
+        assert!(inner_rect(bounds).height < min_height);
+
+        let buffer = render_popup(80, 20, bounds, &["a".to_string()]);
+        let baseline = render_bounds_only(80, 20, bounds);
+        assert_eq!(
+            buffer, baseline,
+            "popup must be skipped, not vertically clipped, when shorter than the minimum legible height"
+        );
+    }
+
+    /// Regression test for #364: a growing, multi-key history (e.g. while
+    /// typing a regex pattern, recording a macro, or using a named
+    /// register) must never draw over the Target panel's border, no matter
+    /// how wide the rendered key text gets.
+    #[test]
+    fn test_render_key_history_popup_never_overwrites_panel_border() {
+        let bounds = Rect::new(10, 5, 40, 12);
+        let wide_keys: Vec<String> = vec![
+            "regex-pattern".to_string(),
+            "Space".to_string(),
+            "⌫".to_string(),
+            "↵".to_string(),
+            "Esc".to_string(),
+        ];
+
+        let buffer = render_popup(80, 20, bounds, &wide_keys);
+        let baseline = render_bounds_only(80, 20, bounds);
+
+        assert_border_unchanged(bounds, &baseline, &buffer);
+        // Sanity: the popup did actually render something inside the panel.
+        assert_ne!(
+            buffer, baseline,
+            "popup should have rendered inside the panel bounds"
+        );
+    }
+
+    #[test]
+    fn test_render_key_history_popup_stays_inside_bounds_inner_area() {
+        let bounds = Rect::new(10, 5, 40, 12);
+        let inner = inner_rect(bounds);
+        let buffer = render_popup(80, 20, bounds, &["Esc".to_string(), "Space".to_string()]);
+
+        // Every non-blank cell outside `bounds` entirely must remain blank,
+        // and nothing should render between `bounds`'s edge and its inner area.
+        for y in 0..20u16 {
+            for x in 0..80u16 {
+                let inside_inner = x >= inner.x
+                    && x < inner.x + inner.width
+                    && y >= inner.y
+                    && y < inner.y + inner.height;
+                let inside_bounds = x >= bounds.x
+                    && x < bounds.x + bounds.width
+                    && y >= bounds.y
+                    && y < bounds.y + bounds.height;
+                if inside_bounds && !inside_inner {
+                    // Border ring of `bounds` - already covered by the
+                    // border-unchanged test; skip here.
+                    continue;
+                }
+                if !inside_inner {
+                    let symbol = buffer[(x, y)].symbol();
+                    assert!(
+                        symbol == " " || symbol.is_empty(),
+                        "unexpected content at ({x}, {y}) outside the panel's inner area: {symbol:?}"
+                    );
+                }
+            }
         }
-
-        // The popup itself must have rendered directly above the reserved strip
-        // (its bottom border sits on the row just above the reserved area).
-        let popup_bottom_row = height - reserved_bottom - 1;
-        assert!(
-            !row_is_blank(&buffer, popup_bottom_row),
-            "popup was not rendered directly above the reserved strip"
-        );
     }
 }

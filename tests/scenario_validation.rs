@@ -7,7 +7,7 @@
 //! key-by-key, exactly as the UI does. This catches issues like multi-key commands
 //! (gs, gg, ge) that would fail in the UI due to missing command buffer handling.
 
-use helix_trainer::config::ScenarioLoader;
+use helix_trainer::config::{QuestLoader, QuestSpec, ScenarioLoader};
 use helix_trainer::game::command_context::{
     ParsedCommand, extract_count_and_command, parse_command_buffer,
 };
@@ -73,6 +73,84 @@ fn test_all_scenarios_load_successfully() {
     }
 
     println!("\n✓ All embedded scenarios validated successfully!");
+}
+
+#[test]
+fn test_all_scenario_ids_are_unique() {
+    use std::collections::HashMap;
+
+    let loader = ScenarioLoader::new();
+    let scenarios = loader
+        .load_from_embedded("en")
+        .expect("Failed to load embedded scenarios");
+
+    let mut seen: HashMap<String, Vec<String>> = HashMap::new();
+    for scenario in &scenarios {
+        seen.entry(scenario.id.clone())
+            .or_default()
+            .push(scenario.name.clone());
+    }
+
+    let duplicates: Vec<String> = seen
+        .into_iter()
+        .filter(|(_, names)| names.len() > 1)
+        .map(|(id, names)| format!("'{}' used by: {}", id, names.join(", ")))
+        .collect();
+
+    assert!(
+        duplicates.is_empty(),
+        "Duplicate scenario ids found (completion tracking is keyed by id, so \
+         duplicates silently alias progress between different scenarios):\n  {}",
+        duplicates.join("\n  ")
+    );
+}
+
+/// Cross-checks every scenario id referenced by a quest (`SpeedRun`'s
+/// `scenario_id` and `conditions.requires_scenarios`) against the loaded
+/// scenario collection, so renaming or removing a scenario id can't silently
+/// leave a quest pointing at nothing.
+#[test]
+fn test_quest_scenario_references_exist() {
+    use std::collections::HashSet;
+
+    let scenario_ids: HashSet<String> = ScenarioLoader::new()
+        .load_from_embedded("en")
+        .expect("Failed to load embedded scenarios")
+        .into_iter()
+        .map(|s| s.id)
+        .collect();
+
+    let templates = QuestLoader::default()
+        .load_for_locale("en")
+        .expect("Failed to load quest templates for locale 'en'");
+
+    let mut dangling = Vec::new();
+    for template in &templates {
+        if let QuestSpec::SpeedRun { scenario_id, .. } = &template.spec
+            && !scenario_ids.contains(scenario_id)
+        {
+            dangling.push(format!(
+                "quest '{}': spec.scenario_id '{}'",
+                template.id, scenario_id
+            ));
+        }
+
+        for scenario_id in &template.conditions.requires_scenarios {
+            if !scenario_ids.contains(scenario_id) {
+                dangling.push(format!(
+                    "quest '{}': conditions.requires_scenarios '{}'",
+                    template.id, scenario_id
+                ));
+            }
+        }
+    }
+
+    assert!(
+        dangling.is_empty(),
+        "Quest(s) reference scenario id(s) that don't exist in the loaded scenario \
+         collection (a renamed or removed scenario id silently orphans the quest):\n  {}",
+        dangling.join("\n  ")
+    );
 }
 
 /// Commands that are special keys handled outside the normal command buffer

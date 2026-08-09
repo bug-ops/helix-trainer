@@ -309,6 +309,11 @@ pub(super) fn render_editor_with_diff(
 /// * `current_title` - Title for current state panel
 /// * `target_title` - Title for target state panel
 /// * `preview` - Optional preview highlight for surround replace
+///
+/// # Returns
+///
+/// The Target panel's outer `Rect`, so callers can bound overlays (e.g. the
+/// key-history popup) to stay strictly inside it and never draw over its border.
 pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     frame: &mut Frame,
     area: Rect,
@@ -316,7 +321,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     current_title: &str,
     target_title: &str,
     preview: Option<PreviewHighlight>,
-) {
+) -> Rect {
     // Get state from trait methods
     let current_content = scenario.current_content();
     let target_content = scenario.target_content();
@@ -448,6 +453,8 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
         )
         .scroll((v_off, h_off));
     frame.render_widget(target, target_area);
+
+    target_area
 }
 
 #[cfg(test)]

@@ -50,7 +50,9 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             mode_selection::render_mode_selection(frame, state)
         }
         crate::ui::state::TypedScreen::Menu(_) => menu::render_main_menu(frame, state),
-        crate::ui::state::TypedScreen::Task(_) => task::render_task_screen(frame, state),
+        crate::ui::state::TypedScreen::Task(_) => {
+            task::render_task_screen(frame, state);
+        }
         crate::ui::state::TypedScreen::Results(_) => results::render_results_screen(frame, state),
         crate::ui::state::TypedScreen::Profile(_) => profile::render_profile_screen(frame, state),
         crate::ui::state::TypedScreen::Statistics(_) => {

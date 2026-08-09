@@ -45,7 +45,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        run: cargo nextest run --lib --verbose
+        run: cargo nextest run --workspace --all-features --lib --bins --tests --verbose
 
       - name: Run doc tests
         if: matrix.os == 'ubuntu-latest'

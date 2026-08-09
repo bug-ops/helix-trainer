@@ -1,0 +1,7 @@
+# Normalize all text files to LF on checkout, regardless of platform.
+#
+# Without this, Windows checkouts convert files to CRLF. Scenario/quest TOML
+# files are embedded verbatim via include_str!() and the toml parser preserves
+# CRLF literally inside multi-line strings, corrupting scenario content and
+# breaking cursor/column math on Windows only.
+* text=auto eol=lf

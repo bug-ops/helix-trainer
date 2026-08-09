@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- CI now runs the full `cargo nextest` test surface (`--workspace --all-features --lib --bins --tests`) instead of `--lib` only, so integration tests under `tests/` (e.g. `tests/scenario_validation.rs`, which verifies every scenario's documented solution actually completes it) are no longer silently skipped in CI (#288)
+- Added `.gitattributes` (`* text=auto eol=lf`) to force LF checkouts on every platform; without it, Windows checkouts converted `scenarios/`/`quests/` TOML files to CRLF, and since those are embedded verbatim via `include_str!()`, the TOML parser preserved `\r\n` literally inside multi-line strings, corrupting scenario content and breaking cursor/column math for roughly half of all scenarios on Windows only — surfaced immediately once CI began running `tests/scenario_validation.rs` on `windows-latest` (#288)
 - Pausing an arcade/survival/challenge mini-game session no longer lets the active scenario's countdown timer keep draining in real time; elapsed time now excludes accumulated paused duration (#271)
 - Arcade mode's key-history popup is now gated behind a visibility flag reset on scenario transitions instead of staying permanently visible after the first keypress, matching Training mode's behavior; the popup is also repositioned/capped to avoid overlapping the Target/Timer/Score HUD or corrupting editor pane borders in both modes (#272)
 - Scenario `id` fields with an empty string now fail validation, matching quest template behavior (#275)

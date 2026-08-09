@@ -322,13 +322,22 @@ pub(in crate::ui::state) fn handle_minigame_command(
         return execute_minigame_command(state, keys.as_str(), typed.as_ref());
     }
 
-    let tokens = keys.tokens();
+    // Single-token keys (the overwhelmingly common case) are checked before
+    // any screen access so the `Vec` allocation `tokens()` would incur can
+    // be skipped entirely.
+    let is_single_token = keys.is_single_token();
 
     let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
         return Ok(());
     };
 
-    if tokens.len() > 1 {
+    if !is_single_token {
+        // An empty `keys` (never produced today - the keymap parser rejects
+        // empty bindings at config-load time) would land here with an empty
+        // `tokens`; `apply_canonical_expansion` handles that by returning
+        // `None`, unlike the old `tokens[0]` indexing this replaced, which
+        // would have panicked.
+        let tokens = keys.tokens();
         let resolved = minigame_data
             .input_state_mut()
             .apply_canonical_expansion(&tokens);
@@ -347,7 +356,7 @@ pub(in crate::ui::state) fn handle_minigame_command(
     // Single token - the common, un-remapped-or-simply-remapped path,
     // dispatched exactly as before the keymap overlay existed.
     let was_base = minigame_data.input_state().state().is_base();
-    let key_event = command_to_key_event(tokens[0]);
+    let key_event = command_to_key_event(keys.as_str());
     let handler_result = minigame_data.input_state_mut().process_key(key_event);
 
     match handler_result {

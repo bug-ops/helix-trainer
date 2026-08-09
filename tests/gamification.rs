@@ -188,7 +188,7 @@ fn test_streak_freeze_mechanics() {
     clock.advance_days(2);
 
     let change = StreakManager::update_streak(&mut profile, clock.now());
-    assert_eq!(change, StreakChange::Protected { used_freeze: true });
+    assert_eq!(change, StreakChange::Protected);
     assert_eq!(profile.current_streak, 10); // Preserved
     assert!(!profile.streak_freeze_available); // Used up
 }

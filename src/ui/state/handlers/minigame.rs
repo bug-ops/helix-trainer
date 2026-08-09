@@ -140,6 +140,7 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
 
     // Check for completion
     let mut scenario_xp = 0u64;
+    let mut scenario_leveled_up = false;
     if session.check_completion() {
         // Play success sound
         state
@@ -224,7 +225,7 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
         scenario_xp = MINIGAME_SCENARIO_BASE_XP
             + (current_streak.saturating_sub(1) as u64 * MINIGAME_STREAK_XP_MULTIPLIER);
         let profile = &mut state.progress.profile;
-        profile.add_xp(scenario_xp);
+        scenario_leveled_up = profile.add_xp(scenario_xp);
 
         // Re-borrow session after state modification
         if let Some(ref mut session) = state.game.minigame_session {
@@ -249,6 +250,20 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
     // keystroke that doesn't finish the scenario, and this is the only place that
     // awards it (this function adds XP internally).
     let quest_award = super::award_quest_completion_xp(state, &was_completed);
+
+    // Each `add_xp` call only reports whether *that* call crossed a level boundary, so
+    // OR the scenario-completion and quest-completion outcomes together (mirrors the
+    // training-mode path in `record_scenario_completion`). Unlike that training-mode
+    // path, this doesn't pair the notification with `save_immediate()` - arcade only
+    // persists at game over, so a mid-session level-up is not durable until then.
+    if scenario_leveled_up || quest_award.leveled_up {
+        state
+            .ui
+            .notifications
+            .push(Notification::new(NotificationType::LevelUp {
+                new_level: state.progress.profile.level,
+            }));
+    }
 
     // Store total XP earned for display in the transition popup (only shown when this
     // keystroke completed the scenario).
@@ -376,6 +391,7 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
         // 3. Update profile with XP and high scores
         let profile = &mut state.progress.profile;
         let leveled_up = profile.add_xp(xp);
+        let new_level = profile.level;
 
         // Update high scores if beaten
         let mut new_high_score = false;
@@ -401,6 +417,16 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
             new_high_score = new_high_score,
             "Mini-game session completed"
         );
+
+        // Unlike the mid-session push in `execute_minigame_command`, this one is
+        // immediately durable: step 4 below saves the profile unconditionally on every
+        // game over, not just on a level-up.
+        if leveled_up {
+            state
+                .ui
+                .notifications
+                .push(Notification::new(NotificationType::LevelUp { new_level }));
+        }
 
         // 4. Persist profile to disk (non-fatal error - log but continue)
         if let Err(e) = state.progress.save_immediate() {
@@ -610,6 +636,116 @@ mod tests {
                     if description == "Use 'h' 1 time"
             )),
             "expected a QuestComplete notification"
+        );
+    }
+
+    /// Regression test for #309: `award_quest_completion_xp`'s `leveled_up` field was
+    /// discarded in `execute_minigame_command`, so a `CommandPractice`/`Exploration`
+    /// quest completing mid-arcade-session could cross a level threshold with zero
+    /// notification. Mirrors the training-mode fix in
+    /// `test_handle_complete_scenario_notifies_on_level_up_from_quest_xp_alone`.
+    #[test]
+    fn test_execute_minigame_command_notifies_on_level_up_from_quest_xp_alone() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType, XPCalculator};
+
+        let mut state = create_test_state();
+        let xp_for_level_2 = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_level_2 - 1;
+        state.progress.profile.level = 1;
+        state.progress.profile.daily_quests = vec![Quest {
+            id: "cmd_practice_h".to_string(),
+            quest_type: QuestType::CommandPractice {
+                command: "h".to_string(),
+                target: 1,
+                current: 0,
+            },
+            description: "Use 'h' 1 time".to_string(),
+            difficulty: QuestDifficulty::Easy,
+            xp_reward: 1,
+            completed: false,
+        }];
+
+        start_minigame(&mut state);
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        execute_minigame_command(&mut state, "h").unwrap();
+
+        assert!(
+            state.progress.profile.level >= 2,
+            "expected a level-up driven by quest XP"
+        );
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { new_level }
+                    if new_level == state.progress.profile.level
+            )),
+            "expected a LevelUp notification reporting the post-award profile level"
+        );
+    }
+
+    /// Regression test for #309: a keystroke that doesn't cross a level threshold
+    /// must not push a `LevelUp` notification.
+    #[test]
+    fn test_execute_minigame_command_no_level_up_notification_without_level_up() {
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        execute_minigame_command(&mut state, "h").unwrap();
+
+        assert!(
+            !state.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { .. }
+            )),
+            "no LevelUp notification should fire without an actual level up"
+        );
+    }
+
+    /// Regression test for #309: `execute_minigame_command` also discarded the
+    /// `leveled_up` result of `profile.add_xp(scenario_xp)` for arcade scenario
+    /// completions (not just quest completions) - a scenario-completion XP award
+    /// crossing a level threshold must notify too.
+    #[test]
+    fn test_execute_minigame_command_notifies_on_level_up_from_scenario_xp() {
+        use crate::gamification::XPCalculator;
+
+        let scenario = create_completable_scenario_with_difficulty("s1", Difficulty::Beginner);
+        let mut state = create_single_scenario_state(scenario);
+        let xp_for_level_2 = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_level_2 - 1;
+        state.progress.profile.level = 1;
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        let _ = execute_minigame_command(&mut state, "x");
+        let _ = execute_minigame_command(&mut state, "d");
+
+        assert!(
+            state.progress.profile.level >= 2,
+            "expected a level-up driven by scenario-completion XP"
+        );
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { new_level }
+                    if new_level == state.progress.profile.level
+            )),
+            "expected a LevelUp notification reporting the post-award profile level"
         );
     }
 
@@ -1655,5 +1791,74 @@ mod tests {
 
         // Should be 2 now
         assert_eq!(state.progress.profile.minigame_games_played, 2);
+    }
+
+    /// Regression test for #309: `handle_minigame_game_over` computed `leveled_up` from
+    /// `profile.add_xp(xp)` only to log it, never pushing a `LevelUp` notification.
+    #[test]
+    fn test_minigame_game_over_notifies_on_level_up() {
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use tempfile::TempDir;
+
+        let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        start_minigame(&mut state);
+
+        // Close enough to the level 2 threshold that even a bare (score 0) game-over's
+        // level bonus XP crosses it.
+        let xp_for_level_2 = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_level_2 - 1;
+        state.progress.profile.level = 1;
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        handle_minigame_game_over(&mut state).unwrap();
+
+        assert!(
+            state.progress.profile.level >= 2,
+            "expected a level-up driven by the end-of-game XP award"
+        );
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { new_level }
+                    if new_level == state.progress.profile.level
+            )),
+            "expected a LevelUp notification reporting the post-award profile level"
+        );
+    }
+
+    /// Regression test for #309: a game-over that doesn't cross a level threshold must
+    /// not push a `LevelUp` notification.
+    #[test]
+    fn test_minigame_game_over_no_level_up_notification_without_level_up() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
+        let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        handle_minigame_game_over(&mut state).unwrap();
+
+        assert!(
+            !state.ui.notifications.visible().iter().any(|n| matches!(
+                n.notification_type,
+                crate::ui::notification::NotificationType::LevelUp { .. }
+            )),
+            "no LevelUp notification should fire without an actual level up"
+        );
     }
 }

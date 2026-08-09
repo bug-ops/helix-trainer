@@ -87,11 +87,19 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
             let mut updated_profile = profile;
             let streak_change = StreakManager::update_streak(&mut updated_profile, now);
             tracing::debug!("Streak status: {:?}", streak_change);
-            if let StreakChange::Protected { used_freeze: true } = streak_change {
-                state
-                    .ui
-                    .notifications
-                    .push(Notification::new(NotificationType::StreakFreezeUsed));
+            match streak_change {
+                StreakChange::Protected => {
+                    state
+                        .ui
+                        .notifications
+                        .push(Notification::new(NotificationType::StreakFreezeUsed));
+                }
+                StreakChange::Broken { was_streak } if was_streak > 0 => {
+                    state.ui.notifications.push(Notification::new(
+                        NotificationType::StreakBroken { was_streak },
+                    ));
+                }
+                _ => {}
             }
 
             // Check if we need to refresh daily quests
@@ -424,6 +432,53 @@ mod tests {
                 .iter()
                 .any(|n| n.notification_type == NotificationType::StreakFreezeUsed),
             "expected a StreakFreezeUsed notification when a freeze protects a missed day"
+        );
+    }
+
+    #[test]
+    fn test_handle_profile_ready_notifies_on_streak_broken() {
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        profile.current_streak = 5;
+        profile.streak_freeze_available = false;
+        // Missed more than one day with no freeze available, so `update_streak` breaks
+        // the streak instead of protecting it.
+        profile.last_activity = Utc::now() - chrono::Duration::days(2);
+
+        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        assert!(result.is_ok());
+        assert_eq!(state.progress.profile.current_streak, 0);
+        assert!(
+            state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| n.notification_type == NotificationType::StreakBroken { was_streak: 5 }),
+            "expected a StreakBroken notification when a streak breaks with no freeze available"
+        );
+    }
+
+    #[test]
+    fn test_handle_profile_ready_no_notification_for_never_started_streak() {
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        // current_streak is already 0 - nothing to lose, so breaking it should stay silent.
+        profile.last_activity = Utc::now() - chrono::Duration::days(2);
+
+        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        assert!(result.is_ok());
+        assert_eq!(state.progress.profile.current_streak, 0);
+        assert!(
+            !state
+                .ui
+                .notifications
+                .visible()
+                .iter()
+                .any(|n| matches!(n.notification_type, NotificationType::StreakBroken { .. })),
+            "no streak was ever active, so no StreakBroken notification should fire"
         );
     }
 

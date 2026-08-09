@@ -32,6 +32,9 @@ pub enum NotificationType {
     /// Streak freeze consumed (a missed day was protected by an earned freeze)
     StreakFreezeUsed,
 
+    /// Streak broken (a missed day with no freeze available reset it to zero)
+    StreakBroken { was_streak: u32 },
+
     /// Informational message
     Info { message: String },
 
@@ -130,6 +133,7 @@ impl Notification {
             NotificationType::StreakMilestone { streak } => format!("{} Day Streak!", streak),
             NotificationType::StreakFreezeGranted => "Streak Freeze Earned!".to_string(),
             NotificationType::StreakFreezeUsed => "Streak Freeze Used".to_string(),
+            NotificationType::StreakBroken { .. } => "Streak Broken".to_string(),
             NotificationType::Info { .. } => "Info".to_string(),
             NotificationType::ReviewSessionComplete { .. } => "Review Complete!".to_string(),
             NotificationType::MasteryLevelUp { command, .. } => {
@@ -160,6 +164,12 @@ impl Notification {
             NotificationType::StreakFreezeUsed => {
                 "Your streak was protected after a missed day".to_string()
             }
+            NotificationType::StreakBroken { was_streak } => {
+                format!(
+                    "Your {} day streak was reset after a missed day",
+                    was_streak
+                )
+            }
             NotificationType::Info { message } => message.clone(),
             NotificationType::ReviewSessionComplete {
                 completed,
@@ -187,6 +197,7 @@ impl Notification {
             NotificationType::StreakMilestone { .. } => Color::Cyan,
             NotificationType::StreakFreezeGranted => Color::Cyan,
             NotificationType::StreakFreezeUsed => Color::Cyan,
+            NotificationType::StreakBroken { .. } => Color::Red,
             NotificationType::Info { .. } => Color::Blue,
             NotificationType::ReviewSessionComplete { .. } => Color::Green,
             NotificationType::MasteryLevelUp { .. } => Color::Yellow,

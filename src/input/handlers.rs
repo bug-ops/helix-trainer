@@ -359,10 +359,13 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
         return Some(msg);
     }
 
-    // If hint panel is visible, Escape dismisses it without counting as a game action
+    // If hint panel is visible, Escape dismisses it without counting as a game action.
+    // Skip this while in Insert mode so Escape exits Insert mode first (matching the
+    // arcade path); a second Escape then closes the panel.
     if key.code == KeyCode::Esc
         && let TypedScreen::Task(task_data) = &state.screen
         && task_data.show_hint_panel
+        && !is_gameplay_insert_mode(state)
     {
         return Some(Message::ShowHint);
     }

@@ -557,7 +557,9 @@ impl AnyModeSimulator {
         self.mode() == Mode::Normal
             && match self {
                 Self::Normal(sim) => sim.matches_snapshot(target),
-                Self::Insert(sim) => sim.matches_snapshot(target),
+                // Unreachable: the `mode() == Mode::Normal` check above
+                // already short-circuits before this arm can run.
+                Self::Insert(_) => false,
             }
     }
 

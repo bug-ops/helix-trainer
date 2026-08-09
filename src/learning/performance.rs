@@ -11,6 +11,15 @@ use crate::time::{Clock, SystemClock};
 const DEFAULT_DIFFICULTY: f32 = 5.0; // Mixle difficulty (0-10 scale)
 const DEFAULT_DESIRED_RETENTION: f32 = 0.9; // 90% target retention
 
+/// FSRS model parameters this tracker's [`FSRS`] instance is constructed with.
+///
+/// Hoisted so the decay value passed to `fsrs::current_retrievability` in
+/// [`PerformanceTracker::update_fsrs_state`] (`FSRS_PARAMS[20]`) is structurally tied
+/// to whatever parameters actually built the tracker, instead of a same-named
+/// constant that could silently diverge if these parameters ever become
+/// user-configurable.
+const FSRS_PARAMS: [f32; 21] = fsrs::DEFAULT_PARAMETERS;
+
 /// Card state tracked by the application (FSRS doesn't track this)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CardState {
@@ -46,7 +55,30 @@ pub struct CommandPerformance {
 
     // Derived fields
     pub mastery_level: MasteryLevel,
-    pub retrievability: f32, // Current recall probability (0.0-1.0)
+    /// Current recall probability (0.0-1.0).
+    ///
+    /// Deserialized tolerantly: `serde_json` writes a `NaN` `f32` as `null`, and a
+    /// past build could produce one here (see the decay-sign fix in
+    /// `PerformanceTracker::update_fsrs_state`). Without this, a profile saved
+    /// while that bug was live would fail to deserialize at all -- permanently
+    /// bricking `profile.json` -- rather than just having one stale field. A
+    /// *present* key with value `null` recovers as `1.0`, the same default a
+    /// brand-new card gets in [`CommandPerformance::new`] -- this does not cover a
+    /// genuinely missing key, which still errors (no build has ever omitted this
+    /// field, so that case doesn't need tolerance).
+    #[serde(deserialize_with = "deserialize_retrievability")]
+    pub retrievability: f32,
+}
+
+/// See the `retrievability` field doc on [`CommandPerformance`]. `#[serde(default)]`
+/// alone would not have covered this even if paired here: it only fires when the key
+/// is absent, not when it's present with value `null`, which is what a `NaN` `f32`
+/// round-trips to.
+fn deserialize_retrievability<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<f32>::deserialize(deserializer)?.unwrap_or(1.0))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,7 +267,7 @@ impl PerformanceTracker {
     pub fn with_clock(clock: Arc<dyn Clock>) -> Self {
         Self {
             stats: HashMap::new(),
-            fsrs: FSRS::new(&[]).unwrap(),
+            fsrs: FSRS::new(&FSRS_PARAMS).unwrap(),
             clock,
         }
     }
@@ -339,13 +371,22 @@ impl PerformanceTracker {
         perf.update_from_next_state(next_state.memory, next_state.interval, rating_index, now);
 
         // Update retrievability (current recall probability)
+        //
+        // `decay` must be the raw (positive) model weight `w[20]`, not its negation:
+        // `fsrs::current_retrievability`'s formula mirrors the crate's internal
+        // `power_forgetting_curve`, which computes its own `decay = -w[20]` before use.
+        // Passing a negative value here double-flips the sign, driving the curve's base
+        // negative for perfectly ordinary inputs and producing NaN via `powf`. Read from
+        // `FSRS_PARAMS[20]` (the same array `self.fsrs` above is constructed with, see
+        // `with_clock`/`from_stats_with_clock`) rather than a same-named constant, so
+        // this can't silently diverge if these parameters become configurable later.
         perf.retrievability = fsrs::current_retrievability(
             perf.memory_state().unwrap_or(MemoryState {
                 stability: 0.0,
                 difficulty: DEFAULT_DIFFICULTY,
             }),
             elapsed_days as f32,
-            -0.5, // Default decay parameter
+            FSRS_PARAMS[20],
         );
     }
 
@@ -378,7 +419,7 @@ impl PerformanceTracker {
     ) -> Self {
         Self {
             stats,
-            fsrs: FSRS::new(&[]).unwrap(),
+            fsrs: FSRS::new(&FSRS_PARAMS).unwrap(),
             clock,
         }
     }
@@ -456,6 +497,38 @@ mod tests {
         assert_eq!(perf.mastery_level, MasteryLevel::Beginner);
         assert_eq!(perf.retrievability, 1.0);
         assert!(perf.memory_state().is_none());
+    }
+
+    /// Regression test: a `profile.json` written while the decay-sign bug (see
+    /// `PerformanceTracker::update_fsrs_state`) was live could contain a `NaN`
+    /// `retrievability`, which `serde_json` round-trips as `null`. Deserializing that
+    /// must recover as `1.0`, not fail the whole `CommandPerformance` (and therefore
+    /// the whole profile load).
+    #[test]
+    fn test_deserialize_null_retrievability_recovers_as_one() {
+        let json = r#"{
+            "command": "x",
+            "stability": 5.0,
+            "difficulty": 6.0,
+            "state": "Review",
+            "reps": 3,
+            "lapses": 1,
+            "attempts": 3,
+            "successes": 2,
+            "total_time": 3000,
+            "avg_time": 1000,
+            "last_review": "2026-01-15T12:00:00Z",
+            "due": "2026-01-20T12:00:00Z",
+            "scheduled_days": 5,
+            "mastery_level": "Intermediate",
+            "retrievability": null
+        }"#;
+
+        let perf: CommandPerformance = serde_json::from_str(json).unwrap();
+        assert_eq!(perf.retrievability, 1.0);
+        // Everything else deserializes normally -- only `retrievability` gets tolerant handling.
+        assert_eq!(perf.command, "x");
+        assert_eq!(perf.stability, 5.0);
     }
 
     #[test]

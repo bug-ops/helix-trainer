@@ -202,7 +202,7 @@ impl<'a> ScenarioScorer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ScoringConfig, Setup, Solution, TargetState};
+    use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
     use chrono::Duration;
     use std::time::Duration as StdDuration;
 
@@ -214,17 +214,21 @@ mod tests {
             description: "A test scenario".to_string(),
             setup: Setup {
                 file_content: "test content".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             target: TargetState {
                 file_content: "target content".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             solution: Solution {
                 commands: commands.into_iter().map(String::from).collect(),

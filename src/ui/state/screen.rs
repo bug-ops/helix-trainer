@@ -605,7 +605,7 @@ mod tests {
 
     #[test]
     fn test_task_data_key_history() {
-        use crate::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
+        use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
             id: "test".to_string(),
@@ -613,17 +613,21 @@ mod tests {
             description: "Test scenario".to_string(),
             setup: Setup {
                 file_content: "test".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             target: TargetState {
                 file_content: "test".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             solution: Solution {
                 commands: vec!["x".to_string(), "d".to_string()],
@@ -658,7 +662,7 @@ mod tests {
 
     #[test]
     fn test_task_data_key_history_max_5() {
-        use crate::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
+        use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
             id: "test".to_string(),
@@ -666,17 +670,21 @@ mod tests {
             description: "Test scenario".to_string(),
             setup: Setup {
                 file_content: "test".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             target: TargetState {
                 file_content: "test".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             solution: Solution {
                 commands: vec!["x".to_string(), "d".to_string()],
@@ -707,7 +715,7 @@ mod tests {
 
     #[test]
     fn test_completed_or_abandoned_helpers() {
-        use crate::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
+        use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
             id: "test_123".to_string(),
@@ -715,17 +723,21 @@ mod tests {
             description: "Test scenario".to_string(),
             setup: Setup {
                 file_content: "test".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             target: TargetState {
                 file_content: "test".to_string(),
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some((0, 0)),
+                    selection: None,
+                    cursors: None,
+                    selections: None,
+                },
             },
             solution: Solution {
                 commands: vec!["x".to_string(), "d".to_string()],

@@ -65,20 +65,24 @@ fn test_validate_id_field_invalid_characters() {
 }
 
 #[test]
-fn test_quest_type_tag_deserialization() {
-    #[derive(Deserialize)]
-    struct Test {
-        #[serde(rename = "type")]
-        quest_type: QuestTypeTag,
-    }
+fn test_quest_spec_type_tag_deserialization() {
+    let valid = r#"
+type = "command_practice"
+[params]
+command = "x"
+target = 3
+"#;
+    let result: QuestSpec = toml::from_str(valid).unwrap();
+    assert!(matches!(result, QuestSpec::CommandPractice { .. }));
 
-    let valid = r#"type = "command_practice""#;
-    let result: Test = toml::from_str(valid).unwrap();
-    assert_eq!(result.quest_type, QuestTypeTag::CommandPractice);
-
-    let valid = r#"type = "speed_run""#;
-    let result: Test = toml::from_str(valid).unwrap();
-    assert_eq!(result.quest_type, QuestTypeTag::SpeedRun);
+    let valid = r#"
+type = "speed_run"
+[params]
+scenario_id = "delete_line_001"
+time_limit_seconds = 5
+"#;
+    let result: QuestSpec = toml::from_str(valid).unwrap();
+    assert!(matches!(result, QuestSpec::SpeedRun { .. }));
 }
 
 #[test]
@@ -102,52 +106,75 @@ fn test_quest_difficulty_deserialization() {
 }
 
 #[test]
-fn test_quest_params_command_practice() {
+fn test_quest_spec_command_practice() {
     let toml_str = r#"
+type = "command_practice"
+[params]
 command = "x"
 target = 3
 "#;
-    let params: QuestParams = toml::from_str(toml_str).unwrap();
-    match params {
-        QuestParams::CommandPractice { command, target } => {
+    let spec: QuestSpec = toml::from_str(toml_str).unwrap();
+    match spec {
+        QuestSpec::CommandPractice { command, target } => {
             assert_eq!(command, "x");
             assert_eq!(target, 3);
         }
-        _ => panic!("Wrong variant"),
+        other => panic!("Wrong variant: {:?}", other),
     }
 }
 
 #[test]
-fn test_quest_params_scenario_completion() {
+fn test_quest_spec_scenario_completion() {
     let toml_str = r#"
+type = "scenario_completion"
+[params]
 target = 5
 "#;
-    let params: QuestParams = toml::from_str(toml_str).unwrap();
-    match params {
-        QuestParams::ScenarioCompletion { target } => {
+    let spec: QuestSpec = toml::from_str(toml_str).unwrap();
+    match spec {
+        QuestSpec::ScenarioCompletion { target } => {
             assert_eq!(target, 5);
         }
-        _ => panic!("Wrong variant"),
+        other => panic!("Wrong variant: {:?}", other),
     }
 }
 
 #[test]
-fn test_quest_params_speed_run() {
+fn test_quest_spec_speed_run() {
     let toml_str = r#"
+type = "speed_run"
+[params]
 scenario_id = "delete_line_001"
 time_limit_seconds = 5
 "#;
-    let params: QuestParams = toml::from_str(toml_str).unwrap();
-    match params {
-        QuestParams::SpeedRun {
+    let spec: QuestSpec = toml::from_str(toml_str).unwrap();
+    match spec {
+        QuestSpec::SpeedRun {
             scenario_id,
             time_limit_seconds,
         } => {
             assert_eq!(scenario_id, "delete_line_001");
             assert_eq!(time_limit_seconds, 5);
         }
-        _ => panic!("Wrong variant"),
+        other => panic!("Wrong variant: {:?}", other),
     }
+}
+
+#[test]
+fn test_quest_spec_type_params_mismatch_is_deserialization_error() {
+    // `type` says speed_run but `params` is shaped like command_practice: this
+    // must fail to deserialize rather than silently picking a mismatched variant.
+    let toml_str = r#"
+type = "speed_run"
+[params]
+command = "x"
+target = 3
+"#;
+    let result: Result<QuestSpec, _> = toml::from_str(toml_str);
+    assert!(
+        result.is_err(),
+        "type/params mismatch should be a deserialization error"
+    );
 }
 
 #[test]
@@ -224,9 +251,8 @@ fn test_quest_template_to_quest_conversion() {
         id: "test_quest".to_string(),
         name: "Test Quest".to_string(),
         description: "Delete 3 lines".to_string(),
-        quest_type: QuestTypeTag::CommandPractice,
         difficulty: QuestDifficulty::Easy,
-        params: QuestParams::CommandPractice {
+        spec: QuestSpec::CommandPractice {
             command: "x".to_string(),
             target: 3,
         },
@@ -257,30 +283,34 @@ fn test_validate_id_field_empty() {
 }
 
 #[test]
-fn test_quest_params_time_invested() {
+fn test_quest_spec_time_invested() {
     let toml_str = r#"
+type = "time_invested"
+[params]
 target_minutes = 10
 "#;
-    let params: QuestParams = toml::from_str(toml_str).unwrap();
-    match params {
-        QuestParams::TimeInvested { target_minutes } => {
+    let spec: QuestSpec = toml::from_str(toml_str).unwrap();
+    match spec {
+        QuestSpec::TimeInvested { target_minutes } => {
             assert_eq!(target_minutes, 10);
         }
-        _ => panic!("Wrong variant"),
+        other => panic!("Wrong variant: {:?}", other),
     }
 }
 
 #[test]
-fn test_quest_params_exploration() {
+fn test_quest_spec_exploration() {
     let toml_str = r#"
+type = "exploration"
+[params]
 target_commands = 15
 "#;
-    let params: QuestParams = toml::from_str(toml_str).unwrap();
-    match params {
-        QuestParams::Exploration { target_commands } => {
+    let spec: QuestSpec = toml::from_str(toml_str).unwrap();
+    match spec {
+        QuestSpec::Exploration { target_commands } => {
             assert_eq!(target_commands, 15);
         }
-        _ => panic!("Wrong variant"),
+        other => panic!("Wrong variant: {:?}", other),
     }
 }
 
@@ -468,9 +498,10 @@ fn test_validate_all_quest_templates() {
             template.id
         );
 
-        // 4. Validate quest type matches parameters
-        match (&template.quest_type, &template.params) {
-            (QuestTypeTag::CommandPractice, QuestParams::CommandPractice { command, target }) => {
+        // 4. Validate quest spec parameters (type/params mismatch is unrepresentable
+        //    at the type level, so no wildcard arm is needed here)
+        match &template.spec {
+            QuestSpec::CommandPractice { command, target } => {
                 assert!(!command.is_empty(), "Empty command for ID: {}", template.id);
                 assert!(
                     command.len() <= 10,
@@ -485,7 +516,7 @@ fn test_validate_all_quest_templates() {
                 );
                 commands_used.insert(command.clone());
             }
-            (QuestTypeTag::ScenarioCompletion, QuestParams::ScenarioCompletion { target }) => {
+            QuestSpec::ScenarioCompletion { target } => {
                 assert!(*target > 0, "Target must be > 0 for ID: {}", template.id);
                 assert!(
                     *target <= 100,
@@ -493,13 +524,10 @@ fn test_validate_all_quest_templates() {
                     template.id
                 );
             }
-            (
-                QuestTypeTag::SpeedRun,
-                QuestParams::SpeedRun {
-                    scenario_id,
-                    time_limit_seconds,
-                },
-            ) => {
+            QuestSpec::SpeedRun {
+                scenario_id,
+                time_limit_seconds,
+            } => {
                 assert!(
                     !scenario_id.is_empty(),
                     "Empty scenario_id for ID: {}",
@@ -522,7 +550,7 @@ fn test_validate_all_quest_templates() {
                 );
                 scenario_ids_used.insert(scenario_id.clone());
             }
-            (QuestTypeTag::TimeInvested, QuestParams::TimeInvested { target_minutes }) => {
+            QuestSpec::TimeInvested { target_minutes } => {
                 assert!(
                     *target_minutes > 0,
                     "Target minutes must be > 0 for ID: {}",
@@ -534,7 +562,7 @@ fn test_validate_all_quest_templates() {
                     template.id
                 );
             }
-            (QuestTypeTag::Exploration, QuestParams::Exploration { target_commands }) => {
+            QuestSpec::Exploration { target_commands } => {
                 assert!(
                     *target_commands > 0,
                     "Target commands must be > 0 for ID: {}",
@@ -546,10 +574,6 @@ fn test_validate_all_quest_templates() {
                     template.id
                 );
             }
-            _ => panic!(
-                "Quest type {:?} does not match params for ID: {}",
-                template.quest_type, template.id
-            ),
         }
 
         // 5. Validate custom XP reward if present
@@ -574,6 +598,17 @@ fn test_validate_all_quest_templates() {
             "Too many required scenarios (max 20) for ID: {}",
             template.id
         );
+
+        // Spot-check that `conditions` (a sibling of the flattened `spec` field)
+        // deserializes correctly and isn't swallowed by the adjacent tagging.
+        if template.id == "speed_delete_hard" {
+            assert_eq!(
+                template.conditions.requires_scenarios,
+                vec!["delete_line_001".to_string()],
+                "requires_scenarios did not survive deserialization for ID: {}",
+                template.id
+            );
+        }
 
         // Collect scenario IDs from conditions
         for scenario_id in &template.conditions.requires_scenarios {

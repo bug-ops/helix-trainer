@@ -542,12 +542,7 @@ impl QuestGenerator {
         // Filter to only exploration type quests
         let exploration_templates: Vec<_> = templates
             .into_iter()
-            .filter(|t| {
-                matches!(
-                    t.quest_type,
-                    crate::config::quests::QuestTypeTag::Exploration
-                )
-            })
+            .filter(|t| matches!(t.spec, crate::config::quests::QuestSpec::Exploration { .. }))
             .collect();
 
         assert!(

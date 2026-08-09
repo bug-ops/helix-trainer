@@ -3,7 +3,7 @@
 //! These tests verify that the UI layer correctly handles multi-key commands
 //! like 'dd', 'gg', 'r<char>' through the typestate-based InputStateMachine.
 
-use helix_trainer::config::{Scenario, ScoringConfig, Setup, Solution, TargetState};
+use helix_trainer::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 use helix_trainer::game::PlayableScenario;
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::learning::PerformanceTracker;
@@ -33,17 +33,21 @@ fn create_test_scenario(
         description: "Test scenario for integration testing".to_string(),
         setup: Setup {
             file_content: setup_content.to_string(),
-            cursor_position: Some(setup_cursor),
-            selection: None,
-            cursors: None,
-            selections: None,
+            cursor: CursorSpec {
+                cursor_position: Some(setup_cursor),
+                selection: None,
+                cursors: None,
+                selections: None,
+            },
         },
         target: TargetState {
             file_content: target_content.to_string(),
-            cursor_position: Some(target_cursor),
-            selection: None,
-            cursors: None,
-            selections: None,
+            cursor: CursorSpec {
+                cursor_position: Some(target_cursor),
+                selection: None,
+                cursors: None,
+                selections: None,
+            },
         },
         solution: Solution {
             commands: vec!["test".to_string()],

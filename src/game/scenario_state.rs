@@ -44,19 +44,19 @@ impl ScenarioState {
         // Create initial snapshot from scenario setup
         let initial_snapshot = EditorSnapshot::from_scenario_config(
             scenario.setup.file_content.clone(),
-            scenario.setup.cursor_position,
-            scenario.setup.selection,
-            scenario.setup.cursors.as_deref(),
-            scenario.setup.selections.as_deref(),
+            scenario.setup.cursor.cursor_position,
+            scenario.setup.cursor.selection,
+            scenario.setup.cursor.cursors.as_deref(),
+            scenario.setup.cursor.selections.as_deref(),
         );
 
         // Create target snapshot for completion checking
         let target_snapshot = EditorSnapshot::from_scenario_config(
             scenario.target.file_content.clone(),
-            scenario.target.cursor_position,
-            scenario.target.selection,
-            scenario.target.cursors.as_deref(),
-            scenario.target.selections.as_deref(),
+            scenario.target.cursor.cursor_position,
+            scenario.target.cursor.selection,
+            scenario.target.cursor.cursors.as_deref(),
+            scenario.target.cursor.selections.as_deref(),
         );
 
         // Initialize Helix simulator from initial snapshot

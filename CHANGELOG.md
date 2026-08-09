@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `Setup` and `TargetState` now share their cursor/selection fields and logic through a single `CursorSpec` type (`#[serde(flatten)]`) instead of duplicating both; scenario TOML files are unaffected (#268)
+- Quest templates now use a single adjacently-tagged `QuestSpec` enum instead of a separate `type` discriminator and untagged `params` enum, making a `type`/`params` mismatch a deserialization error instead of a runtime-only check; quest TOML files are unaffected (#274)
+
 ### Fixed
 
 - CI now runs the full `cargo nextest` test surface (`--workspace --all-features --lib --bins --tests`) instead of `--lib` only, so integration tests under `tests/` (e.g. `tests/scenario_validation.rs`, which verifies every scenario's documented solution actually completes it) are no longer silently skipped in CI (#288)

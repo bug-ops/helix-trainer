@@ -3,8 +3,8 @@
 //! Provides a fluent builder API for creating `Scenario` instances in tests.
 
 use crate::config::{
-    AlternativeSolution, Difficulty, Scenario, ScenarioCategory, ScenarioMetadata, ScoringConfig,
-    Setup, Solution, TargetState,
+    AlternativeSolution, CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioMetadata,
+    ScoringConfig, Setup, Solution, TargetState,
 };
 use std::num::NonZeroUsize;
 
@@ -244,17 +244,21 @@ impl ScenarioBuilder {
             description: self.description,
             setup: Setup {
                 file_content: self.setup_content,
-                cursor_position: Some(self.setup_cursor),
-                selection: self.setup_selection,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some(self.setup_cursor),
+                    selection: self.setup_selection,
+                    cursors: None,
+                    selections: None,
+                },
             },
             target: TargetState {
                 file_content: self.target_content,
-                cursor_position: Some(self.target_cursor),
-                selection: self.target_selection,
-                cursors: None,
-                selections: None,
+                cursor: CursorSpec {
+                    cursor_position: Some(self.target_cursor),
+                    selection: self.target_selection,
+                    cursors: None,
+                    selections: None,
+                },
             },
             solution: Solution {
                 commands: self.commands,

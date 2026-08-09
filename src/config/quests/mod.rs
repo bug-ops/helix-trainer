@@ -38,27 +38,16 @@ pub struct QuestTemplate {
     pub name: String,
     pub description: String,
 
-    #[serde(rename = "type")]
-    pub quest_type: QuestTypeTag,
     pub difficulty: QuestDifficulty,
-    pub params: QuestParams,
+
+    #[serde(flatten)]
+    pub spec: QuestSpec,
 
     #[serde(default)]
     pub xp: Option<XpConfig>,
 
     #[serde(default)]
     pub conditions: QuestConditions,
-}
-
-/// Quest type discriminator (for TOML deserialization)
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum QuestTypeTag {
-    CommandPractice,
-    ScenarioCompletion,
-    SpeedRun,
-    TimeInvested,
-    Exploration,
 }
 
 /// Quest difficulty (matches existing enum)
@@ -70,10 +59,15 @@ pub enum QuestDifficulty {
     Hard,
 }
 
-/// Quest-specific parameters (untagged enum for flexible deserialization)
+/// Quest type and its type-specific parameters
+///
+/// Adjacently tagged by the TOML `type` field, with the variant's fields read
+/// from the nested `params` table (`#[serde(tag = "type", content = "params")]`).
+/// This makes a `type`/`params` shape mismatch a deserialization error instead
+/// of a runtime validation concern.
 #[derive(Deserialize, Debug, Clone)]
-#[serde(untagged)]
-pub enum QuestParams {
+#[serde(tag = "type", content = "params", rename_all = "snake_case")]
+pub enum QuestSpec {
     CommandPractice {
         command: String,
         target: u32,
@@ -339,16 +333,16 @@ impl QuestLoader {
             ));
         }
 
-        // Validate that params match quest type
-        self.validate_params_match_type(quest)?;
+        // Validate spec parameter bounds
+        self.validate_spec(quest)?;
 
         Ok(())
     }
 
-    /// Validate that quest parameters match the quest type
-    fn validate_params_match_type(&self, quest: &QuestTemplate) -> Result<(), SecurityError> {
-        match (&quest.quest_type, &quest.params) {
-            (QuestTypeTag::CommandPractice, QuestParams::CommandPractice { command, target }) => {
+    /// Validate quest spec parameters are within bounds
+    fn validate_spec(&self, quest: &QuestTemplate) -> Result<(), SecurityError> {
+        match &quest.spec {
+            QuestSpec::CommandPractice { command, target } => {
                 if command.is_empty() || command.len() > 10 {
                     return Err(SecurityError::InvalidInput("Invalid command name".into()));
                 }
@@ -358,20 +352,17 @@ impl QuestLoader {
                     ));
                 }
             }
-            (QuestTypeTag::ScenarioCompletion, QuestParams::ScenarioCompletion { target }) => {
+            QuestSpec::ScenarioCompletion { target } => {
                 if *target == 0 || *target > MAX_QUEST_TARGET {
                     return Err(SecurityError::InvalidInput(
                         "Invalid scenario completion target".into(),
                     ));
                 }
             }
-            (
-                QuestTypeTag::SpeedRun,
-                QuestParams::SpeedRun {
-                    scenario_id,
-                    time_limit_seconds,
-                },
-            ) => {
+            QuestSpec::SpeedRun {
+                scenario_id,
+                time_limit_seconds,
+            } => {
                 if scenario_id.is_empty() || scenario_id.len() > 64 {
                     return Err(SecurityError::InvalidInput("Invalid scenario ID".into()));
                 }
@@ -381,24 +372,19 @@ impl QuestLoader {
                     ));
                 }
             }
-            (QuestTypeTag::TimeInvested, QuestParams::TimeInvested { target_minutes }) => {
+            QuestSpec::TimeInvested { target_minutes } => {
                 if *target_minutes == 0 || *target_minutes > MAX_QUEST_TARGET {
                     return Err(SecurityError::InvalidInput(
                         "Invalid time invested target".into(),
                     ));
                 }
             }
-            (QuestTypeTag::Exploration, QuestParams::Exploration { target_commands }) => {
+            QuestSpec::Exploration { target_commands } => {
                 if *target_commands == 0 || *target_commands > MAX_QUEST_TARGET {
                     return Err(SecurityError::InvalidInput(
                         "Invalid exploration target".into(),
                     ));
                 }
-            }
-            _ => {
-                return Err(SecurityError::InvalidInput(
-                    "Quest type does not match parameters".into(),
-                ));
             }
         }
 
@@ -423,7 +409,7 @@ impl QuestTemplate {
     pub fn to_quest(&self) -> crate::gamification::Quest {
         use crate::gamification::Quest;
 
-        let quest_type = self.params_to_quest_type();
+        let quest_type = self.spec_to_quest_type();
         let difficulty = self.difficulty_to_runtime();
 
         Quest::new(
@@ -434,32 +420,32 @@ impl QuestTemplate {
         )
     }
 
-    /// Convert template parameters to runtime QuestType
-    fn params_to_quest_type(&self) -> crate::gamification::QuestType {
+    /// Convert template spec to runtime QuestType
+    fn spec_to_quest_type(&self) -> crate::gamification::QuestType {
         use crate::gamification::QuestType;
 
-        match &self.params {
-            QuestParams::CommandPractice { command, target } => QuestType::CommandPractice {
+        match &self.spec {
+            QuestSpec::CommandPractice { command, target } => QuestType::CommandPractice {
                 command: command.clone(),
                 target: *target,
                 current: 0,
             },
-            QuestParams::ScenarioCompletion { target } => QuestType::ScenarioCompletion {
+            QuestSpec::ScenarioCompletion { target } => QuestType::ScenarioCompletion {
                 target: *target,
                 current: 0,
             },
-            QuestParams::SpeedRun {
+            QuestSpec::SpeedRun {
                 scenario_id,
                 time_limit_seconds,
             } => QuestType::SpeedRun {
                 scenario_id: scenario_id.clone(),
                 time_limit: std::time::Duration::from_secs(*time_limit_seconds),
             },
-            QuestParams::TimeInvested { target_minutes } => QuestType::TimeInvested {
+            QuestSpec::TimeInvested { target_minutes } => QuestType::TimeInvested {
                 target_minutes: *target_minutes,
                 current_minutes: 0,
             },
-            QuestParams::Exploration { target_commands } => QuestType::Exploration {
+            QuestSpec::Exploration { target_commands } => QuestType::Exploration {
                 target_commands: *target_commands,
                 commands_used: HashSet::new(),
             },

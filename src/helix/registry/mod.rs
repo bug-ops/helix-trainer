@@ -104,7 +104,7 @@ mod tests {
         let registry = normal_registry();
 
         let h_meta = registry.get_metadata("h").unwrap();
-        assert_eq!(h_meta.name, "move_left");
+        assert_eq!(h_meta.name, "move_char_left");
         assert_eq!(h_meta.category, Category::Movement);
         assert!(!h_meta.repeatable);
 

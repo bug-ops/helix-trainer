@@ -69,10 +69,18 @@ pub struct CommandMetadata {
     pub repeatable: bool,
     /// Mode transition triggered by this command
     pub mode_change: Option<ModeTransition>,
+    /// Whether `name` is a trainer-internal convenience alias rather than a
+    /// real Helix 25.07.1 command name.
+    ///
+    /// Excluded from the `helix_name -> CanonicalKeys` reverse index built by
+    /// [`CommandRegistry`](super::command_registry::CommandRegistry), since
+    /// resolving a user's Helix keymap config by command name must never
+    /// land on a binding that doesn't actually exist upstream.
+    pub alias_only: bool,
 }
 
 impl CommandMetadata {
-    /// Create new command metadata
+    /// Create new command metadata for a real Helix 25.07.1 command
     pub const fn new(
         name: &'static str,
         key: &'static str,
@@ -90,6 +98,33 @@ impl CommandMetadata {
             category,
             repeatable,
             mode_change,
+            alias_only: false,
+        }
+    }
+
+    /// Create metadata for a trainer-internal convenience binding that has
+    /// no corresponding upstream Helix command name (e.g. `^` or `Ctrl-r`).
+    ///
+    /// Marks [`alias_only`](Self::alias_only) so the binding is excluded
+    /// from the `helix_name -> CanonicalKeys` reverse index.
+    pub const fn new_alias(
+        name: &'static str,
+        key: &'static str,
+        description: &'static str,
+        help: &'static str,
+        category: Category,
+        repeatable: bool,
+        mode_change: Option<ModeTransition>,
+    ) -> Self {
+        Self {
+            name,
+            key,
+            description,
+            help,
+            category,
+            repeatable,
+            mode_change,
+            alias_only: true,
         }
     }
 }

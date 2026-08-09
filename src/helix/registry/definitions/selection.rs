@@ -14,7 +14,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Existing selection commands
     registry.register(Command::new(
         CommandMetadata::new(
-            "select_line",
+            "extend_line_below",
             CMD_SELECT_LINE,
             "Select line",
             "Select the current line. Use 'x' then 'd' to delete a line in Helix.",
@@ -27,7 +27,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "extend_line",
+            "extend_to_line_bounds",
             CMD_EXTEND_LINE,
             "Extend to line bounds",
             "Extend the selection to line boundaries.",
@@ -93,7 +93,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "split_selection_newlines",
+            "split_selection_on_newline",
             CMD_SPLIT_SELECTION_NEWLINES,
             "Split on newlines",
             "Split the selection on newlines, creating one selection per line.",
@@ -145,7 +145,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "merge_consecutive",
+            "merge_consecutive_selections",
             CMD_MERGE_CONSECUTIVE,
             "Merge consecutive",
             "Merge only adjacent/consecutive selections.",
@@ -158,7 +158,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "copy_selection_next_line",
+            "copy_selection_on_next_line",
             CMD_COPY_SELECTION_NEXT,
             "Copy to next line",
             "Copy the selection to the next line below.",
@@ -171,7 +171,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "copy_selection_prev_line",
+            "copy_selection_on_prev_line",
             CMD_COPY_SELECTION_PREV,
             "Copy to prev line",
             "Copy the selection to the previous line above.",
@@ -184,7 +184,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "keep_selections_matching",
+            "keep_selections",
             CMD_KEEP_MATCHING,
             "Keep matching",
             "Keep only selections that match the given regex pattern.",
@@ -197,7 +197,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "remove_selections_matching",
+            "remove_selections",
             CMD_REMOVE_MATCHING,
             "Remove matching",
             "Remove selections that match the given regex pattern.",

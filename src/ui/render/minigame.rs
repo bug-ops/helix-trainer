@@ -549,7 +549,7 @@ mod tests {
         let mut state = AppState::new(
             vec![],
             UserProfile::new(),
-            ProfileStorage::new(),
+            ProfileStorage::for_test(),
             PerformanceTracker::new(),
         );
         state.screen = TypedScreen::MiniGame(MiniGameData::default());
@@ -571,7 +571,7 @@ mod tests {
         let mut state = AppState::new(
             vec![],
             UserProfile::new(),
-            ProfileStorage::new(),
+            ProfileStorage::for_test(),
             PerformanceTracker::new(),
         );
         state.screen = TypedScreen::MiniGame(MiniGameData::default());
@@ -591,7 +591,7 @@ mod tests {
         let mut state = AppState::new(
             vec![],
             UserProfile::new(),
-            ProfileStorage::new(),
+            ProfileStorage::for_test(),
             PerformanceTracker::new(),
         );
         state.screen = TypedScreen::Menu(MenuData::default());

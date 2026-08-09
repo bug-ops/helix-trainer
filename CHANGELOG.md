@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Quest completion now marks `UserProfile::completed_quests_today`, so `StreakManager::update_streak` (still evaluated once per app launch, at profile load) can increment `current_streak` on the following day's session instead of the set staying permanently empty (#267)
   - Streak-freeze eligibility now requires completing every quest generated for the day rather than a fixed count of 5, which the quest generator can never produce (max 4/day) and was therefore unreachable; eligible completion grants a freeze via `StreakManager::grant_freeze`, surfaced with a new `StreakFreezeGranted` notification (#257)
   - Scenario completion and profile load now check `AchievementEngine::check_achievements` and unlock newly satisfied achievements — including retroactively unlocking every tier a profile already qualifies for, not just the highest one — surfaced via the existing `Achievement` notification (#256)
+- FSRS review history, XP, level, and quest progress are no longer lost on a crash, forced kill, or terminal close mid-session (#258, #273). Every mid-session profile save — scenario completion, XP award, mini-game game-over, and review-session completion/abandon — now syncs the live FSRS tracker state before writing, routed through a single centralized `ProgressState::save_immediate`/`save_debounced` path instead of five duplicated (and partly stale) save call sites.
+- Profile saves (`~/.config/helix-trainer/profile.json`) are now atomic: the write goes to a temp file, is `fsync`ed, and is renamed into place, so a crash or power loss mid-write can no longer leave a truncated or corrupted profile behind.
 
 ### Changed
 

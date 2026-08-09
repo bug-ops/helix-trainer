@@ -419,16 +419,7 @@ impl AppState {
     // NOTE: Debounce saves to reduce I/O overhead (5-second delay)
     // OPTIMIZE: Performance audit suggested this optimization (50-80% I/O reduction)
     pub fn save_profile_debounced(&mut self) -> Result<(), crate::gamification::GamificationError> {
-        if !self.progress.should_save() {
-            return Ok(());
-        }
-
-        self.progress.profile.performance_data =
-            self.progress.performance_tracker.get_stats_clone();
-        self.progress.storage.save(&self.progress.profile)?;
-        self.progress.mark_saved();
-
-        Ok(())
+        self.progress.save_debounced()
     }
 
     /// Force immediate save (for level-up, achievements, exit)
@@ -437,11 +428,7 @@ impl AppState {
     ///
     /// Returns error if save operation fails
     pub fn save_profile_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
-        self.progress.profile.performance_data =
-            self.progress.performance_tracker.get_stats_clone();
-        self.progress.storage.save(&self.progress.profile)?;
-        self.progress.mark_saved();
-        Ok(())
+        self.progress.save_immediate()
     }
 }
 

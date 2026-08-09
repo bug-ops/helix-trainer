@@ -19,7 +19,7 @@ pub fn empty_test_app_state() -> AppState {
 /// Uses default profile, storage, and tracker.
 pub fn test_app_state_with_scenarios(scenarios: Vec<Scenario>) -> AppState {
     let profile = UserProfile::new();
-    let storage = ProfileStorage::new();
+    let storage = ProfileStorage::for_test();
     let tracker = PerformanceTracker::new();
     AppState::new(scenarios, profile, storage, tracker)
 }
@@ -82,7 +82,7 @@ impl TestAppStateBuilder {
     /// Build the AppState
     pub fn build(self) -> AppState {
         let profile = self.profile.unwrap_or_default();
-        let storage = self.storage.unwrap_or_default();
+        let storage = self.storage.unwrap_or_else(ProfileStorage::for_test);
         let tracker = self.tracker.unwrap_or_default();
         AppState::new(self.scenarios, profile, storage, tracker)
     }

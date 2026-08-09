@@ -217,6 +217,38 @@ impl ProgressState {
     pub fn mark_saved(&mut self) {
         self.last_save_time = Some(Instant::now());
     }
+
+    /// Sync FSRS performance data from the live tracker and persist the profile immediately.
+    ///
+    /// This is the single source of truth for saving progress: every call site that
+    /// persists the profile mid-session must go through this method (or
+    /// [`ProgressState::save_debounced`]) rather than calling `storage.save` directly,
+    /// otherwise `profile.performance_data` silently goes stale.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the save operation fails.
+    pub fn save_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
+        self.profile.performance_data = self.performance_tracker.get_stats_clone();
+        self.storage.save(&self.profile)?;
+        self.mark_saved();
+        Ok(())
+    }
+
+    /// Save the profile only if the debounce interval has elapsed since the last save.
+    ///
+    /// Syncs FSRS performance data from the live tracker before writing, same as
+    /// [`ProgressState::save_immediate`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the save operation fails.
+    pub fn save_debounced(&mut self) -> Result<(), crate::gamification::GamificationError> {
+        if !self.should_save() {
+            return Ok(());
+        }
+        self.save_immediate()
+    }
 }
 
 impl std::fmt::Debug for ProgressState {
@@ -359,7 +391,7 @@ mod tests {
         let progress = ProgressState::new(
             UserProfile::new(),
             PerformanceTracker::new(),
-            ProfileStorage::new(),
+            ProfileStorage::for_test(),
         );
 
         // Should save immediately when no previous save
@@ -374,7 +406,7 @@ mod tests {
         let mut progress = ProgressState::new(
             UserProfile::new(),
             PerformanceTracker::new(),
-            ProfileStorage::new(),
+            ProfileStorage::for_test(),
         );
 
         assert!(progress.last_save_time.is_none());
@@ -390,7 +422,7 @@ mod tests {
         let mut progress = ProgressState::new(
             UserProfile::new(),
             PerformanceTracker::new(),
-            ProfileStorage::new(),
+            ProfileStorage::for_test(),
         );
 
         // First save should be allowed
@@ -399,5 +431,132 @@ mod tests {
 
         // Immediate second save should be blocked (within 5 second window)
         assert!(!progress.should_save());
+    }
+
+    /// Compares the fields that `save_immediate`/`save_debounced` are responsible for
+    /// syncing. `CommandPerformance` has no `PartialEq` impl, so this checks the subset
+    /// of fields that prove the persisted copy reflects the tracker's state.
+    fn stats_match(
+        a: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
+        b: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
+    ) -> bool {
+        a.len() == b.len()
+            && a.iter().all(|(k, v)| {
+                b.get(k).is_some_and(|other| {
+                    other.attempts == v.attempts
+                        && other.successes == v.successes
+                        && other.reps == v.reps
+                        && other.command == v.command
+                })
+            })
+    }
+
+    #[test]
+    fn test_save_immediate_syncs_tracker_stats_into_persisted_profile() {
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::with_path(&profile_path),
+        );
+
+        progress.performance_tracker.record_attempt(
+            "x",
+            Duration::from_millis(500),
+            true,
+            Duration::from_millis(500),
+        );
+
+        progress.save_immediate().unwrap();
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert!(!persisted.performance_data.is_empty());
+        assert!(stats_match(
+            &persisted.performance_data,
+            &progress.performance_tracker.get_stats_clone()
+        ));
+    }
+
+    #[test]
+    fn test_save_debounced_does_not_write_within_debounce_window() {
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::with_path(&profile_path),
+        );
+
+        // Establish a recent save so the debounce window is active.
+        progress.save_immediate().unwrap();
+        let after_first_save = std::fs::read_to_string(&profile_path).unwrap();
+
+        // Mutate the tracker after the save; a debounced save within the window
+        // must not pick this up.
+        progress.performance_tracker.record_attempt(
+            "d",
+            Duration::from_millis(500),
+            true,
+            Duration::from_millis(500),
+        );
+        progress.save_debounced().unwrap();
+
+        let after_debounced_call = std::fs::read_to_string(&profile_path).unwrap();
+        assert_eq!(
+            after_first_save, after_debounced_call,
+            "debounced save must not have rewritten the file within the debounce window"
+        );
+    }
+
+    #[test]
+    fn test_save_debounced_writes_once_debounce_elapses() {
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use std::time::{Duration, Instant};
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::with_path(&profile_path),
+        );
+
+        // Simulate a save that happened long enough ago for the debounce to elapse,
+        // without needing to sleep in the test.
+        progress.last_save_time =
+            Some(Instant::now() - PROFILE_SAVE_DEBOUNCE - Duration::from_secs(1));
+
+        progress.performance_tracker.record_attempt(
+            "j",
+            Duration::from_millis(500),
+            true,
+            Duration::from_millis(500),
+        );
+
+        assert!(progress.should_save());
+        progress.save_debounced().unwrap();
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert!(stats_match(
+            &persisted.performance_data,
+            &progress.performance_tracker.get_stats_clone()
+        ));
+        assert!(!persisted.performance_data.is_empty());
     }
 }

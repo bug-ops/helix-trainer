@@ -125,8 +125,13 @@ fn test_navigate_back_from_menu_to_mode_selection() {
 
 #[test]
 fn test_navigate_back_from_minigame_to_mode_selection() {
+    use crate::gamification::ProfileStorage;
+    use tempfile::TempDir;
+
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
+    let temp_dir = TempDir::new().unwrap();
+    state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
     // Go to Arcade Mode
     update(&mut state, Message::SelectArcadeMode).unwrap();

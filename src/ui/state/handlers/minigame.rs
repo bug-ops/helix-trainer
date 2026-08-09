@@ -331,13 +331,9 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
         );
 
         // 4. Persist profile to disk (non-fatal error - log but continue)
-        let save_result = state.progress.storage.save(&state.progress.profile);
-
-        if let Err(e) = save_result {
+        if let Err(e) = state.progress.save_immediate() {
             tracing::error!("Failed to save profile after mini-game: {:?}", e);
             // Don't return error - game over screen should still display
-        } else {
-            state.progress.mark_saved();
         }
     }
 
@@ -392,7 +388,7 @@ mod tests {
             progress: ProgressState::new(
                 UserProfile::new(),
                 PerformanceTracker::new(),
-                ProfileStorage::new(),
+                ProfileStorage::for_test(),
             ),
             config: ConfigState::default(),
         }
@@ -540,7 +536,12 @@ mod tests {
 
     #[test]
     fn test_minigame_back_to_menu() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         assert!(state.game.minigame_session.is_some());
@@ -578,9 +579,12 @@ mod tests {
 
     #[test]
     fn test_minigame_game_over_awards_xp() {
-        use crate::gamification::XPCalculator;
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use tempfile::TempDir;
 
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Transition to playing state
@@ -612,7 +616,12 @@ mod tests {
 
     #[test]
     fn test_minigame_updates_high_score() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Set initial high score
@@ -630,6 +639,44 @@ mod tests {
 
         // Check high score was updated
         assert_eq!(state.progress.profile.minigame_high_score, 5000);
+    }
+
+    /// Regression test for #258: `handle_minigame_game_over`'s save must go through
+    /// `ProgressState::save_immediate`, which syncs `performance_tracker` into
+    /// `profile.performance_data` before writing, instead of persisting a stale copy.
+    #[test]
+    fn test_minigame_game_over_persists_synced_fsrs_data() {
+        use crate::gamification::ProfileStorage;
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut state = create_test_state();
+        state.progress.storage = ProfileStorage::with_path(&profile_path);
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+            session.stats.score = 5000;
+        }
+
+        // Seed tracker state as if reviews happened earlier in the session.
+        state.progress.performance_tracker.record_attempt(
+            "j",
+            Duration::from_millis(500),
+            true,
+            Duration::from_millis(500),
+        );
+
+        handle_minigame_game_over(&mut state).unwrap();
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert!(!persisted.performance_data.is_empty());
+        assert!(persisted.performance_data.contains_key("j"));
     }
 
     #[test]
@@ -700,7 +747,12 @@ mod tests {
 
     #[test]
     fn test_minigame_timeout_to_game_over() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Transition to playing state
@@ -747,9 +799,13 @@ mod tests {
 
     #[test]
     fn test_minigame_render_game_over() {
+        use crate::gamification::ProfileStorage;
         use ratatui::{Terminal, backend::TestBackend};
+        use tempfile::TempDir;
 
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Progress to playing
@@ -784,8 +840,12 @@ mod tests {
     #[test]
     fn test_minigame_game_over_handles_errors_gracefully() {
         // Test that game over handler doesn't return error even if save fails
-        // (uses test storage that doesn't actually persist, so save succeeds)
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Progress to playing
@@ -1121,7 +1181,12 @@ mod tests {
 
     #[test]
     fn test_minigame_updates_best_streak() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Set initial best streak
@@ -1143,7 +1208,12 @@ mod tests {
 
     #[test]
     fn test_minigame_does_not_lower_high_score() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Set high score
@@ -1186,7 +1256,12 @@ mod tests {
 
     #[test]
     fn test_minigame_back_to_menu_increments_games_played() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Verify initial games_played is 0
@@ -1213,7 +1288,12 @@ mod tests {
 
     #[test]
     fn test_minigame_game_over_increments_games_played() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         start_minigame(&mut state);
 
         // Verify initial games_played is 0

@@ -84,23 +84,7 @@ fn record_scenario_completion(
     let leveled_up = ctx.progress.profile.add_xp(total_xp);
     ScenarioCompletionService::update_profile_counters(&mut ctx.progress.profile, is_perfect);
 
-    if leveled_up {
-        ctx.progress
-            .storage
-            .save(&ctx.progress.profile)
-            .map_err(UserError::from)?;
-        ctx.progress.mark_saved();
-    }
-
     ctx.progress.scenarios_completed_today += 1;
-
-    if ctx.progress.should_save() {
-        ctx.progress
-            .storage
-            .save(&ctx.progress.profile)
-            .map_err(UserError::from)?;
-        ctx.progress.mark_saved();
-    }
 
     let commands = ScenarioCompletionService::extract_commands(feedback);
     ctx.progress.profile.commands_executed = ctx
@@ -115,6 +99,14 @@ fn record_scenario_completion(
         feedback.duration,
         feedback.score > 0,
     );
+
+    // Save after FSRS data has been recorded so `performance_data` reflects this
+    // scenario's review history, not the state before it.
+    if leveled_up {
+        ctx.progress.save_immediate().map_err(UserError::from)?;
+    } else {
+        ctx.progress.save_debounced().map_err(UserError::from)?;
+    }
 
     // Generate notifications for mastery level ups
     for (command, new_level) in mastery_changes {
@@ -438,7 +430,7 @@ mod tests {
             progress: ProgressState::new(
                 UserProfile::new(),
                 PerformanceTracker::new(),
-                ProfileStorage::new(),
+                ProfileStorage::for_test(),
             ),
             config: ConfigState::default(),
         }
@@ -704,8 +696,12 @@ mod tests {
     #[test]
     fn test_handle_complete_scenario_full_flow() {
         use crate::game::SessionAfterAction;
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
 
         let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
 
@@ -784,6 +780,118 @@ mod tests {
         )));
     }
 
+    /// Compares the fields that `save_immediate`/`save_debounced` sync from the
+    /// tracker. `CommandPerformance` has no `PartialEq` impl.
+    fn stats_match(
+        a: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
+        b: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
+    ) -> bool {
+        a.len() == b.len()
+            && a.iter().all(|(k, v)| {
+                b.get(k).is_some_and(|other| {
+                    other.attempts == v.attempts
+                        && other.successes == v.successes
+                        && other.reps == v.reps
+                        && other.command == v.command
+                })
+            })
+    }
+
+    fn completed_feedback_with_commands() -> crate::game::Feedback {
+        use crate::game::SessionAfterAction;
+
+        let scenario = create_test_scenario();
+        let session = GameSession::new(scenario).unwrap();
+
+        let result = session.record_action("x".to_string()).unwrap();
+        let session = match result {
+            SessionAfterAction::StillActive(s) => s,
+            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+        };
+        let result = session.record_action("d".to_string()).unwrap();
+        let completed = match result {
+            SessionAfterAction::Completed(c) => c,
+            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+        };
+
+        completed.feedback().unwrap()
+    }
+
+    /// Regression test for #273: the FSRS-recording step in `record_scenario_completion`
+    /// must run *before* the save, otherwise the persisted profile captures stale
+    /// (pre-completion) tracker state even though the in-memory tracker is up to date.
+    #[test]
+    fn test_record_scenario_completion_persists_fsrs_data_no_level_up() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut state = create_test_state();
+        state.progress.storage = ProfileStorage::with_path(&profile_path);
+        // Fresh profile: no prior save recorded, so save_debounced will fire.
+        assert!(state.progress.should_save());
+
+        let feedback = completed_feedback_with_commands();
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        // Small XP amount that should not trigger a level-up, exercising the
+        // save_debounced branch.
+        record_scenario_completion(&mut ctx, &feedback, 1).unwrap();
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert!(
+            !persisted.performance_data.is_empty(),
+            "persisted profile should contain FSRS data recorded during completion"
+        );
+        assert!(stats_match(
+            &persisted.performance_data,
+            &ctx.progress.performance_tracker.get_stats_clone()
+        ));
+    }
+
+    /// Same as above but through the level-up (save_immediate) branch.
+    #[test]
+    fn test_record_scenario_completion_persists_fsrs_data_on_level_up() {
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+
+        let mut state = create_test_state();
+        state.progress.storage = ProfileStorage::with_path(&profile_path);
+        let xp_for_level_2 = XPCalculator::xp_for_level(2);
+        state.progress.profile.total_xp = xp_for_level_2 - 10;
+        state.progress.profile.level = 1;
+
+        let feedback = completed_feedback_with_commands();
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+
+        record_scenario_completion(&mut ctx, &feedback, 100).unwrap();
+        assert!(ctx.progress.profile.level >= 2, "expected a level-up");
+
+        let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
+        assert!(!persisted.performance_data.is_empty());
+        assert!(stats_match(
+            &persisted.performance_data,
+            &ctx.progress.performance_tracker.get_stats_clone()
+        ));
+    }
+
     #[test]
     fn test_handle_start_scenario_creates_task_screen() {
         let mut state = create_test_state();
@@ -857,7 +965,7 @@ mod tests {
             progress: ProgressState::new(
                 UserProfile::new(),
                 PerformanceTracker::new(),
-                ProfileStorage::new(),
+                ProfileStorage::for_test(),
             ),
             config: ConfigState::default(),
         }

@@ -72,6 +72,12 @@ pub fn handle_complete_review_command(
         // Update performance tracker
         let tracker = &mut ctx.progress.performance_tracker;
         tracker.record_attempt(command, duration, success, OPTIMAL_REVIEW_TIME);
+
+        // Persist periodically so review progress survives a crash mid-session
+        // (non-fatal error - log but continue, a review keypress must not kill the session)
+        if let Err(e) = ctx.progress.save_debounced() {
+            tracing::error!("Failed to save profile during review session: {:?}", e);
+        }
     }
 
     // Delegate to next review handler for screen transition logic
@@ -103,8 +109,7 @@ pub fn handle_next_review_command(
 
             // Award XP for review session
             let xp = (completed as u64 * 10) + (success_rate * 20.0) as u64;
-            let profile = &mut ctx.progress.profile;
-            profile.add_xp(xp);
+            ctx.progress.profile.add_xp(xp);
 
             // Show session summary notification
             ctx.ui
@@ -117,6 +122,12 @@ pub fn handle_next_review_command(
 
             // Clear review session
             ctx.game.review_session = None;
+
+            // Persist FSRS state and profile now that the review session has ended
+            // (non-fatal error - log but continue, matches handle_minigame_game_over's policy)
+            if let Err(e) = ctx.progress.save_immediate() {
+                tracing::error!("Failed to save profile after review session: {:?}", e);
+            }
 
             // Return to menu
             return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
@@ -137,6 +148,16 @@ pub fn handle_abandon_review_session(
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
     ctx.game.review_session = None;
+
+    // Persist attempts already recorded so far - abandoning mid-session (e.g. Esc)
+    // is the likelier interrupted-user path, so it should flush just like completion does
+    if let Err(e) = ctx.progress.save_immediate() {
+        tracing::error!(
+            "Failed to save profile after abandoning review session: {:?}",
+            e
+        );
+    }
+
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
         MenuData::default(),
     ))))

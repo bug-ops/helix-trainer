@@ -5,7 +5,7 @@
 use crate::security::limits::*;
 use crate::security::validators::validate_id_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -64,12 +64,22 @@ pub enum ScenarioCategory {
 }
 
 /// Difficulty level for progressive learning
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Difficulty {
     Beginner,
     Intermediate,
     Advanced,
+}
+
+impl Difficulty {
+    /// All difficulty variants. Keep in sync with the enum — `difficulty_all_is_exhaustive`
+    /// below fails to compile if a variant is added here without updating this array.
+    pub const ALL: [Difficulty; 3] = [
+        Difficulty::Beginner,
+        Difficulty::Intermediate,
+        Difficulty::Advanced,
+    ];
 }
 
 /// Scenario definition

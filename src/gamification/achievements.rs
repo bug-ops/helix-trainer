@@ -1,11 +1,41 @@
 //! Achievement system and tracking
 
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::config::Difficulty;
 use crate::learning::{MasteryLevel, PerformanceTracker};
+use crate::minigame::base_time_limit_for;
 
 use super::UserProfile;
+
+/// Ratio of elapsed time to a scenario's base per-difficulty time budget, clamped to
+/// `[0.0, 1.0]`. Missing difficulty metadata defaults to [`Difficulty::Beginner`].
+///
+/// This is the single definition of "speed" behind `SpeedDemon`/`Speedrunner`/`Flash`,
+/// shared by both the arcade and Training-mode completion paths so a scenario counts
+/// as a speed run the same way regardless of which mode it was played in. Deliberately
+/// uses the base per-difficulty budget rather than arcade's level-scaled
+/// [`DifficultyController`](crate::minigame::DifficultyController) budget, since
+/// Training mode has no adaptive-difficulty state to scale from.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::Difficulty;
+/// use helix_trainer::gamification::speed_time_ratio;
+/// use std::time::Duration;
+///
+/// // Beginner budget is 10s; 4s elapsed is 40% of it.
+/// let ratio = speed_time_ratio(Duration::from_secs(4), Some(Difficulty::Beginner));
+/// assert!((ratio - 0.4).abs() < f64::EPSILON);
+/// ```
+pub fn speed_time_ratio(elapsed: Duration, difficulty: Option<Difficulty>) -> f64 {
+    let budget = base_time_limit_for(difficulty.unwrap_or(Difficulty::Beginner));
+    (elapsed.as_secs_f64() / budget.as_secs_f64()).clamp(0.0, 1.0)
+}
 
 /// Unique achievement identifiers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -144,6 +174,9 @@ impl AchievementEngine {
         // Mastery achievements
         Self::check_mastery_achievements(profile, tracker, &mut unlocked);
 
+        // Speed achievements
+        Self::check_speed_achievements(profile, &mut unlocked);
+
         // Exploration achievements
         Self::check_exploration_achievements(profile, tracker, &mut unlocked);
 
@@ -254,6 +287,29 @@ impl AchievementEngine {
 
         if commands_used >= 20 && !profile.has_achievement(&AchievementId::JackOfAllTrades) {
             unlocked.push(AchievementId::JackOfAllTrades);
+        }
+
+        // Polyglot - completed at least one scenario at every difficulty level.
+        // Iterates `Difficulty::ALL` rather than hardcoding each variant so a future
+        // difficulty is automatically included here.
+        let all_difficulties_done = Difficulty::ALL
+            .iter()
+            .all(|d| profile.difficulties_completed.contains(d));
+
+        if all_difficulties_done && !profile.has_achievement(&AchievementId::Polyglot) {
+            unlocked.push(AchievementId::Polyglot);
+        }
+    }
+
+    fn check_speed_achievements(profile: &UserProfile, unlocked: &mut Vec<AchievementId>) {
+        if profile.speed_run_count >= 10 && !profile.has_achievement(&AchievementId::Speedrunner) {
+            unlocked.push(AchievementId::Speedrunner);
+        }
+        if profile.speed_run_count >= 1 && !profile.has_achievement(&AchievementId::SpeedDemon) {
+            unlocked.push(AchievementId::SpeedDemon);
+        }
+        if profile.flash_run_count >= 1 && !profile.has_achievement(&AchievementId::Flash) {
+            unlocked.push(AchievementId::Flash);
         }
     }
 
@@ -464,5 +520,65 @@ mod tests {
             assert!(!achievement.name.is_empty());
             assert!(!achievement.description.is_empty());
         }
+    }
+
+    #[test]
+    fn test_speed_demon_unlocks_at_threshold_and_not_below() {
+        let tracker = PerformanceTracker::new();
+        let mut profile = UserProfile::new();
+
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(!unlocked.contains(&AchievementId::SpeedDemon));
+
+        profile.speed_run_count = 1;
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(unlocked.contains(&AchievementId::SpeedDemon));
+    }
+
+    #[test]
+    fn test_speedrunner_unlocks_at_ten_speed_runs_and_not_below() {
+        let tracker = PerformanceTracker::new();
+        let mut profile = UserProfile::new();
+
+        profile.speed_run_count = 9;
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(!unlocked.contains(&AchievementId::Speedrunner));
+
+        profile.speed_run_count = 10;
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(unlocked.contains(&AchievementId::Speedrunner));
+    }
+
+    #[test]
+    fn test_flash_unlocks_at_threshold_and_not_below() {
+        let tracker = PerformanceTracker::new();
+        let mut profile = UserProfile::new();
+
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(!unlocked.contains(&AchievementId::Flash));
+
+        profile.flash_run_count = 1;
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(unlocked.contains(&AchievementId::Flash));
+    }
+
+    #[test]
+    fn test_polyglot_unlocks_only_when_all_difficulties_completed() {
+        let tracker = PerformanceTracker::new();
+        let mut profile = UserProfile::new();
+
+        profile.difficulties_completed.insert(Difficulty::Beginner);
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(!unlocked.contains(&AchievementId::Polyglot));
+
+        profile
+            .difficulties_completed
+            .insert(Difficulty::Intermediate);
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(!unlocked.contains(&AchievementId::Polyglot));
+
+        profile.difficulties_completed.insert(Difficulty::Advanced);
+        let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
+        assert!(unlocked.contains(&AchievementId::Polyglot));
     }
 }

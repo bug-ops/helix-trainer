@@ -2,9 +2,11 @@
 //!
 //! Handles starting, completing, retrying, and abandoning scenarios
 
+use crate::config::Difficulty;
+use crate::constants::{FLASH_TIME_RATIO, SPEED_DEMON_TIME_RATIO};
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
-use crate::gamification::{Achievement, AchievementEngine};
+use crate::gamification::{Achievement, AchievementEngine, speed_time_ratio};
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
@@ -78,11 +80,33 @@ fn record_scenario_completion(
     ctx: &mut HandlerContext<'_>,
     feedback: &crate::game::Feedback,
     total_xp: u64,
+    difficulty: Option<Difficulty>,
 ) -> Result<(), UserError> {
     let is_perfect = feedback.score == feedback.max_points;
 
     let leveled_up = ctx.progress.profile.add_xp(total_xp);
     ScenarioCompletionService::update_profile_counters(&mut ctx.progress.profile, is_perfect);
+
+    if let Some(difficulty) = difficulty {
+        ctx.progress
+            .profile
+            .difficulties_completed
+            .insert(difficulty);
+    }
+
+    // Speed achievements (SpeedDemon/Speedrunner/Flash) previously only fired from
+    // arcade play; Training mode has no `DifficultyController` to scale a time budget,
+    // but the same base per-difficulty budget `speed_time_ratio` uses is enough to
+    // judge a completion as a speed run here too.
+    let time_ratio = speed_time_ratio(feedback.duration, difficulty);
+    if time_ratio < SPEED_DEMON_TIME_RATIO {
+        ctx.progress.profile.speed_run_count =
+            ctx.progress.profile.speed_run_count.saturating_add(1);
+    }
+    if time_ratio < FLASH_TIME_RATIO {
+        ctx.progress.profile.flash_run_count =
+            ctx.progress.profile.flash_run_count.saturating_add(1);
+    }
 
     ctx.progress.scenarios_completed_today += 1;
 
@@ -252,7 +276,11 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     });
 
     // Record completion and award XP
-    record_scenario_completion(&mut ctx, &feedback, total_xp)?;
+    let scenario_difficulty = completed_session
+        .as_ref()
+        .and_then(|s| s.scenario().metadata.as_ref())
+        .and_then(|m| m.difficulty);
+    record_scenario_completion(&mut ctx, &feedback, total_xp, scenario_difficulty)?;
 
     // Create ResultsData with completed session and transition to Results screen
     let Some(session) = completed_session else {
@@ -426,14 +454,18 @@ mod tests {
     };
 
     fn create_test_scenario() -> Scenario {
+        create_test_scenario_with_difficulty("test_scenario", Difficulty::Beginner)
+    }
+
+    fn create_test_scenario_with_difficulty(id: &str, difficulty: Difficulty) -> Scenario {
         ScenarioBuilder::new()
-            .id("test_scenario")
+            .id(id)
             .setup_cursor(1, 0)
             .target_content("line 1\nline 3\n")
             .target_cursor(1, 0)
             .hint("Hint 1")
             .tolerance(1)
-            .difficulty(Difficulty::Beginner)
+            .difficulty(difficulty)
             .build()
     }
 
@@ -796,6 +828,141 @@ mod tests {
         )));
     }
 
+    /// Regression test for #290: completing a scenario must record its difficulty
+    /// into `profile.difficulties_completed` via the `difficulty` param threaded
+    /// through `record_scenario_completion`, not just update score-based counters.
+    #[test]
+    fn test_handle_complete_scenario_updates_difficulties_completed() {
+        use crate::game::SessionAfterAction;
+
+        let mut state = create_test_state();
+        assert!(state.progress.profile.difficulties_completed.is_empty());
+
+        let scenario = create_test_scenario(); // Difficulty::Beginner
+        let session = GameSession::new(scenario).unwrap();
+
+        let result = session.record_action("x".to_string()).unwrap();
+        let session = match result {
+            SessionAfterAction::StillActive(s) => s,
+            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+        };
+        let result = session.record_action("d".to_string()).unwrap();
+        let completed = match result {
+            SessionAfterAction::Completed(c) => c,
+            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+        };
+
+        let feedback = completed.feedback().unwrap();
+        state.ui.last_feedback = Some(feedback);
+        state.game.pending_completed_session = Some(completed);
+
+        handle_complete_scenario(&mut state).unwrap();
+
+        assert!(
+            state
+                .progress
+                .profile
+                .difficulties_completed
+                .contains(&Difficulty::Beginner)
+        );
+    }
+
+    /// Regression test for #290: `Polyglot` must unlock once a scenario from every
+    /// difficulty tier has been completed through the live completion path.
+    #[test]
+    fn test_handle_complete_scenario_unlocks_polyglot_after_all_difficulties() {
+        use crate::game::SessionAfterAction;
+        use crate::gamification::AchievementId;
+
+        let mut state = create_test_state();
+
+        for difficulty in [
+            Difficulty::Beginner,
+            Difficulty::Intermediate,
+            Difficulty::Advanced,
+        ] {
+            let scenario = create_test_scenario_with_difficulty("multi_difficulty", difficulty);
+            let session = GameSession::new(scenario).unwrap();
+
+            let result = session.record_action("x".to_string()).unwrap();
+            let session = match result {
+                SessionAfterAction::StillActive(s) => s,
+                SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+            };
+            let result = session.record_action("d".to_string()).unwrap();
+            let completed = match result {
+                SessionAfterAction::Completed(c) => c,
+                SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+            };
+
+            let feedback = completed.feedback().unwrap();
+            state.ui.last_feedback = Some(feedback);
+            state.game.pending_completed_session = Some(completed);
+
+            handle_complete_scenario(&mut state).unwrap();
+        }
+
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::Polyglot)
+        );
+        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+            n.notification_type,
+            crate::ui::notification::NotificationType::Achievement { ref name, .. }
+                if name == "Polyglot"
+        )));
+    }
+
+    /// Regression test for S2 (#290 follow-up): speed achievements (`SpeedDemon`/
+    /// `Flash`) previously only unlocked from arcade play, since Training mode had no
+    /// concept of a per-scenario time budget. `record_scenario_completion` now derives
+    /// one from the scenario's difficulty via `gamification::speed_time_ratio`, so an
+    /// immediate (near-zero elapsed) Training-mode completion also counts as a speed run.
+    #[test]
+    fn test_handle_complete_scenario_unlocks_speed_achievements() {
+        use crate::game::SessionAfterAction;
+        use crate::gamification::AchievementId;
+
+        let mut state = create_test_state();
+
+        let scenario = create_test_scenario(); // Difficulty::Beginner
+        let session = GameSession::new(scenario).unwrap();
+
+        let result = session.record_action("x".to_string()).unwrap();
+        let session = match result {
+            SessionAfterAction::StillActive(s) => s,
+            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
+        };
+        let result = session.record_action("d".to_string()).unwrap();
+        let completed = match result {
+            SessionAfterAction::Completed(c) => c,
+            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
+        };
+
+        let feedback = completed.feedback().unwrap();
+        state.ui.last_feedback = Some(feedback);
+        state.game.pending_completed_session = Some(completed);
+
+        handle_complete_scenario(&mut state).unwrap();
+
+        assert_eq!(state.progress.profile.speed_run_count, 1);
+        assert_eq!(state.progress.profile.flash_run_count, 1);
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::SpeedDemon)
+        );
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::Flash)
+        );
+    }
+
     /// Compares the fields that `save_immediate`/`save_debounced` sync from the
     /// tracker. `CommandPerformance` has no `PartialEq` impl.
     fn stats_match(
@@ -860,7 +1027,7 @@ mod tests {
 
         // Small XP amount that should not trigger a level-up, exercising the
         // save_debounced branch.
-        record_scenario_completion(&mut ctx, &feedback, 1).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, None).unwrap();
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(
@@ -905,7 +1072,7 @@ mod tests {
 
         // Small XP amount that should not trigger a level-up, exercising the
         // skipped save_debounced branch alongside the achievement-unlock save.
-        record_scenario_completion(&mut ctx, &feedback, 1).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, None).unwrap();
 
         assert!(
             ctx.progress
@@ -949,7 +1116,7 @@ mod tests {
             &state.config,
         );
 
-        record_scenario_completion(&mut ctx, &feedback, 100).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 100, None).unwrap();
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
@@ -1015,7 +1182,7 @@ mod tests {
             &state.config,
         );
 
-        record_scenario_completion(&mut ctx, &feedback, 100).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 100, None).unwrap();
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
 
         assert!(
@@ -1042,7 +1209,7 @@ mod tests {
         );
 
         // Small XP amount that should not trigger a level-up.
-        record_scenario_completion(&mut ctx, &feedback, 1).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, None).unwrap();
 
         assert!(
             !ctx.ui.notifications.visible().iter().any(|n| matches!(

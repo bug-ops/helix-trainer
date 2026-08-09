@@ -3,13 +3,19 @@
 use std::sync::Arc;
 
 use crate::config::Scenario;
-use crate::constants::{MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER};
+use crate::constants::{
+    FLASH_TIME_RATIO, MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER,
+    SPEED_DEMON_TIME_RATIO,
+};
 use crate::game::format_key_for_display;
+use crate::game::services::ScenarioCompletionService;
+use crate::gamification::{Achievement, AchievementEngine, speed_time_ratio};
 use crate::input::typestate::{HandlerResult, command_to_key_event};
 use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
 use crate::sound::SoundEffect;
+use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
     AppState, GameState, HandlerContext, HandlerOutcome, InputStateAccess, MiniGameData,
     ModeSelectionData, TypedScreen,
@@ -153,7 +159,63 @@ fn execute_minigame_command(state: &mut AppState, command: &str) -> Result<(), U
             // Update quest progress for scenario completion (shared function)
             let duration = scenario.elapsed();
             let scenario_id = scenario.scenario.id.clone();
+            let scenario_difficulty = scenario
+                .scenario
+                .metadata
+                .as_ref()
+                .and_then(|m| m.difficulty);
+            let optimal_count = scenario.scenario.scoring.optimal_count.get();
+            let actual_count = scenario.action_count().max(1);
+            // Efficiency-only, matching Training's `is_perfect` definition. This is
+            // deliberately looser than `PerformanceTier::Perfect` (efficiency AND
+            // time_ratio < 0.5) used for the in-round combo badge, so a completion
+            // the arcade UI only ever badges "Excellent" can still unlock
+            // FirstPerfect/Perfect10.
+            let is_perfect = actual_count <= optimal_count;
+            // Base per-difficulty budget, not the level-scaled arcade time_limit - see
+            // `speed_time_ratio` doc comment for why the two modes share one definition
+            // of "speed" instead of computing it independently.
+            let time_ratio = speed_time_ratio(duration, scenario_difficulty);
+
             super::track_scenario_completion_for_quests(state, &scenario_id, duration);
+
+            // Update mastery/perfect/completion counters the same way the training-mode
+            // completion path (`record_scenario_completion`) does, so
+            // Perfect10/Perfect100/Centurion/Veteran/Legend are reachable from arcade too.
+            ScenarioCompletionService::update_profile_counters(
+                &mut state.progress.profile,
+                is_perfect,
+            );
+
+            // Track exploration/speed signals for achievements (SpeedDemon, Speedrunner,
+            // Flash, Polyglot).
+            let profile = &mut state.progress.profile;
+            if let Some(difficulty) = scenario_difficulty {
+                profile.difficulties_completed.insert(difficulty);
+            }
+            if time_ratio < SPEED_DEMON_TIME_RATIO {
+                profile.speed_run_count = profile.speed_run_count.saturating_add(1);
+            }
+            if time_ratio < FLASH_TIME_RATIO {
+                profile.flash_run_count = profile.flash_run_count.saturating_add(1);
+            }
+        }
+
+        // Check and unlock any achievements newly satisfied by this completion
+        // (mastery/exploration/speed counters all just changed above)
+        let newly_unlocked = AchievementEngine::check_and_unlock(
+            &mut state.progress.profile,
+            &state.progress.performance_tracker,
+        );
+        for achievement_id in newly_unlocked {
+            let achievement = Achievement::new(achievement_id);
+            state
+                .ui
+                .notifications
+                .push(Notification::new(NotificationType::Achievement {
+                    name: achievement.name,
+                    description: achievement.description,
+                }));
         }
 
         // Award XP for scenario completion in arcade mode
@@ -363,6 +425,10 @@ mod tests {
     use crate::ui::state::{ConfigState, GameState, ProgressState, UIState};
 
     fn create_test_scenario(id: &str) -> Scenario {
+        create_test_scenario_with_difficulty(id, Difficulty::Beginner)
+    }
+
+    fn create_test_scenario_with_difficulty(id: &str, difficulty: Difficulty) -> Scenario {
         ScenarioBuilder::new()
             .id(id)
             .setup_content("line 1\nline 2\n")
@@ -370,8 +436,35 @@ mod tests {
             .target_content("line 1\n")
             .target_cursor(1, 0)
             .optimal_count(1)
-            .difficulty(Difficulty::Beginner)
+            .difficulty(difficulty)
             .build()
+    }
+
+    /// Unlike [`create_test_scenario`], this scenario is actually reachable via
+    /// real commands ("x" then "d" deletes the middle line), so tests that need
+    /// `check_completion()` to genuinely turn true should use this instead.
+    fn create_completable_scenario_with_difficulty(id: &str, difficulty: Difficulty) -> Scenario {
+        ScenarioBuilder::new()
+            .id(id)
+            .setup_cursor(1, 0)
+            .target_content("line 1\nline 3\n")
+            .target_cursor(1, 0)
+            .difficulty(difficulty)
+            .build()
+    }
+
+    fn create_single_scenario_state(scenario: Scenario) -> AppState {
+        AppState {
+            screen: TypedScreen::ModeSelection(ModeSelectionData::default()),
+            ui: UIState::new(),
+            game: GameState::new(vec![scenario]),
+            progress: ProgressState::new(
+                UserProfile::new(),
+                PerformanceTracker::new(),
+                ProfileStorage::for_test(),
+            ),
+            config: ConfigState::default(),
+        }
     }
 
     fn create_test_state() -> AppState {
@@ -1284,6 +1377,171 @@ mod tests {
         // Session should be cleared
         assert!(state.game.minigame_session.is_none());
         assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    }
+
+    /// Regression test for #291: achievements must unlock through the live arcade
+    /// completion path (`execute_minigame_command`), not just on next profile load.
+    /// An immediate (near-zero elapsed) completion also exercises the #290 speed
+    /// counters: `time_ratio` is well under both `SPEED_DEMON_TIME_RATIO` and
+    /// `FLASH_TIME_RATIO`, so both `speed_run_count` and `flash_run_count` bump.
+    #[test]
+    fn test_execute_minigame_command_unlocks_achievement_mid_session() {
+        use crate::gamification::AchievementId;
+
+        let scenario =
+            create_completable_scenario_with_difficulty("speed_test", Difficulty::Beginner);
+        let mut state = create_single_scenario_state(scenario);
+        start_minigame(&mut state);
+
+        // Transition to playing
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        // Complete the scenario ("x" selects the line, "d" deletes it) essentially
+        // immediately, so time_ratio stays near 0.0.
+        let _ = execute_minigame_command(&mut state, "x");
+        let _ = execute_minigame_command(&mut state, "d");
+
+        assert_eq!(state.progress.profile.speed_run_count, 1);
+        assert_eq!(state.progress.profile.flash_run_count, 1);
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::SpeedDemon)
+        );
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::Flash)
+        );
+
+        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+            &n.notification_type,
+            NotificationType::Achievement { name, .. } if name == "Speed Demon"
+        )));
+        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+            &n.notification_type,
+            NotificationType::Achievement { name, .. } if name == "Flash"
+        )));
+    }
+
+    /// Regression coverage for #290: a completion that consumes more than half of
+    /// the scenario's time budget must NOT count as a speed run. Uses an
+    /// Advanced-difficulty scenario (6s budget at controller level 1) and sleeps
+    /// past 50% of it before completing.
+    #[test]
+    fn test_execute_minigame_command_slow_completion_does_not_increment_speed_counters() {
+        use crate::gamification::AchievementId;
+
+        let scenario =
+            create_completable_scenario_with_difficulty("advanced1", Difficulty::Advanced);
+        let mut state = create_single_scenario_state(scenario);
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(3_500));
+
+        let _ = execute_minigame_command(&mut state, "x");
+        let _ = execute_minigame_command(&mut state, "d");
+
+        assert_eq!(state.progress.profile.speed_run_count, 0);
+        assert_eq!(state.progress.profile.flash_run_count, 0);
+        assert!(
+            !state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::SpeedDemon)
+        );
+        assert!(
+            !state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::Flash)
+        );
+    }
+
+    /// Regression test for S3 (#291 follow-up): arcade completion must feed
+    /// `ScenarioCompletionService::update_profile_counters` the same way Training mode
+    /// does, so `scenarios_completed`/`perfect_scenarios` (and therefore
+    /// FirstPerfect/Perfect10/.../Centurion) are reachable from arcade play. Previously
+    /// the arcade path never called this at all despite a comment claiming it did.
+    #[test]
+    fn test_execute_minigame_command_perfect_completion_updates_counters_and_unlocks_first_perfect()
+    {
+        use crate::gamification::AchievementId;
+
+        // Default optimal_count is 2; "x" then "d" is exactly 2 actions, so this
+        // completion is perfect (actual_count <= optimal_count).
+        let scenario =
+            create_completable_scenario_with_difficulty("perfect_test", Difficulty::Beginner);
+        let mut state = create_single_scenario_state(scenario);
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        let _ = execute_minigame_command(&mut state, "x");
+        let _ = execute_minigame_command(&mut state, "d");
+
+        assert_eq!(state.progress.profile.scenarios_completed, 1);
+        assert_eq!(state.progress.profile.perfect_scenarios, 1);
+        assert!(
+            state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::FirstPerfect)
+        );
+    }
+
+    /// Companion to the perfect-completion test above: a completion that takes more
+    /// actions than the scenario's `optimal_count` must still increment
+    /// `scenarios_completed`, but must NOT count as perfect.
+    #[test]
+    fn test_execute_minigame_command_non_perfect_completion_does_not_increment_perfect_count() {
+        use crate::gamification::AchievementId;
+        use crate::testing::ScenarioBuilder;
+
+        let scenario = ScenarioBuilder::new()
+            .id("non_perfect_test")
+            .setup_cursor(1, 0)
+            .target_content("line 1\nline 3\n")
+            .target_cursor(1, 0)
+            .difficulty(Difficulty::Beginner)
+            .optimal_count(1) // "x" then "d" (2 actions) exceeds this
+            .build();
+        let mut state = create_single_scenario_state(scenario);
+        start_minigame(&mut state);
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        let _ = execute_minigame_command(&mut state, "x");
+        let _ = execute_minigame_command(&mut state, "d");
+
+        assert_eq!(state.progress.profile.scenarios_completed, 1);
+        assert_eq!(state.progress.profile.perfect_scenarios, 0);
+        assert!(
+            !state
+                .progress
+                .profile
+                .has_achievement(&AchievementId::FirstPerfect)
+        );
     }
 
     #[test]

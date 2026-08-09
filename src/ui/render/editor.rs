@@ -402,6 +402,26 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
         u16::try_from(raw).unwrap_or(u16::MAX)
     };
 
+    // `v_off` centers the Current panel's primary cursor row in the viewport (rather than
+    // pinning it to the pane's last row), so scrolling past a page boundary moves the cursor
+    // within the pane the way a real editor does instead of gluing it to the bottom edge while
+    // text slides underneath (#339). Applied to BOTH panels so their line indices stay aligned,
+    // mirroring `h_off`. Clamped to `total_lines.saturating_sub(inner_height)` - the cursor row
+    // reported by the simulator can be one past the last line rendered by `current_lines()`
+    // (a trailing `\n` makes `Rope::char_to_line` report a phantom final row that `str::lines()`
+    // drops), so this clamp is required for correctness, not just polish.
+    let panel_inner_height = current_area.height.saturating_sub(2) as usize;
+    let primary_cursor_row = cursors
+        .iter()
+        .find(|c| c.is_primary)
+        .map(|c| c.row)
+        .unwrap_or(0);
+    let max_v_offset = current_lines.len().saturating_sub(panel_inner_height);
+    let v_off_raw = primary_cursor_row
+        .saturating_sub(panel_inner_height / 2)
+        .min(max_v_offset);
+    let v_off: u16 = u16::try_from(v_off_raw).unwrap_or(u16::MAX);
+
     let current = Paragraph::new(current_lines)
         .block(
             Block::default()
@@ -409,7 +429,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan)),
         )
-        .scroll((0, h_off));
+        .scroll((v_off, h_off));
     frame.render_widget(current, current_area);
 
     // Target state with syntax highlighting and multi-cursor
@@ -425,7 +445,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Green)),
         )
-        .scroll((0, h_off));
+        .scroll((v_off, h_off));
     frame.render_widget(target, target_area);
 }
 
@@ -1028,6 +1048,209 @@ mod tests {
             "\u{2588}",
             "past-EOL cursor block not visible at expected column {cursor_x} - \
              horizontal scroll did not bring it into view"
+        );
+    }
+
+    // ==================== render_editor_pair vertical follow-cursor scroll (#339) ====================
+
+    fn line_visible(
+        buffer: &ratatui::buffer::Buffer,
+        x_start: u16,
+        x_end: u16,
+        text: &str,
+    ) -> bool {
+        (0..buffer.area.height).any(|y| {
+            (x_start..x_end)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                .contains(text)
+        })
+    }
+
+    fn render_tall_document_buffer(
+        total_lines: usize,
+        cursor_row: usize,
+        area_width: u16,
+        area_height: u16,
+    ) -> ratatui::buffer::Buffer {
+        let lines: Vec<String> = (0..total_lines).map(|i| format!("line{i}")).collect();
+        render_buffer_with_lines(&lines, (cursor_row, 0), area_width, area_height)
+    }
+
+    fn render_buffer_with_lines(
+        lines: &[String],
+        cursor: (usize, usize),
+        area_width: u16,
+        area_height: u16,
+    ) -> ratatui::buffer::Buffer {
+        use crate::testing::ScenarioBuilder;
+        use ratatui::{Terminal, backend::TestBackend};
+
+        let content: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        let scenario = ScenarioBuilder::new()
+            .id("vertical_scroll_test")
+            .setup_content(content.clone())
+            .setup_cursor(cursor.0, cursor.1)
+            .target_content(content)
+            .build();
+        let session = crate::game::GameSession::new(scenario).unwrap();
+
+        let backend = TestBackend::new(area_width, area_height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_editor_pair(frame, area, &session, " Current ", " Target ", None);
+            })
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    #[test]
+    fn test_render_editor_pair_short_document_does_not_scroll() {
+        // Document fits entirely within the pane, so line0 (the first line) must stay visible.
+        let buffer = render_tall_document_buffer(5, 0, 60, 12);
+        let half_width = 60 / 2;
+        assert!(line_visible(&buffer, 0, half_width, "line0"));
+        assert!(line_visible(&buffer, half_width, 60, "line0"));
+    }
+
+    #[test]
+    fn test_render_editor_pair_tall_document_scrolls_down_to_follow_cursor() {
+        // area_height 12 -> panel_inner_height 10, half-height 5. Cursor at row 25 of 30 is
+        // far past the first screen, and clamped against the document's last page: v_off =
+        // min(25 - 5, 30 - 10) = 20, so line20 must be the exact top visible line (line19
+        // just above it must have scrolled out) with the cursor's line25 visible below it.
+        let area_width = 60u16;
+        let area_height = 12u16;
+        let buffer = render_tall_document_buffer(30, 25, area_width, area_height);
+        let half_width = area_width / 2;
+
+        assert!(
+            !line_visible(&buffer, 0, half_width, "line19"),
+            "line19 must have scrolled out of view"
+        );
+        assert!(
+            line_visible(&buffer, 0, half_width, "line20"),
+            "line20 must be the exact top visible line (v_off == 20)"
+        );
+        assert!(
+            line_visible(&buffer, 0, half_width, "line25"),
+            "cursor's line (line25) must be visible after scrolling"
+        );
+        assert!(
+            line_visible(&buffer, half_width, area_width, "line20"),
+            "Target panel must scroll in sync with Current"
+        );
+    }
+
+    #[test]
+    fn test_render_editor_pair_cursor_at_last_line_does_not_overscroll() {
+        // area_height 12 -> panel_inner_height 10, half-height 5. Cursor on the last line
+        // (row 14 of 15) must not push the offset past the document's end: v_off =
+        // min(14 - 5, 15 - 10) = 5, so line5 is the exact top visible line (line4 just above
+        // it must have scrolled out) and the last line lands within the pane.
+        let area_width = 60u16;
+        let area_height = 12u16;
+        let buffer = render_tall_document_buffer(15, 14, area_width, area_height);
+        let half_width = area_width / 2;
+
+        assert!(
+            line_visible(&buffer, 0, half_width, "line14"),
+            "last line must be visible when the cursor sits on it"
+        );
+        assert!(
+            line_visible(&buffer, 0, half_width, "line5"),
+            "line5 must be the exact top visible line (v_off == 5)"
+        );
+        assert!(
+            !line_visible(&buffer, 0, half_width, "line4"),
+            "scroll must not run past the point needed to reveal the last line"
+        );
+    }
+
+    #[test]
+    fn test_render_editor_pair_cursor_within_first_screen_has_no_offset() {
+        // Cursor sits within the first visible screen (row 3 <= inner_height/2 == 5), so no
+        // vertical scroll should occur and line0 must remain visible at the top.
+        let buffer = render_tall_document_buffer(30, 3, 60, 12);
+        let half_width = 60 / 2;
+        assert!(line_visible(&buffer, 0, half_width, "line0"));
+        assert!(line_visible(&buffer, half_width, 60, "line0"));
+    }
+
+    #[test]
+    fn test_render_editor_pair_vertical_scroll_boundary_stays_at_zero() {
+        // inner_height 10, half-height 5: row == half-height is the last row that must NOT
+        // trigger any scroll (v_off = row.saturating_sub(5) == 0).
+        let buffer = render_tall_document_buffer(30, 5, 60, 12);
+        let half_width = 60 / 2;
+        assert!(line_visible(&buffer, 0, half_width, "line0"));
+    }
+
+    #[test]
+    fn test_render_editor_pair_vertical_scroll_boundary_flips_to_one() {
+        // inner_height 10, half-height 5: row == half-height + 1 is the first row that must
+        // trigger a one-line scroll (v_off = row.saturating_sub(5) == 1), so the visible
+        // window is exactly rows [1, 10] - line0 scrolled out, line11 not yet in view. "line10"
+        // (not "line1") pins the top edge unambiguously: "line1" is also a substring of
+        // "line10"/"line11", so it wouldn't distinguish v_off == 1 from v_off == 2.
+        let buffer = render_tall_document_buffer(30, 6, 60, 12);
+        let half_width = 60 / 2;
+        assert!(
+            !line_visible(&buffer, 0, half_width, "line0"),
+            "line0 must have scrolled out of view at the v_off == 1 boundary"
+        );
+        assert!(
+            line_visible(&buffer, 0, half_width, "line10"),
+            "line10 must be the last visible line (window is exactly [1, 10])"
+        );
+        assert!(
+            !line_visible(&buffer, 0, half_width, "line11"),
+            "line11 must not be visible yet (window is exactly [1, 10])"
+        );
+    }
+
+    #[test]
+    fn test_render_editor_pair_degenerate_two_row_pane_does_not_panic() {
+        // area_height 2 collapses panel_inner_height to 0 (saturating_sub) - a #321-style
+        // underflow risk for the same file. Rendering must complete without panicking.
+        let buffer = render_tall_document_buffer(30, 15, 60, 2);
+        assert_eq!(buffer.area.height, 2);
+    }
+
+    #[test]
+    fn test_render_editor_pair_scrolls_both_axes_simultaneously() {
+        // A long line far down a tall document forces both h_off and v_off nonzero at once;
+        // the two offsets are computed independently and passed as one `.scroll()` tuple, so
+        // this pins that they compose correctly rather than one clobbering the other.
+        let area_width = 42u16;
+        let area_height = 12u16; // panel_inner_width = 19, panel_inner_height = 10
+        let inner_width = 19usize;
+
+        let head = "HEADMARK_";
+        let pad = "a".repeat(inner_width);
+        let tail = "_TAILMARK";
+        let long_line = format!("{head}{pad}{tail}");
+        let cursor_col = long_line.len() - 1; // last char, well past inner_width
+
+        let mut lines: Vec<String> = (0..30).map(|i| format!("line{i}")).collect();
+        lines[25] = long_line;
+
+        let buffer = render_buffer_with_lines(&lines, (25, cursor_col), area_width, area_height);
+        let half_width = area_width / 2;
+
+        assert!(
+            !line_visible(&buffer, 0, half_width, "line19"),
+            "vertical scroll must have occurred (line19 out of view)"
+        );
+        assert!(
+            !line_visible(&buffer, 0, half_width, "HEADMARK"),
+            "horizontal scroll must have occurred (line start scrolled out of view)"
+        );
+        assert!(
+            line_visible(&buffer, 0, half_width, "_TAILMARK"),
+            "cursor's tail marker must be visible after both scrolls are applied"
         );
     }
 }

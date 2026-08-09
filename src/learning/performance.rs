@@ -485,7 +485,10 @@ impl Default for PerformanceTracker {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+    use crate::time::FakeClock;
 
     #[test]
     fn test_new_command_defaults() {
@@ -699,8 +702,6 @@ mod tests {
 
     #[test]
     fn test_record_attempt_honors_injected_clock() {
-        use crate::time::FakeClock;
-
         let clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
         let mut tracker = PerformanceTracker::with_clock(clock.clone());
 
@@ -732,5 +733,96 @@ mod tests {
         assert!(all.contains(&"x"));
         assert!(all.contains(&"yy"));
         assert!(all.contains(&"p"));
+    }
+
+    /// Strategy for one simulated review: (success, duration, optimal duration, days
+    /// elapsed since the previous review). `elapsed_days` ranges up to a year so both
+    /// properties exercise FSRS's primary scheduling input (`days_elapsed` in
+    /// [`PerformanceTracker::calculate_next_fsrs_state`]), not just same-instant reviews.
+    fn attempt_strategy() -> impl Strategy<Value = (bool, u64, u64, i64)> {
+        (any::<bool>(), 1u64..90, 1u64..90, 0i64..365)
+    }
+
+    proptest! {
+        #[test]
+        fn prop_fsrs_state_transition_is_deterministic(
+            attempts in prop::collection::vec(attempt_strategy(), 1..12),
+        ) {
+            let run = || {
+                let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
+                let mut tracker = PerformanceTracker::with_clock(clock.clone());
+                for &(success, duration_secs, optimal_secs, elapsed_days) in &attempts {
+                    clock.advance_days(elapsed_days);
+                    tracker.record_attempt(
+                        "x",
+                        Duration::from_secs(duration_secs),
+                        success,
+                        Duration::from_secs(optimal_secs),
+                    );
+                }
+                tracker.get_performance("x").unwrap().clone()
+            };
+
+            let first = run();
+            let second = run();
+
+            // Same starting state + same rating sequence + same simulated elapsed
+            // time between reviews must always produce the same resulting FSRS
+            // state -- no hidden randomness or wall-clock reads.
+            prop_assert_eq!(first.stability, second.stability);
+            prop_assert_eq!(first.difficulty, second.difficulty);
+            prop_assert_eq!(first.state, second.state);
+            prop_assert_eq!(first.reps, second.reps);
+            prop_assert_eq!(first.lapses, second.lapses);
+            prop_assert_eq!(first.scheduled_days, second.scheduled_days);
+            prop_assert_eq!(first.due, second.due);
+            prop_assert_eq!(first.retrievability, second.retrievability);
+        }
+
+        /// Bounds this crate's glue code doesn't itself enforce -- unlike `scheduled_days`
+        /// (`.max(1.0)` at :182, cannot be zero by construction) or `due` (defined as
+        /// `last_review + scheduled_days`, cannot precede it by construction) -- these
+        /// come straight from the `fsrs` crate's own model output, so a regression in how
+        /// this module drives that crate (wrong parameter order, unclamped passthrough,
+        /// wrong decay sign) would show up here. Broader than `test_difficulty_bounds`
+        /// above: exercises Hard/Good/Easy ratings and elapsed-day gaps up to a year, not
+        /// just repeated same-instant failures.
+        #[test]
+        fn prop_fsrs_state_stays_in_bounds(
+            attempts in prop::collection::vec(attempt_strategy(), 1..20),
+        ) {
+            let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
+            let mut tracker = PerformanceTracker::with_clock(clock.clone());
+
+            for &(success, duration_secs, optimal_secs, elapsed_days) in &attempts {
+                clock.advance_days(elapsed_days);
+                tracker.record_attempt(
+                    "x",
+                    Duration::from_secs(duration_secs),
+                    success,
+                    Duration::from_secs(optimal_secs),
+                );
+
+                let perf = tracker.get_performance("x").unwrap();
+                // FSRS's own difficulty domain (fsrs::simulation::{D_MIN, D_MAX}).
+                prop_assert!(
+                    (1.0..=10.0).contains(&perf.difficulty),
+                    "difficulty {} outside FSRS's [1, 10] domain",
+                    perf.difficulty
+                );
+                // FSRS clamps stability to a strictly positive minimum
+                // (fsrs::simulation::S_MIN); zero would make retrievability degenerate.
+                prop_assert!(
+                    perf.stability > 0.0,
+                    "stability {} must be strictly positive",
+                    perf.stability
+                );
+                prop_assert!(
+                    (0.0..=1.0).contains(&perf.retrievability),
+                    "retrievability {} outside the documented [0, 1] probability range",
+                    perf.retrievability
+                );
+            }
+        }
     }
 }

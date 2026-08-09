@@ -75,7 +75,13 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
 
     // Render mini-game mode submenu if active
     if let Some(ref selection) = mode_data.minigame_mode_selection {
-        render_minigame_mode_submenu(frame, inner, selection, state.progress.today());
+        render_minigame_mode_submenu(
+            frame,
+            inner,
+            selection,
+            state.progress.today(),
+            &state.progress.profile.challenge_progress,
+        );
     }
 
     // Instructions - different when submenu is open
@@ -132,6 +138,7 @@ fn render_minigame_mode_submenu(
     parent_area: Rect,
     selection: &MiniGameModeSelection,
     today: chrono::NaiveDate,
+    challenge_progress: &crate::minigame::ChallengeProgress,
 ) {
     // Position submenu to the right of "Arcade Mode" option
     let submenu_width = 45;
@@ -185,10 +192,26 @@ fn render_minigame_mode_submenu(
             ("   ", Style::default().fg(Color::White))
         };
 
-        // Mode name line
+        // Mode name line — for Challenge mode, append today's remaining
+        // attempts (FR-006) so the cap is visible before the player is
+        // blocked. Kept on the name line, not the description line: the
+        // submenu's 43-column inner width already clips the Challenge
+        // description close to its limit, and a short "(N/3)" suffix here
+        // fits comfortably where an appended description suffix would not.
+        let name_text = if mode.is_challenge() {
+            format!(
+                "{} {} ({}/{})",
+                icon,
+                mode.name(),
+                challenge_progress.attempts_remaining(today),
+                crate::constants::CHALLENGE_MAX_ATTEMPTS
+            )
+        } else {
+            format!("{} {}", icon, mode.name())
+        };
         let name_line = Line::from(vec![
             Span::styled(prefix, name_style),
-            Span::styled(format!("{} {}", icon, mode.name()), name_style),
+            Span::styled(name_text, name_style),
         ]);
 
         // Description line

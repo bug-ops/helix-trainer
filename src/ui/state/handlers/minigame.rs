@@ -476,6 +476,14 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
             profile.minigame_best_streak = stats.best_streak();
         }
 
+        // Record Daily Challenge result (attempts/best-score tracking)
+        if session.mode().is_challenge() {
+            let scenarios_completed = u8::try_from(stats.scenarios_completed).unwrap_or(u8::MAX);
+            profile
+                .challenge_progress
+                .record_result(stats.score, scenarios_completed);
+        }
+
         // Increment total games played counter
         profile.minigame_games_played = profile.minigame_games_played.saturating_add(1);
 
@@ -1015,6 +1023,58 @@ mod tests {
 
         // Check high score was updated
         assert_eq!(state.progress.profile.minigame_high_score, 5000);
+    }
+
+    #[test]
+    fn test_minigame_updates_challenge_progress() {
+        use crate::gamification::ProfileStorage;
+        use crate::minigame::{ChallengeConfig, MiniGameMode};
+        use crate::ui::state::HandlerContext;
+        use tempfile::TempDir;
+
+        let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+
+        let today = state.progress.today();
+        let mode = MiniGameMode::Challenge(ChallengeConfig::for_date(today));
+
+        // Launch through the real handler (not a hand-built session) so
+        // `start_attempt` -> `record_result` is exercised end-to-end.
+        {
+            let mut ctx = HandlerContext::new(
+                &mut state.ui,
+                &mut state.game,
+                &mut state.progress,
+                &state.config,
+            );
+            super::super::mode_selection::handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        }
+        assert_eq!(
+            state
+                .progress
+                .profile
+                .challenge_progress
+                .attempts_used_today,
+            1
+        );
+
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+            session.stats.score = 5000;
+            session.stats.scenarios_completed = 7;
+        }
+
+        handle_minigame_game_over(&mut state).unwrap();
+
+        let progress = &state.progress.profile.challenge_progress;
+        assert_eq!(progress.best_score_today, 5000);
+        assert_eq!(progress.best_scenarios_today, 7);
+        assert_eq!(progress.all_time_best_score, 5000);
+        assert_eq!(progress.all_time_best_scenarios, 7);
+        assert_eq!(progress.total_challenges_completed, 0); // 7 < CHALLENGE_SCENARIO_COUNT (10)
     }
 
     /// Regression test for #258: `handle_minigame_game_over`'s save must go through

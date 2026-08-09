@@ -697,4 +697,30 @@ mod tests {
         // Verify defaults work for challenge_progress (via #[serde(default)])
         assert_eq!(restored.challenge_progress.attempts_used_today, 0);
     }
+
+    /// Regression test for #376: a non-default `challenge_progress` must survive
+    /// a real `ProfileStorage::save`/`load` round-trip (the actual persisted
+    /// format, JSON via `profile.json`), not just a bare TOML round-trip of
+    /// `ChallengeProgress` in isolation.
+    #[test]
+    fn test_challenge_progress_persists_through_profile_storage_round_trip() {
+        use crate::gamification::ProfileStorage;
+
+        let mut profile = UserProfile::new();
+        let today = chrono::Utc::now().date_naive();
+        profile.challenge_progress.start_attempt(today);
+        profile.challenge_progress.start_attempt(today);
+        profile.challenge_progress.record_result(4200, 7);
+
+        let storage = ProfileStorage::for_test();
+        storage.save(&profile).unwrap();
+        let restored = storage.load().unwrap();
+
+        assert_eq!(restored.challenge_progress.attempts_used_today, 2);
+        assert_eq!(restored.challenge_progress.total_challenges_attempted, 2);
+        assert_eq!(restored.challenge_progress.best_score_today, 4200);
+        assert_eq!(restored.challenge_progress.best_scenarios_today, 7);
+        assert_eq!(restored.challenge_progress.all_time_best_score, 4200);
+        assert_eq!(restored.challenge_progress.all_time_best_scenarios, 7);
+    }
 }

@@ -5,10 +5,12 @@
 
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
+use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
     HandlerContext, HandlerOutcome, MenuData, MiniGameData, MiniGameModeSelection,
     ModeSelectionData, TypedScreen,
 };
+use rust_i18n::t;
 use std::sync::Arc;
 
 /// Handle mode selection up navigation
@@ -116,6 +118,16 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
 ) -> Result<HandlerOutcome, UserError> {
     use crate::config::Scenario;
 
+    let today = ctx.progress.today();
+    if mode.is_challenge() && !ctx.progress.profile.challenge_progress.can_attempt(today) {
+        ctx.ui
+            .notifications
+            .push(Notification::new(NotificationType::Info {
+                message: t!("minigame.challenge_no_attempts_left").to_string(),
+            }));
+        return Ok(HandlerOutcome::Stay);
+    }
+
     // Collect scenarios
     let scenarios: Vec<Scenario> = ctx
         .game
@@ -128,6 +140,20 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
     if scenarios.is_empty() {
         tracing::warn!("No scenarios available for mini-game");
         return Ok(HandlerOutcome::Stay);
+    }
+
+    // Only consume an attempt once the launch is actually going to succeed -
+    // an empty scenario pool above must not burn one of today's 3 attempts.
+    if mode.is_challenge() {
+        ctx.progress.profile.challenge_progress.start_attempt(today);
+        // Save immediately (not debounced): a crash/quit within the debounce
+        // window would otherwise refund the attempt just consumed in memory.
+        if let Err(e) = ctx.progress.save_immediate() {
+            tracing::error!(
+                "Failed to save profile after starting challenge attempt: {:?}",
+                e
+            );
+        }
     }
 
     // Clone mode for MiniGameData
@@ -448,6 +474,179 @@ mod tests {
         assert_eq!(
             ctx.game.minigame_session.as_ref().unwrap().stats().lives(),
             3
+        );
+    }
+
+    #[test]
+    fn test_launch_challenge_mode_enforces_daily_attempt_cap() {
+        use crate::constants::CHALLENGE_MAX_ATTEMPTS;
+
+        let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let today = ctx.progress.today();
+        let mode = crate::minigame::MiniGameMode::Challenge(
+            crate::minigame::ChallengeConfig::for_date(today),
+        );
+
+        for _ in 0..CHALLENGE_MAX_ATTEMPTS {
+            let outcome = handle_launch_minigame_mode(&mut ctx, mode.clone()).unwrap();
+            assert!(outcome.is_transition());
+            ctx.game.minigame_session = None; // simulate returning to mode selection
+        }
+
+        // One more attempt beyond the cap must be rejected.
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        assert!(outcome.is_stay());
+        assert!(ctx.game.minigame_session.is_none());
+        assert_eq!(
+            ctx.progress.profile.challenge_progress.attempts_used_today,
+            CHALLENGE_MAX_ATTEMPTS
+        );
+        assert_eq!(
+            ctx.progress
+                .profile
+                .challenge_progress
+                .total_challenges_attempted,
+            u32::from(CHALLENGE_MAX_ATTEMPTS)
+        );
+
+        // The player must be told why the launch was refused, with the actual
+        // localized copy, not just a matching notification variant.
+        assert_eq!(ctx.ui.notifications.count(), 1);
+        assert_eq!(
+            ctx.ui.notifications.visible()[0].message(),
+            rust_i18n::t!("minigame.challenge_no_attempts_left").to_string()
+        );
+        assert!(matches!(
+            ctx.ui.notifications.visible()[0].notification_type,
+            crate::ui::notification::NotificationType::Info { .. }
+        ));
+    }
+
+    /// Regression guard: exhausting Daily Challenge attempts must not affect
+    /// other mini-game modes, which have no attempt cap.
+    #[test]
+    fn test_launch_survival_mode_unaffected_by_exhausted_challenge_attempts() {
+        use crate::constants::CHALLENGE_MAX_ATTEMPTS;
+
+        let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let today = ctx.progress.today();
+        let challenge_mode = crate::minigame::MiniGameMode::Challenge(
+            crate::minigame::ChallengeConfig::for_date(today),
+        );
+        for _ in 0..CHALLENGE_MAX_ATTEMPTS {
+            handle_launch_minigame_mode(&mut ctx, challenge_mode.clone()).unwrap();
+            ctx.game.minigame_session = None;
+        }
+        assert!(!ctx.progress.profile.challenge_progress.can_attempt(today));
+
+        let survival_mode =
+            crate::minigame::MiniGameMode::Survival(crate::minigame::SurvivalConfig::default());
+        let outcome = handle_launch_minigame_mode(&mut ctx, survival_mode).unwrap();
+
+        assert!(outcome.is_transition());
+        assert!(ctx.game.minigame_session.is_some());
+    }
+
+    /// Regression test for critique S1: an attempt must not be consumed when
+    /// the launch cannot actually start (empty scenario pool) - and, since
+    /// consuming an attempt is what triggers the immediate save, no save must
+    /// happen either.
+    #[test]
+    fn test_launch_challenge_mode_with_no_scenarios_does_not_consume_attempt() {
+        use crate::gamification::ProfileStorage;
+        use tempfile::TempDir;
+
+        let (mut ui, mut game, mut progress, config) = create_test_context(); // No scenarios
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("profile.json");
+        progress.storage = ProfileStorage::with_path(&profile_path);
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let mode = crate::minigame::MiniGameMode::Challenge(
+            crate::minigame::ChallengeConfig::for_date(ctx.progress.today()),
+        );
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+
+        assert!(outcome.is_stay());
+        assert!(ctx.game.minigame_session.is_none());
+        assert!(
+            !profile_path.exists(),
+            "no save should be triggered when the launch never consumes an attempt"
+        );
+        assert_eq!(
+            ctx.progress.profile.challenge_progress.attempts_used_today,
+            0
+        );
+        assert_eq!(
+            ctx.progress
+                .profile
+                .challenge_progress
+                .total_challenges_attempted,
+            0
+        );
+    }
+
+    /// Regression test: the attempt cap resets on a new calendar day, exercised
+    /// through the handler (not just at the `ChallengeProgress` type level) via
+    /// the injected `Clock`.
+    #[test]
+    fn test_launch_challenge_mode_resets_on_new_day_via_handler() {
+        use crate::constants::CHALLENGE_MAX_ATTEMPTS;
+        use crate::gamification::{ProfileStorage, UserProfile};
+        use crate::learning::PerformanceTracker;
+        use crate::time::FakeClock;
+        use std::sync::Arc;
+
+        let scenarios = vec![create_test_scenario("s1")];
+        let mut ui = UIState::new();
+        let mut game = GameState::new(scenarios);
+        let config = ConfigState::default();
+
+        let day1_clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
+        let mut progress = ProgressState::with_clock(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::for_test(),
+            day1_clock,
+        );
+
+        {
+            let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+            let today = ctx.progress.today();
+            let mode = crate::minigame::MiniGameMode::Challenge(
+                crate::minigame::ChallengeConfig::for_date(today),
+            );
+            for _ in 0..CHALLENGE_MAX_ATTEMPTS {
+                handle_launch_minigame_mode(&mut ctx, mode.clone()).unwrap();
+                ctx.game.minigame_session = None;
+            }
+            let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+            assert!(outcome.is_stay());
+        }
+
+        // Advance to the next calendar day and rebuild the context with the
+        // same profile - the cap must have reset.
+        let day2_clock = Arc::new(FakeClock::at("2026-01-16T12:00:00Z"));
+        progress = ProgressState::with_clock(
+            progress.profile.clone(),
+            PerformanceTracker::new(),
+            ProfileStorage::for_test(),
+            day2_clock,
+        );
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+        let today = ctx.progress.today();
+        let mode = crate::minigame::MiniGameMode::Challenge(
+            crate::minigame::ChallengeConfig::for_date(today),
+        );
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        assert!(outcome.is_transition());
+        assert_eq!(
+            ctx.progress.profile.challenge_progress.attempts_used_today,
+            1
         );
     }
 

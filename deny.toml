@@ -36,7 +36,22 @@ multiple-versions = "warn"
 # Deny wildcard dependencies
 wildcards = "allow"
 # List of crates that are allowed to have multiple versions
-skip = []
+skip = [
+    # windows_x86_64_{gnu,gnullvm,msvc} fan out to 3 versions each from two
+    # independent transitive chains: rodio -> cpal -> jni -> windows-sys 0.45
+    # (via windows-targets 0.42) and helix-core/helix-loader -> etcetera ->
+    # windows-sys 0.59/0.60 (via windows-targets 0.52/0.53). Neither chain is
+    # a direct dependency; re-check after routine `cargo update` whether
+    # upstream alignment collapses these.
+    { name = "windows_x86_64_gnu" },
+    { name = "windows_x86_64_gnullvm" },
+    { name = "windows_x86_64_msvc" },
+    # winnow duplicates via toml 0.8 (used by helix-core/helix-loader and
+    # rust-i18n-support) vs toml 1.x (used directly by helix-trainer and by
+    # cpal's ndk -> num_enum chain). Not collapsible without a toml major
+    # version alignment upstream.
+    { name = "winnow" },
+]
 # List of explicitly banned crates
 deny = []
 

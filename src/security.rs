@@ -49,9 +49,6 @@ pub enum SecurityError {
     #[error("Session timeout (max duration: {0:?})")]
     SessionTimeout(Duration),
 
-    #[error("Invalid scenario configuration")]
-    InvalidScoringConfig,
-
     #[error("Too many actions (max: 1000000)")]
     TooManyActions,
 
@@ -258,6 +255,9 @@ pub mod limits {
 
     /// Maximum number of selections per scenario
     pub const MAX_SELECTIONS_PER_SCENARIO: usize = 100;
+
+    /// Maximum length of a scenario or quest ID
+    pub const MAX_ID_LENGTH: usize = 64;
 }
 
 /// Path validation utilities
@@ -320,6 +320,35 @@ pub mod path_validator {
         }
 
         Ok(())
+    }
+}
+
+/// Shared serde validators for scenario/quest configuration fields
+pub mod validators {
+    use super::limits::MAX_ID_LENGTH;
+    use serde::Deserialize;
+
+    /// Custom deserialization for ID field to validate format
+    pub fn validate_id_field<'de, D>(deserializer: D) -> Result<String, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+
+        // Validate ID is not empty
+        if s.is_empty() {
+            return Err(serde::de::Error::custom("Invalid ID: cannot be empty"));
+        }
+
+        // Validate ID format: alphanumeric with underscores, max MAX_ID_LENGTH chars
+        if s.len() > MAX_ID_LENGTH || !s.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            return Err(serde::de::Error::custom(format!(
+                "Invalid ID: must be alphanumeric with underscores, max {} chars",
+                MAX_ID_LENGTH
+            )));
+        }
+
+        Ok(s)
     }
 }
 
@@ -901,11 +930,6 @@ mod tests {
             SecurityError::SessionTimeout(Duration::from_secs(60))
                 .to_string()
                 .contains("timeout")
-        );
-        assert!(
-            SecurityError::InvalidScoringConfig
-                .to_string()
-                .contains("scenario configuration")
         );
         assert!(
             SecurityError::TooManyActions

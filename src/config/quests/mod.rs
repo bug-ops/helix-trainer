@@ -4,6 +4,7 @@
 //! security patterns as scenario loading.
 
 use crate::security::limits::*;
+use crate::security::validators::validate_id_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -101,6 +102,9 @@ pub struct XpConfig {
 }
 
 /// Quest unlock conditions
+///
+/// INVARIANT: min_level <= max_level when both are set, checked by
+/// `QuestLoader::validate_quest`.
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct QuestConditions {
@@ -112,28 +116,6 @@ pub struct QuestConditions {
     pub requires_commands: Vec<String>,
     #[serde(default)]
     pub requires_scenarios: Vec<String>,
-}
-
-/// Custom deserialization for ID field to validate format
-fn validate_id_field<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-
-    // Validate ID is not empty
-    if s.is_empty() {
-        return Err(serde::de::Error::custom("Invalid ID: cannot be empty"));
-    }
-
-    // Validate ID format: alphanumeric with underscores, max 64 chars
-    if s.len() > 64 || !s.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        return Err(serde::de::Error::custom(
-            "Invalid ID: must be alphanumeric with underscores, max 64 chars",
-        ));
-    }
-
-    Ok(s)
 }
 
 /// Custom deserialization for version field to validate format
@@ -247,24 +229,13 @@ impl QuestLoader {
             UserError::ScenarioLoadError
         })?;
 
-        // Parse TOML with proper error handling
-        let quests_file: QuestsFile = toml::from_str(&content)
-            .map_err(|e| UserError::from(SecurityError::InvalidToml(e.to_string())))?;
-
-        let quests = quests_file.quests;
-
-        // Validate quest count
-        if quests.len() > MAX_QUEST_TEMPLATES_PER_FILE {
-            return Err(UserError::from(SecurityError::TooManyScenarios {
-                max: MAX_QUEST_TEMPLATES_PER_FILE,
-                actual: quests.len(),
-            }));
-        }
-
-        // Validate each quest template
-        for quest in &quests {
-            self.validate_quest(quest).map_err(UserError::from)?;
-        }
+        // Parse, count-check, and validate each quest template
+        let quests = super::loader::parse_and_validate::<QuestsFile>(
+            &content,
+            MAX_QUEST_TEMPLATES_PER_FILE,
+            |q| self.validate_quest(q),
+        )
+        .map_err(UserError::from)?;
 
         tracing::info!(count = quests.len(), "Successfully loaded quest templates");
 
@@ -301,30 +272,20 @@ impl QuestLoader {
 
         tracing::info!(locale = locale, "Loading quests from embedded data");
 
-        // Parse TOML content
-        let quests_file: QuestsFile = toml::from_str(content).map_err(|e| {
+        // Parse, count-check, and validate each quest template
+        let quests = super::loader::parse_and_validate::<QuestsFile>(
+            content,
+            MAX_QUEST_TEMPLATES_PER_FILE,
+            |q| self.validate_quest(q),
+        )
+        .map_err(|e| {
             tracing::error!(
                 locale = locale,
-                "Failed to parse embedded quest TOML: {}",
+                "Failed to load embedded quest file: {:?}",
                 e
             );
-            UserError::from(SecurityError::InvalidToml(e.to_string()))
+            UserError::from(e)
         })?;
-
-        let quests = quests_file.quests;
-
-        // Validate quest count
-        if quests.len() > MAX_QUEST_TEMPLATES_PER_FILE {
-            return Err(UserError::from(SecurityError::TooManyScenarios {
-                max: MAX_QUEST_TEMPLATES_PER_FILE,
-                actual: quests.len(),
-            }));
-        }
-
-        // Validate each quest template
-        for quest in &quests {
-            self.validate_quest(quest).map_err(UserError::from)?;
-        }
 
         tracing::info!(
             locale = locale,

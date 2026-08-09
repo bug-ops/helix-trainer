@@ -93,6 +93,43 @@ tolerance = 0
 }
 
 #[test]
+fn test_empty_id_rejection() {
+    let toml = r#"
+[[scenarios]]
+id = ""
+name = "Test"
+description = "Test"
+
+[scenarios.setup]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = "test"
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["test"]
+description = "test"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+        "#;
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
+
+    let result = loader.load(temp_file.path());
+    assert!(result.is_err());
+}
+
+#[test]
 fn test_oversized_content_rejection() {
     let huge_content = "A".repeat(200_000);
     let toml = format!(

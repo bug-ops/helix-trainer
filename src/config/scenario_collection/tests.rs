@@ -36,7 +36,7 @@ fn create_scenario(
         alternatives: vec![],
         hints: vec![],
         scoring: ScoringConfig {
-            optimal_count: 1,
+            optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },
@@ -613,7 +613,7 @@ fn test_scenarios_without_metadata() {
         alternatives: vec![],
         hints: vec![],
         scoring: ScoringConfig {
-            optimal_count: 1,
+            optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },

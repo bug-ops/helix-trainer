@@ -4,6 +4,7 @@
 //! as well as application configuration.
 
 pub mod app_config;
+mod loader;
 pub mod quests;
 pub mod scenario_collection;
 pub mod scenarios;

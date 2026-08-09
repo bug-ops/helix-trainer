@@ -3,9 +3,11 @@
 //! This module handles loading TOML scenario files with security validations.
 
 use crate::security::limits::*;
+use crate::security::validators::validate_id_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::Deserialize;
 use std::fs;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 /// Wrapper for scenarios array in TOML file
@@ -101,6 +103,9 @@ pub struct Scenario {
 /// Supports two formats:
 /// - Single cursor: `cursor_position = [row, col]` with optional `selection`
 /// - Multi-cursor: `cursors = [[row, col], ...]` or `selections = [[start_row, start_col, end_row, end_col], ...]`
+///
+/// INVARIANT: at least one of cursor_position/cursors/selections must be set,
+/// checked by `ScenarioLoader::validate_setup_or_target_config`.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Setup {
     pub file_content: String,
@@ -127,6 +132,9 @@ pub struct Setup {
 /// Supports two formats:
 /// - Single cursor: `cursor_position = [row, col]` with optional `selection`
 /// - Multi-cursor: `cursors = [[row, col], ...]` or `selections = [[start_row, start_col, end_row, end_col], ...]`
+///
+/// INVARIANT: at least one of cursor_position/cursors/selections must be set,
+/// checked by `ScenarioLoader::validate_setup_or_target_config`.
 #[derive(Deserialize, Debug, Clone)]
 pub struct TargetState {
     pub file_content: String,
@@ -166,7 +174,7 @@ pub struct AlternativeSolution {
 /// Scoring configuration
 #[derive(Deserialize, Debug, Clone)]
 pub struct ScoringConfig {
-    pub optimal_count: usize,
+    pub optimal_count: NonZeroUsize,
     pub max_points: u32,
     pub tolerance: usize,
 }
@@ -331,23 +339,6 @@ impl TargetState {
     pub fn selections_ref(&self) -> Option<&[[usize; 4]]> {
         self.selections.as_deref()
     }
-}
-
-/// Custom deserialization for ID field to validate format
-fn validate_id_field<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-
-    // Validate ID format: alphanumeric with underscores, max 64 chars
-    if s.len() > 64 || !s.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        return Err(serde::de::Error::custom(
-            "Invalid ID: must be alphanumeric with underscores, max 64 chars",
-        ));
-    }
-
-    Ok(s)
 }
 
 /// Secure scenario loader with path validation and content verification
@@ -529,24 +520,13 @@ impl ScenarioLoader {
             UserError::ScenarioLoadError
         })?;
 
-        // Parse TOML with proper error handling
-        let scenarios_file: ScenariosFile = toml::from_str(&content)
-            .map_err(|e| UserError::from(SecurityError::InvalidToml(e.to_string())))?;
-
-        let scenarios = scenarios_file.scenarios;
-
-        // Validate scenario count
-        if scenarios.len() > MAX_SCENARIOS_PER_FILE {
-            return Err(UserError::from(SecurityError::TooManyScenarios {
-                max: MAX_SCENARIOS_PER_FILE,
-                actual: scenarios.len(),
-            }));
-        }
-
-        // Validate each scenario
-        for scenario in &scenarios {
-            self.validate_scenario(scenario).map_err(UserError::from)?;
-        }
+        // Parse, count-check, and validate each scenario
+        let scenarios = super::loader::parse_and_validate::<ScenariosFile>(
+            &content,
+            MAX_SCENARIOS_PER_FILE,
+            |s| self.validate_scenario(s),
+        )
+        .map_err(UserError::from)?;
 
         tracing::info!(count = scenarios.len(), "Successfully loaded scenarios");
 
@@ -592,31 +572,21 @@ impl ScenarioLoader {
         let mut all_scenarios = Vec::new();
 
         for (index, content) in embedded_contents.iter().enumerate() {
-            // Parse TOML content
-            let scenarios_file: ScenariosFile = toml::from_str(content).map_err(|e| {
+            // Parse, count-check, and validate each scenario
+            let scenarios = super::loader::parse_and_validate::<ScenariosFile>(
+                content,
+                MAX_SCENARIOS_PER_FILE,
+                |s| self.validate_scenario(s),
+            )
+            .map_err(|e| {
                 tracing::error!(
                     locale = locale,
                     index = index,
-                    "Failed to parse embedded scenario TOML: {}",
+                    "Failed to load embedded scenario file: {:?}",
                     e
                 );
-                UserError::from(SecurityError::InvalidToml(e.to_string()))
+                UserError::from(e)
             })?;
-
-            let scenarios = scenarios_file.scenarios;
-
-            // Validate scenario count per file
-            if scenarios.len() > MAX_SCENARIOS_PER_FILE {
-                return Err(UserError::from(SecurityError::TooManyScenarios {
-                    max: MAX_SCENARIOS_PER_FILE,
-                    actual: scenarios.len(),
-                }));
-            }
-
-            // Validate each scenario
-            for scenario in &scenarios {
-                self.validate_scenario(scenario).map_err(UserError::from)?;
-            }
 
             all_scenarios.extend(scenarios);
         }
@@ -684,11 +654,6 @@ impl ScenarioLoader {
             return Err(SecurityError::TooManyAlternatives {
                 max: MAX_ALTERNATIVES,
             });
-        }
-
-        // Validate scoring configuration
-        if scenario.scoring.optimal_count == 0 {
-            return Err(SecurityError::InvalidScoringConfig);
         }
 
         // Validate command sequences

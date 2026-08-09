@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use super::{AchievementId, Quest};
+use crate::config::Difficulty;
 use crate::constants::{
     MAX_PLAYER_LEVEL, MINIGAME_LEVEL_BONUS_XP, MINIGAME_STREAK_BONUS_DIVISOR,
     MINIGAME_STREAK_BONUS_MAX_XP, MINIGAME_XP_PER_100_POINTS, SCENARIO_BASE_XP_PER_100_POINTS,
@@ -91,6 +92,23 @@ pub struct UserProfile {
     /// Persisted FSRS/PerformanceTracker data
     #[serde(default)]
     pub performance_data: HashMap<String, CommandPerformance>,
+
+    /// Count of scenario completions finished in under
+    /// [`SPEED_DEMON_TIME_RATIO`](crate::constants::SPEED_DEMON_TIME_RATIO) of a
+    /// scenario's time budget, in either Training or arcade mode. Powers
+    /// `SpeedDemon`/`Speedrunner`.
+    #[serde(default)]
+    pub speed_run_count: u32,
+
+    /// Count of scenario completions finished in under
+    /// [`FLASH_TIME_RATIO`](crate::constants::FLASH_TIME_RATIO) of a scenario's
+    /// time budget, in either Training or arcade mode. Powers `Flash`.
+    #[serde(default)]
+    pub flash_run_count: u32,
+
+    /// Difficulty levels completed at least once, across any mode. Powers `Polyglot`.
+    #[serde(default)]
+    pub difficulties_completed: HashSet<Difficulty>,
 }
 
 impl UserProfile {
@@ -131,6 +149,9 @@ impl UserProfile {
             survival_best_level: 0,
             survival_best_scenarios: 0,
             performance_data: HashMap::new(),
+            speed_run_count: 0,
+            flash_run_count: 0,
+            difficulties_completed: HashSet::new(),
         }
     }
 

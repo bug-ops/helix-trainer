@@ -784,6 +784,22 @@ fn test_difficulty_debug() {
     assert!(format!("{:?}", Difficulty::Advanced).contains("Advanced"));
 }
 
+/// Exhaustive match forces a compile error if a `Difficulty` variant is added without
+/// updating `Difficulty::ALL` (used by the Polyglot achievement check), catching drift
+/// at compile time rather than silently under-counting difficulties.
+#[test]
+fn difficulty_all_is_exhaustive() {
+    fn assert_variant_covered(d: Difficulty) {
+        match d {
+            Difficulty::Beginner | Difficulty::Intermediate | Difficulty::Advanced => {}
+        }
+    }
+    for d in Difficulty::ALL {
+        assert_variant_covered(d);
+    }
+    assert_eq!(Difficulty::ALL.len(), 3);
+}
+
 #[test]
 fn test_scenario_with_all_metadata_fields() {
     let toml = r#"

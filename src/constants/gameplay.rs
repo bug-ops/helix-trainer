@@ -68,3 +68,11 @@ pub const SURVIVAL_BASE_TIME: Duration = Duration::from_secs(10);
 pub const SURVIVAL_MIN_TIME: Duration = Duration::from_secs(3);
 /// Time decrease per level in survival mode (500ms)
 pub const SURVIVAL_TIME_DECREASE_PER_LEVEL: Duration = Duration::from_millis(500);
+
+// Speed achievement thresholds (fraction of a mini-game scenario's time budget used)
+/// Elapsed-time ratio below which a completion counts as a "speed run"
+/// (`SpeedDemon`/`Speedrunner` achievements)
+pub const SPEED_DEMON_TIME_RATIO: f64 = 0.5;
+/// Elapsed-time ratio below which a completion counts as a "flash" run
+/// (`Flash` achievement)
+pub const FLASH_TIME_RATIO: f64 = 0.25;

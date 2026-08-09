@@ -246,6 +246,30 @@ pub struct DifficultyController {
     level_changed: Option<LevelChange>,
 }
 
+/// Base per-difficulty time budget, independent of arcade's adaptive level scaling.
+///
+/// [`DifficultyController::time_limit_for`] scales this by the controller's current
+/// level; callers with no controller instance (e.g. Training mode, which has no
+/// adaptive difficulty state) use this directly as the "speed" reference budget for
+/// achievement thresholds.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::Difficulty;
+/// use helix_trainer::minigame::base_time_limit_for;
+/// use std::time::Duration;
+///
+/// assert_eq!(base_time_limit_for(Difficulty::Beginner), Duration::from_secs(10));
+/// ```
+pub fn base_time_limit_for(difficulty: Difficulty) -> Duration {
+    match difficulty {
+        Difficulty::Beginner => BEGINNER_TIME_LIMIT,
+        Difficulty::Intermediate => INTERMEDIATE_TIME_LIMIT,
+        Difficulty::Advanced => ADVANCED_TIME_LIMIT,
+    }
+}
+
 impl DifficultyController {
     /// Create a new difficulty controller starting at level 1
     ///
@@ -306,18 +330,12 @@ impl DifficultyController {
     /// ```
     pub fn time_limit_for(&self, scenario: &Scenario) -> Duration {
         // Get base time from scenario metadata
-        let base = if let Some(ref metadata) = scenario.metadata
-            && let Some(difficulty) = metadata.difficulty
-        {
-            match difficulty {
-                Difficulty::Beginner => BEGINNER_TIME_LIMIT,
-                Difficulty::Intermediate => INTERMEDIATE_TIME_LIMIT,
-                Difficulty::Advanced => ADVANCED_TIME_LIMIT,
-            }
-        } else {
-            // Fallback if no metadata: use medium time
-            FALLBACK_TIME_LIMIT
-        };
+        let base = scenario
+            .metadata
+            .as_ref()
+            .and_then(|m| m.difficulty)
+            .map(base_time_limit_for)
+            .unwrap_or(FALLBACK_TIME_LIMIT);
 
         // Scale by current level (level 10 = 80% time, but not less than 50%)
         let scale = match self.level {

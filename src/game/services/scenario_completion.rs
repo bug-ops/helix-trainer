@@ -29,11 +29,14 @@ pub struct CompletionResult {
 
 /// Result of recording a scenario completion and scaling its XP by mastery
 ///
-/// Mixes one post-recording field with three pre-recording fields, each
-/// documented individually below to avoid ambiguity.
+/// Fields are a mix of post-recording values (`actual_xp`, `mastery_level`)
+/// and pre-recording values (`applied_multiplier`, `applied_mastery_factor`,
+/// `applied_repeat_penalty`), each documented individually below to avoid
+/// ambiguity.
 #[derive(Debug, Clone)]
-pub struct XpScalingResult {
-    /// XP actually awarded for this completion, after mastery/repeat scaling
+pub struct XPScalingResult {
+    /// XP actually awarded for this completion, after mastery/repeat scaling;
+    /// reflects the post-recording state
     pub actual_xp: u64,
     /// Mastery level *after* recording this completion, for display purposes
     pub mastery_level: ScenarioMastery,
@@ -73,7 +76,7 @@ impl ScenarioCompletionService {
 
     /// Record scenario completion and return mastery-scaled XP
     ///
-    /// See [`XpScalingResult`] for the distinction between the post-recording
+    /// See [`XPScalingResult`] for the distinction between the post-recording
     /// `mastery_level` field and the pre-recording multiplier fields.
     #[must_use]
     pub fn record_and_scale_xp(
@@ -82,7 +85,7 @@ impl ScenarioCompletionService {
         score: u32,
         base_xp: u64,
         now: DateTime<Utc>,
-    ) -> XpScalingResult {
+    ) -> XPScalingResult {
         // Capture multipliers BEFORE recording (what will be applied)
         let (_pre_mastery_level, pre_mastery_factor, pre_repeat_penalty) = profile
             .scenario_history
@@ -105,7 +108,7 @@ impl ScenarioCompletionService {
         let applied_multiplier = pre_mastery_factor * pre_repeat_penalty;
 
         // Return post-mastery level (for display) but pre-multipliers (what was applied)
-        XpScalingResult {
+        XPScalingResult {
             actual_xp,
             mastery_level: post_mastery_level,
             applied_multiplier,

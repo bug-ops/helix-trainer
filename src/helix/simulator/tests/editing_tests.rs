@@ -53,7 +53,7 @@ fn test_multiple_line_deletions() {
 }
 
 // ============================================================================
-// Undo Tests
+// Undo/Redo Tests
 // ============================================================================
 
 #[test]
@@ -67,6 +67,136 @@ fn test_undo() {
 
     sim.execute_command(CMD_UNDO).unwrap();
     assert_eq!(sim.get_state().unwrap().content(), "test\n");
+}
+
+#[test]
+fn test_undo_then_redo_round_trip() {
+    let mut sim = AnyModeSimulator::new("test\n".to_string());
+
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "");
+
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+
+    sim.execute_command(CMD_REDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "");
+}
+
+#[test]
+fn test_redo_via_ctrl_r_alias() {
+    let mut sim = AnyModeSimulator::new("test\n".to_string());
+
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+
+    sim.execute_command(CMD_CTRL_R).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "");
+}
+
+#[test]
+fn test_multiple_sequential_undo_redo_walks_full_history() {
+    let mut sim = AnyModeSimulator::new("aaa\nbbb\nccc\n".to_string());
+
+    // Three edits, each deleting the current (now-first) line
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "bbb\nccc\n");
+
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "ccc\n");
+
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "");
+
+    // Undo 3x should walk back through each intermediate state
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "ccc\n");
+
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "bbb\nccc\n");
+
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "aaa\nbbb\nccc\n");
+
+    // Redo 3x should walk forward and land back at the latest state
+    sim.execute_command(CMD_REDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "bbb\nccc\n");
+
+    sim.execute_command(CMD_REDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "ccc\n");
+
+    sim.execute_command(CMD_REDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "");
+}
+
+#[test]
+fn test_new_edit_after_undo_clears_redo_stack() {
+    let mut sim = AnyModeSimulator::new("line1\nline2\nline3\n".to_string());
+
+    // Delete line1, then undo it back
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "line1\nline2\nline3\n");
+
+    // A fresh edit on a different line must invalidate the pending redo
+    sim.execute_command(CMD_MOVE_DOWN).unwrap();
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "line1\nline3\n");
+
+    // Redo should now be a no-op: the stale "restore line1 deletion" entry is gone
+    sim.execute_command(CMD_REDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "line1\nline3\n");
+}
+
+#[test]
+fn test_noop_command_after_undo_does_not_clear_pending_redo() {
+    // Critic finding S3: a command that produces a pure-retain (no-op)
+    // changeset — e.g. uppercasing a point selection, which has no text to
+    // change — must not wipe a pending redo_stack. Exercised through the
+    // real command path (Alt-`) rather than a hand-built Transaction.
+    let mut sim = AnyModeSimulator::new("test\n".to_string());
+
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "");
+
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+
+    // Point selection (anchor == head) at the start of the doc: no text to
+    // uppercase, so this produces an empty changeset.
+    sim.execute_command(CMD_SWITCH_TO_UPPERCASE).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "test\n");
+
+    // The pending redo from the earlier undo must still be intact.
+    sim.execute_command(CMD_REDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "");
+}
+
+#[test]
+fn test_interleaved_undo_redo_undo_round_trips() {
+    let mut sim = AnyModeSimulator::new("aaa\nbbb\n".to_string());
+
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "bbb\n");
+
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "aaa\nbbb\n");
+
+    sim.execute_command(CMD_REDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "bbb\n");
+
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.get_state().unwrap().content(), "aaa\nbbb\n");
 }
 
 // ============================================================================

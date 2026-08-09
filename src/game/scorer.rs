@@ -185,12 +185,12 @@ impl Scorer {
     /// ```
     /// use helix_trainer::game::{Scorer, PerformanceRating};
     ///
-    /// assert_eq!(Scorer::get_rating(100, 100), PerformanceRating::Perfect);
-    /// assert_eq!(Scorer::get_rating(95, 100), PerformanceRating::Excellent);
-    /// assert_eq!(Scorer::get_rating(75, 100), PerformanceRating::Good);
-    /// assert_eq!(Scorer::get_rating(30, 100), PerformanceRating::Poor);
+    /// assert_eq!(Scorer::rating(100, 100), PerformanceRating::Perfect);
+    /// assert_eq!(Scorer::rating(95, 100), PerformanceRating::Excellent);
+    /// assert_eq!(Scorer::rating(75, 100), PerformanceRating::Good);
+    /// assert_eq!(Scorer::rating(30, 100), PerformanceRating::Poor);
     /// ```
-    pub fn get_rating(score: u32, max_points: u32) -> PerformanceRating {
+    pub fn rating(score: u32, max_points: u32) -> PerformanceRating {
         if max_points == 0 {
             return PerformanceRating::Poor;
         }
@@ -399,39 +399,39 @@ mod tests {
 
     #[test]
     fn test_rating_perfect() {
-        assert_eq!(Scorer::get_rating(100, 100), PerformanceRating::Perfect);
+        assert_eq!(Scorer::rating(100, 100), PerformanceRating::Perfect);
     }
 
     #[test]
     fn test_rating_excellent() {
-        assert_eq!(Scorer::get_rating(95, 100), PerformanceRating::Excellent);
+        assert_eq!(Scorer::rating(95, 100), PerformanceRating::Excellent);
         // Verify Excellent is reachable with realistic scenario data (optimal <= 7)
         // optimal=7, actual=8 → score = floor(7/8 * 100) = 87 → Excellent
         let score = Scorer::calculate_score(7, 8, 0, 100).unwrap();
-        assert_eq!(Scorer::get_rating(score, 100), PerformanceRating::Excellent);
+        assert_eq!(Scorer::rating(score, 100), PerformanceRating::Excellent);
         // optimal=4, actual=5 → score = floor(4/5 * 100) = 80 → Excellent
         let score = Scorer::calculate_score(4, 5, 0, 100).unwrap();
-        assert_eq!(Scorer::get_rating(score, 100), PerformanceRating::Excellent);
+        assert_eq!(Scorer::rating(score, 100), PerformanceRating::Excellent);
     }
 
     #[test]
     fn test_rating_good() {
-        assert_eq!(Scorer::get_rating(75, 100), PerformanceRating::Good);
+        assert_eq!(Scorer::rating(75, 100), PerformanceRating::Good);
     }
 
     #[test]
     fn test_rating_fair() {
-        assert_eq!(Scorer::get_rating(50, 100), PerformanceRating::Fair);
+        assert_eq!(Scorer::rating(50, 100), PerformanceRating::Fair);
     }
 
     #[test]
     fn test_rating_poor() {
-        assert_eq!(Scorer::get_rating(30, 100), PerformanceRating::Poor);
+        assert_eq!(Scorer::rating(30, 100), PerformanceRating::Poor);
     }
 
     #[test]
     fn test_rating_zero_max_points() {
-        assert_eq!(Scorer::get_rating(0, 0), PerformanceRating::Poor);
+        assert_eq!(Scorer::rating(0, 0), PerformanceRating::Poor);
     }
 
     #[test]

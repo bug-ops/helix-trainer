@@ -182,7 +182,7 @@ impl<'a> ScenarioScorer<'a> {
     /// A score indicating the command's priority for practice.
     #[must_use]
     pub fn score_command(&self, command: &str) -> f64 {
-        match self.tracker.get_performance(command) {
+        match self.tracker.performance(command) {
             Some(perf) => {
                 // Command has been practiced before
                 let days_overdue = (self.now - perf.due).num_days().max(0) as f64;
@@ -274,7 +274,7 @@ mod tests {
         );
 
         // Get the due date and create a scorer 7 days after
-        let perf = tracker.get_performance("dd").unwrap();
+        let perf = tracker.performance("dd").unwrap();
         let seven_days_later = perf.due + Duration::days(7);
 
         let scorer = ScenarioScorer::with_time(&tracker, seven_days_later);
@@ -304,7 +304,7 @@ mod tests {
         );
 
         // Get the due date and create a scorer 3.5 days after (half of max overdue)
-        let perf = tracker.get_performance("x").unwrap();
+        let perf = tracker.performance("x").unwrap();
         let half_overdue = perf.due + Duration::days(3) + Duration::hours(12);
 
         let scorer = ScenarioScorer::with_time(&tracker, half_overdue);
@@ -334,7 +334,7 @@ mod tests {
         }
 
         // Score at the due time (not overdue)
-        let perf = tracker.get_performance("dd").unwrap();
+        let perf = tracker.performance("dd").unwrap();
         let scorer = ScenarioScorer::with_time(&tracker, perf.due);
 
         let score = scorer.score_command("dd");
@@ -371,7 +371,7 @@ mod tests {
         }
 
         // Score at due time
-        let perf = tracker.get_performance("dd").unwrap();
+        let perf = tracker.performance("dd").unwrap();
         let scorer = ScenarioScorer::with_time(&tracker, perf.due);
 
         let score = scorer.score_command("dd");
@@ -404,7 +404,7 @@ mod tests {
         // Create scenario with both commands
         let scenario = make_scenario(vec!["h", "dd"]);
 
-        let perf = tracker.get_performance("h").unwrap();
+        let perf = tracker.performance("h").unwrap();
         let scorer = ScenarioScorer::with_time(&tracker, perf.due);
 
         let score = scorer.score(&scenario);
@@ -537,8 +537,8 @@ mod tests {
         }
 
         // Score at the later due date to avoid overdue effects
-        let h_perf = tracker.get_performance("h").unwrap();
-        let dd_perf = tracker.get_performance("dd").unwrap();
+        let h_perf = tracker.performance("h").unwrap();
+        let dd_perf = tracker.performance("dd").unwrap();
         let now = h_perf.due.max(dd_perf.due);
 
         let scorer = ScenarioScorer::with_time(&tracker, now);
@@ -586,7 +586,7 @@ mod tests {
             StdDuration::from_secs(1),
         );
 
-        let perf = tracker.get_performance("dd").unwrap();
+        let perf = tracker.performance("dd").unwrap();
 
         // Test at exactly max overdue days
         let at_max = perf.due + Duration::days(FSRS_MAX_OVERDUE_DAYS as i64);

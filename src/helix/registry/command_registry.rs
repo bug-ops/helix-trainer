@@ -148,7 +148,7 @@ impl<M: EditorMode> CommandRegistry<M> {
     }
 
     /// Get command metadata
-    pub fn get_metadata(&self, key: &str) -> Option<&CommandMetadata> {
+    pub fn metadata(&self, key: &str) -> Option<&CommandMetadata> {
         self.commands.get(key).map(|c| &c.metadata)
     }
 
@@ -233,11 +233,11 @@ mod tests {
     }
 
     #[test]
-    fn test_get_metadata() {
+    fn test_metadata() {
         let mut registry: CommandRegistry<NormalMode> = CommandRegistry::new();
         registry.register(create_test_command());
 
-        let meta = registry.get_metadata("h").unwrap();
+        let meta = registry.metadata("h").unwrap();
         assert_eq!(meta.name, "test_move");
         assert_eq!(meta.key, "h");
         assert_eq!(meta.category, Category::Movement);
@@ -329,7 +329,7 @@ mod tests {
     fn test_nonexistent_command() {
         let registry: CommandRegistry<NormalMode> = CommandRegistry::new();
         assert!(!registry.contains("xyz"));
-        assert!(registry.get_metadata("xyz").is_none());
+        assert!(registry.metadata("xyz").is_none());
     }
 
     /// Guards the `helix_name -> key` reverse index used to resolve a

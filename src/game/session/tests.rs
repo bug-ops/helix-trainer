@@ -72,16 +72,16 @@ fn test_completion_detection() {
 }
 
 #[test]
-fn test_get_hint() {
+fn test_hint() {
     let scenario = create_test_scenario();
     let mut session = GameSession::new(scenario).unwrap();
 
-    let hint = session.get_hint();
+    let hint = session.hint();
     assert!(hint.is_some());
     assert_eq!(hint.unwrap(), "Use x to select line, then d to delete");
 
     // Second call should return None (only one hint)
-    let hint2 = session.get_hint();
+    let hint2 = session.hint();
     assert!(hint2.is_none());
 }
 

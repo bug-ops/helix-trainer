@@ -253,13 +253,13 @@ fn test_scenario_count() {
 }
 
 #[test]
-fn test_get_scenario() {
+fn test_scenario() {
     let scenario = create_test_scenario();
     let mut scenarios = vec![scenario.clone()];
     scenarios.push(scenario);
     let state = create_test_app_state(scenarios);
 
-    assert!(state.get_scenario(0).is_some());
-    assert!(state.get_scenario(1).is_some());
-    assert!(state.get_scenario(999).is_none());
+    assert!(state.scenario(0).is_some());
+    assert!(state.scenario(1).is_some());
+    assert!(state.scenario(999).is_none());
 }

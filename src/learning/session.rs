@@ -122,7 +122,7 @@ impl ReviewSession {
         let old_mastery = self
             .tracker
             .borrow()
-            .get_performance(&item.id)
+            .performance(&item.id)
             .map(|p| p.mastery_level)
             .unwrap_or(MasteryLevel::Beginner);
 
@@ -135,7 +135,7 @@ impl ReviewSession {
         let new_mastery = self
             .tracker
             .borrow()
-            .get_performance(&item.id)
+            .performance(&item.id)
             .map(|p| p.mastery_level)
             .unwrap_or(MasteryLevel::Beginner);
 

@@ -1,7 +1,7 @@
 //! Tests for multi-cursor state conversion (Issue #141)
 //!
 //! These tests verify that:
-//! - `get_state()` exports ALL selections from helix_core::Selection
+//! - `state()` exports ALL selections from helix_core::Selection
 //! - `from_editor_state()` imports ALL selections into helix_core::Selection
 //! - Round-trip: EditorState -> Simulator -> EditorState preserves all selections
 
@@ -15,7 +15,7 @@ fn test_from_editor_state_single_cursor() {
     let state = EditorState::new("hello world".to_string(), cursor, None).unwrap();
 
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&state);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     assert_eq!(exported.content(), "hello world");
     assert_eq!(exported.cursor_position().0, 0);
@@ -33,7 +33,7 @@ fn test_from_editor_state_single_selection() {
     let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
 
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&state);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     assert_eq!(exported.selections().len(), 1);
     let exp_sel = exported.selections()[0];
@@ -60,7 +60,7 @@ fn test_from_editor_state_multiple_selections() {
             .unwrap();
 
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&state);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     assert_eq!(exported.selections().len(), 2);
 }
@@ -82,7 +82,7 @@ fn test_from_editor_state_multiline_selections() {
             .unwrap();
 
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&state);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     assert_eq!(exported.selections().len(), 2);
 
@@ -108,7 +108,7 @@ fn test_round_trip_single_selection() {
 
     // EditorState -> Simulator -> EditorState
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&original);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     // Content should match
     assert_eq!(exported.content(), original.content());
@@ -140,7 +140,7 @@ fn test_round_trip_multiple_selections() {
 
     // EditorState -> Simulator -> EditorState
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&original);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     // Content should match
     assert_eq!(exported.content(), original.content());
@@ -170,7 +170,7 @@ fn test_round_trip_preserves_primary_idx() {
             .unwrap();
 
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&original);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     // Primary index should be preserved (clamped if necessary)
     assert!(exported.primary_selection_idx() < exported.selections().len());
@@ -193,7 +193,7 @@ fn test_any_mode_simulator_multi_selection() {
             .unwrap();
 
     let sim = AnyModeSimulator::from_editor_state(&state);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     assert_eq!(exported.selections().len(), 2);
 }
@@ -208,8 +208,8 @@ fn test_point_selections_are_not_exported() {
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&state);
 
     // Internally the simulator has a point selection (cursor position)
-    // but get_state() should not export it as a selection
-    let exported = sim.get_state().unwrap();
+    // but state() should not export it as a selection
+    let exported = sim.state().unwrap();
     assert!(exported.selections().is_empty());
 }
 
@@ -219,7 +219,7 @@ fn test_empty_content_multi_cursor() {
     let state = EditorState::new(String::new(), cursor, None).unwrap();
 
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&state);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     assert_eq!(exported.content(), "");
     assert!(exported.selections().is_empty());
@@ -236,7 +236,7 @@ fn test_selection_at_end_of_line() {
     let state = EditorState::new("hello\nworld".to_string(), cursor, Some(sel)).unwrap();
 
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&state);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     assert_eq!(exported.selections().len(), 1);
     let exp_sel = exported.selections()[0];
@@ -254,7 +254,7 @@ fn test_cross_line_selection() {
     let state = EditorState::new("hello\nworld".to_string(), cursor, Some(sel)).unwrap();
 
     let sim = HelixSimulator::<NormalMode>::from_editor_state(&state);
-    let exported = sim.get_state().unwrap();
+    let exported = sim.state().unwrap();
 
     assert_eq!(exported.selections().len(), 1);
     let exp_sel = exported.selections()[0];

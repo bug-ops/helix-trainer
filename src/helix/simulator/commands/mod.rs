@@ -719,7 +719,7 @@ mod tests {
                 HelixSimulator::<NormalMode>::new(String::new()).enter_insert_mode(),
             );
             sim.execute_command(":").unwrap();
-            assert_eq!(sim.to_editor_state().unwrap().content(), ":");
+            assert_eq!(sim.state().unwrap().content(), ":");
         }
 
         #[test]

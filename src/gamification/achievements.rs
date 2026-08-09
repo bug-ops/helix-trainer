@@ -258,7 +258,7 @@ impl AchievementEngine {
             .iter()
             .filter(|cmd| {
                 tracker
-                    .get_performance(cmd)
+                    .performance(cmd)
                     .map(|perf| perf.mastery_level == MasteryLevel::Master)
                     .unwrap_or(false)
             })

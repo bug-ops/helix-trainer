@@ -275,7 +275,7 @@ fn test_performance_tracker_updated() {
     let attempts_before = state
         .progress
         .performance_tracker
-        .get_performance(&command)
+        .performance(&command)
         .map(|p| p.attempts)
         .unwrap_or(0);
 
@@ -286,7 +286,7 @@ fn test_performance_tracker_updated() {
     let attempts_after = state
         .progress
         .performance_tracker
-        .get_performance(&command)
+        .performance(&command)
         .map(|p| p.attempts)
         .unwrap_or(0);
 

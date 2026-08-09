@@ -405,7 +405,7 @@ impl PerformanceTracker {
         }
     }
 
-    pub fn get_stats_clone(&self) -> HashMap<String, CommandPerformance> {
+    pub fn stats_clone(&self) -> HashMap<String, CommandPerformance> {
         self.stats.clone()
     }
 
@@ -424,7 +424,7 @@ impl PerformanceTracker {
         }
     }
 
-    pub fn get_performance(&self, command: &str) -> Option<&CommandPerformance> {
+    pub fn performance(&self, command: &str) -> Option<&CommandPerformance> {
         self.stats.get(command)
     }
 
@@ -459,7 +459,7 @@ impl PerformanceTracker {
         }
     }
 
-    pub fn get_weak_commands(&self) -> Vec<String> {
+    pub fn weak_commands(&self) -> Vec<String> {
         self.stats
             .iter()
             .filter(|(_, perf)| {
@@ -541,7 +541,7 @@ mod tests {
         // First attempt (perfect)
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let perf = tracker.get_performance("x").unwrap();
+        let perf = tracker.performance("x").unwrap();
         assert!(perf.stability > 0.0);
         assert_eq!(perf.reps, 1);
         assert!(matches!(
@@ -554,7 +554,7 @@ mod tests {
         // Second attempt (perfect)
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let perf = tracker.get_performance("x").unwrap();
+        let perf = tracker.performance("x").unwrap();
         assert!(perf.stability > first_stability); // FSRS increases stability
         assert_eq!(perf.reps, 2);
     }
@@ -567,12 +567,12 @@ mod tests {
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let lapses_before = tracker.get_performance("x").unwrap().lapses;
+        let lapses_before = tracker.performance("x").unwrap().lapses;
 
         // Fail
         tracker.record_attempt("x", Duration::from_secs(10), false, Duration::from_secs(1));
 
-        let perf = tracker.get_performance("x").unwrap();
+        let perf = tracker.performance("x").unwrap();
         // Lapse count increases when failing
         assert_eq!(perf.lapses, lapses_before + 1);
         assert!(matches!(
@@ -590,7 +590,7 @@ mod tests {
             tracker.record_attempt("x", Duration::from_secs(10), false, Duration::from_secs(1));
         }
 
-        let perf = tracker.get_performance("x").unwrap();
+        let perf = tracker.performance("x").unwrap();
         assert!(perf.difficulty >= 0.0);
         assert!(perf.difficulty <= 10.0);
     }
@@ -695,7 +695,7 @@ mod tests {
             );
         }
 
-        let weak = tracker.get_weak_commands();
+        let weak = tracker.weak_commands();
         assert!(weak.contains(&"weak".to_string()));
         // "strong" might still be beginner mastery level initially, so don't assert it's not weak
     }
@@ -706,12 +706,12 @@ mod tests {
         let mut tracker = PerformanceTracker::with_clock(clock.clone());
 
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        let first_last_review = tracker.get_performance("x").unwrap().last_review;
+        let first_last_review = tracker.performance("x").unwrap().last_review;
         assert_eq!(first_last_review, clock.now());
 
         clock.advance_days(3);
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        let second_last_review = tracker.get_performance("x").unwrap().last_review;
+        let second_last_review = tracker.performance("x").unwrap().last_review;
         assert_eq!(second_last_review, clock.now());
         assert_eq!(
             (second_last_review - first_last_review).num_days(),
@@ -760,7 +760,7 @@ mod tests {
                         Duration::from_secs(optimal_secs),
                     );
                 }
-                tracker.get_performance("x").unwrap().clone()
+                tracker.performance("x").unwrap().clone()
             };
 
             let first = run();
@@ -803,7 +803,7 @@ mod tests {
                     Duration::from_secs(optimal_secs),
                 );
 
-                let perf = tracker.get_performance("x").unwrap();
+                let perf = tracker.performance("x").unwrap();
                 // FSRS's own difficulty domain (fsrs::simulation::{D_MIN, D_MAX}).
                 prop_assert!(
                     (1.0..=10.0).contains(&perf.difficulty),

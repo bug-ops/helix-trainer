@@ -58,7 +58,7 @@ pub fn handle_show_hint(state: &mut AppState) -> Result<HandlerOutcome, UserErro
     }
 
     // Otherwise, try to show next hint
-    if let Some(hint) = task_data.session.get_hint() {
+    if let Some(hint) = task_data.session.hint() {
         task_data.current_hint = Some(hint.clone());
         task_data.show_hint_panel = true;
     }

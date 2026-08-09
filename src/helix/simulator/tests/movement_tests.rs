@@ -18,11 +18,11 @@ fn test_move_right() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().1, 1);
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().1, 2);
 }
 
@@ -36,7 +36,7 @@ fn test_move_left() {
 
     // Move left once
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().1, 1);
 }
 
@@ -45,15 +45,15 @@ fn test_move_down_up() {
     let mut sim = AnyModeSimulator::new("line1\nline2\nline3\n".to_string());
 
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().0, 1);
 
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().0, 2);
 
     sim.execute_command(CMD_MOVE_UP).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().0, 1);
 }
 
@@ -67,15 +67,15 @@ fn test_word_movement() {
 
     // Move to next word
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     // 'w' extends selection from current position to start of next word
     // helix-core: anchor=0, head=6 (start of "world")
-    // get_state() returns head position for cursor
+    // state() returns head position for cursor
     assert_eq!(state.cursor_position().1, 6); // Start of "world"
 
     // Move to next word again
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().1, 12); // Start of "foo"
 }
 
@@ -84,7 +84,7 @@ fn test_move_word_boundary() {
     let mut sim = AnyModeSimulator::new("  spaced  words  ".to_string());
 
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     // Should move to first non-space character of next word
     assert!(state.cursor_position().1 > 0);
 }
@@ -94,7 +94,7 @@ fn test_move_word_end() {
     let mut sim = AnyModeSimulator::new("hello world".to_string());
 
     sim.execute_command(CMD_MOVE_WORD_END).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     // Should be at end of "hello"
     assert!(state.cursor_position().1 >= 4 && state.cursor_position().1 <= 5);
 }
@@ -108,7 +108,7 @@ fn test_move_prev_word() {
     // Then move to previous word
     sim.execute_command(CMD_MOVE_WORD_BACKWARD).unwrap();
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     // Should have moved to start of "foo" (col 12)
     assert_eq!(state.cursor_position().1, 12);
 }
@@ -125,13 +125,13 @@ fn test_move_line_start() {
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     // Move to end of line (use 'gl' in Helix, not '$')
     sim.execute_command(CMD_GOTO_LINE_END).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     // Cursor at end of "world" - which is position 4 or 5
     assert!(state.cursor_position().1 >= 4);
 
     // Move to start of line (use 'gh' in Helix, not '0')
     sim.execute_command(CMD_GOTO_LINE_START).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().1, 0);
 }
 
@@ -144,11 +144,11 @@ fn test_goto_first_nonwhitespace() {
     for _ in 0..10 {
         sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     }
-    assert_eq!(sim.get_state().unwrap().cursor_position().1, 10);
+    assert_eq!(sim.state().unwrap().cursor_position().1, 10);
 
     // Execute gs command
     sim.execute_command(CMD_GOTO_FIRST_NONWHITESPACE).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     // Should be at position 4 (first 'f' in "fn")
     assert_eq!(state.cursor_position().1, 4);
 }
@@ -163,12 +163,12 @@ fn test_document_start() {
 
     // Move somewhere else
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().0, 1);
 
     // Go back to start
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().0, 0);
     assert_eq!(state.cursor_position().1, 0);
 }
@@ -179,7 +179,7 @@ fn test_goto_last_line_ge_command() {
     let mut sim = AnyModeSimulator::new("Line 1\nLine 2\nLine 3\nLast line".to_string());
 
     // Cursor starts at (0, 0)
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(state.cursor_position().0, 0);
     assert_eq!(state.cursor_position().1, 0);
 
@@ -187,7 +187,7 @@ fn test_goto_last_line_ge_command() {
     let result = sim.execute_command(CMD_GOTO_LAST_LINE);
     assert!(result.is_ok(), "ge command should succeed: {:?}", result);
 
-    let state = sim.get_state().unwrap();
+    let state = sim.state().unwrap();
     assert_eq!(
         state.cursor_position().0,
         3,

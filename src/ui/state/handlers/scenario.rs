@@ -1156,7 +1156,7 @@ mod tests {
         );
         assert!(stats_match(
             &persisted.performance_data,
-            &ctx.progress.performance_tracker.get_stats_clone()
+            &ctx.progress.performance_tracker.stats_clone()
         ));
     }
 
@@ -1208,7 +1208,7 @@ mod tests {
         );
         assert!(stats_match(
             &persisted.performance_data,
-            &ctx.progress.performance_tracker.get_stats_clone()
+            &ctx.progress.performance_tracker.stats_clone()
         ));
     }
 
@@ -1243,7 +1243,7 @@ mod tests {
         assert!(!persisted.performance_data.is_empty());
         assert!(stats_match(
             &persisted.performance_data,
-            &ctx.progress.performance_tracker.get_stats_clone()
+            &ctx.progress.performance_tracker.stats_clone()
         ));
 
         // Regression test for #293/S3: this feedback also triggers mastery-level-up

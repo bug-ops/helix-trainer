@@ -14,7 +14,7 @@ use ratatui::{
 /// Get a human-readable description for a Helix command from registry
 fn get_command_description(command: &str) -> &'static str {
     normal_registry()
-        .get_metadata(command)
+        .metadata(command)
         .map(|m| m.description)
         .unwrap_or("Helix command")
 }
@@ -100,7 +100,7 @@ fn render_review_content(
 /// Render command information panel
 fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command: &str) {
     let tracker = &state.progress.performance_tracker;
-    let perf = tracker.get_performance(command);
+    let perf = tracker.performance(command);
 
     // Get command description
     let description = get_command_description(command);

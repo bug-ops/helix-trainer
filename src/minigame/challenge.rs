@@ -23,12 +23,21 @@ use super::ChallengeConfig;
 ///
 /// Consider storing `NaiveDate` directly instead of `String` format to avoid
 /// repeated string allocations in `can_attempt()`, `attempts_remaining()`,
-/// `start_attempt()`, and `is_today()` methods. This would require custom
-/// serde serialization or a migration strategy for existing profiles.
+/// `start_attempt()`, and `is_today()` methods. `NaiveDate`'s serde format is
+/// the same `"YYYY-MM-DD"` string already used here (and already persisted
+/// elsewhere in `profile.json` as a bare `NaiveDate`, e.g.
+/// `ScenarioCompletion::last_attempt_date`), so this is not a wire-format
+/// migration. The real, narrower risk: `ProfileStorage::load` currently hard-
+/// errors the whole profile load on any parse failure, so a malformed stored
+/// date for this field would need `#[serde(default, deserialize_with = ...)]`
+/// mapping bad values to `None` instead of propagating a parse error. Out of
+/// scope for this batch — deferred as a small follow-up, not a blocked one.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChallengeProgress {
     /// Date of current/last challenge (YYYY-MM-DD format for serialization)
-    // TODO: CR-013: Consider storing chrono::NaiveDate directly with custom serde
+    // TODO: CR-013: Consider storing chrono::NaiveDate directly with custom serde.
+    // Deferred: needs a lenient deserializer so a malformed value doesn't hard-error
+    // the whole profile load; see struct-level doc above.
     pub last_challenge_date: Option<String>,
 
     /// Attempts used today (0-3)
@@ -156,16 +165,18 @@ impl ChallengeProgress {
 /// Uses index-based shuffling to reduce from O(n) clones to O(k) clones,
 /// where k is `config.scenario_count` (typically 10).
 ///
-/// # TODO: Property-based testing
-///
-/// Consider adding proptest for comprehensive verification of deterministic
-/// scenario selection behavior across random inputs.
-///
-/// # TODO: Arc<Scenario> optimization
+/// # TODO: `Arc<Scenario>` optimization
 ///
 /// Consider using `Arc<Scenario>` to avoid deep clones entirely. Currently
 /// bounded to k=10 clones per call, which is acceptable but could be
-/// eliminated with reference counting.
+/// eliminated with reference counting. Out of scope for now: the selection
+/// this function returns is stored as owned `Scenario` end-to-end (through
+/// `MiniGameSession::with_mode`, `refill_queue`'s `VecDeque<Scenario>` queue,
+/// and the public `ActiveMiniScenario::scenario` field also used by the
+/// non-Challenge Arcade/Survival path via `DifficultyController::next_scenario`),
+/// so switching to `Arc<Scenario>` here alone would just move the clone rather
+/// than remove it — it needs a coordinated type change across all of those
+/// call sites.
 ///
 /// # Examples
 ///
@@ -200,6 +211,10 @@ pub fn select_challenge_scenarios(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use proptest::prelude::*;
+
     use super::*;
     use crate::config::Difficulty;
     use crate::testing::ScenarioBuilder;
@@ -478,5 +493,73 @@ mod tests {
         let config = ChallengeConfig::for_date(today);
         let selected = select_challenge_scenarios(&scenarios, &config);
         assert!(selected.is_empty());
+    }
+
+    proptest! {
+        #[test]
+        fn prop_select_challenge_scenarios_is_deterministic_and_bounded(
+            pool_size in 0usize..30,
+            scenario_count in 1usize..15,
+            seed in any::<u64>(),
+        ) {
+            let scenarios: Vec<Scenario> = (0..pool_size)
+                .map(|i| create_test_scenario(&format!("scenario_{i}")))
+                .collect();
+
+            let mut config =
+                ChallengeConfig::for_date(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap());
+            config.scenario_count = scenario_count;
+            config.seed = seed;
+
+            let selected1 = select_challenge_scenarios(&scenarios, &config);
+            let selected2 = select_challenge_scenarios(&scenarios, &config);
+
+            // Same config must always select the same scenarios, in the same order
+            prop_assert_eq!(
+                selected1.iter().map(|s| s.id.clone()).collect::<Vec<_>>(),
+                selected2.iter().map(|s| s.id.clone()).collect::<Vec<_>>()
+            );
+
+            // Selection length is bounded by both the request and the available pool
+            prop_assert_eq!(selected1.len(), pool_size.min(scenario_count));
+
+            // No scenario is selected more than once
+            let unique_ids: HashSet<_> = selected1.iter().map(|s| &s.id).collect();
+            prop_assert_eq!(unique_ids.len(), selected1.len());
+
+            // Every selected scenario comes from the original pool
+            let original_ids: HashSet<_> = scenarios.iter().map(|s| &s.id).collect();
+            prop_assert!(selected1.iter().all(|s| original_ids.contains(&s.id)));
+        }
+
+        #[test]
+        fn prop_select_challenge_scenarios_seed_changes_the_selection(
+            pool_size in 20usize..30,
+            scenario_count in 1usize..5,
+            seeds in prop::collection::hash_set(any::<u64>(), 5..10),
+        ) {
+            let scenarios: Vec<Scenario> = (0..pool_size)
+                .map(|i| create_test_scenario(&format!("scenario_{i}")))
+                .collect();
+
+            let mut config =
+                ChallengeConfig::for_date(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap());
+            config.scenario_count = scenario_count;
+
+            let outcomes: HashSet<Vec<String>> = seeds
+                .into_iter()
+                .map(|seed| {
+                    config.seed = seed;
+                    select_challenge_scenarios(&scenarios, &config)
+                        .into_iter()
+                        .map(|s| s.id)
+                        .collect()
+                })
+                .collect();
+
+            // With a pool much larger than the requested count, distinct seeds
+            // must not all collapse onto the same selection/order.
+            prop_assert!(outcomes.len() >= 2);
+        }
     }
 }

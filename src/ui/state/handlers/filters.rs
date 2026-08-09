@@ -2,9 +2,24 @@
 //!
 //! Handles scenario list filtering and sorting
 
+use std::collections::HashSet;
+use std::hash::Hash;
+
 use crate::config::{Difficulty, ScenarioCategory, SortMode};
 use crate::security::UserError;
 use crate::ui::state::{HandlerContext, HandlerOutcome};
+
+/// Toggles `value` in an optional filter set, clearing the set (setting it to `None`)
+/// when the last member is removed.
+fn toggle_filter_set<T: Eq + Hash>(filter: &mut Option<HashSet<T>>, value: T) {
+    let set = filter.get_or_insert_default();
+    if !set.remove(&value) {
+        set.insert(value);
+    }
+    if set.is_empty() {
+        *filter = None;
+    }
+}
 
 /// Handle SetSortMode message
 ///
@@ -29,17 +44,7 @@ pub fn handle_toggle_category_filter(
     let current_filter = ctx.game.scenario_collection.active_filter();
     let mut new_filter = current_filter.clone();
 
-    // Toggle category in the filter set
-    let categories = new_filter.categories.get_or_insert_with(Default::default);
-    if categories.contains(&category) {
-        categories.remove(&category);
-        // If no categories left, clear the filter
-        if categories.is_empty() {
-            new_filter.categories = None;
-        }
-    } else {
-        categories.insert(category);
-    }
+    toggle_filter_set(&mut new_filter.categories, category);
 
     ctx.game
         .scenario_collection
@@ -58,17 +63,7 @@ pub fn handle_toggle_difficulty_filter(
     let current_filter = ctx.game.scenario_collection.active_filter();
     let mut new_filter = current_filter.clone();
 
-    // Toggle difficulty in the filter set
-    let difficulties = new_filter.difficulties.get_or_insert_with(Default::default);
-    if difficulties.contains(&difficulty) {
-        difficulties.remove(&difficulty);
-        // If no difficulties left, clear the filter
-        if difficulties.is_empty() {
-            new_filter.difficulties = None;
-        }
-    } else {
-        difficulties.insert(difficulty);
-    }
+    toggle_filter_set(&mut new_filter.difficulties, difficulty);
 
     ctx.game
         .scenario_collection

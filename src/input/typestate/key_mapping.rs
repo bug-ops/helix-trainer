@@ -423,6 +423,11 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
 /// assert!(key.modifiers.contains(KeyModifiers::SHIFT));
 /// ```
 pub fn command_to_key_event(command: &str) -> KeyEvent {
-    parse_helix_key_string(command)
-        .unwrap_or_else(|| KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE))
+    parse_helix_key_string(command).unwrap_or_else(|| {
+        tracing::warn!(
+            command,
+            "Failed to parse key command, falling back to Space"
+        );
+        KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE)
+    })
 }

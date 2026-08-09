@@ -8,6 +8,14 @@
 use crate::security::UserError;
 use crate::ui::state::{AppState, HandlerContext, HandlerOutcome, MenuData};
 
+/// Number of fixed menu entries appended after the scenario list: Review, Profile, Statistics, Quit.
+const FIXED_MENU_ITEMS: usize = 4;
+
+/// Total number of menu items: filtered scenarios plus the fixed trailing entries.
+fn total_menu_items(ctx: &HandlerContext<'_>) -> usize {
+    ctx.game.scenario_collection.count() + FIXED_MENU_ITEMS
+}
+
 /// Handle MenuUp message
 ///
 /// Moves menu selection up (with bounds checking).
@@ -27,8 +35,7 @@ pub fn handle_menu_down(
     data: &mut MenuData,
     ctx: &HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    // Total menu items = filtered scenarios + Review + Profile + Statistics + Quit
-    let max_items = ctx.game.scenario_collection.count() + 4;
+    let max_items = total_menu_items(ctx);
     if data.selected_item < max_items - 1 {
         data.selected_item += 1;
     }
@@ -51,7 +58,7 @@ pub fn handle_menu_down_by(
     ctx: &HandlerContext<'_>,
     count: usize,
 ) -> Result<HandlerOutcome, UserError> {
-    let max_items = ctx.game.scenario_collection.count() + 4;
+    let max_items = total_menu_items(ctx);
     let max_index = max_items.saturating_sub(1);
     data.selected_item = (data.selected_item + count).min(max_index);
     Ok(HandlerOutcome::Stay)
@@ -72,7 +79,7 @@ pub fn handle_menu_jump_to_last(
     data: &mut MenuData,
     ctx: &HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    let max_items = ctx.game.scenario_collection.count() + 4;
+    let max_items = total_menu_items(ctx);
     data.selected_item = max_items.saturating_sub(1);
     Ok(HandlerOutcome::Stay)
 }
@@ -85,7 +92,7 @@ pub fn handle_menu_jump_to(
     ctx: &HandlerContext<'_>,
     line: usize,
 ) -> Result<HandlerOutcome, UserError> {
-    let max_items = ctx.game.scenario_collection.count() + 4;
+    let max_items = total_menu_items(ctx);
     // Convert 1-indexed to 0-indexed, clamping to valid range
     let target = line.saturating_sub(1).min(max_items.saturating_sub(1));
     data.selected_item = target;

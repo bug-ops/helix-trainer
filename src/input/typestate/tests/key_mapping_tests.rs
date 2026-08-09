@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::helix::commands::*;
 use crate::input::typestate::key_mapping::{
     command_to_key_event, handle_insert_mode_input, is_count_compatible_command,
-    map_key_to_helix_command, map_single_key_command, parse_helix_key_string,
+    map_key_to_helix_command, map_single_key_command, normalize_key_event, parse_helix_key_string,
 };
 
 // ============================================================================
@@ -150,6 +150,28 @@ fn test_map_single_key_case() {
         map_single_key_command('`', KeyModifiers::NONE),
         Some(CMD_SWITCH_CASE_ALT)
     );
+}
+
+// Regression tests for issue #377: a plain backtick keystroke was being
+// rewritten to Alt-backtick by `normalize_key_event` before it ever reached
+// `map_single_key_command`, so these exercise the full `map_key_to_helix_command`
+// pipeline rather than calling `map_single_key_command` directly.
+#[test]
+fn test_map_key_plain_backtick_resolves_to_switch_case_alt() {
+    let key = KeyEvent::new(KeyCode::Char('`'), KeyModifiers::NONE);
+    assert_eq!(map_key_to_helix_command(key), Some(CMD_SWITCH_CASE_ALT));
+}
+
+#[test]
+fn test_map_key_alt_backtick_resolves_to_switch_to_uppercase() {
+    let key = KeyEvent::new(KeyCode::Char('`'), KeyModifiers::ALT);
+    assert_eq!(map_key_to_helix_command(key), Some(CMD_SWITCH_TO_UPPERCASE));
+}
+
+#[test]
+fn test_normalize_key_event_does_not_touch_plain_backtick() {
+    let key = KeyEvent::new(KeyCode::Char('`'), KeyModifiers::NONE);
+    assert_eq!(normalize_key_event(key), key);
 }
 
 #[test]

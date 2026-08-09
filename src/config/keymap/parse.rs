@@ -610,16 +610,13 @@ mod tests {
     }
 
     #[test]
-    fn colliding_macos_composed_key_reports_accurate_applied_count() {
-        // A bare "`" and an explicit "A-`" both normalize to the same
-        // PhysicalKey (Char('`') + ALT): macOS's Option-` dead key produces
-        // a literal backtick character, which `map_macos_composed_char`
-        // maps back to ALT + backtick (see `PhysicalKey::normalize`) - the
-        // same collision mechanism the original issue cited, distinct from
-        // the shift-normalization one covered above.
-        //
-        // Lexicographically "A-`" < "`" (uppercase letters sort before
-        // backtick in ASCII), so "`" is resolved second and wins.
+    fn backtick_and_alt_backtick_do_not_collide() {
+        // A bare "`" and an explicit "A-`" must normalize to *distinct*
+        // PhysicalKeys. `map_macos_composed_char` no longer rewrites plain
+        // backtick to ALT + backtick (see issue #377): that rewrite made a
+        // real, directly-typeable key indistinguishable from macOS's
+        // Option-` dead-key composition artifact. Both bindings must now
+        // apply independently.
         let (overlay, report) = resolve_str(
             r#"
             [keys.normal]
@@ -628,20 +625,18 @@ mod tests {
             "#,
         )
         .unwrap();
-        assert_eq!(overlay.len(), 1);
+        assert_eq!(overlay.len(), 2);
         assert_eq!(report.applied, overlay.len());
-        assert_eq!(report.ignored.len(), 1);
-        assert_eq!(report.ignored[0].path, "keys.normal.A-`");
+        assert!(report.ignored.is_empty());
+        let plain_key = PhysicalKey::try_from("`").unwrap();
         assert_eq!(
-            report.ignored[0].reason,
-            KeymapWarningReason::Shadowed {
-                by: "keys.normal.`".to_string()
-            }
-        );
-        let key = PhysicalKey::try_from("`").unwrap();
-        assert_eq!(
-            overlay.lookup(KeyContext::Base, key),
+            overlay.lookup(KeyContext::Base, plain_key),
             Some(&CanonicalKeys::from_static("ge"))
+        );
+        let alt_key = PhysicalKey::try_from("A-`").unwrap();
+        assert_eq!(
+            overlay.lookup(KeyContext::Base, alt_key),
+            Some(&CanonicalKeys::from_static("gg"))
         );
     }
 

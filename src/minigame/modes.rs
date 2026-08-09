@@ -39,17 +39,20 @@ impl MiniGameMode {
         }
     }
 
-    /// Check if this mode has a session time limit
-    pub fn has_session_timer(&self) -> bool {
-        matches!(self, Self::Arcade(_))
-    }
-
     /// Get session duration if applicable
+    ///
+    /// Single source of truth for whether a mode has a session time limit —
+    /// see [`Self::has_session_timer`], which derives from this.
     pub fn session_duration(&self) -> Option<Duration> {
         match self {
             Self::Arcade(c) => Some(c.session_duration),
-            _ => None,
+            Self::Survival(_) | Self::Challenge(_) => None,
         }
+    }
+
+    /// Check if this mode has a session time limit
+    pub fn has_session_timer(&self) -> bool {
+        self.session_duration().is_some()
     }
 
     /// Get mode display name
@@ -72,17 +75,26 @@ impl MiniGameMode {
 
     /// Check if this is Arcade mode
     pub fn is_arcade(&self) -> bool {
-        matches!(self, Self::Arcade(_))
+        match self {
+            Self::Arcade(_) => true,
+            Self::Survival(_) | Self::Challenge(_) => false,
+        }
     }
 
     /// Check if this is Survival mode
     pub fn is_survival(&self) -> bool {
-        matches!(self, Self::Survival(_))
+        match self {
+            Self::Survival(_) => true,
+            Self::Arcade(_) | Self::Challenge(_) => false,
+        }
     }
 
     /// Check if this is Challenge mode
     pub fn is_challenge(&self) -> bool {
-        matches!(self, Self::Challenge(_))
+        match self {
+            Self::Challenge(_) => true,
+            Self::Arcade(_) | Self::Survival(_) => false,
+        }
     }
 }
 

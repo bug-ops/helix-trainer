@@ -265,6 +265,15 @@ pub struct MiniGameSession {
     /// When transition state started (for auto-advance)
     transition_started_at: Option<Instant>,
 
+    /// When the session-level clock started (set once gameplay begins after countdown)
+    session_started_at: Option<Instant>,
+
+    /// When the current session-level pause span began, if paused
+    session_paused_at: Option<Instant>,
+
+    /// Total duration accumulated across all completed session-level pause spans
+    session_total_paused: Duration,
+
     /// Performance tracker for FSRS-based scenario selection (read-only clone)
     ///
     /// When present, scenarios with commands needing practice are prioritized.
@@ -357,6 +366,9 @@ impl MiniGameSession {
             state: MiniGameState::default(),
             scenarios,
             transition_started_at: None,
+            session_started_at: None,
+            session_paused_at: None,
+            session_total_paused: Duration::ZERO,
             tracker,
             mode,
             selected_scenarios,
@@ -413,6 +425,9 @@ impl MiniGameSession {
             } else {
                 // Countdown finished, start playing
                 self.state = MiniGameState::Playing;
+                if self.session_started_at.is_none() {
+                    self.session_started_at = Some(Instant::now());
+                }
                 // Load first scenario if not already loaded
                 if self.current.is_none() {
                     let _ = self.load_next_scenario();
@@ -648,6 +663,53 @@ impl MiniGameSession {
             .unwrap_or(false)
     }
 
+    /// Get elapsed session-level time, excluding any paused duration
+    ///
+    /// Returns `Duration::ZERO` if gameplay has not started yet (still in countdown).
+    fn session_elapsed(&self) -> Duration {
+        let Some(started_at) = self.session_started_at else {
+            return Duration::ZERO;
+        };
+        let paused = self.session_total_paused
+            + self
+                .session_paused_at
+                .map(|p| p.elapsed())
+                .unwrap_or(Duration::ZERO);
+        started_at.elapsed().saturating_sub(paused)
+    }
+
+    /// Check if the mode's session-level time limit has elapsed
+    ///
+    /// Always `false` for modes without a session timer (see
+    /// [`MiniGameMode::has_session_timer`]).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use helix_trainer::minigame::MiniGameSession;
+    ///
+    /// let session = MiniGameSession::new(scenarios, None);
+    /// if session.is_session_expired() {
+    ///     session.end_session_on_timeout();
+    /// }
+    /// ```
+    pub fn is_session_expired(&self) -> bool {
+        self.mode
+            .session_duration()
+            .is_some_and(|limit| self.session_elapsed() >= limit)
+    }
+
+    /// End the session immediately because its time limit (not a per-scenario
+    /// timeout) has elapsed
+    ///
+    /// Unlike [`Self::handle_timeout`], this does not consume a life: the
+    /// session clock ran out, so the run ends regardless of lives remaining.
+    pub fn end_session_on_timeout(&mut self) {
+        self.state = MiniGameState::GameOver;
+        self.current = None;
+        self.transition_started_at = None;
+    }
+
     /// Pause the game
     ///
     /// # Examples
@@ -664,6 +726,9 @@ impl MiniGameSession {
             self.state = MiniGameState::Paused;
             if let Some(ref mut current) = self.current {
                 current.pause();
+            }
+            if self.session_paused_at.is_none() {
+                self.session_paused_at = Some(Instant::now());
             }
         }
     }
@@ -685,6 +750,9 @@ impl MiniGameSession {
             self.state = MiniGameState::Playing;
             if let Some(ref mut current) = self.current {
                 current.resume();
+            }
+            if let Some(paused_at) = self.session_paused_at.take() {
+                self.session_total_paused += paused_at.elapsed();
             }
         }
     }
@@ -1425,6 +1493,113 @@ mod tests {
         assert!(arcade.has_session_timer());
         assert!(!survival.has_session_timer());
         assert!(!challenge.has_session_timer());
+    }
+
+    /// Helper for #327 tests: an Arcade session with a very short session
+    /// duration so tests can wait it out with a real (short) sleep rather
+    /// than mocking `Instant`.
+    fn short_arcade_session(session_duration: Duration) -> MiniGameSession {
+        let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
+        let mode = MiniGameMode::Arcade(ArcadeConfig {
+            session_duration,
+            ..ArcadeConfig::default()
+        });
+        let mut session = MiniGameSession::with_mode(scenarios, None, mode);
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(session.state().is_playing());
+        session
+    }
+
+    #[test]
+    fn test_session_expires_after_duration_elapses() {
+        // A generous limit (well above typical session-construction time) and an
+        // even more generous sleep multiple keep this robust on loaded CI runners.
+        let session = short_arcade_session(Duration::from_millis(200));
+
+        assert!(!session.is_session_expired());
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(session.is_session_expired());
+    }
+
+    #[test]
+    fn test_end_session_on_timeout_transitions_to_game_over_without_consuming_life() {
+        let mut session = short_arcade_session(Duration::from_millis(200));
+        let lives_before = session.stats().lives();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(session.is_session_expired());
+
+        session.end_session_on_timeout();
+
+        assert!(session.state().is_game_over());
+        assert_eq!(
+            session.stats().lives(),
+            lives_before,
+            "session-timeout must not consume a life, unlike a per-scenario timeout"
+        );
+    }
+
+    #[test]
+    fn test_session_pause_freezes_session_elapsed_time() {
+        let mut session = short_arcade_session(Duration::from_secs(60));
+
+        session.pause();
+        assert!(session.state().is_paused());
+        assert!(
+            !session.is_session_expired(),
+            "sanity: 60s session should not already be expired"
+        );
+
+        let elapsed_at_pause = session.session_elapsed();
+        std::thread::sleep(Duration::from_millis(50));
+        let elapsed_while_paused = session.session_elapsed();
+
+        // Wide margin: the paused-duration subtraction cancels wall-clock drift
+        // exactly (mathematically constant while paused, mod the sub-millisecond
+        // gap between `pause()` and reading `elapsed_at_pause`), so this is not a
+        // tight race against the sleep above — 200ms leaves ample headroom on a
+        // loaded CI runner.
+        assert!(
+            elapsed_while_paused < elapsed_at_pause + Duration::from_millis(200),
+            "session-level elapsed time advanced while paused: before={elapsed_at_pause:?} during={elapsed_while_paused:?}"
+        );
+
+        session.resume();
+        assert!(session.state().is_playing());
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(
+            session.session_elapsed() > elapsed_while_paused,
+            "session-level elapsed time did not resume advancing after resume"
+        );
+    }
+
+    #[test]
+    fn test_modes_without_session_timer_never_expire() {
+        let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
+
+        let survival_mode = MiniGameMode::Survival(SurvivalConfig::default());
+        let mut survival = MiniGameSession::with_mode(scenarios.clone(), None, survival_mode);
+        survival.start();
+        survival.tick_countdown();
+        survival.tick_countdown();
+        survival.tick_countdown();
+
+        let challenge_mode =
+            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
+        let mut challenge = MiniGameSession::with_mode(scenarios, None, challenge_mode);
+        challenge.start();
+        challenge.tick_countdown();
+        challenge.tick_countdown();
+        challenge.tick_countdown();
+
+        std::thread::sleep(Duration::from_millis(30));
+
+        assert!(!survival.mode().has_session_timer());
+        assert!(!survival.is_session_expired());
+        assert!(!challenge.mode().has_session_timer());
+        assert!(!challenge.is_session_expired());
     }
 
     #[test]

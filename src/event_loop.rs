@@ -48,6 +48,25 @@ fn is_minigame_timed_out(state: &AppState) -> bool {
         .unwrap_or(false)
 }
 
+/// Check if the mini-game's session-level time limit has elapsed (e.g. Arcade's 60 seconds)
+///
+/// Checked across both `Playing` and `Transition` (not just `Playing`, unlike
+/// [`is_minigame_timed_out`]): the session clock keeps running during the brief
+/// between-scenario transition, so gating this on `Playing` alone would let a
+/// run overrun the limit by up to the transition delay before the check fires
+/// again on the next scenario.
+fn is_minigame_session_expired(state: &AppState) -> bool {
+    state
+        .game
+        .minigame_session
+        .as_ref()
+        .map(|s| {
+            let playing_or_transitioning = s.state().is_playing() || s.state().is_transition();
+            playing_or_transitioning && s.is_session_expired()
+        })
+        .unwrap_or(false)
+}
+
 /// Check if mini-game should auto-advance to next scenario
 fn should_minigame_advance(state: &AppState) -> bool {
     state
@@ -138,8 +157,13 @@ pub async fn run_async_event_loop(
 
             // Fast tick for animations and mini-game timeout checking (100ms)
             _ = tick_interval.tick() => {
-                // Check for mini-game timeout
-                if is_minigame_playing(state) && is_minigame_timed_out(state) {
+                // Check for mini-game session-level expiry (e.g. Arcade's 60s limit) first —
+                // it takes priority over a per-scenario timeout landing on the same tick.
+                // Not gated on is_minigame_playing: it must also fire during the
+                // between-scenario Transition state (see is_minigame_session_expired).
+                if is_minigame_session_expired(state) {
+                    ui::update(state, Message::MiniGameSessionTimeout)?;
+                } else if is_minigame_playing(state) && is_minigame_timed_out(state) {
                     ui::update(state, Message::MiniGameTimeout)?;
                 }
                 // Check for mini-game transition auto-advance

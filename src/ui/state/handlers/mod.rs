@@ -16,8 +16,8 @@ pub(super) use gameplay::{handle_execute_command, handle_show_hint};
 pub(super) use menu::{handle_menu_down, handle_menu_up};
 pub(super) use minigame::{
     handle_minigame_back_to_menu, handle_minigame_command, handle_minigame_next_scenario,
-    handle_minigame_scenario_complete, handle_minigame_tick, handle_minigame_timeout,
-    handle_pause_minigame, handle_resume_minigame, handle_start_minigame,
+    handle_minigame_scenario_complete, handle_minigame_session_timeout, handle_minigame_tick,
+    handle_minigame_timeout, handle_pause_minigame, handle_resume_minigame, handle_start_minigame,
 };
 pub(super) use mode_selection::{
     handle_mode_selection_back, handle_mode_selection_down, handle_mode_selection_select,

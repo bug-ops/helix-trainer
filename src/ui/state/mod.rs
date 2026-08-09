@@ -162,6 +162,9 @@ pub enum Message {
     /// Timeout on current mini-game scenario
     MiniGameTimeout,
 
+    /// The mode's session-level time limit elapsed (e.g. Arcade's 60 seconds)
+    MiniGameSessionTimeout,
+
     /// Current mini-game scenario completed
     MiniGameScenarioComplete,
 
@@ -703,6 +706,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
         Message::MiniGameCommand(command) => handlers::handle_minigame_command(state, command),
         Message::MiniGameTimeout => handlers::handle_minigame_timeout(state),
+        Message::MiniGameSessionTimeout => handlers::handle_minigame_session_timeout(state),
         Message::MiniGameScenarioComplete => {
             let mut ctx = HandlerContext::new(
                 &mut state.ui,

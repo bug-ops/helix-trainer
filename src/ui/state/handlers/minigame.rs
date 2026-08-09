@@ -338,6 +338,22 @@ pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) -> Res
     Ok(())
 }
 
+/// Handle the mode's session-level time limit elapsing (e.g. Arcade's 60 seconds)
+///
+/// Ends the run immediately regardless of lives remaining, reusing the same
+/// game-over bookkeeping (FSRS recording, XP award, high scores, profile save)
+/// as a per-scenario timeout that depletes the last life.
+pub(in crate::ui::state) fn handle_minigame_session_timeout(
+    state: &mut AppState,
+) -> Result<(), UserError> {
+    if let Some(ref mut session) = state.game.minigame_session {
+        session.end_session_on_timeout();
+        state.progress.sound_manager.play(SoundEffect::GameOver);
+        handle_minigame_game_over(state)?;
+    }
+    Ok(())
+}
+
 /// Handle scenario completion (user triggered)
 pub(in crate::ui::state) fn handle_minigame_scenario_complete(
     ctx: &mut HandlerContext<'_>,
@@ -1966,5 +1982,136 @@ mod tests {
             )),
             "no LevelUp notification should fire without an actual level up"
         );
+    }
+
+    /// Regression test for #327: `handle_minigame_session_timeout` (the session-level
+    /// clock running out, e.g. Arcade's 60 seconds) must reuse the exact same
+    /// FSRS/XP/high-score/profile-save bookkeeping as `handle_minigame_timeout`
+    /// depleting the last life, but must NOT consume a life to get there.
+    #[test]
+    fn test_session_timeout_reuses_game_over_bookkeeping_without_consuming_life() {
+        use crate::gamification::{ProfileStorage, XPCalculator};
+        use crate::minigame::{ArcadeConfig, MiniGameMode};
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        start_minigame(&mut state);
+
+        // Swap in a short session-duration Arcade mode so the session timer can be
+        // waited out with a short real-time sleep, mirroring
+        // `test_active_scenario_pause_freezes_elapsed_time`'s real-time approach.
+        let scenarios = Arc::new(vec![create_test_scenario("s1")]);
+        let mode = MiniGameMode::Arcade(ArcadeConfig {
+            session_duration: Duration::from_millis(200),
+            ..ArcadeConfig::default()
+        });
+        let mut session = MiniGameSession::with_mode(scenarios, None, mode);
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.stats.score = 5000;
+        for _ in 0..10 {
+            session.stats.record_completion();
+        }
+        let lives_before = session.stats().lives();
+        state.game.minigame_session = Some(session);
+
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(
+            state
+                .game
+                .minigame_session
+                .as_ref()
+                .unwrap()
+                .is_session_expired()
+        );
+
+        let initial_xp = state.progress.profile.total_xp;
+
+        handle_minigame_session_timeout(&mut state).unwrap();
+
+        // Same bookkeeping as an ordinary timeout game-over: XP awarded, high
+        // score updated, games_played incremented.
+        let expected_xp = XPCalculator::minigame_xp(5000, 1, 10);
+        assert_eq!(state.progress.profile.total_xp - initial_xp, expected_xp);
+        assert_eq!(state.progress.profile.minigame_high_score, 5000);
+        assert_eq!(state.progress.profile.minigame_games_played, 1);
+
+        // Jumps straight to GameOver without consuming a life.
+        let session = state.game.minigame_session.as_ref().unwrap();
+        assert!(session.state().is_game_over());
+        assert_eq!(session.stats().lives(), lives_before);
+
+        // Profile was persisted to disk (same save path as a normal game over).
+        let persisted = ProfileStorage::with_path(temp_dir.path().join("profile.json"))
+            .load()
+            .unwrap();
+        assert_eq!(persisted.minigame_high_score, 5000);
+    }
+
+    /// Regression test for #327: the `!session.state().is_game_over()` guard in
+    /// `handle_minigame_back_to_menu` (added for #317 to stop `handle_minigame_timeout`
+    /// double-awarding) must also cover a session ended via
+    /// `handle_minigame_session_timeout` — the session-level clock running out, not
+    /// lives depleted. Backing out to the menu afterward must be a no-op.
+    #[test]
+    fn test_minigame_back_to_menu_after_session_timeout_does_not_double_award() {
+        use crate::gamification::ProfileStorage;
+        use crate::minigame::{ArcadeConfig, MiniGameMode};
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let mut state = create_test_state();
+        let temp_dir = TempDir::new().unwrap();
+        state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        start_minigame(&mut state);
+
+        let scenarios = Arc::new(vec![create_test_scenario("s1")]);
+        let mode = MiniGameMode::Arcade(ArcadeConfig {
+            session_duration: Duration::from_millis(200),
+            ..ArcadeConfig::default()
+        });
+        let mut session = MiniGameSession::with_mode(scenarios, None, mode);
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        state.game.minigame_session = Some(session);
+
+        std::thread::sleep(Duration::from_millis(500));
+
+        // Ends the run via the session-timer path (not lives depleted) - this
+        // already runs `handle_minigame_game_over` once.
+        handle_minigame_session_timeout(&mut state).unwrap();
+        assert!(
+            state
+                .game
+                .minigame_session
+                .as_ref()
+                .map(|s| s.state().is_game_over())
+                .unwrap_or(false)
+        );
+
+        let xp_after_first_game_over = state.progress.profile.total_xp;
+        let games_played_after_first_game_over = state.progress.profile.minigame_games_played;
+
+        // Simulate Esc/`m`/Ctrl-q on the game-over screen.
+        let outcome = handle_minigame_back_to_menu(&mut state).unwrap();
+        crate::ui::state::apply_outcome(&mut state, outcome);
+
+        assert_eq!(
+            state.progress.profile.total_xp, xp_after_first_game_over,
+            "returning to menu from an already-processed session timeout must not award XP again"
+        );
+        assert_eq!(
+            state.progress.profile.minigame_games_played, games_played_after_first_game_over,
+            "returning to menu from an already-processed session timeout must not increment games_played again"
+        );
+        assert!(state.game.minigame_session.is_none());
+        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     }
 }

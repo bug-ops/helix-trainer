@@ -83,6 +83,10 @@ Documented in [[plan#Revisit Triggers]]. In short: the session-clock bug
 ([[appendix-spinoffs#Spin-off A]]) is fixed independently; a real user demand
 signal appears; a second reference project ships an equivalent mechanic.
 
+> [!info] First trigger fired 2026-08-09 — see [[plan#4. Revisit Triggers]]
+> The session-clock bug was fixed as #327. This NO-GO decision still stands;
+> the priority/evidence re-check that trigger calls for has not been done.
+
 ## Package Contents
 
 - [[BRD]] — business goal (competitive parity vs. vim-be-good) and the finding that undermines it

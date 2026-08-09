@@ -37,20 +37,87 @@ multiple-versions = "warn"
 wildcards = "allow"
 # List of crates that are allowed to have multiple versions
 skip = [
-    # windows_x86_64_{gnu,gnullvm,msvc} fan out to 3 versions each from two
-    # independent transitive chains: rodio -> cpal -> jni -> windows-sys 0.45
-    # (via windows-targets 0.42) and helix-core/helix-loader -> etcetera ->
-    # windows-sys 0.59/0.60 (via windows-targets 0.52/0.53). Neither chain is
-    # a direct dependency; re-check after routine `cargo update` whether
-    # upstream alignment collapses these.
+    # bitflags: 1.x via rust-i18n's globwalk and rodio's symphonia decoders;
+    # 2.x via cpal/alsa/coreaudio-rs, crossterm/ratatui, and helix-core/
+    # helix-stdx. Two independent transitive chains on different majors; not
+    # collapsible without globwalk/symphonia moving to bitflags 2 upstream.
+    { name = "bitflags" },
+    # darling/darling_core/darling_macro: 0.20.x via tui-big-text's
+    # derive_builder (pinned to darling ^0.20, already at derive_builder's
+    # latest release 0.20.2); 0.23.x via ratatui's instability crate.
+    # `cargo update -p instability` bumps its darling to 0.24.0 but does not
+    # collapse the duplicate (derive_builder still requires darling 0.20.x),
+    # so the bump was not taken.
+    { name = "darling" },
+    { name = "darling_core" },
+    { name = "darling_macro" },
+    # foldhash and hashbrown: hashbrown 0.15.5 (-> foldhash 0.1.5) via
+    # helix-core/helix-loader (imara-diff, tree-house); hashbrown 0.16.1
+    # (-> foldhash 0.2.0) via ratatui-core's kasuari; hashbrown 0.17.1
+    # (-> foldhash 0.2.0) via indexmap, pulled by fsrs's priority-queue and
+    # by toml_edit on both the toml 0.8 branch (helix-core/helix-loader/
+    # rust-i18n-support) and the toml 1.x branch (cpal's ndk -> num_enum ->
+    # proc-macro-crate chain). Independent transitive chains.
+    { name = "foldhash" },
+    { name = "hashbrown" },
+    # getrandom and r-efi: getrandom 0.2.17 via dirs -> dirs-sys ->
+    # redox_users (Redox-only); 0.3.4 via ahash (rust-i18n-support's
+    # serde-saphyr) and proptest's rand 0.9 chain; 0.4.3 via fsrs/
+    # helix-trainer's direct rand 0.10 dependency and tempfile. r-efi
+    # mirrors the 0.3.4/0.4.3 split (it's getrandom's UEFI target binding).
+    # All three chains are transitive with independent major-version pins.
+    { name = "getrandom" },
+    { name = "r-efi" },
+    # itertools: three chains cargo-deny sees on the default (non-dev) graph
+    # -- 0.11.0 via rust-i18n-support, 0.14.0 via fsrs (direct) and
+    # ratatui-core, 0.15.0 via tui-big-text. criterion also pulls 0.13.0 but
+    # as a dev-dependency (benches only), invisible to cargo-deny's default
+    # duplicate-version check and not counted among these chains.
+    { name = "itertools" },
+    # serde_spanned, toml, toml_datetime, toml_edit, and winnow all split
+    # along the same line: the 0.8/0.6/0.22 generation via helix-core/
+    # helix-loader and rust-i18n-support (toml 0.8), vs the 1.x/1.1/0.25
+    # generation via helix-trainer's own direct `toml` dependency and cpal's
+    # ndk -> num_enum -> proc-macro-crate chain (toml 1.x). Not collapsible
+    # without a toml major-version alignment upstream in helix-core.
+    { name = "serde_spanned" },
+    { name = "toml" },
+    { name = "toml_datetime" },
+    { name = "toml_edit" },
+    { name = "winnow" },
+    # syn: 2.0.119 is used by the vast majority of the proc-macro ecosystem
+    # still in-tree (darling_core, rust-i18n-macro, ratatui-macros,
+    # thiserror-impl, tokio-macros, etc.); 3.0.3 is pulled solely by
+    # serde_derive 1.0.229, which has already moved to syn 3. Not
+    # collapsible until the rest of the proc-macro ecosystem follows.
+    { name = "syn" },
+    # thiserror/thiserror-impl: 1.0.69 via cpal's Android-only jni/ndk
+    # chain; 2.0.20 via helix-trainer's own direct dependency and ratatui's
+    # kasuari. jni/ndk have no newer thiserror-2-compatible release.
+    { name = "thiserror" },
+    { name = "thiserror-impl" },
+    # unicode-width: 0.1.12 via helix-core (upstream helix-editor pin);
+    # 0.2.2 via ratatui-core (widget rendering) and rust-i18n-support's
+    # annotate-snippets/serde-saphyr chain. Independent transitive chains.
+    { name = "unicode-width" },
+    # windows-sys, windows-targets, and their per-target windows_* crates
+    # (aarch64/i686/x86_64 x gnu/gnullvm/msvc) fan out from the same four
+    # independent transitive chains: rodio -> cpal -> jni -> windows-sys
+    # 0.45 (windows-targets 0.42); helix-core/helix-loader -> etcetera ->
+    # windows-sys 0.59 (windows-targets 0.52); helix-stdx's own direct
+    # windows-sys 0.60 (windows-targets 0.53); and dirs/errno -> rustix's
+    # windows-sys 0.61. None of these is a direct dependency; re-check after
+    # routine `cargo update` whether upstream alignment collapses these.
+    { name = "windows-sys" },
+    { name = "windows-targets" },
+    { name = "windows_aarch64_gnullvm" },
+    { name = "windows_aarch64_msvc" },
+    { name = "windows_i686_gnu" },
+    { name = "windows_i686_gnullvm" },
+    { name = "windows_i686_msvc" },
     { name = "windows_x86_64_gnu" },
     { name = "windows_x86_64_gnullvm" },
     { name = "windows_x86_64_msvc" },
-    # winnow duplicates via toml 0.8 (used by helix-core/helix-loader and
-    # rust-i18n-support) vs toml 1.x (used directly by helix-trainer and by
-    # cpal's ndk -> num_enum chain). Not collapsible without a toml major
-    # version alignment upstream.
-    { name = "winnow" },
 ]
 # List of explicitly banned crates
 deny = []

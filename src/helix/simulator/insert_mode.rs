@@ -134,7 +134,18 @@ impl HelixSimulator<NormalMode> {
     /// Change selection: delete the full selection and write it to the
     /// default register (prepare for insert mode; Helix 'c').
     pub fn change_selection(&mut self) -> Result<(), UserError> {
-        yank_to_register(self, None)?;
+        self.change_selection_from_register(None)
+    }
+
+    /// Change selection, yanking to the given register (`"<reg>c`).
+    ///
+    /// `register: None` addresses the unnamed register, matching plain
+    /// `c`. See [`Self::change_selection`].
+    pub fn change_selection_from_register(
+        &mut self,
+        register: Option<char>,
+    ) -> Result<(), UserError> {
+        yank_to_register(self, register)?;
         self.change_selection_impl()
     }
 
@@ -151,8 +162,20 @@ impl HelixSimulator<NormalMode> {
     /// call site, since this simulator's Insert mode only ever carries one
     /// cursor, matching every other insert-entry command (`a`, `i`, `o`,
     /// `O`, ...).
+    ///
+    /// A linewise selection (every range spans whole lines including their
+    /// trailing newline, as produced by `x`) is handled differently,
+    /// matching upstream Helix: instead of leaving a mid-line insertion
+    /// point where the deleted text used to start, each range is replaced
+    /// with a blank line and the cursor lands on it (`Open::Above`), so
+    /// `xc` behaves like `O` rather than a plain insert at the deletion
+    /// point.
     fn change_selection_impl(&mut self) -> Result<(), UserError> {
-        self.selection = super::commands::editing::delete_active_selection(self);
+        self.selection = if super::commands::editing::is_selection_linewise(self) {
+            super::commands::editing::change_selection_linewise(self)
+        } else {
+            super::commands::editing::delete_active_selection(self)
+        };
         Ok(())
     }
 }
@@ -160,6 +183,11 @@ impl HelixSimulator<NormalMode> {
 // Operations only available in Insert mode
 impl HelixSimulator<InsertMode> {
     /// Insert text at cursor position
+    ///
+    /// Reads/writes only `selection.primary()`, overwriting the whole
+    /// selection with a single point - see `enter_insert_mode`'s doc
+    /// comment for why every Insert-mode command is single-cursor, not just
+    /// mode entry.
     pub fn insert_text(&mut self, text: &str) -> Result<(), UserError> {
         let head = self.selection.primary().head;
         let text_len = text.chars().count();
@@ -177,6 +205,8 @@ impl HelixSimulator<InsertMode> {
     }
 
     /// Delete character before cursor (backspace)
+    ///
+    /// Same single-cursor caveat as [`Self::insert_text`].
     pub fn backspace(&mut self) -> Result<(), UserError> {
         let head = self.selection.primary().head;
 

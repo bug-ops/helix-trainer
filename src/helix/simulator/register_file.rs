@@ -15,6 +15,12 @@ use std::collections::HashMap;
 /// (so `""y` and `y` are equivalent).
 pub const UNNAMED_REGISTER: char = '"';
 
+/// The blackhole register: writes addressed to it are discarded.
+///
+/// Matches Helix's `"_`, used to delete/change text without touching any
+/// register (e.g. `"_d`, `"_c`).
+pub const BLACKHOLE_REGISTER: char = '_';
+
 /// Storage for all named registers, including the unnamed default register.
 ///
 /// # Examples
@@ -55,9 +61,14 @@ impl RegisterFile {
     /// Write content into a register, overwriting any previous content.
     ///
     /// `None` addresses the unnamed register, so `set(None, ...)` is what
-    /// plain `y` writes to.
+    /// plain `y` writes to. Writes to the blackhole register
+    /// ([`BLACKHOLE_REGISTER`]) are silently discarded, matching Helix's
+    /// `"_`.
     pub fn set(&mut self, register: Option<char>, content: String) {
         let key = register.unwrap_or(UNNAMED_REGISTER);
+        if key == BLACKHOLE_REGISTER {
+            return;
+        }
         self.registers.insert(key, content);
     }
 
@@ -108,5 +119,24 @@ mod tests {
         registers.set(Some('a'), "content".to_string());
         registers.clear('a');
         assert_eq!(registers.get(Some('a')), None);
+    }
+
+    #[test]
+    fn blackhole_register_discards_writes() {
+        let mut registers = RegisterFile::new();
+        registers.set(Some(BLACKHOLE_REGISTER), "discarded".to_string());
+        assert_eq!(registers.get(Some(BLACKHOLE_REGISTER)), None);
+    }
+
+    #[test]
+    fn blackhole_register_does_not_affect_other_registers() {
+        let mut registers = RegisterFile::new();
+        registers.set(None, "unnamed".to_string());
+        registers.set(Some('a'), "named".to_string());
+        registers.set(Some(BLACKHOLE_REGISTER), "discarded".to_string());
+
+        assert_eq!(registers.get(None), Some("unnamed"));
+        assert_eq!(registers.get(Some('a')), Some("named"));
+        assert_eq!(registers.get(Some(BLACKHOLE_REGISTER)), None);
     }
 }

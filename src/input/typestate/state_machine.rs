@@ -265,6 +265,6 @@ pub enum SurroundPreview {
 pub enum RegisterPreview {
     /// Waiting for the register character after `"`.
     SelectingRegister,
-    /// Register selected; waiting for the operator (y/p/P/R).
+    /// Register selected; waiting for the operator (y/p/P/R/d/c).
     AwaitingOperator(char),
 }

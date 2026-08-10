@@ -90,7 +90,7 @@ pub struct ReplaceCharPending;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterPending;
 
-/// Waiting for the operator character after '"{register}' (y/p/P/R)
+/// Waiting for the operator character after '"{register}' (y/p/P/R/d/c)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterOpPending {
     /// The register selected to scope the upcoming operator

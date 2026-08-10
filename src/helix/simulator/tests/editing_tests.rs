@@ -587,3 +587,236 @@ fn test_delete_selection_multi_range_maps_cursor_through_earlier_deletions() {
     assert_eq!(snapshot.primary_idx, 1);
     assert_eq!(sim.mode(), Mode::Normal);
 }
+
+// ============================================================================
+// Linewise Change Tests (x + c -> Open::Above, Helix 'xc')
+// ============================================================================
+
+#[test]
+fn test_select_line_then_change_opens_blank_line() {
+    let mut sim = AnyModeSimulator::new("one\ntwo\nthree".to_string());
+
+    // 'x' selects the whole first line including its trailing newline
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    // 'c' on a linewise selection opens a blank line instead of a plain
+    // mid-line insert
+    sim.execute_command(CMD_CHANGE).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.content(), "\ntwo\nthree");
+    assert_eq!(state.cursor_position(), (0, 0));
+
+    sim.execute_command("X").unwrap();
+    assert_eq!(sim.state().unwrap().content(), "X\ntwo\nthree");
+}
+
+#[test]
+fn test_select_line_then_change_noyank_also_opens_blank_line() {
+    let mut sim = AnyModeSimulator::new("one\ntwo".to_string());
+
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_CHANGE_SELECTION_NOYANK).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.content(), "\ntwo");
+    assert_eq!(state.cursor_position(), (0, 0));
+}
+
+#[test]
+fn test_select_line_middle_then_change_opens_blank_line_in_place() {
+    let mut sim = AnyModeSimulator::new("one\ntwo\nthree".to_string());
+
+    sim.execute_command(CMD_MOVE_DOWN).unwrap(); // onto "two"
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command(CMD_CHANGE).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.content(), "one\n\nthree");
+    assert_eq!(state.cursor_position(), (1, 0));
+}
+
+#[test]
+fn test_change_non_linewise_selection_does_not_open_blank_line() {
+    // A plain point cursor (no active selection) is never linewise - 'c'
+    // must fall back to a normal mid-position insert, matching pre-existing
+    // behavior (see `test_change_selection`).
+    let mut sim = AnyModeSimulator::new("one\ntwo".to_string());
+
+    sim.execute_command(CMD_CHANGE).unwrap();
+
+    let state = sim.state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.content(), "ne\ntwo");
+    assert_eq!(state.cursor_position(), (0, 0));
+}
+
+// ============================================================================
+// Blackhole Register Tests ("_)
+// ============================================================================
+
+#[test]
+fn test_delete_selection_blackhole_register_discards_text() {
+    let mut sim = AnyModeSimulator::new("y abc".to_string());
+
+    // Pre-populate the default register so a no-op paste can't pass trivially
+    sim.execute_command(CMD_YANK).unwrap();
+
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command("\"_d").unwrap(); // blackhole-delete 'a'
+    assert_eq!(sim.state().unwrap().content(), "y bc");
+
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
+    sim.execute_command(CMD_PASTE_BEFORE).unwrap();
+
+    assert_eq!(
+        sim.state().unwrap().content(),
+        "yy bc",
+        "\"_d must not write the deleted text anywhere"
+    );
+}
+
+#[test]
+fn test_change_selection_blackhole_register_discards_text() {
+    let mut sim = AnyModeSimulator::new("y abc".to_string());
+
+    sim.execute_command(CMD_YANK).unwrap();
+
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command("\"_c").unwrap(); // blackhole-change 'a'
+    assert_eq!(sim.mode(), Mode::Insert);
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "y bc");
+
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
+    sim.execute_command(CMD_PASTE_BEFORE).unwrap();
+
+    assert_eq!(
+        sim.state().unwrap().content(),
+        "yy bc",
+        "\"_c must not write the deleted text anywhere"
+    );
+}
+
+#[test]
+fn test_delete_selection_named_register_round_trips_through_paste() {
+    let mut sim = AnyModeSimulator::new("abc".to_string());
+
+    sim.execute_command("\"ad").unwrap(); // delete 'a' into register 'a'
+    assert_eq!(sim.state().unwrap().content(), "bc");
+
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command("\"ap").unwrap(); // paste register 'a' after cursor
+
+    assert_eq!(sim.state().unwrap().content(), "bca");
+}
+
+#[test]
+fn test_blackhole_change_on_linewise_selection_opens_blank_line_without_yanking() {
+    // Item 1 (linewise xc -> Open::Above) composed with item 2 (blackhole
+    // register): the blank-line-open behavior must still happen, and the
+    // deleted line must still not be written to any register.
+    let mut sim = AnyModeSimulator::new("y\none\ntwo".to_string());
+
+    sim.execute_command(CMD_YANK).unwrap(); // pre-populate the default register with 'y'
+
+    sim.execute_command(CMD_MOVE_DOWN).unwrap(); // onto "one"
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
+    sim.execute_command("\"_c").unwrap(); // blackhole-change the whole line
+
+    let state = sim.state().unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(state.content(), "y\n\ntwo");
+    assert_eq!(state.cursor_position(), (1, 0));
+
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
+    sim.execute_command(CMD_PASTE_BEFORE).unwrap();
+
+    assert_eq!(
+        sim.state().unwrap().content(),
+        "yy\n\ntwo",
+        "\"_c must not write the deleted line anywhere"
+    );
+}
+
+// ============================================================================
+// Delete Without Yanking Tests (Alt-d)
+// ============================================================================
+
+#[test]
+fn test_delete_selection_noyank_does_not_populate_register() {
+    let mut sim = AnyModeSimulator::new("y abc".to_string());
+
+    sim.execute_command(CMD_YANK).unwrap(); // register holds 'y'
+
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION_NOYANK).unwrap(); // Alt-d deletes 'a'
+    assert_eq!(sim.mode(), Mode::Normal);
+    assert_eq!(sim.state().unwrap().content(), "y bc");
+
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
+    sim.execute_command(CMD_PASTE_BEFORE).unwrap();
+
+    assert_eq!(
+        sim.state().unwrap().content(),
+        "yy bc",
+        "Alt-d must leave a pre-existing register ('y') untouched"
+    );
+}
+
+// ============================================================================
+// Repeat (.) of Register-Scoped Commands
+// ============================================================================
+
+#[test]
+fn test_repeat_blackhole_delete() {
+    // Regression: `.` must replay the exact blackhole-delete, not a stale
+    // prior action - `"_d`'s key events were previously dropped entirely by
+    // `cmd_to_key_events`, so nothing got recorded for it.
+    let mut sim = AnyModeSimulator::new("abcabc".to_string());
+
+    sim.execute_command("\"_d").unwrap(); // delete 'a' at index 0, discard it
+    assert_eq!(sim.state().unwrap().content(), "bcabc");
+
+    // "bcabc": b(0) c(1) a(2) b(3) c(4) - two moves lands on the 'a'
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_REPEAT).unwrap(); // '.' must replay "_d, deleting 'a' again
+
+    assert_eq!(sim.state().unwrap().content(), "bcbc");
+
+    // The register must still be empty - the repeat must not have yanked
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
+    sim.execute_command(CMD_PASTE_AFTER).unwrap();
+    assert_eq!(
+        sim.state().unwrap().content(),
+        "bcbc",
+        "repeated \"_d must not have written anything to the default register"
+    );
+}
+
+#[test]
+fn test_repeat_named_register_delete() {
+    let mut sim = AnyModeSimulator::new("aXaX".to_string());
+
+    sim.execute_command("\"rd").unwrap(); // delete 'a' into register 'r'
+    assert_eq!(sim.state().unwrap().content(), "XaX");
+
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command(CMD_REPEAT).unwrap(); // '.' must replay "rd on the second 'a'
+
+    assert_eq!(sim.state().unwrap().content(), "XX");
+
+    // Register 'r' must hold the SECOND deleted 'a' (overwritten by the
+    // repeat), proving the repeat actually re-executed "rd and not a stale
+    // prior action
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
+    sim.execute_command("\"rp").unwrap();
+    assert_eq!(sim.state().unwrap().content(), "XaX");
+}

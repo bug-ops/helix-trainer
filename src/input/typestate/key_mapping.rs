@@ -307,6 +307,7 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
     match (c, is_shift, is_alt) {
         // Alt commands (must be checked first as they have highest specificity)
         ('c', false, true) => Some(CMD_CHANGE_SELECTION_NOYANK), // Alt-c
+        ('d', false, true) => Some(CMD_DELETE_SELECTION_NOYANK), // Alt-d
         ('C', _, true) => Some(CMD_COPY_SELECTION_PREV),         // Alt-C (any SHIFT)
         ('J', _, true) => Some(CMD_JOIN_SELECTIONS_SPACE),       // Alt-J (any SHIFT)
         ('K', _, true) => Some(CMD_REMOVE_MATCHING),             // Alt-K (any SHIFT)

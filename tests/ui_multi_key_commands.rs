@@ -414,8 +414,8 @@ fn test_register_yank_paste_multi_key() {
 
 #[test]
 fn test_register_op_cancels_on_out_of_scope_operator() {
-    // Register scope is limited to y/p/P/R; any other operator cancels back
-    // to Base rather than executing a bare command.
+    // Register scope is limited to y/p/P/R/d/c; any other operator cancels
+    // back to Base rather than executing a bare command.
     let scenario = create_test_scenario("test_register_cancel", "hello", (0, 0), "world", (0, 0));
 
     let mut state = create_test_app_state(vec![scenario.clone()]);
@@ -423,8 +423,8 @@ fn test_register_op_cancels_on_out_of_scope_operator() {
 
     update(&mut state, exec("\"")).unwrap();
     update(&mut state, exec("a")).unwrap();
-    // 'd' is not register-scoped - should cancel, not delete anything
-    update(&mut state, exec("d")).unwrap();
+    // 'x' is not register-scoped - should cancel, not select anything
+    update(&mut state, exec("x")).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());

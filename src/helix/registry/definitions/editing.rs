@@ -24,6 +24,19 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         editing::delete_selection,
     ));
 
+    registry.register(Command::new(
+        CommandMetadata::new(
+            "delete_selection_noyank",
+            CMD_DELETE_SELECTION_NOYANK,
+            "Delete selection without yanking",
+            "Delete the current selection without writing to a register.",
+            Category::Editing,
+            true,
+            None,
+        ),
+        editing::delete_selection_noyank,
+    ));
+
     // Change selection (delete and enter insert mode)
     registry.register(Command::new(
         CommandMetadata::new(

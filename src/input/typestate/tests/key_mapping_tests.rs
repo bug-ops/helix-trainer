@@ -841,6 +841,15 @@ fn test_map_alt_c_lowercase_change_noyank() {
 }
 
 #[test]
+fn test_map_alt_d_delete_selection_noyank() {
+    // Alt-d: delete_selection_noyank (lowercase)
+    assert_eq!(
+        map_single_key_command('d', KeyModifiers::ALT),
+        Some(CMD_DELETE_SELECTION_NOYANK)
+    );
+}
+
+#[test]
 fn test_map_alt_c_copy_selection_prev() {
     // Alt-C: copy_selection_on_prev_line (uppercase)
     assert_eq!(

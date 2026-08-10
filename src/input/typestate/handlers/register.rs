@@ -3,14 +3,17 @@
 //! Handles input after the `"` prefix for named-register-scoped clipboard
 //! operations:
 //! - `"` - select a register (waiting for the register character)
-//! - `"{register}` - register selected (waiting for y/p/P/R)
+//! - `"{register}` - register selected (waiting for y/p/P/R/d/c)
 //!
-//! Register scope is deliberately limited to the four commands that can be
+//! Register scope is deliberately limited to the six commands that can be
 //! targeted at a *named* register via this `"<reg>` prefix (`y`, `p`, `P`,
-//! `R`); any other key cancels rather than executing a bare command, keeping
-//! `"<reg><op>` an atomic 3-key sequence with no partial side effects. `d`
-//! and `c` also read/write the *default* (unnamed) register directly when
-//! invoked bare, but cannot be routed through this prefix to a named one.
+//! `R`, `d`, `c`); any other key cancels rather than executing a bare
+//! command, keeping `"<reg><op>` an atomic 3-key sequence with no partial
+//! side effects. `d` and `c` also read/write the *default* (unnamed)
+//! register directly when invoked bare; routing them through this prefix
+//! (e.g. `"_d`, `"_c`) is how the blackhole register
+//! ([`crate::helix::simulator::register_file::BLACKHOLE_REGISTER`]) is
+//! reached, since it can't be addressed as the default register.
 
 use std::borrow::Cow;
 
@@ -49,8 +52,8 @@ impl InputHandler<RegisterPending> for KeyHandler {
 impl InputHandler<RegisterOpPending> for KeyHandler {
     fn handle_key(state: &RegisterOpPending, key: KeyEvent) -> HandlerResult {
         match key.code {
-            // Only y/p/P/R are register-scoped in this trainer
-            KeyCode::Char(op @ ('y' | 'p' | 'P' | 'R')) => {
+            // Only y/p/P/R/d/c are register-scoped in this trainer
+            KeyCode::Char(op @ ('y' | 'p' | 'P' | 'R' | 'd' | 'c')) => {
                 let cmd = format!("\"{}{}", state.register, op);
                 HandlerResult::Execute(Cow::Owned(cmd))
             }
@@ -112,13 +115,34 @@ mod tests {
     }
 
     #[test]
-    fn register_op_pending_rejects_out_of_scope_operator() {
+    fn register_op_pending_accepts_delete_and_change() {
         let state = RegisterOpPending { register: 'a' };
-        // 'd' is not register-scoped in this trainer (see architect handoff)
         assert_eq!(
             KeyHandler::handle_key(&state, key('d')),
-            HandlerResult::Cancel
+            HandlerResult::Execute(Cow::Borrowed("\"ad"))
         );
+        assert_eq!(
+            KeyHandler::handle_key(&state, key('c')),
+            HandlerResult::Execute(Cow::Borrowed("\"ac"))
+        );
+    }
+
+    #[test]
+    fn register_op_pending_accepts_blackhole_register_delete_and_change() {
+        let state = RegisterOpPending { register: '_' };
+        assert_eq!(
+            KeyHandler::handle_key(&state, key('d')),
+            HandlerResult::Execute(Cow::Borrowed("\"_d"))
+        );
+        assert_eq!(
+            KeyHandler::handle_key(&state, key('c')),
+            HandlerResult::Execute(Cow::Borrowed("\"_c"))
+        );
+    }
+
+    #[test]
+    fn register_op_pending_rejects_out_of_scope_operator() {
+        let state = RegisterOpPending { register: 'a' };
         assert_eq!(
             KeyHandler::handle_key(&state, key('x')),
             HandlerResult::Cancel

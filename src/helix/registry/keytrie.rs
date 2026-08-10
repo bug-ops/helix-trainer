@@ -169,11 +169,12 @@ impl KeyTrie {
         // Named register prefix ("<reg><op>): "<reg> is always partial,
         // waiting for the operator character. No allow-list on the register
         // char itself, same as the 'r' replace-char prefix - but the
-        // operator IS allow-listed to y/p/P/R, matching `RegisterOpPending`
-        // (`src/input/typestate/handlers/register.rs`), which cancels on
-        // any other key. Uses `chars().count()`, not the byte-based `len`
-        // above: a multi-byte register char (e.g. `"é`) would otherwise make
-        // `len() == 3` true for only 2 actual chars (missing the operator).
+        // operator IS allow-listed to y/p/P/R/d/c, matching
+        // `RegisterOpPending` (`src/input/typestate/handlers/register.rs`),
+        // which cancels on any other key. Uses `chars().count()`, not the
+        // byte-based `len` above: a multi-byte register char (e.g. `"é`)
+        // would otherwise make `len() == 3` true for only 2 actual chars
+        // (missing the operator).
         if first_char == '"' {
             let char_count = buffer.chars().count();
             if char_count <= 2 {
@@ -184,7 +185,7 @@ impl KeyTrie {
                     .chars()
                     .nth(2)
                     .expect("char_count == 3 checked above");
-                return if matches!(op, 'y' | 'p' | 'P' | 'R') {
+                return if matches!(op, 'y' | 'p' | 'P' | 'R' | 'd' | 'c') {
                     KeyMatch::Complete(buffer.to_string())
                 } else {
                     KeyMatch::Invalid
@@ -530,15 +531,19 @@ mod tests {
         assert_eq!(trie.resolve("\"ap"), KeyMatch::Complete("\"ap".to_string()));
         assert_eq!(trie.resolve("\"aP"), KeyMatch::Complete("\"aP".to_string()));
         assert_eq!(trie.resolve("\"aR"), KeyMatch::Complete("\"aR".to_string()));
+        assert_eq!(trie.resolve("\"ad"), KeyMatch::Complete("\"ad".to_string()));
+        assert_eq!(trie.resolve("\"ac"), KeyMatch::Complete("\"ac".to_string()));
+        assert_eq!(trie.resolve("\"_d"), KeyMatch::Complete("\"_d".to_string()));
+        assert_eq!(trie.resolve("\"_c"), KeyMatch::Complete("\"_c".to_string()));
     }
 
-    /// Regression test: the KeyTrie must reject register ops outside y/p/P/R,
-    /// matching `RegisterOpPending`'s cancel behavior, instead of reporting
-    /// `Complete` for an operator the real UI would never execute.
+    /// Regression test: the KeyTrie must reject register ops outside
+    /// y/p/P/R/d/c, matching `RegisterOpPending`'s cancel behavior, instead
+    /// of reporting `Complete` for an operator the real UI would never
+    /// execute.
     #[test]
     fn test_register_op_invalid_for_out_of_scope_operator() {
         let trie = KeyTrie::new();
-        assert_eq!(trie.resolve("\"ad"), KeyMatch::Invalid);
         assert_eq!(trie.resolve("\"ax"), KeyMatch::Invalid);
     }
 

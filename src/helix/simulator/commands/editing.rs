@@ -119,13 +119,100 @@ pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>
 /// valid character rather than resting one-past-the-end (unlike
 /// `change_selection`, which hands the raw mapped positions to Insert mode).
 pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    yank_to_register(sim, None)?;
+    delete_selection_from_register(sim, None)
+}
 
+/// Delete selection, yanking to the given register (`"<reg>d`).
+///
+/// `register: None` addresses the unnamed register, matching plain `d`. See
+/// [`delete_selection`] for the deletion/cursor rules.
+pub fn delete_selection_from_register<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    register: Option<char>,
+) -> Result<(), UserError> {
+    yank_to_register(sim, register)?;
+    delete_selection_impl(sim)
+}
+
+/// Delete selection without yanking (Helix 'Alt-d'): deletes the full
+/// active selection, leaving every register untouched.
+///
+/// Upstream Helix binds this alongside `change_selection_noyank` (`Alt-c`).
+pub fn delete_selection_noyank<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), UserError> {
+    delete_selection_impl(sim)
+}
+
+fn delete_selection_impl<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let mapped = delete_active_selection(sim);
     let last_valid_pos = sim.doc.len_chars().saturating_sub(1);
     sim.selection = mapped.transform(|range| Range::point(range.head.min(last_valid_pos)));
 
     Ok(())
+}
+
+/// True when every range of the active selection spans one or more whole
+/// lines, from line start through the following line's start (so each
+/// range includes its trailing newline).
+///
+/// Mirrors upstream Helix's `selection_is_linewise` - the condition under
+/// which `change_selection` opens a blank line (`Open::Above`) instead of
+/// leaving a plain mid-line insertion point. `x` (select_line) produces
+/// exactly this shape of selection.
+pub(crate) fn is_selection_linewise<M: EditorMode>(sim: &HelixSimulator<M>) -> bool {
+    let slice = sim.doc.slice(..);
+    sim.selection.ranges().iter().all(|range| {
+        if range.slice(slice).len_lines() < 2 {
+            return false;
+        }
+        let (start_line, end_line) = range.line_range(slice);
+        let start = sim.doc.line_to_char(start_line);
+        let end = sim
+            .doc
+            .line_to_char((end_line + 1).min(sim.doc.len_lines()));
+        start == range.from() && end == range.to()
+    })
+}
+
+/// Replace every range of a linewise selection with a single blank line,
+/// returning the mapped selection with each cursor on its own new blank
+/// line.
+///
+/// Mirrors upstream Helix's `change_selection` falling back to
+/// `open(Open::Above)` for a whole-line selection (Helix `xc`), simplified
+/// to this simulator's single blank line per range (no indent/comment
+/// continuation). Positions are computed directly rather than via
+/// [`helix_core::Selection::map`]: a point sitting exactly at an
+/// insertion boundary maps *after* the inserted text by default (see
+/// `Range::map`'s `Assoc::AfterSticky` for equal anchor/head), which would
+/// land the cursor one line too far down instead of on the new blank line.
+///
+/// Like [`delete_active_selection`], does *not* assign the result back to
+/// `sim.selection` - the caller must do that. Until it does, `sim.selection`
+/// still holds the pre-call ranges, now stale against the post-transaction
+/// document (`apply_transaction` only touches `sim.doc`).
+pub(crate) fn change_selection_linewise<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Selection {
+    let ranges: Vec<Range> = sim.selection.ranges().to_vec();
+
+    let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
+        (range.from(), range.to(), Some("\n".into()))
+    });
+
+    let mut delta: i64 = 0;
+    let new_ranges: Vec<Range> = ranges
+        .iter()
+        .map(|range| {
+            let pos = (range.from() as i64 + delta) as usize;
+            delta += 1 - (range.to() as i64 - range.from() as i64);
+            Range::point(pos)
+        })
+        .collect();
+
+    let primary_idx = sim.selection.primary_index();
+    sim.apply_transaction(transaction);
+
+    Selection::new(new_ranges.into(), primary_idx)
 }
 
 /// Switch case of selected text (Helix '~' command)
@@ -1409,5 +1496,81 @@ mod tests {
         let range = sim.selection.primary();
         assert_eq!(range.from(), 1);
         assert_eq!(range.to(), 8);
+    }
+
+    // ========================================================================
+    // Linewise change_selection tests (Helix `xc` -> `Open::Above`)
+    // ========================================================================
+
+    #[test]
+    fn test_is_selection_linewise_true_for_whole_line_selection() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("one\ntwo\nthree".to_string());
+        // Selects "one\n" (line_start=0 through start of next line=4),
+        // matching what `x` (select_line) produces.
+        sim.selection = Selection::single(4, 0);
+
+        assert!(is_selection_linewise(&sim));
+    }
+
+    #[test]
+    fn test_is_selection_linewise_false_for_mid_line_selection() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("one\ntwo".to_string());
+        sim.selection = Selection::single(0, 2); // "on", not a whole line
+
+        assert!(!is_selection_linewise(&sim));
+    }
+
+    #[test]
+    fn test_is_selection_linewise_false_for_last_line_without_trailing_newline() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("one\ntwo".to_string());
+        // Selects "two" (no trailing newline in the document to include)
+        sim.selection = Selection::single(7, 4);
+
+        assert!(!is_selection_linewise(&sim));
+    }
+
+    #[test]
+    fn test_change_selection_linewise_replaces_line_with_blank_line() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("one\ntwo\nthree".to_string());
+        sim.selection = Selection::single(4, 0); // whole first line, as `x` produces
+
+        let mapped = change_selection_linewise(&mut sim);
+
+        assert_eq!(sim.doc.to_string(), "\ntwo\nthree");
+        assert_eq!(mapped.ranges().len(), 1);
+        assert_eq!(
+            mapped.primary().head,
+            0,
+            "cursor must sit on the blank line"
+        );
+    }
+
+    #[test]
+    fn test_change_selection_linewise_multi_range_maps_each_cursor() {
+        // Exercises `change_selection_linewise`'s internal transaction/offset
+        // math directly, not real multi-cursor UX: a live `xc` never reaches
+        // Insert mode with more than one cursor, since `enter_insert_mode`
+        // collapses to the primary range immediately after this returns (see
+        // its doc comment). This only proves the mapped positions for every
+        // range are correct if/when that limitation is ever lifted.
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("one\ntwo\nthree".to_string());
+        // Two whole-line ranges: "one\n" and "two\n"
+        let ranges = vec![Range::new(0, 4), Range::new(4, 8)];
+        sim.selection = Selection::new(ranges.into(), 0);
+
+        assert!(is_selection_linewise(&sim));
+        let mapped = change_selection_linewise(&mut sim);
+
+        assert_eq!(sim.doc.to_string(), "\n\nthree");
+        assert_eq!(mapped.ranges().len(), 2);
+        assert_eq!(mapped.ranges()[0].head, 0, "first cursor on its blank line");
+        assert_eq!(
+            mapped.ranges()[1].head,
+            1,
+            "second cursor mapped past the first range's replacement"
+        );
     }
 }

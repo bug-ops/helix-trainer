@@ -128,6 +128,20 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         return vec![KeyEvent::new(KeyCode::Char(';'), KeyModifiers::ALT)];
     }
 
+    // Named register prefix ("<reg><op>, e.g. `"_d`, `"ay`): uses
+    // `chars().count()`, not the byte-based `len()`, for the same
+    // multi-byte-register-char reason as the dispatch branch in this
+    // module's `execute_normal_mode_command_internal`. Without this arm
+    // these commands fell through to the `len() == 1` case below (always
+    // false for a 3-char string) and recorded as an empty key sequence, so
+    // `.` replayed a stale prior action instead of the register op itself.
+    if cmd.starts_with(CMD_SELECT_REGISTER) && cmd.chars().count() == 3 {
+        return cmd
+            .chars()
+            .map(|ch| KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE))
+            .collect();
+    }
+
     if cmd.len() == 1
         && let Some(ch) = cmd.chars().next()
     {
@@ -146,6 +160,14 @@ fn is_insert_command(cmd: &str) -> bool {
         || cmd == CMD_OPEN_ABOVE
         || cmd == CMD_CHANGE
         || cmd == CMD_CHANGE_SELECTION_NOYANK
+        || is_register_scoped_change(cmd)
+}
+
+/// True for a register-scoped change command (e.g. `"ac`, `"_c`) - the
+/// `"<reg>c` form dispatched by the `CMD_SELECT_REGISTER` branch above,
+/// which also needs to enter Insert mode like bare `c`.
+fn is_register_scoped_change(cmd: &str) -> bool {
+    cmd.starts_with(CMD_SELECT_REGISTER) && cmd.chars().count() == 3 && cmd.ends_with('c')
 }
 
 fn execute_insert_mode_command_internal(
@@ -285,6 +307,12 @@ pub(super) fn execute_normal_mode_command_internal(
                 'p' => clipboard::paste_after_from_register(sim, Some(register)),
                 'P' => clipboard::paste_before_from_register(sim, Some(register)),
                 'R' => editing::replace_with_yanked_from_register(sim, Some(register)),
+                'd' => editing::delete_selection_from_register(sim, Some(register)),
+                // 'c' deletes into the given register and prepares Insert
+                // mode the same way plain 'c' does; the actual mode
+                // transition happens in `execute_command_any_mode`, gated by
+                // `is_insert_command` recognizing this register-scoped form.
+                'c' => sim.change_selection_from_register(Some(register)),
                 _ => Err(UserError::command_failed(format!(
                     "unknown register operation '{}'",
                     op
@@ -533,6 +561,7 @@ mod tests {
         #[test]
         fn test_insert_command_editing_not_insert() {
             assert!(!is_insert_command(CMD_DELETE_SELECTION));
+            assert!(!is_insert_command(CMD_DELETE_SELECTION_NOYANK));
             assert!(!is_insert_command(CMD_YANK));
             assert!(!is_insert_command(CMD_PASTE_AFTER));
         }
@@ -546,6 +575,26 @@ mod tests {
         fn test_insert_command_random_string() {
             assert!(!is_insert_command("xyz"));
             assert!(!is_insert_command(""));
+        }
+
+        #[test]
+        fn test_insert_command_register_scoped_change_is_insert() {
+            assert!(is_insert_command("\"ac"));
+            assert!(is_insert_command("\"_c"));
+        }
+
+        #[test]
+        fn test_insert_command_register_scoped_delete_is_not_insert() {
+            assert!(!is_insert_command("\"ad"));
+            assert!(!is_insert_command("\"_d"));
+        }
+
+        #[test]
+        fn test_insert_command_register_scoped_other_ops_are_not_insert() {
+            assert!(!is_insert_command("\"ay"));
+            assert!(!is_insert_command("\"ap"));
+            assert!(!is_insert_command("\"aP"));
+            assert!(!is_insert_command("\"aR"));
         }
     }
 
@@ -625,18 +674,40 @@ mod tests {
             assert!(events.is_empty());
         }
 
-        /// Named regression test for S3/Q2: register ops and command-line
-        /// invocations are deliberately not `.`-repeatable. `cmd_to_key_events`
-        /// has no dedicated arm for either shape, so both fall through to the
-        /// generic "unmatched, len != 1" branch and produce no key events -
-        /// `record_command_if_needed_normal` then skips recording entirely
-        /// (an empty `key_events` slice is never recorded), so `.` after
-        /// `"ay` or `:goto 3` is a no-op, matching Helix (`.` repeats changes,
-        /// not yanks or navigation).
+        /// Named regression test for S3/Q2: command-line invocations are
+        /// deliberately not `.`-repeatable. `cmd_to_key_events` has no
+        /// dedicated arm for `:`-prefixed commands, so they fall through to
+        /// the generic "unmatched, len != 1" branch and produce no key
+        /// events - `record_command_if_needed_normal` then skips recording
+        /// entirely (an empty `key_events` slice is never recorded), so `.`
+        /// after `:goto 3` is a no-op.
+        ///
+        /// Register-scoped ops (`"ay`, `"_d`, ...) are the opposite case -
+        /// they DO need key events (see the next test) so `.` after a
+        /// register-scoped delete/change/yank replays it, consistent with
+        /// their unscoped counterparts (bare `y`/`d`/`c` are all
+        /// `.`-repeatable per `is_repeatable_command`). This split from the
+        /// register case above was itself a regression (#400): the missing
+        /// arm meant `"<reg><op>` was silently unrecorded, so `.` replayed
+        /// whatever the *previous* recorded action was instead.
         #[test]
-        fn test_cmd_to_key_events_register_op_and_command_line_are_not_repeatable() {
-            assert!(cmd_to_key_events("\"ay").is_empty());
+        fn test_cmd_to_key_events_command_line_is_not_repeatable() {
             assert!(cmd_to_key_events(":goto 3").is_empty());
+        }
+
+        #[test]
+        fn test_cmd_to_key_events_register_op_produces_three_key_events() {
+            let events = cmd_to_key_events("\"ay");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('"'));
+            assert_eq!(events[1].code, KeyCode::Char('a'));
+            assert_eq!(events[2].code, KeyCode::Char('y'));
+
+            let events = cmd_to_key_events("\"_d");
+            assert_eq!(events.len(), 3);
+            assert_eq!(events[0].code, KeyCode::Char('"'));
+            assert_eq!(events[1].code, KeyCode::Char('_'));
+            assert_eq!(events[2].code, KeyCode::Char('d'));
         }
 
         #[test]

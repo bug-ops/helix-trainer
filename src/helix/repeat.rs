@@ -68,7 +68,7 @@ pub enum RepeatableAction {
     ///
     /// # Fields
     ///
-    /// - `entry_command`: The command used to enter insert mode (`i`, `a`, `A`, `I`, `o`, `O`)
+    /// - `entry_command`: The command used to enter insert mode (`i`, `a`, `A`, `I`, `o`, `O`, `c`, `Alt-c`, `"<reg>c`)
     /// - `text`: The text that was typed
     /// - `movements`: Arrow key movements made during insert
     InsertSequence {
@@ -261,7 +261,7 @@ impl InsertModeRecorder {
     /// Optionally captures the command used to enter insert mode.
     ///
     /// # Arguments
-    /// * `entry_command` - The command that entered insert mode (`i`, `a`, `A`, `I`, `o`, `O`)
+    /// * `entry_command` - The command that entered insert mode (`i`, `a`, `A`, `I`, `o`, `O`, `c`, `Alt-c`, `"<reg>c`)
     pub fn start(&mut self, entry_command: Option<String>) {
         self.is_recording = true;
         self.entry_command = entry_command;

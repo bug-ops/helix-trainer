@@ -2028,7 +2028,7 @@ mod tests {
             ));
 
             // Must not panic and must fall through to the stock key, which
-            // RegisterOpPending cancels on (only y/p/P/R are recognized ops).
+            // RegisterOpPending cancels on (only y/p/P/R/d/c are recognized ops).
             press(
                 &mut state,
                 KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),

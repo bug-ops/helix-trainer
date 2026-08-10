@@ -48,7 +48,7 @@ pub enum InputState {
     ReplaceCharPending,
     /// After '"' - waiting for register character
     RegisterPending,
-    /// After '"{register}' - waiting for operator character (y/p/P/R)
+    /// After '"{register}' - waiting for operator character (y/p/P/R/d/c)
     RegisterOpPending { register: char },
     /// After ':' - accumulating a command-line buffer
     CommandLinePending { buffer: String },

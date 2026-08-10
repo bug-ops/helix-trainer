@@ -417,7 +417,19 @@ impl HelixSimulator<NormalMode> {
 
     /// Transition to Insert mode
     ///
-    /// Collapses the selection to cursor position, matching Helix behavior
+    /// Collapses the selection to a single cursor at the primary range's
+    /// head, discarding every other range.
+    ///
+    /// Known limitation: real Helix keeps every cursor active through
+    /// Insert mode (typing/backspacing at each one), but this simulator's
+    /// Insert-mode commands (`insert_text`, `backspace`, the arrow-key
+    /// handlers) all read/write only `selection.primary()` and overwrite the
+    /// whole selection with a single point, not just at entry. Preserving
+    /// the full selection here would still leave every secondary cursor
+    /// frozen (or panicking on stale offsets) as soon as the user typed, so
+    /// the collapse happens up front instead. Fixing this for real means
+    /// reworking Insert mode's commands to operate over every range, not
+    /// just entry - out of scope for a single-method change.
     pub fn enter_insert_mode(self) -> HelixSimulator<InsertMode> {
         // Collapse selection to cursor position (head of primary range)
         let cursor_pos = self.selection.primary().head;
@@ -787,8 +799,25 @@ fn execute_key_sequence(
     while i < keys.len() {
         let key = &keys[i];
 
+        // Named register prefix ("<reg><op>, e.g. `"_d`, `"ay`) is a 3-key
+        // sequence, so it must be checked before the 2-key patterns below -
+        // otherwise the leading '"' would be consumed alone as a bare
+        // (invalid) single-key command.
+        let register_cmd = if i + 2 < keys.len()
+            && key.code == KeyCode::Char('"')
+            && let (KeyCode::Char(register), KeyCode::Char(op)) =
+                (keys[i + 1].code, keys[i + 2].code)
+        {
+            i += 3;
+            Some(format!("{CMD_SELECT_REGISTER}{register}{op}"))
+        } else {
+            None
+        };
+
         // Check for multi-key command patterns
-        let cmd = if i + 1 < keys.len() {
+        let cmd = if register_cmd.is_some() {
+            register_cmd
+        } else if i + 1 < keys.len() {
             if let (KeyCode::Char(ch1), KeyCode::Char(ch2)) = (key.code, keys[i + 1].code) {
                 match (ch1, ch2) {
                     ('g', 'g') => {

@@ -29,6 +29,7 @@ pub const CMD_GOTO_FIRST_NONBLANK: &str = "^";
 
 // Editing commands
 pub const CMD_DELETE_SELECTION: &str = "d";
+pub const CMD_DELETE_SELECTION_NOYANK: &str = "Alt-d";
 pub const CMD_INSERT: &str = "i";
 pub const CMD_APPEND: &str = "a";
 pub const CMD_INSERT_LINE_START: &str = "I";

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-10
+
 ### Added
 
 - `scripts/install.sh` and `scripts/install.ps1`: one-line installers that resolve the latest (or a pinned) GitHub release, download the archive matching the current OS/architecture, verify its SHA-256 checksum, and install the `helix-trainer` binary. `install.sh` covers Linux (glibc and static musl builds via `--static`) and macOS on x86_64/aarch64; `install.ps1` covers Windows on x86_64/aarch64. README's Installation section documents both as the recommended path alongside manual archive download and building from source, with one-liners that resolve and pin to the latest release tag before fetching the script from `raw.githubusercontent.com`, instead of fetching from the mutable `main` branch ref. `install.sh` extracts the downloaded archive with [exarch](https://github.com/bug-ops/exarch) when available or bootstrappable on the host, falling back to the system `tar` otherwise (see #392 below for how the exarch bootstrap itself is verified). CI runs `shellcheck` on `scripts/install.sh` when it changes.
@@ -68,6 +70,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deny.toml`'s `[bans].skip` now explicitly documents and skips the `windows_x86_64_{gnu,gnullvm,msvc}` and `winnow` duplicate-version clusters: each fans out from two independent transitive chains (`rodio -> cpal -> jni` vs `helix-core`/`helix-loader -> etcetera` for the `windows_x86_64_*` crates; `toml` 0.8 vs `toml` 1.x for `winnow`) that are not collapsible from this workspace without an upstream major-version alignment; `cargo update` confirms no newer compatible version resolves either. Silences the corresponding `cargo deny check bans` warnings (already non-blocking, `multiple-versions = "warn"`) with a recorded rationale instead of leaving them unexplained (#356)
 - **BREAKING**: `StreakChange::Protected`'s vestigial `used_freeze` field (always `true` in practice — the `false` case was never constructed) is dropped; it is now a unit variant (#310)
 - Training-mode (`record_scenario_completion`) and Arcade-mode (`execute_minigame_command`'s completion block) scenario completion no longer reimplement the same post-completion bookkeeping independently: speed-achievement counting (`SPEED_DEMON_TIME_RATIO`/`FLASH_TIME_RATIO` threshold checks plus `difficulties_completed` tracking), achievement-check-and-notify, and `LevelUp` notification construction are now shared through new `ScenarioCompletionService::track_speed_and_difficulty`/`check_and_notify_achievements`/`level_up_notification` methods. Behavior is unchanged for both modes, including Training's inline `save_immediate`/`save_debounced` persistence and Arcade's no-mid-session-persist policy (#358)
+- **BREAKING**: `ScoringConfig.optimal_count` is now `NonZeroUsize` instead of `usize`; TOML layout is unchanged, but zero rejection now happens at parse time, so `optimal_count = 0` now surfaces as "Failed to load scenario file..." instead of "Operation failed..." (#277)
+- **BREAKING**: Removed the now-unreachable `SecurityError::InvalidScoringConfig` variant (#277)
+- Unified scenario and quest ID validation into `security::validators::validate_id_field` (#275)
+- Consolidated scenario/quest TOML parsing, count-limit enforcement, and per-item validation into a shared `config::loader::parse_and_validate` pipeline (#276)
+- Collapsed the duplicated `PlayableScenario` trait implementations for `GameSession<Active>` and `GameSession<Completed>` into a single `impl<S: SessionState> PlayableScenario for GameSession<S>` block; the per-state `elapsed()` behavior is now dispatched through a new `SessionState::session_elapsed` associated function (#280)
+- **BREAKING**: Removed `AppState::save_profile_debounced`, `AppState::save_profile_immediate`, and `ProgressState::save_blocking` — the serialized save-writer path introduced for #294 left them with no production caller; the application's exit-time save now goes through `AppState::prepare_final_save_request` instead (#294)
+- `ScenarioCompletionService::record_and_scale_xp` now returns a named `XPScalingResult` struct instead of an unlabeled `(u64, ScenarioMastery, f64, f64, f64)` tuple, removing the risk of a silent positional swap between its three `f64` fields (#281)
 
 ### Fixed
 
@@ -148,16 +157,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### CI
 
 - Added a `changes` job (`dorny/paths-filter`) to `ci.yml` that skips the 3-OS `test` matrix, `msrv`, the 3-OS `build` matrix, and `coverage` when a push/PR only touches docs/metadata (no `src/`, `scenarios/`, `locales/`, manifests, or workflow files changed); `fmt`/`clippy`/`security` remain always-on since they're cheap and also cover config files like `Cargo.toml`. Any change under `.github/workflows/**` still forces every job to run. The `gate` job's pass/fail check now accepts a `skipped` result for the gated jobs only when the path filter deliberately excluded them, so a real failure or an unexpected skip still fails the gate.
-
-### Changed
-
-- **BREAKING**: `ScoringConfig.optimal_count` is now `NonZeroUsize` instead of `usize`; TOML layout is unchanged, but zero rejection now happens at parse time, so `optimal_count = 0` now surfaces as "Failed to load scenario file..." instead of "Operation failed..." (#277)
-- **BREAKING**: Removed the now-unreachable `SecurityError::InvalidScoringConfig` variant (#277)
-- Unified scenario and quest ID validation into `security::validators::validate_id_field` (#275)
-- Consolidated scenario/quest TOML parsing, count-limit enforcement, and per-item validation into a shared `config::loader::parse_and_validate` pipeline (#276)
-- Collapsed the duplicated `PlayableScenario` trait implementations for `GameSession<Active>` and `GameSession<Completed>` into a single `impl<S: SessionState> PlayableScenario for GameSession<S>` block; the per-state `elapsed()` behavior is now dispatched through a new `SessionState::session_elapsed` associated function (#280)
-- **BREAKING**: Removed `AppState::save_profile_debounced`, `AppState::save_profile_immediate`, and `ProgressState::save_blocking` — the serialized save-writer path introduced for #294 left them with no production caller; the application's exit-time save now goes through `AppState::prepare_final_save_request` instead (#294)
-- `ScenarioCompletionService::record_and_scale_xp` now returns a named `XPScalingResult` struct instead of an unlabeled `(u64, ScenarioMastery, f64, f64, f64)` tuple, removing the risk of a silent positional swap between its three `f64` fields (#281)
 
 ## [0.5.12] - 2026-07-27
 
@@ -1461,7 +1460,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.5.12...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/bug-ops/helix-trainer/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/bug-ops/helix-trainer/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/bug-ops/helix-trainer/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/bug-ops/helix-trainer/compare/v0.5.9...v0.5.10

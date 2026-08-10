@@ -105,7 +105,7 @@ description = "Use 'l' five times (less efficient)"
 
 ```toml
 [scenarios.metadata]
-category = "movement"              # movement, editing, clipboard, search, selection, textobjects, advanced, registers
+category = "movement"              # movement, editing, clipboard, search, selection, textobjects, advanced, registers, writing
 difficulty = "beginner"            # beginner, intermediate, advanced
 tags = ["word", "motion"]          # Flexible filtering tags
 commands_taught = ["w"]            # Commands this scenario teaches

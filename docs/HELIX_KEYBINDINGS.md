@@ -1,7 +1,7 @@
 # Helix Editor — Complete Keybindings Reference
 
 > **Source:** [docs.helix-editor.com/keymap.html](https://docs.helix-editor.com/keymap.html)
-> **Updated:** 2026-01-15
+> **Updated:** 2026-08-10
 
 Comprehensive reference of all Helix editor keybindings for developing training scenarios.
 
@@ -584,11 +584,11 @@ Track which commands have been implemented in the simulator:
 | ✅ | <kbd><</kbd> | Unindent selection |
 | ❌ | <kbd>=</kbd> | Format selection (LSP) |
 | ✅ | <kbd>d</kbd> | Delete selection |
-| ❌ | <kbd>Alt</kbd>+<kbd>d</kbd> | Delete without yanking |
+| ✅ | <kbd>Alt</kbd>+<kbd>d</kbd> | Delete without yanking |
 | ✅ | <kbd>c</kbd> | Change selection (delete and enter insert mode) |
-| ❌ | <kbd>Alt</kbd>+<kbd>c</kbd> | Change without yanking |
+| ✅ | <kbd>Alt</kbd>+<kbd>c</kbd> | Change without yanking |
 | ❌ | <kbd>Ctrl</kbd>+<kbd>a</kbd>, <kbd>Ctrl</kbd>+<kbd>x</kbd> | Increment/decrement number |
-| ❌ | <kbd>Q</kbd>, <kbd>q</kbd> | Record/replay macro |
+| ✅ | <kbd>Q</kbd>, <kbd>q</kbd> | Record/replay macro |
 
 ### Selection & Line Operations
 
@@ -665,6 +665,13 @@ Track which commands have been implemented in the simulator:
 | ✅ | <kbd>ma</kbd> + object | Select around text object |
 | ✅ | <kbd>mi</kbd> + object | Select inside text object |
 
+### Macros
+
+| Status | Keys | Description |
+|:------:|------|-------------|
+| ✅ | <kbd>Q</kbd> | Start/stop recording macro to a named register |
+| ✅ | <kbd>q</kbd> | Replay recorded macro from a named register |
+
 ### Command Mode
 
 | Status | Keys | Description |
@@ -676,9 +683,9 @@ Track which commands have been implemented in the simulator:
 
 ## Implementation Summary
 
-**Phase 2.2 Complete: 90+ Commands Implemented**
+**Phase 2.2 Complete: 95+ Commands Implemented**
 
-**Implemented:** 90+ commands covering most essential Helix operations
+**Implemented:** 95+ commands covering most essential Helix operations
 
 ### By Category
 
@@ -687,11 +694,12 @@ Track which commands have been implemented in the simulator:
 | **Movement** | 23 | <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> <kbd>w</kbd> <kbd>b</kbd> <kbd>e</kbd> <kbd>W</kbd> <kbd>B</kbd> <kbd>E</kbd> <kbd>0</kbd> <kbd>$</kbd> <kbd>^</kbd> <kbd>gg</kbd> <kbd>ge</kbd> <kbd>gh</kbd> <kbd>gl</kbd> <kbd>gs</kbd> <kbd>G</kbd> <kbd>f</kbd> <kbd>F</kbd> <kbd>t</kbd> <kbd>T</kbd> |
 | **Paragraph** | 2 | <kbd>[p</kbd> <kbd>]p</kbd> |
 | **Page** | 4 | <kbd>Ctrl+b</kbd> <kbd>Ctrl+f</kbd> <kbd>Ctrl+u</kbd> <kbd>Ctrl+d</kbd> |
-| **Editing** | 17 | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>d</kbd> <kbd>c</kbd> <kbd>r</kbd> <kbd>R</kbd> <kbd>~</kbd> <kbd>`</kbd> <kbd>Alt+`</kbd> <kbd>.</kbd> <kbd>u</kbd> <kbd>U</kbd> |
+| **Editing** | 19 | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>d</kbd> <kbd>c</kbd> <kbd>r</kbd> <kbd>R</kbd> <kbd>~</kbd> <kbd>`</kbd> <kbd>Alt+`</kbd> <kbd>Alt+d</kbd> <kbd>Alt+c</kbd> <kbd>.</kbd> <kbd>u</kbd> <kbd>U</kbd> |
 | **Selection** | 20 | <kbd>x</kbd> <kbd>X</kbd> <kbd>v</kbd> <kbd>;</kbd> <kbd>,</kbd> <kbd>%</kbd> <kbd>s</kbd> <kbd>S</kbd> <kbd>C</kbd> <kbd>K</kbd> <kbd>Alt+C</kbd> <kbd>Alt+K</kbd> <kbd>Alt+s</kbd> <kbd>Alt+x</kbd> <kbd>_</kbd> <kbd>&</kbd> <kbd>Alt+-</kbd> <kbd>Alt+_</kbd> <kbd>Alt+,</kbd> |
 | **Search** | 6 | <kbd>/</kbd> <kbd>?</kbd> <kbd>n</kbd> <kbd>N</kbd> <kbd>*</kbd> <kbd>Alt+*</kbd> |
 | **View** | 6 | <kbd>z</kbd> <kbd>zz</kbd> <kbd>zt</kbd> <kbd>zb</kbd> <kbd>zm</kbd> <kbd>zj</kbd> <kbd>zk</kbd> |
 | **Match Mode** | 6 | <kbd>mm</kbd> <kbd>ms</kbd> <kbd>md</kbd> <kbd>mr</kbd> <kbd>ma</kbd> <kbd>mi</kbd> |
+| **Macros** | 2 | <kbd>Q</kbd> <kbd>q</kbd> |
 | **Indentation** | 2 | <kbd>></kbd> <kbd><</kbd> |
 | **Line ops** | 3 | <kbd>J</kbd> <kbd>Alt+J</kbd> <kbd>Ctrl+c</kbd> |
 | **Clipboard** | 3 | <kbd>y</kbd> <kbd>p</kbd> <kbd>P</kbd> |
@@ -701,18 +709,17 @@ Track which commands have been implemented in the simulator:
 
 ### Training Scenarios Coverage
 
-- ✅ 136 scenarios covering 90+ implemented commands
-- ✅ All scenarios use realistic Rust code
+- ✅ 160 scenarios covering 95+ implemented commands
+- ✅ All scenarios use realistic code (Rust, Python, Markdown)
 - ✅ Syntax highlighting for code display
 - ✅ Multiple difficulty levels per command
 - ✅ Hints and alternative solutions provided
-- ✅ Organized in thematic directory structure
+- ✅ Organized in thematic directory structure (movement, editing, registers, writing, macros, and more)
 
 ### Not Yet Implemented (Future Phases)
 
 - Tree-sitter selections (<kbd>Alt+o</kbd>, <kbd>Alt+i</kbd>, etc.)
 - LSP integration commands
-- Macros (<kbd>Q</kbd>, <kbd>q</kbd>) — named registers (<kbd>"</kbd>) are implemented, scoped to y/p/P/R
 - Window mode (<kbd>Ctrl+w</kbd>)
 - Space mode (<kbd>Space</kbd>)
 - Jumplist (<kbd>Ctrl+i</kbd>, <kbd>Ctrl+o</kbd>)

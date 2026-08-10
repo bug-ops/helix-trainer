@@ -57,8 +57,8 @@ All modes feature:
 - **Rich Metadata** — Every scenario tagged with category, difficulty, taught commands, and practice focus
 - **Syntax Highlighting** — Realistic Rust code snippets with proper highlighting
 - **Real Helix Accuracy** — Uses official `helix-core` library (v25.07.1)
-- **100 Commands** — Movement, editing, clipboard, undo/redo, repeat, surround, text objects, multi-cursor
-- **134 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
+- **95+ Commands** — Movement, editing, clipboard, undo/redo, repeat, surround, text objects, multi-cursor, registers, macros
+- **160 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
 - **70 Daily Quests** — Easy, medium, and hard challenges across all commands
 - **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
 - **Arrow Key Navigation** — Optional `enable_arrow_keys_in_normal_mode` configuration for cursor movement
@@ -96,7 +96,7 @@ Both one-liners resolve and pin to the latest release tag before fetching the sc
 Pin a specific version or install directory:
 
 ```bash
-./scripts/install.sh --version 0.5.12 --dir /usr/local/bin
+./scripts/install.sh --version 0.6.0 --dir /usr/local/bin
 ./scripts/install.sh --static   # Linux: static musl build, no audio feature
 ```
 
@@ -170,7 +170,7 @@ Mode Selection
 │  │  ├─ ✅ Practice: Complete 3 scenarios
 │  │  ├─ ⏳ Learning: Try 2 new scenarios
 │  │  └─ 🔄 Review: 5 cards due
-│  ├─ Scenario List (134 available)
+│  ├─ Scenario List (160 available)
 │  │  ├─ Basic Movement (Mastered - 20% XP)
 │  │  ├─ Word Navigation (Proficient - 50% XP)
 │  │  └─ Delete Line (Learning - 100% XP)
@@ -190,8 +190,11 @@ Mode Selection
 | **Match Mode** | <kbd>mm</kbd> (brackets) <kbd>ms</kbd> (surround) <kbd>md</kbd> (delete surround) <kbd>mr</kbd> (replace surround) |
 | **Text Objects** | <kbd>ma</kbd>/<kbd>mi</kbd> + <kbd>w</kbd> <kbd>W</kbd> <kbd>(</kbd> <kbd>[</kbd> <kbd>{</kbd> <kbd><</kbd> <kbd>"</kbd> <kbd>'</kbd> <kbd>`</kbd> <kbd>p</kbd> |
 | **Selection** | <kbd>x</kbd> <kbd>X</kbd> <kbd>v</kbd> <kbd>;</kbd> <kbd>,</kbd> <kbd>Alt</kbd>+<kbd>,</kbd> <kbd>%</kbd> <kbd>s</kbd> <kbd>S</kbd> <kbd>Alt</kbd>+<kbd>s</kbd> <kbd>Alt</kbd>+<kbd>;</kbd> <kbd>&</kbd> <kbd>_</kbd> <kbd>Alt</kbd>+<kbd>-</kbd> <kbd>Alt</kbd>+<kbd>_</kbd> <kbd>C</kbd> <kbd>Alt</kbd>+<kbd>C</kbd> <kbd>K</kbd> <kbd>Alt</kbd>+<kbd>K</kbd> |
-| **Editing** | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>r</kbd> <kbd>c</kbd> <kbd>Alt</kbd>+<kbd>c</kbd> <kbd>d</kbd> <kbd>J</kbd> <kbd>Alt</kbd>+<kbd>J</kbd> <kbd>></kbd> <kbd><</kbd> <kbd>~</kbd> <kbd>`</kbd> <kbd>Alt</kbd>+<kbd>`</kbd> <kbd>R</kbd> <kbd>Alt</kbd>+<kbd>x</kbd> <kbd>Ctrl</kbd>+<kbd>c</kbd> (toggle comment) |
+| **Editing** | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>r</kbd> <kbd>c</kbd> <kbd>Alt</kbd>+<kbd>c</kbd> <kbd>d</kbd> <kbd>Alt</kbd>+<kbd>d</kbd> <kbd>J</kbd> <kbd>Alt</kbd>+<kbd>J</kbd> <kbd>></kbd> <kbd><</kbd> <kbd>~</kbd> <kbd>`</kbd> <kbd>Alt</kbd>+<kbd>`</kbd> <kbd>R</kbd> <kbd>Alt</kbd>+<kbd>x</kbd> <kbd>Ctrl</kbd>+<kbd>c</kbd> (toggle comment) |
 | **Clipboard** | <kbd>y</kbd> <kbd>p</kbd> <kbd>P</kbd> |
+| **Registers** | <kbd>"</kbd><kbd>a</kbd>-<kbd>z</kbd> prefix on <kbd>y</kbd>/<kbd>p</kbd>/<kbd>P</kbd>/<kbd>R</kbd>/<kbd>d</kbd>/<kbd>c</kbd> (named registers) <kbd>"</kbd><kbd>_</kbd> (blackhole, discards writes) |
+| **Macros** | <kbd>q</kbd> (record/stop) <kbd>Q</kbd> (replay) |
+| **Command-line** | <kbd>:</kbd> then <kbd>goto N</kbd> / <kbd>g N</kbd> (jump to line) |
 | **Search** | <kbd>/</kbd> <kbd>?</kbd> <kbd>n</kbd> <kbd>N</kbd> <kbd>*</kbd> <kbd>Alt</kbd>+<kbd>*</kbd> |
 | **View** | <kbd>z</kbd> <kbd>zz</kbd> <kbd>zt</kbd> <kbd>zb</kbd> <kbd>zm</kbd> <kbd>zj</kbd> <kbd>zk</kbd> |
 | **Undo/Redo** | <kbd>u</kbd> <kbd>U</kbd> <kbd>Ctrl</kbd>+<kbd>r</kbd> |

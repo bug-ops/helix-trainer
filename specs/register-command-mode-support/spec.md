@@ -83,9 +83,14 @@ just deferred — see Resolution below):
 - Full command-line surface (`:g` global, `:w` write, `:sort`, arbitrary
   line ranges, shell commands, `:normal`)
 - Register content inspection UI
-- Macro recording/playback (tracked separately under issue #198)
-- Scroll commands, view mode extensions, selection-regex (tracked under
-  issue #198)
+- Macro recording/playback — was tracked separately under issue #198;
+  **now implemented**, see [[../regex-selection-and-macro-commands/spec|Regex
+  Selection and Macro Commands]] and section 11 below
+- Scroll commands, view mode extensions, selection-regex — was tracked
+  under issue #198; **scroll commands and select-all/replace now have
+  scenario coverage** (`d66278d`), **selection-regex now implemented**,
+  see [[../regex-selection-and-macro-commands/spec|Regex Selection and
+  Macro Commands]] and section 11 below
 
 ## 2. User Stories
 
@@ -222,7 +227,50 @@ command, no ranges. This was an explicit, documented scoping decision (see
 `docs/HELIX_KEYBINDINGS.md`'s scope disclaimer), not an oversight. Full
 verdict in [[SRS]].
 
-## 11. See Also
+## 11. Post-Release Extensions (v0.6.0)
+
+Three follow-up commits, still within the register/command-mode feature
+area, shipped after the retroactive documentation above was written:
+
+- **`d66278d`** (closes issue #198) — added scenario coverage for `Ctrl-b`/
+  `Ctrl-f`/`Ctrl-u`/`Ctrl-d` (half-page/page scroll), `%` (select-all), and
+  `R` (replace-selection-with-yanked), plus a bug fix recognizing
+  Ctrl-modified keys that previously fell through to their unmodified
+  bare-key command. Explicitly deferred `q`/`Q` (macros — no
+  record/replay logic existed) and `s`/`S` (selection-regex — no-op
+  stubs) as "from-scratch feature work, not scenario content."
+- **`a4efc2e`** — implemented exactly what `d66278d` deferred: `s`/`S`
+  (regex select/split) and `q`/`Q` (macro record/replay). Fully documented
+  in its own package, [[../regex-selection-and-macro-commands/spec|Regex
+  Selection and Macro Commands]]. This closes issue #198's remaining
+  scope; the "still-open content-coverage gap" language in this package's
+  original research spec (section 2, US-003 note; section 10 References)
+  is now stale and superseded by that package.
+- **`fb2e0c5`**, **`dd39300`**, **`efeac9d`** — a trio of register-scoped
+  Helix-simulator correctness fixes discovered via kitty-keyboard-protocol
+  reachability testing of `Alt-c`/`Alt-d`:
+  - `fb2e0c5` registered `change_selection_noyank` for `Alt-c`, initially
+    reusing the plain `change_selection` handler (at that point the
+    simulator never wrote registers on change/delete, so yank vs. noyank
+    were behaviorally identical).
+  - `dd39300` split the two apart: `change_selection` (`c`, `d`) now
+    deletes the full active selection and writes the deleted text to the
+    default register via `yank_to_register` (folding over all selection
+    ranges, not just the primary one); `change_selection_noyank` (`Alt-c`)
+    keeps the deletion but does not populate the register.
+  - `efeac9d` added **blackhole register** (`"_`) support — register-scoped
+    delete/change operations targeting `"_` discard text instead of
+    overwriting a register, matching real Helix — plus the missing `Alt-d`
+    (`delete_selection_noyank`) binding mirroring `Alt-c`, and a fix for
+    command-repeat (`.`) silently dropping `"<reg>d`/`"<reg>c`
+    register-scoped operations (a gap only reachable once `d`/`c` became
+    routable through the register-selection input layer).
+
+These extend FR-002/FR-003 (register-scoped yank on `y`, paste on `p`/`P`)
+to also cover register-scoped delete/change (`d`/`c`), and add the
+blackhole register as a new addressable register alongside named ones.
+
+## 12. See Also
 
 - [[constitution]] — project principles
 - [[BRD]] — business rationale and what actually shipped
@@ -230,9 +278,13 @@ verdict in [[SRS]].
 - [[NFR]] — non-functional requirement verdicts
 - [[plan]] — as-built architecture
 - [[tasks]] — retroactive task breakdown
+- [[../regex-selection-and-macro-commands/spec|Regex Selection and Macro
+  Commands]] — resolves this package's deferred macro/selection-regex
+  scope (section 11)
 - [[MOC-specs]] — all specifications
 - [Helix Keymap Reference](https://docs.helix-editor.com/keymap.html)
 - [Helix Command-Line Reference](https://docs.helix-editor.com/command-line.html)
 - [S-Sigdel/vimhjkl](https://github.com/S-Sigdel/vimhjkl) — reference project
-- Issue #198 — Helix command content-coverage gap (macros, scroll, view mode, selection-regex — distinct, unaddressed)
+- Issue #198 — Helix command content-coverage gap — **closed**, see
+  section 11 (macros, scroll, selection-regex all landed)
 - Issue #104 — vim-style marks explicitly rejected (authoritative prior art)

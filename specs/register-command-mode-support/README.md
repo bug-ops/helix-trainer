@@ -78,4 +78,10 @@ variant as the draft's FR-005/NFR-002 requested.
 - [[constitution]] — project principles, Section I (Architecture)
 - `docs/HELIX_KEYBINDINGS.md` — user-facing scope disclaimer
 - Issue #104 — vim-style marks explicitly rejected (unaffected by this work)
-- Issue #198 — separate, still-open content-coverage gap (macros, scroll, view mode, selection-regex)
+- Issue #198 — Helix command content-coverage gap (macros, scroll, view
+  mode, selection-regex) — **closed** as of v0.6.0: scroll/select-all/`R`
+  scenario coverage landed in `d66278d`, and macros/selection-regex landed
+  in `a4efc2e`, documented in
+  `specs/regex-selection-and-macro-commands/spec.md` (see
+  `spec.md#11. Post-Release Extensions (v0.6.0)` in this package for the
+  full breakdown)

@@ -9,6 +9,10 @@ ignore = [
     # (bincode -> syntect -> helix-trainer); syntect is actively maintained
     # and will update when it moves off bincode
     "RUSTSEC-2025-0141",
+    # smartstring is unmaintained but it's a transitive dependency pinned by
+    # helix-core (smartstring -> helix-core -> helix-trainer); helix-core is
+    # vendored at upstream tag 25.07.1 and has no safe upgrade path off it
+    "RUSTSEC-2026-0249",
 ]
 
 [licenses]

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `cargo deny check` (CI's Security Audit job) failing on RUSTSEC-2026-0249: `smartstring` was marked unmaintained upstream; it is a transitive dependency pinned by `helix-core` (vendored at upstream tag 25.07.1) with no safe upgrade path, so it is now ignored in `deny.toml` following the same pattern as the existing `bincode` ignore.
+
 ## [0.6.0] - 2026-08-10
 
 ### Added

@@ -48,7 +48,7 @@ status: permanent
 
 ## II. Technology Stack
 
-- Language: Rust, MSRV per `Cargo.toml` `rust-version` (1.91 at time of
+- Language: Rust, MSRV per `Cargo.toml` `rust-version` (1.98 at time of
   writing).
 - TUI: `ratatui` + `crossterm`.
 - Async runtime: `tokio` (2 worker threads).

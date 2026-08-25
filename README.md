@@ -3,7 +3,7 @@
 [![CI Status](https://img.shields.io/github/actions/workflow/status/bug-ops/helix-trainer/ci.yml?branch=main)](https://github.com/bug-ops/helix-trainer/actions)
 [![codecov](https://codecov.io/github/bug-ops/helix-trainer/graph/badge.svg?token=GMTOLA56LW)](https://codecov.io/github/bug-ops/helix-trainer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.91+-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.98+-orange.svg)](https://www.rust-lang.org)
 [![Release](https://img.shields.io/github/v/release/bug-ops/helix-trainer)](https://github.com/bug-ops/helix-trainer/releases/latest)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 
@@ -135,7 +135,7 @@ cd helix-trainer-*/
 ### Build from source
 
 > [!WARNING]
-> **Requires Rust 1.91+** (2024 edition). Install via [rustup.rs](https://rustup.rs/)
+> **Requires Rust 1.98+** (2024 edition). Install via [rustup.rs](https://rustup.rs/)
 
 ```bash
 git clone https://github.com/bug-ops/helix-trainer.git

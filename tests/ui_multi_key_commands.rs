@@ -10,6 +10,7 @@ use helix_trainer::input::keymap::CanonicalKeys;
 use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::ui::state::{InputStateAccess, TypedScreen};
 use helix_trainer::ui::{AppState, Message, update};
+use std::assert_matches;
 use std::borrow::Cow;
 
 /// Build an `ExecuteCommand` message for a single physical key with no
@@ -362,10 +363,10 @@ fn test_register_yank_paste_multi_key() {
     // '"' - transitions to RegisterPending
     update(&mut state, exec("\"")).unwrap();
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(matches!(
+        assert_matches!(
             task_data.input_state().state(),
             helix_trainer::input::typestate::InputState::RegisterPending
-        ));
+        );
     } else {
         panic!("Should be on Task screen");
     }
@@ -373,10 +374,10 @@ fn test_register_yank_paste_multi_key() {
     // 'a' - selects register a, transitions to RegisterOpPending
     update(&mut state, exec("a")).unwrap();
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(matches!(
+        assert_matches!(
             task_data.input_state().state(),
             helix_trainer::input::typestate::InputState::RegisterOpPending { register: 'a' }
-        ));
+        );
         // Nothing executed yet
         assert_eq!(task_data.session.current_content(), "alpha beta");
     } else {

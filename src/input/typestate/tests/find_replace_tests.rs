@@ -1,5 +1,7 @@
 //! Tests for FindCharPending and ReplaceCharPending handlers
 
+use std::assert_matches;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
@@ -21,7 +23,7 @@ fn test_find_char_pending_accept_char() {
         &state,
         KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "fa"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "fa");
 }
 
 #[test]
@@ -33,7 +35,7 @@ fn test_find_char_pending_backward() {
         &state,
         KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "Fx"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "Fx");
 }
 
 #[test]
@@ -45,7 +47,7 @@ fn test_till_char_pending() {
         &state,
         KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "te"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "te");
 }
 
 #[test]
@@ -54,7 +56,7 @@ fn test_find_char_escape_cancels() {
         find_type: FindType::FindForward,
     };
     let result = KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 // ============================================================================
@@ -67,7 +69,7 @@ fn test_replace_char_pending_accept_char() {
         &ReplaceCharPending,
         KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ra"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ra");
 }
 
 #[test]
@@ -76,7 +78,7 @@ fn test_replace_char_pending_enter_newline() {
         &ReplaceCharPending,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "r\n"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "r\n");
 }
 
 #[test]
@@ -85,7 +87,7 @@ fn test_replace_char_escape_cancels() {
         &ReplaceCharPending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 // ============================================================================
@@ -98,7 +100,7 @@ fn test_unmatched_prev_pending_p_produces_goto_prev_paragraph() {
         &UnmatchedPrevPending,
         KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_PREV_PARAGRAPH));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_PREV_PARAGRAPH);
 }
 
 #[test]
@@ -107,7 +109,7 @@ fn test_unmatched_prev_pending_escape_cancels() {
         &UnmatchedPrevPending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -116,7 +118,7 @@ fn test_unmatched_prev_pending_other_key_cancels() {
         &UnmatchedPrevPending,
         KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -125,7 +127,7 @@ fn test_unmatched_prev_pending_digit_cancels() {
         &UnmatchedPrevPending,
         KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 // ============================================================================
@@ -138,7 +140,7 @@ fn test_unmatched_next_pending_p_produces_goto_next_paragraph() {
         &UnmatchedNextPending,
         KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_NEXT_PARAGRAPH));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_NEXT_PARAGRAPH);
 }
 
 #[test]
@@ -147,7 +149,7 @@ fn test_unmatched_next_pending_escape_cancels() {
         &UnmatchedNextPending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -156,7 +158,7 @@ fn test_unmatched_next_pending_other_key_cancels() {
         &UnmatchedNextPending,
         KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -165,5 +167,5 @@ fn test_unmatched_next_pending_digit_cancels() {
         &UnmatchedNextPending,
         KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }

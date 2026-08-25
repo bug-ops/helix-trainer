@@ -1,5 +1,7 @@
 //! Tests for navigation and screen transitions
 
+use std::assert_matches;
+
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::ui::state::{Message, Screen, TypedScreen, update};
 
@@ -214,21 +216,21 @@ fn test_quit_app_persists_fsrs_data_from_live_action() {
 #[test]
 fn test_navigate_to_screen() {
     let mut state = create_test_app_state(vec![]);
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 
     // After TypedScreen refactoring, only screens with standalone data can be navigated to
     // Task and Results require active sessions, so only test Profile/Statistics/Menu/ModeSelection
     update(&mut state, Message::NavigateTo(Screen::Profile)).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Profile(_)));
+    assert_matches!(state.screen, TypedScreen::Profile(_));
 
     update(&mut state, Message::NavigateTo(Screen::Statistics)).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Statistics(_)));
+    assert_matches!(state.screen, TypedScreen::Statistics(_));
 
     update(&mut state, Message::NavigateTo(Screen::MainMenu)).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 
     update(&mut state, Message::NavigateTo(Screen::ModeSelection)).unwrap();
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 
 #[test]
@@ -238,11 +240,11 @@ fn test_back_to_menu_clears_session() {
 
     update(&mut state, Message::StartScenario(0)).unwrap();
     // After TypedScreen refactoring, verify we're on Task screen
-    assert!(matches!(state.screen, TypedScreen::Task(_)));
+    assert_matches!(state.screen, TypedScreen::Task(_));
 
     update(&mut state, Message::BackToMenu).unwrap();
     // Should transition back to ModeSelection screen (the main menu)
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 
 #[test]

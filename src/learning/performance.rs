@@ -489,6 +489,7 @@ mod tests {
 
     use super::*;
     use crate::time::FakeClock;
+    use std::assert_matches;
 
     #[test]
     fn test_new_command_defaults() {
@@ -544,10 +545,7 @@ mod tests {
         let perf = tracker.performance("x").unwrap();
         assert!(perf.stability > 0.0);
         assert_eq!(perf.reps, 1);
-        assert!(matches!(
-            perf.state,
-            CardState::Learning | CardState::Review
-        ));
+        assert_matches!(perf.state, CardState::Learning | CardState::Review);
 
         let first_stability = perf.stability;
 
@@ -575,10 +573,7 @@ mod tests {
         let perf = tracker.performance("x").unwrap();
         // Lapse count increases when failing
         assert_eq!(perf.lapses, lapses_before + 1);
-        assert!(matches!(
-            perf.state,
-            CardState::Relearning | CardState::Learning
-        ));
+        assert_matches!(perf.state, CardState::Relearning | CardState::Learning);
     }
 
     #[test]

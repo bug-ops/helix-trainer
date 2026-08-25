@@ -220,6 +220,7 @@ impl ReviewSession {
 mod tests {
     use super::*;
     use crate::learning::PerformanceTracker;
+    use std::assert_matches;
 
     fn create_populated_tracker() -> Rc<RefCell<PerformanceTracker>> {
         let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
@@ -300,20 +301,20 @@ mod tests {
 
             let result = &session.results[0];
             // Both old and new mastery should be set
-            assert!(matches!(
+            assert_matches!(
                 result.old_mastery,
                 MasteryLevel::Beginner
                     | MasteryLevel::Intermediate
                     | MasteryLevel::Advanced
                     | MasteryLevel::Master
-            ));
-            assert!(matches!(
+            );
+            assert_matches!(
                 result.new_mastery,
                 MasteryLevel::Beginner
                     | MasteryLevel::Intermediate
                     | MasteryLevel::Advanced
                     | MasteryLevel::Master
-            ));
+            );
         }
     }
 

@@ -10,6 +10,7 @@
 use helix_trainer::learning::{
     Analytics, MasteryLevel, PerformanceTracker, ReviewSession, Scheduler,
 };
+use std::assert_matches;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -75,13 +76,13 @@ fn test_complete_learning_workflow() {
     assert_eq!(x_perf.attempts, 3);
     assert_eq!(x_perf.successes, 3);
     // Mastery level is calculated by FSRS, don't assert specific level
-    assert!(matches!(
+    assert_matches!(
         x_perf.mastery_level,
         MasteryLevel::Beginner
             | MasteryLevel::Intermediate
             | MasteryLevel::Advanced
             | MasteryLevel::Master
-    ));
+    );
 
     let yy_perf = tracker.performance("yy").unwrap();
     assert_eq!(yy_perf.attempts, 3);
@@ -135,13 +136,13 @@ fn test_mastery_progression() {
     let perf = tracker.performance("x").unwrap();
 
     // With 20 successful attempts, should have valid mastery level
-    assert!(matches!(
+    assert_matches!(
         perf.mastery_level,
         MasteryLevel::Beginner
             | MasteryLevel::Intermediate
             | MasteryLevel::Advanced
             | MasteryLevel::Master
-    ));
+    );
     assert_eq!(perf.attempts, 20);
     assert_eq!(perf.successes, 20);
 

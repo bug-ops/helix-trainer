@@ -2,6 +2,7 @@
 
 use helix_trainer::gamification::*;
 use helix_trainer::learning::PerformanceTracker;
+use std::assert_matches;
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -41,10 +42,10 @@ fn test_complete_user_flow() {
 
     // Update streak
     let change = StreakManager::update_streak(&mut profile, chrono::Utc::now());
-    assert!(matches!(
+    assert_matches!(
         change,
         StreakChange::Continued | StreakChange::Incremented { .. }
-    ));
+    );
 
     // Check achievements
     profile.perfect_scenarios = 1;

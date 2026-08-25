@@ -1,5 +1,7 @@
 //! Tests for ViewPending handler
 
+use std::assert_matches;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
@@ -11,7 +13,7 @@ fn test_view_pending_zz() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_CENTER));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_CENTER);
 }
 
 #[test]
@@ -20,7 +22,7 @@ fn test_view_pending_zt() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_TOP));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_TOP);
 }
 
 #[test]
@@ -29,7 +31,7 @@ fn test_view_pending_zb() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_BOTTOM));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_BOTTOM);
 }
 
 #[test]
@@ -38,7 +40,7 @@ fn test_view_pending_zm() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_CENTER_HORIZONTAL));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_CENTER_HORIZONTAL);
 }
 
 #[test]
@@ -47,7 +49,7 @@ fn test_view_pending_zj() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_SCROLL_DOWN));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_SCROLL_DOWN);
 }
 
 #[test]
@@ -56,7 +58,7 @@ fn test_view_pending_zk() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_SCROLL_UP));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_SCROLL_UP);
 }
 
 #[test]
@@ -65,7 +67,7 @@ fn test_view_pending_escape_cancels() {
         &ViewPending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -74,5 +76,5 @@ fn test_view_pending_invalid_cancels() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }

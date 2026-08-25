@@ -540,6 +540,7 @@ impl ConfigState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn test_ui_state_new() {
@@ -853,7 +854,7 @@ mod tests {
             .await
             .expect("save result should arrive")
             .expect("channel should not be closed");
-        assert!(matches!(msg, DataLoadMessage::ProfileSaved));
+        assert_matches!(msg, DataLoadMessage::ProfileSaved);
 
         let expected_xp = progress.profile.total_xp;
         // Drop every sender clone — including the one `progress` holds
@@ -951,8 +952,9 @@ mod tests {
 
         // Within the debounce window: should not dispatch another save.
         progress.save_debounced().unwrap();
-        assert!(
-            matches!(result_rx.try_recv(), Err(mpsc::error::TryRecvError::Empty)),
+        assert_matches!(
+            result_rx.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty),
             "debounced call within the window must not dispatch a second save"
         );
     }
@@ -995,8 +997,9 @@ mod tests {
                 .await
                 .expect("save result should arrive")
                 .expect("channel should not be closed");
-            assert!(
-                matches!(msg, DataLoadMessage::ProfileSaved),
+            assert_matches!(
+                msg,
+                DataLoadMessage::ProfileSaved,
                 "every save must succeed, got {msg:?}"
             );
         }
@@ -1062,7 +1065,7 @@ mod tests {
                 .await
                 .expect("save result should arrive")
                 .expect("channel should not be closed");
-            assert!(matches!(msg, DataLoadMessage::ProfileSaved));
+            assert_matches!(msg, DataLoadMessage::ProfileSaved);
         }
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();

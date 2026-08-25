@@ -542,6 +542,7 @@ mod tests {
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
     use crate::ui::state::{ConfigState, GameState, ProgressState, UIState};
+    use std::assert_matches;
 
     fn create_test_scenario(id: &str) -> Scenario {
         create_test_scenario_with_difficulty(id, Difficulty::Beginner)
@@ -623,7 +624,7 @@ mod tests {
         start_minigame(&mut state);
 
         assert!(state.game.minigame_session.is_some());
-        assert!(matches!(state.screen, TypedScreen::MiniGame(_)));
+        assert_matches!(state.screen, TypedScreen::MiniGame(_));
 
         if let Some(ref session) = state.game.minigame_session {
             assert!(session.state().is_countdown());
@@ -931,7 +932,7 @@ mod tests {
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         assert!(state.game.minigame_session.is_none());
-        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+        assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     }
 
     #[test]
@@ -1536,7 +1537,7 @@ mod tests {
         );
         let outcome = handle_minigame_scenario_complete(&mut ctx).unwrap();
 
-        assert!(matches!(outcome, HandlerOutcome::Stay));
+        assert_matches!(outcome, HandlerOutcome::Stay);
     }
 
     #[test]
@@ -1554,7 +1555,7 @@ mod tests {
 
         let outcome = handle_minigame_next_scenario(&mut state).unwrap();
 
-        assert!(matches!(outcome, HandlerOutcome::Stay));
+        assert_matches!(outcome, HandlerOutcome::Stay);
     }
 
     /// Regression test for S4b: a half-typed prefix/register/command-line
@@ -1798,7 +1799,7 @@ mod tests {
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         assert!(state.game.minigame_session.is_none());
-        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+        assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     }
 
     #[test]
@@ -1830,7 +1831,7 @@ mod tests {
 
         // Session should be cleared
         assert!(state.game.minigame_session.is_none());
-        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+        assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     }
 
     /// Regression test for #291: achievements must unlock through the live arcade
@@ -2173,7 +2174,7 @@ mod tests {
             "returning to menu from an already-processed game-over must not increment games_played again"
         );
         assert!(state.game.minigame_session.is_none());
-        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+        assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     }
 
     /// Regression test for #309: a game-over that doesn't cross a level threshold must
@@ -2333,6 +2334,6 @@ mod tests {
             "returning to menu from an already-processed session timeout must not increment games_played again"
         );
         assert!(state.game.minigame_session.is_none());
-        assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+        assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     }
 }

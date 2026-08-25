@@ -524,6 +524,7 @@ mod tests {
     use crate::ui::state::{
         AppState, ConfigState, GameState, ProgressState, TaskData, TypedScreen, UIState,
     };
+    use std::assert_matches;
 
     fn create_test_scenario() -> Scenario {
         create_test_scenario_with_difficulty("test_scenario", Difficulty::Beginner)
@@ -568,10 +569,10 @@ mod tests {
 
         let outcome = handle_start_scenario(&mut ctx, 0).unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             outcome,
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Task(_))
-        ));
+        );
         assert!(!ctx.ui.show_key_history);
         assert!(ctx.ui.completion_time.is_none());
     }
@@ -588,7 +589,7 @@ mod tests {
 
         let outcome = handle_start_scenario(&mut ctx, 999).unwrap();
 
-        assert!(matches!(outcome, HandlerOutcome::Stay));
+        assert_matches!(outcome, HandlerOutcome::Stay);
     }
 
     #[test]
@@ -599,12 +600,12 @@ mod tests {
 
         let screen = handle_abandon_scenario(task_data).unwrap();
 
-        assert!(matches!(screen, TypedScreen::Results(_)));
+        assert_matches!(screen, TypedScreen::Results(_));
         if let TypedScreen::Results(results) = screen {
-            assert!(matches!(
+            assert_matches!(
                 results.session,
                 crate::ui::state::CompletedOrAbandoned::Abandoned(_)
-            ));
+            );
         }
     }
 
@@ -640,7 +641,7 @@ mod tests {
 
         let screen = handle_retry_scenario(results_data, &mut ctx).unwrap();
 
-        assert!(matches!(screen, TypedScreen::Task(_)));
+        assert_matches!(screen, TypedScreen::Task(_));
         assert!(!ctx.ui.show_key_history);
         assert!(ctx.ui.completion_time.is_none());
     }
@@ -664,7 +665,7 @@ mod tests {
 
         let screen = handle_retry_scenario(results_data, &mut ctx).unwrap();
 
-        assert!(matches!(screen, TypedScreen::Task(_)));
+        assert_matches!(screen, TypedScreen::Task(_));
     }
 
     #[test]
@@ -679,10 +680,10 @@ mod tests {
 
         let outcome = handle_next_scenario(&mut ctx).unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             outcome,
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Menu(_))
-        ));
+        );
     }
 
     /// Regression test for #292 finding F2 (impl-critic): `xp_breakdown.quest_bonuses`
@@ -804,10 +805,10 @@ mod tests {
 
         let outcome = handle_complete_scenario(&mut state).unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             outcome,
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Menu(_))
-        ));
+        );
     }
 
     #[test]
@@ -835,10 +836,10 @@ mod tests {
 
         let outcome = handle_complete_scenario(&mut state).unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             outcome,
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Results(_))
-        ));
+        );
     }
 
     #[test]
@@ -873,10 +874,10 @@ mod tests {
 
         let outcome = handle_complete_scenario(&mut state).unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             outcome,
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Results(_))
-        ));
+        );
 
         assert!(state.progress.profile.total_xp > initial_xp);
         assert_eq!(state.progress.scenarios_completed_today, 1);
@@ -1442,7 +1443,7 @@ mod tests {
         let outcome = handle_start_scenario(&mut ctx, 0).unwrap();
 
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::Task(_)));
+            assert_matches!(*screen, TypedScreen::Task(_));
         } else {
             panic!("Expected Transition outcome");
         }
@@ -1457,10 +1458,10 @@ mod tests {
         let screen = handle_abandon_scenario(task_data).unwrap();
 
         if let TypedScreen::Results(results) = screen {
-            assert!(matches!(
+            assert_matches!(
                 results.session,
                 crate::ui::state::CompletedOrAbandoned::Abandoned(_)
-            ));
+            );
         } else {
             panic!("Expected Results screen");
         }
@@ -1479,7 +1480,7 @@ mod tests {
         let outcome = handle_next_scenario(&mut ctx).unwrap();
 
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::Menu(_)));
+            assert_matches!(*screen, TypedScreen::Menu(_));
         } else {
             panic!("Expected Transition outcome");
         }
@@ -1570,8 +1571,9 @@ mod tests {
         let outcome = handle_next_lesson(&results_data, &mut ctx).unwrap();
 
         // Should stay on results screen
-        assert!(
-            matches!(outcome, HandlerOutcome::Stay),
+        assert_matches!(
+            outcome,
+            HandlerOutcome::Stay,
             "Expected Stay outcome at end of list"
         );
     }
@@ -1592,10 +1594,7 @@ mod tests {
 
         // Should transition to Menu screen
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(
-                matches!(*screen, TypedScreen::Menu(_)),
-                "Expected Menu screen"
-            );
+            assert_matches!(*screen, TypedScreen::Menu(_), "Expected Menu screen");
         } else {
             panic!("Expected Transition outcome");
         }
@@ -1617,10 +1616,7 @@ mod tests {
 
         // Should always transition to Menu screen
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(
-                matches!(*screen, TypedScreen::Menu(_)),
-                "Expected Menu screen"
-            );
+            assert_matches!(*screen, TypedScreen::Menu(_), "Expected Menu screen");
         } else {
             panic!("Expected Transition outcome");
         }
@@ -1642,10 +1638,7 @@ mod tests {
 
         // Should always transition to Menu screen regardless of scenario_index
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(
-                matches!(*screen, TypedScreen::Menu(_)),
-                "Expected Menu screen"
-            );
+            assert_matches!(*screen, TypedScreen::Menu(_), "Expected Menu screen");
         } else {
             panic!("Expected Transition outcome");
         }
@@ -1751,10 +1744,10 @@ mod tests {
         let outcome = handle_start_scenario(&mut ctx, 2).unwrap();
 
         // Verify transition to Task screen
-        assert!(matches!(
+        assert_matches!(
             outcome,
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Task(_))
-        ));
+        );
 
         // Verify menu position was saved
         assert_eq!(
@@ -2026,7 +2019,7 @@ mod tests {
 
         let outcome = handle_next_lesson(&results_data, &mut ctx).unwrap();
 
-        assert!(matches!(outcome, HandlerOutcome::Stay));
+        assert_matches!(outcome, HandlerOutcome::Stay);
         assert!(
             ctx.ui.notifications.visible().iter().any(|n| matches!(
                 n.notification_type,

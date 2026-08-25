@@ -35,7 +35,7 @@ fn fsync_parent_dir(path: &Path) {
     // filename with no directory component; treat that the same as "no
     // parent given" and fsync the current directory instead of no-op'ing.
     let parent = match path.parent() {
-        Some(p) if !p.as_os_str().is_empty() => p,
+        Some(p) if !p.is_empty() => p,
         _ => Path::new("."),
     };
     if let Ok(dir) = fs::File::open(parent) {

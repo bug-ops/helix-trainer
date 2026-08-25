@@ -9,6 +9,7 @@
 //! constructing `ReviewSessionState` directly, since `StartReviewSession` cannot be
 //! relied on to produce a due review deterministically.
 
+use std::assert_matches;
 use std::time::{Duration, Instant};
 
 use super::common::{create_test_app_state, create_test_scenario};
@@ -30,9 +31,9 @@ fn test_review_session_with_no_due_reviews() {
     // May or may not have reviews due - depends on FSRS algorithm
     // If no reviews due, should stay on menu
     if state.game.review_session.is_none() {
-        assert!(matches!(state.screen, TypedScreen::Menu(_)));
+        assert_matches!(state.screen, TypedScreen::Menu(_));
     } else {
-        assert!(matches!(state.screen, TypedScreen::Review(_)));
+        assert_matches!(state.screen, TypedScreen::Review(_));
     }
 }
 
@@ -43,7 +44,7 @@ fn test_review_session_message_handlers() {
     let state = create_test_app_state(vec![scenario]);
 
     // Test AbandonReviewSession message handler
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 
     // The actual review session behavior depends on FSRS scheduling
     // This test verifies the message handlers are correctly wired
@@ -55,12 +56,12 @@ fn test_review_session_no_due_reviews_stays_on_menu() {
     let mut state = create_test_app_state(vec![scenario]);
 
     // Don't add any reviews to tracker
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Should stay on ModeSelection when no reviews are due
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     assert!(state.game.review_session.is_none());
 }
 
@@ -131,7 +132,7 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
     // Session should be cleared and XP awarded (1 completed * 10 + 100% success * 20).
     assert!(state.game.review_session.is_none());
     assert_eq!(state.progress.profile.total_xp, initial_xp + 30);
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 
     let persisted = ProfileStorage::with_path(state.progress.storage.path())
         .load()
@@ -260,7 +261,7 @@ fn test_abandon_review_session_persists_partial_progress() {
     update(&mut state, Message::AbandonReviewSession).unwrap();
 
     assert!(state.game.review_session.is_none());
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 
     let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
     assert!(

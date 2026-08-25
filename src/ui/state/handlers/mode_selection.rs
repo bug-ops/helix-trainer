@@ -187,6 +187,7 @@ mod tests {
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
     use crate::ui::state::{ConfigState, GameState, ProgressState, UIState};
+    use std::assert_matches;
 
     fn create_test_scenario(id: &str) -> crate::config::Scenario {
         ScenarioBuilder::new()
@@ -286,7 +287,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::Menu(_)));
+            assert_matches!(*screen, TypedScreen::Menu(_));
         }
     }
 
@@ -299,7 +300,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::MiniGame(_)));
+            assert_matches!(*screen, TypedScreen::MiniGame(_));
         }
     }
 
@@ -340,7 +341,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::Menu(_)));
+            assert_matches!(*screen, TypedScreen::Menu(_));
         }
     }
 
@@ -440,7 +441,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::MiniGame(_)));
+            assert_matches!(*screen, TypedScreen::MiniGame(_));
             if let TypedScreen::MiniGame(data) = *screen {
                 assert!(data.mode.as_ref().map(|m| m.is_survival()).unwrap_or(false));
             }
@@ -466,7 +467,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::MiniGame(_)));
+            assert_matches!(*screen, TypedScreen::MiniGame(_));
         }
 
         // Verify session is created with 3 lives
@@ -518,10 +519,10 @@ mod tests {
             ctx.ui.notifications.visible()[0].message(),
             rust_i18n::t!("minigame.challenge_no_attempts_left").to_string()
         );
-        assert!(matches!(
+        assert_matches!(
             ctx.ui.notifications.visible()[0].notification_type,
             crate::ui::notification::NotificationType::Info { .. }
-        ));
+        );
     }
 
     /// Regression guard: exhausting Daily Challenge attempts must not affect

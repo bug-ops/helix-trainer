@@ -11,6 +11,7 @@ use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::ui::state::{AppState, Message, TypedScreen};
 use helix_trainer::ui::update;
+use std::assert_matches;
 use std::time::Duration;
 
 /// Helper: Create test app state with optional due reviews
@@ -44,14 +45,14 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
 #[test]
 fn test_start_review_session_with_due_reviews() {
     let mut state = create_test_app_state_with_reviews(5);
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     assert!(state.game.review_session.is_none());
 
     // Start review session
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Should transition to Review screen and create session state
-    assert!(matches!(state.screen, TypedScreen::Review(_)));
+    assert_matches!(state.screen, TypedScreen::Review(_));
     assert!(state.game.review_session.is_some());
 
     let session = state.game.review_session.as_ref().unwrap();
@@ -64,13 +65,13 @@ fn test_start_review_session_with_due_reviews() {
 #[test]
 fn test_start_review_session_with_zero_due_reviews() {
     let mut state = create_test_app_state_with_reviews(0);
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 
     // Try to start review session with no due reviews
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Should stay on ModeSelection (no reviews available)
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     assert!(state.game.review_session.is_none());
 }
 
@@ -80,7 +81,7 @@ fn test_start_review_session_with_one_review_boundary() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    assert!(matches!(state.screen, TypedScreen::Review(_)));
+    assert_matches!(state.screen, TypedScreen::Review(_));
     let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.due_commands.len(), 1);
     assert_eq!(session.current_index, 0);
@@ -92,7 +93,7 @@ fn test_start_review_session_with_many_reviews_stress_test() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    assert!(matches!(state.screen, TypedScreen::Review(_)));
+    assert_matches!(state.screen, TypedScreen::Review(_));
     let session = state.game.review_session.as_ref().unwrap();
     assert_eq!(session.due_commands.len(), 100);
     assert_eq!(session.current_index, 0);
@@ -104,7 +105,7 @@ fn test_abandon_review_session_mid_way() {
 
     // Start session
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Review(_)));
+    assert_matches!(state.screen, TypedScreen::Review(_));
 
     // Complete 2 reviews
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
@@ -118,7 +119,7 @@ fn test_abandon_review_session_mid_way() {
     update(&mut state, Message::AbandonReviewSession).unwrap();
 
     // Should return to menu and clear session
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(state.game.review_session.is_none());
 }
 
@@ -139,7 +140,7 @@ fn test_complete_all_reviews_successfully() {
     }
 
     // Should return to menu and award XP
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(state.game.review_session.is_none());
 
     // Verify XP was awarded
@@ -257,7 +258,7 @@ fn test_next_review_command_ends_session() {
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     // Session should end and return to menu
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(state.game.review_session.is_none());
 }
 
@@ -306,15 +307,15 @@ fn test_state_transition_review_to_next_to_review() {
 
     // MainMenu → Review
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Review(_)));
+    assert_matches!(state.screen, TypedScreen::Review(_));
 
     // Review → Next → Still Review
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Review(_)));
+    assert_matches!(state.screen, TypedScreen::Review(_));
 
     // Review → Complete → MainMenu
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 }
 
 #[test]
@@ -323,11 +324,11 @@ fn test_state_transition_review_to_abandon_to_menu() {
 
     // MainMenu → Review
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Review(_)));
+    assert_matches!(state.screen, TypedScreen::Review(_));
 
     // Review → Abandon → MainMenu
     update(&mut state, Message::AbandonReviewSession).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 }
 
 #[test]
@@ -336,7 +337,7 @@ fn test_state_transition_menu_to_review_no_due() {
 
     // ModeSelection → (Try Review) → Stay on ModeSelection
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 
 // ============================================================================
@@ -510,7 +511,7 @@ fn test_complete_flow_all_successful() {
 
     // Start review session
     update(&mut state, Message::StartReviewSession).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Review(_)));
+    assert_matches!(state.screen, TypedScreen::Review(_));
 
     // Complete all 5 reviews successfully
     for i in 0..5 {
@@ -522,7 +523,7 @@ fn test_complete_flow_all_successful() {
     }
 
     // Session should end
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(state.game.review_session.is_none());
 
     // XP should be awarded
@@ -554,7 +555,7 @@ fn test_complete_flow_all_failed() {
     }
 
     // Session should still end and award base XP
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(state.game.review_session.is_none());
 
     let final_xp = {
@@ -583,7 +584,7 @@ fn test_complete_flow_abandoned_after_partial() {
     update(&mut state, Message::AbandonReviewSession).unwrap();
 
     // Should return to menu without awarding XP (session incomplete)
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(state.game.review_session.is_none());
 
     let final_xp = {
@@ -603,7 +604,7 @@ fn test_complete_flow_zero_reviews() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Should stay on ModeSelection (initial screen)
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     assert!(state.game.review_session.is_none());
 }
 
@@ -625,7 +626,7 @@ fn test_boundary_single_review() {
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     // Should immediately end session
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(state.game.review_session.is_none());
 }
 
@@ -644,7 +645,7 @@ fn test_boundary_large_review_count() {
     }
 
     // Should handle large count gracefully
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(state.game.review_session.is_none());
 }
 

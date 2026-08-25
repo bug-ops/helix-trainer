@@ -1,5 +1,7 @@
 //! Tests for AppState functionality
 
+use std::assert_matches;
+
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::ui::state::TypedScreen;
 
@@ -48,7 +50,7 @@ fn test_scenario_invalid_index() {
 #[test]
 fn test_initial_screen_is_mode_selection() {
     let state = create_test_app_state(vec![]);
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 
 #[test]

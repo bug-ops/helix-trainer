@@ -1,5 +1,7 @@
 //! Tests for TextObject handlers
 
+use std::assert_matches;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::input::typestate::{
@@ -16,7 +18,7 @@ fn test_text_object_around_word() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "maw"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "maw");
 }
 
 #[test]
@@ -25,7 +27,7 @@ fn test_text_object_around_word_big() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "maW"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "maW");
 }
 
 #[test]
@@ -34,7 +36,7 @@ fn test_text_object_around_parens() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ma("));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ma(");
 }
 
 #[test]
@@ -43,7 +45,7 @@ fn test_text_object_around_quotes() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ma\""));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ma\"");
 }
 
 #[test]
@@ -52,7 +54,7 @@ fn test_text_object_around_paragraph() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "map"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "map");
 }
 
 #[test]
@@ -61,7 +63,7 @@ fn test_text_object_around_escape_cancels() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -70,7 +72,7 @@ fn test_text_object_around_invalid_cancels() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 // ============================================================================
@@ -83,7 +85,7 @@ fn test_text_object_inside_word() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "miw"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "miw");
 }
 
 #[test]
@@ -92,7 +94,7 @@ fn test_text_object_inside_brackets() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi["));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi[");
 }
 
 #[test]
@@ -101,7 +103,7 @@ fn test_text_object_inside_braces() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi{"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi{");
 }
 
 #[test]
@@ -110,7 +112,7 @@ fn test_text_object_inside_angle_brackets() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('<'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi<"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi<");
 }
 
 #[test]
@@ -119,7 +121,7 @@ fn test_text_object_inside_single_quote() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('\''), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi'"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi'");
 }
 
 #[test]
@@ -128,7 +130,7 @@ fn test_text_object_inside_backtick() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('`'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mi`"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi`");
 }
 
 #[test]
@@ -137,5 +139,5 @@ fn test_text_object_inside_escape_cancels() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }

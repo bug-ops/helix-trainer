@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::testing::ScenarioBuilder;
+use std::assert_matches;
 
 fn create_test_scenario() -> Scenario {
     ScenarioBuilder::new()
@@ -86,8 +87,9 @@ fn test_completion_detection() {
     let result = session.record_action("d".to_string()).unwrap();
 
     // Should be completed now
-    assert!(
-        matches!(result, SessionAfterAction::Completed(_)),
+    assert_matches!(
+        result,
+        SessionAfterAction::Completed(_),
         "Session should be completed after 'x' + 'd' commands"
     );
 }

@@ -1,5 +1,7 @@
 //! Tests for scenario lifecycle (start, complete, abandon, retry)
 
+use std::assert_matches;
+
 use super::common::{create_test_app_state, create_test_scenario, exec};
 use crate::game::PlayableScenario;
 use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE};
@@ -13,7 +15,7 @@ fn test_start_scenario() {
     update(&mut state, Message::StartScenario(0)).unwrap();
 
     // After typestate refactoring, session is in TypedScreen::Task, not game.session
-    assert!(matches!(state.screen, TypedScreen::Task(_)));
+    assert_matches!(state.screen, TypedScreen::Task(_));
     if let TypedScreen::Task(task_data) = &state.screen {
         // Verify session exists in task data
         assert!(!task_data.session.current_content().is_empty());
@@ -28,7 +30,7 @@ fn test_start_invalid_scenario_index() {
     update(&mut state, Message::StartScenario(999)).unwrap();
 
     // Should stay on current screen (not transition to Task)
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 
 #[test]
@@ -42,7 +44,7 @@ fn test_complete_scenario_navigates_to_results() {
     state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
     update(&mut state, Message::StartScenario(0)).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Task(_)));
+    assert_matches!(state.screen, TypedScreen::Task(_));
 
     // Execute the solution command to reach target state
     // In Helix, 'xd' = select line + delete selection (or legacy 'x')
@@ -52,13 +54,13 @@ fn test_complete_scenario_navigates_to_results() {
     // After completing the scenario, completion_time is set (success animation starts)
     // Screen stays on Task until CompleteScenario message is sent after delay
     assert!(state.ui.completion_time.is_some());
-    assert!(matches!(state.screen, TypedScreen::Task(_)));
+    assert_matches!(state.screen, TypedScreen::Task(_));
 
     // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
     update(&mut state, Message::CompleteScenario).unwrap();
 
     // Now should be on Results screen
-    assert!(matches!(state.screen, TypedScreen::Results(_)));
+    assert_matches!(state.screen, TypedScreen::Results(_));
 }
 
 #[test]
@@ -68,7 +70,7 @@ fn test_abandon_scenario_navigates_to_results() {
 
     update(&mut state, Message::StartScenario(0)).unwrap();
     // After TypedScreen refactoring, verify we're on Task screen
-    assert!(matches!(state.screen, TypedScreen::Task(_)));
+    assert_matches!(state.screen, TypedScreen::Task(_));
 
     update(&mut state, Message::AbandonScenario).unwrap();
     // Should transition to Results screen
@@ -118,7 +120,7 @@ fn test_retry_scenario_resets_state() {
 
     // Abandon to go to Results screen
     update(&mut state, Message::AbandonScenario).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Results(_)));
+    assert_matches!(state.screen, TypedScreen::Results(_));
 
     // Now retry - this should create a fresh session with action count = 0
     update(&mut state, Message::RetryScenario).unwrap();
@@ -136,11 +138,11 @@ fn test_next_scenario_clears_session() {
 
     update(&mut state, Message::StartScenario(0)).unwrap();
     // Verify we're on Task screen with active session
-    assert!(matches!(state.screen, TypedScreen::Task(_)));
+    assert_matches!(state.screen, TypedScreen::Task(_));
 
     update(&mut state, Message::NextScenario).unwrap();
     // Should return to menu
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 }
 
 #[test]
@@ -183,8 +185,9 @@ fn test_previously_completed_quests_tracking() {
         state.ui.completion_time.is_some(),
         "completion_time should be set after completing scenario"
     );
-    assert!(
-        matches!(state.screen, TypedScreen::Task(_)),
+    assert_matches!(
+        state.screen,
+        TypedScreen::Task(_),
         "Should stay on Task screen during success animation"
     );
 
@@ -203,8 +206,9 @@ fn test_previously_completed_quests_tracking() {
     update(&mut state, Message::CompleteScenario).unwrap();
 
     // Now should be on Results screen
-    assert!(
-        matches!(state.screen, TypedScreen::Results(_)),
+    assert_matches!(
+        state.screen,
+        TypedScreen::Results(_),
         "Should be on Results screen after CompleteScenario"
     );
 }

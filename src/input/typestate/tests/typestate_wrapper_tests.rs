@@ -1,5 +1,7 @@
 //! Tests for TypestateHandler and TypestateHandlerState
 
+use std::assert_matches;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
@@ -11,7 +13,7 @@ fn test_typestate_handler_base_to_goto() {
     let (result, next) = handler.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
 
     assert!(result.is_transition());
-    assert!(matches!(next, TypestateHandlerState::GotoPending(_)));
+    assert_matches!(next, TypestateHandlerState::GotoPending(_));
 }
 
 #[test]
@@ -23,7 +25,7 @@ fn test_typestate_handler_state_process() {
     let (result, next) = state.process_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
     assert!(result.is_transition());
     state = next;
-    assert!(matches!(state, TypestateHandlerState::ViewPending(_)));
+    assert_matches!(state, TypestateHandlerState::ViewPending(_));
 
     // Press 'z' - execute "zz"
     let (result, next) = state.process_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));

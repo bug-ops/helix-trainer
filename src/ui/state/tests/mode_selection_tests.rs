@@ -1,5 +1,7 @@
 //! Tests for mode selection handlers
 
+use std::assert_matches;
+
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::ui::state::{Message, TypedScreen, update};
 
@@ -7,7 +9,7 @@ use crate::ui::state::{Message, TypedScreen, update};
 fn test_mode_selection_up() {
     let mut state = create_test_app_state(vec![]);
     // Should start on ModeSelection screen
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 
     // Set selected mode to 1
     if let TypedScreen::ModeSelection(mode_data) = &mut state.screen {
@@ -93,7 +95,7 @@ fn test_select_training_mode() {
     update(&mut state, Message::SelectTrainingMode).unwrap();
 
     // Should navigate to Menu screen
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 }
 
 #[test]
@@ -104,7 +106,7 @@ fn test_select_arcade_mode() {
     update(&mut state, Message::SelectArcadeMode).unwrap();
 
     // Should navigate to MiniGame selection screen
-    assert!(matches!(state.screen, TypedScreen::MiniGame(_)));
+    assert_matches!(state.screen, TypedScreen::MiniGame(_));
 }
 
 #[test]
@@ -114,13 +116,13 @@ fn test_navigate_back_from_menu_to_mode_selection() {
 
     // Go to Training Mode
     update(&mut state, Message::SelectTrainingMode).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 
     // Go back
     update(&mut state, Message::BackToMenu).unwrap();
 
     // Should return to ModeSelection
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 
 #[test]
@@ -135,13 +137,13 @@ fn test_navigate_back_from_minigame_to_mode_selection() {
 
     // Go to Arcade Mode
     update(&mut state, Message::SelectArcadeMode).unwrap();
-    assert!(matches!(state.screen, TypedScreen::MiniGame(_)));
+    assert_matches!(state.screen, TypedScreen::MiniGame(_));
 
     // Go back
     update(&mut state, Message::MiniGameBackToMenu).unwrap();
 
     // Should return to ModeSelection
-    assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 
 #[test]

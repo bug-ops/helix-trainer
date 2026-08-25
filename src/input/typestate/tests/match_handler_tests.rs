@@ -1,5 +1,7 @@
 //! Tests for MatchPending and surround handlers
 
+use std::assert_matches;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
@@ -18,7 +20,7 @@ fn test_match_pending_mm() {
         &MatchPending,
         KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_MATCH_BRACKETS));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_MATCH_BRACKETS);
 }
 
 #[test]
@@ -27,10 +29,10 @@ fn test_match_pending_ms_transitions_to_surround_add() {
         &MatchPending,
         KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
     );
-    assert!(matches!(
+    assert_matches!(
         result,
         HandlerResult::Transition(InputState::SurroundAddPending)
-    ));
+    );
 }
 
 #[test]
@@ -39,10 +41,10 @@ fn test_match_pending_md_transitions_to_surround_delete() {
         &MatchPending,
         KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
     );
-    assert!(matches!(
+    assert_matches!(
         result,
         HandlerResult::Transition(InputState::SurroundDeletePending)
-    ));
+    );
 }
 
 #[test]
@@ -51,10 +53,10 @@ fn test_match_pending_mr_transitions_to_surround_replace() {
         &MatchPending,
         KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
     );
-    assert!(matches!(
+    assert_matches!(
         result,
         HandlerResult::Transition(InputState::SurroundReplaceFromPending)
-    ));
+    );
 }
 
 #[test]
@@ -63,10 +65,10 @@ fn test_match_pending_ma_transitions_to_text_object_around() {
         &MatchPending,
         KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
     );
-    assert!(matches!(
+    assert_matches!(
         result,
         HandlerResult::Transition(InputState::TextObjectAroundPending)
-    ));
+    );
 }
 
 #[test]
@@ -75,10 +77,10 @@ fn test_match_pending_mi_transitions_to_text_object_inside() {
         &MatchPending,
         KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
     );
-    assert!(matches!(
+    assert_matches!(
         result,
         HandlerResult::Transition(InputState::TextObjectInsidePending)
-    ));
+    );
 }
 
 #[test]
@@ -87,7 +89,7 @@ fn test_match_pending_invalid_cancels() {
         &MatchPending,
         KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 // ============================================================================
@@ -100,7 +102,7 @@ fn test_surround_add_pending_accept_char() {
         &SurroundAddPending,
         KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ms("));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ms(");
 }
 
 #[test]
@@ -109,7 +111,7 @@ fn test_surround_add_pending_accept_bracket() {
         &SurroundAddPending,
         KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ms["));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ms[");
 }
 
 #[test]
@@ -118,7 +120,7 @@ fn test_surround_add_pending_accept_quote() {
         &SurroundAddPending,
         KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "ms\""));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ms\"");
 }
 
 #[test]
@@ -127,7 +129,7 @@ fn test_surround_add_pending_escape_cancels() {
         &SurroundAddPending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 // ============================================================================
@@ -140,7 +142,7 @@ fn test_surround_delete_pending_accept_char() {
         &SurroundDeletePending,
         KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "md("));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "md(");
 }
 
 #[test]
@@ -149,7 +151,7 @@ fn test_surround_delete_pending_accept_bracket() {
         &SurroundDeletePending,
         KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "md{"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "md{");
 }
 
 #[test]
@@ -158,7 +160,7 @@ fn test_surround_delete_pending_escape_cancels() {
         &SurroundDeletePending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 // ============================================================================
@@ -171,10 +173,10 @@ fn test_surround_replace_from_transitions_to_to() {
         &SurroundReplaceFromPending,
         KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
     );
-    assert!(matches!(
+    assert_matches!(
         result,
         HandlerResult::Transition(InputState::SurroundReplaceToPending { from_char: '(' })
-    ));
+    );
 }
 
 #[test]
@@ -183,7 +185,7 @@ fn test_surround_replace_from_escape_cancels() {
         &SurroundReplaceFromPending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -193,7 +195,7 @@ fn test_surround_replace_to_completes() {
         &state,
         KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mr(["));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mr([");
 }
 
 #[test]
@@ -203,12 +205,12 @@ fn test_surround_replace_to_quotes() {
         &state,
         KeyEvent::new(KeyCode::Char('\''), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "mr\"'"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mr\"'");
 }
 
 #[test]
 fn test_surround_replace_to_escape_cancels() {
     let state = SurroundReplaceToPending { from_char: '(' };
     let result = KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }

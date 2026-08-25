@@ -1,5 +1,7 @@
 //! Tests for CountPending handler
 
+use std::assert_matches;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::input::typestate::{
@@ -13,10 +15,10 @@ fn test_count_pending_more_digits() {
         &state,
         KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE),
     );
-    assert!(matches!(
+    assert_matches!(
         result,
         HandlerResult::Transition(InputState::CountPending { count: 35 })
-    ));
+    );
 }
 
 #[test]
@@ -26,7 +28,7 @@ fn test_count_pending_command() {
         &state,
         KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == "3j"));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "3j");
 }
 
 #[test]
@@ -37,14 +39,14 @@ fn test_count_pending_invalid_command_cancels() {
         &state,
         KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
 fn test_count_pending_escape_cancels() {
     let state = CountPending { count: 5 };
     let result = KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -84,7 +86,7 @@ fn test_count_pending_register_prefix_cancels() {
         &state,
         KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]

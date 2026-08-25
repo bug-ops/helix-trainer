@@ -229,6 +229,7 @@ mod tests {
     use super::*;
     use crate::time::{Clock, FakeClock};
     use chrono::Duration;
+    use std::assert_matches;
 
     #[test]
     fn test_streak_same_day_continues() {
@@ -486,10 +487,10 @@ mod tests {
         profile.streak_freeze_available = true;
 
         let result = StreakManager::use_freeze(&mut profile, STREAK_FREEZE_MAX_GAP_DAYS + 1);
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(GamificationError::StreakFreezeGapOutOfRange { .. })
-        ));
+        );
         assert!(
             profile.streak_freeze_available,
             "freeze must remain held when the gap exceeds the coverage cap"
@@ -507,10 +508,7 @@ mod tests {
         profile.streak_freeze_available = true;
 
         let result = StreakManager::use_freeze(&mut profile, 2);
-        assert!(matches!(
-            result,
-            Err(GamificationError::StreakFreezeNothingToProtect)
-        ));
+        assert_matches!(result, Err(GamificationError::StreakFreezeNothingToProtect));
         assert!(
             profile.streak_freeze_available,
             "freeze must remain held when there is no streak to protect"

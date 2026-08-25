@@ -678,6 +678,8 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
 #[cfg(test)]
 #[allow(unused_variables)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use crate::{
         config::Scenario,
@@ -1870,10 +1872,10 @@ mod tests {
                 let result = data
                     .input_state_mut()
                     .process_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
-                assert!(matches!(
+                assert_matches!(
                     result,
                     crate::input::typestate::HandlerResult::Transition(_)
-                ));
+                );
                 assert!(data.input_state().is_prefix_state());
             }
 
@@ -1881,8 +1883,9 @@ mod tests {
                 handle_minigame_keys(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state);
             // Esc while a count is pending must route through the state
             // machine (Cancel), not pause the game.
-            assert!(
-                matches!(esc_msg, Some(Message::MiniGameCommand { .. })),
+            assert_matches!(
+                esc_msg,
+                Some(Message::MiniGameCommand { .. }),
                 "expected Esc to route as a MiniGameCommand (cancel) while a prefix state is pending, got {:?}",
                 esc_msg
             );
@@ -1899,8 +1902,9 @@ mod tests {
 
             let esc_msg =
                 handle_minigame_keys(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &state);
-            assert!(
-                matches!(esc_msg, Some(Message::MiniGameCommand { .. })),
+            assert_matches!(
+                esc_msg,
+                Some(Message::MiniGameCommand { .. }),
                 "expected Esc to route as a MiniGameCommand (cancel) while RegisterPending, got {:?}",
                 esc_msg
             );
@@ -2022,10 +2026,10 @@ mod tests {
                 &mut state,
                 KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
             );
-            assert!(matches!(
+            assert_matches!(
                 input_state(&state),
                 crate::input::typestate::InputState::RegisterOpPending { register: 'a' }
-            ));
+            );
 
             // Must not panic and must fall through to the stock key, which
             // RegisterOpPending cancels on (only y/p/P/R/d/c are recognized ops).

@@ -374,10 +374,11 @@ impl AppState {
     /// ```ignore
     /// use helix_trainer::ui::AppState;
     /// use helix_trainer::config::Scenario;
+    /// use std::assert_matches;
     ///
     /// let scenarios = vec![/* ... */];
     /// let state = AppState::new(scenarios, profile, storage, tracker);
-    /// assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    /// assert_matches!(state.screen, TypedScreen::Menu(_));
     /// ```
     pub fn new(
         scenarios: Vec<Scenario>,

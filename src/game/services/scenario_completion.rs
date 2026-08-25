@@ -229,6 +229,7 @@ impl ScenarioCompletionService {
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::learning::PerformanceTracker;
     /// use helix_trainer::ui::NotificationType;
+    /// use std::assert_matches;
     ///
     /// let mut profile = UserProfile::new();
     /// profile.perfect_scenarios = 1;
@@ -239,10 +240,10 @@ impl ScenarioCompletionService {
     ///
     /// // Should unlock FirstPerfect
     /// assert_eq!(notifications.len(), 1);
-    /// assert!(matches!(
+    /// assert_matches!(
     ///     notifications[0].notification_type,
     ///     NotificationType::Achievement { .. }
-    /// ));
+    /// );
     /// ```
     #[must_use]
     pub fn check_and_notify_achievements(
@@ -270,12 +271,13 @@ impl ScenarioCompletionService {
     /// ```
     /// use helix_trainer::game::services::ScenarioCompletionService;
     /// use helix_trainer::ui::NotificationType;
+    /// use std::assert_matches;
     ///
     /// let notification = ScenarioCompletionService::level_up_notification(true, 5);
-    /// assert!(matches!(
+    /// assert_matches!(
     ///     notification.unwrap().notification_type,
     ///     NotificationType::LevelUp { new_level: 5 }
-    /// ));
+    /// );
     ///
     /// assert!(ScenarioCompletionService::level_up_notification(false, 5).is_none());
     /// ```

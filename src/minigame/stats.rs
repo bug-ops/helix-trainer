@@ -576,6 +576,7 @@ mod tests {
 
     mod multiplier_state_tests {
         use super::*;
+        use std::assert_matches;
 
         #[test]
         fn test_new_state() {
@@ -639,10 +640,10 @@ mod tests {
                 state.record_success();
             }
             assert_eq!(state.grace_remaining(), 1);
-            assert!(matches!(
+            assert_matches!(
                 state.take_change(),
                 Some(MultiplierChange::MilestoneReached { .. })
-            ));
+            );
         }
 
         #[test]
@@ -657,10 +658,7 @@ mod tests {
             state.record_failure();
             assert_eq!(state.grace_remaining(), 0);
             assert!((state.current() - multiplier_before).abs() < f64::EPSILON);
-            assert!(matches!(
-                state.take_change(),
-                Some(MultiplierChange::GraceUsed)
-            ));
+            assert_matches!(state.take_change(), Some(MultiplierChange::GraceUsed));
         }
 
         #[test]
@@ -675,10 +673,10 @@ mod tests {
             state.record_failure();
             assert!((state.current() - 1.0).abs() < f64::EPSILON);
             assert_eq!(state.streak(), 0);
-            assert!(matches!(
+            assert_matches!(
                 state.take_change(),
                 Some(MultiplierChange::Decreased { from, to }) if (from - old_mult).abs() < f64::EPSILON && (to - 1.0).abs() < f64::EPSILON
-            ));
+            );
         }
 
         #[test]
@@ -769,10 +767,10 @@ mod tests {
             state.take_change();
 
             state.record_success();
-            assert!(matches!(
+            assert_matches!(
                 state.take_change(),
                 Some(MultiplierChange::Increased { from, to }) if (from - 1.0).abs() < f64::EPSILON && (to - 1.5).abs() < f64::EPSILON
-            ));
+            );
         }
 
         #[test]

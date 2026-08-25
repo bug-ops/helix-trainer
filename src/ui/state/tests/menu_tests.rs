@@ -1,5 +1,7 @@
 //! Tests for menu navigation and selection
 
+use std::assert_matches;
+
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::game::PlayableScenario;
 use crate::ui::state::{Message, TypedScreen, update};
@@ -136,7 +138,7 @@ fn test_menu_select_quit_awards_live_minigame_session_reached_via_review_detour(
     // `minigame_session` - reproducing the menu-Quit-reachable-with-a-live-
     // session path without needing due reviews to be seeded.
     update(&mut state, Message::AbandonReviewSession).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
     assert!(
         state.game.minigame_session.is_some(),
         "the paused arcade session must still be live once the Menu screen is reached"
@@ -170,7 +172,7 @@ fn test_menu_select_profile() {
     }
 
     update(&mut state, Message::MenuSelect).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Profile(_)));
+    assert_matches!(state.screen, TypedScreen::Profile(_));
 }
 
 #[test]
@@ -185,7 +187,7 @@ fn test_menu_select_statistics() {
     }
 
     update(&mut state, Message::MenuSelect).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Statistics(_)));
+    assert_matches!(state.screen, TypedScreen::Statistics(_));
 }
 
 #[test]
@@ -198,14 +200,14 @@ fn test_menu_with_zero_scenarios() {
     // Review should be at index 0 (no scenarios)
     update(&mut state, Message::MenuSelect).unwrap();
     // Should stay on MainMenu if no reviews are due
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 
     // Profile at index 1
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 1;
     }
     update(&mut state, Message::MenuSelect).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Profile(_)));
+    assert_matches!(state.screen, TypedScreen::Profile(_));
 
     // Statistics at index 2
     state.screen = TypedScreen::Menu(Default::default());
@@ -213,7 +215,7 @@ fn test_menu_with_zero_scenarios() {
         menu_data.selected_item = 2;
     }
     update(&mut state, Message::MenuSelect).unwrap();
-    assert!(matches!(state.screen, TypedScreen::Statistics(_)));
+    assert_matches!(state.screen, TypedScreen::Statistics(_));
 
     // Quit at index 3
     state.screen = TypedScreen::Menu(Default::default());
@@ -361,5 +363,5 @@ fn test_menu_select_review_no_due() {
     update(&mut state, Message::MenuSelect).unwrap();
 
     // No reviews due, should stay on menu
-    assert!(matches!(state.screen, TypedScreen::Menu(_)));
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 }

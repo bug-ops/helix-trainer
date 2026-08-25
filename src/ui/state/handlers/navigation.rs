@@ -102,6 +102,7 @@ mod tests {
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::ui::state::{ConfigState, GameState, ProgressState, UIState};
+    use std::assert_matches;
 
     fn create_test_context() -> (UIState, GameState, ProgressState, ConfigState) {
         (
@@ -144,7 +145,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::ModeSelection(_)));
+            assert_matches!(*screen, TypedScreen::ModeSelection(_));
         }
     }
 
@@ -154,7 +155,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::Profile(_)));
+            assert_matches!(*screen, TypedScreen::Profile(_));
         }
     }
 
@@ -178,7 +179,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+            assert_matches!(*new_screen, TypedScreen::ModeSelection(_));
         }
     }
 
@@ -194,7 +195,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+            assert_matches!(*new_screen, TypedScreen::ModeSelection(_));
         }
     }
 
@@ -211,7 +212,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+            assert_matches!(*new_screen, TypedScreen::ModeSelection(_));
         }
     }
 
@@ -228,7 +229,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::MiniGame(_)));
+            assert_matches!(*new_screen, TypedScreen::MiniGame(_));
         }
     }
 
@@ -244,7 +245,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::MiniGame(_)));
+            assert_matches!(*new_screen, TypedScreen::MiniGame(_));
         }
     }
 
@@ -260,7 +261,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::MiniGame(_)));
+            assert_matches!(*new_screen, TypedScreen::MiniGame(_));
         }
     }
 
@@ -274,7 +275,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+            assert_matches!(*new_screen, TypedScreen::ModeSelection(_));
         }
     }
 
@@ -284,7 +285,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::Menu(_)));
+            assert_matches!(*screen, TypedScreen::Menu(_));
         }
     }
 
@@ -294,7 +295,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::Statistics(_)));
+            assert_matches!(*screen, TypedScreen::Statistics(_));
         }
     }
 
@@ -304,7 +305,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::Achievements(_)));
+            assert_matches!(*screen, TypedScreen::Achievements(_));
         }
     }
 
@@ -314,7 +315,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::MiniGame(_)));
+            assert_matches!(*screen, TypedScreen::MiniGame(_));
         }
     }
 
@@ -324,7 +325,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
-            assert!(matches!(*screen, TypedScreen::CategoryFilters(_)));
+            assert_matches!(*screen, TypedScreen::CategoryFilters(_));
         }
     }
 
@@ -356,7 +357,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::ModeSelection(_)));
+            assert_matches!(*new_screen, TypedScreen::ModeSelection(_));
         }
     }
 
@@ -374,7 +375,7 @@ mod tests {
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
             // Should return to Menu (scenario list), not ModeSelection
-            assert!(matches!(*new_screen, TypedScreen::Menu(_)));
+            assert_matches!(*new_screen, TypedScreen::Menu(_));
         }
     }
 
@@ -391,7 +392,7 @@ mod tests {
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(new_screen) = outcome {
-            assert!(matches!(*new_screen, TypedScreen::MiniGame(_)));
+            assert_matches!(*new_screen, TypedScreen::MiniGame(_));
         }
     }
 }

@@ -1,5 +1,7 @@
 //! Tests for GotoPending handler
 
+use std::assert_matches;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
@@ -11,7 +13,7 @@ fn test_goto_pending_gg() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_FILE_START));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_FILE_START);
 }
 
 #[test]
@@ -20,7 +22,7 @@ fn test_goto_pending_gh() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LINE_START));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LINE_START);
 }
 
 #[test]
@@ -29,7 +31,7 @@ fn test_goto_pending_gl() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LINE_END));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LINE_END);
 }
 
 #[test]
@@ -38,7 +40,7 @@ fn test_goto_pending_invalid_key_cancels() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -47,7 +49,7 @@ fn test_goto_pending_escape_cancels() {
         &GotoPending,
         KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Cancel));
+    assert_matches!(result, HandlerResult::Cancel);
 }
 
 #[test]
@@ -56,7 +58,7 @@ fn test_goto_pending_gs() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_FIRST_NONWHITESPACE));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_FIRST_NONWHITESPACE);
 }
 
 #[test]
@@ -65,5 +67,5 @@ fn test_goto_pending_ge() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
     );
-    assert!(matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LAST_LINE));
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LAST_LINE);
 }

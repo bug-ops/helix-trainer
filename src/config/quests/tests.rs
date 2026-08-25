@@ -1,6 +1,7 @@
 //! Tests for quest template loading
 
 use super::*;
+use std::assert_matches;
 use std::path::PathBuf;
 
 #[test]
@@ -73,7 +74,7 @@ command = "x"
 target = 3
 "#;
     let result: QuestSpec = toml::from_str(valid).unwrap();
-    assert!(matches!(result, QuestSpec::CommandPractice { .. }));
+    assert_matches!(result, QuestSpec::CommandPractice { .. });
 
     let valid = r#"
 type = "speed_run"
@@ -82,7 +83,7 @@ scenario_id = "delete_line_001"
 time_limit_seconds = 5
 "#;
     let result: QuestSpec = toml::from_str(valid).unwrap();
-    assert!(matches!(result, QuestSpec::SpeedRun { .. }));
+    assert_matches!(result, QuestSpec::SpeedRun { .. });
 }
 
 #[test]

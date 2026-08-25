@@ -121,10 +121,11 @@ impl ParsedCommand {
 ///
 /// ```ignore
 /// use helix_trainer::game::command_context::{parse_command_buffer, ParsedCommand};
+/// use std::assert_matches;
 ///
-/// assert!(matches!(parse_command_buffer("gg"), ParsedCommand::Complete(_)));
-/// assert!(matches!(parse_command_buffer("g"), ParsedCommand::Partial));
-/// assert!(matches!(parse_command_buffer("xyz"), ParsedCommand::Invalid));
+/// assert_matches!(parse_command_buffer("gg"), ParsedCommand::Complete(_));
+/// assert_matches!(parse_command_buffer("g"), ParsedCommand::Partial);
+/// assert_matches!(parse_command_buffer("xyz"), ParsedCommand::Invalid);
 /// ```
 pub fn parse_command_buffer(buffer: &str) -> ParsedCommand {
     use crate::helix::registry::{KeyMatch, normal_registry};
@@ -306,102 +307,55 @@ pub fn process_command_input<B: CommandBuffer>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn test_parse_command_buffer_single_key() {
-        assert!(matches!(
-            parse_command_buffer("j"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("k"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("d"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("j"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("k"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("d"), ParsedCommand::Complete(_));
 
         assert_eq!(parse_command_buffer("j").command(), Some("j"));
     }
 
     #[test]
     fn test_parse_command_buffer_goto_commands() {
-        assert!(matches!(
-            parse_command_buffer("gg"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("gh"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("gl"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("gs"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("ge"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("gg"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("gh"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("gl"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("gs"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("ge"), ParsedCommand::Complete(_));
 
         assert_eq!(parse_command_buffer("gg").command(), Some("gg"));
     }
 
     #[test]
     fn test_parse_command_buffer_partial() {
-        assert!(matches!(parse_command_buffer("g"), ParsedCommand::Partial));
-        assert!(matches!(parse_command_buffer("r"), ParsedCommand::Partial));
-        assert!(matches!(parse_command_buffer("f"), ParsedCommand::Partial));
+        assert_matches!(parse_command_buffer("g"), ParsedCommand::Partial);
+        assert_matches!(parse_command_buffer("r"), ParsedCommand::Partial);
+        assert_matches!(parse_command_buffer("f"), ParsedCommand::Partial);
     }
 
     #[test]
     fn test_parse_command_buffer_replace() {
-        assert!(matches!(
-            parse_command_buffer("ra"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("rx"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("ra"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("rx"), ParsedCommand::Complete(_));
 
         assert_eq!(parse_command_buffer("ra").command(), Some("ra"));
     }
 
     #[test]
     fn test_parse_command_buffer_find() {
-        assert!(matches!(
-            parse_command_buffer("fa"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("Fx"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("te"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("TY"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("fa"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("Fx"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("te"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("TY"), ParsedCommand::Complete(_));
     }
 
     #[test]
     fn test_parse_command_buffer_invalid() {
-        assert!(matches!(
-            parse_command_buffer("xyz"),
-            ParsedCommand::Invalid
-        ));
-        assert!(matches!(
-            parse_command_buffer("ggg"),
-            ParsedCommand::Invalid
-        ));
+        assert_matches!(parse_command_buffer("xyz"), ParsedCommand::Invalid);
+        assert_matches!(parse_command_buffer("ggg"), ParsedCommand::Invalid);
     }
 
     #[test]
@@ -430,285 +384,156 @@ mod tests {
         let result = parse_command_buffer("");
         // Single-key logic treats len==1 as complete, but empty is len==0
         // Falls through to Invalid
-        assert!(matches!(result, ParsedCommand::Invalid));
+        assert_matches!(result, ParsedCommand::Invalid);
     }
 
     #[test]
     fn test_parse_command_buffer_replace_special_chars() {
         // Replace with space
-        assert!(matches!(
-            parse_command_buffer("r "),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("r "), ParsedCommand::Complete(_));
         assert_eq!(parse_command_buffer("r ").command(), Some("r "));
 
         // Replace with newline
-        assert!(matches!(
-            parse_command_buffer("r\n"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("r\n"), ParsedCommand::Complete(_));
 
         // Replace with tab
-        assert!(matches!(
-            parse_command_buffer("r\t"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("r\t"), ParsedCommand::Complete(_));
     }
 
     #[test]
     fn test_parse_command_buffer_find_special_chars() {
         // Find space
-        assert!(matches!(
-            parse_command_buffer("f "),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("f "), ParsedCommand::Complete(_));
 
         // Find uppercase reverse with space
-        assert!(matches!(
-            parse_command_buffer("F "),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("F "), ParsedCommand::Complete(_));
 
         // Till newline
-        assert!(matches!(
-            parse_command_buffer("t\n"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("t\n"), ParsedCommand::Complete(_));
 
         // Till reverse with tab
-        assert!(matches!(
-            parse_command_buffer("T\t"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("T\t"), ParsedCommand::Complete(_));
     }
 
     #[test]
     fn test_parse_command_buffer_all_movement_commands() {
         // Basic movement
-        assert!(matches!(
-            parse_command_buffer("h"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("l"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("h"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("l"), ParsedCommand::Complete(_));
 
         // Word movement
-        assert!(matches!(
-            parse_command_buffer("w"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("b"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("e"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("w"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("b"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("e"), ParsedCommand::Complete(_));
 
         // WORD movement (uppercase)
-        assert!(matches!(
-            parse_command_buffer("W"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("B"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("E"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("W"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("B"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("E"), ParsedCommand::Complete(_));
 
         // Line bounds
         // Note: "0" is NOT a command in Helix - use "gh" for goto line start
         // Note: "$" is NOT a line end command in Helix - use "gl" for goto line end
-        assert!(matches!(parse_command_buffer("0"), ParsedCommand::Invalid));
-        assert!(matches!(parse_command_buffer("$"), ParsedCommand::Invalid));
+        assert_matches!(parse_command_buffer("0"), ParsedCommand::Invalid);
+        assert_matches!(parse_command_buffer("$"), ParsedCommand::Invalid);
     }
 
     #[test]
     fn test_parse_command_buffer_all_editing_commands() {
         // Insert modes
-        assert!(matches!(
-            parse_command_buffer("i"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("a"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("I"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("A"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("o"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("O"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("i"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("a"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("I"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("A"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("o"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("O"), ParsedCommand::Complete(_));
 
         // Change/delete
-        assert!(matches!(
-            parse_command_buffer("c"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("d"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("c"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("d"), ParsedCommand::Complete(_));
 
         // Other editing
-        assert!(matches!(
-            parse_command_buffer("J"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer(">"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("<"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("~"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("J"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer(">"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("<"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("~"), ParsedCommand::Complete(_));
     }
 
     #[test]
     fn test_parse_command_buffer_selection_commands() {
-        assert!(matches!(
-            parse_command_buffer("x"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("X"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("%"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer(";"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("v"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("x"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("X"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("%"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer(";"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("v"), ParsedCommand::Complete(_));
     }
 
     #[test]
     fn test_parse_command_buffer_clipboard_commands() {
-        assert!(matches!(
-            parse_command_buffer("y"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("p"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("P"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("y"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("p"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("P"), ParsedCommand::Complete(_));
     }
 
     #[test]
     fn test_parse_command_buffer_undo_commands() {
-        assert!(matches!(
-            parse_command_buffer("u"),
-            ParsedCommand::Complete(_)
-        ));
-        assert!(matches!(
-            parse_command_buffer("U"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("u"), ParsedCommand::Complete(_));
+        assert_matches!(parse_command_buffer("U"), ParsedCommand::Complete(_));
     }
 
     #[test]
     fn test_parse_command_buffer_special_commands() {
         // Match mode prefix (waiting for second key)
-        assert!(matches!(parse_command_buffer("m"), ParsedCommand::Partial));
+        assert_matches!(parse_command_buffer("m"), ParsedCommand::Partial);
 
         // Match brackets (mm)
-        assert!(matches!(
-            parse_command_buffer("mm"),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("mm"), ParsedCommand::Complete(_));
 
         // Repeat
-        assert!(matches!(
-            parse_command_buffer("."),
-            ParsedCommand::Complete(_)
-        ));
+        assert_matches!(parse_command_buffer("."), ParsedCommand::Complete(_));
     }
 
     #[test]
     fn test_parse_command_buffer_partial_all_prefixes() {
         // Goto prefix
-        assert!(matches!(parse_command_buffer("g"), ParsedCommand::Partial));
+        assert_matches!(parse_command_buffer("g"), ParsedCommand::Partial);
 
         // Match mode prefix
-        assert!(matches!(parse_command_buffer("m"), ParsedCommand::Partial));
+        assert_matches!(parse_command_buffer("m"), ParsedCommand::Partial);
 
         // Replace prefix
-        assert!(matches!(parse_command_buffer("r"), ParsedCommand::Partial));
+        assert_matches!(parse_command_buffer("r"), ParsedCommand::Partial);
 
         // Find prefixes
-        assert!(matches!(parse_command_buffer("f"), ParsedCommand::Partial));
-        assert!(matches!(parse_command_buffer("F"), ParsedCommand::Partial));
+        assert_matches!(parse_command_buffer("f"), ParsedCommand::Partial);
+        assert_matches!(parse_command_buffer("F"), ParsedCommand::Partial);
 
         // Till prefixes
-        assert!(matches!(parse_command_buffer("t"), ParsedCommand::Partial));
-        assert!(matches!(parse_command_buffer("T"), ParsedCommand::Partial));
+        assert_matches!(parse_command_buffer("t"), ParsedCommand::Partial);
+        assert_matches!(parse_command_buffer("T"), ParsedCommand::Partial);
     }
 
     #[test]
     fn test_parse_command_buffer_invalid_long_sequences() {
         // Three or more characters (except valid multi-key)
-        assert!(matches!(
-            parse_command_buffer("rrr"),
-            ParsedCommand::Invalid
-        ));
-        assert!(matches!(
-            parse_command_buffer("fff"),
-            ParsedCommand::Invalid
-        ));
-        assert!(matches!(
-            parse_command_buffer("abc"),
-            ParsedCommand::Invalid
-        ));
-        assert!(matches!(
-            parse_command_buffer("jjj"),
-            ParsedCommand::Invalid
-        ));
+        assert_matches!(parse_command_buffer("rrr"), ParsedCommand::Invalid);
+        assert_matches!(parse_command_buffer("fff"), ParsedCommand::Invalid);
+        assert_matches!(parse_command_buffer("abc"), ParsedCommand::Invalid);
+        assert_matches!(parse_command_buffer("jjj"), ParsedCommand::Invalid);
 
         // Invalid goto sequences
-        assert!(matches!(parse_command_buffer("gx"), ParsedCommand::Invalid));
-        assert!(matches!(parse_command_buffer("gz"), ParsedCommand::Invalid));
+        assert_matches!(parse_command_buffer("gx"), ParsedCommand::Invalid);
+        assert_matches!(parse_command_buffer("gz"), ParsedCommand::Invalid);
     }
 
     #[test]
     fn test_parse_command_buffer_invalid_double_char() {
         // dd is no longer valid (Helix uses xd for delete line)
-        assert!(matches!(parse_command_buffer("dd"), ParsedCommand::Invalid));
+        assert_matches!(parse_command_buffer("dd"), ParsedCommand::Invalid);
 
         // Other invalid doubles
-        assert!(matches!(parse_command_buffer("jj"), ParsedCommand::Invalid));
-        assert!(matches!(parse_command_buffer("kk"), ParsedCommand::Invalid));
+        assert_matches!(parse_command_buffer("jj"), ParsedCommand::Invalid);
+        assert_matches!(parse_command_buffer("kk"), ParsedCommand::Invalid);
     }
 
     #[test]

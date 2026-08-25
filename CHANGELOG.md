@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Bump MSRV to Rust 1.98 to use the newly-stabilized `Path::is_empty()` in `ProfileStorage` path handling.
+- Migrate `assert!(matches!(...))` to `assert_matches!` across the test suite, now that MSRV covers its Rust 1.96 stabilization.
 
 ### Fixed
 

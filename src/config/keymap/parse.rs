@@ -370,6 +370,7 @@ fn resolves_cleanly_from_base(canonical: &CanonicalKeys) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     /// M1: `resolves_cleanly_from_base`'s "final token may transition"
     /// exception is scoped to `tokens.len() == 1` because *today*, by
@@ -397,8 +398,9 @@ mod tests {
                 });
                 result = Some(machine.process_key(key_event));
             }
-            assert!(
-                matches!(result, Some(HandlerResult::Execute(_))),
+            assert_matches!(
+                result,
+                Some(HandlerResult::Execute(_)),
                 "registry key {:?} (name {:?}) is multi-token but its final token doesn't execute: {:?}",
                 meta.key,
                 meta.name,
@@ -483,10 +485,10 @@ mod tests {
         assert!(overlay.is_empty());
         assert_eq!(report.applied, 0);
         assert_eq!(report.ignored.len(), 1);
-        assert!(matches!(
+        assert_matches!(
             report.ignored[0].reason,
             KeymapWarningReason::UnknownCommand(_)
-        ));
+        );
     }
 
     #[test]
@@ -584,10 +586,10 @@ mod tests {
         )
         .unwrap();
         assert!(overlay.is_empty());
-        assert!(matches!(
+        assert_matches!(
             report.ignored[0].reason,
             KeymapWarningReason::UnparsableKey(_)
-        ));
+        );
     }
 
     #[test]
@@ -672,12 +674,12 @@ mod tests {
             toml.push_str(&format!("k{i} = \"move_char_left\"\n"));
         }
         let err = resolve_str(&toml).unwrap_err();
-        assert!(matches!(err, SecurityError::TooManyKeymapBindings { .. }));
+        assert_matches!(err, SecurityError::TooManyKeymapBindings { .. });
     }
 
     #[test]
     fn missing_file_is_not_found_not_a_hard_error() {
         let err = load_keymap_file(Path::new("/nonexistent/helix/config.toml")).unwrap_err();
-        assert!(matches!(err, KeymapLoadError::NotFound));
+        assert_matches!(err, KeymapLoadError::NotFound);
     }
 }

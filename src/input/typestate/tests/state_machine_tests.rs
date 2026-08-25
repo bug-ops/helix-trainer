@@ -1,5 +1,7 @@
 //! Tests for InputStateMachine
 
+use std::assert_matches;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
@@ -136,7 +138,7 @@ fn test_state_machine_surround_add_sequence() {
     // Press 's' - transition to SurroundAddPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(matches!(sm.state(), InputState::SurroundAddPending));
+    assert_matches!(sm.state(), InputState::SurroundAddPending);
 
     // Press '(' - execute "ms("
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
@@ -156,7 +158,7 @@ fn test_state_machine_surround_delete_sequence() {
     // Press 'd' - transition to SurroundDeletePending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(matches!(sm.state(), InputState::SurroundDeletePending));
+    assert_matches!(sm.state(), InputState::SurroundDeletePending);
 
     // Press '{' - execute "md{"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE));
@@ -176,15 +178,15 @@ fn test_state_machine_surround_replace_sequence() {
     // Press 'r' - transition to SurroundReplaceFromPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(matches!(sm.state(), InputState::SurroundReplaceFromPending));
+    assert_matches!(sm.state(), InputState::SurroundReplaceFromPending);
 
     // Press '(' - transition to SurroundReplaceToPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(matches!(
+    assert_matches!(
         sm.state(),
         InputState::SurroundReplaceToPending { from_char: '(' }
-    ));
+    );
 
     // Press '[' - execute "mr(["
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
@@ -200,7 +202,7 @@ fn test_state_machine_surround_escape_cancels() {
     // Go to SurroundAddPending
     sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
     sm.process_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
-    assert!(matches!(sm.state(), InputState::SurroundAddPending));
+    assert_matches!(sm.state(), InputState::SurroundAddPending);
 
     // Press Escape - should cancel
     let result = sm.process_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
@@ -230,7 +232,7 @@ fn test_state_machine_text_object_around_sequence() {
     // Press 'a' - transition to TextObjectAroundPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(matches!(sm.state(), InputState::TextObjectAroundPending));
+    assert_matches!(sm.state(), InputState::TextObjectAroundPending);
 
     // Press 'w' - execute "maw"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE));
@@ -250,7 +252,7 @@ fn test_state_machine_text_object_inside_sequence() {
     // Press 'i' - transition to TextObjectInsidePending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(matches!(sm.state(), InputState::TextObjectInsidePending));
+    assert_matches!(sm.state(), InputState::TextObjectInsidePending);
 
     // Press '(' - execute "mi("
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
@@ -266,7 +268,7 @@ fn test_state_machine_text_object_escape_cancels() {
     // Go to TextObjectAroundPending
     sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
     sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
-    assert!(matches!(sm.state(), InputState::TextObjectAroundPending));
+    assert_matches!(sm.state(), InputState::TextObjectAroundPending);
 
     // Press Escape - should cancel
     let result = sm.process_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
@@ -308,7 +310,7 @@ fn test_pending_surround_preview_none_in_surround_replace_from() {
     // Go to SurroundReplaceFromPending
     sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
     sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
-    assert!(matches!(sm.state(), InputState::SurroundReplaceFromPending));
+    assert_matches!(sm.state(), InputState::SurroundReplaceFromPending);
     // Still no preview - we don't know which bracket yet
     assert!(sm.pending_surround_preview().is_none());
 }
@@ -323,10 +325,10 @@ fn test_pending_surround_preview_replace() {
     sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
     sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
 
-    assert!(matches!(
+    assert_matches!(
         sm.state(),
         InputState::SurroundReplaceToPending { from_char: '(' }
-    ));
+    );
 
     // Should return Replace variant with the from_char
     let preview = sm.pending_surround_preview();

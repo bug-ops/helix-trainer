@@ -96,7 +96,7 @@ Both one-liners resolve and pin to the latest release tag before fetching the sc
 Pin a specific version or install directory:
 
 ```bash
-./scripts/install.sh --version 0.6.0 --dir /usr/local/bin
+./scripts/install.sh --version 0.6.1 --dir /usr/local/bin
 ./scripts/install.sh --static   # Linux: static musl build, no audio feature
 ```
 

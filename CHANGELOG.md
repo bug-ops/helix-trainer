@@ -7,14 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-26
+
 ### Changed
 
-- Bump MSRV to Rust 1.98 to use the newly-stabilized `Path::is_empty()` in `ProfileStorage` path handling.
-- Migrate `assert!(matches!(...))` to `assert_matches!` across the test suite, now that MSRV covers its Rust 1.96 stabilization.
+- Bump MSRV to Rust 1.98 to use the newly-stabilized `Path::is_empty()` in `ProfileStorage` path handling (#408).
+- Migrate `assert!(matches!(...))` to `assert_matches!` across the test suite, now that MSRV covers its Rust 1.96 stabilization (#408).
 
 ### Fixed
 
-- `cargo deny check` (CI's Security Audit job) failing on RUSTSEC-2026-0249: `smartstring` was marked unmaintained upstream; it is a transitive dependency pinned by `helix-core` (vendored at upstream tag 25.07.1) with no safe upgrade path, so it is now ignored in `deny.toml` following the same pattern as the existing `bincode` ignore.
+- `cargo deny check` (CI's Security Audit job) failing on RUSTSEC-2026-0249: `smartstring` was marked unmaintained upstream; it is a transitive dependency pinned by `helix-core` (vendored at upstream tag 25.07.1) with no safe upgrade path, so it is now ignored in `deny.toml` following the same pattern as the existing `bincode` ignore (#406).
+
+### Dependencies
+
+- `futures`: 0.3.33 → 0.3.34 (#404)
+
+### CI
+
+- Bump `dorny/paths-filter` from 3 to 4 (#403)
+- Bump `lewagon/wait-on-check-action` from 1.9.0 to 1.9.1 (#405)
 
 ## [0.6.0] - 2026-08-10
 
@@ -1469,7 +1480,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/bug-ops/helix-trainer/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/bug-ops/helix-trainer/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/bug-ops/helix-trainer/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/bug-ops/helix-trainer/compare/v0.5.10...v0.5.11

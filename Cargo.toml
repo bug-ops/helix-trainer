@@ -16,7 +16,7 @@ audio = ["rodio"]
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 crossterm = { version = "0.29", features = ["event-stream"] }
-dirs = "6.0"
+dirs = "7.0"
 fsrs = "6.6"
 futures = "0.3"
 helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-21
+
+### Dependencies
+
+- `rodio`: 0.22.2 → 0.23.0 (#422)
+- `dirs`: 6.0.0 → 7.0.0 (#413)
+- `proptest`: 1.11.0 → 1.12.0 (#420)
+- `serde_json`: 1.0.151 → 1.0.154 (#423)
+- `tokio`: 1.53.1 → 1.54.0 (#419, #421)
+- `rust-i18n`: 4.2.1 → 4.2.4 (#412, #418)
+- `tui-big-text`: 0.8.9 → 0.8.10 (#416)
+- `rand`: 0.10.2 → 0.10.3 (#417)
+- `thiserror`: 2.0.20 → 2.0.21 (#415)
+- `toml`: 1.1.4 → 1.1.6 (#410, #414)
+- `fsrs`: 6.6.1 → 6.6.2 (#411)
+
 ## [0.6.1] - 2026-08-26
 
 ### Changed
@@ -1480,7 +1496,8 @@ With this release, all Phase 1 components are fully implemented:
 
 ---
 
-[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/bug-ops/helix-trainer/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/bug-ops/helix-trainer/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/bug-ops/helix-trainer/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/bug-ops/helix-trainer/compare/v0.5.12...v0.6.0
 [0.5.12]: https://github.com/bug-ops/helix-trainer/compare/v0.5.11...v0.5.12

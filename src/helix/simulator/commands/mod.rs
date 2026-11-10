@@ -434,6 +434,18 @@ pub(super) fn execute_normal_mode_command_internal(
     {
         return selection::split_selection(sim, pattern);
     }
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_KEEP_MATCHING)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return selection::keep_selections_regex(sim, pattern);
+    }
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_REMOVE_MATCHING)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return selection::remove_selections_regex(sim, pattern);
+    }
     // Search-prompt invocation ("/ <pattern>"); bare "/" stays in the registry.
     if let Some(pattern) = cmd
         .strip_prefix(CMD_SEARCH_FORWARD)

@@ -53,9 +53,12 @@ A failed profile load never destroys the file on disk; reads are bounded and rej
 
 | ID | Requirement | Priority |
 |----|------------|----------|
-| FR-001 | WHEN loading `profile.json` fails for any reason other than "file does not exist" THE SYSTEM SHALL keep the in-memory profile in a read-only persistence state (typed: `ProfileStorage<Writable>` vs `ProfileStorage<Quarantined>` or an equivalent type-level distinction) in which every save request (debounced and final) is refused | must |
-| FR-002 | WHEN loading fails and the file exists THE SYSTEM SHALL copy or rename the unreadable file to `profile.json.corrupt-<timestamp>` before any later write to the profile path, and SHALL never overwrite or delete the original in the same run unless the move succeeded | must |
-| FR-003 | WHEN loading fails THE SYSTEM SHALL show a visible notification stating that progress could not be loaded, that saving is disabled for this session, and where the backup is | must |
+| FR-001 | WHEN loading `profile.json` fails for any reason other than "file does not exist" THE SYSTEM SHALL keep the in-memory profile in a typed persistence state `ProfilePersistence` with variants `Loading`, `Writable` and `Quarantined(QuarantineOutcome)`; `ProgressState` starts in `Loading` (fail-safe: nothing is saved until a profile load result arrives); every save request (immediate, debounced, synchronous and final) SHALL be refused outside `Writable`, and `prepare_final_save_request` SHALL return `None` outside `Writable` | must |
+| FR-002 | WHEN loading fails and the file exists THE SYSTEM SHALL COPY (not rename) the unreadable file to `profile.json.corrupt-<timestamp>` and SHALL leave the original byte-identical; the outcome of the copy is carried in `Quarantined(QuarantineOutcome)` and reported to the user | must |
+
+> [!warning] Known limitation (accepted)
+> Because the backup is a copy and the original stays in place, every launch with the same unreadable file creates a new `profile.json.corrupt-<timestamp>` copy and saving stays disabled until the user repairs or removes the file. A "start fresh" recovery flow is deferred to a follow-up.
+| FR-003 | WHEN loading fails THE SYSTEM SHALL show a persistent banner at the top of the screen, derived from `ProfilePersistence::Quarantined` state rather than an entry in the (evictable, short-lived) notification queue. The banner wraps lines, its first line is `Profile load failed: saving is disabled this session.` and its second line is `Backup kept at: <path>` (or states that the backup failed), and it SHALL NOT cover the bottom footer line | must |
 | FR-004 | WHEN `achievements_unlocked` contains an unknown `AchievementId` (downgrade) THE SYSTEM SHALL ignore the unknown entries and load the rest of the profile rather than fail the whole file | must |
 | FR-005 | WHEN the file does not exist THE SYSTEM SHALL create a new default profile and save normally (first launch) | must |
 
@@ -63,7 +66,7 @@ A failed profile load never destroys the file on disk; reads are bounded and rej
 
 | ID | Requirement | Priority |
 |----|------------|----------|
-| FR-010 | WHEN reading `profile.json`, `config.json` or the Helix `config.toml` THE SYSTEM SHALL open the path once, verify via the handle that it is a regular file, and read at most `max + 1` bytes (a file larger than `max` is rejected), with no separate length lookup | must |
+| FR-010 | WHEN reading `profile.json`, `config.json` or the Helix `config.toml` THE SYSTEM SHALL use the single helper `path_validator::read_capped`: reject a non-regular path, open once, re-check on the open handle, and read at most `max + 1` bytes (a file larger than `max` is rejected); the former `validate_file_size` is removed | must |
 | FR-011 | WHEN the path is a character device, FIFO, socket or directory THE SYSTEM SHALL reject it with a `UserError` without blocking or unbounded allocation | must |
 | FR-012 | THE SAME helper SHALL be used for every capped read site (profile, config, keymap, and the scenario and quest loaders) | must |
 
@@ -72,7 +75,7 @@ A failed profile load never destroys the file on disk; reads are bounded and rej
 | ID | Requirement | Priority |
 |----|------------|----------|
 | FR-020 | WHERE the platform is Unix THE SYSTEM SHALL create the data directory with mode `0700` and `profile.json`, its temporary file, `profile.json.lock` and `config.json` with mode `0600` | must |
-| FR-021 | WHEN an existing data file or directory has broader permissions THE SYSTEM SHALL tighten them on the next write | should |
+| FR-021 | THE SYSTEM SHALL NOT change the permissions of a directory that already exists (the data path may sit inside an arbitrary directory such as `/tmp`); mode `0700` applies only to directories the application creates, and `0600` to files the application creates or rewrites (an existing file with broader permissions is therefore tightened when it is rewritten) | must |
 
 ### 2.4 Counter arithmetic (#442)
 
@@ -89,6 +92,15 @@ A failed profile load never destroys the file on disk; reads are bounded and rej
 | FR-040 | WHEN a panic occurs after terminal setup THE SYSTEM SHALL, from a panic hook installed right after `setup_terminal()`, restore the terminal (disable raw mode, leave the alternate screen, pop keyboard-enhancement flags, show the cursor) on a fresh stdout handle, then chain to the previously installed hook | must |
 | FR-041 | WHEN `main` returns early with an error after terminal setup THE SYSTEM SHALL restore the terminal through a drop guard | must |
 | FR-042 | THE RESTORE LOGIC SHALL be shared with the normal exit path (single implementation) | must |
+
+### 2.6 Event-loop error policy (#466, see [[constitution#V. Security]])
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-050 | WHEN `update()` or `handle_data_message()` returns `UserError::WrongScreen` (a message for a screen other than the current one; the variant carries no screen name, the screen for the debug log is taken from state) THE EVENT LOOP SHALL ignore it silently (debug-level `tracing` only) | must |
+| FR-051 | WHEN either returns any other `UserError` (including a failed startup save and a rejected simulator command) THE EVENT LOOP SHALL show it as a user notification and keep running | must |
+| FR-052 | THE EVENT LOOP SHALL contain no `?` on `update()`/`handle_data_message()`; one `apply_update` boundary owns this policy | must |
+| FR-053 | WHEN the crossterm `EventStream` yields `Some(Err(_))` THE EVENT LOOP SHALL log it and exit with an error after 5 consecutive errors (the counter resets on any successful event); WHEN it yields `None` THE EVENT LOOP SHALL end with an error | must |
 
 ## 3. Acceptance Criteria
 
@@ -134,6 +146,7 @@ THEN  raw mode is off and the alternate screen is left before the previous hook 
 |----------|-------------------|
 | Backup move fails (read-only directory) | Saving stays disabled, the original is untouched, notification says so |
 | Two quarantines in the same second | Timestamp plus a numeric suffix keeps names unique |
+| Same unreadable file on a later launch | A new backup copy is created each launch (known limitation, see FR-002) |
 | Profile larger than the 1 MiB cap | Treated as a load failure (FR-001..003), not as a new profile |
 | Config file bad (`config.json`) | Existing fallback to defaults is kept; no overwrite of the bad file without a backup `[NEEDS CLARIFICATION: apply FR-002 backup to config.json too]` |
 | Panic hook invoked twice | Idempotent restore, no second panic |

@@ -17,6 +17,7 @@ use helix_trainer::{
 use std::io;
 use tokio::sync::mpsc;
 
+mod cli;
 mod data_handling;
 mod event_loop;
 mod logging;
@@ -24,7 +25,7 @@ mod terminal;
 
 use event_loop::run_async_event_loop;
 use logging::init_secure_logging;
-use terminal::{restore_terminal, setup_terminal};
+use terminal::{install_panic_hook, setup_terminal};
 
 /// Main entry point (async)
 ///
@@ -34,6 +35,22 @@ use terminal::{restore_terminal, setup_terminal};
 /// - Tick interval for animations
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<()> {
+    match cli::parse_args(std::env::args_os().skip(1)) {
+        cli::CliAction::Run => {}
+        cli::CliAction::Version => {
+            println!("{}", cli::version_text());
+            return Ok(());
+        }
+        cli::CliAction::Help => {
+            println!("{}", cli::help_text());
+            return Ok(());
+        }
+        cli::CliAction::Error(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(cli::USAGE_EXIT_CODE);
+        }
+    }
+
     // Warn if running debug build
     #[cfg(debug_assertions)]
     {
@@ -99,8 +116,11 @@ async fn main() -> Result<()> {
 
     // Setup terminal
     let mut terminal = setup_terminal()?;
+    install_panic_hook();
 
     tracing::debug!("Terminal initialized");
+
+    app_state.progress.begin_profile_load();
 
     // Spawn background data loaders
     spawn_data_loaders(data_tx);
@@ -133,7 +153,10 @@ async fn main() -> Result<()> {
     // enqueues a save after this point, so this snapshot — the most up to
     // date one there is — is guaranteed to be written last and win over
     // any mid-session save that was still queued or in flight.
-    if let Err(e) = save_request_tx.send(final_save_request).await {
+    let exit_save_requested = final_save_request.is_some();
+    if let Some(request) = final_save_request
+        && let Err(e) = save_request_tx.send(request).await
+    {
         tracing::error!("Failed to enqueue exit-time profile save: {}", e);
     }
     drop(save_request_tx);
@@ -146,7 +169,7 @@ async fn main() -> Result<()> {
     // Nothing reads `data_rx` past this point (the event loop that drove it
     // has already returned); drop it so the writer's `result_tx.send` calls
     // fail fast on a full channel instead of risking a wait here while
-    // `restore_terminal` below is left stranded on raw mode.
+    // `terminal.restore()` below is left stranded on raw mode.
     drop(data_rx);
     // `JoinHandle::await` resolving to `Ok` only means the writer task
     // didn't panic, not that the save it processed actually succeeded —
@@ -160,14 +183,17 @@ async fn main() -> Result<()> {
         Ok(SaveWriterOutcome::LastSaveFailed(err)) => {
             tracing::error!("Failed to save profile on exit: {}", err);
         }
-        Ok(SaveWriterOutcome::NoRequestsProcessed) => {
+        Ok(SaveWriterOutcome::NoRequestsProcessed) if exit_save_requested => {
             tracing::error!("Profile save writer exited without processing the exit-time save");
+        }
+        Ok(SaveWriterOutcome::NoRequestsProcessed) => {
+            tracing::info!("Exit-time profile save skipped (profile not loaded or load failed)");
         }
         Err(e) => tracing::error!("Profile save writer task panicked: {}", e),
     }
 
     // Restore terminal
-    restore_terminal(&mut terminal)?;
+    terminal.restore()?;
 
     tracing::info!("Exiting Helix Keybindings Trainer");
 

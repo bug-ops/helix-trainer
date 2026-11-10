@@ -3,16 +3,32 @@
 //! This module provides the runtime representation of input state, wrapping the typestate
 //! pattern for runtime use while still benefiting from the type-safe design.
 
+use std::num::NonZeroUsize;
+
 use super::state_types::FindType;
 use crate::input::keymap::KeyContext;
 
-/// Which `s`/`S` regex-selection command a `RegexPromptPending` buffer is for
+/// Which `s`/`S`/`/` command a `RegexPromptPending` buffer is for
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegexPromptKind {
     /// `s` - select all regex matches within the current selection
     SelectRegex,
     /// `S` - split the current selection on a regex delimiter
     SplitSelection,
+    /// `/` - select the next regex match after the cursor
+    Search,
+}
+
+impl RegexPromptKind {
+    /// The command prefix character this prompt assembles a command for; also
+    /// the prompt character shown in the footer.
+    pub fn prefix(self) -> char {
+        match self {
+            Self::SelectRegex => 's',
+            Self::SplitSelection => 'S',
+            Self::Search => '/',
+        }
+    }
 }
 
 /// Runtime representation of input state
@@ -44,6 +60,13 @@ pub enum InputState {
     TextObjectInsidePending,
     /// After 'f'/'F'/'t'/'T' - waiting for character
     FindCharPending { find_type: FindType },
+    /// After `{n}f`/`{n}F`/`{n}t`/`{n}T` - waiting for character
+    CountedFindCharPending {
+        find_type: FindType,
+        count: NonZeroUsize,
+    },
+    /// After `{n}g` - waiting for the second 'g'
+    CountedGotoPending { count: NonZeroUsize },
     /// After 'r' - waiting for replacement character
     ReplaceCharPending,
     /// After '"' - waiting for register character
@@ -52,13 +75,13 @@ pub enum InputState {
     RegisterOpPending { register: char },
     /// After ':' - accumulating a command-line buffer
     CommandLinePending { buffer: String },
-    /// After 's'/'S' - accumulating a regex-selection prompt buffer
+    /// After 's'/'S'/'/' - accumulating a regex prompt buffer
     RegexPromptPending {
         kind: RegexPromptKind,
         buffer: String,
     },
     /// After digit 1-9 - building count prefix
-    CountPending { count: usize },
+    CountPending { count: NonZeroUsize },
     /// After '[' - waiting for unmatched previous command second key
     UnmatchedPrevPending,
     /// After ']' - waiting for unmatched next command second key
@@ -111,6 +134,7 @@ impl InputState {
         matches!(
             self,
             Self::FindCharPending { .. }
+                | Self::CountedFindCharPending { .. }
                 | Self::ReplaceCharPending
                 | Self::SurroundAddPending
                 | Self::SurroundDeletePending
@@ -183,6 +207,8 @@ impl InputState {
             | Self::TextObjectAroundPending
             | Self::TextObjectInsidePending
             | Self::FindCharPending { .. }
+            | Self::CountedFindCharPending { .. }
+            | Self::CountedGotoPending { .. }
             | Self::ReplaceCharPending
             | Self::RegisterPending
             | Self::CommandLinePending { .. }
@@ -204,6 +230,8 @@ impl InputState {
             Self::TextObjectAroundPending => "TEXT_OBJECT_AROUND_PENDING",
             Self::TextObjectInsidePending => "TEXT_OBJECT_INSIDE_PENDING",
             Self::FindCharPending { .. } => "FIND_CHAR_PENDING",
+            Self::CountedFindCharPending { .. } => "COUNTED_FIND_CHAR_PENDING",
+            Self::CountedGotoPending { .. } => "COUNTED_GOTO_PENDING",
             Self::ReplaceCharPending => "REPLACE_CHAR_PENDING",
             Self::RegisterPending => "REGISTER_PENDING",
             Self::RegisterOpPending { .. } => "REGISTER_OP_PENDING",
@@ -224,7 +252,10 @@ mod key_context_tests {
     fn base_and_count_and_register_op_map_to_base_context() {
         assert_eq!(InputState::Base.key_context(), Some(KeyContext::Base));
         assert_eq!(
-            InputState::CountPending { count: 3 }.key_context(),
+            InputState::CountPending {
+                count: NonZeroUsize::new(3).unwrap()
+            }
+            .key_context(),
             Some(KeyContext::Base)
         );
         assert_eq!(

@@ -425,3 +425,95 @@ fn test_completion_progress_not_100_while_in_insert_mode() {
         }
     }
 }
+
+fn movement_scenario(target_cursor: (usize, usize)) -> Scenario {
+    ScenarioBuilder::new()
+        .id("progress_move_001")
+        .setup_content("abcdefghij\nsecond line")
+        .setup_cursor(0, 0)
+        .target_content("abcdefghij\nsecond line")
+        .target_cursor(target_cursor.0, target_cursor.1)
+        .commands(vec!["l"])
+        .optimal_count(1)
+        .build()
+}
+
+fn step(session: GameSession<Active>, command: &str) -> GameSession<Active> {
+    match session.record_action(command.to_string()).unwrap() {
+        SessionAfterAction::StillActive(s) => s,
+        SessionAfterAction::Completed(_) => panic!("unexpected completion after '{command}'"),
+    }
+}
+
+#[test]
+fn test_progress_below_100_when_only_cursor_differs_from_target() {
+    let session = GameSession::new(movement_scenario((0, 8))).unwrap();
+    assert!(session.completion_progress() < 100);
+}
+
+#[test]
+fn test_progress_increases_as_cursor_approaches_target() {
+    let mut session = GameSession::new(movement_scenario((0, 8))).unwrap();
+    let mut previous = session.completion_progress();
+    for _ in 0..7 {
+        session = step(session, "l");
+        let current = session.completion_progress();
+        assert!(current > previous, "{current} should exceed {previous}");
+        assert!(current < 100);
+        previous = current;
+    }
+    match session.record_action("l".to_string()).unwrap() {
+        SessionAfterAction::Completed(done) => assert_eq!(done.completion_progress(), 100),
+        SessionAfterAction::StillActive(_) => panic!("cursor on target must complete"),
+    }
+}
+
+#[test]
+fn test_progress_below_100_when_selection_differs_from_target() {
+    let scenario = ScenarioBuilder::new()
+        .id("progress_select_001")
+        .setup_content("hello world")
+        .setup_cursor(0, 0)
+        .target_content("hello world")
+        .target_cursor(0, 4)
+        .target_selection((0, 0), (0, 4))
+        .commands(vec!["e"])
+        .optimal_count(1)
+        .build();
+    let session = GameSession::new(scenario).unwrap();
+    assert!(session.completion_progress() < 100);
+}
+
+#[test]
+fn test_progress_text_deviation_never_exceeds_text_only_value() {
+    let scenario = ScenarioBuilder::new()
+        .id("progress_text_001")
+        .setup_content("a\nb\nc\nd")
+        .setup_cursor(0, 0)
+        .target_content("a\nc\nd")
+        .target_cursor(0, 0)
+        .commands(vec!["j", "x", "d"])
+        .optimal_count(3)
+        .build();
+    let session = GameSession::new(scenario).unwrap();
+    assert!(session.completion_progress() <= 33);
+}
+
+#[test]
+fn test_no_bundled_scenario_starts_complete() {
+    let scenarios = crate::config::ScenarioLoader::new()
+        .load_from_embedded("en")
+        .unwrap();
+    let started_complete: Vec<String> = scenarios
+        .into_iter()
+        .filter_map(|s| {
+            let id = s.id.clone();
+            let session = GameSession::new(s).unwrap();
+            (session.completion_progress() == 100).then_some(id)
+        })
+        .collect();
+    assert!(
+        started_complete.is_empty(),
+        "scenarios starting at 100%: {started_complete:?}"
+    );
+}

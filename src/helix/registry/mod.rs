@@ -43,8 +43,8 @@ use std::sync::OnceLock;
 use crate::helix::simulator::NormalMode;
 
 pub use command_registry::{Command, CommandHandler, CommandRegistry};
-pub use keytrie::{KeyMatch, KeyTrie, MAX_COUNT_PREFIX, split_count_prefix};
-pub use metadata::{Category, CommandMetadata, ModeTransition};
+pub use keytrie::{KeyMatch, KeyTrie, MAX_COUNT_PREFIX, parse_counted_command, split_count_prefix};
+pub use metadata::{Category, CommandMetadata, CountBehavior, ModeTransition, NativeCounted};
 
 /// Global normal mode command registry
 ///

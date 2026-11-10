@@ -26,6 +26,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
 // Re-export Mode from simulator to avoid duplication
+use super::simulator::InsertCommand;
 pub use super::simulator::Mode;
 
 /// Maximum length of insert mode text recording (security limit)
@@ -50,6 +51,18 @@ pub enum Movement {
     Down,
 }
 
+/// A deleting Insert-mode key recorded between typed characters
+///
+/// `after_chars` is the number of typed characters that preceded the key, so
+/// replay can interleave it with the recorded text in its original order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InsertEdit {
+    /// Count of typed characters recorded before this key
+    pub after_chars: usize,
+    /// The key that was pressed
+    pub command: InsertCommand,
+}
+
 /// Represents a repeatable action that can be replayed
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepeatableAction {
@@ -71,10 +84,12 @@ pub enum RepeatableAction {
     /// - `entry_command`: The command used to enter insert mode (`i`, `a`, `A`, `I`, `o`, `O`, `c`, `Alt-c`, `"<reg>c`)
     /// - `text`: The text that was typed
     /// - `movements`: Arrow key movements made during insert
+    /// - `edits`: Deleting keys (`Ctrl-w`, `Ctrl-u`, ...) interleaved with `text`
     InsertSequence {
         entry_command: Option<String>,
         text: String,
         movements: Vec<Movement>,
+        edits: Vec<InsertEdit>,
     },
 }
 
@@ -237,6 +252,7 @@ pub struct InsertModeRecorder {
     entry_command: Option<String>,
     text: String,
     movements: Vec<Movement>,
+    edits: Vec<InsertEdit>,
 }
 
 impl InsertModeRecorder {
@@ -247,6 +263,7 @@ impl InsertModeRecorder {
             entry_command: None,
             text: String::new(),
             movements: Vec::new(),
+            edits: Vec::new(),
         }
     }
 
@@ -267,6 +284,7 @@ impl InsertModeRecorder {
         self.entry_command = entry_command;
         self.text.clear();
         self.movements.clear();
+        self.edits.clear();
     }
 
     /// Record a character typed in insert mode
@@ -297,6 +315,22 @@ impl InsertModeRecorder {
         }
     }
 
+    /// Record a deleting Insert-mode key at the current text position
+    ///
+    /// Bounded by the same limit as movements.
+    pub fn record_edit(&mut self, command: InsertCommand) {
+        if !self.is_recording {
+            return;
+        }
+
+        if self.edits.len() < MAX_INSERT_MOVEMENTS {
+            self.edits.push(InsertEdit {
+                after_chars: self.text.chars().count(),
+                command,
+            });
+        }
+    }
+
     /// Finish recording and return the recorded action
     ///
     /// Stops recording and returns a `RepeatableAction::InsertSequence`
@@ -309,12 +343,14 @@ impl InsertModeRecorder {
             entry_command: self.entry_command.clone(),
             text: self.text.clone(),
             movements: self.movements.clone(),
+            edits: self.edits.clone(),
         };
 
         // Reset state
         self.entry_command = None;
         self.text.clear();
         self.movements.clear();
+        self.edits.clear();
 
         action
     }
@@ -491,6 +527,7 @@ mod tests {
                 entry_command,
                 text,
                 movements,
+                ..
             } => {
                 assert_eq!(entry_command, Some("i".to_string()));
                 assert_eq!(text, "hello");
@@ -518,6 +555,7 @@ mod tests {
                 entry_command,
                 text,
                 movements,
+                ..
             } => {
                 assert_eq!(entry_command, Some("a".to_string()));
                 assert_eq!(text, "hi!");
@@ -541,6 +579,7 @@ mod tests {
                 entry_command,
                 text,
                 movements,
+                ..
             } => {
                 assert_eq!(entry_command, None);
                 assert!(text.is_empty());
@@ -565,6 +604,7 @@ mod tests {
                 entry_command,
                 text,
                 movements,
+                ..
             } => {
                 assert_eq!(entry_command, None);
                 assert!(text.is_empty());

@@ -216,7 +216,7 @@ resolved by a separate, unrelated fix — see
 |----|------------|----------|
 | FR-011 | THE SYSTEM SHALL resolve the Helix `config.toml` path as Helix does: `$XDG_CONFIG_HOME/helix/config.toml` when `XDG_CONFIG_HOME` is set to a non-empty absolute path, otherwise `~/.config/helix/config.toml` on macOS and Linux; on Windows `%AppData%\helix\config.toml` | must |
 | FR-012 | THE PATH RESOLUTION SHALL be a pure function of its inputs (environment value and home directory passed in) so it is unit-testable without touching the process environment | must |
-| FR-013 | WHEN the resolved file does not exist THE SYSTEM SHALL keep the existing behavior (stock keymap plus a "not found" warning naming the resolved path) | must |
+| FR-013 | WHEN the resolved file does not exist THE SYSTEM SHALL keep the existing behavior (stock keymap plus a "not found" warning). The resolved path SHALL be written to the `tracing` log only; the user-facing toast text is unchanged (no locale edits) | must |
 | FR-014 | `README.md`, `SECURITY.md` and the `AppConfig` doc comment SHALL describe the real trainer data and config locations per platform (the directory returned by `dirs::config_dir()` joined with `helix-trainer`, so `~/Library/Application Support/helix-trainer/` on macOS) and the Helix config path from FR-011 | must |
 
 ### 10.3 Acceptance Criteria

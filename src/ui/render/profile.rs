@@ -64,9 +64,7 @@ fn render_profile_content(frame: &mut Frame, state: &AppState, area: ratatui::la
     let scenarios_completed = profile.scenarios_completed;
     let perfect_scenarios = profile.perfect_scenarios;
 
-    // Calculate current XP in level
-    let current_level_xp = crate::gamification::XPCalculator::xp_for_level(level);
-    let xp_in_level = total_xp - current_level_xp;
+    let xp_in_level = profile.xp_in_level();
 
     // Split content into two sections
     let content_chunks = Layout::default()

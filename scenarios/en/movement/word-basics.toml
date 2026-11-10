@@ -64,8 +64,8 @@ file_content = """struct Point {
     x: i32,
     y: i32,
 }"""
-cursor_position = [1, 7]
-selection = [1, 5, 1, 7]
+cursor_position = [1, 10]
+selection = [1, 7, 1, 10]
 
 [scenarios.solution]
 commands = ["w", "w"]

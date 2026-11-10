@@ -4,7 +4,7 @@
 
 use crate::helix::commands::*;
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
-use crate::helix::registry::metadata::{Category, CommandMetadata, ModeTransition};
+use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior, ModeTransition};
 use crate::helix::simulator::commands::editing;
 use crate::helix::simulator::{HelixSimulator, NormalMode};
 
@@ -20,7 +20,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Editing,
             true,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         editing::delete_selection,
     ));
 
@@ -33,7 +34,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Editing,
             true,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         editing::delete_selection_noyank,
     ));
 
@@ -47,7 +49,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::ModeChange,
             true,
             Some(ModeTransition::ToInsert),
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         HelixSimulator::change_selection,
     ));
 
@@ -60,7 +63,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::ModeChange,
             true,
             Some(ModeTransition::ToInsert),
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         HelixSimulator::change_selection_noyank,
     ));
 
@@ -74,7 +78,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Editing,
             true,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         editing::join_lines,
     ));
 
@@ -115,7 +120,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Editing,
             true,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         editing::switch_case,
     ));
 
@@ -128,7 +134,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Editing,
             true,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         editing::switch_case,
     ));
 
@@ -141,7 +148,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Editing,
             true,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         editing::switch_to_uppercase,
     ));
 
@@ -167,7 +175,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Editing,
             true,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         editing::join_selections_space,
     ));
 
@@ -195,7 +204,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::ModeChange,
             true,
             Some(ModeTransition::ToInsert),
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         |_sim| Ok(()), // Mode transition handled by caller
     ));
 
@@ -208,7 +218,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::ModeChange,
             true,
             Some(ModeTransition::ToInsert),
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         HelixSimulator::append,
     ));
 
@@ -221,7 +232,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::ModeChange,
             true,
             Some(ModeTransition::ToInsert),
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         HelixSimulator::insert_at_line_start,
     ));
 
@@ -234,7 +246,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::ModeChange,
             true,
             Some(ModeTransition::ToInsert),
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         HelixSimulator::append_at_line_end,
     ));
 
@@ -290,7 +303,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Editing,
             false,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         |_sim| Ok(()), // Handled specially by execute_command_any_mode
     ));
 

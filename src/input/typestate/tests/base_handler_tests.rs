@@ -68,9 +68,11 @@ fn test_base_state_count_prefix() {
         &BaseState,
         KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
     );
-    assert_matches!(
+    assert_eq!(
         result,
-        HandlerResult::Transition(InputState::CountPending { count: 3 })
+        HandlerResult::Transition(InputState::CountPending {
+            count: super::nz(3)
+        })
     );
 }
 
@@ -223,4 +225,56 @@ fn test_base_state_replace_with_yanked() {
         KeyEvent::new(KeyCode::Char('R'), KeyModifiers::SHIFT),
     );
     assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_REPLACE_WITH_YANKED);
+}
+
+fn base_key(c: char, modifiers: KeyModifiers) -> HandlerResult {
+    KeyHandler::handle_key(&BaseState, KeyEvent::new(KeyCode::Char(c), modifiers))
+}
+
+/// #487: Alt-s must run split_selection_on_newline, not open the `s` prompt.
+#[test]
+fn test_base_state_alt_s_executes_split_selection_on_newline() {
+    assert_eq!(
+        base_key('s', KeyModifiers::ALT),
+        HandlerResult::Execute(std::borrow::Cow::Borrowed(CMD_SPLIT_SELECTION_NEWLINES))
+    );
+}
+
+/// #487: no Alt chord may open a plain-key pending state.
+#[test]
+fn test_base_state_alt_chords_never_open_pending_state() {
+    for c in "gzm[]ftrFTSQq\":sS123456789/".chars() {
+        let result = base_key(c, KeyModifiers::ALT);
+        assert!(
+            !matches!(result, HandlerResult::Transition(_)),
+            "Alt-{c} opened a pending state: {result:?}"
+        );
+    }
+    assert_eq!(base_key('g', KeyModifiers::ALT), HandlerResult::Stay);
+    assert_eq!(base_key('5', KeyModifiers::ALT), HandlerResult::Stay);
+}
+
+/// #487: other Alt-bound commands still resolve.
+#[test]
+fn test_base_state_alt_bound_commands_still_execute() {
+    assert_matches!(
+        base_key('c', KeyModifiers::ALT),
+        HandlerResult::Execute(cmd) if cmd == CMD_CHANGE_SELECTION_NOYANK
+    );
+    assert_matches!(
+        base_key('C', KeyModifiers::ALT | KeyModifiers::SHIFT),
+        HandlerResult::Execute(cmd) if cmd == CMD_COPY_SELECTION_PREV
+    );
+}
+
+/// #504: `/` opens the search prompt instead of executing a bare command.
+#[test]
+fn test_base_state_slash_opens_search_prompt() {
+    assert_eq!(
+        base_key('/', KeyModifiers::NONE),
+        HandlerResult::Transition(InputState::RegexPromptPending {
+            kind: crate::input::typestate::RegexPromptKind::Search,
+            buffer: String::new(),
+        })
+    );
 }

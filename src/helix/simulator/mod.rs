@@ -15,6 +15,7 @@ pub mod find_state;
 mod insert_mode;
 mod mode;
 pub mod register_file;
+use undo::HistoryEntry;
 pub mod search_state;
 pub mod snapshot;
 mod undo;
@@ -37,6 +38,7 @@ pub use mode::{EditorMode, InsertMode, NormalMode};
 // Re-export state types
 pub use command_line::CommandLine;
 pub use find_state::{FindDirection, FindState, FindType};
+pub use insert_mode::InsertCommand;
 pub use register_file::RegisterFile;
 pub use search_state::{SearchDirection, SearchState};
 pub use snapshot::{EditorDisplay, EditorSnapshot, SelectionBounds, SerializableRange};
@@ -81,14 +83,14 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Current selection(s) with head and anchor positions
     pub(super) selection: Selection,
 
-    /// Undo history stack storing the document state from immediately
-    /// before each applied transaction.
-    pub(super) history: Vec<Rope>,
+    /// Undo history stack storing the document and selection from
+    /// immediately before each applied transaction.
+    pub(super) history: Vec<HistoryEntry>,
 
-    /// Redo stack storing the document state each `undo` moves away from,
-    /// so `redo` can restore it. Cleared whenever a new transaction is
-    /// applied, matching standard editor undo/redo semantics.
-    pub(super) redo_stack: Vec<Rope>,
+    /// Redo stack storing the document and selection each `undo` moves away
+    /// from, so `redo` can restore them. Cleared whenever a new transaction
+    /// is applied, matching standard editor undo/redo semantics.
+    pub(super) redo_stack: Vec<HistoryEntry>,
 
     /// Named registers for yank, paste, and replace operations
     ///
@@ -105,6 +107,12 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// is threaded across every mode-transition struct literal so that
     /// recording survives an Insert-mode excursion inside a macro.
     pub(super) macro_recorder: MacroRecorder,
+
+    /// Cursor position right after an auto-indented line break (`o`, `O`,
+    /// Enter) that is the only edit of the current insert session. Leaving
+    /// Insert mode with the cursor still there strips that indentation, as
+    /// Helix does.
+    pub(super) auto_indent_end: Option<usize>,
 
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
@@ -174,10 +182,18 @@ impl<M: EditorMode> HelixSimulator<M> {
     pub fn state(&self) -> Result<EditorState, UserError> {
         let max_pos = self.doc.len_chars();
 
-        // Helper: convert char index to (row, col)
+        // Helper: convert char index to (row, col). The empty line after a
+        // trailing newline is not a row of `EditorState`, so a position there
+        // maps to the end of the last real line.
+        let ends_with_newline = max_pos > 0 && self.doc.char(max_pos - 1) == '\n';
+        let last_row = self.doc.len_lines() - 1 - usize::from(ends_with_newline);
         let pos_to_row_col = |char_idx: usize| -> (usize, usize) {
             let clamped = char_idx.min(max_pos);
             let line = self.doc.char_to_line(clamped);
+            if line > last_row {
+                let row_len = self.doc.line(last_row).len_chars();
+                return (last_row, row_len - 1);
+            }
             let line_start = self.doc.line_to_char(line);
             let col = clamped - line_start;
             (line, col)
@@ -272,9 +288,12 @@ impl<M: EditorMode> HelixSimulator<M> {
             return;
         }
 
+        self.auto_indent_end = None;
         // Save previous state before applying transaction
-        let prev_doc = self.doc.clone();
-        self.history.push(prev_doc);
+        self.history.push(HistoryEntry {
+            doc: self.doc.clone(),
+            selection: self.selection.clone(),
+        });
         transaction.apply(&mut self.doc);
         // A new edit invalidates any previously undone changes
         self.redo_stack.clear();
@@ -298,6 +317,7 @@ impl HelixSimulator<NormalMode> {
             view_state: ViewState::new(),
             find_state: FindState::new(),
             macro_recorder: MacroRecorder::new(),
+            auto_indent_end: None,
             _mode: PhantomData,
         }
     }
@@ -341,6 +361,7 @@ impl HelixSimulator<NormalMode> {
             view_state: ViewState::new(),
             find_state: FindState::new(),
             macro_recorder: MacroRecorder::new(),
+            auto_indent_end: None,
             _mode: PhantomData,
         }
     }
@@ -411,6 +432,7 @@ impl HelixSimulator<NormalMode> {
             view_state: ViewState::new(),
             find_state: FindState::new(),
             macro_recorder: MacroRecorder::new(),
+            auto_indent_end: None,
             _mode: PhantomData,
         }
     }
@@ -448,6 +470,7 @@ impl HelixSimulator<NormalMode> {
             view_state: self.view_state,
             find_state: self.find_state,
             macro_recorder: self.macro_recorder,
+            auto_indent_end: self.auto_indent_end,
             _mode: PhantomData,
         }
     }
@@ -476,7 +499,8 @@ impl HelixSimulator<NormalMode> {
 // Methods ONLY available in InsertMode
 impl HelixSimulator<InsertMode> {
     /// Transition to Normal mode
-    pub fn exit_insert_mode(self) -> HelixSimulator<NormalMode> {
+    pub fn exit_insert_mode(mut self) -> HelixSimulator<NormalMode> {
+        self.strip_unused_auto_indent();
         HelixSimulator {
             doc: self.doc,
             selection: self.selection,
@@ -490,6 +514,7 @@ impl HelixSimulator<InsertMode> {
             view_state: self.view_state,
             find_state: self.find_state,
             macro_recorder: self.macro_recorder,
+            auto_indent_end: self.auto_indent_end,
             _mode: PhantomData,
         }
     }
@@ -559,6 +584,24 @@ impl AnyModeSimulator {
     /// Execute a command, handling mode transitions
     pub fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
         commands::execute_command_any_mode(self, cmd)
+    }
+
+    /// Execute `base` with a count prefix, as `{count}{base}` would.
+    ///
+    /// The single counted-execution mechanism: the command's
+    /// [`CountBehavior`](crate::helix::registry::CountBehavior) decides
+    /// whether it repeats, runs once, or receives the count (`2G`, `3fa`).
+    ///
+    /// # Errors
+    ///
+    /// Returns `UserError` if the command fails or does not exist.
+    #[cfg(test)]
+    pub(crate) fn execute_counted(
+        &mut self,
+        base: &str,
+        count: std::num::NonZeroUsize,
+    ) -> Result<(), UserError> {
+        commands::execute_counted_any_mode(self, base, count)
     }
 
     /// Get current editor state
@@ -691,6 +734,7 @@ impl AnyModeSimulator {
                 entry_command,
                 text,
                 movements,
+                edits,
             } => {
                 // Execute insert sequence through wrapper
                 use crate::helix::commands::*;
@@ -699,9 +743,17 @@ impl AnyModeSimulator {
                 let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
                 commands::execute_command_any_mode(self, insert_cmd)?;
 
-                // Insert text character by character
-                for ch in text.chars() {
+                // Insert text character by character, replaying deleting
+                // keys at the position they were originally pressed
+                let mut pending_edits = edits.iter().peekable();
+                for (typed, ch) in text.chars().enumerate() {
+                    while let Some(edit) = pending_edits.next_if(|e| e.after_chars <= typed) {
+                        commands::execute_command_any_mode(self, edit.command.as_str())?;
+                    }
                     commands::execute_command_any_mode(self, &ch.to_string())?;
+                }
+                for edit in pending_edits {
+                    commands::execute_command_any_mode(self, edit.command.as_str())?;
                 }
 
                 // Apply movements

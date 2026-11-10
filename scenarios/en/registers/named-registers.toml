@@ -26,7 +26,8 @@ beta
 alpha
 gamma
 """
-cursor_position = [2, 5]
+cursor_position = [3, 0]
+selection = [2, 0, 3, 0]
 
 [scenarios.solution]
 commands = ["x", '"ay', "j", "x", "y", "j", '"aP']

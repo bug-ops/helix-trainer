@@ -8,8 +8,12 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::helix::commands::*;
 
+use super::count::goto_line_command;
 use super::{InputHandler, KeyHandler};
-use crate::input::typestate::{handler_result::HandlerResult, state_types::GotoPending};
+use crate::input::typestate::{
+    handler_result::HandlerResult,
+    state_types::{CountedGotoPending, GotoPending},
+};
 
 impl InputHandler<GotoPending> for KeyHandler {
     fn handle_key(_state: &GotoPending, key: KeyEvent) -> HandlerResult {
@@ -29,6 +33,17 @@ impl InputHandler<GotoPending> for KeyHandler {
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
             // Invalid second key - cancel
+            _ => HandlerResult::Cancel,
+        }
+    }
+}
+
+impl InputHandler<CountedGotoPending> for KeyHandler {
+    fn handle_key(state: &CountedGotoPending, key: KeyEvent) -> HandlerResult {
+        match key.code {
+            KeyCode::Char('g') => {
+                HandlerResult::Execute(Cow::Owned(goto_line_command(state.count)))
+            }
             _ => HandlerResult::Cancel,
         }
     }

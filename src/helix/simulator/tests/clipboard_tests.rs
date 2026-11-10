@@ -238,7 +238,8 @@ fn test_paste_before_divergent_clipboard_matches_helix() {
 
 #[test]
 fn test_yank_select_line_round_trips_full_line() {
-    // 'x' (select_line) produces a backward range (anchor=line_end, head=line_start)
+    // 'x' (select_line) produces a forward range; ';' collapses it to its block
+    // cursor (the line's newline), so 'j' lands on the next line's newline
     let mut sim = AnyModeSimulator::new("abc\nXYZ\n".to_string());
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
@@ -248,7 +249,7 @@ fn test_yank_select_line_round_trips_full_line() {
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
     let state = sim.state().unwrap();
-    assert_eq!(state.content(), "abc\nXabc\nYZ\n");
+    assert_eq!(state.content(), "abc\nXYZ\nabc\n");
 }
 
 #[test]

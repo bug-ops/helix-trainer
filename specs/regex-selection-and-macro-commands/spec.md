@@ -260,16 +260,15 @@ THEN  line 2 is `let sumum = a + b;` and line 3 is `    sumum`
 | Alt-modified digit, `g`, `f`, `t`, `r`, `m`, `z`, `"`, `:`, `q` keys | Never open a pending state; Alt-bound commands execute, unbound Alt chords are ignored (no action recorded) |
 | Count larger than the available matches for `f`/`t` (`9fa`) | Selection unchanged, no error, same as the uncounted failure path |
 | `{n}G` / `{n}gg` with `n` beyond the last line | Clamped to the last line as in hx |
-| Bare `G` with no count | [NEEDS CLARIFICATION: confirm against hx 25.07.1 (documented as "goto line <n>, else end of file") and keep the current simulator behavior only if it matches] |
+| Bare `G` with no count | No-op (verified against helix-term 25.07.1); bare `gg` goes to the file start |
 | `md` / `mr` with no surrounding pair found | Selection and buffer unchanged, `UserError` per the existing path |
 | `,` / `Alt-,` with a single range | No-op, no error |
-| Surround add/delete/replace undo granularity | Out of scope here (still two transactions); deferred follow-up |
+| Surround add/delete/replace undo granularity | One undo step per operation (see helix-core spec 3.8 FR-027) |
 
 ### 10.4 Out of Scope (this batch)
 
 - `Alt-K`, `K`, `&` stubs (`keep_selections`, `remove_selections`, align) remain unimplemented, tracked separately
 - Named macro registers (unchanged from section 1)
-- Single-transaction (one undo step) surround operations
 - Backward search `?` (see register-command-mode-support section 12)
 
 ### 10.5 Success Criteria

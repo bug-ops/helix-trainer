@@ -10,7 +10,7 @@ use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 
 use super::keytrie::KeyTrie;
-use super::metadata::{Category, CommandMetadata, ModeTransition};
+use super::metadata::{Category, CommandMetadata, CountBehavior, ModeTransition, NativeCounted};
 
 /// Check if a key string represents a modifier key command (Alt-*, Ctrl-*)
 fn is_modifier_key(key: &str) -> bool {
@@ -171,6 +171,43 @@ impl<M: EditorMode> CommandRegistry<M> {
             .get(key)
             .map(|c| c.metadata.repeatable)
             .unwrap_or(false)
+    }
+
+    /// How a count prefix applies to `base` (a command string without count).
+    ///
+    /// Registered commands use their metadata. Commands dispatched outside
+    /// the registry because they carry an argument (`G`, `f<c>`, `t<c>`,
+    /// `F<c>`, `T<c>`) are `Native`; register-scoped delete/change
+    /// (`"<r>d`, `"<r>c`) ignore the count like their plain forms; everything
+    /// else repeats.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::registry::{CountBehavior, normal_registry};
+    ///
+    /// let registry = normal_registry();
+    /// assert_eq!(registry.count_behavior("x"), CountBehavior::Repeat);
+    /// assert_eq!(registry.count_behavior("J"), CountBehavior::Ignore);
+    /// assert_eq!(registry.count_behavior("gg"), CountBehavior::Native);
+    /// assert_eq!(registry.count_behavior("fa"), CountBehavior::Native);
+    /// assert_eq!(registry.count_behavior("G"), CountBehavior::Native);
+    /// assert_eq!(registry.count_behavior("d"), CountBehavior::Ignore);
+    /// assert_eq!(registry.count_behavior("\"ad"), CountBehavior::Ignore);
+    /// ```
+    pub fn count_behavior(&self, base: &str) -> CountBehavior {
+        if let Some(cmd) = self.commands.get(base) {
+            return cmd.metadata.count_behavior;
+        }
+        if NativeCounted::parse(base).is_some() {
+            return CountBehavior::Native;
+        }
+        let mut chars = base.chars();
+        match (chars.next(), chars.next(), chars.next(), chars.next()) {
+            (Some('"'), Some(_), Some('d' | 'c'), None) => CountBehavior::Ignore,
+            (Some('q'), None, ..) => CountBehavior::Ignore,
+            _ => CountBehavior::Repeat,
+        }
     }
 
     /// Get the KeyTrie for multi-key resolution

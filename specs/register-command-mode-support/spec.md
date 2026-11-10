@@ -295,11 +295,12 @@ blackhole register as a new addressable register alongside named ones.
 
 | ID | Requirement | Priority |
 |----|------------|----------|
-| FR-210 | WHEN a register value contains a line ending THE SYSTEM SHALL paste it linewise: `p` inserts at the start of the line after the range's last line, `P` at the start of the line of the range's first line (upstream `paste_impl`: linewise = any value contains a line ending) | must |
+| FR-210 | WHEN a register value ENDS WITH a line ending THE SYSTEM SHALL paste it linewise: `p` inserts at the start of the line after the range's last line, `P` at the start of the line of the range's first line (upstream `paste_impl`: linewise = the value ends with a line ending; a multi-line value without a trailing line ending is pasted inline) | must |
 | FR-211 | WHEN a linewise paste targets the last line of a buffer with no trailing newline THE SYSTEM SHALL insert the line separator needed so the pasted line does not merge into the last line | must |
-| FR-212 | WHEN a register value contains no line ending THE SYSTEM SHALL paste inline exactly as before this batch | must |
+| FR-212 | WHEN a register value does not end with a line ending (including a multi-line value without a trailing line ending) THE SYSTEM SHALL paste inline exactly as before this batch | must |
 | FR-213 | WHEN a yank runs over several selection ranges THE SYSTEM SHALL store one value per range in the target register (the register value type changes from a single `String` to an ordered list of strings; internal change, no persisted format) | must |
-| FR-214 | WHEN `p`/`P`/`R` run with N ranges and M stored values THE SYSTEM SHALL paste value i at range i, repeating the last value when M < N and ignoring surplus values when M > N | must |
+| FR-214 | WHEN `p`/`P` run with N ranges and M stored values THE SYSTEM SHALL paste value i at range i, repeating the last value when M < N and ignoring surplus values when M > N | must |
+| FR-214a | `R` (replace with yanked) with several stored values pasting value i into range i is NOT part of this batch (explicitly deferred; needs `RegisterFile::get_values` consumption in `R`); `R` keeps using the first value (FR-215) | deferred |
 | FR-215 | WHEN a register holding several values is read by an operation expecting one string THE SYSTEM SHALL use the first value | should |
 | FR-216 | WHEN text is pasted THE SYSTEM SHALL select the pasted text in every range (see [[../helix-core-post-25-07-1-upgrade-readiness/spec#3.8 Simulator Fidelity at the Pinned Core (25.07.1)\|section 3.8 FR-024]]) | must |
 
@@ -345,6 +346,8 @@ THEN  the trailing `{` is removed (not the letter `w` inserted)
 | `"_` (blackhole) yank over several ranges | Stores nothing, as before |
 | `Ctrl-w` at line start in Insert mode | Deletes the preceding newline as hx does |
 | `Delete` at the very end of the buffer | No-op |
+| Register value `"a\nb"` (multi-line, no trailing line ending) | Pasted inline, not linewise |
+| Register value `"a\n"` (ends with a line ending) | Pasted linewise |
 
 ### 12.6 Success Criteria
 

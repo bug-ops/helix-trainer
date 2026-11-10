@@ -12,7 +12,6 @@ use crate::security::validators::validate_id_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 /// File wrapper for quest templates
@@ -238,21 +237,15 @@ impl QuestLoader {
         let canonical = path_validator::validate_path(path, &self.allowed_base_paths)
             .map_err(UserError::from)?;
 
-        // Validate file size to prevent resource exhaustion
-        path_validator::validate_file_size(&canonical, MAX_SCENARIO_FILE_SIZE)
-            .map_err(UserError::from)?;
-
         // Log with sanitized path (doesn't leak full path)
         tracing::info!(
             file = %sanitizer::sanitize_path_for_logging(&canonical),
             "Loading quest template file"
         );
 
-        // Read file content
-        let content = fs::read_to_string(&canonical).map_err(|e| {
-            tracing::error!("Failed to read quest template file: {}", e);
-            UserError::ScenarioLoadError
-        })?;
+        // Bounded read of a regular file to prevent resource exhaustion
+        let content = path_validator::read_capped(&canonical, MAX_SCENARIO_FILE_SIZE)
+            .map_err(UserError::from)?;
 
         // Parse, count-check, and validate each quest template
         let quests = super::loader::parse_and_validate::<QuestsFile>(

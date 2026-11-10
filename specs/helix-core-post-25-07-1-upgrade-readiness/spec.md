@@ -194,7 +194,8 @@ Known keymap changes on master relevant here:
 | FR-022 | WHEN `u`/`U` undo or redo a change THE SIMULATOR SHALL restore the selection that existed with that history state (history entries store the text and the selection) so `x d u d` removes line 1 again | #501 | must |
 | FR-023 | WHEN `gl` runs THE SIMULATOR SHALL move to the last character of the line (not the line ending, and not past the end on the last line) | #492 | must |
 | FR-024 | WHEN `p` or `P` completes THE SIMULATOR SHALL select the pasted text in each range (`w y P d` restores the original text) | #491 | must |
-| FR-025 | THE SIMULATOR SHALL expose ONE counted-execution mechanism (a counted `execute` taking the base command and a non-zero count) driven by per-command metadata `CountBehavior::{Repeat, Ignore, Native}` in the command registry: `Repeat` applies the command n times (`h`, `j`, `x`, `d`, ...), `Ignore` applies it once (`J`), `Native` passes the count into the command (`G`, `gg`, `f`, `t`, `F`, `T`). The game and minigame layers SHALL call this mechanism and SHALL NOT repeat the base command themselves | #493, #499 | must |
+| FR-025 | THE SIMULATOR SHALL expose ONE counted-execution mechanism (a counted execute taking the base command and a non-zero count; it is crate-internal and not part of the public API) driven by per-command metadata `CountBehavior::{Repeat, Ignore, Native}` in the command registry: `Repeat` applies the command n times (the default, e.g. `h`, `j`, `x`), `Ignore` applies it once (`d`, `Alt-d`, `c`, `Alt-c`, `i`, `a`, `I`, `A`, `Alt-,` (`remove_primary_selection`), `J`, `Alt-J`, `~`, `` ` ``, ``Alt-` ``, `Alt-;` (`flip_selections`), `v`, `Ctrl-c`, `.`, `q`, and the register-scoped forms `"<r>d` and `"<r>c`, decided by the rule in `CommandRegistry::count_behavior`; hx 25.07.1 reads or ignores the count there per the `helix-term` sources, so `3d` on `abcdef` gives `bcdef`), `Native` passes the count into the command (`G`, `gg`, `f`, `t`, `F`, `T`); native counted strings are parsed by one registry parser into a closed `NativeCounted` type (`GotoLine` or `Find`). Commands where hx reads the count and repetition is equivalent (`h`/`j`/`k`/`l`, `w`/`b`/`e`, `x`/`X`, `u`/`U`, `p`/`P`/`R`, `>`/`<`, `o`/`O`, `n`/`N` and similar) stay `Repeat`; A `Repeat` loop SHALL stop as soon as a command has switched the simulator into Insert mode, so `3o` never types the base command as text. The authoritative per-command list is the registry; this table is checked by a registry test. The game and minigame layers SHALL call this mechanism and SHALL NOT repeat the base command themselves | #493, #499 | must |
+| FR-027 | WHEN `ms`, `md` or `mr` completes THE SIMULATOR SHALL record it as ONE undo step (one transaction, as hx), so `m s (` followed by `u` restores the text before the surround in one press | #502 | must |
 | FR-026 | WHEN `o`, `O` or Enter in Insert mode creates a new line THE SIMULATOR SHALL copy the leading whitespace of the current line onto it (`j o xyz Enter abc Escape` on scenario 14 keeps the 4-space indent) | #490 | must |
 
 ### 3.8.1 Acceptance Criteria
@@ -229,14 +230,21 @@ WHEN  the user presses j, o, xyz, Enter, abc, Escape
 | Existing scenarios whose target was authored against the old (wrong) behavior | Target and `optimal_count` are corrected to hx behavior in the same change; `cargo nextest run scenario` must pass |
 | Command strings with counts (`3fa`, `2G`) | Must be accepted by the simulator before the input layer emits them (see [[regex-selection-and-macro-commands/spec#10. Bug-Fix Batch: Input Chords, Counted Commands, Surround and Primary Selection (#487, #493, #502, #503, #455)\|regex-selection-and-macro-commands section 10]]) |
 
-### 3.8.3 Deferred (not part of this batch)
+### 3.8.3 Accepted deviations from hx (this batch)
+
+| Deviation | Rationale |
+|-----------|-----------|
+| `;` collapses all ranges to a block cursor | Accepted simplification of `collapse_selection` for the trainer |
+| `state()` reports a cursor on the empty line after a final `\n` as the end of the last real line | Display/target comparison uses real lines only |
+| `Escape` immediately after `o`, `O` or Enter removes the auto-inserted indent | Same as hx `try_restore_indent` |
+
+### 3.8.4 Deferred (not part of this batch)
 
 - #500: language-aware indent unit for `>`, `<`, Tab, `o`
-- Single-transaction (one undo step) surround operations
 - `&`, `K`, `Alt-K` stubs
 - Tree-sitter extra indent on `o`/`O`/Enter
 
-### 3.8.4 Success Criteria
+### 3.8.5 Success Criteria
 
 | ID | Metric | Target |
 |----|--------|--------|

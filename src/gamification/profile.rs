@@ -15,6 +15,38 @@ use crate::learning::CommandPerformance;
 use crate::learning::ScenarioHistory;
 use crate::sound::SoundConfig;
 
+/// An achievement id from disk that may be unknown to this build.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MaybeKnownAchievement {
+    Known(AchievementId),
+    Unknown(serde::de::IgnoredAny),
+}
+
+fn deserialize_known_achievements<'de, D>(
+    deserializer: D,
+) -> Result<HashSet<AchievementId>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Vec::<MaybeKnownAchievement>::deserialize(deserializer)?;
+    let total = raw.len();
+    let known: HashSet<AchievementId> = raw
+        .into_iter()
+        .filter_map(|entry| match entry {
+            MaybeKnownAchievement::Known(id) => Some(id),
+            MaybeKnownAchievement::Unknown(_) => None,
+        })
+        .collect();
+    if known.len() < total {
+        tracing::warn!(
+            "Ignored {} unknown achievement id(s) in profile",
+            total - known.len()
+        );
+    }
+    Ok(known)
+}
+
 /// User profile with progression, streaks, and achievements
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfile {
@@ -34,6 +66,10 @@ pub struct UserProfile {
     pub last_activity: DateTime<Utc>,
 
     /// Unlocked achievements
+    ///
+    /// Ids this build does not know (e.g. written by a newer version) are
+    /// dropped on load instead of failing the whole profile.
+    #[serde(deserialize_with = "deserialize_known_achievements")]
     pub achievements_unlocked: HashSet<AchievementId>,
 
     /// Active daily quests
@@ -202,6 +238,43 @@ impl UserProfile {
         self.level > old_level
     }
 
+    /// Replace `level` with the level implied by `total_xp`.
+    ///
+    /// `total_xp` is the single source of truth; a stored `level` that
+    /// disagrees with it (hand edit, downgrade) is silently corrected.
+    pub fn recompute_level(&mut self) {
+        self.level = XPCalculator::level_from_xp(self.total_xp);
+    }
+
+    /// Total-XP thresholds `(start of current level, start of next level)`.
+    fn level_bounds(&self) -> (u64, u64) {
+        (
+            XPCalculator::xp_for_level(self.level),
+            XPCalculator::xp_for_level(self.level.saturating_add(1)),
+        )
+    }
+
+    /// XP earned inside the current level, clamped to `[0, level span]`.
+    ///
+    /// Safe for any `(level, total_xp)` pair, including ones that are
+    /// inconsistent with each other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::UserProfile;
+    ///
+    /// let mut profile = UserProfile::new();
+    /// profile.add_xp(150);
+    /// assert_eq!(profile.xp_in_level(), 50);
+    /// ```
+    pub fn xp_in_level(&self) -> u64 {
+        let (current, next) = self.level_bounds();
+        self.total_xp
+            .saturating_sub(current)
+            .min(next.saturating_sub(current))
+    }
+
     /// Get XP progress to next level (0.0 - 1.0)
     ///
     /// # Examples
@@ -214,21 +287,19 @@ impl UserProfile {
     /// assert_eq!(profile.xp_progress(), 0.5);
     /// ```
     pub fn xp_progress(&self) -> f64 {
-        let current_level_xp = XPCalculator::xp_for_level(self.level);
-        let next_level_xp = XPCalculator::xp_for_level(self.level + 1);
-        let xp_in_level = self.total_xp - current_level_xp;
-        let xp_needed = next_level_xp - current_level_xp;
+        let (current, next) = self.level_bounds();
+        let xp_needed = next.saturating_sub(current);
 
         if xp_needed == 0 {
             1.0
         } else {
-            (xp_in_level as f64) / (xp_needed as f64)
+            (self.xp_in_level() as f64) / (xp_needed as f64)
         }
     }
 
     /// XP needed for next level
     pub fn xp_for_next_level(&self) -> u64 {
-        let next_level_total = XPCalculator::xp_for_level(self.level + 1);
+        let (_, next_level_total) = self.level_bounds();
         next_level_total.saturating_sub(self.total_xp)
     }
 
@@ -722,5 +793,55 @@ mod tests {
         assert_eq!(restored.challenge_progress.best_scenarios_today, 7);
         assert_eq!(restored.challenge_progress.all_time_best_score, 4200);
         assert_eq!(restored.challenge_progress.all_time_best_scenarios, 7);
+    }
+
+    /// Regression test for #450: `level` far above what `total_xp` supports
+    /// must not panic `xp_progress`/`xp_in_level` (debug overflow) or leave
+    /// the bar out of range.
+    #[test]
+    fn test_xp_progress_inconsistent_level_never_panics_or_leaves_range() {
+        for (level, total_xp) in [
+            (50, 0),
+            (u32::MAX, 0),
+            (u32::MAX, u64::MAX),
+            (1, 1_000_000),
+            (0, 0),
+            (1, 0),
+        ] {
+            let mut profile = UserProfile::new();
+            profile.level = level;
+            profile.total_xp = total_xp;
+
+            let progress = profile.xp_progress();
+            assert!(
+                (0.0..=1.0).contains(&progress),
+                "({level}, {total_xp}) -> {progress}"
+            );
+            let _ = profile.xp_for_next_level();
+            let span = XPCalculator::xp_for_level(level.saturating_add(1))
+                .saturating_sub(XPCalculator::xp_for_level(level));
+            assert!(profile.xp_in_level() <= span);
+        }
+    }
+
+    #[test]
+    fn test_xp_progress_unchanged_for_consistent_profile() {
+        let mut profile = UserProfile::new();
+        profile.add_xp(150);
+        assert_eq!(profile.level, 2);
+        assert_eq!(profile.xp_in_level(), 50);
+        assert!((profile.xp_progress() - 50.0 / 183.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_recompute_level_follows_total_xp() {
+        let mut profile = UserProfile::new();
+        profile.level = 50;
+        profile.recompute_level();
+        assert_eq!(profile.level, 1);
+
+        profile.total_xp = 1_000_000;
+        profile.recompute_level();
+        assert_eq!(profile.level, XPCalculator::level_from_xp(1_000_000));
     }
 }

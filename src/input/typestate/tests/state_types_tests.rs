@@ -1,5 +1,6 @@
 //! Tests for state type marker types
 
+use super::nz;
 use crate::input::typestate::{
     BaseState, CountPending, FindCharPending, FindType, GotoPending, HandlerState, MatchPending,
     ReplaceCharPending, SurroundAddPending, SurroundDeletePending, SurroundReplaceFromPending,
@@ -152,9 +153,9 @@ fn test_base_state_clone() {
 
 #[test]
 fn test_count_pending_equality() {
-    let a = CountPending { count: 5 };
-    let b = CountPending { count: 5 };
-    let c = CountPending { count: 10 };
+    let a = CountPending { count: nz(5) };
+    let b = CountPending { count: nz(5) };
+    let c = CountPending { count: nz(10) };
     assert_eq!(a, b);
     assert_ne!(a, c);
 }
@@ -206,7 +207,7 @@ fn test_all_state_types_debug() {
         .is_empty()
     );
     assert!(!format!("{:?}", ReplaceCharPending).is_empty());
-    assert!(!format!("{:?}", CountPending { count: 5 }).is_empty());
+    assert!(!format!("{:?}", CountPending { count: nz(5) }).is_empty());
     assert!(!format!("{:?}", UnmatchedPrevPending).is_empty());
     assert!(!format!("{:?}", UnmatchedNextPending).is_empty());
 }

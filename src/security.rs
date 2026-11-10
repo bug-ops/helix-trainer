@@ -87,6 +87,12 @@ pub enum SecurityError {
 
     #[error("Too many keymap bindings (max {max}, got {actual})")]
     TooManyKeymapBindings { max: usize, actual: usize },
+
+    #[error("Not a regular file")]
+    NotRegularFile,
+
+    #[error("Failed to read file: {0}")]
+    ReadFailed(String),
 }
 
 /// User-facing error messages (sanitized)
@@ -94,6 +100,11 @@ pub enum SecurityError {
 pub enum UserError {
     #[error("Invalid application state. Please restart the application.")]
     InvalidState { message: String },
+
+    /// A message arrived for a screen other than the current one (e.g. a stale
+    /// timer message racing a key-driven transition). Not a user-visible fault.
+    #[error("That action is not available on the current screen.")]
+    WrongScreen,
 
     #[error("Failed to load scenario file. Please check the file path and format.")]
     ScenarioLoadError,
@@ -321,6 +332,7 @@ pub mod limits {
 pub mod path_validator {
     use super::*;
     use std::fs;
+    use std::io::Read;
 
     /// Validates that a path is safe to access
     pub fn validate_path(path: &Path, allowed_bases: &[PathBuf]) -> Result<PathBuf, SecurityError> {
@@ -365,18 +377,125 @@ pub mod path_validator {
             || path_str.contains('`')
     }
 
-    /// Validates file size
-    pub fn validate_file_size(path: &Path, max_size: u64) -> Result<(), SecurityError> {
-        let metadata = fs::metadata(path).map_err(|_| SecurityError::InvalidPath)?;
+    /// Reads a UTF-8 text file of at most `max_size` bytes without trusting its reported length.
+    ///
+    /// The path is rejected unless it resolves to a regular file (so `/dev/zero`
+    /// symlinks, FIFOs, sockets and directories never reach an unbounded read),
+    /// and at most `max_size + 1` bytes are read from the opened handle: a file
+    /// that is larger, or grows between lookup and read, is refused instead of
+    /// being buffered. [`SecurityError::FileTooLarge::actual`] is the number of
+    /// bytes read, i.e. a lower bound on the real size.
+    ///
+    /// # Errors
+    ///
+    /// - [`SecurityError::InvalidPath`] if the path cannot be opened
+    /// - [`SecurityError::NotRegularFile`] if it is not a regular file
+    /// - [`SecurityError::FileTooLarge`] if it exceeds `max_size`
+    /// - [`SecurityError::InvalidEncoding`] if the content is not UTF-8
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::security::path_validator::read_capped;
+    ///
+    /// let dir = tempfile::tempdir().unwrap();
+    /// let path = dir.path().join("a.txt");
+    /// std::fs::write(&path, "hello").unwrap();
+    /// assert_eq!(read_capped(&path, 16).unwrap(), "hello");
+    /// assert!(read_capped(&path, 4).is_err());
+    /// ```
+    pub fn read_capped(path: &Path, max_size: u64) -> Result<String, SecurityError> {
+        // `stat` never blocks, so a FIFO is rejected here before `open` could hang on it.
+        if !fs::metadata(path)
+            .map_err(|_| SecurityError::InvalidPath)?
+            .is_file()
+        {
+            return Err(SecurityError::NotRegularFile);
+        }
 
-        if metadata.len() > max_size {
+        let file = fs::File::open(path).map_err(|_| SecurityError::InvalidPath)?;
+        let is_file = file
+            .metadata()
+            .map_err(|e| SecurityError::ReadFailed(e.to_string()))?
+            .is_file();
+        if !is_file {
+            return Err(SecurityError::NotRegularFile);
+        }
+
+        let mut buf = Vec::new();
+        file.take(max_size.saturating_add(1))
+            .read_to_end(&mut buf)
+            .map_err(|e| SecurityError::ReadFailed(e.to_string()))?;
+
+        let read = buf.len() as u64;
+        if read > max_size {
             return Err(SecurityError::FileTooLarge {
                 max: max_size,
-                actual: metadata.len(),
+                actual: read,
             });
         }
 
-        Ok(())
+        String::from_utf8(buf).map_err(|_| SecurityError::InvalidEncoding)
+    }
+}
+
+/// Creation of user-private files and directories for persisted data.
+///
+/// On Unix directories are created `0700` and files `0600` (an existing file
+/// reopened through `create_file` is tightened to `0600`); other platforms
+/// use the process defaults.
+pub mod private_fs {
+    use std::fs;
+    use std::io;
+    use std::path::Path;
+
+    /// Creates `path` and any missing parents, owner-only (`0700`) on Unix.
+    ///
+    /// Directories that already exist are left untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns the underlying I/O error if a directory cannot be created.
+    pub fn create_dir_all(path: &Path) -> io::Result<()> {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        builder.create(path)
+    }
+
+    /// Creates or truncates `path` for writing, owner-only (`0600`) on Unix.
+    ///
+    /// # Errors
+    ///
+    /// Returns the underlying I/O error if the file cannot be opened or its
+    /// permissions cannot be tightened.
+    pub fn create_file(path: &Path) -> io::Result<fs::File> {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        let file = private_options(&mut options).open(path)?;
+        #[cfg(unix)]
+        file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
+        Ok(file)
+    }
+
+    /// Creates `path` for writing, failing if it already exists, owner-only
+    /// (`0600`) on Unix.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::ErrorKind::AlreadyExists`] if `path` exists, or the
+    /// underlying I/O error otherwise.
+    pub fn create_new_file(path: &Path) -> io::Result<fs::File> {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        private_options(&mut options).open(path)
+    }
+
+    fn private_options(options: &mut fs::OpenOptions) -> &mut fs::OpenOptions {
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(options, 0o600);
+        options
     }
 }
 
@@ -1116,5 +1235,85 @@ mod tests {
             .contains("Command")
         );
         assert!(UserError::SessionExpired.to_string().contains("expired"));
+    }
+
+    mod read_capped {
+        use super::*;
+
+        #[test]
+        fn reads_file_within_cap() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("f.txt");
+            std::fs::write(&path, "12345").unwrap();
+            assert_eq!(path_validator::read_capped(&path, 5).unwrap(), "12345");
+        }
+
+        #[test]
+        fn rejects_file_over_cap() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("f.txt");
+            std::fs::write(&path, "123456").unwrap();
+            assert!(matches!(
+                path_validator::read_capped(&path, 5),
+                Err(SecurityError::FileTooLarge { max: 5, .. })
+            ));
+        }
+
+        #[test]
+        fn rejects_directory() {
+            let dir = tempfile::tempdir().unwrap();
+            assert!(matches!(
+                path_validator::read_capped(dir.path(), 5),
+                Err(SecurityError::NotRegularFile)
+            ));
+        }
+
+        #[test]
+        fn rejects_non_utf8() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("f.bin");
+            std::fs::write(&path, [0xff, 0xfe]).unwrap();
+            assert!(matches!(
+                path_validator::read_capped(&path, 5),
+                Err(SecurityError::InvalidEncoding)
+            ));
+        }
+
+        #[test]
+        fn missing_path_is_invalid_path() {
+            let dir = tempfile::tempdir().unwrap();
+            assert!(matches!(
+                path_validator::read_capped(&dir.path().join("nope"), 5),
+                Err(SecurityError::InvalidPath)
+            ));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn rejects_symlink_to_dev_zero_without_unbounded_read() {
+            let dir = tempfile::tempdir().unwrap();
+            let link = dir.path().join("zero.json");
+            std::os::unix::fs::symlink("/dev/zero", &link).unwrap();
+            assert!(matches!(
+                path_validator::read_capped(&link, 1024),
+                Err(SecurityError::NotRegularFile)
+            ));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn rejects_fifo_without_blocking() {
+            let dir = tempfile::tempdir().unwrap();
+            let fifo = dir.path().join("pipe.json");
+            let status = std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            assert!(matches!(
+                path_validator::read_capped(&fifo, 1024),
+                Err(SecurityError::NotRegularFile)
+            ));
+        }
     }
 }

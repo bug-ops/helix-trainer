@@ -45,7 +45,7 @@ The binary ignores all command-line arguments. `helix-trainer --version`, `--hel
 |----|------------|----------|
 | FR-001 | WHEN the first argument is `--version` or `-V` THE SYSTEM SHALL print `helix-trainer <version>` (version from `CARGO_PKG_VERSION`) to stdout, exit 0, and NOT set up the terminal | must |
 | FR-002 | WHEN the first argument is `--help` or `-h` THE SYSTEM SHALL print usage (name, one-line description, the flags above) to stdout, exit 0, and NOT set up the terminal | must |
-| FR-003 | WHEN any other argument is present THE SYSTEM SHALL print an error naming the argument and a hint to use `--help` to stderr, exit with a non-zero code (2), and NOT set up the terminal | must |
+| FR-003 | WHEN any other argument is present, or any argument follows `--version`/`--help`, THE SYSTEM SHALL print an error naming the argument and a hint to use `--help` to stderr, exit with a non-zero code (2), and NOT set up the terminal | must |
 | FR-004 | WHEN no arguments are given THE SYSTEM SHALL start the TUI exactly as before | must |
 | FR-005 | THE SYSTEM SHALL parse arguments into a closed typed result (`CliAction::{Run, Version, Help, Error(String)}`) before any terminal, config or data-loader work, and the parser SHALL be a pure function of the argument list | must |
 | FR-006 | WHEN `--version` or `--help` runs without a TTY (stdin redirected from `/dev/null`) THE SYSTEM SHALL still succeed | must |
@@ -72,8 +72,8 @@ THEN  it returns CliAction::Run
 
 | Scenario | Expected Behavior |
 |----------|-------------------|
-| `--version --help` | First recognized argument wins (`Version`) |
-| `--version extra` | `[NEEDS CLARIFICATION: treat trailing arguments as an error or ignore]` default: error (strict) |
+| `--version --help` | Error, exit 2: any extra argument after `--version`/`--help` is an error |
+| `--version extra` | Error, exit 2 (decided: strict, no trailing arguments allowed) |
 | Empty-string argument | Unknown argument error |
 
 ## 5. Success Criteria

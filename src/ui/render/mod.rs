@@ -83,4 +83,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
 
     // Render global notifications on top of all screens
     popups::render_notifications(frame, state);
+
+    // Persistent warning while profile saving is disabled
+    popups::render_profile_load_banner(frame, state);
 }

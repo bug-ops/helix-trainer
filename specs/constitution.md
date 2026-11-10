@@ -58,7 +58,7 @@ status: permanent
 - Optional audio: `rodio`, feature-gated behind `audio` (requires
   `libasound2-dev` on Linux).
 - Config/scenario data: TOML (`scenarios/en/<category>/*.toml`), user
-  profile/config: JSON under `~/.config/helix-trainer/`.
+  profile/config: JSON in the OS config directory (`dirs::config_dir()/helix-trainer/`).
 - YAML tooling (when needed): `fast-yaml` (`fy` CLI) exclusively — never
   hand-edit YAML without validating via `fy` afterward.
 
@@ -125,7 +125,7 @@ status: permanent
   `src/security.rs` (`UserError`, `SecurityError`) — never panic on
   malformed user input (invalid register names, malformed command-line
   expressions, oversized input) and never silently no-op it either.
-- A recoverable `UserError` (including a message that arrives for a screen other than the current one, a failed background save, or a rejected simulator command) MUST NOT terminate the TUI session. The event loop reports it (user-visible notification where the user can act on it, `tracing` otherwise; a stale-screen message is a silent debug-level no-op) and keeps running. Only unrecoverable terminal I/O failure ends the session: an input-stream error is reported and the loop exits only after a bounded number of consecutive errors, never by spinning. A single `apply_update` boundary in `src/event_loop.rs` owns this policy; `?` on `update()`/`handle_data_message()` inside the loop is forbidden.
+- A recoverable `UserError` (including a message that arrives for a screen other than the current one, a failed background save, or a rejected simulator command) MUST NOT terminate the TUI session. The event loop reports it (user-visible notification where the user can act on it, `tracing` otherwise; a stale-screen message is a silent debug-level no-op) and keeps running. Only unrecoverable terminal I/O failure ends the session: an input-stream error is reported and the loop exits only after 5 consecutive errors, never by spinning. A `WrongScreen` error is ignored silently; every other `UserError` is shown as a notification. A single `apply_update` boundary in `src/event_loop.rs` owns this policy; `?` on `update()`/`handle_data_message()` inside the loop is forbidden.
 - Never commit secrets, API keys, or credentials. This project has no
   external services/API keys in scope today; if any are ever introduced,
   they must go through the vault mechanism described in the user's global

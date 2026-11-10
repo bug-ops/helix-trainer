@@ -218,13 +218,14 @@ direct result of writing this property-test coverage — see
 | FR-009 | WHEN two due items have equal priority THE SYSTEM SHALL order them deterministically (earlier `due` first, then command id ascending) so the queue does not depend on hash-map iteration order | #433 | must |
 | FR-010 | WHEN two `ReviewItem` values are compared THE SYSTEM SHALL satisfy `a == b` if and only if `a.cmp(&b) == Ordering::Equal`, including `0.0` vs `-0.0` and `NaN` priorities (`PartialEq` is defined via `Ord`) | #434 | must |
 | FR-011 | THE SYSTEM SHALL remove `#[ignore]` from `prop_get_review_queue_is_sorted_by_priority_descending`, `prop_get_review_queue_keeps_the_highest_priority_items` and `prop_review_item_eq_agrees_with_ord`, and they SHALL pass | #433, #434 | must |
-| FR-012 | WHEN a scenario completion creates or updates review cards THE SYSTEM SHALL create cards only for reviewable Helix commands, represented by a typed `ReviewableCommand` produced by a smart constructor; typed text, `Escape`, argument characters and empty names SHALL NOT produce a card | #505 | must |
+| FR-012 | WHEN a scenario completion creates or updates review cards THE SYSTEM SHALL create cards only for reviewable Helix commands, represented by a typed `ReviewableCommand` (`src/learning/reviewable.rs`) produced by a smart constructor; `Escape`, text typed in Insert mode (the actions between an entering command such as `i`/`a`/`o`/`c` and `Escape`), single characters that are not commands, argument characters and empty names SHALL NOT produce a card | #505 | must |
 | FR-013 | WHEN a recorded action carries a count prefix THE SYSTEM SHALL strip it (`3h` becomes `h`, `3fa` becomes `f`) | #505 | must |
 | FR-014 | WHEN a recorded action is a find, till or replace command with its argument character (`f=`, `T,`, `r_`) THE SYSTEM SHALL keep only the command (`f`, `T`, `r`) | #505 | must |
 | FR-015 | WHEN a recorded action is a search with a typed pattern (`/ sum`) THE SYSTEM SHALL record the command `/`; selection-regex forms keep the existing normalization (`select_regex`/`split_selection`, FR-009 of [[../regex-selection-and-macro-commands/spec]]) | #505 | must |
 | FR-016 | WHEN a recorded action is a surround command with arguments (`ma(`) THE SYSTEM SHALL keep the form `ma(` (the delimiter is part of the skill) | #505 | should |
 | FR-017 | THE SAME filtering SHALL apply to Training completions and arcade/minigame completions | #505 | must |
 | FR-018 | `normalize_command_id`, used by quests and the minigame scorer, SHALL keep its current contract; review-card filtering is a separate constructor | #505 | must |
+| FR-019 | `profile.commands_executed` SHALL keep counting every executed command (it is not filtered by `ReviewableCommand`); only review-card creation is filtered | #505 | must |
 
 ### Acceptance Criteria
 
@@ -245,14 +246,15 @@ THEN  the cards are exactly [h, f, T, r, /, ma(]  (typed text and Escape produce
 |----------|-------------------|
 | Persisted junk cards from earlier versions (`!`, `Escape`, `3h`, `f=`) | Not removed by this batch; prune-on-load is deferred to a follow-up issue [NEEDS CLARIFICATION: confirm deferral] |
 | `NaN` priority | Orders deterministically via `total_cmp`; equality agrees with ordering |
-| Insert-mode typed characters in a solution | Never create cards; the entering command (`i`, `a`, `o`) still does |
+| Insert-mode typed characters in a solution | Never create cards (everything from the entering command up to `Escape`, exclusive of the entering command itself, is dropped); the entering command (`i`, `a`, `o`, `c`) still does, and `Escape` never does |
+| Single typed character outside Insert mode that is not a command | No card |
 
 ### Success Criteria
 
 | ID | Metric | Target |
 |----|--------|--------|
-| SC-006 | No `#[ignore]` left on the scheduler property tests | 3 previously ignored properties pass |
-| SC-007 | Unit tests for the extraction table above on both the training and minigame paths | Pass |
+| SC-006 | No `#[ignore]` left on the scheduler property tests; `ReviewableCommand` unit tests cover count stripping (`3h` to `h`), argument stripping (`f=` to `f`), search (`/ sum` to `/`), surround (`ma(` kept), `Escape` and Insert-mode text dropped | 3 previously ignored properties pass; `ReviewableCommand` tests pass |
+| SC-007 | Unit tests for the extraction table above on both the training and minigame paths, plus a test that `profile.commands_executed` still counts all commands and `normalize_command_id` outputs are unchanged | Pass |
 
 ## 12. See Also
 

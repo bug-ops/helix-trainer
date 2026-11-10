@@ -302,10 +302,8 @@ fn test_map_single_key_repeat() {
 
 #[test]
 fn test_map_single_key_search() {
-    assert_eq!(
-        map_single_key_command('/', KeyModifiers::NONE),
-        Some(CMD_SEARCH_FORWARD)
-    );
+    // '/' opens the search prompt via a dedicated `base.rs` arm (#504).
+    assert_eq!(map_single_key_command('/', KeyModifiers::NONE), None);
     assert_eq!(
         map_single_key_command('?', KeyModifiers::SHIFT),
         Some(CMD_SEARCH_BACKWARD)
@@ -531,6 +529,50 @@ fn test_insert_mode_unknown() {
 
     let key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
     assert!(handle_insert_mode_input(key).is_none());
+}
+
+#[test]
+fn test_insert_mode_editing_chords() {
+    let cases = [
+        (KeyCode::Char('w'), KeyModifiers::CONTROL, "Ctrl-w"),
+        (KeyCode::Char('u'), KeyModifiers::CONTROL, "Ctrl-u"),
+        (KeyCode::Char('k'), KeyModifiers::CONTROL, "Ctrl-k"),
+        (KeyCode::Char('d'), KeyModifiers::CONTROL, "Ctrl-d"),
+        (KeyCode::Char('d'), KeyModifiers::ALT, "Alt-d"),
+        (KeyCode::Backspace, KeyModifiers::ALT, "Alt-Backspace"),
+        (KeyCode::Delete, KeyModifiers::NONE, "Delete"),
+    ];
+    for (code, mods, expected) in cases {
+        let result = handle_insert_mode_input(KeyEvent::new(code, mods));
+        assert_eq!(result.as_deref(), Some(expected), "{code:?} {mods:?}");
+    }
+}
+
+/// #489: a Ctrl/Alt-modified char with no insert binding must not be typed.
+#[test]
+fn test_insert_mode_unbound_modified_chars_are_dropped() {
+    for (c, mods) in [
+        ('w', KeyModifiers::ALT),
+        ('x', KeyModifiers::CONTROL),
+        ('h', KeyModifiers::CONTROL),
+    ] {
+        let key = KeyEvent::new(KeyCode::Char(c), mods);
+        assert_eq!(handle_insert_mode_input(key), None, "{c} {mods:?}");
+    }
+}
+
+/// Windows reports AltGr characters as Ctrl+Alt+char; they must still type.
+#[test]
+fn test_insert_mode_altgr_chars_are_typed() {
+    let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;
+    for c in ['@', '{', '[', 'w'] {
+        let key = KeyEvent::new(KeyCode::Char(c), altgr);
+        assert_eq!(
+            handle_insert_mode_input(key).as_deref(),
+            Some(c.to_string().as_str()),
+            "{c}"
+        );
+    }
 }
 
 // ============================================================================

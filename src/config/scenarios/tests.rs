@@ -729,6 +729,28 @@ fn test_load_from_embedded_english() {
 }
 
 #[test]
+fn test_embedded_scenarios_optimal_count_equals_solution_commands() {
+    let scenarios = ScenarioLoader::new()
+        .load_from_embedded("en")
+        .expect("embedded scenarios must load");
+
+    let mismatches: Vec<String> = scenarios
+        .iter()
+        .filter(|s| s.scoring.optimal_count.get() != s.solution.commands.len())
+        .map(|s| {
+            format!(
+                "{}: optimal_count={} but solution has {} commands",
+                s.id,
+                s.scoring.optimal_count,
+                s.solution.commands.len()
+            )
+        })
+        .collect();
+
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+#[test]
 fn test_load_from_embedded_unknown_locale() {
     let loader = ScenarioLoader::new();
     let result = loader.load_from_embedded("xx"); // Non-existent locale

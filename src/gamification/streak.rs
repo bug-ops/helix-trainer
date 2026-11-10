@@ -78,7 +78,7 @@ impl StreakManager {
             1 => {
                 // Next day - increment if completed any quest today
                 if !profile.completed_quests_today.is_empty() {
-                    profile.current_streak += 1;
+                    profile.current_streak = profile.current_streak.saturating_add(1);
                     profile.longest_streak = profile.longest_streak.max(profile.current_streak);
                     StreakChange::Incremented {
                         new_streak: profile.current_streak,
@@ -253,6 +253,18 @@ mod tests {
         let change = StreakManager::update_streak(&mut profile, clock.now());
         assert_eq!(change, StreakChange::Incremented { new_streak: 6 });
         assert_eq!(profile.current_streak, 6);
+    }
+
+    #[test]
+    fn test_streak_saturates_at_u32_max() {
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = u32::MAX;
+        profile.complete_quest("test_quest".to_string());
+        clock.advance_days(1);
+
+        StreakManager::update_streak(&mut profile, clock.now());
+        assert_eq!(profile.current_streak, u32::MAX);
     }
 
     #[test]

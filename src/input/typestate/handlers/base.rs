@@ -9,127 +9,110 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
 
+use super::count::count_from_digit;
 use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{
     handler_result::HandlerResult,
-    input_state::InputState,
-    key_mapping::{map_single_key_command, normalize_key_event},
+    input_state::{InputState, RegexPromptKind},
+    key_mapping::{Chord, map_single_key_command, normalize_key_event},
     state_types::{BaseState, FindType},
 };
+
+fn execute(cmd: &'static str) -> HandlerResult {
+    HandlerResult::Execute(Cow::Borrowed(cmd))
+}
+
+fn regex_prompt(kind: RegexPromptKind) -> HandlerResult {
+    HandlerResult::Transition(InputState::RegexPromptPending {
+        kind,
+        buffer: String::new(),
+    })
+}
+
+fn ctrl_key(code: KeyCode) -> HandlerResult {
+    match code {
+        KeyCode::Char('r') => execute(CMD_CTRL_R),
+        KeyCode::Char('c') => execute(CMD_TOGGLE_COMMENTS),
+        KeyCode::Char('b') => execute(CMD_PAGE_UP),
+        KeyCode::Char('f') => execute(CMD_PAGE_DOWN),
+        KeyCode::Char('u') => execute(CMD_HALF_PAGE_UP),
+        KeyCode::Char('d') => execute(CMD_HALF_PAGE_DOWN),
+        _ => HandlerResult::Stay,
+    }
+}
+
+/// Alt chords never open a pending state: they run the Alt-bound command or
+/// are ignored (#487).
+fn alt_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
+    match code {
+        KeyCode::Char(c) => {
+            map_single_key_command(c, modifiers).map_or(HandlerResult::Stay, execute)
+        }
+        KeyCode::Esc => execute(CMD_ESCAPE),
+        _ => HandlerResult::Stay,
+    }
+}
+
+fn plain_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
+    match code {
+        // Prefix commands - transition to pending states
+        KeyCode::Char('g') => HandlerResult::Transition(InputState::GotoPending),
+        KeyCode::Char('z') => HandlerResult::Transition(InputState::ViewPending),
+        KeyCode::Char('m') => HandlerResult::Transition(InputState::MatchPending),
+        KeyCode::Char('[') => HandlerResult::Transition(InputState::UnmatchedPrevPending),
+        KeyCode::Char(']') => HandlerResult::Transition(InputState::UnmatchedNextPending),
+
+        // Find/till commands - transition to find char pending
+        KeyCode::Char(c) if let Some(find_type) = FindType::from_key(c) => {
+            HandlerResult::Transition(InputState::FindCharPending { find_type })
+        }
+
+        KeyCode::Char('r') => HandlerResult::Transition(InputState::ReplaceCharPending),
+        KeyCode::Char('"') => HandlerResult::Transition(InputState::RegisterPending),
+
+        KeyCode::Char(':') => HandlerResult::Transition(InputState::CommandLinePending {
+            buffer: String::new(),
+        }),
+
+        // Regex prompts: `s`/`S` select/split, `/` search
+        KeyCode::Char('s') => regex_prompt(RegexPromptKind::SelectRegex),
+        KeyCode::Char('S') => regex_prompt(RegexPromptKind::SplitSelection),
+        KeyCode::Char('/') => regex_prompt(RegexPromptKind::Search),
+
+        // Macro recording ('q') and replay ('Q'). This handler only runs
+        // in Normal mode (Insert mode input bypasses the state machine
+        // entirely - see `handle_insert_mode_input`), so these always
+        // mean "toggle recording" / "replay macro" here; dispatched as
+        // plain commands so `execute_command_any_mode` does the work.
+        KeyCode::Char('q') => execute(CMD_TOGGLE_MACRO_RECORDING),
+        KeyCode::Char('Q') => execute(CMD_REPLAY_MACRO),
+
+        // Count prefix - digits 1-9 start a count
+        KeyCode::Char(c) if let Some(count) = count_from_digit(c) => {
+            HandlerResult::Transition(InputState::CountPending { count })
+        }
+
+        // Single-key commands - execute immediately; unknown keys stay in base
+        KeyCode::Char(c) => {
+            map_single_key_command(c, modifiers).map_or(HandlerResult::Stay, execute)
+        }
+
+        KeyCode::Esc => execute(CMD_ESCAPE),
+
+        _ => HandlerResult::Stay,
+    }
+}
 
 impl InputHandler<BaseState> for KeyHandler {
     fn handle_key(_state: &BaseState, key: KeyEvent) -> HandlerResult {
         // Normalize key event for consistent handling across terminals
-        // (e.g., 'c' + SHIFT + ALT → 'C' + ALT)
+        // (e.g., 'c' + SHIFT + ALT -> 'C' + ALT)
         let key = normalize_key_event(key);
 
-        // Only filter CONTROL modifier, let ALT through for Alt-key commands
-        let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-
-        match (key.code, has_ctrl) {
-            // Special modifiers - let through for Ctrl-R, Ctrl-C, etc.
-            (KeyCode::Char('r'), true) if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                HandlerResult::Execute(Cow::Borrowed(CMD_CTRL_R))
-            }
-            (KeyCode::Char('c'), true) if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                HandlerResult::Execute(Cow::Borrowed(CMD_TOGGLE_COMMENTS))
-            }
-
-            // Page/half-page movement - let through for Ctrl-b/f/u/d
-            (KeyCode::Char('b'), true) => HandlerResult::Execute(Cow::Borrowed(CMD_PAGE_UP)),
-            (KeyCode::Char('f'), true) => HandlerResult::Execute(Cow::Borrowed(CMD_PAGE_DOWN)),
-            (KeyCode::Char('u'), true) => HandlerResult::Execute(Cow::Borrowed(CMD_HALF_PAGE_UP)),
-            (KeyCode::Char('d'), true) => HandlerResult::Execute(Cow::Borrowed(CMD_HALF_PAGE_DOWN)),
-
-            // Ignore other modifier combinations
-            (_, true) => HandlerResult::Stay,
-
-            // Prefix commands - transition to pending states
-            (KeyCode::Char('g'), false) => HandlerResult::Transition(InputState::GotoPending),
-            (KeyCode::Char('z'), false) => HandlerResult::Transition(InputState::ViewPending),
-            (KeyCode::Char('m'), false) => HandlerResult::Transition(InputState::MatchPending),
-            (KeyCode::Char('['), false) => {
-                HandlerResult::Transition(InputState::UnmatchedPrevPending)
-            }
-            (KeyCode::Char(']'), false) => {
-                HandlerResult::Transition(InputState::UnmatchedNextPending)
-            }
-
-            // Find/till commands - transition to find char pending
-            (KeyCode::Char('f'), false) => HandlerResult::Transition(InputState::FindCharPending {
-                find_type: FindType::FindForward,
-            }),
-            (KeyCode::Char('F'), _) => HandlerResult::Transition(InputState::FindCharPending {
-                find_type: FindType::FindBackward,
-            }),
-            (KeyCode::Char('t'), false) => HandlerResult::Transition(InputState::FindCharPending {
-                find_type: FindType::TillForward,
-            }),
-            (KeyCode::Char('T'), _) => HandlerResult::Transition(InputState::FindCharPending {
-                find_type: FindType::TillBackward,
-            }),
-
-            // Replace command - transition to replace char pending
-            (KeyCode::Char('r'), false) => {
-                HandlerResult::Transition(InputState::ReplaceCharPending)
-            }
-
-            // Named register selection - transition to register pending
-            (KeyCode::Char('"'), false) => HandlerResult::Transition(InputState::RegisterPending),
-
-            // Command-line mode - transition to command-line pending
-            (KeyCode::Char(':'), false) => {
-                HandlerResult::Transition(InputState::CommandLinePending {
-                    buffer: String::new(),
-                })
-            }
-
-            // Regex-selection prompt - transition to regex prompt pending
-            (KeyCode::Char('s'), false) => {
-                HandlerResult::Transition(InputState::RegexPromptPending {
-                    kind: crate::input::typestate::RegexPromptKind::SelectRegex,
-                    buffer: String::new(),
-                })
-            }
-            (KeyCode::Char('S'), _) => HandlerResult::Transition(InputState::RegexPromptPending {
-                kind: crate::input::typestate::RegexPromptKind::SplitSelection,
-                buffer: String::new(),
-            }),
-
-            // Macro recording ('q') and replay ('Q'). This handler only runs
-            // in Normal mode (Insert mode input bypasses the state machine
-            // entirely - see `handle_insert_mode_input`), so these always
-            // mean "toggle recording" / "replay macro" here; dispatched as
-            // plain commands so `execute_command_any_mode` does the work.
-            (KeyCode::Char('q'), false) => {
-                HandlerResult::Execute(Cow::Borrowed(CMD_TOGGLE_MACRO_RECORDING))
-            }
-            (KeyCode::Char('Q'), _) => HandlerResult::Execute(Cow::Borrowed(CMD_REPLAY_MACRO)),
-
-            // Count prefix - digits 1-9 start a count
-            (KeyCode::Char(c @ '1'..='9'), false) => {
-                let count = c
-                    .to_digit(10)
-                    .expect("pattern match guarantees ASCII digit")
-                    as usize;
-                HandlerResult::Transition(InputState::CountPending { count })
-            }
-
-            // Single-key commands - execute immediately
-            (KeyCode::Char(c), _) => {
-                if let Some(cmd) = map_single_key_command(c, key.modifiers) {
-                    HandlerResult::Execute(Cow::Borrowed(cmd))
-                } else {
-                    // Unknown key - stay in base state
-                    HandlerResult::Stay
-                }
-            }
-
-            // Escape and other special keys
-            (KeyCode::Esc, _) => HandlerResult::Execute(Cow::Borrowed(CMD_ESCAPE)),
-
-            // Unknown keys - stay in base state
-            _ => HandlerResult::Stay,
+        match Chord::of(key.modifiers) {
+            Chord::Ctrl => ctrl_key(key.code),
+            Chord::Alt => alt_key(key.code, key.modifiers),
+            Chord::Plain => plain_key(key.code, key.modifiers),
         }
     }
 }

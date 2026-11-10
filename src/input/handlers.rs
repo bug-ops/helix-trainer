@@ -1993,7 +1993,7 @@ mod tests {
         }
 
         #[test]
-        fn count_then_multi_token_remap_does_not_panic_and_cancels() {
+        fn count_then_multi_token_remap_does_not_panic_and_falls_through() {
             let mut state = state_with_multi_token_remap();
 
             press(
@@ -2003,15 +2003,15 @@ mod tests {
             assert!(input_state(&state).is_count_pending());
 
             // Must not panic (this is the regression under test) and must
-            // fall through to the stock key, which "3" + "G" cancels (G is
-            // not a count-compatible command in this trainer).
+            // fall through to the stock key: "3" + "G" is the counted
+            // goto-line command (#493), executed once.
             press(
                 &mut state,
                 KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),
             );
 
             assert!(input_state(&state).is_base());
-            assert_eq!(action_count(&state), 0);
+            assert_eq!(action_count(&state), 1);
         }
 
         #[test]
@@ -2040,6 +2040,61 @@ mod tests {
 
             assert!(input_state(&state).is_base());
             assert_eq!(action_count(&state), 0);
+        }
+    }
+
+    /// #504 / FR-204: an invalid `/` pattern reaches the simulator, which
+    /// rejects it; the failure must be a recoverable `UserError` that leaves
+    /// the player on the task screen with the session intact (#466).
+    mod search_prompt_error_tests {
+        use super::*;
+        use crate::ui::state::update;
+
+        fn task_state() -> AppState {
+            let mut state = create_test_app_state();
+            state.screen = TypedScreen::Task(TaskData::new(make_active_task_session()));
+            state
+        }
+
+        fn type_keys(state: &mut AppState, keys: &str) -> Result<(), crate::security::UserError> {
+            for c in keys.chars() {
+                let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+                if let Some(msg) = handle_task_keys(key, state) {
+                    update(state, msg)?;
+                }
+            }
+            if let Some(msg) =
+                handle_task_keys(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), state)
+            {
+                update(state, msg)?;
+            }
+            Ok(())
+        }
+
+        #[test]
+        fn invalid_search_pattern_is_a_recoverable_error_and_keeps_the_task_screen() {
+            let mut state = task_state();
+
+            let result = type_keys(&mut state, "/a(");
+
+            assert!(result.is_err(), "simulator must reject the pattern");
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("player was thrown off the task screen: {:?}", state.screen);
+            };
+            assert_eq!(task_data.session.action_count(), 0);
+            assert!(task_data.input_state().state().is_base());
+        }
+
+        #[test]
+        fn valid_search_pattern_executes_as_one_action() {
+            let mut state = task_state();
+
+            type_keys(&mut state, "/es").unwrap();
+
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
+            };
+            assert_eq!(task_data.session.action_count(), 1);
         }
     }
 }

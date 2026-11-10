@@ -188,7 +188,7 @@ commands = ["gg"]
 description = "Press 'gg' to go to start"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -240,7 +240,7 @@ commands = ["gg"]
 description = "Press 'gg' to jump to first line"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -354,7 +354,7 @@ commands = ["gg"]
 description = "Press 'gg' to go to document start"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 1
 max_points = 100
 tolerance = 0
 

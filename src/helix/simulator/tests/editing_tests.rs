@@ -173,8 +173,10 @@ fn test_noop_command_after_undo_does_not_clear_pending_redo() {
     sim.execute_command(CMD_UNDO).unwrap();
     assert_eq!(sim.state().unwrap().content(), "test\n");
 
-    // Point selection (anchor == head) at the start of the doc: no text to
-    // uppercase, so this produces an empty changeset.
+    // Undo restores the pre-delete line selection; collapse it to a point
+    // selection (anchor == head): no text to uppercase, so this produces an
+    // empty changeset.
+    sim.execute_command(CMD_COLLAPSE_SELECTION).unwrap();
     sim.execute_command(CMD_SWITCH_TO_UPPERCASE).unwrap();
     assert_eq!(sim.state().unwrap().content(), "test\n");
 
@@ -819,4 +821,227 @@ fn test_repeat_named_register_delete() {
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     sim.execute_command("\"rp").unwrap();
     assert_eq!(sim.state().unwrap().content(), "XaX");
+}
+
+// ============================================================================
+// Batch regressions: x/X, ~, J, surround, `,` and `Alt-,`
+// ============================================================================
+
+const SNIPPET: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}";
+
+/// Runs `commands` on `SNIPPET`, then `d`, and returns the buffer.
+fn run_then_delete(commands: &[&str]) -> String {
+    let mut sim = AnyModeSimulator::new(SNIPPET.to_string());
+    for command in commands {
+        sim.execute_command(command).unwrap();
+    }
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    sim.state().unwrap().content().to_string()
+}
+
+fn run(commands: &[&str]) -> String {
+    let mut sim = AnyModeSimulator::new(SNIPPET.to_string());
+    for command in commands {
+        sim.execute_command(command).unwrap();
+    }
+    sim.state().unwrap().content().to_string()
+}
+
+#[test]
+fn test_repeated_select_line_extends_selection_by_one_line() {
+    assert_eq!(
+        run_then_delete(&[CMD_SELECT_LINE, CMD_SELECT_LINE]),
+        "    sum\n}"
+    );
+}
+
+#[test]
+fn test_select_line_three_times_selects_three_lines() {
+    assert_eq!(
+        run_then_delete(&[CMD_SELECT_LINE, CMD_SELECT_LINE, CMD_SELECT_LINE]),
+        "}"
+    );
+}
+
+#[test]
+fn test_select_all_then_select_line_selects_whole_buffer() {
+    assert_eq!(run_then_delete(&[CMD_SELECT_ALL, CMD_SELECT_LINE]), "");
+}
+
+#[test]
+fn test_select_line_then_move_down_moves_from_cursor_not_head() {
+    assert_eq!(
+        run_then_delete(&[CMD_SELECT_LINE, CMD_MOVE_DOWN]),
+        "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;    sum\n}"
+    );
+}
+
+#[test]
+fn test_extend_line_widens_to_whole_lines() {
+    assert_eq!(
+        run_then_delete(&[CMD_MOVE_RIGHT, CMD_EXTEND_LINE]),
+        "    let sum = a + b;\n    sum\n}"
+    );
+}
+
+#[test]
+fn test_switch_case_keeps_selection() {
+    assert_eq!(
+        run_then_delete(&[CMD_SELECT_LINE, CMD_SWITCH_CASE]),
+        "    let sum = a + b;\n    sum\n}"
+    );
+    assert!(
+        run(&[CMD_SELECT_LINE, CMD_SWITCH_CASE]).starts_with("FN ADD(A: I32"),
+        "case must still be toggled"
+    );
+}
+
+#[test]
+fn test_switch_case_keeps_every_range_of_multi_selection() {
+    assert_eq!(
+        run_then_delete(&[CMD_SELECT_ALL, "s a", CMD_SWITCH_CASE]),
+        "fn dd(: i32, b: i32) -> i32 {\n    let sum =  + b;\n    sum\n}"
+    );
+}
+
+#[test]
+fn test_collapse_selection_after_select_line_lands_on_newline() {
+    assert_eq!(
+        run_then_delete(&[CMD_SELECT_LINE, CMD_COLLAPSE_SELECTION]),
+        "fn add(a: i32, b: i32) -> i32 {    let sum = a + b;\n    sum\n}"
+    );
+}
+
+#[test]
+fn test_switch_to_uppercase_keeps_selection() {
+    assert_eq!(
+        run_then_delete(&[CMD_SELECT_LINE, CMD_SWITCH_TO_UPPERCASE]),
+        "    let sum = a + b;\n    sum\n}"
+    );
+}
+
+#[test]
+fn test_join_lines_replaces_indentation_with_single_space() {
+    assert_eq!(
+        run(&[CMD_JOIN_LINES]),
+        "fn add(a: i32, b: i32) -> i32 { let sum = a + b;\n    sum\n}"
+    );
+}
+
+#[test]
+fn test_join_lines_joins_every_line_of_selection() {
+    assert_eq!(
+        run(&[CMD_SELECT_ALL, CMD_JOIN_LINES]),
+        "fn add(a: i32, b: i32) -> i32 { let sum = a + b; sum }"
+    );
+}
+
+#[test]
+fn test_join_selections_space_strips_indentation() {
+    assert_eq!(
+        run(&[CMD_SELECT_ALL, CMD_JOIN_SELECTIONS_SPACE]),
+        "fn add(a: i32, b: i32) -> i32 { let sum = a + b; sum }"
+    );
+}
+
+#[test]
+fn test_surround_add_selects_whole_surrounded_span() {
+    let mut sim = AnyModeSimulator::new("hello world".to_string());
+    sim.execute_command(CMD_SELECT_ALL).unwrap();
+    sim.execute_command("ms[").unwrap();
+    assert_eq!(sim.state().unwrap().content(), "[hello world]");
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "");
+}
+
+#[test]
+fn test_surround_add_is_a_single_undo_step() {
+    let mut sim = AnyModeSimulator::new("hello".to_string());
+    sim.execute_command(CMD_SELECT_ALL).unwrap();
+    sim.execute_command("ms(").unwrap();
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "hello");
+}
+
+#[test]
+fn test_surround_delete_keeps_selection_over_content() {
+    let mut sim = AnyModeSimulator::new("x (abc) y".to_string());
+    for _ in 0..3 {
+        sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    }
+    sim.execute_command("md(").unwrap();
+    assert_eq!(sim.state().unwrap().content(), "x abc y");
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "x bc y");
+}
+
+#[test]
+fn test_keep_primary_selection_keeps_only_first_match() {
+    assert_eq!(
+        run_then_delete(&[CMD_SELECT_ALL, "s a", CMD_KEEP_PRIMARY_SELECTION]),
+        "fn dd(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}"
+    );
+}
+
+#[test]
+fn test_remove_primary_selection_drops_first_match() {
+    let remaining = run_then_delete(&[CMD_SELECT_ALL, "s a", CMD_REMOVE_PRIMARY_SELECTION]);
+    assert_eq!(
+        remaining,
+        "fn add(: i32, b: i32) -> i32 {\n    let sum =  + b;\n    sum\n}"
+    );
+}
+
+#[test]
+fn test_remove_primary_selection_keeps_last_range() {
+    assert_eq!(
+        run_then_delete(&[CMD_REMOVE_PRIMARY_SELECTION]),
+        "n add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}"
+    );
+}
+
+#[test]
+fn test_surround_delete_is_a_single_undo_step() {
+    let mut sim = AnyModeSimulator::new("(abc)".to_string());
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command("md(").unwrap();
+    assert_eq!(sim.state().unwrap().content(), "abc");
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "(abc)");
+}
+
+#[test]
+fn test_surround_replace_swaps_pair_in_single_undo_step() {
+    let mut sim = AnyModeSimulator::new("(abc)".to_string());
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    sim.execute_command("mr([").unwrap();
+    assert_eq!(sim.state().unwrap().content(), "[abc]");
+    sim.execute_command(CMD_UNDO).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "(abc)");
+}
+
+#[test]
+fn test_join_selections_space_selects_every_inserted_space() {
+    let mut sim = AnyModeSimulator::new(SNIPPET.to_string());
+    sim.execute_command(CMD_SELECT_ALL).unwrap();
+    sim.execute_command(CMD_JOIN_SELECTIONS_SPACE).unwrap();
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(
+        sim.state().unwrap().content(),
+        "fn add(a: i32, b: i32) -> i32 {let sum = a + b;sum}"
+    );
+}
+
+#[test]
+fn test_counted_join_joins_one_pair_only() {
+    for count in [2, 3] {
+        let mut sim = AnyModeSimulator::new(SNIPPET.to_string());
+        sim.execute_counted(CMD_JOIN_LINES, std::num::NonZeroUsize::new(count).unwrap())
+            .unwrap();
+        assert_eq!(
+            sim.state().unwrap().content(),
+            "fn add(a: i32, b: i32) -> i32 { let sum = a + b;\n    sum\n}",
+            "{count}J must join a single pair"
+        );
+    }
 }

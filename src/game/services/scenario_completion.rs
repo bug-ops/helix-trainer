@@ -6,7 +6,7 @@ use crate::config::Difficulty;
 use crate::constants::{FLASH_TIME_RATIO, SPEED_DEMON_TIME_RATIO};
 use crate::game::Feedback;
 use crate::gamification::{Achievement, AchievementEngine, UserProfile, speed_time_ratio};
-use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
+use crate::learning::{PerformanceTracker, ReviewableCommand, ScenarioMastery, Scheduler};
 use crate::ui::notification::{Notification, NotificationType};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
@@ -152,19 +152,17 @@ impl ScenarioCompletionService {
         scheduler.record_scenario_commands_with_mastery(tracker, commands, duration, success)
     }
 
-    /// Extract command strings from feedback
+    /// Extract reviewable command ids from feedback
     ///
-    /// Normalizes register ops (`"ay` -> `"y`) and command-line invocations
-    /// (`:g 3` -> `:goto`) so FSRS mints one learning card per skill rather
-    /// than one per register letter or argument value.
+    /// Goes through [`ReviewableCommand`]: typed text, `Escape` and argument
+    /// characters yield no card, and register ops (`"ay` -> `"y`) and
+    /// command-line invocations (`:g 3` -> `:goto`) are normalized so FSRS mints
+    /// one learning card per skill.
     #[must_use]
     pub fn extract_commands(feedback: &Feedback) -> Vec<String> {
-        feedback
-            .user_actions
-            .iter()
-            .map(|action| {
-                crate::helix::commands::normalize_command_id(&action.command).into_owned()
-            })
+        ReviewableCommand::from_actions(feedback.user_actions.iter().map(|a| a.command.as_str()))
+            .into_iter()
+            .map(ReviewableCommand::into_string)
             .collect()
     }
 
@@ -457,6 +455,23 @@ mod tests {
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
         assert_eq!(commands, vec!["d", "w", "j"]);
+    }
+
+    #[test]
+    fn test_extract_commands_skips_typed_text_and_arguments() {
+        use crate::game::UserAction;
+
+        let mut feedback = create_test_feedback(100, 100);
+        feedback.user_actions = ["!", "Escape", " ", "3h", "f=", "T,", "r_", "/ sum", "ma("]
+            .iter()
+            .map(|c| UserAction {
+                command: (*c).to_string(),
+                timestamp: Duration::ZERO,
+            })
+            .collect();
+
+        let commands = ScenarioCompletionService::extract_commands(&feedback);
+        assert_eq!(commands, vec!["h", "f", "T", "r", "/", "ma("]);
     }
 
     #[test]

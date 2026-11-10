@@ -6,7 +6,6 @@
 
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
-use helix_core::Selection;
 
 /// A parsed `:` command-line invocation, ready to execute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,21 +81,9 @@ impl CommandLine {
 /// line *start* (not first non-blank). `:goto 0` is a silent no-op, matching
 /// Helix wrapping the argument in `NonZeroUsize::new`.
 fn execute_goto<M: EditorMode>(sim: &mut HelixSimulator<M>, n: usize) -> Result<(), UserError> {
-    if n == 0 {
-        return Ok(());
+    if let Some(count) = std::num::NonZeroUsize::new(n) {
+        super::commands::movement::goto_line(sim, count);
     }
-
-    let len_lines = sim.doc.len_lines();
-    let last_line_is_empty = len_lines > 0 && sim.doc.line(len_lines - 1).len_chars() == 0;
-    let max_line = if last_line_is_empty {
-        len_lines.saturating_sub(2)
-    } else {
-        len_lines.saturating_sub(1)
-    };
-
-    let line_idx = (n - 1).min(max_line);
-    let pos = sim.doc.line_to_char(line_idx);
-    sim.selection = Selection::point(pos);
     Ok(())
 }
 
@@ -160,7 +147,7 @@ mod tests {
     fn goto_zero_is_silent_noop() {
         let mut sim: HelixSimulator<NormalMode> =
             HelixSimulator::new("aaa\nbbb\nccc\n".to_string());
-        sim.selection = Selection::point(5);
+        sim.selection = helix_core::Selection::point(5);
         CommandLine::Goto(0).execute(&mut sim).unwrap();
         assert_eq!(sim.selection.primary().head, 5); // unchanged
     }

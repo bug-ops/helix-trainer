@@ -344,8 +344,12 @@ impl<S: SessionState> GameSession<S> {
             .filter(|(current, target)| current == target)
             .count();
 
-        // Calculate percentage (0-100)
-        let percentage = (matching_lines * 100) / target_lines.len().max(1);
+        let text_percentage = (matching_lines * 100) / target_lines.len().max(1);
+        let percentage = if text_percentage < 100 {
+            text_percentage
+        } else {
+            self.cursor_progress()
+        };
 
         // Mirror matches_snapshot's mode requirement: content can match the
         // target while still in Insert mode (e.g. right after `o`), but the
@@ -357,6 +361,57 @@ impl<S: SessionState> GameSession<S> {
             percentage.min(100) as u8
         }
     }
+
+    /// Progress once the text is on target: 100 only when cursor/selection
+    /// also match, otherwise a value below 100 from their remaining distance.
+    fn cursor_progress(&self) -> usize {
+        let current = self.simulator.to_snapshot();
+        if current.matches(&self.target_snapshot) {
+            return 100;
+        }
+        let (distance, max_distance) = selection_distance(&current, &self.target_snapshot);
+        let remaining = max_distance.saturating_sub(distance);
+        (remaining * 100 / max_distance).min(99)
+    }
+}
+
+/// Distance between the cursor/selection of two snapshots and its maximum.
+///
+/// The maximum is always at least 1, so callers can divide by it.
+fn selection_distance(current: &EditorSnapshot, target: &EditorSnapshot) -> (usize, usize) {
+    let doc_len = current
+        .content
+        .chars()
+        .count()
+        .max(target.content.chars().count())
+        .max(1);
+
+    let target_is_cursor_only =
+        target.selections.len() <= 1 && target.selections.iter().all(|r| r.is_point());
+    if target_is_cursor_only {
+        let distance = current.cursor_offset().abs_diff(target.cursor_offset());
+        return (distance.min(doc_len), doc_len);
+    }
+
+    let normalized = |snapshot: &EditorSnapshot| {
+        let mut ranges: Vec<(usize, usize)> = snapshot
+            .selections
+            .iter()
+            .map(|r| (r.anchor.min(r.head), r.anchor.max(r.head)))
+            .collect();
+        ranges.sort_unstable();
+        ranges
+    };
+    let (current_ranges, target_ranges) = (normalized(current), normalized(target));
+    let range_max = 2 * doc_len;
+    let paired: usize = current_ranges
+        .iter()
+        .zip(&target_ranges)
+        .map(|(a, b)| (a.0.abs_diff(b.0) + a.1.abs_diff(b.1)).min(range_max))
+        .sum();
+    let unpaired = current_ranges.len().abs_diff(target_ranges.len()) * range_max;
+    let range_count = current_ranges.len().max(target_ranges.len()).max(1);
+    (paired + unpaired, range_count * range_max)
 }
 
 // Methods ONLY available in Active state
@@ -435,6 +490,21 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn record_action(mut self, command: String) -> Result<SessionAfterAction, UserError> {
+        self.apply_action(command)?;
+        Ok(self.finish_action())
+    }
+
+    /// Execute and record one command without consuming the session.
+    ///
+    /// On `Err` the action is not recorded and the session stays usable, so a
+    /// caller holding it behind a screen can report the error and carry on
+    /// instead of losing the session. Pair with [`GameSession::finish_action`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action limit is exceeded or the simulator
+    /// rejects the command.
+    pub fn apply_action(&mut self, command: String) -> Result<(), UserError> {
         // Validate action count doesn't exceed limits
         security::arithmetic::validate_action_count(self.user_actions.len() + 1)
             .map_err(UserError::from)?;
@@ -446,58 +516,16 @@ impl GameSession<Active> {
         let elapsed = self.elapsed();
         let action = UserAction::new(command, elapsed);
         self.user_actions.push(action);
-
-        // Check if scenario is completed and return appropriate state
-        if CommandExecutor::check_completion(&self) {
-            Ok(SessionAfterAction::Completed(self.into_completed()))
-        } else {
-            Ok(SessionAfterAction::StillActive(self))
-        }
+        Ok(())
     }
 
-    /// Record a user action with count prefix (e.g., "3w" executes "w" 3 times)
-    ///
-    /// This method executes the base command `count` times through the simulator,
-    /// but records only ONE action in the history with the full command string.
-    /// This ensures that "3w" counts as 1 action, not 3.
-    ///
-    /// # Arguments
-    /// * `full_command` - The full command string (e.g., "3w")
-    /// * `base_command` - The base command to execute (e.g., "w")
-    /// * `count` - How many times to execute the base command
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action count exceeds limits or command execution fails.
-    pub fn record_action_with_count(
-        mut self,
-        full_command: String,
-        base_command: &str,
-        count: usize,
-    ) -> Result<SessionAfterAction, UserError> {
-        // Validate action count doesn't exceed limits
-        security::arithmetic::validate_action_count(self.user_actions.len() + 1)
-            .map_err(UserError::from)?;
-
-        // Execute command `count` times using CommandExecutor trait
-        // Stops early if completion is detected
-        for _ in 0..count {
-            self.execute_single(base_command)?;
-            if CommandExecutor::check_completion(&self) {
-                break;
-            }
-        }
-
-        // Record ONE action in history with the full command
-        let elapsed = self.elapsed();
-        let action = UserAction::new(full_command, elapsed);
-        self.user_actions.push(action);
-
-        // Check if scenario is completed and return appropriate state
+    /// Resolve the session state after [`GameSession::apply_action`]: completed
+    /// if the editor now matches the target, otherwise still active.
+    pub fn finish_action(self) -> SessionAfterAction {
         if CommandExecutor::check_completion(&self) {
-            Ok(SessionAfterAction::Completed(self.into_completed()))
+            SessionAfterAction::Completed(self.into_completed())
         } else {
-            Ok(SessionAfterAction::StillActive(self))
+            SessionAfterAction::StillActive(self)
         }
     }
 

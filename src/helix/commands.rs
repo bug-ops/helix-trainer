@@ -102,6 +102,7 @@ pub const CMD_GOTO_LINE_START: &str = "gh";
 pub const CMD_GOTO_LINE_END: &str = "gl";
 pub const CMD_GOTO_FIRST_NONWHITESPACE: &str = "gs";
 pub const CMD_GOTO_LAST_LINE: &str = "ge";
+pub const CMD_GOTO_LINE: &str = "G";
 
 // Special commands
 pub const CMD_ESCAPE: &str = "Escape";
@@ -120,6 +121,15 @@ pub const CMD_ARROW_LEFT: &str = "Left";
 pub const CMD_ARROW_RIGHT: &str = "Right";
 pub const CMD_ARROW_UP: &str = "Up";
 pub const CMD_ARROW_DOWN: &str = "Down";
+
+// Insert-mode editing keys (Helix 25.07.1 defaults)
+pub const CMD_INSERT_DELETE_WORD_BACKWARD: &str = "Ctrl-w";
+pub const CMD_INSERT_DELETE_TO_LINE_START: &str = "Ctrl-u";
+pub const CMD_INSERT_DELETE_TO_LINE_END: &str = "Ctrl-k";
+pub const CMD_INSERT_DELETE_CHAR_FORWARD: &str = "Ctrl-d";
+pub const CMD_INSERT_DELETE_WORD_FORWARD: &str = "Alt-d";
+pub const CMD_INSERT_ALT_BACKSPACE: &str = "Alt-Backspace";
+pub const CMD_INSERT_DELETE_KEY: &str = "Delete";
 
 // Selection commands
 pub const CMD_SELECT_REGEX: &str = "s";

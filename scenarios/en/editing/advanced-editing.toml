@@ -98,7 +98,7 @@ cursor_position = [0, 0]
 selection = [0, 0, 1, 18]
 
 [scenarios.target]
-file_content = """fn main() {     println!("Hi");
+file_content = """fn main() { println!("Hi");
 }"""
 cursor_position = [0, 12]
 selection = [0, 11, 0, 12]
@@ -254,7 +254,8 @@ selection = [0, 11, 0, 13]
 
 [scenarios.target]
 file_content = """let msg = "OK";"""
-cursor_position = [0, 11]
+cursor_position = [0, 13]
+selection = [0, 11, 0, 13]
 
 [scenarios.solution]
 commands = ["~"]

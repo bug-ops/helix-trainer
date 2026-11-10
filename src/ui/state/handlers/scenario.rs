@@ -76,12 +76,12 @@ fn record_scenario_completion(
 
     ctx.progress.scenarios_completed_today += 1;
 
-    let commands = ScenarioCompletionService::extract_commands(feedback);
     ctx.progress.profile.commands_executed = ctx
         .progress
         .profile
         .commands_executed
-        .saturating_add(commands.len() as u32);
+        .saturating_add(feedback.user_actions.len() as u32);
+    let commands = ScenarioCompletionService::extract_commands(feedback);
     let mastery_changes = ScenarioCompletionService::record_fsrs_data_with_mastery(
         &mut ctx.progress.scheduler,
         &mut ctx.progress.performance_tracker,
@@ -552,7 +552,8 @@ mod tests {
                 UserProfile::new(),
                 PerformanceTracker::new(),
                 ProfileStorage::for_test(),
-            ),
+            )
+            .loaded(),
             config: ConfigState::default(),
         }
     }
@@ -1101,6 +1102,37 @@ mod tests {
         completed.feedback().unwrap()
     }
 
+    /// `commands_executed` counts every recorded action; only FSRS cards are filtered
+    /// to reviewable commands.
+    #[test]
+    fn test_record_scenario_completion_counts_all_actions_but_only_reviewable_cards() {
+        use crate::game::UserAction;
+
+        let mut state = create_test_state();
+        let mut feedback = minimal_feedback();
+        feedback.user_actions = ["i", "!", "Escape", "3h", "f="]
+            .iter()
+            .map(|c| UserAction {
+                command: (*c).to_string(),
+                timestamp: std::time::Duration::ZERO,
+            })
+            .collect();
+        let before = state.progress.profile.commands_executed;
+
+        let mut ctx = HandlerContext::new(
+            &mut state.ui,
+            &mut state.game,
+            &mut state.progress,
+            &state.config,
+        );
+        record_scenario_completion(&mut ctx, &feedback, 1, None).unwrap();
+
+        assert_eq!(ctx.progress.profile.commands_executed, before + 5);
+        let mut cards = ctx.progress.performance_tracker.all_commands();
+        cards.sort_unstable();
+        assert_eq!(cards, ["f", "h", "i"]);
+    }
+
     /// Regression test for #273: the FSRS-recording step in `record_scenario_completion`
     /// must run *before* the save, otherwise the persisted profile captures stale
     /// (pre-completion) tracker state even though the in-memory tracker is up to date.
@@ -1504,7 +1536,8 @@ mod tests {
                 UserProfile::new(),
                 PerformanceTracker::new(),
                 ProfileStorage::for_test(),
-            ),
+            )
+            .loaded(),
             config: ConfigState::default(),
         }
     }

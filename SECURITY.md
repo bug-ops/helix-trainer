@@ -57,7 +57,7 @@ We will respond within 48 hours.
 
 ```bash
 chmod 755 helix-trainer
-chmod 700 ~/.config/helix-trainer/
+chmod 700 ~/.config/helix-trainer/   # Linux; on macOS: ~/Library/Application\ Support/helix-trainer/
 ```
 
 ## For Contributors
@@ -77,7 +77,7 @@ Requirements:
 
 1. **Scenario Files** — TOML files are parsed from restricted directories only
 2. **Terminal I/O** — Raw mode requires terminal access
-3. **User Data** — Stored unencrypted in `~/.config/helix-trainer/`
+3. **User Data** — Stored unencrypted in `helix-trainer/` under the platform config directory (`~/.config/` on Linux, `~/Library/Application Support/` on macOS, `%AppData%` on Windows)
 
 ## CI Security Checks
 

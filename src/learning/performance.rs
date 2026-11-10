@@ -186,7 +186,7 @@ impl CommandPerformance {
         self.state = match (self.state, rating_index) {
             // Again (0) - failed
             (_, 0) => {
-                self.lapses += 1;
+                self.lapses = self.lapses.saturating_add(1);
                 if self.reps > 0 {
                     CardState::Relearning
                 } else {
@@ -223,7 +223,7 @@ impl CommandPerformance {
             self.due = self.last_review + chrono::Duration::days(self.scheduled_days as i64);
         }
 
-        self.reps += 1;
+        self.reps = self.reps.saturating_add(1);
     }
 }
 
@@ -299,13 +299,13 @@ impl PerformanceTracker {
             .or_insert_with(|| CommandPerformance::new(command.to_string(), now));
 
         // Update attempt counters
-        perf.attempts += 1;
+        perf.attempts = perf.attempts.saturating_add(1);
         if success {
-            perf.successes += 1;
+            perf.successes = perf.successes.saturating_add(1);
         }
 
         perf.total_time += duration;
-        perf.avg_time = perf.total_time / perf.attempts;
+        perf.avg_time = perf.total_time / perf.attempts.max(1);
 
         // Update FSRS state
         self.update_fsrs_state(command, duration, success, optimal_time, now);
@@ -819,5 +819,25 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_record_attempt_with_saturated_counters_does_not_panic() {
+        let mut perf = CommandPerformance::new("x".to_string(), Utc::now());
+        perf.attempts = u32::MAX;
+        perf.successes = u32::MAX;
+        perf.reps = u32::MAX;
+        let mut tracker = PerformanceTracker::from_stats(HashMap::from([("x".to_string(), perf)]));
+
+        tracker.record_attempt(
+            "x",
+            std::time::Duration::from_secs(1),
+            true,
+            std::time::Duration::from_secs(1),
+        );
+
+        let perf = tracker.performance("x").expect("entry exists");
+        assert_eq!(perf.attempts, u32::MAX);
+        assert_eq!(perf.successes, u32::MAX);
     }
 }

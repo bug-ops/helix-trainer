@@ -3,7 +3,7 @@
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
-use crate::ui::state::{Message, Screen, TypedScreen, update};
+use crate::ui::state::{Message, NavTarget, TypedScreen, update};
 
 #[test]
 fn test_new_state() {
@@ -220,16 +220,16 @@ fn test_navigate_to_screen() {
 
     // After TypedScreen refactoring, only screens with standalone data can be navigated to
     // Task and Results require active sessions, so only test Profile/Statistics/Menu/ModeSelection
-    update(&mut state, Message::NavigateTo(Screen::Profile)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::Profile)).unwrap();
     assert_matches!(state.screen, TypedScreen::Profile(_));
 
-    update(&mut state, Message::NavigateTo(Screen::Statistics)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::Statistics)).unwrap();
     assert_matches!(state.screen, TypedScreen::Statistics(_));
 
-    update(&mut state, Message::NavigateTo(Screen::MainMenu)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::MainMenu)).unwrap();
     assert_matches!(state.screen, TypedScreen::Menu(_));
 
-    update(&mut state, Message::NavigateTo(Screen::ModeSelection)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::ModeSelection)).unwrap();
     assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 

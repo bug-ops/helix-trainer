@@ -34,7 +34,7 @@ fn test_toggle_sound_message() {
 /// Test that ToggleSound works regardless of current screen
 #[test]
 fn test_toggle_sound_works_on_any_screen() {
-    use crate::ui::state::{Screen, TypedScreen};
+    use crate::ui::state::{NavTarget, TypedScreen};
 
     let mut state = create_test_app_state(vec![]);
 
@@ -44,13 +44,13 @@ fn test_toggle_sound_works_on_any_screen() {
     assert!(!state.progress.sound_manager.config().enabled);
 
     // Navigate to Profile and test
-    update(&mut state, Message::NavigateTo(Screen::Profile)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::Profile)).unwrap();
     assert_matches!(state.screen, TypedScreen::Profile(_));
     update(&mut state, Message::ToggleSound).unwrap();
     assert!(state.progress.sound_manager.config().enabled);
 
     // Navigate to Statistics and test
-    update(&mut state, Message::NavigateTo(Screen::Statistics)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::Statistics)).unwrap();
     assert_matches!(state.screen, TypedScreen::Statistics(_));
     update(&mut state, Message::ToggleSound).unwrap();
     assert!(!state.progress.sound_manager.config().enabled);

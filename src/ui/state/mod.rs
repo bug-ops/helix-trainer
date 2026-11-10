@@ -8,7 +8,7 @@
 //!
 //! The Elm Architecture pattern consists of:
 //! - `AppState`: The complete application state
-//! - `Screen`: The current screen being displayed
+//! - `TypedScreen`: The current screen being displayed, with its required data
 //! - `Message`: User actions and events that trigger state changes
 //! - `update()`: Pure function that transforms state based on messages
 //!
@@ -89,17 +89,16 @@ pub struct ReviewResult {
     pub duration: Duration,
 }
 
-/// The current screen being displayed in the UI
+/// Screens that can be entered without carrying any session or result data
+///
+/// Screens that need data (task, results, review, arcade, end-game summary) are
+/// entered through their own messages, so they are not representable here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Screen {
+pub enum NavTarget {
     /// Mode selection screen (Training vs Arcade)
     ModeSelection,
     /// Main menu screen (Training Mode)
     MainMenu,
-    /// Task/scenario gameplay screen
-    Task,
-    /// Results screen after scenario completion
-    Results,
     /// Profile screen showing level, achievements, stats
     Profile,
     /// Statistics screen showing command mastery and analytics
@@ -108,12 +107,6 @@ pub enum Screen {
     Achievements,
     /// Category filters configuration screen
     CategoryFilters,
-    /// Review session screen for spaced repetition
-    Review,
-    /// Mini-game mode (Arcade Mode)
-    MiniGame,
-    /// Curriculum-completion summary screen
-    EndGameSummary,
 }
 
 /// Messages that trigger state updates
@@ -123,8 +116,8 @@ pub enum Screen {
 /// messages in a pure, side-effect-free manner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Message {
-    /// Navigate to a specific screen
-    NavigateTo(Screen),
+    /// Navigate to a screen that needs no data
+    NavigateTo(NavTarget),
 
     /// Quit the application
     QuitApp,

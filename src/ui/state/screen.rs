@@ -120,23 +120,6 @@ impl TypedScreen {
             Self::EndGameSummary(_) => "EndGameSummary",
         }
     }
-
-    /// Get the corresponding Screen enum value (for backward compatibility)
-    pub fn to_screen_enum(&self) -> super::Screen {
-        match self {
-            Self::ModeSelection(_) => super::Screen::ModeSelection,
-            Self::Menu(_) => super::Screen::MainMenu,
-            Self::Task(_) => super::Screen::Task,
-            Self::Results(_) => super::Screen::Results,
-            Self::Profile(_) => super::Screen::Profile,
-            Self::Statistics(_) => super::Screen::Statistics,
-            Self::Achievements(_) => super::Screen::Achievements,
-            Self::CategoryFilters(_) => super::Screen::CategoryFilters,
-            Self::Review(_) => super::Screen::Review,
-            Self::MiniGame(_) => super::Screen::MiniGame,
-            Self::EndGameSummary(_) => super::Screen::EndGameSummary,
-        }
-    }
 }
 
 /// Data required for main menu screen
@@ -676,15 +659,6 @@ mod tests {
     }
 
     #[test]
-    fn test_typed_screen_to_screen_enum() {
-        let menu = TypedScreen::Menu(MenuData::default());
-        assert_eq!(menu.to_screen_enum(), super::super::Screen::MainMenu);
-
-        let stats = TypedScreen::Statistics(StatisticsData::default());
-        assert_eq!(stats.to_screen_enum(), super::super::Screen::Statistics);
-    }
-
-    #[test]
     fn test_task_data_key_history() {
         use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
@@ -971,19 +945,11 @@ mod tests {
         };
         let screen = TypedScreen::EndGameSummary(data);
         assert_eq!(screen.screen_type(), "EndGameSummary");
-        assert_eq!(
-            screen.to_screen_enum(),
-            super::super::Screen::EndGameSummary
-        );
     }
 
     #[test]
     fn test_typed_screen_category_filters() {
         let screen = TypedScreen::CategoryFilters(CategoryFiltersData::default());
         assert_eq!(screen.screen_type(), "CategoryFilters");
-        assert_eq!(
-            screen.to_screen_enum(),
-            super::super::Screen::CategoryFilters
-        );
     }
 }

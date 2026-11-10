@@ -7,7 +7,7 @@
 use crate::security::UserError;
 use crate::ui::state::{
     AchievementsData, AppState, CategoryFiltersData, HandlerContext, HandlerOutcome, MenuData,
-    MiniGameData, ModeSelectionData, ProfileData, ReturnDestination, Screen, StatisticsData,
+    MiniGameData, ModeSelectionData, NavTarget, ProfileData, ReturnDestination, StatisticsData,
     TypedScreen,
 };
 
@@ -31,24 +31,16 @@ pub fn handle_quit_app(state: &mut AppState) -> Result<HandlerOutcome, UserError
 
 /// Handle NavigateTo message
 ///
-/// Changes the current screen to the specified screen.
+/// Changes the current screen to the target screen.
 /// Returns a Transition outcome with the new screen.
-pub fn handle_navigate_to(screen: Screen) -> Result<HandlerOutcome, UserError> {
-    // Convert Screen enum to TypedScreen variant
-    let new_screen = match screen {
-        Screen::ModeSelection => TypedScreen::ModeSelection(ModeSelectionData::default()),
-        Screen::MainMenu => TypedScreen::Menu(MenuData::default()),
-        Screen::Profile => TypedScreen::Profile(ProfileData::default()),
-        Screen::Statistics => TypedScreen::Statistics(StatisticsData::default()),
-        Screen::Achievements => TypedScreen::Achievements(AchievementsData::default()),
-        Screen::CategoryFilters => TypedScreen::CategoryFilters(CategoryFiltersData::default()),
-        Screen::MiniGame => TypedScreen::MiniGame(MiniGameData::default()),
-        // NOTE: Task, Results, Review, and EndGameSummary screens require data and
-        // should not be navigated to via NavigateTo - they have their own handlers
-        Screen::Task | Screen::Results | Screen::Review | Screen::EndGameSummary => {
-            // Stay on current screen if trying to navigate to a data-dependent screen
-            return Ok(HandlerOutcome::Stay);
-        }
+pub fn handle_navigate_to(target: NavTarget) -> Result<HandlerOutcome, UserError> {
+    let new_screen = match target {
+        NavTarget::ModeSelection => TypedScreen::ModeSelection(ModeSelectionData::default()),
+        NavTarget::MainMenu => TypedScreen::Menu(MenuData::default()),
+        NavTarget::Profile => TypedScreen::Profile(ProfileData::default()),
+        NavTarget::Statistics => TypedScreen::Statistics(StatisticsData::default()),
+        NavTarget::Achievements => TypedScreen::Achievements(AchievementsData::default()),
+        NavTarget::CategoryFilters => TypedScreen::CategoryFilters(CategoryFiltersData::default()),
     };
     Ok(HandlerOutcome::Transition(Box::new(new_screen)))
 }
@@ -141,7 +133,7 @@ mod tests {
 
     #[test]
     fn test_navigate_to_mode_selection() {
-        let outcome = handle_navigate_to(Screen::ModeSelection).unwrap();
+        let outcome = handle_navigate_to(NavTarget::ModeSelection).unwrap();
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -151,20 +143,12 @@ mod tests {
 
     #[test]
     fn test_navigate_to_profile() {
-        let outcome = handle_navigate_to(Screen::Profile).unwrap();
+        let outcome = handle_navigate_to(NavTarget::Profile).unwrap();
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
             assert_matches!(*screen, TypedScreen::Profile(_));
         }
-    }
-
-    #[test]
-    fn test_navigate_to_task_stays_on_current() {
-        let outcome = handle_navigate_to(Screen::Task).unwrap();
-
-        // Task screen requires data, so should stay on current screen
-        assert!(outcome.is_stay());
     }
 
     #[test]
@@ -281,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_navigate_to_main_menu() {
-        let outcome = handle_navigate_to(Screen::MainMenu).unwrap();
+        let outcome = handle_navigate_to(NavTarget::MainMenu).unwrap();
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -291,7 +275,7 @@ mod tests {
 
     #[test]
     fn test_navigate_to_statistics() {
-        let outcome = handle_navigate_to(Screen::Statistics).unwrap();
+        let outcome = handle_navigate_to(NavTarget::Statistics).unwrap();
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -301,7 +285,7 @@ mod tests {
 
     #[test]
     fn test_navigate_to_achievements() {
-        let outcome = handle_navigate_to(Screen::Achievements).unwrap();
+        let outcome = handle_navigate_to(NavTarget::Achievements).unwrap();
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -310,41 +294,13 @@ mod tests {
     }
 
     #[test]
-    fn test_navigate_to_minigame() {
-        let outcome = handle_navigate_to(Screen::MiniGame).unwrap();
-
-        assert!(outcome.is_transition());
-        if let HandlerOutcome::Transition(screen) = outcome {
-            assert_matches!(*screen, TypedScreen::MiniGame(_));
-        }
-    }
-
-    #[test]
     fn test_navigate_to_category_filters() {
-        let outcome = handle_navigate_to(Screen::CategoryFilters).unwrap();
+        let outcome = handle_navigate_to(NavTarget::CategoryFilters).unwrap();
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
             assert_matches!(*screen, TypedScreen::CategoryFilters(_));
         }
-    }
-
-    #[test]
-    fn test_navigate_to_results_stays_on_current() {
-        let outcome = handle_navigate_to(Screen::Results).unwrap();
-        assert!(outcome.is_stay());
-    }
-
-    #[test]
-    fn test_navigate_to_review_stays_on_current() {
-        let outcome = handle_navigate_to(Screen::Review).unwrap();
-        assert!(outcome.is_stay());
-    }
-
-    #[test]
-    fn test_navigate_to_end_game_summary_stays_on_current() {
-        let outcome = handle_navigate_to(Screen::EndGameSummary).unwrap();
-        assert!(outcome.is_stay());
     }
 
     #[test]

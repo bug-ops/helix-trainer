@@ -15,7 +15,7 @@
 //! # Example Usage
 //!
 //! ```ignore
-//! use helix_trainer::ui::{AppState, Message, update, render, Screen};
+//! use helix_trainer::ui::{AppState, Message, NavTarget, update, render};
 //! use helix_trainer::config::ScenarioLoader;
 //!
 //! // Load scenarios
@@ -39,4 +39,4 @@ pub mod state;
 
 pub use notification::{Notification, NotificationQueue, NotificationType};
 pub use render::render;
-pub use state::{AppState, Message, Screen, update};
+pub use state::{AppState, Message, NavTarget, update};

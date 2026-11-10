@@ -24,7 +24,7 @@ use std::borrow::Cow;
 
 use crate::input::keymap::{CanonicalKeys, PhysicalKey};
 use crate::ui::state::InputStateAccess;
-use crate::ui::{AppState, Message, Screen, state::TypedScreen};
+use crate::ui::{AppState, Message, NavTarget, state::TypedScreen};
 
 use super::typestate::{
     InputStateMachine, handle_insert_mode_input, map_key_to_helix_command, normalize_key_event,
@@ -203,7 +203,7 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
             return None; // Consumed the escape
         }
         // Buffer is empty - go back to mode selection
-        return Some(Message::NavigateTo(Screen::ModeSelection));
+        return Some(Message::NavigateTo(NavTarget::ModeSelection));
     }
 
     // Handle Enter - always select
@@ -235,7 +235,7 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
         if buffer.is_empty() {
             match c {
                 'q' => return Some(Message::QuitApp),
-                'm' => return Some(Message::NavigateTo(Screen::ModeSelection)),
+                'm' => return Some(Message::NavigateTo(NavTarget::ModeSelection)),
                 'r' => return Some(Message::StartReviewSession),
                 'p' => return Some(Message::ShowProfile),
                 's' => return Some(Message::ShowStatistics),
@@ -522,7 +522,7 @@ pub fn handle_end_game_summary_keys(key: KeyEvent) -> Option<Message> {
         KeyCode::Char('q') => Some(Message::QuitApp),
         KeyCode::Char('r') => Some(Message::StartReviewSession),
         KeyCode::Char('a') => Some(Message::SelectArcadeMode),
-        KeyCode::Char('l') => Some(Message::NavigateTo(Screen::MainMenu)),
+        KeyCode::Char('l') => Some(Message::NavigateTo(NavTarget::MainMenu)),
         KeyCode::Esc | KeyCode::Char('m') => Some(Message::BackToMenu),
         KeyCode::Char('M') => Some(Message::ToggleSound),
         _ => None,
@@ -1835,7 +1835,7 @@ mod tests {
             let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
             assert_eq!(
                 handle_end_game_summary_keys(key),
-                Some(Message::NavigateTo(Screen::MainMenu))
+                Some(Message::NavigateTo(NavTarget::MainMenu))
             );
         }
 

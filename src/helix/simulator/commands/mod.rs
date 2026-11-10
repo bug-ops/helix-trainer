@@ -441,6 +441,12 @@ pub(super) fn execute_normal_mode_command_internal(
     {
         return search::search_pattern_forward(sim, pattern);
     }
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_SEARCH_BACKWARD)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return search::search_pattern_backward(sim, pattern);
+    }
 
     registry.execute(sim, cmd)?;
 

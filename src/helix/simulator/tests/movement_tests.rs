@@ -399,6 +399,55 @@ fn test_search_prompt_empty_pattern_is_noop() {
     assert_eq!(text_and_ranges(&sim).1, vec![(0, 0)]);
 }
 
+// Expected buffers below were recorded from `hx` 25.07.1 on the same keys.
+const LET_SUM_DELETED: &str = "fn add(a: i32, b: i32) -> i32 {\n    let  = a + b;\n    sum\n}";
+const LAST_SUM_DELETED: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    \n}";
+
+#[test]
+fn test_backward_search_wraps_to_last_match_from_buffer_start() {
+    let mut sim = AnyModeSimulator::new(SCENARIO_14.to_string());
+    run(&mut sim, &["? sum", CMD_DELETE_SELECTION]);
+    assert_eq!(text_and_ranges(&sim).0, LAST_SUM_DELETED);
+}
+
+#[test]
+fn test_backward_search_selects_previous_match_before_cursor() {
+    let mut sim = AnyModeSimulator::new(SCENARIO_14.to_string());
+    run(&mut sim, &["j", "j", "? sum", CMD_DELETE_SELECTION]);
+    assert_eq!(text_and_ranges(&sim).0, LET_SUM_DELETED);
+}
+
+#[test]
+fn test_backward_search_repeated_walks_backward() {
+    let mut sim = AnyModeSimulator::new(SCENARIO_14.to_string());
+    run(&mut sim, &["? sum", "? sum", CMD_DELETE_SELECTION]);
+    assert_eq!(text_and_ranges(&sim).0, LET_SUM_DELETED);
+}
+
+#[test]
+fn test_n_after_backward_search_continues_backward() {
+    let mut sim = AnyModeSimulator::new(SCENARIO_14.to_string());
+    run(&mut sim, &["? sum", CMD_SEARCH_NEXT, CMD_DELETE_SELECTION]);
+    assert_eq!(text_and_ranges(&sim).0, LET_SUM_DELETED);
+}
+
+#[test]
+fn test_backward_search_finds_match_ending_at_cursor() {
+    for steps in [2, 3] {
+        let mut sim = AnyModeSimulator::new("abab x".to_string());
+        run(&mut sim, &vec![CMD_MOVE_RIGHT; steps]);
+        run(&mut sim, &["? ab", CMD_DELETE_SELECTION]);
+        assert_eq!(text_and_ranges(&sim).0, "ab x", "cursor at {steps}");
+    }
+}
+
+#[test]
+fn test_backward_search_invalid_regex_errs_and_keeps_selection() {
+    let mut sim = AnyModeSimulator::new(SCENARIO_14.to_string());
+    assert!(sim.execute_command("? (").is_err());
+    assert_eq!(text_and_ranges(&sim).1, vec![(0, 0)]);
+}
+
 #[test]
 fn test_counted_find_spans_lines_on_scenario_14() {
     let mut sim = AnyModeSimulator::new(SCENARIO_14.to_string());

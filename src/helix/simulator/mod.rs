@@ -751,8 +751,7 @@ impl AnyModeSimulator {
             crate::helix::repeat::RepeatableAction::InsertSequence {
                 entry_command,
                 text,
-                movements,
-                edits,
+                keys,
             } => {
                 // Execute insert sequence through wrapper
                 use crate::helix::commands::*;
@@ -761,28 +760,17 @@ impl AnyModeSimulator {
                 let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
                 commands::execute_command_any_mode(self, insert_cmd)?;
 
-                // Insert text character by character, replaying deleting
-                // keys at the position they were originally pressed
-                let mut pending_edits = edits.iter().peekable();
+                // Insert text character by character, replaying non-text keys
+                // at the position they were originally pressed
+                let mut pending_keys = keys.iter().peekable();
                 for (typed, ch) in text.chars().enumerate() {
-                    while let Some(edit) = pending_edits.next_if(|e| e.after_chars <= typed) {
-                        commands::execute_command_any_mode(self, edit.command.as_str())?;
+                    while let Some(key) = pending_keys.next_if(|k| k.after_chars <= typed) {
+                        commands::execute_command_any_mode(self, key.action.command())?;
                     }
                     commands::execute_command_any_mode(self, &ch.to_string())?;
                 }
-                for edit in pending_edits {
-                    commands::execute_command_any_mode(self, edit.command.as_str())?;
-                }
-
-                // Apply movements
-                for movement in movements {
-                    let cmd = match movement {
-                        crate::helix::repeat::Movement::Left => CMD_ARROW_LEFT,
-                        crate::helix::repeat::Movement::Right => CMD_ARROW_RIGHT,
-                        crate::helix::repeat::Movement::Up => CMD_ARROW_UP,
-                        crate::helix::repeat::Movement::Down => CMD_ARROW_DOWN,
-                    };
-                    commands::execute_command_any_mode(self, cmd)?;
+                for key in pending_keys {
+                    commands::execute_command_any_mode(self, key.action.command())?;
                 }
 
                 // Exit insert mode

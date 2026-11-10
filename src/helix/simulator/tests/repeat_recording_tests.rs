@@ -5,7 +5,7 @@
 //! - Insert mode recording: Verify text and movements are captured
 
 use crate::helix::commands::*;
-use crate::helix::repeat::{Mode, Movement, RepeatableAction};
+use crate::helix::repeat::{InsertAction, InsertKey, Mode, Movement, RepeatableAction};
 use crate::helix::simulator::AnyModeSimulator;
 
 // ============================================================================
@@ -193,11 +193,9 @@ fn test_insert_mode_recording_simple() {
     // Verify insert sequence was recorded
     let buffer = sim.repeat_buffer();
     match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence {
-            text, movements, ..
-        }) => {
+        Some(RepeatableAction::InsertSequence { text, keys, .. }) => {
             assert_eq!(text, "hi");
-            assert!(movements.is_empty());
+            assert!(keys.is_empty());
         }
         _ => panic!("Expected InsertSequence action"),
     }
@@ -226,13 +224,22 @@ fn test_insert_mode_recording_with_movements() {
     // Verify insert sequence with movements was recorded
     let buffer = sim.repeat_buffer();
     match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence {
-            text, movements, ..
-        }) => {
+        Some(RepeatableAction::InsertSequence { text, keys, .. }) => {
             assert_eq!(text, "hi!");
-            assert_eq!(movements.len(), 2);
-            assert_eq!(movements[0], Movement::Left);
-            assert_eq!(movements[1], Movement::Left);
+            let left = InsertAction::Move(Movement::Left);
+            assert_eq!(
+                keys,
+                &[
+                    InsertKey {
+                        after_chars: 2,
+                        action: left
+                    },
+                    InsertKey {
+                        after_chars: 2,
+                        action: left
+                    },
+                ]
+            );
         }
         _ => panic!("Expected InsertSequence action"),
     }
@@ -304,11 +311,9 @@ fn test_insert_mode_empty_recording() {
     // Verify empty insert sequence was recorded
     let buffer = sim.repeat_buffer();
     match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence {
-            text, movements, ..
-        }) => {
+        Some(RepeatableAction::InsertSequence { text, keys, .. }) => {
             assert!(text.is_empty());
-            assert!(movements.is_empty());
+            assert!(keys.is_empty());
         }
         _ => panic!("Expected InsertSequence action"),
     }

@@ -288,9 +288,6 @@ fn test_repeat_append() {
 fn test_repeat_insert_with_movements() {
     let mut sim = AnyModeSimulator::new("world".to_string());
 
-    // Insert with arrow key movements (simplified test)
-    // Note: Current implementation applies movements AFTER all text insertion
-    // This is a known limitation - movements aren't interleaved with text
     sim.execute_command(CMD_INSERT).unwrap();
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
     sim.execute_command(CMD_INSERT).unwrap();
@@ -312,6 +309,23 @@ fn test_repeat_insert_with_movements() {
     assert_eq!(state.content(), "hiworlhid");
     // Cursor moved left from position 8 to position 7
     assert_eq!(state.cursor_position().1, 7);
+}
+
+#[test]
+fn test_repeat_insert_keeps_movement_between_typed_text() {
+    let mut sim = AnyModeSimulator::new("world".to_string());
+
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command("a").unwrap();
+    sim.execute_command(CMD_ARROW_LEFT).unwrap();
+    sim.execute_command("b").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "baworld");
+
+    sim.execute_command(CMD_GOTO_LINE_END).unwrap();
+    sim.execute_command(".").unwrap();
+
+    assert_eq!(sim.state().unwrap().content(), "baworlbad");
 }
 
 #[test]

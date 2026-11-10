@@ -353,6 +353,17 @@ pub fn collapse_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 
 /// Switch selected text to uppercase (Helix 'Alt-`' command), keeping the selection
 pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    map_selected_text(sim, str::to_uppercase);
+    Ok(())
+}
+
+/// Switch selected text to lowercase (Helix '`' command), keeping the selection
+pub fn switch_to_lowercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    map_selected_text(sim, str::to_lowercase);
+    Ok(())
+}
+
+fn map_selected_text<M: EditorMode>(sim: &mut HelixSimulator<M>, map: fn(&str) -> String) {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = range.to();
@@ -361,14 +372,11 @@ pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
             return (start, end, None);
         }
 
-        let slice = sim.doc.slice(start..end);
-        let uppercase: String = slice.chars().flat_map(|c| c.to_uppercase()).collect();
-
-        (start, end, Some(uppercase.into()))
+        let mapped = map(&sim.doc.slice(start..end).to_string());
+        (start, end, Some(mapped.into()))
     });
 
     apply_keeping_selection(sim, transaction);
-    Ok(())
 }
 
 /// Replace selection with the unnamed register's content (Helix 'R' command)
@@ -737,6 +745,16 @@ mod tests {
         switch_to_uppercase(&mut sim).unwrap();
 
         assert_eq!(sim.doc.to_string(), "HELLO world");
+    }
+
+    #[test]
+    fn test_switch_to_lowercase() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("HeLLO".to_string());
+        sim.selection = Selection::single(0, 5);
+
+        switch_to_lowercase(&mut sim).unwrap();
+
+        assert_eq!(sim.doc.to_string(), "hello");
     }
 
     #[test]

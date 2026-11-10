@@ -129,14 +129,14 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         CommandMetadata::new(
             "switch_to_lowercase",
             CMD_SWITCH_CASE_ALT,
-            "Switch case (alt)",
-            "Toggle the case of the selected text (alternative key).",
+            "Switch to lowercase",
+            "Convert the selected text to lowercase.",
             Category::Editing,
             true,
             None,
         )
         .with_count_behavior(CountBehavior::Ignore),
-        editing::switch_case,
+        editing::switch_to_lowercase,
     ));
 
     registry.register(Command::new(

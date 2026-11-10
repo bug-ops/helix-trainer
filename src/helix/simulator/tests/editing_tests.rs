@@ -913,6 +913,22 @@ fn test_collapse_selection_after_select_line_lands_on_newline() {
 }
 
 #[test]
+fn test_backtick_lowercases_selection_instead_of_toggling() {
+    let mut sim = AnyModeSimulator::new("Hello WORLD".to_string());
+    sim.execute_command(CMD_SELECT_ALL).unwrap();
+    sim.execute_command(CMD_SWITCH_CASE_ALT).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "hello world");
+}
+
+#[test]
+fn test_alt_backtick_uppercases_selection_without_toggling() {
+    let mut sim = AnyModeSimulator::new("Hello world".to_string());
+    sim.execute_command(CMD_SELECT_ALL).unwrap();
+    sim.execute_command(CMD_SWITCH_TO_UPPERCASE).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "HELLO WORLD");
+}
+
+#[test]
 fn test_switch_to_uppercase_keeps_selection() {
     assert_eq!(
         run_then_delete(&[CMD_SELECT_LINE, CMD_SWITCH_TO_UPPERCASE]),

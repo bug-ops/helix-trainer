@@ -296,8 +296,8 @@ fn render_weak_commands_section(lines: &mut Vec<Line<'static>>, state: &AppState
                 ),
                 Span::raw(", "),
                 Span::styled(
-                    format!("{} lapses", perf.lapses),
-                    Style::default().fg(if perf.lapses > 2 {
+                    format!("{} lapses", perf.lapses()),
+                    Style::default().fg(if perf.lapses() > 2 {
                         Color::Red
                     } else {
                         Color::Gray

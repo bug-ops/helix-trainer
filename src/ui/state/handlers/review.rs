@@ -3,6 +3,7 @@
 //! Handles spaced repetition review sessions
 
 use crate::constants::OPTIMAL_REVIEW_TIME;
+use crate::gamification::XPCalculator;
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
@@ -101,14 +102,7 @@ pub fn handle_next_review_command(
                 .iter()
                 .filter(|r| r.success)
                 .count();
-            let success_rate = if completed > 0 {
-                success_count as f64 / completed as f64
-            } else {
-                0.0
-            };
-
-            // Award XP for review session
-            let xp = (completed as u64 * 10) + (success_rate * 20.0) as u64;
+            let xp = XPCalculator::review_session_xp(completed, success_count);
             let leveled_up = ctx.progress.profile.add_xp(xp);
             let new_level = ctx.progress.profile.level;
 

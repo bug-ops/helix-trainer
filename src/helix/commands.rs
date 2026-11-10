@@ -130,6 +130,7 @@ pub const CMD_INSERT_DELETE_CHAR_FORWARD: &str = "Ctrl-d";
 pub const CMD_INSERT_DELETE_WORD_FORWARD: &str = "Alt-d";
 pub const CMD_INSERT_ALT_BACKSPACE: &str = "Alt-Backspace";
 pub const CMD_INSERT_DELETE_KEY: &str = "Delete";
+pub const CMD_INSERT_TAB: &str = "\t";
 
 // Selection commands
 pub const CMD_SELECT_REGEX: &str = "s";

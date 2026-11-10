@@ -32,6 +32,20 @@ pub struct NormalMode;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InsertMode;
 
+/// Runtime classification of the editor mode for display and dispatch
+///
+/// Unlike the typestate markers, this is a value that UI code can match
+/// exhaustively, so adding a mode forces every consumer to handle it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModeKind {
+    /// Normal mode: commands are executed
+    Normal,
+    /// Insert mode: typed characters are inserted
+    Insert,
+    /// Select (extend) mode: motions extend the selection
+    Select,
+}
+
 /// Private module for sealing the EditorMode trait
 ///
 /// This prevents external crates from implementing EditorMode,
@@ -74,6 +88,14 @@ mod tests {
     fn test_mode_names() {
         assert_eq!(NormalMode::name(), "NORMAL");
         assert_eq!(InsertMode::name(), "INSERT");
+    }
+
+    #[test]
+    fn test_any_mode_simulator_reports_mode_kind() {
+        let mut sim = crate::helix::AnyModeSimulator::new("abc".to_string()).with_language("rs");
+        assert_eq!(sim.mode_kind(), ModeKind::Normal);
+        sim.execute_command("i").unwrap();
+        assert_eq!(sim.mode_kind(), ModeKind::Insert);
     }
 
     #[test]

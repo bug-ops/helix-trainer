@@ -528,7 +528,7 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
         (_, KeyCode::Backspace) => borrowed(CMD_BACKSPACE),
         (_, KeyCode::Delete) => borrowed(CMD_INSERT_DELETE_KEY),
         (_, KeyCode::Enter) => borrowed("\n"),
-        (_, KeyCode::Tab) => borrowed("\t"),
+        (_, KeyCode::Tab) => borrowed(CMD_INSERT_TAB),
         (_, KeyCode::Left) => borrowed(CMD_ARROW_LEFT),
         (_, KeyCode::Right) => borrowed(CMD_ARROW_RIGHT),
         (_, KeyCode::Up) => borrowed(CMD_ARROW_UP),

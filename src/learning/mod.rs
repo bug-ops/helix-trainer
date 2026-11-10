@@ -11,7 +11,9 @@ pub mod session;
 pub mod traits;
 
 pub use analytics::{Analytics, MasterySummary};
-pub use performance::{CardState, CommandPerformance, MasteryLevel, PerformanceTracker};
+pub use performance::{
+    CardState, CommandPerformance, MasteryLevel, PerformanceData, PerformanceTracker,
+};
 pub use reviewable::ReviewableCommand;
 pub use scenario_history::{
     MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery, is_valid_scenario_id,

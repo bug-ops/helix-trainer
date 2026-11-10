@@ -29,32 +29,83 @@ pub enum CardState {
     Relearning,
 }
 
+/// Persisted per-command FSRS data, keyed by command string.
+///
+/// A serde-transparent wrapper so the profile and the tracker exchange a named type
+/// instead of a bare `HashMap`, and the on-disk JSON shape stays a plain object.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PerformanceData(HashMap<String, CommandPerformance>);
+
+impl PerformanceData {
+    /// Look up the record for `command`.
+    #[must_use]
+    pub fn get(&self, command: &str) -> Option<&CommandPerformance> {
+        self.0.get(command)
+    }
+
+    /// Whether a record exists for `command`.
+    #[must_use]
+    pub fn contains_key(&self, command: &str) -> bool {
+        self.0.contains_key(command)
+    }
+
+    /// Number of tracked commands.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Whether no command is tracked.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Iterate over `(command, record)` pairs in arbitrary order.
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &CommandPerformance)> {
+        self.0.iter()
+    }
+}
+
+impl From<HashMap<String, CommandPerformance>> for PerformanceData {
+    fn from(map: HashMap<String, CommandPerformance>) -> Self {
+        Self(map)
+    }
+}
+
+impl From<PerformanceData> for HashMap<String, CommandPerformance> {
+    fn from(data: PerformanceData) -> Self {
+        data.0
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandPerformance {
-    pub command: String,
+    command: String,
 
     // FSRS state (stored as Option<MemoryState>)
-    pub stability: f32,   // Memory stability (days)
-    pub difficulty: f32,  // Item difficulty (0-10)
-    pub state: CardState, // Card state (application-managed)
-    pub reps: u32,        // Total repetitions
-    pub lapses: u32,      // Number of lapses (forgot)
+    stability: f32,   // Memory stability (days)
+    difficulty: f32,  // Item difficulty (0-10)
+    state: CardState, // Card state (application-managed)
+    reps: u32,        // Total repetitions
+    lapses: u32,      // Number of lapses (forgot)
 
     // Performance metrics (application-specific)
-    pub attempts: u32,
-    pub successes: u32,
+    attempts: u32,
+    successes: u32,
     #[serde(with = "duration_serde")]
-    pub total_time: Duration,
+    total_time: Duration,
     #[serde(with = "duration_serde")]
-    pub avg_time: Duration,
+    avg_time: Duration,
 
     // Scheduling
-    pub last_review: DateTime<Utc>,
-    pub due: DateTime<Utc>,
-    pub scheduled_days: u32,
+    last_review: DateTime<Utc>,
+    due: DateTime<Utc>,
+    scheduled_days: u32,
 
     // Derived fields
-    pub mastery_level: MasteryLevel,
+    mastery_level: MasteryLevel,
     /// Current recall probability (0.0-1.0).
     ///
     /// Deserialized tolerantly: `serde_json` writes a `NaN` `f32` as `null`, and a
@@ -67,7 +118,7 @@ pub struct CommandPerformance {
     /// genuinely missing key, which still errors (no build has ever omitted this
     /// field, so that case doesn't need tolerance).
     #[serde(deserialize_with = "deserialize_retrievability")]
-    pub retrievability: f32,
+    retrievability: f32,
 }
 
 /// See the `retrievability` field doc on [`CommandPerformance`]. `#[serde(default)]`
@@ -141,6 +192,114 @@ impl CommandPerformance {
             mastery_level: MasteryLevel::Beginner,
             retrievability: 1.0, // New card, perfect retrievability
         }
+    }
+
+    /// Command text this record tracks.
+    #[must_use]
+    pub fn command(&self) -> &str {
+        &self.command
+    }
+
+    /// FSRS memory stability in days.
+    #[must_use]
+    pub fn stability(&self) -> f32 {
+        self.stability
+    }
+
+    /// FSRS item difficulty (0-10).
+    #[must_use]
+    pub fn difficulty(&self) -> f32 {
+        self.difficulty
+    }
+
+    /// Application-managed card state.
+    #[must_use]
+    pub fn state(&self) -> CardState {
+        self.state
+    }
+
+    /// Total successful repetitions scheduled by FSRS.
+    #[must_use]
+    pub fn reps(&self) -> u32 {
+        self.reps
+    }
+
+    /// Number of times the command was forgotten.
+    #[must_use]
+    pub fn lapses(&self) -> u32 {
+        self.lapses
+    }
+
+    /// Total recorded attempts.
+    #[must_use]
+    pub fn attempts(&self) -> u32 {
+        self.attempts
+    }
+
+    /// Total successful attempts.
+    #[must_use]
+    pub fn successes(&self) -> u32 {
+        self.successes
+    }
+
+    /// Cumulative time spent across attempts.
+    #[must_use]
+    pub fn total_time(&self) -> Duration {
+        self.total_time
+    }
+
+    /// Average time per attempt.
+    #[must_use]
+    pub fn avg_time(&self) -> Duration {
+        self.avg_time
+    }
+
+    /// Timestamp of the last review.
+    #[must_use]
+    pub fn last_review(&self) -> DateTime<Utc> {
+        self.last_review
+    }
+
+    /// Timestamp when the command is next due.
+    #[must_use]
+    pub fn due(&self) -> DateTime<Utc> {
+        self.due
+    }
+
+    /// Interval in days chosen by the last FSRS schedule.
+    #[must_use]
+    pub fn scheduled_days(&self) -> u32 {
+        self.scheduled_days
+    }
+
+    /// Derived mastery tier.
+    #[must_use]
+    pub fn mastery_level(&self) -> MasteryLevel {
+        self.mastery_level
+    }
+
+    /// Current recall probability (0.0-1.0).
+    #[must_use]
+    pub fn retrievability(&self) -> f32 {
+        self.retrievability
+    }
+
+    /// Test-only: overwrite the FSRS difficulty to stage a scheduling scenario.
+    #[cfg(test)]
+    pub(crate) fn set_difficulty(&mut self, difficulty: f32) {
+        self.difficulty = difficulty;
+    }
+
+    /// Test-only: overwrite the scheduled interval to stage a scheduling scenario.
+    #[cfg(test)]
+    pub(crate) fn set_scheduled_days(&mut self, scheduled_days: u32) {
+        self.scheduled_days = scheduled_days;
+    }
+
+    /// Test-only: overwrite the due timestamp to stage a scheduling scenario.
+    #[cfg(test)]
+    pub(crate) fn set_due(&mut self, due: DateTime<Utc>) {
+        self.due = due;
     }
 
     pub fn success_rate(&self) -> f64 {
@@ -280,6 +439,15 @@ impl PerformanceTracker {
         self.clock = clock;
     }
 
+    /// The clock this tracker reads time from.
+    ///
+    /// Lets sibling components (such as the arcade prioritizer) share one injected
+    /// time source instead of reading the system clock independently.
+    #[must_use]
+    pub fn clock(&self) -> &Arc<dyn Clock> {
+        &self.clock
+    }
+
     pub fn record_attempt(
         &mut self,
         command: &str,
@@ -405,20 +573,17 @@ impl PerformanceTracker {
         }
     }
 
-    pub fn stats_clone(&self) -> HashMap<String, CommandPerformance> {
-        self.stats.clone()
+    pub fn stats_clone(&self) -> PerformanceData {
+        PerformanceData(self.stats.clone())
     }
 
-    pub fn from_stats(stats: HashMap<String, CommandPerformance>) -> Self {
+    pub fn from_stats(stats: PerformanceData) -> Self {
         Self::from_stats_with_clock(stats, Arc::new(SystemClock))
     }
 
-    pub fn from_stats_with_clock(
-        stats: HashMap<String, CommandPerformance>,
-        clock: Arc<dyn Clock>,
-    ) -> Self {
+    pub fn from_stats_with_clock(stats: PerformanceData, clock: Arc<dyn Clock>) -> Self {
         Self {
-            stats,
+            stats: stats.into(),
             fsrs: FSRS::new(&FSRS_PARAMS).unwrap(),
             clock,
         }
@@ -827,7 +992,8 @@ mod tests {
         perf.attempts = u32::MAX;
         perf.successes = u32::MAX;
         perf.reps = u32::MAX;
-        let mut tracker = PerformanceTracker::from_stats(HashMap::from([("x".to_string(), perf)]));
+        let mut tracker =
+            PerformanceTracker::from_stats(HashMap::from([("x".to_string(), perf)]).into());
 
         tracker.record_attempt(
             "x",

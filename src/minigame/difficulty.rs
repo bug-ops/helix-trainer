@@ -26,7 +26,7 @@ use crate::constants::{
     RECENT_SUCCESS_RATE_FOR_DECREASE, RECENT_SUCCESS_RATE_FOR_INCREASE, RECENT_TREND_WINDOW,
 };
 use crate::learning::PerformanceTracker;
-use crate::minigame::ScenarioScorer;
+use crate::minigame::ScenarioPrioritizer;
 use rand::RngExt;
 use rand::distr::weighted::WeightedIndex;
 use rand::prelude::Distribution;
@@ -466,7 +466,7 @@ impl DifficultyController {
         tracker: &PerformanceTracker,
         rng: &mut R,
     ) -> Option<Scenario> {
-        let scorer = ScenarioScorer::new(tracker);
+        let scorer = ScenarioPrioritizer::new(tracker);
 
         // Calculate weights: FSRS score + base weight (ensures non-zero probability)
         let weights: Vec<f64> = candidates

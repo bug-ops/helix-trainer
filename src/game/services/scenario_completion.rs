@@ -5,20 +5,13 @@
 use crate::config::Difficulty;
 use crate::constants::{FLASH_TIME_RATIO, SPEED_DEMON_TIME_RATIO};
 use crate::game::Feedback;
-use crate::gamification::{Achievement, AchievementEngine, UserProfile, speed_time_ratio};
+use crate::gamification::{
+    Achievement, AchievementEngine, UserProfile, XPCalculator, XPComponents, speed_time_ratio,
+};
 use crate::learning::{PerformanceTracker, ReviewableCommand, ScenarioMastery, Scheduler};
 use crate::ui::notification::{Notification, NotificationType};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
-
-/// Components of XP calculation before mastery scaling
-#[derive(Debug, Clone, Default)]
-pub struct XPComponents {
-    pub base_xp: u64,
-    pub perfect_bonus: u64,
-    pub first_today_bonus: u64,
-    pub total_base_xp: u64,
-}
 
 /// Result of completing a scenario
 #[derive(Debug, Clone)]
@@ -61,25 +54,16 @@ impl ScenarioCompletionService {
     /// Calculate XP components from scenario feedback (pure function)
     #[must_use]
     pub fn calculate_xp_components(feedback: &Feedback, is_first_today: bool) -> XPComponents {
-        let score = feedback.score;
-        let is_perfect = feedback.score == feedback.max_points;
-
-        let base_xp = (u64::from(score) * 50) / 100;
-        let perfect_bonus = if is_perfect { base_xp / 5 } else { 0 };
-        let first_today_bonus = if is_first_today { 10 } else { 0 };
-        let total_base_xp = base_xp + perfect_bonus + first_today_bonus;
-
-        XPComponents {
-            base_xp,
-            perfect_bonus,
-            first_today_bonus,
-            total_base_xp,
-        }
+        XPCalculator::training_xp_components(
+            feedback.score,
+            feedback.score == feedback.max_points,
+            is_first_today,
+        )
     }
 
     /// Record scenario completion and return mastery-scaled XP
     ///
-    /// See [`XPScalingResult`] for the distinction between the post-recording
+    /// See `XPScalingResult` for the distinction between the post-recording
     /// `mastery_level` field and the pre-recording multiplier fields.
     #[must_use]
     pub fn record_and_scale_xp(

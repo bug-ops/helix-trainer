@@ -189,6 +189,10 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
         self.simulator.is_insert_mode()
     }
 
+    fn mode_kind(&self) -> crate::helix::ModeKind {
+        self.simulator.mode_kind()
+    }
+
     fn elapsed(&self) -> std::time::Duration {
         ActiveMiniScenario::elapsed(self)
     }

@@ -35,7 +35,7 @@
 mod challenge;
 mod difficulty;
 mod modes;
-mod scorer;
+mod prioritizer;
 mod scoring;
 mod session;
 mod state;
@@ -48,7 +48,7 @@ mod tests;
 pub use challenge::{ChallengeProgress, select_challenge_scenarios};
 pub use difficulty::{DifficultyController, LevelChange, PerformancePoint, base_time_limit_for};
 pub use modes::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig, TimeDecreaseMode};
-pub use scorer::ScenarioScorer;
+pub use prioritizer::ScenarioPrioritizer;
 pub use scoring::{PerformanceTier, ScoreBreakdown, ScoreCalculator};
 pub use session::{ActiveMiniScenario, MiniGameSession};
 pub use state::MiniGameState;

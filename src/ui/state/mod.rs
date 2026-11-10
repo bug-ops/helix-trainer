@@ -360,6 +360,15 @@ impl fmt::Debug for AppState {
 }
 
 impl AppState {
+    /// The active arcade session, if one exists.
+    ///
+    /// Single read path for gameplay code that only needs to inspect the session,
+    /// so callers do not reach through `state.game` field by field.
+    #[must_use]
+    pub fn minigame_session(&self) -> Option<&crate::minigame::MiniGameSession> {
+        self.game.minigame_session.as_ref()
+    }
+
     /// Create a new application state with the given scenarios
     ///
     /// # Arguments

@@ -259,7 +259,7 @@ impl AchievementEngine {
             .filter(|cmd| {
                 tracker
                     .performance(cmd)
-                    .map(|perf| perf.mastery_level == MasteryLevel::Master)
+                    .map(|perf| perf.mastery_level() == MasteryLevel::Master)
                     .unwrap_or(false)
             })
             .count();

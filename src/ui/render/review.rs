@@ -106,7 +106,7 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
     let description = get_command_description(command);
 
     let mastery_text = if let Some(p) = perf {
-        format!("Mastery: {:?} ⭐", p.mastery_level)
+        format!("Mastery: {:?} ⭐", p.mastery_level())
     } else {
         "Mastery: New".to_string()
     };
@@ -115,7 +115,7 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
         // `state: &AppState` is in scope here, so use the injected clock rather than
         // the wall clock directly.
         let now = state.progress.now();
-        let days = (p.due - now).num_days();
+        let days = (p.due() - now).num_days();
         if days > 0 {
             format!("Next: in {} days", days)
         } else {

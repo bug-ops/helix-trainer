@@ -153,7 +153,7 @@ impl Scheduler {
             .filter_map(|cmd| {
                 tracker
                     .performance(cmd)
-                    .filter(|perf| perf.due <= now)
+                    .filter(|perf| perf.due() <= now)
                     .map(|_| cmd.to_string())
             })
             .collect()
@@ -178,10 +178,10 @@ impl Scheduler {
             .into_iter()
             .filter_map(|cmd| {
                 tracker.performance(cmd).and_then(|perf| {
-                    if perf.due <= now {
+                    if perf.due() <= now {
                         Some(ReviewItem {
                             id: cmd.to_string(),
-                            due: perf.due,
+                            due: perf.due(),
                             priority: Self::calculate_priority(perf, now),
                         })
                     } else {
@@ -207,9 +207,9 @@ impl Scheduler {
     /// - `difficulty_weight` = difficulty / 5.0 (harder = more important)
     /// - `priority` = urgency * difficulty_weight
     fn calculate_priority(perf: &CommandPerformance, now: DateTime<Utc>) -> f64 {
-        let days_overdue = (now - perf.due).num_days().max(0) as f64;
-        let urgency = days_overdue / perf.scheduled_days.max(1) as f64;
-        let difficulty_weight = perf.difficulty as f64 / 5.0; // Normalize 0-10 to 0-2
+        let days_overdue = (now - perf.due()).num_days().max(0) as f64;
+        let urgency = days_overdue / perf.scheduled_days().max(1) as f64;
+        let difficulty_weight = perf.difficulty() as f64 / 5.0; // Normalize 0-10 to 0-2
 
         urgency * difficulty_weight
     }
@@ -350,15 +350,15 @@ mod tests {
 
         // Command 1: Very overdue, hard difficulty
         let mut cmd1 = CommandPerformance::new("hard_overdue".to_string(), now);
-        cmd1.difficulty = 8.0;
-        cmd1.scheduled_days = 10;
-        cmd1.due = now - ChronoDuration::days(20); // 20 days overdue
+        cmd1.set_difficulty(8.0);
+        cmd1.set_scheduled_days(10);
+        cmd1.set_due(now - ChronoDuration::days(20)); // 20 days overdue
 
         // Command 2: Slightly overdue, easy difficulty
         let mut cmd2 = CommandPerformance::new("easy_overdue".to_string(), now);
-        cmd2.difficulty = 3.0;
-        cmd2.scheduled_days = 10;
-        cmd2.due = now - ChronoDuration::days(5); // 5 days overdue
+        cmd2.set_difficulty(3.0);
+        cmd2.set_scheduled_days(10);
+        cmd2.set_due(now - ChronoDuration::days(5)); // 5 days overdue
 
         let priority1 = Scheduler::calculate_priority(&cmd1, now);
         let priority2 = Scheduler::calculate_priority(&cmd2, now);
@@ -484,9 +484,9 @@ mod tests {
         let now = Utc::now();
 
         let mut cmd = CommandPerformance::new("not_due".to_string(), now);
-        cmd.difficulty = 8.0;
-        cmd.scheduled_days = 10;
-        cmd.due = now + ChronoDuration::days(5); // Future due date
+        cmd.set_difficulty(8.0);
+        cmd.set_scheduled_days(10);
+        cmd.set_due(now + ChronoDuration::days(5)); // Future due date
 
         let priority = Scheduler::calculate_priority(&cmd, now);
 
@@ -503,7 +503,7 @@ mod tests {
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let scheduled_days = tracker.performance("x").unwrap().scheduled_days;
+        let scheduled_days = tracker.performance("x").unwrap().scheduled_days();
         assert!(
             scheduled_days >= 1,
             "second review should push the due date forward"
@@ -533,8 +533,8 @@ mod tests {
         let now = clock.now();
         let card = |id: &str, overdue: ChronoDuration| {
             let mut perf = CommandPerformance::new(id.to_string(), now);
-            perf.scheduled_days = 10;
-            perf.due = now - overdue;
+            perf.set_scheduled_days(10);
+            perf.set_due(now - overdue);
             (id.to_string(), perf)
         };
         // Same whole overdue days (3) => identical priority; different `due` / `id`.
@@ -546,7 +546,7 @@ mod tests {
             card("z", day3 + ChronoDuration::hours(2)),
             card("low", ChronoDuration::days(1)),
         ]);
-        let tracker = PerformanceTracker::from_stats_with_clock(stats, clock.clone());
+        let tracker = PerformanceTracker::from_stats_with_clock(stats.into(), clock.clone());
         let scheduler = Scheduler::with_clock(clock);
 
         let ids = |limit| -> Vec<String> {
@@ -725,7 +725,7 @@ mod tests {
                 let expected: HashSet<String> = tracker
                     .all_commands()
                     .into_iter()
-                    .filter(|cmd| tracker.performance(cmd).is_some_and(|p| p.due <= now))
+                    .filter(|cmd| tracker.performance(cmd).is_some_and(|p| p.due() <= now))
                     .map(str::to_string)
                     .collect();
                 prop_assert_eq!(returned_set, expected);

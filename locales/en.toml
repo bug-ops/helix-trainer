@@ -13,6 +13,7 @@ instructions_with_numbers = "j/k: Navigate | gg/G: First/Last | 15G: Go to 15 | 
 title = "Task"
 mode_normal = "NORMAL"
 mode_insert = "INSERT"
+mode_select = "SELECT"
 hint_key = "Press ? or F1 for hint"
 abandon_key = "Press Esc to abandon"
 actions = "Actions"

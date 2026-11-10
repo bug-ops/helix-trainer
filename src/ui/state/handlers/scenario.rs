@@ -1068,16 +1068,16 @@ mod tests {
     /// Compares the fields that `save_immediate`/`save_debounced` sync from the
     /// tracker. `CommandPerformance` has no `PartialEq` impl.
     fn stats_match(
-        a: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
-        b: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
+        a: &crate::learning::PerformanceData,
+        b: &crate::learning::PerformanceData,
     ) -> bool {
         a.len() == b.len()
             && a.iter().all(|(k, v)| {
                 b.get(k).is_some_and(|other| {
-                    other.attempts == v.attempts
-                        && other.successes == v.successes
-                        && other.reps == v.reps
-                        && other.command == v.command
+                    other.attempts() == v.attempts()
+                        && other.successes() == v.successes()
+                        && other.reps() == v.reps()
+                        && other.command() == v.command()
                 })
             })
     }

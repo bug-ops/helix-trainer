@@ -302,12 +302,7 @@ fn handle_task_special_keys(key: KeyEvent) -> Option<Message> {
 fn is_gameplay_insert_mode(state: &AppState) -> bool {
     match &state.screen {
         TypedScreen::Task(task_data) => task_data.session.is_insert_mode(),
-        TypedScreen::MiniGame(_) => state
-            .game
-            .minigame_session
-            .as_ref()
-            .map(|s| s.is_insert_mode())
-            .unwrap_or(false),
+        TypedScreen::MiniGame(_) => state.minigame_session().is_some_and(|s| s.is_insert_mode()),
         _ => false,
     }
 }
@@ -605,7 +600,7 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
 /// Handle keyboard events on mini-game screen
 pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Check if game over or paused
-    let session = state.game.minigame_session.as_ref()?;
+    let session = state.minigame_session()?;
 
     // Ctrl-Q returns to menu from any minigame state (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {

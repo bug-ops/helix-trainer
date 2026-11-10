@@ -7,7 +7,7 @@ use crate::async_state::SaveRequest;
 use crate::config::{AppConfig, Difficulty, ScenarioCategory, ScenarioCollection, SortMode};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
-use crate::gamification::{ProfileStorage, QuarantineOutcome, UserProfile};
+use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile};
 use crate::input::keymap::KeymapOverlay;
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
 use crate::sound::{SoundConfig, SoundManager};
@@ -205,6 +205,9 @@ pub struct ProgressState {
     /// Profile storage handler
     pub storage: ProfileStorage,
 
+    /// Daily-quest template registry and its load state
+    pub quest_registry: QuestRegistrySlot,
+
     /// Scenarios completed today
     pub scenarios_completed_today: usize,
 
@@ -282,6 +285,7 @@ impl ProgressState {
             performance_tracker,
             scheduler: Scheduler::with_clock(clock.clone()),
             storage,
+            quest_registry: QuestRegistrySlot::default(),
             scenarios_completed_today: 0,
             commands_used_today: HashSet::new(),
             session_start_time: Instant::now(),
@@ -870,7 +874,7 @@ mod tests {
         // If the tracker still used SystemClock, `last_review` would be wall-clock "now",
         // not the fake clock's fixed instant.
         let perf = progress.performance_tracker.performance("x").unwrap();
-        assert_eq!(perf.last_review, clock.now());
+        assert_eq!(perf.last_review(), clock.now());
 
         // The scheduler must observe the same fake "now" the tracker recorded against, so
         // a command recorded at the fake clock's current time is immediately due.
@@ -904,16 +908,16 @@ mod tests {
     /// syncing. `CommandPerformance` has no `PartialEq` impl, so this checks the subset
     /// of fields that prove the persisted copy reflects the tracker's state.
     fn stats_match(
-        a: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
-        b: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
+        a: &crate::learning::PerformanceData,
+        b: &crate::learning::PerformanceData,
     ) -> bool {
         a.len() == b.len()
             && a.iter().all(|(k, v)| {
                 b.get(k).is_some_and(|other| {
-                    other.attempts == v.attempts
-                        && other.successes == v.successes
-                        && other.reps == v.reps
-                        && other.command == v.command
+                    other.attempts() == v.attempts()
+                        && other.successes() == v.successes()
+                        && other.reps() == v.reps()
+                        && other.command() == v.command()
                 })
             })
     }

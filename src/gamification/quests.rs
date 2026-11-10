@@ -5,6 +5,7 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::config::quests::{QuestLoader, QuestTemplate};
@@ -316,6 +317,22 @@ impl QuestDistribution {
 #[derive(Debug, Clone)]
 pub struct QuestTemplateRegistry {
     templates: Vec<QuestTemplate>,
+}
+
+/// Load state of the shared [`QuestTemplateRegistry`] held by the application.
+///
+/// Makes "not loaded yet" and "failed to load" distinct states instead of
+/// collapsing both into an empty registry, so quest generation can tell a missing
+/// registry from one that legitimately has no templates.
+#[derive(Debug, Clone, Default)]
+pub enum QuestRegistrySlot {
+    /// The background load has not reported back yet.
+    #[default]
+    Pending,
+    /// Templates loaded successfully and are shared by quest generation.
+    Ready(Arc<QuestTemplateRegistry>),
+    /// Loading failed; quest generation must not assume any templates exist.
+    Unavailable,
 }
 
 impl QuestTemplateRegistry {

@@ -865,6 +865,10 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
         self.is_insert_mode()
     }
 
+    fn mode_kind(&self) -> crate::helix::ModeKind {
+        self.simulator.mode_kind()
+    }
+
     fn elapsed(&self) -> Duration {
         S::session_elapsed(self.started_at, self.completed_at)
     }

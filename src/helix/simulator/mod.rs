@@ -33,7 +33,7 @@ use helix_core::{Rope, Selection, Transaction};
 use std::marker::PhantomData;
 
 // Re-export mode typestate markers
-pub use mode::{EditorMode, InsertMode, NormalMode};
+pub use mode::{EditorMode, InsertMode, ModeKind, NormalMode};
 
 // Re-export state types
 pub use command_line::CommandLine;
@@ -571,6 +571,24 @@ impl AnyModeSimulator {
             Self::Normal(_) => Mode::Normal,
             Self::Insert(_) => Mode::Insert,
         }
+    }
+
+    /// Get the current mode as a [`ModeKind`] for exhaustive matching
+    pub fn mode_kind(&self) -> ModeKind {
+        match self {
+            Self::Normal(_) => ModeKind::Normal,
+            Self::Insert(_) => ModeKind::Insert,
+        }
+    }
+
+    /// Declare the content language of the edited document
+    ///
+    /// The language selects language-specific editor behavior (for example the
+    /// indent unit). Currently a pass-through; callers already supply the
+    /// effective language so no call site changes when behavior lands.
+    #[must_use]
+    pub fn with_language(self, _language: &str) -> Self {
+        self
     }
 
     /// Get current mode name

@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use crate::config::Scenario;
-use crate::constants::{MINIGAME_SCENARIO_BASE_XP, MINIGAME_STREAK_XP_MULTIPLIER};
 use crate::game::format_key_for_display;
 use crate::game::services::ScenarioCompletionService;
+use crate::gamification::XPCalculator;
 use crate::input::typestate::{HandlerResult, command_to_key_event};
 use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
@@ -211,8 +211,7 @@ fn execute_minigame_command(
 
         // Award XP for scenario completion in arcade mode
         // Base XP per scenario + bonus per streak level (encourages maintaining streaks)
-        scenario_xp = MINIGAME_SCENARIO_BASE_XP
-            + (current_streak.saturating_sub(1) as u64 * MINIGAME_STREAK_XP_MULTIPLIER);
+        scenario_xp = XPCalculator::arcade_scenario_xp(current_streak);
         let profile = &mut state.progress.profile;
         scenario_leveled_up = profile.add_xp(scenario_xp);
 

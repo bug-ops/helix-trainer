@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use crate::helix::SelectionBounds;
+use crate::helix::{ModeKind, SelectionBounds};
 
 pub mod command_context;
 pub mod editor_state;
@@ -84,14 +84,8 @@ pub trait PlayableScenario {
         crate::config::DEFAULT_LANGUAGE
     }
 
-    /// Get current editor mode as string for UI display
-    fn mode_name(&self) -> &'static str {
-        if self.is_insert_mode() {
-            "INSERT"
-        } else {
-            "NORMAL"
-        }
-    }
+    /// Get the current editor mode for UI display
+    fn mode_kind(&self) -> ModeKind;
 
     /// Get all cursor positions for multi-cursor scenarios.
     ///

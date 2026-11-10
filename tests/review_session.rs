@@ -277,7 +277,7 @@ fn test_performance_tracker_updated() {
         .progress
         .performance_tracker
         .performance(&command)
-        .map(|p| p.attempts)
+        .map(|p| p.attempts())
         .unwrap_or(0);
 
     // Complete review
@@ -288,7 +288,7 @@ fn test_performance_tracker_updated() {
         .progress
         .performance_tracker
         .performance(&command)
-        .map(|p| p.attempts)
+        .map(|p| p.attempts())
         .unwrap_or(0);
 
     assert!(

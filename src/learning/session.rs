@@ -123,7 +123,7 @@ impl ReviewSession {
             .tracker
             .borrow()
             .performance(&item.id)
-            .map(|p| p.mastery_level)
+            .map(|p| p.mastery_level())
             .unwrap_or(MasteryLevel::Beginner);
 
         // Record attempt (mutably borrows tracker)
@@ -136,7 +136,7 @@ impl ReviewSession {
             .tracker
             .borrow()
             .performance(&item.id)
-            .map(|p| p.mastery_level)
+            .map(|p| p.mastery_level())
             .unwrap_or(MasteryLevel::Beginner);
 
         // Store result

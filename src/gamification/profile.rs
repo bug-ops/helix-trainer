@@ -2,16 +2,18 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use super::{AchievementId, Quest};
 use crate::config::Difficulty;
 use crate::constants::{
-    MAX_PLAYER_LEVEL, MINIGAME_LEVEL_BONUS_XP, MINIGAME_STREAK_BONUS_DIVISOR,
-    MINIGAME_STREAK_BONUS_MAX_XP, MINIGAME_XP_PER_100_POINTS, SCENARIO_BASE_XP_PER_100_POINTS,
+    MAX_PLAYER_LEVEL, MINIGAME_LEVEL_BONUS_XP, MINIGAME_SCENARIO_BASE_XP,
+    MINIGAME_STREAK_BONUS_DIVISOR, MINIGAME_STREAK_BONUS_MAX_XP, MINIGAME_STREAK_XP_MULTIPLIER,
+    MINIGAME_XP_PER_100_POINTS, REVIEW_SUCCESS_BONUS_MAX_XP, REVIEW_XP_PER_COMMAND,
+    SCENARIO_BASE_XP_PER_100_POINTS, SCENARIO_FIRST_TODAY_BONUS_XP, SCENARIO_PERFECT_BONUS_DIVISOR,
     XP_LEVEL_FORMULA_BASE, XP_LEVEL_FORMULA_EXPONENT,
 };
-use crate::learning::CommandPerformance;
+use crate::learning::PerformanceData;
 use crate::learning::ScenarioHistory;
 use crate::sound::SoundConfig;
 
@@ -127,7 +129,7 @@ pub struct UserProfile {
 
     /// Persisted FSRS/PerformanceTracker data
     #[serde(default)]
-    pub performance_data: HashMap<String, CommandPerformance>,
+    pub performance_data: PerformanceData,
 
     /// Count of scenario completions finished in under
     /// [`SPEED_DEMON_TIME_RATIO`](crate::constants::SPEED_DEMON_TIME_RATIO) of a
@@ -209,7 +211,7 @@ impl UserProfile {
             challenge_progress: crate::minigame::ChallengeProgress::default(),
             survival_best_level: 0,
             survival_best_scenarios: 0,
-            performance_data: HashMap::new(),
+            performance_data: PerformanceData::default(),
             speed_run_count: 0,
             flash_run_count: 0,
             difficulties_completed: HashSet::new(),
@@ -337,6 +339,19 @@ impl Default for UserProfile {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Components of a training-scenario XP award before mastery scaling
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct XPComponents {
+    /// XP derived from the scenario score
+    pub base_xp: u64,
+    /// Bonus for a perfect score
+    pub perfect_bonus: u64,
+    /// Bonus for the first completion of the day
+    pub first_today_bonus: u64,
+    /// Sum of the three components
+    pub total_base_xp: u64,
 }
 
 /// XP calculation and leveling formulas
@@ -484,6 +499,81 @@ impl XPCalculator {
         (base_xp as f64 * multiplier).round() as u64
     }
 
+    /// XP components for a completed training scenario, before mastery scaling
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::XPCalculator;
+    ///
+    /// let xp = XPCalculator::training_xp_components(100, true, true);
+    /// assert_eq!(xp.total_base_xp, 50 + 10 + 10);
+    /// ```
+    #[must_use]
+    pub fn training_xp_components(
+        score: u32,
+        is_perfect: bool,
+        is_first_today: bool,
+    ) -> XPComponents {
+        let base_xp = (u64::from(score) * SCENARIO_BASE_XP_PER_100_POINTS) / 100;
+        let perfect_bonus = if is_perfect {
+            base_xp / SCENARIO_PERFECT_BONUS_DIVISOR
+        } else {
+            0
+        };
+        let first_today_bonus = if is_first_today {
+            SCENARIO_FIRST_TODAY_BONUS_XP
+        } else {
+            0
+        };
+        let total_base_xp = base_xp + perfect_bonus + first_today_bonus;
+
+        XPComponents {
+            base_xp,
+            perfect_bonus,
+            first_today_bonus,
+            total_base_xp,
+        }
+    }
+
+    /// XP for one arcade scenario completion at the given streak
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::XPCalculator;
+    ///
+    /// assert_eq!(XPCalculator::arcade_scenario_xp(1), 15);
+    /// assert_eq!(XPCalculator::arcade_scenario_xp(5), 23);
+    /// ```
+    #[must_use]
+    pub fn arcade_scenario_xp(streak: u32) -> u64 {
+        MINIGAME_SCENARIO_BASE_XP
+            + (streak.saturating_sub(1) as u64 * MINIGAME_STREAK_XP_MULTIPLIER)
+    }
+
+    /// XP for a finished review session: a flat amount per completed command plus a
+    /// bonus proportional to the share of commands recalled successfully
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::XPCalculator;
+    ///
+    /// assert_eq!(XPCalculator::review_session_xp(5, 3), 62);
+    /// assert_eq!(XPCalculator::review_session_xp(0, 0), 0);
+    /// ```
+    #[must_use]
+    pub fn review_session_xp(completed: usize, recalled: usize) -> u64 {
+        let success_rate = if completed > 0 {
+            recalled as f64 / completed as f64
+        } else {
+            0.0
+        };
+        (completed as u64 * REVIEW_XP_PER_COMMAND)
+            + (success_rate * REVIEW_SUCCESS_BONUS_MAX_XP) as u64
+    }
+
     /// Calculate XP earned from mini-game session
     ///
     /// # Arguments
@@ -529,6 +619,65 @@ impl XPCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Golden values derived from the pre-#485 inline formulas; they pin current
+    /// behavior so the move into `XPCalculator` cannot change any award.
+    #[test]
+    fn golden_training_xp_components() {
+        let cases: [(u32, bool, bool, [u64; 4]); 6] = [
+            (100, true, false, [50, 10, 0, 60]),
+            (100, true, true, [50, 10, 10, 70]),
+            (85, false, false, [42, 0, 0, 42]),
+            (85, false, true, [42, 0, 10, 52]),
+            (0, false, false, [0, 0, 0, 0]),
+            (30, true, false, [15, 3, 0, 18]),
+        ];
+        for (score, perfect, first, [base, bonus, today, total]) in cases {
+            let xp = XPCalculator::training_xp_components(score, perfect, first);
+            assert_eq!(
+                (
+                    xp.base_xp,
+                    xp.perfect_bonus,
+                    xp.first_today_bonus,
+                    xp.total_base_xp
+                ),
+                (base, bonus, today, total),
+                "score={score} perfect={perfect} first={first}"
+            );
+        }
+    }
+
+    #[test]
+    fn golden_arcade_scenario_xp() {
+        for (streak, expected) in [(0, 15), (1, 15), (2, 17), (5, 23), (10, 33)] {
+            assert_eq!(
+                XPCalculator::arcade_scenario_xp(streak),
+                expected,
+                "streak={streak}"
+            );
+        }
+    }
+
+    #[test]
+    fn golden_review_session_xp() {
+        let cases = [
+            (0, 0, 0),
+            (1, 1, 30),
+            (1, 0, 10),
+            (5, 3, 62),
+            (7, 4, 81),
+            (10, 10, 120),
+            (3, 1, 36),
+            (6, 5, 76),
+        ];
+        for (completed, recalled, expected) in cases {
+            assert_eq!(
+                XPCalculator::review_session_xp(completed, recalled),
+                expected,
+                "completed={completed} recalled={recalled}"
+            );
+        }
+    }
 
     #[test]
     fn test_new_profile_defaults() {

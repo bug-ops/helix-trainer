@@ -8,7 +8,7 @@
 use chrono::NaiveDate;
 use rand::SeedableRng;
 use rand::prelude::SliceRandom;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::config::Scenario;
 use crate::constants::{CHALLENGE_MAX_ATTEMPTS, CHALLENGE_SCENARIO_COUNT};
@@ -18,27 +18,14 @@ use super::ChallengeConfig;
 /// Tracks player's progress on daily challenges.
 ///
 /// Persisted to UserProfile for cross-session tracking.
-///
-/// # TODO: Performance Optimization
-///
-/// Consider storing `NaiveDate` directly instead of `String` format to avoid
-/// repeated string allocations in `can_attempt()`, `attempts_remaining()`,
-/// `start_attempt()`, and `is_today()` methods. `NaiveDate`'s serde format is
-/// the same `"YYYY-MM-DD"` string already used here (and already persisted
-/// elsewhere in `profile.json` as a bare `NaiveDate`, e.g.
-/// `ScenarioCompletion::last_attempt_date`), so this is not a wire-format
-/// migration. The real, narrower risk: `ProfileStorage::load` currently hard-
-/// errors the whole profile load on any parse failure, so a malformed stored
-/// date for this field would need `#[serde(default, deserialize_with = ...)]`
-/// mapping bad values to `None` instead of propagating a parse error. Out of
-/// scope for this batch — deferred as a small follow-up, not a blocked one.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChallengeProgress {
-    /// Date of current/last challenge (YYYY-MM-DD format for serialization)
-    // TODO: CR-013 (tracked in #391): Consider storing chrono::NaiveDate directly with custom serde.
-    // Deferred: needs a lenient deserializer so a malformed value doesn't hard-error
-    // the whole profile load; see struct-level doc above.
-    pub last_challenge_date: Option<String>,
+    /// Date of current/last challenge; serialized as `YYYY-MM-DD`.
+    ///
+    /// A malformed stored value loads as `None` so one bad field does not fail
+    /// the whole profile load.
+    #[serde(default, deserialize_with = "lenient_date")]
+    pub last_challenge_date: Option<NaiveDate>,
 
     /// Attempts used today (0-3)
     pub attempts_used_today: u8,
@@ -60,6 +47,15 @@ pub struct ChallengeProgress {
 
     /// Total challenges completed (all 10 scenarios)
     pub total_challenges_completed: u32,
+}
+
+fn lenient_date<'de, D>(deserializer: D) -> Result<Option<NaiveDate>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // Buffer as a Value first so a mismatched shape is fully consumed before being discarded.
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(NaiveDate::deserialize(value).ok())
 }
 
 impl ChallengeProgress {
@@ -95,7 +91,7 @@ impl ChallengeProgress {
     pub fn start_attempt(&mut self, today: NaiveDate) {
         // Reset for new day
         if self.is_new_day(today) {
-            self.last_challenge_date = Some(Self::today_string(today));
+            self.last_challenge_date = Some(today);
             self.attempts_used_today = 0;
             self.best_score_today = 0;
             self.best_scenarios_today = 0;
@@ -129,14 +125,9 @@ impl ChallengeProgress {
         }
     }
 
-    /// Get the given date as a YYYY-MM-DD string
-    fn today_string(today: NaiveDate) -> String {
-        today.to_string()
-    }
-
     /// Check whether the calendar day has rolled over since `last_challenge_date`
     fn is_new_day(&self, today: NaiveDate) -> bool {
-        self.last_challenge_date.as_deref() != Some(&Self::today_string(today))
+        self.last_challenge_date != Some(today)
     }
 
     /// Check if progress is for the given date
@@ -250,7 +241,7 @@ mod tests {
     fn test_can_attempt_after_using_attempts() {
         let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = Some(today.to_string());
+        progress.last_challenge_date = Some(today);
         progress.attempts_used_today = 2;
 
         assert!(progress.can_attempt(today));
@@ -265,7 +256,7 @@ mod tests {
     fn test_start_attempt_new_day() {
         let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = Some("2020-01-01".to_string());
+        progress.last_challenge_date = NaiveDate::from_ymd_opt(2020, 1, 1);
         progress.attempts_used_today = 3;
         progress.best_score_today = 5000;
         progress.best_scenarios_today = 8;
@@ -283,7 +274,7 @@ mod tests {
     fn test_start_attempt_same_day() {
         let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = Some(today.to_string());
+        progress.last_challenge_date = Some(today);
         progress.attempts_used_today = 1;
         progress.best_score_today = 5000;
 
@@ -292,7 +283,7 @@ mod tests {
         // Should not reset, just increment
         assert_eq!(progress.attempts_used_today, 2);
         assert_eq!(progress.best_score_today, 5000);
-        assert_eq!(progress.last_challenge_date, Some(today.to_string()));
+        assert_eq!(progress.last_challenge_date, Some(today));
     }
 
     #[test]
@@ -469,6 +460,67 @@ mod tests {
         assert_eq!(progress.total_challenges_completed, 0);
     }
 
+    fn load_with_date(date: Option<serde_json::Value>) -> ChallengeProgress {
+        let mut json = serde_json::to_value(ChallengeProgress {
+            all_time_best_score: 42,
+            ..ChallengeProgress::new()
+        })
+        .unwrap();
+        let object = json.as_object_mut().unwrap();
+        match date {
+            Some(value) => object.insert("last_challenge_date".to_owned(), value),
+            None => object.remove("last_challenge_date"),
+        };
+        // from_str, not from_value: production loads via the streaming deserializer.
+        serde_json::from_str(&json.to_string()).unwrap()
+    }
+
+    #[test]
+    fn test_last_challenge_date_deserialize_valid() {
+        let p = load_with_date(Some("2026-01-15".into()));
+        assert_eq!(p.last_challenge_date, NaiveDate::from_ymd_opt(2026, 1, 15));
+    }
+
+    #[test]
+    fn test_last_challenge_date_deserialize_malformed_degrades_to_none() {
+        for text in ["not-a-date", "2026-02-30", "2026-01-15T10:00:00"] {
+            let p = load_with_date(Some(text.into()));
+            assert!(p.last_challenge_date.is_none(), "{text}");
+            assert_eq!(p.all_time_best_score, 42, "{text}");
+        }
+    }
+
+    #[test]
+    fn test_last_challenge_date_deserialize_wrong_type_degrades_to_none() {
+        for value in [
+            serde_json::json!(12345),
+            serde_json::json!([1, 2]),
+            serde_json::json!({"a": 1}),
+        ] {
+            let p = load_with_date(Some(value));
+            assert!(p.last_challenge_date.is_none());
+            assert_eq!(p.all_time_best_score, 42);
+        }
+    }
+
+    #[test]
+    fn test_last_challenge_date_deserialize_missing_and_null() {
+        assert!(load_with_date(None).last_challenge_date.is_none());
+        assert!(
+            load_with_date(Some(serde_json::Value::Null))
+                .last_challenge_date
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_last_challenge_date_serializes_as_iso_string() {
+        let mut p = ChallengeProgress::new();
+        p.start_attempt(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap());
+        let json = serde_json::to_value(&p).unwrap();
+        assert_eq!(json["last_challenge_date"], "2026-01-15");
+    }
+
     // CR-008: Test is_today() method
     #[test]
     fn test_challenge_progress_is_today() {
@@ -479,7 +531,7 @@ mod tests {
         progress.start_attempt(today);
         assert!(progress.is_today(today)); // Now has today's date
 
-        progress.last_challenge_date = Some("2020-01-01".to_string());
+        progress.last_challenge_date = NaiveDate::from_ymd_opt(2020, 1, 1);
         assert!(!progress.is_today(today)); // Past date
     }
 

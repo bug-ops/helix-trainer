@@ -68,7 +68,7 @@ implicit trade-off, not an explicitly documented one in the commit.
 | ID | Requirement | Target | Status |
 |----|------------|--------|--------|
 | NFR-001 | New property tests must run within CI time budgets; bound `ProptestConfig` case counts rather than leaving them unbounded | No `cargo nextest` slowdown attributable to the new tests | **Partially met.** No explicit `ProptestConfig` override was added — both blocks use the implicit default (256 cases). This satisfies "runs within CI budgets" in practice (no evidence of slowdown found), but does not satisfy the letter of "bound... rather than leaving them unbounded" as an explicit, intentional choice. |
-| NFR-002 | Property test invariants must be traceable back to the specific FSRS/scheduler behavior they verify, via doc comments referencing this spec | Each property documented with rationale | **Met for the two properties that exist** — `prop_fsrs_state_transition_is_deterministic` and `prop_fsrs_state_stays_in_bounds` carry doc comments explaining the invariant. **Not applicable** to FR-002/004/005, which were never implemented, so there is nothing to trace for those. |
+| NFR-002 | Property test invariants must be traceable back to the specific FSRS/scheduler behavior they verify, via doc comments referencing this spec | Each property documented with rationale | **Met for the two properties that exist** — `prop_fsrs_state_transition_is_deterministic` and `prop_fsrs_state_stays_in_bounds` carry doc comments explaining the invariant. **Not applicable** to FR-002, which was not implemented. FR-004/FR-005 were implemented later by #428 in `src/learning/scheduler.rs` (8 properties: 5 active, 3 `#[ignore]`d pending #433/#434). |
 
 ## 3. Reliability
 

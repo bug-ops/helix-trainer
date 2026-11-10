@@ -44,7 +44,7 @@ graph TD
     C --> D[CardState + stability/difficulty/retrievability]
     D --> E1[prop_fsrs_state_transition_is_deterministic]
     D --> E2[prop_fsrs_state_stays_in_bounds]
-    F[scheduler.rs: ReviewItem Ord, get_due_reviews] -.uncovered.-> G[No property test]
+    F[scheduler.rs: ReviewItem Ord, get_due_reviews] -.covered by #428 (3 ignored).-> G[props module in scheduler.rs]
 ```
 
 ### Key Design Decisions
@@ -63,7 +63,7 @@ src/learning/
 ├── performance.rs      # PerformanceTracker, CardState — 2 new proptest! blocks
 │                        # added to existing #[cfg(test)] mod tests
 │                        # + custom deserializer for retrievability self-heal
-└── scheduler.rs         # Scheduler, ReviewItem — UNCHANGED, still uncovered
+└── scheduler.rs         # Scheduler, ReviewItem — unchanged by 33bdaa1; props module added by #428
 ```
 
 ## 3. Data Model
@@ -111,7 +111,7 @@ No change to `src/security.rs`. Not applicable.
 |-------|-----------|-----------------|----------|
 | Property | `proptest` (default config, 256 cases) | FSRS state-transition determinism (`prop_fsrs_state_transition_is_deterministic`); FSRS bounds invariants (`prop_fsrs_state_stays_in_bounds`) | `performance.rs` only |
 | Regression (example-based) | `#[test]` | `test_deserialize_null_retrievability_recovers_as_one` — locks in the self-heal behavior for the discovered bug | `performance.rs` |
-| **Gap** | — | `ReviewItem` `Ord`/`PartialOrd` total-order property (FR-004); `get_due_reviews`/`get_review_queue` bounds property (FR-005); due-date-not-earlier-than-review property (FR-002) | **None — `scheduler.rs` untested by proptest** |
+| **Gap** | — | `ReviewItem` `Ord`/`PartialOrd` total-order property (FR-004); `get_due_reviews`/`get_review_queue` bounds property (FR-005); due-date-not-earlier-than-review property (FR-002) | **Closed by #428 for FR-004/FR-005** (3 properties ignored: #433, #434); FR-002 still open |
 
 ## 8. Performance Considerations
 
@@ -131,14 +131,17 @@ active in CI on merge.
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
-| III. Testing — proptest required for deterministic-given-fixed-inputs logic, if declared | Partially compliant | `performance.rs` now compliant; `scheduler.rs` (same subsystem, same "deterministic given fixed inputs" characterization) is not — see Residual Work below |
+| III. Testing — proptest required for deterministic-given-fixed-inputs logic, if declared | Partially compliant | `performance.rs` compliant; `scheduler.rs` partially compliant — FR-004/FR-005 implemented by #428 (5 active properties, 3 `#[ignore]`d pending #433/#434); FR-002 still open — see Residual Work below |
 | III. Testing — no live wall-clock in property tests | Compliant | `FakeClock` used throughout |
 | III. Testing — colocated `#[cfg(test)]` modules | Compliant | No new submodule introduced |
 | VIII. Git Workflow — full check suite before commit | Assumed compliant (not independently re-verified as part of this retroactive plan) | — |
 
 ## 11. Residual Work
 
-> [!warning] Recommended Follow-up (Not Yet Scheduled)
+> [!warning] Status Update (#428)
+> Items 1 and 2 below are implemented in `src/learning/scheduler.rs` (module `props`); three properties are `#[ignore]`d pending #433 (queue ordering/top-N) and #434 (`PartialEq` vs `Ord`). Item 3 remains open.
+>
+> Original recommendation:
 > To fully close the original finding's scope, a follow-up would need to add
 > `proptest!` coverage to `src/learning/scheduler.rs` for:
 > 1. `ReviewItem`'s `Ord`/`PartialOrd` — total order, transitivity, no panic

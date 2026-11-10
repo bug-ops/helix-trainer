@@ -179,7 +179,7 @@ by a shipped property test.
 - Use a fixed/fake clock, never live `Utc::now()`, inside any new property test
 
 ### Ask First
-- Extending this coverage to `src/learning/scheduler.rs` (FR-004/FR-005 remain unimplemented — see [[plan#Residual Work]])
+- Extending this coverage to `src/learning/scheduler.rs` (FR-004/FR-005 were later implemented by #428 — see [[plan#Residual Work]])
 - Modifying the project's continuous-improvement rules wording
 
 ### Never
@@ -188,7 +188,7 @@ by a shipped property test.
 
 ## 9. Open Questions
 
-- [NEEDS CLARIFICATION: should `src/learning/scheduler.rs` (FR-004, FR-005 — `ReviewItem` ordering, `get_due_reviews`/`get_review_queue` bounds) receive property-test coverage as a follow-up, given it remains fully untested by this resolution? See [[BRD#Residual Gap]].]
+- [RESOLVED by #428; three ignored properties tracked by #433/#434] Original question: should `src/learning/scheduler.rs` (FR-004, FR-005 — `ReviewItem` ordering, `get_due_reviews`/`get_review_queue` bounds) receive property-test coverage as a follow-up, given it remains fully untested by this resolution? See [[BRD#Residual Gap]].]
 - [NEEDS CLARIFICATION: should the project's continuous-improvement rules be reworded now to scope the proptest claim to "FSRS state-transition logic in `src/learning/performance.rs`" specifically, until/unless `scheduler.rs` coverage is added?]
 
 ## 10. Resolution (Retroactive)
@@ -199,7 +199,7 @@ with an unrelated CI-hardening fix (issue #295) in the same commit. Path (a)
 and residual gap are in [[SRS]] and [[BRD]]. Summary: `performance.rs` (FSRS
 state-transition determinism and bounds) is now covered by two property
 tests; `scheduler.rs` (`ReviewItem` ordering, due-review queue bounds) was
-**not** touched and remains uncovered — see [[plan#Residual Work]] for the
+**not** touched by that commit; #428 later added FR-004/FR-005 coverage (3 properties `#[ignore]`d pending #433/#434) — see [[plan#Residual Work]] for the
 recommended follow-up scope.
 
 A real correctness bug (retrievability decay sign error, causing NaN →
@@ -216,6 +216,6 @@ direct result of writing this property-test coverage — see
 - [[plan]] — as-built architecture and residual work
 - [[tasks]] — retroactive task breakdown
 - [[MOC-specs]] — all specifications
-- `src/learning/scheduler.rs` — `Scheduler`, `ReviewItem` (uncovered)
+- `src/learning/scheduler.rs` — `Scheduler`, `ReviewItem` (covered by #428)
 - `src/learning/performance.rs` — `CardState`, `PerformanceTracker` (covered)
 - the project's continuous-improvement rules — source of the proptest claim

@@ -29,7 +29,7 @@ superseded)
 
 | Feature | Phase | Status |
 |---------|-------|--------|
-| [[fsrs-proptest-coverage-gap/README\|FSRS Scheduler Property-Based Test Coverage Gap]] | review | implemented (partial scope — see [[fsrs-proptest-coverage-gap/BRD#Residual Gap\|Residual Gap]]) |
+| [[fsrs-proptest-coverage-gap/README\|FSRS Scheduler Property-Based Test Coverage Gap]] | review | implemented (residual: ignored properties tied to #433/#434 — see [[fsrs-proptest-coverage-gap/BRD#Residual Gap\|Residual Gap]]) |
 | [[arcade-game-mode-variety/README\|Arcade Game Mode Variety]] | rejected | NO-GO — full decision-record package, not built |
 | [[register-command-mode-support/README\|Named Register and Command-Line (`:`) Mode Support]] | review | implemented (command-line mode narrower than drafted — `:goto`/`:g` only, no `:s` substitute); extended in v0.6.0 with blackhole register and register-scoped delete/change — see [[register-command-mode-support/spec#11. Post-Release Extensions (v0.6.0)\|Post-Release Extensions]] |
 | [[arcade-gamification-session-fixes/spec\|Gamification Live-Trigger Wiring, Notifications, and Bookkeeping Fixes]] | specify (lightweight, per SDD scaling guidance) | implemented — broadened in v0.6.0 from one commit (`623e0a8`) to the full seven-commit bug-fix thread |
@@ -165,7 +165,8 @@ dropped to match the slug-only naming used by every other package here.
 - **challenge-attempt-limit-not-enforced** — fixed by `e637c30` (PR #384,
   issue #376). The `MiniGameData.challenge_progress` snapshot was removed;
   attempts show as `(N/3)` in the mode submenu. The malformed
-  `last_challenge_date` risk (CR-013) was deliberately left open.
+  `last_challenge_date` risk (CR-013) was initially left open and later
+  resolved by #427 (`Option<NaiveDate>` with a lenient deserializer).
 - **backtick-key-misparsed-as-alt** — fixed by `45bbd1f` (PR #380, issue
   #377). Root cause was the app's own `map_macos_composed_char` table, not
   crossterm or tmux as the draft suspected.
@@ -175,12 +176,9 @@ dropped to match the slug-only naming used by every other package here.
 - **language-aware-syntax-highlighting** — corrected a stale path
   (it cited a nonexistent `validators.rs` file; the validator is
   `validators::validate_language_field` in `src/security.rs`).
-- **Open items, not changed here**: the residual `scheduler.rs` proptest
-  gap recorded in [[fsrs-proptest-coverage-gap/BRD#Residual Gap|Residual Gap]]
-  is still present (no `proptest` in `src/learning/scheduler.rs`) and is now
-  tracked by #428 (P4); and the `TODO: CR-013` marker in
-  `src/minigame/challenge.rs` (formerly citing the closed #391) is now
-  tracked by #427 (P3).
+- **Follow-up updates**: #428 implemented FR-004/FR-005 as proptests in
+  `src/learning/scheduler.rs`; three properties are `#[ignore]`d pending real
+  defects #433 and #434 (see [[fsrs-proptest-coverage-gap/BRD#Residual Gap|Residual Gap]]). #427 resolved the CR-013 TODO in `src/minigame/challenge.rs`.
 
 ## See Also
 

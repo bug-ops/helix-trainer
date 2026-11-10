@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Migrate five bug-spec packages into `specs/`, merge the spec index, and drop links to untracked paths (#429)
+
 ## [0.6.2] - 2026-10-21
 
 ### Dependencies

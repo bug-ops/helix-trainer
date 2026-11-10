@@ -39,4 +39,5 @@ category = "clipboard"
 difficulty = "beginner"
 tags = ["undo", "redo"]
 commands_taught = ["u", "U"]
+completion = "after_taught_commands"
 estimated_time_seconds = 15

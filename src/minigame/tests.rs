@@ -359,3 +359,43 @@ fn test_countdown_ticks() {
     session.tick_countdown();
     assert!(session.state().is_playing());
 }
+
+fn arcade_completion_step(commands: &[&str]) -> Option<usize> {
+    let undo_redo = crate::config::ScenarioLoader::new()
+        .load_from_embedded("en")
+        .unwrap()
+        .into_iter()
+        .find(|s| s.id == "undo_redo_001")
+        .unwrap();
+    let mut session = MiniGameSession::new(Arc::new(vec![undo_redo]), None);
+    session.start();
+    for _ in 0..3 {
+        session.tick_countdown();
+    }
+    assert_eq!(
+        session.current_scenario().unwrap().scenario.id,
+        "undo_redo_001"
+    );
+    for (i, cmd) in commands.iter().enumerate() {
+        session.handle_command(cmd).unwrap();
+        if session.check_completion() {
+            return Some(i + 1);
+        }
+    }
+    None
+}
+
+#[test]
+fn test_arcade_undo_redo_completes_only_at_last_taught_command() {
+    assert_eq!(arcade_completion_step(&["x", "d", "u", "U"]), Some(4));
+}
+
+#[test]
+fn test_arcade_undo_redo_not_completed_when_target_reached_by_untaught_command() {
+    assert_eq!(arcade_completion_step(&["u", "U", "x", "d"]), None);
+}
+
+#[test]
+fn test_arcade_undo_redo_counted_taught_command_completes() {
+    assert_eq!(arcade_completion_step(&["x", "d", "2u", "U"]), Some(4));
+}

@@ -54,6 +54,7 @@ fn create_scenario(
             prerequisites: vec![],
             estimated_time_seconds: None,
             locale: None,
+            ..Default::default()
         }),
     }
 }

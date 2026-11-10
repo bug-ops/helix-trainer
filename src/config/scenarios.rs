@@ -2,6 +2,7 @@
 //!
 //! This module handles loading TOML scenario files with security validations.
 
+use crate::learning::ReviewableCommand;
 use crate::security::limits::{
     MAX_ALTERNATIVES, MAX_COMMAND_SEQUENCE_LENGTH, MAX_CURSORS_PER_SCENARIO,
     MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE, MAX_SCENARIOS_PER_FILE,
@@ -21,9 +22,72 @@ pub struct ScenariosFile {
     pub scenarios: Vec<Scenario>,
 }
 
+/// How a scenario decides it is finished.
+///
+/// Set in the TOML as `completion = "after_taught_commands"` under
+/// `[scenarios.metadata]`; an unknown value is a scenario load error.
+#[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CompletionRule {
+    /// Complete as soon as the editor state equals the target.
+    #[default]
+    TargetState,
+    /// Complete when the editor state equals the target AND the action that
+    /// produced it is one of the scenario's `commands_taught`, so history
+    /// navigation (`u`/`U`) cannot be satisfied by revisiting a state.
+    AfterTaughtCommands,
+}
+
+impl CompletionRule {
+    /// The single completion predicate shared by training and arcade.
+    ///
+    /// `target_reached` is the editor-versus-target comparison and
+    /// `last_command` the just-executed action. Commands are compared as review
+    /// card ids, so a count prefix is ignored (`2u` matches `u`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::config::CompletionRule;
+    ///
+    /// let taught = ["u".to_string()];
+    /// let rule = CompletionRule::AfterTaughtCommands;
+    /// assert!(rule.is_satisfied(true, &taught, Some("2u")));
+    /// assert!(!rule.is_satisfied(true, &taught, Some("d")));
+    /// assert!(CompletionRule::TargetState.is_satisfied(true, &taught, Some("d")));
+    /// ```
+    #[must_use]
+    pub fn is_satisfied(
+        self,
+        target_reached: bool,
+        commands_taught: &[String],
+        last_command: Option<&str>,
+    ) -> bool {
+        if !target_reached {
+            return false;
+        }
+        match self {
+            Self::TargetState => true,
+            Self::AfterTaughtCommands => {
+                let Some(last) = last_command.and_then(ReviewableCommand::parse) else {
+                    return false;
+                };
+                commands_taught
+                    .iter()
+                    .filter_map(|taught| ReviewableCommand::parse(taught))
+                    .any(|taught| taught == last)
+            }
+        }
+    }
+}
+
 /// Scenario metadata for filtering, sorting, and quest generation
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct ScenarioMetadata {
+    /// Completion rule (defaults to [`CompletionRule::TargetState`])
+    #[serde(default)]
+    pub completion: CompletionRule,
+
     /// Scenario category (e.g., movement, editing, clipboard)
     #[serde(default)]
     pub category: Option<ScenarioCategory>,
@@ -113,6 +177,24 @@ pub struct Scenario {
     /// Metadata for filtering, sorting, and quest generation (optional for backward compatibility)
     #[serde(default)]
     pub metadata: Option<ScenarioMetadata>,
+}
+
+impl Scenario {
+    /// Whether the scenario is finished, given the editor-versus-target
+    /// comparison and the just-executed command.
+    ///
+    /// Both training and arcade completion go through this, so they cannot
+    /// diverge. See [`CompletionRule`].
+    #[must_use]
+    pub fn is_completed_by(&self, target_reached: bool, last_command: Option<&str>) -> bool {
+        let (rule, taught) = self
+            .metadata
+            .as_ref()
+            .map_or((CompletionRule::default(), &[][..]), |m| {
+                (m.completion, m.commands_taught.as_slice())
+            });
+        rule.is_satisfied(target_reached, taught, last_command)
+    }
 }
 
 /// Cursor and selection configuration shared by [`Setup`] and [`TargetState`]

@@ -86,7 +86,10 @@ impl ActiveMiniScenario {
 
     /// Check if scenario is completed
     fn is_completed(&self) -> bool {
-        self.simulator.matches_snapshot(&self.target_snapshot)
+        self.scenario.is_completed_by(
+            self.simulator.matches_snapshot(&self.target_snapshot),
+            self.actions.last().map(String::as_str),
+        )
     }
 
     /// Freeze the countdown timer
@@ -241,7 +244,7 @@ impl CommandExecutor for ActiveMiniScenario {
     }
 
     fn check_completion(&self) -> bool {
-        self.simulator.matches_snapshot(&self.target_snapshot)
+        self.is_completed()
     }
 }
 

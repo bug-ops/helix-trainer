@@ -19,6 +19,7 @@ pub use scenario_collection::{
     CompletionFilter, CurriculumStats, ScenarioCollection, ScenarioFilter, SortMode,
 };
 pub use scenarios::{
-    AlternativeSolution, CursorSpec, DEFAULT_LANGUAGE, Difficulty, Scenario, ScenarioCategory,
-    ScenarioLoader, ScenarioMetadata, ScenariosFile, ScoringConfig, Setup, Solution, TargetState,
+    AlternativeSolution, CompletionRule, CursorSpec, DEFAULT_LANGUAGE, Difficulty, Scenario,
+    ScenarioCategory, ScenarioLoader, ScenarioMetadata, ScenariosFile, ScoringConfig, Setup,
+    Solution, TargetState,
 };

@@ -560,7 +560,10 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn check_completion(&self) -> bool {
-        self.simulator.matches_snapshot(&self.target_snapshot)
+        self.scenario.is_completed_by(
+            self.simulator.matches_snapshot(&self.target_snapshot),
+            self.user_actions.last().map(|a| a.command.as_str()),
+        )
     }
 
     /// Check if content matches target (ignoring cursor position)
@@ -697,7 +700,7 @@ impl CommandExecutor for GameSession<Active> {
     }
 
     fn check_completion(&self) -> bool {
-        self.simulator.matches_snapshot(&self.target_snapshot)
+        GameSession::check_completion(self)
     }
 }
 

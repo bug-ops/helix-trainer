@@ -517,3 +517,39 @@ fn test_no_bundled_scenario_starts_complete() {
         "scenarios starting at 100%: {started_complete:?}"
     );
 }
+
+fn undo_redo_scenario() -> Scenario {
+    crate::config::ScenarioLoader::new()
+        .load_from_embedded("en")
+        .unwrap()
+        .into_iter()
+        .find(|s| s.id == "undo_redo_001")
+        .unwrap()
+}
+
+/// Returns the action count at which `commands` complete the scenario, if ever.
+fn completion_step(commands: &[&str]) -> Option<usize> {
+    let mut session = GameSession::new(undo_redo_scenario()).unwrap();
+    for (i, cmd) in commands.iter().enumerate() {
+        match session.record_action((*cmd).to_string()).unwrap() {
+            SessionAfterAction::Completed(_) => return Some(i + 1),
+            SessionAfterAction::StillActive(s) => session = s,
+        }
+    }
+    None
+}
+
+#[test]
+fn test_undo_redo_completes_only_at_last_taught_command() {
+    assert_eq!(completion_step(&["x", "d", "u", "U"]), Some(4));
+}
+
+#[test]
+fn test_undo_redo_not_completed_when_target_reached_by_untaught_command() {
+    assert_eq!(completion_step(&["u", "U", "x", "d"]), None);
+}
+
+#[test]
+fn test_undo_redo_counted_taught_command_completes() {
+    assert_eq!(completion_step(&["x", "d", "2u", "U"]), Some(4));
+}

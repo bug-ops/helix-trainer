@@ -336,9 +336,26 @@ fn test_all_scenario_command_line_entries_parse() {
     );
 }
 
-/// Scenarios exempt from the `actions == optimal_count` check.
-// completion is state-based; undo/redo revisit states; tracked in follow-up
-const ACTION_COUNT_EXEMPT_SCENARIO_IDS: &[&str] = &["undo_redo_001"];
+#[test]
+fn test_after_taught_commands_scenarios_declare_taught_commands() {
+    use helix_trainer::config::CompletionRule;
+
+    let scenarios = ScenarioLoader::new()
+        .load_from_embedded("en")
+        .expect("Failed to load embedded scenarios");
+    for scenario in scenarios {
+        let Some(metadata) = scenario.metadata.as_ref() else {
+            continue;
+        };
+        if metadata.completion == CompletionRule::AfterTaughtCommands {
+            assert!(
+                !metadata.commands_taught.is_empty(),
+                "{}: after_taught_commands needs non-empty commands_taught",
+                scenario.id
+            );
+        }
+    }
+}
 
 #[test]
 fn test_all_scenarios_execute_solution() {
@@ -438,9 +455,7 @@ fn test_all_scenarios_execute_solution() {
                             format!("final progress {} != 100", done.completion_progress()),
                         ));
                     }
-                    if !ACTION_COUNT_EXEMPT_SCENARIO_IDS.contains(&scenario.id.as_str())
-                        && done.action_count() != scenario.scoring.optimal_count.get()
-                    {
+                    if done.action_count() != scenario.scoring.optimal_count.get() {
                         failed_scenarios.push((
                             scenario.id.clone(),
                             format!(

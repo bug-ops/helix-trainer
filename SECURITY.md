@@ -2,10 +2,12 @@
 
 ## Supported Versions
 
+Only the latest minor release line receives security fixes.
+
 | Version | Supported |
 |---------|-----------|
-| 0.4.x   | Yes |
-| < 0.4   | No |
+| 0.6.x   | Yes |
+| < 0.6   | No |
 
 ## Reporting a Vulnerability
 
@@ -30,21 +32,21 @@ We will respond within 48 hours.
 
 ### What We Protect
 
-- **No `unsafe` code** — Entire codebase is safe Rust
-- **Path traversal prevention** — All file operations are validated
-- **Input validation** — All TOML parsing with size limits
+- **No first-party `unsafe` code** — `#![forbid(unsafe_code)]` in the crate; third-party dependencies are outside this guarantee
+- **Path validation for scenario and quest files** — directory loaders canonicalize paths and check them against an allow-list
+- **Bounded file reads** — every file read from disk (profile, config, keymap, scenario and quest files) goes through a size-capped reader that rejects non-regular files such as FIFOs and device nodes
 - **Local-only data** — No network, no telemetry, no cloud sync
-- **Secure defaults** — Restrictive file permissions
+- **Owner-only persisted data** — on Unix the data directory is created `0700` and files `0600`; other platforms use process defaults
 
 ### Implemented Protections
 
 | Protection | Implementation |
 |------------|----------------|
-| Path traversal | Canonical path validation |
-| Content limits | Max file size, scenario count limits |
-| Input sanitization | All user input validated |
-| Error handling | No sensitive data in errors |
-| Dependencies | Regular `cargo audit` checks |
+| Path traversal | Canonical path validation in the scenario and quest directory loaders |
+| Content limits | Size-capped reads, scenario count and field length limits |
+| Input validation | Scenario, quest and keymap fields validated at load time |
+| Error handling | User-facing errors are sanitized and carry no file paths |
+| Dependencies | `cargo deny check` (advisories and licenses) in CI |
 
 ## For Users
 
@@ -57,13 +59,13 @@ We will respond within 48 hours.
 
 ```bash
 chmod 755 helix-trainer
-chmod 700 ~/.config/helix-trainer/   # Linux; on macOS: ~/Library/Application\ Support/helix-trainer/
+chmod 700 ~/.config/helix-trainer/   # Linux and macOS
 ```
 
 ## For Contributors
 
 > [!IMPORTANT]
-> All code must pass `cargo clippy -- -D warnings` and `cargo audit`.
+> All code must pass `cargo clippy --all-targets --all-features -- -D warnings` and `cargo deny check`.
 
 Requirements:
 
@@ -75,15 +77,17 @@ Requirements:
 
 ## Known Limitations
 
-1. **Scenario Files** — TOML files are parsed from restricted directories only
-2. **Terminal I/O** — Raw mode requires terminal access
-3. **User Data** — Stored unencrypted in `helix-trainer/` under the platform config directory (`~/.config/` on Linux, `~/Library/Application Support/` on macOS, `%AppData%` on Windows)
+1. **Bundled scenarios** — Scenarios and quests are compiled into the binary; the directory loaders exist for development and are not reachable from the shipped application
+2. **Keymap file** — The optional Helix `config.toml` keymap is read from the user's own config directory without an allow-list check (size-capped, regular files only)
+3. **Terminal I/O** — Raw mode requires terminal access
+4. **User Data** — Stored unencrypted in `~/.config/helix-trainer/` on Linux and macOS, and in `helix-trainer/` under `%AppData%` on Windows
+5. **Native dependency** — The `syntect` syntax highlighter is built with the `regex-onig` backend, which links the C Oniguruma library into the binary
 
 ## CI Security Checks
 
 Every PR runs:
 
-- `cargo clippy -- -D warnings`
+- `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo deny check` (license and vulnerability audit)
 - All tests must pass
 

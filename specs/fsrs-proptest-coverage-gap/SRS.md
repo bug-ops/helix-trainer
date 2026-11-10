@@ -141,10 +141,7 @@ SHALL assert both converge to bitwise-identical resulting state.
 consistent with `BinaryHeap`'s max-heap contract.
 
 - *Priority*: must
-- *Verdict*: **Not implemented.** `src/learning/scheduler.rs` was not
-  touched by commit `33bdaa1` (confirmed: empty diff against that file).
-  `ReviewItem::Ord` already uses `total_cmp` (pre-existing code) but has
-  zero property-test coverage.
+- *Verdict*: **Implemented (#428)** as proptests in `src/learning/scheduler.rs` (module `props`). One property (`PartialEq` agrees with `Ord`) is `#[ignore]`d because it exposes a real defect, tracked by #434. Not covered at commit `33bdaa1`.
 
 **FR-005** — WHEN a property test runs `Scheduler::get_due_reviews`/
 `get_review_queue` with an arbitrarily generated set of tracked commands
@@ -152,7 +149,7 @@ THE SYSTEM SHALL assert only commands with `due <= now` are returned, and
 the queue never exceeds its requested size limit.
 
 - *Priority*: must
-- *Verdict*: **Not implemented.** Same as FR-004 — `scheduler.rs` untouched.
+- *Verdict*: **Implemented (#428)** in `props`. Two properties (queue sorted by priority descending; queue keeps the highest-priority items) are `#[ignore]`d because `get_review_queue` is unsorted / not top-N, tracked by #433.
 
 **FR-006** — IF resolution path (b) — removal — is selected THEN THE SYSTEM
 SHALL remove `proptest`, clean up the TODO, and update the documentation
@@ -172,10 +169,10 @@ dedicated submodule).
   was added there.
 
 **Net**: 2 of 5 "must" FRs fully/adequately satisfied (FR-001 partially/
-differently, FR-003 fully); FR-002, FR-004, FR-005 not implemented. FR-007
-satisfied. The commit resolved the *state-transition* half of the original
-finding's scope but left the *priority-queue/due-selection* half completely
-uncovered.
+differently, FR-003 fully); FR-002 not implemented. FR-007
+satisfied. Commit `33bdaa1` resolved the *state-transition* half of the original
+finding's scope; FR-004 and FR-005 (the *priority-queue/due-selection* half) were
+added by #428, with three properties ignored pending #433/#434.
 
 ### 3.2 Success Criteria
 
@@ -196,7 +193,7 @@ tests:
 |--------|-------------|----------------|
 | `CardState` | Application-managed lifecycle state of a practiced command | `New`, `Learning`, `Review`, `Relearning` |
 | Tracked command performance record | Per-command FSRS-derived state | `stability`, `difficulty`, `state`, `retrievability`, `reps`, `lapses`, `scheduled_days`, `due` |
-| `ReviewItem` (uncovered) | Priority-queue entry for due reviews (`src/learning/scheduler.rs`) | `id`, `due`, `priority` |
+| `ReviewItem` (covered by #428) | Priority-queue entry for due reviews (`src/learning/scheduler.rs`) | `id`, `due`, `priority` |
 
 ## 4. Verification and Validation
 
@@ -207,8 +204,8 @@ tests:
 | FR-001 | `prop_fsrs_state_stays_in_bounds` | `difficulty ∈ [1,10]`, `stability > 0`, `retrievability ∈ [0,1]` after every attempt | **Pass, scoped narrower than drafted (no explicit NaN/Inf assertion)** |
 | FR-002 | — | Due date `>= review_time` | **Not run — no test exists** |
 | FR-003 | `prop_fsrs_state_transition_is_deterministic` | Two independent trackers converge to identical state given identical input | **Pass** |
-| FR-004 | — | `ReviewItem` total/transitive `Ord`, no panics | **Not run — no test exists** |
-| FR-005 | — | `get_due_reviews`/`get_review_queue` bounds correctness | **Not run — no test exists** |
+| FR-004 | — | `ReviewItem` total/transitive `Ord`, no panics | **Pass (1 property ignored, #434)** |
+| FR-005 | — | `get_due_reviews`/`get_review_queue` bounds correctness | **Pass (2 properties ignored, #433)** |
 | FR-006 | N/A | N/A | **Not applicable** |
 | FR-007 | Code review | Colocated in `#[cfg(test)]` | **Pass** |
 
@@ -228,7 +225,7 @@ data from the sign bug found during this work.
 | BRD Section | SRS Requirement(s) | NFR Requirement(s) |
 |----------------|--------------------|--------------------|
 | [[BRD#What Was Implemented]] | FR-001 (differently-scoped), FR-003 (full), FR-007 | NFR-001, NFR-003 (met) |
-| [[BRD#Residual Gap]] | FR-002, FR-004, FR-005 (not implemented) | NFR-002 (partially met — invariants that exist are traceable; the missing ones are not documented as deferred in-code) |
+| [[BRD#Residual Gap]] | FR-002 (not implemented); FR-004, FR-005 (implemented by #428; 3 properties ignored, #433/#434) | NFR-002 (partially met — invariants that exist are traceable; the missing ones are not documented as deferred in-code) |
 | [[BRD#Bug Found By This Work]] | N/A — discovered via FR-001's property, not a drafted requirement | N/A |
 
 ## See Also

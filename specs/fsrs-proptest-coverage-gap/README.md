@@ -47,7 +47,7 @@ alongside the fix.
 
 **The resolution is partial.** `src/learning/scheduler.rs` — the other half
 of the original finding's scope (`ReviewItem` ordering, due-review queue
-selection) — received zero property-test coverage. See
+selection) — received zero property-test coverage in that commit; #428 later added it (3 properties `#[ignore]`d pending #433/#434). See
 [[BRD#Residual Gap]] and [[plan#Residual Work]].
 
 ## Traceability
@@ -56,7 +56,7 @@ selection) — received zero property-test coverage. See
 |---|---|---|---|
 | Proptest declared, unused, in `Cargo.toml` | FR-003 (determinism) fully met; FR-001 (bounds) met via a differently-scoped property | NFR-001 (case-count bounding) partially met — implicit default, not explicit; NFR-003 (determinism of the tests themselves) fully met | 2 property tests shipped in `performance.rs` |
 | Real bug surfaced by the bounds property | N/A — not a drafted requirement | N/A | Sign-error fix + self-healing deserializer + regression test |
-| `scheduler.rs` half of the original scope | FR-002, FR-004, FR-005 not implemented | N/A | Documented as residual work, not scheduled |
+| `scheduler.rs` half of the original scope | FR-002 not implemented; FR-004/FR-005 implemented by #428 | N/A | 3 properties `#[ignore]`d pending defects #433 and #434 |
 
 ## Package Contents
 
@@ -69,12 +69,12 @@ selection) — received zero property-test coverage. See
 - [[plan]] — as-built architecture, bundled unrelated CI-hardening change,
   and recommended follow-up scope
 - [[tasks]] — retroactive task breakdown (T001-T003 completed, T004
-  recommended but not scheduled)
+  implemented by #428, 3 properties ignored pending #433/#434)
 
 ## See Also
 
 - `specs/MOC-specs.md` — specifications index
 - [[constitution]] — project principles, Section III (Testing)
 - `src/learning/performance.rs` — covered
-- `src/learning/scheduler.rs` — uncovered, see Residual Work
+- `src/learning/scheduler.rs` — covered by #428 (3 properties ignored), see Residual Work
 - the project's continuous-improvement rules — source of the original claim, still not fully accurate

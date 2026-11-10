@@ -200,7 +200,7 @@ currently dead in production.
 
 | Entity | Description | Key Attributes |
 |--------|-------------|----------------|
-| `ChallengeProgress` (existing, `src/minigame/challenge.rs`) | Per-player Daily Challenge attempt/score tracking, persisted inside `UserProfile` | `last_challenge_date: Option<String>`, `attempts_used_today: u8`, `best_score_today: u64`, `best_scenarios_today: u8`, `all_time_best_score: u64`, `all_time_best_scenarios: u8`, `total_challenges_attempted: u32`, `total_challenges_completed: u32` |
+| `ChallengeProgress` (existing, `src/minigame/challenge.rs`) | Per-player Daily Challenge attempt/score tracking, persisted inside `UserProfile` | `last_challenge_date: Option<NaiveDate>` (lenient deserializer; stored as `"YYYY-MM-DD"` or `null`), `attempts_used_today: u8`, `best_score_today: u64`, `best_scenarios_today: u8`, `all_time_best_score: u64`, `all_time_best_scenarios: u8`, `total_challenges_attempted: u32`, `total_challenges_completed: u32` |
 | `UserProfile.challenge_progress` (existing field, `src/gamification/profile.rs:82`) | The canonical, persisted copy of `ChallengeProgress` — source of truth read/written across sessions | `crate::minigame::ChallengeProgress` |
 | `MiniGameData.challenge_progress` (removed) | Former per-screen `Option<ChallengeProgress>` snapshot. Removed as redundant: the render layer reads `state.progress.profile.challenge_progress` directly, so there is no stale copy after `record_result` | n/a |
 
@@ -211,7 +211,7 @@ currently dead in production.
 | Player has 0 attempts remaining and selects Daily Challenge | Launch is blocked (FR-002); mode-selection screen stays open with a clear "no attempts remaining today" message; Arcade/Survival remain launchable |
 | Player launches Daily Challenge, then quits mid-session (Ctrl-Q / back-to-menu) without completing any scenario | Counted as one used attempt (`start_attempt` already ran at launch); `record_result` is still called with whatever score/scenarios-completed the session had accumulated (may be 0/0) so the attempt is not "free" |
 | Day rolls over while a Daily Challenge session is already in progress (session started 23:59, ends 00:01 next day) | The in-progress session's `record_result` still applies to the day it was **started** on (`last_challenge_date` set at `start_attempt` time is not re-evaluated mid-session); the next NEW launch attempt is what triggers the day-rollover reset per FR-007 |
-| Corrupted/malformed `last_challenge_date` string in `profile.json` (e.g. hand-edited or from a future incompatible version) | Per the existing `# TODO: CR-013` doc comment in `challenge.rs`, this is a known follow-up risk (`ProfileStorage::load` currently hard-errors the whole profile load on any parse failure). Out of scope for this fix unless it blocks FR-001..FR-008; tracked as an open question below |
+| Corrupted/malformed `last_challenge_date` string in `profile.json` (e.g. hand-edited or from a future incompatible version) | Resolved by #427: the field is `Option<NaiveDate>` with a lenient deserializer, so a malformed value or wrong type loads as `None` (treated as never played) instead of failing the whole profile load; the storage format is unchanged |
 | Player has never played Daily Challenge (`ChallengeProgress::default()`, `last_challenge_date: None`) | `can_attempt` returns `true` (different-day branch triggers on `None != Some(today)`) — first launch succeeds and starts tracking, no special-case code needed |
 | Scenario collection is empty when Daily Challenge is selected | Existing behavior in `handle_launch_minigame_mode` already returns `HandlerOutcome::Stay` with a warning log before any session is created — attempt-cap check (FR-001) must run before or alongside this existing empty-scenarios guard so an attempt is never consumed for a launch that can't actually start |
 
@@ -250,9 +250,8 @@ Measurable metrics that prove the feature works:
   existing users)
 - Adding a new UI element/popup beyond reusing existing Daily Challenge copy
   areas mentioned in FR-006
-- Resolving the CR-013 TODO (lenient date deserialization) as part of this
-  change — flag it as a separate follow-up unless it directly blocks this
-  fix
+- Lenient date deserialization (formerly the CR-013 TODO) — not part of this
+  change; delivered separately by #427
 
 ### Never
 - Silently drop or reset an existing player's `all_time_best_score` /
@@ -279,7 +278,7 @@ Merged in PR #384 (issue #376, commit `e637c30`); recorded in `CHANGELOG.md`. Al
 - **Where to show attempts remaining?** In the submenu, on the mode name line as `(N/3)`. A first implementation appended it to the description line, which overflowed the submenu's fixed 43-column inner width and never reached the screen; entries are now single-line.
 - **`MiniGameData.challenge_progress` snapshot or direct read?** Direct read from the profile; the field was removed.
 - **Call-site wiring?** In `handle_launch_minigame_mode` and `handle_minigame_game_over`, no new wrapper.
-- **CR-013 (malformed `last_challenge_date` hard-errors profile load)?** Not fixed here. The `TODO: CR-013` marker is still in `src/minigame/challenge.rs` and is tracked by #427 (it formerly cited the closed #391); see the [[MOC-specs]] reconciliation notes.
+- **CR-013 (malformed `last_challenge_date` hard-errors profile load)?** Resolved by #427: `last_challenge_date` is now `Option<NaiveDate>` with a lenient deserializer (malformed value or wrong type becomes `None`); the `TODO: CR-013` marker and `today_string` were removed.
 - **Blocked-attempt copy?** `minigame.challenge_no_attempts_left` in `locales/en.toml`.
 
 ## 11. See Also

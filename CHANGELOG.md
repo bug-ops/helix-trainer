@@ -7,13 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking**: `ChallengeProgress::last_challenge_date` is now `Option<NaiveDate>` instead of `Option<String>`; the stored `YYYY-MM-DD` format is unchanged (#435)
+
+### Fixed
+
+- A malformed `last_challenge_date` in `profile.json` now loads as `None` instead of failing the whole profile load (#435)
+
+### Testing
+
+- Add property-based tests for `ReviewItem` ordering and due-review selection in the FSRS scheduler (#435)
+
 ### Documentation
 
 - Migrate five bug-spec packages into `specs/`, merge the spec index, and drop links to untracked paths (#429)
+- Update the challenge-limit and FSRS proptest specs to reflect the implemented changes (#435)
 
 ### CI
 
 - Skip fmt, clippy, security and the other heavy jobs for docs and specs only changes (#432)
+- Pin all GitHub Actions to full commit SHAs (#435)
+- Add a weekly scheduled cargo-deny advisories check independent of the CI gate (#435)
 
 ## [0.6.2] - 2026-10-21
 

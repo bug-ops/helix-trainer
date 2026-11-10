@@ -19,8 +19,8 @@ related:
 > [!info] References
 > **Spec**: [[spec]]
 > **Plan**: [[plan]]
-> **Total tasks**: 3 completed (commit `33bdaa1`), 1 recommended follow-up
-> (not scheduled)
+> **Total tasks**: 3 completed (commit `33bdaa1`), 1 follow-up
+> (T004, done in #428)
 >
 > This is a retroactive breakdown of work already merged, reconstructed from
 > the diff for traceability — not a forward-looking plan that was followed
@@ -31,7 +31,7 @@ related:
 - [x] T001: Add FSRS state-transition determinism property test
 - [x] T002: Add FSRS bounds property test and fix the sign bug it found
 - [x] T003: Add regression test for `null`-retrievability self-heal
-- [ ] T004 (follow-up, not scheduled): Add `scheduler.rs` property coverage
+- [x] T004 (follow-up, done in #428): Add `scheduler.rs` property coverage
 
 ---
 
@@ -105,22 +105,21 @@ self-heal instead of hard-failing; this task locks that behavior in.
 
 ---
 
-### T004 (Follow-up, Not Scheduled): Add `scheduler.rs` Property Coverage
+### T004 (Done in #428; 3 properties ignored pending #433/#434): Add `scheduler.rs` Property Coverage
 
 **Context**: `src/learning/scheduler.rs` (`ReviewItem` ordering,
-`get_due_reviews`/`get_review_queue`) remains completely uncovered by
-proptest, per [[plan#Residual Work]]. This task is recorded for
-traceability but was **not** part of commit `33bdaa1` and has no assigned
-owner or timeline.
+`get_due_reviews`/`get_review_queue`) was uncovered by
+proptest at commit `33bdaa1`, per [[plan#Residual Work]]. Implemented by #428;
+three properties are `#[ignore]`d pending #433 and #434.
 **Spec reference**: [[spec#FR-004]], [[spec#FR-005]]
 **Acceptance criteria**:
-- [ ] Property test asserting `ReviewItem`'s `Ord`/`PartialOrd` is total,
+- [x] Property test asserting `ReviewItem`'s `Ord`/`PartialOrd` is total,
       transitive, and panic-free across arbitrary `priority` values
       including edge-case floats
-- [ ] Property test asserting `get_due_reviews`/`get_review_queue` only
+- [x] Property test asserting `get_due_reviews`/`get_review_queue` only
       return items with `due <= now` and never exceed the requested size
       limit, across arbitrarily generated tracked-command sets
-- [ ] Both use a fixed clock, consistent with `performance.rs`'s convention
+- [x] Both use a fixed clock, consistent with `performance.rs`'s convention
 **Dependencies**: none (independent of T001-T003; same subsystem)
 **Files**: `src/learning/scheduler.rs`
 **Complexity**: low-medium

@@ -34,8 +34,7 @@ in `Cargo.toml` but had zero real usages anywhere in the codebase. This
 finding (issue #263) was resolved by adding two property tests to
 `src/learning/performance.rs`, which in turn surfaced and fixed a live
 correctness bug. The companion module, `src/learning/scheduler.rs`, was left
-uncovered — the resolution is **partial**, not complete, relative to the
-original finding's full scope.
+uncovered by that commit — the resolution was **partial**; #428 later closed most of the remainder (3 properties `#[ignore]`d pending #433/#434).
 
 ## Problem Statement
 
@@ -95,10 +94,13 @@ argued property testing would catch that example-based tests would not.
 ## Residual Gap
 
 > [!warning] Not Fully Resolved
-> `src/learning/scheduler.rs` (`Scheduler`, `ReviewItem` `Ord`/`PartialOrd`,
-> `get_due_reviews`, `get_review_queue`) received **zero** property-test
-> coverage from this commit — the diff to that file is empty. FR-004 and
-> FR-005 from [[spec]] remain unimplemented. The
+> Update (#428): FR-004 and FR-005 from [[spec]] are now implemented as
+> proptests in `src/learning/scheduler.rs` (module `props`). Three properties
+> are `#[ignore]`d because they expose real defects: #433 (`get_review_queue`
+> not sorted / not top-N, 2 properties) and #434 (`PartialEq` inconsistent
+> with `Ord`, 1 property). The residual gap is now only those ignored
+> properties. Original state at commit `33bdaa1`: `scheduler.rs` had zero
+> property coverage. The
 > the project's continuous-improvement rules claim, taken literally, is
 > therefore still not fully backed by implementation: it is now true for the
 > FSRS *state-transition* half of the scheduler subsystem, but not for the
@@ -127,8 +129,8 @@ retrievability bug being found).
 
 See [[SRS]] for the full FR-001..007 list with per-requirement verdicts.
 Summary: FR-003 (determinism) fully satisfied; FR-001 (bounds) satisfied via
-a differently-scoped property than originally drafted; FR-002, FR-004, FR-005
-not implemented; FR-006 not applicable (path (a) was chosen, not (b));
+a differently-scoped property than originally drafted; FR-002
+not implemented; FR-004, FR-005 implemented by #428 (3 properties ignored pending #433/#434); FR-006 not applicable (path (a) was chosen, not (b));
 FR-007 (colocation convention) satisfied.
 
 ## Non-Functional Requirements
@@ -146,8 +148,9 @@ See [[NFR]] for NFR-001..004, all verified against the shipped tests.
 ### Out of Scope (of what shipped, contrary to the original finding's ask)
 
 > [!danger] Explicit Gaps
-> - `src/learning/scheduler.rs` — `ReviewItem` ordering and due-review
->   queue-bound property tests (FR-004, FR-005) were not implemented
+> - `src/learning/scheduler.rs` — FR-004/FR-005 properties were not part of
+>   commit `33bdaa1`; implemented later by #428 (three remain `#[ignore]`d,
+>   tied to #433/#434)
 > - Due-date-not-earlier-than-review-timestamp property (FR-002) was not
 >   implemented as a standalone property test — the code comment added at
 >   the call site argues it is "correct by construction," which is an
@@ -181,9 +184,9 @@ See [[SRS#3.2 Success Criteria]] for the metric-by-metric actual outcome.
 ## Open Questions
 
 > [!question] Unresolved Items
-> - [ ] Should `src/learning/scheduler.rs` property coverage (FR-004,
->       FR-005) be filed as a follow-up P4 finding, given the residual gap
->       documented above?
+> - [x] `src/learning/scheduler.rs` property coverage (FR-004, FR-005) —
+>       filed and implemented as #428; remaining ignored properties tracked
+>       by #433 and #434
 > - [ ] Should the project's continuous-improvement rules be reworded now to
 >       avoid overclaiming coverage it does not have for `scheduler.rs`?
 

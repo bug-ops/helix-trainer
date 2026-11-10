@@ -29,15 +29,16 @@ follows these packages. The batch also appends "Bug-Fix Batch" sections to
 [[custom-helix-keymap-support/spec]],
 [[arcade-gamification-session-fixes/spec]],
 [[fsrs-proptest-coverage-gap/spec]] and amends [[constitution]] Section V.
+The 2026-11-11 P2-P3 batch (PR for #509) further extends [[helix-core-post-25-07-1-upgrade-readiness/spec]] (section 3.8), [[regex-selection-and-macro-commands/spec]] (section 11: `?`, `K`/`Alt-K`/`&`, F1 hint), [[register-command-mode-support/spec]] (deferral pointers), [[custom-helix-keymap-support/spec]] (data-directory pointer), [[fsrs-proptest-coverage-gap/spec]] (section 12: #511, #464, #469, #470), [[data-and-runtime-hardening/spec]] (#467, #484, #515, #518), [[optimal-count-action-counter-unit/spec]] (#512) and [[arcade-gamification-session-fixes/spec]] (section 9: #468, #469, #461).
 
 | Feature | Phase | Status |
 |---------|-------|--------|
-| [[helix-core-post-25-07-1-upgrade-readiness/spec\|Helix Core Upgrade Readiness and Simulator Fidelity at the Pinned Core]] | specify (lightweight) | proposed — upgrade checklist (sections 3.1-3.7) not built; section 3.8 (simulator fidelity, #490-#499, #501) specified for the bug batch |
+| [[helix-core-post-25-07-1-upgrade-readiness/spec\|Helix Core Upgrade Readiness and Simulator Fidelity at the Pinned Core]] | specify (lightweight) | proposed — upgrade checklist (sections 3.1-3.7) not built; section 3.8 (simulator fidelity, #490-#499, #501; extended 2026-11-11 with #500, #510, #514, #517, #519, #520, #524) specified for the bug batches |
 | [[cli-version-and-help-flags/spec\|`--version` and `--help` Command-Line Flags]] | specify (lightweight bug-fix spec) | proposed — #452 |
 | [[training-progress-indicator/spec\|Training Progress Indicator Reflects Cursor and Selection]] | specify (lightweight bug-fix spec) | proposed — #451 |
-| [[optimal-count-action-counter-unit/spec\|`optimal_count` and Action Counter Use the Same Unit]] | specify (lightweight bug-fix spec) | proposed — #488 |
+| [[optimal-count-action-counter-unit/spec\|`optimal_count` and Action Counter Use the Same Unit]] | specify (lightweight bug-fix spec) | proposed — #488; section 7 adds the opt-in `after_taught_commands` completion rule (#512) |
 | [[sound-setting-persistence/spec\|Sound Toggle Persists Across Restarts]] | specify (lightweight bug-fix spec) | proposed — #459 |
-| [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444 |
+| [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444; extended 2026-11-11 with #467, #484, #515, #518 |
 
 ## Completed Specs
 

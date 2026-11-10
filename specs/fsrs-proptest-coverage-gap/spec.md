@@ -221,7 +221,7 @@ direct result of writing this property-test coverage — see
 | FR-012 | WHEN a scenario completion creates or updates review cards THE SYSTEM SHALL create cards only for reviewable Helix commands, represented by a typed `ReviewableCommand` (`src/learning/reviewable.rs`) produced by a smart constructor; `Escape`, text typed in Insert mode (the actions between an entering command such as `i`/`a`/`o`/`c` and `Escape`), single characters that are not commands, argument characters and empty names SHALL NOT produce a card | #505 | must |
 | FR-013 | WHEN a recorded action carries a count prefix THE SYSTEM SHALL strip it (`3h` becomes `h`, `3fa` becomes `f`) | #505 | must |
 | FR-014 | WHEN a recorded action is a find, till or replace command with its argument character (`f=`, `T,`, `r_`) THE SYSTEM SHALL keep only the command (`f`, `T`, `r`) | #505 | must |
-| FR-015 | WHEN a recorded action is a search with a typed pattern (`/ sum`) THE SYSTEM SHALL record the command `/`; selection-regex forms keep the existing normalization (`select_regex`/`split_selection`, FR-009 of [[../regex-selection-and-macro-commands/spec]]) | #505 | must |
+| FR-015 | WHEN a recorded action is a search with a typed pattern (`/ sum`) THE SYSTEM SHALL record the command `/` (and `? sum` the command `?`, see [[../regex-selection-and-macro-commands/spec#11. Bug-Fix Batch: Backward Search, Keep/Remove Selections, Hint Key (#509, #510, #513)\|regex spec section 11]]); selection-regex forms keep the existing normalization (`select_regex`/`split_selection`, FR-009 of [[../regex-selection-and-macro-commands/spec]]) | #505 | must |
 | FR-016 | WHEN a recorded action is a surround command with arguments (`ma(`) THE SYSTEM SHALL keep the form `ma(` (the delimiter is part of the skill) | #505 | should |
 | FR-017 | THE SAME filtering SHALL apply to Training completions and arcade/minigame completions | #505 | must |
 | FR-018 | `normalize_command_id`, used by quests and the minigame scorer, SHALL keep its current contract; review-card filtering is a separate constructor | #505 | must |
@@ -244,7 +244,7 @@ THEN  the cards are exactly [h, f, T, r, /, ma(]  (typed text and Escape produce
 
 | Scenario | Expected Behavior |
 |----------|-------------------|
-| Persisted junk cards from earlier versions (`!`, `Escape`, `3h`, `f=`) | Not removed by this batch; prune-on-load is deferred to a follow-up issue [NEEDS CLARIFICATION: confirm deferral] |
+| Persisted junk cards from earlier versions (`!`, `Escape`, `3h`, `f=`) | Dropped once on profile load by FR-020 (#511); valid history is kept |
 | `NaN` priority | Orders deterministically via `total_cmp`; equality agrees with ordering |
 | Insert-mode typed characters in a solution | Never create cards (everything from the entering command up to `Escape`, exclusive of the entering command itself, is dropped); the entering command (`i`, `a`, `o`, `c`) still does, and `Escape` never does |
 | Single typed character outside Insert mode that is not a command | No card |
@@ -256,7 +256,64 @@ THEN  the cards are exactly [h, f, T, r, /, ma(]  (typed text and Escape produce
 | SC-006 | No `#[ignore]` left on the scheduler property tests; `ReviewableCommand` unit tests cover count stripping (`3h` to `h`), argument stripping (`f=` to `f`), search (`/ sum` to `/`), surround (`ma(` kept), `Escape` and Insert-mode text dropped | 3 previously ignored properties pass; `ReviewableCommand` tests pass |
 | SC-007 | Unit tests for the extraction table above on both the training and minigame paths, plus a test that `profile.commands_executed` still counts all commands and `normalize_command_id` outputs are unchanged | Pass |
 
-## 12. See Also
+## 12. Bug-Fix Batch: Persisted Card Integrity, Panic-Free FSRS Updates, Single Urgency Authority (#511, #464, #469, #470)
+
+> [!info] Added 2026-11-11 (spec-first update for the P2-P3 bug batch)
+> Requirement IDs continue after FR-019. FSRS-7 work (#436) is outside this batch and not specified here.
+
+### 12.1 Requirements
+
+| ID | Requirement | Issue | Priority |
+|----|------------|-------|----------|
+| FR-020 | WHEN a profile is loaded THE SYSTEM SHALL drop every persisted card whose command does not pass the `ReviewableCommand` constructor (FR-012), once and without touching valid cards or their history; the number of dropped cards is logged (`tracing`); this is NOT a profile load failure and does not trigger the quarantine flow of [[../data-and-runtime-hardening/spec]] | #511 | must |
+| FR-021 | THE PERSISTED CARD SHALL be parsed at the deserialization boundary into a validated type: stability and difficulty finite and inside their documented ranges (difficulty 0-10, stability >= 0), `successes <= attempts`; the fields are private to the learning module and read through accessors, so the FSRS update path is the only writer | #464 | must |
+| FR-022 | WHEN a persisted card fails FR-021 validation THE SYSTEM SHALL drop that card, log the dropped count and command ids, and load the rest of the profile (one policy shared with FR-020: invalid cards are dropped and logged, never a profile-level load failure and never a later panic) | #464 | must |
+| FR-023 | THE SYSTEM SHALL NOT persist values derivable from other fields: `avg_time`, `mastery_level` and `retrievability` are computed on read, and the redundant `command` field is not stored (the map key is the command id); older files that still contain these keys SHALL load, ignoring them | #464 | must |
+| FR-024 | WHEN `PerformanceTracker` records an attempt and the FSRS state update fails THE SYSTEM SHALL return `LearningError::FsrsError`, record the attempt without changing the schedule, and log the error; production code SHALL contain no `unwrap`/`expect` on the FSRS update or on tracker map lookups (use `entry()` or `let Some(..) else`) | #469 | must |
+| FR-025 | `ReviewSession::record_and_next` SHALL return `Result<_, LearningError>` and SHALL NOT panic when called on a completed session | #469 | must |
+| FR-026 | THE SYSTEM SHALL compute "how much does this command need practice" in one place, `learning::urgency::command_urgency(perf, now) -> Urgency`, with the clock injected (the tracker's clock; no direct `Utc::now()` in arcade selection). `Urgency` is `Novel` when the tracker has NO entry for the command (the key is the entry, not the presence of FSRS memory), otherwise carries `overdue_ratio` (days overdue divided by `scheduled_days.max(1)`), `difficulty` and `weakness` (`1 - success_rate`). A card with attempts but no FSRS memory stays on the practiced branch with today's behavior | #470 | must |
+| FR-027 | EACH CONSUMER SHALL apply a documented projection of `Urgency`. Review priority keeps `overdue_ratio x difficulty / 5` exactly, so review order and the scheduler property tests are unchanged. The arcade weight is `W1 x min(overdue_ratio, 1) + W2 x weakness`, plus the novelty weight for `Novel`; the term stays bounded so no single card dominates the selection and weak but not-due commands keep their weakness weight | #470 | must |
+| FR-028 | THE ARCADE SCORER module SHALL be renamed to `minigame::prioritizer` (`ScenarioPrioritizer`) to separate FSRS prioritization from the points scorers (`minigame::scoring`, `game::scorer`), and be constructed from the tracker's clock | #470 | must |
+
+> [!warning] Documented behavior change (#470)
+> The arcade overdue term changes from absolute days divided by `FSRS_MAX_OVERDUE_DAYS` to the scheduled-relative ratio capped at 1. Consequence: Learning-state cards (`scheduled_days` 1) reach the cap after one overdue day (formerly one seventh of the cap), so freshly learned commands rank higher in arcade selection than before. Accepted because the term is bounded; recorded in the CHANGELOG.
+
+> [!warning] Breaking persisted format (#464)
+> Profiles written by this version omit `retrievability` and other derived keys, so they cannot be read by versions up to 0.6.2. Pre-1.0 policy: accepted, recorded in the CHANGELOG as a breaking change.
+
+### 12.2 Acceptance Criteria
+
+```
+GIVEN a profile containing cards Escape, 3h, f= and valid card h
+WHEN  the profile loads
+THEN  only h remains and the dropped count is logged; no quarantine, no notification of failure
+```
+```
+GIVEN a card with difficulty NaN (or stability -1, or successes > attempts)
+WHEN  the profile loads
+THEN  that card is dropped and logged, other cards load, and no later review of any command panics
+```
+```
+GIVEN a tracker whose FSRS update returns an error
+WHEN  an attempt is recorded
+THEN  the attempt is counted, the schedule is unchanged, LearningError::FsrsError is returned and logged
+```
+```
+GIVEN the same tracker and FakeClock
+WHEN  Scheduler::get_review_queue and the arcade prioritizer rank commands
+THEN  both derive from command_urgency; review order equals the pre-change order; arcade selection is deterministic under FakeClock
+```
+
+### 12.3 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Tracker has no entry for the command | `Urgency::Novel` (arcade novelty weight; excluded from the review queue as today) |
+| Card has attempts but no FSRS memory | Practiced branch, not Novel |
+| Old file with `avg_time`/`mastery_level`/`retrievability`/`command` keys | Loads; keys ignored |
+| Hand-edited card with `attempts = u32::MAX` | Saturating arithmetic of the data-hardening spec applies (see [[../data-and-runtime-hardening/spec]] FR-030) |
+
+## 13. See Also
 
 - [[constitution]] — project principles
 - [[BRD]] — business rationale, decision, and residual gap

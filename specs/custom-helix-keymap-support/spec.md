@@ -240,7 +240,7 @@ THEN  it falls back to ~/.config/helix/config.toml
 ### 10.4 Out of Scope (explicitly deferred)
 
 > [!danger] Not part of this batch
-> Relocating the trainer's own data directory (`profile.json`, `config.json`) to `~/.config/helix-trainer/`, and any migration of existing macOS users' files. Moving the directory without a migration would silently orphan existing profiles. Tracked as a separate follow-up; until then the docs describe the real location (FR-014).
+> Relocating the trainer's own data directory (`profile.json`, `config.json`) to `~/.config/helix-trainer/`, and any migration of existing macOS users' files, was deferred from this batch. It is now specified with a per-file copy migration in [[data-and-runtime-hardening/spec#2.9 Data directory on macOS and one-time migration (#515)|data-and-runtime-hardening section 2.9]] (#515); that section also shares the XDG resolver of FR-011/FR-012. FR-014's macOS location text is updated when #515 lands.
 
 ### 10.5 Success Criteria
 

@@ -181,7 +181,7 @@ Known keymap changes on master relevant here:
 ### 3.8 Simulator Fidelity at the Pinned Core (25.07.1)
 
 > [!info] Added 2026-11-10 (spec-first update for the P1-P3 bug batch)
-> Differential runs of the trainer against `hx` 25.07.1 (the exact version vendored as `helix-core`) found commands whose simulated result differs from the pinned core. These are defects at the CURRENT pin, independent of any future bump, and are in scope of the fixes below (they do not change `Cargo.toml`). The reference for every requirement is the behavior of `hx` 25.07.1 on the same text and keys; tests MUST assert the resulting selection as well as buffer text. Issue #500 (language-aware indent unit for `>`/`<`) is excluded from this batch.
+> Differential runs of the trainer against `hx` 25.07.1 (the exact version vendored as `helix-core`) found commands whose simulated result differs from the pinned core. These are defects at the CURRENT pin, independent of any future bump, and are in scope of the fixes below (they do not change `Cargo.toml`). The reference for every requirement is the behavior of `hx` 25.07.1 on the same text and keys; tests MUST assert the resulting selection as well as buffer text. Issue #500 (language-aware indent unit for `>`/`<`) and the follow-ups #510, #514, #517, #519, #520 and #524 (found while fixing the first set) were added to the batch on 2026-11-11 (FR-028..FR-035 and the FR-020 amendment). Tree-sitter extra indent stays deferred (#516, not part of this batch).
 
 | ID | Requirement | Issue | Priority |
 |----|------------|-------|----------|
@@ -189,7 +189,7 @@ Known keymap changes on master relevant here:
 | FR-017 | WHEN a vertical motion (`j`, `k`) follows a line selection THE SIMULATOR SHALL compute the target from the range head as hx does (`x j d` removes the newline at the end of line 2) | #496 | must |
 | FR-018 | WHEN `f`, `t`, `F` or `T` finds its target THE SIMULATOR SHALL extend/select from the previous position to the found position as hx does (`f a d` removes `fn a`; `t ( d` removes `fn add`), not collapse to a one-character cursor | #494 | must |
 | FR-019 | WHEN `r<char>` runs THE SIMULATOR SHALL replace every character of every selection range with `<char>` | #497 | must |
-| FR-020 | WHEN `~`, `` ` `` or `Alt-`` ` `` runs THE SIMULATOR SHALL apply the case change to every character of every range and keep the selection | #498 | must |
+| FR-020 | WHEN `~`, `` ` `` or `Alt-`` ` `` runs THE SIMULATOR SHALL apply the case change to every character of every range and keep the selection. `~` SHALL toggle case (`switch_case`), `` ` `` SHALL lowercase (`switch_to_lowercase`) and `Alt-`` ` `` SHALL uppercase (`switch_to_uppercase`); each key is bound to a dedicated handler matching its registry name, and the lowercase and uppercase keys SHALL NOT toggle | #498, #517 | must |
 | FR-021 | WHEN `J` runs THE SIMULATOR SHALL join per hx `join_selections`: for each range replace each line break with a single space and strip the leading whitespace of the joined line; a count SHALL NOT repeat the join (`2J` equals `J`); `Alt-J` follows the same rule with its hx semantics | #499 | must |
 | FR-022 | WHEN `u`/`U` undo or redo a change THE SIMULATOR SHALL restore the selection that existed with that history state (history entries store the text and the selection) so `x d u d` removes line 1 again | #501 | must |
 | FR-023 | WHEN `gl` runs THE SIMULATOR SHALL move to the last character of the line (not the line ending, and not past the end on the last line) | #492 | must |
@@ -197,6 +197,15 @@ Known keymap changes on master relevant here:
 | FR-025 | THE SIMULATOR SHALL expose ONE counted-execution mechanism (a counted execute taking the base command and a non-zero count; it is crate-internal and not part of the public API) driven by per-command metadata `CountBehavior::{Repeat, Ignore, Native}` in the command registry: `Repeat` applies the command n times (the default, e.g. `h`, `j`, `x`), `Ignore` applies it once (`d`, `Alt-d`, `c`, `Alt-c`, `i`, `a`, `I`, `A`, `Alt-,` (`remove_primary_selection`), `J`, `Alt-J`, `~`, `` ` ``, ``Alt-` ``, `Alt-;` (`flip_selections`), `v`, `Ctrl-c`, `.`, `q`, and the register-scoped forms `"<r>d` and `"<r>c`, decided by the rule in `CommandRegistry::count_behavior`; hx 25.07.1 reads or ignores the count there per the `helix-term` sources, so `3d` on `abcdef` gives `bcdef`), `Native` passes the count into the command (`G`, `gg`, `f`, `t`, `F`, `T`); native counted strings are parsed by one registry parser into a closed `NativeCounted` type (`GotoLine` or `Find`). Commands where hx reads the count and repetition is equivalent (`h`/`j`/`k`/`l`, `w`/`b`/`e`, `x`/`X`, `u`/`U`, `p`/`P`/`R`, `>`/`<`, `o`/`O`, `n`/`N` and similar) stay `Repeat`; A `Repeat` loop SHALL stop as soon as a command has switched the simulator into Insert mode, so `3o` never types the base command as text. The authoritative per-command list is the registry; this table is checked by a registry test. The game and minigame layers SHALL call this mechanism and SHALL NOT repeat the base command themselves | #493, #499 | must |
 | FR-027 | WHEN `ms`, `md` or `mr` completes THE SIMULATOR SHALL record it as ONE undo step (one transaction, as hx), so `m s (` followed by `u` restores the text before the surround in one press | #502 | must |
 | FR-026 | WHEN `o`, `O` or Enter in Insert mode creates a new line THE SIMULATOR SHALL copy the leading whitespace of the current line onto it (`j o xyz Enter abc Escape` on scenario 14 keeps the 4-space indent) | #490 | must |
+
+| FR-028 | THE SIMULATOR SHALL resolve one indent unit per document from the effective language (the scenario's `language`, falling back to the default language `rs` when absent) through a typed indent-unit value (spaces of a given width, or a tab) backed by a minimal static table whose entries are copied from the `hx` 25.07.1 language definitions and verified against a local `hx`; the table contains only the languages that bundled scenarios use | #500 | must |
+| FR-029 | A unit test over the embedded scenarios SHALL fail when any effective language used by a bundled scenario has no indent-unit table entry (no silent fall-through to an editor-wide default such as tabs) | #500 | must |
+| FR-030 | WHEN `>` runs THE SIMULATOR SHALL add one indent unit to every non-empty line touched by every selection range (not only the head line); WHEN `<` runs it SHALL remove at most one indent unit of leading whitespace from every touched line; counted forms follow FR-025 (`2>` indents twice). Scenario hints that teach the fixed 2-space behavior are corrected in the same change | #500 | must |
+| FR-031 | WHEN `Tab` is pressed in Insert mode THE SIMULATOR SHALL insert one indent unit (FR-028) at each cursor as `hx` 25.07.1 does, modeled as a typed Insert command (see [[../register-command-mode-support/spec#12.3 Insert-mode editing keys (#489)\|register spec 12.3]]) and emitted by the input layer under the constant for the Tab key; it SHALL NOT insert the literal control character | #514 | must |
+| FR-032 | THE SIMULATOR SHALL implement `&` (`align_selections`), `K` (`keep_selections`) and `Alt-K` (`remove_selections`) with `hx` 25.07.1 semantics instead of silent no-op handlers; `K` and `Alt-K` collect their regex through the regex prompt of [[../regex-selection-and-macro-commands/spec#11. Bug-Fix Batch: Backward Search, Keep/Remove Selections, Hint Key (#509, #510, #513)\|regex spec section 11]] | #510 | must |
+| FR-033 | WHEN `.` replays a recorded Insert sequence THE SIMULATOR SHALL replay cursor movements and edits in their original order (one ordered list in the recorded sequence, not edits followed by all movements) | #519 | must |
+| FR-034 | WHEN `R` runs with N selection ranges and M stored register values THE SIMULATOR SHALL replace range i with value i, repeating the last value when M < N and ignoring surplus values when M > N (the same rule as `p`/`P`, FR-214 of the register spec); with a single value every range receives it | #520 | must |
+| FR-035 | WHILE in Select mode (`v`) THE SIMULATOR SHALL extend the selection with motions as `hx` 25.07.1 does (`v l l` covers the two characters moved over), and `d`, `c`, `y`, `r` and `Esc` in Select mode SHALL behave as in `hx` (`Esc` returns to Normal, `c` enters Insert); the verification set is recorded from a differential run against `hx` before the fix | #524 | must |
 
 ### 3.8.1 Acceptance Criteria
 
@@ -216,6 +225,16 @@ WHEN  the user presses g, l, d        THEN the trailing `{` of line 1 is removed
 WHEN  the user presses w, y, P, d     THEN the buffer equals the original text
 WHEN  the user presses j, o, xyz, Enter, abc, Escape
                                       THEN the inserted lines are indented by 4 spaces
+WHEN  the user presses x, x, >        THEN lines 1 and 2 each gain 4 spaces (Rust indent unit), line 3 is untouched
+WHEN  the user presses x, >, then x, <   THEN line 1 is back to its original indentation
+WHEN  the user presses 2, >           THEN the cursor line gains 8 spaces
+WHEN  the user presses ` on `aBc`     THEN the text is `abc`; Alt-` gives `ABC`; ~ gives `AbC`
+WHEN  the user presses i, Tab         THEN one indent unit of the document language is inserted
+WHEN  the user records `i a <Left> b <Esc>` and presses . elsewhere
+                                      THEN the replay reproduces the original order (a, Left, b)
+WHEN  three ranges are yanked and R runs
+                                      THEN range i receives value i
+WHEN  the user presses v, l, l        THEN the selection covers the two characters moved over
 ```
 
 ### 3.8.2 Edge Cases
@@ -227,6 +246,10 @@ WHEN  the user presses j, o, xyz, Enter, abc, Escape
 | `r` with a newline target or on a range containing line endings | Follows hx; verify against `helix-term` 25.07.1 [NEEDS CLARIFICATION: newline handling] |
 | `u` with no history | No-op, selection unchanged |
 | `o`/`O`/Enter after a line ending in `{` | Copies indentation only; tree-sitter extra indent is not modeled (deferred) |
+| `>` on an empty line | The line is left unchanged (hx skips empty lines) |
+| `<` on a line with less leading whitespace than one unit | Removes only what exists, no error |
+| Scenario language with no indent-unit table entry | Rejected by the FR-029 unit test, never defaulted silently |
+| `&` or `K`/`Alt-K` where `hx` reports an error (no match, invalid regex) | Surface a `UserError` through the existing path; selection unchanged |
 | Existing scenarios whose target was authored against the old (wrong) behavior | Target and `optimal_count` are corrected to hx behavior in the same change; `cargo nextest run scenario` must pass |
 | Command strings with counts (`3fa`, `2G`) | Must be accepted by the simulator before the input layer emits them (see [[regex-selection-and-macro-commands/spec#10. Bug-Fix Batch: Input Chords, Counted Commands, Surround and Primary Selection (#487, #493, #502, #503, #455)\|regex-selection-and-macro-commands section 10]]) |
 
@@ -240,9 +263,7 @@ WHEN  the user presses j, o, xyz, Enter, abc, Escape
 
 ### 3.8.4 Deferred (not part of this batch)
 
-- #500: language-aware indent unit for `>`, `<`, Tab, `o`
-- `&`, `K`, `Alt-K` stubs
-- Tree-sitter extra indent on `o`/`O`/Enter
+- Tree-sitter extra indent on `o`/`O`/Enter (#516, remains open and outside this batch; `o`/`O`/Enter keep copying the current line's leading whitespace only, FR-026)
 
 ### 3.8.5 Success Criteria
 
@@ -251,6 +272,7 @@ WHEN  the user presses j, o, xyz, Enter, abc, Escape
 | SC-101 | Each criterion in 3.8.1 exists as a simulator test asserting buffer and selection | Pass |
 | SC-102 | A test over the registry confirms every command has a `CountBehavior` and the game layer contains no count-by-repeat loop | Pass |
 | SC-103 | `cargo nextest run scenario` after target corrections | Pass |
+| SC-104 | Differential tests for FR-028..FR-035 (indent, Tab, `&`/`K`/`Alt-K`, replay order, `R`, Select mode) assert buffer and selection against recorded `hx` 25.07.1 results; the FR-029 language-coverage test passes | Pass |
 
 ## 4. Non-Functional Requirements
 

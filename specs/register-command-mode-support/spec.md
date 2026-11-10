@@ -276,8 +276,8 @@ blackhole register as a new addressable register alongside named ones.
 > Reference behavior for every criterion is `hx` 25.07.1. Tests MUST assert the resulting selection and cursor as well as buffer text. FR numbers in this section (FR-201 and up) are scoped here; FR-001..FR-010 above are unchanged.
 
 > [!danger] Explicitly deferred
-> - Backward search `?` (#504, second half): `?` is the hint key on the Task and MiniGame screens, so it cannot also search without a product decision. Not part of this batch.
-> - Insert-mode `Tab` (indent) from #489: needs a per-language indent unit, which the simulator does not have. Not part of this batch.
+> - Backward search `?` (#504, second half): not part of this batch's first set; specified later as [[../regex-selection-and-macro-commands/spec#11. Bug-Fix Batch: Backward Search, Keep/Remove Selections, Hint Key (#509, #510, #513)|regex spec section 11]] (#513), where `F1` becomes the only hint key.
+> - Insert-mode `Tab` (indent) from #489: specified later as [[../helix-core-post-25-07-1-upgrade-readiness/spec#3.8 Simulator Fidelity at the Pinned Core (25.07.1)|helix-core spec FR-031]] (#514), which adds the per-language indent unit.
 
 ### 12.1 Search prompt (`/`) (#504, `/` only)
 
@@ -300,7 +300,7 @@ blackhole register as a new addressable register alongside named ones.
 | FR-212 | WHEN a register value does not end with a line ending (including a multi-line value without a trailing line ending) THE SYSTEM SHALL paste inline exactly as before this batch | must |
 | FR-213 | WHEN a yank runs over several selection ranges THE SYSTEM SHALL store one value per range in the target register (the register value type changes from a single `String` to an ordered list of strings; internal change, no persisted format) | must |
 | FR-214 | WHEN `p`/`P` run with N ranges and M stored values THE SYSTEM SHALL paste value i at range i, repeating the last value when M < N and ignoring surplus values when M > N | must |
-| FR-214a | `R` (replace with yanked) with several stored values pasting value i into range i is NOT part of this batch (explicitly deferred; needs `RegisterFile::get_values` consumption in `R`); `R` keeps using the first value (FR-215) | deferred |
+| FR-214a | `R` (replace with yanked) with several stored values pastes value i into range i (consumes `RegisterFile::get_values`); specified by [[../helix-core-post-25-07-1-upgrade-readiness/spec#3.8 Simulator Fidelity at the Pinned Core (25.07.1)\|helix-core spec FR-034]] (#520); until that change lands `R` keeps using the first value (FR-215) | #520 | must |
 | FR-215 | WHEN a register holding several values is read by an operation expecting one string THE SYSTEM SHALL use the first value | should |
 | FR-216 | WHEN text is pasted THE SYSTEM SHALL select the pasted text in every range (see [[../helix-core-post-25-07-1-upgrade-readiness/spec#3.8 Simulator Fidelity at the Pinned Core (25.07.1)\|section 3.8 FR-024]]) | must |
 

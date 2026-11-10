@@ -98,7 +98,7 @@ fn test_quest_progress_scenario_completion() {
     }
 
     // Start and "complete" a scenario
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Simulate scenario completion
     update(

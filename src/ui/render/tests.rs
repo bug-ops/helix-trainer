@@ -48,7 +48,7 @@ fn test_render_task_screen_with_session() {
     let mut state = create_test_app_state(vec![scenario]);
 
     // Create a session
-    crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
     terminal
         .draw(|f| {
@@ -514,7 +514,7 @@ mod screen_render_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Start a scenario to get a Task screen with active session
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         terminal
             .draw(|f| {
@@ -789,7 +789,7 @@ mod popup_tests {
         let mut state = create_test_app_state(vec![scenario.clone()]);
 
         // Start scenario and show hint
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
         crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
 
         terminal
@@ -805,7 +805,7 @@ mod popup_tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         // Key history should be empty initially
         terminal
@@ -821,7 +821,7 @@ mod popup_tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         // Add some key history (simulate key presses)
         if let TypedScreen::Task(ref mut task_data) = state.screen {
@@ -2329,7 +2329,7 @@ mod popup_additional_tests {
             let mut terminal = create_terminal();
             let scenario = create_test_scenario();
             let mut state = create_test_app_state(vec![scenario]);
-            crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+            crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
             if wide_history {
                 if let TypedScreen::Task(ref mut task_data) = state.screen {
@@ -2400,7 +2400,7 @@ mod popup_additional_tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         // Add maximum keys
         if let TypedScreen::Task(ref mut task_data) = state.screen {
@@ -2422,7 +2422,7 @@ mod popup_additional_tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         // Add special multi-character keys
         if let TypedScreen::Task(ref mut task_data) = state.screen {
@@ -2453,7 +2453,7 @@ mod popup_additional_tests {
             .build();
 
         let mut state = create_test_app_state(vec![scenario]);
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
         crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
 
         terminal

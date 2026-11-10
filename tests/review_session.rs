@@ -233,22 +233,6 @@ fn test_complete_review_command_failure() {
 }
 
 #[test]
-fn test_next_review_command_advances() {
-    let mut state = create_test_app_state_with_reviews(3);
-
-    update(&mut state, Message::StartReviewSession).unwrap();
-
-    // Manually trigger NextReviewCommand (normally called by CompleteReviewCommand)
-    let session = state.game.review_session.as_ref().unwrap();
-    assert_eq!(session.current_index, 0);
-
-    update(&mut state, Message::NextReviewCommand).unwrap();
-
-    let session = state.game.review_session.as_ref().unwrap();
-    assert_eq!(session.current_index, 1);
-}
-
-#[test]
 fn test_next_review_command_ends_session() {
     let mut state = create_test_app_state_with_reviews(1);
 

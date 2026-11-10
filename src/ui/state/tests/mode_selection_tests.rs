@@ -92,7 +92,7 @@ fn test_select_training_mode() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Should navigate to Menu screen
     assert_matches!(state.screen, TypedScreen::Menu(_));
@@ -115,7 +115,7 @@ fn test_navigate_back_from_menu_to_mode_selection() {
     let mut state = create_test_app_state(vec![scenario]);
 
     // Go to Training Mode
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
     assert_matches!(state.screen, TypedScreen::Menu(_));
 
     // Go back

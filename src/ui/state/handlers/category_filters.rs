@@ -150,7 +150,7 @@ mod tests {
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
-    use crate::ui::state::handlers::minigame::handle_start_minigame;
+    use crate::ui::state::handlers::mode_selection::handle_select_arcade_mode;
     use crate::ui::state::{
         AppState, ConfigState, GameState, MenuData, ModeSelectionData, ProgressState, UIState,
     };
@@ -209,7 +209,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_start_minigame(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
         crate::ui::state::apply_outcome(state, outcome);
     }
 
@@ -612,17 +612,17 @@ mod tests {
 
         // Set up a difficulty filter first
         {
-            let mut ctx = HandlerContext::new(
+            let ctx = HandlerContext::new(
                 &mut state.ui,
                 &mut state.game,
                 &mut state.progress,
                 &state.config,
             );
-            crate::ui::state::handlers::handle_toggle_difficulty_filter(
-                &mut ctx,
-                Difficulty::Beginner,
-            )
-            .unwrap();
+            let mut filter = ctx.game.scenario_collection.active_filter().clone();
+            filter.difficulties = Some(std::iter::once(Difficulty::Beginner).collect());
+            ctx.game
+                .scenario_collection
+                .apply_filter(&filter, Some(&ctx.progress.profile));
         }
 
         // Enable a category filter

@@ -94,7 +94,7 @@ pub(in crate::ui::state) fn handle_select_training_mode(
     ))))
 }
 
-/// Handle selecting Arcade Mode (legacy - for backward compatibility)
+/// Handle selecting Arcade Mode
 ///
 /// Transitions to the mini-game screen with FSRS-weighted scenario selection.
 pub(in crate::ui::state) fn handle_select_arcade_mode(
@@ -306,9 +306,8 @@ mod tests {
 
     #[test]
     fn test_select_arcade_mode_hides_key_history() {
-        // Regression test for S1: this is a live dispatch path (unlike
-        // handle_start_minigame, which nothing emits), so it must reset the
-        // flag itself rather than relying on a caller to do it.
+        // Regression test for S1: the handler must reset the flag itself rather than
+        // relying on a caller to do it.
         let (mut ui, mut game, mut progress, config) = create_test_context();
         ui.show_key_history = true;
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);

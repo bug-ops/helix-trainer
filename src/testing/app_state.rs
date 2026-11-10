@@ -5,8 +5,9 @@
 use crate::config::Scenario;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
+use crate::security::UserError;
 use crate::time::Clock;
-use crate::ui::state::{AppState, ConfigState};
+use crate::ui::state::{AppState, ConfigState, MenuData, Message, TypedScreen, update};
 use std::sync::Arc;
 
 /// Create a test AppState with no scenarios
@@ -110,6 +111,23 @@ impl TestAppStateBuilder {
         state.progress.mark_profile_loaded();
         state
     }
+}
+
+/// Start the scenario at `index` the way the UI does: by selecting it in the scenario list.
+///
+/// Puts the state on the Menu screen with `index` selected and dispatches
+/// [`Message::MenuSelect`]. An out-of-range `index` selects one of the fixed trailing
+/// menu entries (or nothing), exactly as it would for a user.
+///
+/// # Errors
+///
+/// Propagates the [`UserError`] returned by [`update`].
+pub fn start_scenario_from_menu(state: &mut AppState, index: usize) -> Result<(), UserError> {
+    state.screen = TypedScreen::Menu(MenuData {
+        selected_item: index,
+        ..MenuData::default()
+    });
+    update(state, Message::MenuSelect)
 }
 
 #[cfg(test)]

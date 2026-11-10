@@ -13,8 +13,8 @@ use crate::security::UserError;
 use crate::sound::SoundEffect;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
-    AppState, GameState, HandlerContext, HandlerOutcome, InputStateAccess, MiniGameData,
-    ModeSelectionData, TypedScreen,
+    AppState, GameState, HandlerContext, HandlerOutcome, InputStateAccess, ModeSelectionData,
+    TypedScreen,
 };
 
 /// Create and start a new mini-game session from available scenarios.
@@ -54,18 +54,6 @@ pub(in crate::ui::state) fn create_minigame_session(
     session.start(); // Begin countdown
     game.minigame_session = Some(session);
     true
-}
-
-/// Handle starting a mini-game session
-pub(in crate::ui::state) fn handle_start_minigame(
-    ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
-    // Pass performance tracker for FSRS-weighted scenario selection
-    create_minigame_session(ctx.game, Some(&ctx.progress.performance_tracker));
-    ctx.ui.show_key_history = false;
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
-        MiniGameData::default(),
-    ))))
 }
 
 /// Handle pausing mini-game
@@ -388,16 +376,6 @@ pub(in crate::ui::state) fn handle_minigame_session_timeout(
     Ok(())
 }
 
-/// Handle scenario completion (user triggered)
-pub(in crate::ui::state) fn handle_minigame_scenario_complete(
-    ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
-    if let Some(ref mut session) = ctx.game.minigame_session {
-        session.advance_to_next();
-    }
-    Ok(HandlerOutcome::Stay)
-}
-
 /// Handle advancing to next scenario (after transition delay)
 pub(in crate::ui::state) fn handle_minigame_next_scenario(
     state: &mut AppState,
@@ -538,7 +516,8 @@ mod tests {
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
-    use crate::ui::state::{ConfigState, GameState, ProgressState, UIState};
+    use crate::ui::state::handlers::mode_selection::handle_select_arcade_mode;
+    use crate::ui::state::{ConfigState, GameState, MiniGameData, ProgressState, UIState};
     use std::assert_matches;
 
     fn create_test_scenario(id: &str) -> Scenario {
@@ -613,7 +592,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_start_minigame(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
         crate::ui::state::apply_outcome(state, outcome);
     }
 
@@ -1514,29 +1493,6 @@ mod tests {
 
         assert!(!result);
         assert!(state.game.minigame_session.is_none());
-    }
-
-    #[test]
-    fn test_handle_minigame_scenario_complete() {
-        let mut state = create_test_state();
-        start_minigame(&mut state);
-
-        // Transition to playing
-        if let Some(ref mut session) = state.game.minigame_session {
-            session.tick_countdown();
-            session.tick_countdown();
-            session.tick_countdown();
-        }
-
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-        let outcome = handle_minigame_scenario_complete(&mut ctx).unwrap();
-
-        assert_matches!(outcome, HandlerOutcome::Stay);
     }
 
     #[test]

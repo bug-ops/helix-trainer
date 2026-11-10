@@ -12,7 +12,7 @@ fn test_start_scenario() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
     // After typestate refactoring, session is in TypedScreen::Task, not game.session
     assert_matches!(state.screen, TypedScreen::Task(_));
@@ -27,10 +27,10 @@ fn test_start_invalid_scenario_index() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartScenario(999)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 999).unwrap();
 
-    // Should stay on current screen (not transition to Task)
-    assert_matches!(state.screen, TypedScreen::ModeSelection(_));
+    // Should stay on the menu (not transition to Task)
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn test_complete_scenario_navigates_to_results() {
     let temp_dir = TempDir::new().unwrap();
     state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
     assert_matches!(state.screen, TypedScreen::Task(_));
 
     // Execute the solution command to reach target state
@@ -68,7 +68,7 @@ fn test_abandon_scenario_navigates_to_results() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
     // After TypedScreen refactoring, verify we're on Task screen
     assert_matches!(state.screen, TypedScreen::Task(_));
 
@@ -87,7 +87,7 @@ fn test_show_hint() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(!task_data.show_hint_panel);
     } else {
@@ -108,7 +108,7 @@ fn test_retry_scenario_resets_state() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Execute an action to increase action count
     update(&mut state, exec("l")).unwrap();
@@ -129,20 +129,6 @@ fn test_retry_scenario_resets_state() {
     } else {
         panic!("Should be on Task screen after retry");
     }
-}
-
-#[test]
-fn test_next_scenario_clears_session() {
-    let scenario = create_test_scenario();
-    let mut state = create_test_app_state(vec![scenario]);
-
-    update(&mut state, Message::StartScenario(0)).unwrap();
-    // Verify we're on Task screen with active session
-    assert_matches!(state.screen, TypedScreen::Task(_));
-
-    update(&mut state, Message::NextScenario).unwrap();
-    // Should return to menu
-    assert_matches!(state.screen, TypedScreen::Menu(_));
 }
 
 #[test]
@@ -172,7 +158,7 @@ fn test_previously_completed_quests_tracking() {
     }
 
     // First scenario completion
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Execute command through message to trigger quest progress tracking and complete scenario
     // In Helix, 'xd' = select line + delete selection

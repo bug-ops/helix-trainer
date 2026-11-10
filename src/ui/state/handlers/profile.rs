@@ -73,7 +73,7 @@ mod tests {
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
-    use crate::ui::state::handlers::minigame::handle_start_minigame;
+    use crate::ui::state::handlers::mode_selection::handle_select_arcade_mode;
     use crate::ui::state::{
         AppState, ConfigState, GameState, MenuData, ModeSelectionData, ProgressState, UIState,
     };
@@ -117,7 +117,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_start_minigame(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
         crate::ui::state::apply_outcome(state, outcome);
     }
 

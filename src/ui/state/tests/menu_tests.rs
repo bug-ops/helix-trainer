@@ -10,7 +10,7 @@ use crate::ui::state::{Message, TypedScreen, update};
 fn test_menu_navigation_up() {
     let mut state = create_test_app_state(vec![]);
     // Navigate to Menu screen first (starts on ModeSelection)
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
     // Set initial menu item to 1
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 1;
@@ -35,7 +35,7 @@ fn test_menu_navigation_down() {
     let mut state = create_test_app_state(vec![scenario1, scenario2]);
 
     // Navigate to Menu screen first (starts on ModeSelection)
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     if let TypedScreen::Menu(menu_data) = &state.screen {
         assert_eq!(menu_data.selected_item, 0);
@@ -83,7 +83,7 @@ fn test_menu_select_start_training() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
     // Navigate to menu first (start on ModeSelection)
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     update(&mut state, Message::MenuSelect).unwrap();
 
@@ -102,7 +102,7 @@ fn test_menu_select_quit() {
     let scenario2 = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario1, scenario2]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Select Quit option (index = scenario_count + 3)
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
@@ -127,7 +127,7 @@ fn test_menu_select_quit_awards_live_minigame_session_reached_via_review_detour(
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartMiniGame).unwrap();
+    update(&mut state, Message::SelectArcadeMode).unwrap();
     assert!(state.game.minigame_session.is_some());
     if let Some(ref mut session) = state.game.minigame_session {
         session.stats.score = 7777;
@@ -165,7 +165,7 @@ fn test_menu_select_profile() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 2; // Profile is at index 2 (after 1 scenario + Review)
@@ -180,7 +180,7 @@ fn test_menu_select_statistics() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 3; // Statistics is at index 3 (after 1 scenario + Review + Profile)
@@ -195,7 +195,7 @@ fn test_menu_with_zero_scenarios() {
     // Edge case: no scenarios loaded
     let mut state = create_test_app_state(vec![]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Review should be at index 0 (no scenarios)
     update(&mut state, Message::MenuSelect).unwrap();
@@ -236,7 +236,7 @@ fn test_menu_up_by() {
     ];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Set to item 5
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
@@ -261,7 +261,7 @@ fn test_menu_down_by() {
     let scenarios = vec![create_test_scenario(), create_test_scenario()];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Move down by 2
     update(&mut state, Message::MenuDownBy(2)).unwrap();
@@ -282,7 +282,7 @@ fn test_menu_jump_to_first() {
     let scenarios = vec![create_test_scenario(), create_test_scenario()];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Set to some item
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
@@ -301,7 +301,7 @@ fn test_menu_jump_to_last() {
     let scenarios = vec![create_test_scenario(), create_test_scenario()];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Jump to last (G command)
     update(&mut state, Message::MenuJumpToLast).unwrap();
@@ -320,7 +320,7 @@ fn test_menu_jump_to_specific() {
     ];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Jump to line 3 (1-indexed, so 0-indexed = 2)
     update(&mut state, Message::MenuJumpTo(3)).unwrap();
@@ -353,7 +353,7 @@ fn test_menu_select_review_no_due() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Select Review option (index = scenario_count = 1)
     if let TypedScreen::Menu(menu_data) = &mut state.screen {

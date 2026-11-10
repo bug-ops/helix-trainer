@@ -19,7 +19,7 @@
 //! - UI rendering is pure (no side effects)
 
 use crate::async_state::SaveRequest;
-use crate::config::{Difficulty, Scenario, ScenarioCategory, SortMode};
+use crate::config::Scenario;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
 use crate::security::UserError;
@@ -141,14 +141,8 @@ pub enum Message {
     /// Mode selection: go back (close submenu)
     ModeSelectionBack,
 
-    /// Select Training Mode (manual scenario selection)
-    SelectTrainingMode,
-
     /// Select Arcade Mode (mini-games)
     SelectArcadeMode,
-
-    /// Start mini-game session
-    StartMiniGame,
 
     /// Pause mini-game
     PauseMiniGame,
@@ -175,9 +169,6 @@ pub enum Message {
 
     /// The mode's session-level time limit elapsed (e.g. Arcade's 60 seconds)
     MiniGameSessionTimeout,
-
-    /// Current mini-game scenario completed
-    MiniGameScenarioComplete,
 
     /// Advance to next mini-game scenario (after transition delay)
     MiniGameNextScenario,
@@ -209,9 +200,6 @@ pub enum Message {
     /// Menu action: select current menu item
     MenuSelect,
 
-    /// Start a scenario at the given index
-    StartScenario(usize),
-
     /// Mark the current scenario as complete
     CompleteScenario,
 
@@ -234,9 +222,6 @@ pub enum Message {
 
     /// Retry the current scenario
     RetryScenario,
-
-    /// Move to next scenario
-    NextScenario,
 
     /// Navigate to next lesson from results screen (sequential navigation)
     NextLesson,
@@ -267,21 +252,6 @@ pub enum Message {
         duration: Duration,
     },
 
-    /// Set sort mode for scenario list
-    SetSortMode(SortMode),
-
-    /// Toggle category filter (add/remove from active filters)
-    ToggleCategoryFilter(ScenarioCategory),
-
-    /// Toggle difficulty filter (add/remove from active filters)
-    ToggleDifficultyFilter(Difficulty),
-
-    /// Toggle completed scenarios filter
-    ToggleCompletedFilter,
-
-    /// Reset all filters to default
-    ResetFilters,
-
     /// Navigate to category filters screen
     ShowCategoryFilters,
 
@@ -303,14 +273,8 @@ pub enum Message {
     /// Complete current review command (mark as success or failure)
     CompleteReviewCommand { success: bool },
 
-    /// Move to next review command
-    NextReviewCommand,
-
     /// Abandon the review session
     AbandonReviewSession,
-
-    /// Show a notification (level-up, achievement, quest complete, streak)
-    ShowNotification(crate::ui::notification::Notification),
 
     /// Remove expired notifications from the queue
     CleanupNotifications,
@@ -565,24 +529,6 @@ fn apply_outcome(state: &mut AppState, outcome: HandlerOutcome) {
     }
 }
 
-/// Clamps `MenuData::selected_item` after a filter change may have shrunk the
-/// filtered scenario list.
-///
-/// `ToggleCategoryFilter`/`ToggleDifficultyFilter`/`ToggleCompletedFilter` are dispatched
-/// screen-agnostically via `HandlerContext`, which structurally excludes `state.screen`, so
-/// the filter handlers themselves cannot perform this clamp. This is a no-op unless the menu
-/// screen is currently active. `ui::render::menu::render_main_menu` performs an equivalent
-/// clamp on every render as a backstop for paths (e.g. the `CategoryFilterToggle` filter
-/// popup) that mutate the filter while `MenuData` isn't the active screen.
-fn clamp_menu_selection_to_filtered_count(state: &mut AppState) {
-    if let TypedScreen::Menu(ref mut menu_data) = state.screen {
-        let max_index =
-            handlers::menu::total_menu_items_for_count(state.game.scenario_collection.count())
-                .saturating_sub(1);
-        menu_data.selected_item = menu_data.selected_item.min(max_index);
-    }
-}
-
 /// Pure update function for state transitions
 ///
 /// This function is the heart of the Elm Architecture pattern.
@@ -648,17 +594,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::ModeSelectionBack => {
             extract_screen!(state, ModeSelection, data => handlers::handle_mode_selection_back(data))
         }
-        Message::SelectTrainingMode => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_select_training_mode(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
         Message::SelectArcadeMode => {
             let mut ctx = HandlerContext::new(
                 &mut state.ui,
@@ -667,17 +602,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 &state.config,
             );
             let outcome = handlers::handle_select_arcade_mode(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
-        Message::StartMiniGame => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_start_minigame(&mut ctx)?;
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -721,17 +645,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
         Message::MiniGameTimeout => handlers::handle_minigame_timeout(state),
         Message::MiniGameSessionTimeout => handlers::handle_minigame_session_timeout(state),
-        Message::MiniGameScenarioComplete => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_minigame_scenario_complete(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
         Message::MiniGameNextScenario => {
             let outcome = handlers::handle_minigame_next_scenario(state)?;
             apply_outcome(state, outcome);
@@ -788,17 +701,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         // Scenario lifecycle messages
-        Message::StartScenario(index) => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_start_scenario(&mut ctx, index)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
         Message::CompleteScenario => {
             // This handler needs full AppState access to call update() for quest progress
             let outcome = handlers::handle_complete_scenario(state)?;
@@ -844,17 +746,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             } else {
                 Err(UserError::WrongScreen)
             }
-        }
-        Message::NextScenario => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_next_scenario(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
         }
         Message::NextLesson => {
             if let TypedScreen::Results(ref results_data) = state.screen {
@@ -959,64 +850,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         ),
 
         // Filter messages
-        Message::SetSortMode(mode) => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_set_sort_mode(&mut ctx, mode)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
-        Message::ToggleCategoryFilter(category) => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_toggle_category_filter(&mut ctx, category)?;
-            apply_outcome(state, outcome);
-            clamp_menu_selection_to_filtered_count(state);
-            Ok(())
-        }
-        Message::ToggleDifficultyFilter(difficulty) => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_toggle_difficulty_filter(&mut ctx, difficulty)?;
-            apply_outcome(state, outcome);
-            clamp_menu_selection_to_filtered_count(state);
-            Ok(())
-        }
-        Message::ToggleCompletedFilter => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_toggle_completed_filter(&mut ctx)?;
-            apply_outcome(state, outcome);
-            clamp_menu_selection_to_filtered_count(state);
-            Ok(())
-        }
-        Message::ResetFilters => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_reset_filters(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
 
         // Category filters screen messages
         Message::ShowCategoryFilters => {
@@ -1074,17 +907,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             apply_outcome(state, outcome);
             Ok(())
         }
-        Message::NextReviewCommand => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_next_review_command(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
         Message::AbandonReviewSession => {
             let mut ctx = HandlerContext::new(
                 &mut state.ui,
@@ -1098,11 +920,6 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         }
 
         // Notification messages
-        Message::ShowNotification(notification) => {
-            let outcome = handlers::handle_show_notification(&mut state.ui, notification)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
         Message::CleanupNotifications => {
             let outcome = handlers::handle_cleanup_notifications(&mut state.ui)?;
             apply_outcome(state, outcome);

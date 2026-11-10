@@ -329,20 +329,6 @@ pub fn handle_retry_scenario(
     Ok(TypedScreen::Task(task_data))
 }
 
-/// Handle NextScenario message
-///
-/// Completes the current scenario flow and returns to menu
-/// Restores the previous menu position for consistent navigation experience
-pub fn handle_next_scenario(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-        MenuData {
-            selected_item: ctx.ui.last_menu_selected,
-            scroll_offset: ctx.ui.last_menu_scroll,
-            command_buffer: String::new(),
-        },
-    ))))
-}
-
 /// Handle NextLesson message
 ///
 /// Navigates to the next scenario in the filtered list.
@@ -667,24 +653,6 @@ mod tests {
         let screen = handle_retry_scenario(results_data, &mut ctx).unwrap();
 
         assert_matches!(screen, TypedScreen::Task(_));
-    }
-
-    #[test]
-    fn test_handle_next_scenario() {
-        let mut state = create_test_state();
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-
-        let outcome = handle_next_scenario(&mut ctx).unwrap();
-
-        assert_matches!(
-            outcome,
-            HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Menu(_))
-        );
     }
 
     /// Regression test for #292 finding F2 (impl-critic): `xp_breakdown.quest_bonuses`
@@ -1499,25 +1467,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_handle_next_scenario_returns_to_menu() {
-        let mut state = create_test_state();
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-
-        let outcome = handle_next_scenario(&mut ctx).unwrap();
-
-        if let HandlerOutcome::Transition(screen) = outcome {
-            assert_matches!(*screen, TypedScreen::Menu(_));
-        } else {
-            panic!("Expected Transition outcome");
-        }
-    }
-
     // ============================================================================
     // LESSON NAVIGATION TESTS
     // ============================================================================
@@ -1787,41 +1736,6 @@ mod tests {
             ctx.ui.last_menu_selected, 2,
             "Menu position should be saved when starting scenario"
         );
-    }
-
-    #[test]
-    fn test_menu_position_restored_on_return() {
-        let mut state = create_multi_scenario_state();
-
-        // Set saved menu position
-        state.ui.last_menu_selected = 2;
-        state.ui.last_menu_scroll = 1;
-
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-
-        let outcome = handle_next_scenario(&mut ctx).unwrap();
-
-        if let HandlerOutcome::Transition(screen) = outcome {
-            if let TypedScreen::Menu(menu_data) = *screen {
-                assert_eq!(
-                    menu_data.selected_item, 2,
-                    "Menu should restore selected_item"
-                );
-                assert_eq!(
-                    menu_data.scroll_offset, 1,
-                    "Menu should restore scroll_offset"
-                );
-            } else {
-                panic!("Expected Menu screen");
-            }
-        } else {
-            panic!("Expected Transition outcome");
-        }
     }
 
     #[test]

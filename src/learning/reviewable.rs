@@ -85,6 +85,26 @@ impl ReviewableCommand {
         }
     }
 
+    /// Accept an id already stored on a card, only if it is in canonical form.
+    ///
+    /// `3h`, `f=`, `Escape` and `!` are rejected: they are raw recordings that
+    /// [`ReviewableCommand::parse`] would map to a different id or to nothing, so a card
+    /// keyed by them predates the reviewable-command filter.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::learning::ReviewableCommand;
+    ///
+    /// assert!(ReviewableCommand::from_card_id("h").is_some());
+    /// assert!(ReviewableCommand::from_card_id("3h").is_none());
+    /// assert!(ReviewableCommand::from_card_id("Escape").is_none());
+    /// ```
+    #[must_use]
+    pub fn from_card_id(id: &str) -> Option<Self> {
+        Self::parse(id).filter(|command| command.as_str() == id)
+    }
+
     /// Mint card ids from a whole recorded solution, dropping Insert-mode typing.
     ///
     /// Everything between an insert-entering command (`i`, `a`, `o`, `c`, ...) and the next
@@ -180,6 +200,30 @@ mod tests {
     #[test]
     fn bare_find_and_replace_commands_are_kept() {
         assert_eq!(ids(&["f", "r", ".", "$"]), ["f", "r", ".", "$"]);
+    }
+
+    #[test]
+    fn card_ids_minted_by_parse_are_canonical() {
+        let actions = [
+            "h", "dd", "f", "T", "/", "ma(", "\"y", ":goto", "s", "S", "Ctrl-b", "gg", "0", "$",
+            ".", "?", "ж",
+        ];
+        for id in actions {
+            assert_eq!(
+                ReviewableCommand::from_card_id(id)
+                    .as_ref()
+                    .map(ReviewableCommand::as_str),
+                Some(id),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn card_ids_rejects_raw_recordings() {
+        for id in ["3h", "f=", "Escape", "!", " ", "", "/ sum", "12w"] {
+            assert!(ReviewableCommand::from_card_id(id).is_none(), "{id:?}");
+        }
     }
 
     #[test]

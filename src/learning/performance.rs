@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::reviewable::ReviewableCommand;
 use super::traits::ProgressionTier;
 use crate::time::{Clock, SystemClock};
 
@@ -31,11 +32,41 @@ pub enum CardState {
 
 /// Persisted per-command FSRS data, keyed by command string.
 ///
-/// A serde-transparent wrapper so the profile and the tracker exchange a named type
-/// instead of a bare `HashMap`, and the on-disk JSON shape stays a plain object.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// The profile and the tracker exchange this named type instead of a bare `HashMap`, and
+/// the on-disk JSON shape stays a plain object. Deserialization drops, rather than fails
+/// on, cards whose id is not a canonical [`ReviewableCommand`] (cards saved before typed
+/// text and arguments were excluded) and logs the dropped count.
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(transparent)]
 pub struct PerformanceData(HashMap<String, CommandPerformance>);
+
+impl<'de> Deserialize<'de> for PerformanceData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let raw = HashMap::<String, serde_json::Value>::deserialize(deserializer)?;
+        let mut cards = HashMap::with_capacity(raw.len());
+        let mut dropped = 0_usize;
+        for (command, value) in raw {
+            if ReviewableCommand::from_card_id(&command).is_none() {
+                dropped += 1;
+                continue;
+            }
+            let card = CommandPerformance::deserialize(value).map_err(D::Error::custom)?;
+            cards.insert(command, card);
+        }
+        if dropped > 0 {
+            tracing::warn!(
+                dropped,
+                "dropped persisted cards that are not reviewable commands"
+            );
+        }
+        Ok(Self(cards))
+    }
+}
 
 impl PerformanceData {
     /// Look up the record for `command`.
@@ -698,6 +729,24 @@ mod tests {
         // Everything else deserializes normally -- only `retrievability` gets tolerant handling.
         assert_eq!(perf.command, "x");
         assert_eq!(perf.stability, 5.0);
+    }
+
+    #[test]
+    fn deserialize_drops_non_reviewable_cards_and_keeps_valid_history() {
+        let mut tracker = PerformanceTracker::new();
+        tracker.record_attempt("h", Duration::from_secs(1), true, Duration::from_secs(1));
+        let mut json = serde_json::to_value(tracker.stats_clone()).unwrap();
+        let card = json["h"].clone();
+        for junk in ["Escape", "3h", "f=", "!"] {
+            json[junk] = card.clone();
+        }
+
+        let data: PerformanceData = serde_json::from_value(json).unwrap();
+
+        assert_eq!(data.len(), 1);
+        let kept = data.get("h").expect("valid card survives");
+        assert_eq!(kept.attempts, 1);
+        assert_eq!(kept.reps, 1);
     }
 
     #[test]

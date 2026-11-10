@@ -64,7 +64,10 @@ The 2026-11-11 P2-P3 batch (PR for #509) further extends [[helix-core-post-25-07
 
 Not yet built. Drafted for review/prioritization only.
 
-(none)
+| Feature | Phase | Status |
+|---------|-------|--------|
+| [[fsrs-7-crate-migration/spec\|Migrate `fsrs` Crate from 6.6 to 7.0 (FSRS-6 Behavior Preserved)]] | specify (lightweight, per SDD scaling guidance) | proposed — dependency major bump; model change tracked in [[fsrs-7-model-adoption/spec]] |
+| [[fsrs-7-model-adoption/spec\|Evaluate Switching the Scheduler from the FSRS-6 Model to the FSRS-7 Model]] | specify (lightweight, per SDD scaling guidance) | proposed — go/no-go evaluation (research, P4); prerequisite: [[fsrs-7-crate-migration/spec]] |
 
 ## Project Foundation
 

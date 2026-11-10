@@ -155,36 +155,38 @@ pub fn keymap_fingerprint_mismatch_message() -> String {
 mod tests {
     use super::*;
 
-    fn base(xdg: Option<&str>, home: Option<&str>) -> Option<PathBuf> {
-        helix_config_base(xdg.map(OsStr::new), home.map(Path::new))
+    fn abs(name: &str) -> PathBuf {
+        std::env::temp_dir().join(name)
+    }
+
+    fn base(xdg: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
+        helix_config_base(xdg.map(Path::as_os_str), home)
     }
 
     #[test]
     fn helix_base_defaults_to_home_dot_config() {
-        assert_eq!(base(None, Some("/h")), Some(PathBuf::from("/h/.config")));
+        let home = abs("h");
+        assert_eq!(base(None, Some(&home)), Some(home.join(".config")));
     }
 
     #[test]
     fn helix_base_honors_absolute_xdg_config_home() {
-        assert_eq!(base(Some("/x"), Some("/h")), Some(PathBuf::from("/x")));
+        let xdg = abs("x");
+        assert_eq!(base(Some(&xdg), Some(&abs("h"))), Some(xdg));
     }
 
     #[test]
     fn helix_base_ignores_empty_or_relative_xdg_config_home() {
-        assert_eq!(
-            base(Some(""), Some("/h")),
-            Some(PathBuf::from("/h/.config"))
-        );
-        assert_eq!(
-            base(Some("rel"), Some("/h")),
-            Some(PathBuf::from("/h/.config"))
-        );
+        let home = abs("h");
+        let fallback = Some(home.join(".config"));
+        assert_eq!(base(Some(Path::new("")), Some(&home)), fallback);
+        assert_eq!(base(Some(Path::new("rel")), Some(&home)), fallback);
     }
 
     #[test]
     fn helix_base_is_none_without_any_directory() {
         assert_eq!(base(None, None), None);
-        assert_eq!(base(Some(""), None), None);
+        assert_eq!(base(Some(Path::new("")), None), None);
     }
 
     #[test]

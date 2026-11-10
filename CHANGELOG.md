@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Migrate five bug-spec packages into `specs/`, merge the spec index, and drop links to untracked paths (#429)
 
+### CI
+
+- Skip fmt, clippy, security and the other heavy jobs for docs and specs only changes (#432)
+
 ## [0.6.2] - 2026-10-21
 
 ### Dependencies

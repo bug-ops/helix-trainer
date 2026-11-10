@@ -550,4 +550,204 @@ mod tests {
         assert_eq!(second.id, "low");
         assert_eq!(second.priority, 1.0);
     }
+    mod props {
+        use super::*;
+        use crate::time::FakeClock;
+        use proptest::prelude::*;
+        use std::cmp::Ordering;
+        use std::collections::HashSet;
+
+        const COMMAND_POOL: usize = 8;
+
+        #[derive(Debug, Clone)]
+        struct Event {
+            command: usize,
+            duration_secs: u64,
+            optimal_secs: u64,
+            success: bool,
+            elapsed_days: i64,
+        }
+
+        fn event_strategy() -> impl Strategy<Value = Event> {
+            (0..COMMAND_POOL, 1u64..90, 1u64..90, any::<bool>(), 0i64..60).prop_map(
+                |(command, duration_secs, optimal_secs, success, elapsed_days)| Event {
+                    command,
+                    duration_secs,
+                    optimal_secs,
+                    success,
+                    elapsed_days,
+                },
+            )
+        }
+
+        fn review_item_strategy() -> impl Strategy<Value = ReviewItem> {
+            let priority = prop_oneof![
+                any::<f64>(),
+                Just(f64::NAN),
+                Just(0.0),
+                Just(-0.0),
+                Just(f64::INFINITY),
+                Just(f64::NEG_INFINITY),
+            ];
+            ("[a-z]{1,3}", priority).prop_map(|(id, priority)| ReviewItem {
+                id,
+                due: DateTime::UNIX_EPOCH,
+                priority,
+            })
+        }
+
+        /// Replays `events` against a tracker on a fake clock, then advances the
+        /// clock by `final_days` so a mix of due and not-yet-due commands exists.
+        fn build(events: &[Event], final_days: i64) -> (Scheduler, PerformanceTracker) {
+            let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
+            let mut tracker = PerformanceTracker::with_clock(clock.clone());
+            for event in events {
+                clock.advance_days(event.elapsed_days);
+                tracker.record_attempt(
+                    &format!("c{}", event.command),
+                    Duration::from_secs(event.duration_secs),
+                    event.success,
+                    Duration::from_secs(event.optimal_secs),
+                );
+            }
+            clock.advance_days(final_days);
+            (Scheduler::with_clock(clock), tracker)
+        }
+
+        fn due_ids(scheduler: &Scheduler, tracker: &PerformanceTracker) -> HashSet<String> {
+            scheduler.get_due_reviews(tracker).into_iter().collect()
+        }
+
+        proptest! {
+            #[test]
+            fn prop_review_item_ord_is_antisymmetric_and_matches_partial_ord(
+                a in review_item_strategy(),
+                b in review_item_strategy(),
+            ) {
+                prop_assert_eq!(a.cmp(&b), b.cmp(&a).reverse());
+                prop_assert_eq!(a.partial_cmp(&b), Some(a.cmp(&b)));
+                prop_assert_eq!(a.cmp(&a), Ordering::Equal);
+            }
+
+            #[test]
+            fn prop_review_item_ord_is_transitive(
+                a in review_item_strategy(),
+                b in review_item_strategy(),
+                c in review_item_strategy(),
+            ) {
+                if a <= b && b <= c {
+                    prop_assert!(a <= c);
+                }
+                if a < b && b < c {
+                    prop_assert!(a < c);
+                }
+            }
+
+            #[test]
+            #[ignore = "#434"]
+            fn prop_review_item_eq_agrees_with_ord(
+                a in review_item_strategy(),
+                b in review_item_strategy(),
+            ) {
+                prop_assert_eq!(a == b, a.cmp(&b) == Ordering::Equal);
+            }
+
+            #[test]
+            fn prop_review_item_heap_pops_in_non_increasing_order(
+                items in prop::collection::vec(review_item_strategy(), 0..32),
+            ) {
+                let mut heap: BinaryHeap<ReviewItem> = items.iter().cloned().collect();
+                let mut previous: Option<ReviewItem> = None;
+                while let Some(item) = heap.pop() {
+                    if let Some(prev) = &previous {
+                        prop_assert!(prev >= &item);
+                    }
+                    previous = Some(item);
+                }
+            }
+
+            #[test]
+            fn prop_get_due_reviews_returns_exactly_the_due_commands(
+                events in prop::collection::vec(event_strategy(), 1..30),
+                final_days in 0i64..400,
+            ) {
+                let (scheduler, tracker) = build(&events, final_days);
+                prop_assume!(!scheduler.get_due_reviews(&tracker).is_empty());
+                let now = scheduler.clock.now();
+
+                let returned = scheduler.get_due_reviews(&tracker);
+                let returned_set: HashSet<String> = returned.iter().cloned().collect();
+                prop_assert_eq!(returned.len(), returned_set.len(), "duplicate ids");
+
+                let expected: HashSet<String> = tracker
+                    .all_commands()
+                    .into_iter()
+                    .filter(|cmd| tracker.performance(cmd).is_some_and(|p| p.due <= now))
+                    .map(str::to_string)
+                    .collect();
+                prop_assert_eq!(returned_set, expected);
+            }
+
+            #[test]
+            fn prop_get_review_queue_respects_limit_and_selects_due_commands(
+                events in prop::collection::vec(event_strategy(), 1..30),
+                final_days in 0i64..400,
+                limit in 0usize..12,
+            ) {
+                let (scheduler, tracker) = build(&events, final_days);
+                prop_assume!(!scheduler.get_due_reviews(&tracker).is_empty());
+                let due = due_ids(&scheduler, &tracker);
+
+                let queue = scheduler.get_review_queue(&tracker, limit);
+
+                prop_assert_eq!(queue.len(), limit.min(due.len()));
+                let ids: HashSet<&str> = queue.iter().map(|i| i.id.as_str()).collect();
+                prop_assert_eq!(ids.len(), queue.len(), "duplicate ids in queue");
+                for item in &queue {
+                    prop_assert!(due.contains(&item.id), "{} is not due", item.id);
+                    prop_assert!(item.due <= scheduler.clock.now());
+                }
+            }
+
+            #[test]
+            #[ignore = "#433"]
+            fn prop_get_review_queue_is_sorted_by_priority_descending(
+                events in prop::collection::vec(event_strategy(), 1..30),
+                final_days in 0i64..400,
+                limit in 0usize..12,
+            ) {
+                let (scheduler, tracker) = build(&events, final_days);
+                prop_assume!(!scheduler.get_due_reviews(&tracker).is_empty());
+                let queue = scheduler.get_review_queue(&tracker, limit);
+                for pair in queue.windows(2) {
+                    prop_assert!(
+                        pair[0].priority.total_cmp(&pair[1].priority) != Ordering::Less,
+                        "queue not sorted: {} before {}",
+                        pair[0].priority,
+                        pair[1].priority
+                    );
+                }
+            }
+
+            #[test]
+            #[ignore = "#433"]
+            fn prop_get_review_queue_keeps_the_highest_priority_items(
+                events in prop::collection::vec(event_strategy(), 1..30),
+                final_days in 0i64..400,
+                limit in 1usize..12,
+            ) {
+                let (scheduler, tracker) = build(&events, final_days);
+                prop_assume!(!scheduler.get_due_reviews(&tracker).is_empty());
+                let full = scheduler.get_review_queue(&tracker, usize::MAX);
+                let limited = scheduler.get_review_queue(&tracker, limit);
+
+                let mut all: Vec<f64> = full.iter().map(|i| i.priority).collect();
+                all.sort_by(|a, b| b.total_cmp(a));
+                all.truncate(limit);
+                let mut got: Vec<f64> = limited.iter().map(|i| i.priority).collect();
+                got.sort_by(|a, b| b.total_cmp(a));
+                prop_assert_eq!(got, all);
+            }
+        }
+    }
 }

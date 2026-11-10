@@ -170,6 +170,7 @@ impl From<crate::learning::LearningError> for UserError {
             | LearningError::InvalidCounters { .. } => {
                 UserError::invalid_state("Invalid learning parameters")
             }
+            LearningError::SessionComplete => UserError::OperationFailed,
             LearningError::CommandNotFound(_) => {
                 UserError::command_failed("Command not found in registry")
             }

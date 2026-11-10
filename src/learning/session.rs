@@ -1,4 +1,5 @@
-use super::performance::{MasteryLevel, PerformanceTracker};
+use super::LearningError;
+use super::performance::{CommandPerformance, MasteryLevel, PerformanceTracker};
 use super::scheduler::{ReviewItem, Scheduler};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -86,8 +87,12 @@ impl ReviewSession {
     /// * `success` - Whether review was successful
     /// * `optimal_time` - Expected optimal completion time
     ///
-    /// # Panics
-    /// Panics if called when session is already complete.
+    /// # Errors
+    ///
+    /// Returns [`LearningError::SessionComplete`] when there is no current item; nothing is
+    /// recorded. When only the FSRS update fails, the attempt and the session result are
+    /// still recorded and the session advances before the [`LearningError::FsrsError`] is
+    /// returned, so the caller may log it and carry on.
     ///
     /// # Examples
     ///
@@ -105,41 +110,43 @@ impl ReviewSession {
     /// let scheduler = Scheduler::new();
     /// let mut session = ReviewSession::new(&scheduler, tracker, 10);
     ///
-    /// if let Some(item) = session.current_item() {
-    ///     session.record_and_next(
-    ///         Duration::from_secs(2),
-    ///         true,
-    ///         Duration::from_secs(1)
-    ///     );
+    /// if session.current_item().is_some() {
+    ///     session
+    ///         .record_and_next(Duration::from_secs(2), true, Duration::from_secs(1))
+    ///         .unwrap();
     /// }
+    /// assert!(session.is_complete());
+    /// assert!(
+    ///     session
+    ///         .record_and_next(Duration::from_secs(2), true, Duration::from_secs(1))
+    ///         .is_err()
+    /// );
     /// ```
-    pub fn record_and_next(&mut self, duration: Duration, success: bool, optimal_time: Duration) {
+    pub fn record_and_next(
+        &mut self,
+        duration: Duration,
+        success: bool,
+        optimal_time: Duration,
+    ) -> Result<(), LearningError> {
         let item = self
-            .current_item()
-            .expect("Cannot record when session is complete");
+            .items
+            .get(self.current_index)
+            .ok_or(LearningError::SessionComplete)?;
 
-        // Get old mastery level
-        let old_mastery = self
-            .tracker
-            .borrow()
-            .performance(&item.id)
-            .map(|p| p.mastery_level())
-            .unwrap_or(MasteryLevel::Beginner);
+        let mastery_of = |tracker: &PerformanceTracker| {
+            tracker
+                .performance(&item.id)
+                .map_or(MasteryLevel::Beginner, CommandPerformance::mastery_level)
+        };
+        let old_mastery = mastery_of(&self.tracker.borrow());
 
-        // Record attempt (mutably borrows tracker)
-        self.tracker
-            .borrow_mut()
-            .record_attempt(&item.id, duration, success, optimal_time);
+        let outcome =
+            self.tracker
+                .borrow_mut()
+                .try_record_attempt(&item.id, duration, success, optimal_time);
 
-        // Get new mastery level
-        let new_mastery = self
-            .tracker
-            .borrow()
-            .performance(&item.id)
-            .map(|p| p.mastery_level())
-            .unwrap_or(MasteryLevel::Beginner);
+        let new_mastery = mastery_of(&self.tracker.borrow());
 
-        // Store result
         self.results.push(ReviewResult {
             command: item.id.clone(),
             duration,
@@ -147,9 +154,9 @@ impl ReviewSession {
             old_mastery,
             new_mastery,
         });
-
-        // Advance to next item
         self.current_index += 1;
+
+        outcome
     }
 
     /// Check if session is complete
@@ -181,7 +188,7 @@ impl ReviewSession {
     ///
     /// // Review may or may not be due immediately (FSRS schedules based on performance)
     /// if let Some(_item) = session.current_item() {
-    ///     session.record_and_next(Duration::from_secs(2), true, Duration::from_secs(1));
+    ///     session.record_and_next(Duration::from_secs(2), true, Duration::from_secs(1)).unwrap();
     ///     let summary = session.summary();
     ///     assert_eq!(summary.total_reviews, 1);
     ///     assert_eq!(summary.successful, 1);
@@ -266,7 +273,9 @@ mod tests {
 
         if session.current_item().is_some() {
             let old_index = session.current_index;
-            session.record_and_next(Duration::from_secs(2), true, Duration::from_secs(1));
+            session
+                .record_and_next(Duration::from_secs(2), true, Duration::from_secs(1))
+                .unwrap();
             assert_eq!(session.current_index, old_index + 1);
             assert_eq!(session.results.len(), 1);
         }
@@ -280,7 +289,9 @@ mod tests {
 
         if let Some(item) = session.current_item() {
             let command = item.id.clone();
-            session.record_and_next(Duration::from_secs(3), false, Duration::from_secs(1));
+            session
+                .record_and_next(Duration::from_secs(3), false, Duration::from_secs(1))
+                .unwrap();
 
             assert_eq!(session.results.len(), 1);
             let result = &session.results[0];
@@ -297,7 +308,9 @@ mod tests {
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
         if session.current_item().is_some() {
-            session.record_and_next(Duration::from_secs(1), true, Duration::from_secs(1));
+            session
+                .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
+                .unwrap();
 
             let result = &session.results[0];
             // Both old and new mastery should be set
@@ -336,7 +349,9 @@ mod tests {
 
         // Complete all items
         while let Some(_item) = session.current_item() {
-            session.record_and_next(Duration::from_secs(1), true, Duration::from_secs(1));
+            session
+                .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
+                .unwrap();
         }
 
         assert!(session.is_complete());
@@ -397,7 +412,9 @@ mod tests {
                 1 => Duration::from_secs(4),
                 _ => Duration::from_secs(3),
             };
-            session.record_and_next(duration, success, Duration::from_secs(1));
+            session
+                .record_and_next(duration, success, Duration::from_secs(1))
+                .unwrap();
             processed += 1;
         }
 
@@ -420,7 +437,9 @@ mod tests {
 
         // Complete all reviews
         while let Some(_item) = session.current_item() {
-            session.record_and_next(Duration::from_secs(1), true, Duration::from_secs(1));
+            session
+                .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
+                .unwrap();
         }
 
         let summary = session.summary();
@@ -429,17 +448,16 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Cannot record when session is complete")]
-    fn test_record_and_next_panics_when_complete() {
+    fn test_record_and_next_errors_when_complete() {
         let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
         let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, tracker, 10);
-
-        // Force session to be complete
         session.current_index = session.items.len();
 
-        // This should panic
-        session.record_and_next(Duration::from_secs(1), true, Duration::from_secs(1));
+        let result = session.record_and_next(Duration::from_secs(1), true, Duration::from_secs(1));
+
+        assert_matches!(result, Err(LearningError::SessionComplete));
+        assert!(session.results.is_empty());
     }
 
     #[test]
@@ -450,7 +468,9 @@ mod tests {
 
         let mut completed = 0;
         while let Some(_item) = session.current_item() {
-            session.record_and_next(Duration::from_secs(1), true, Duration::from_secs(1));
+            session
+                .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
+                .unwrap();
             completed += 1;
         }
 

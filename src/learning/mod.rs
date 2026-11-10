@@ -35,6 +35,9 @@ pub enum LearningError {
     #[error("Invalid counters: {successes} successes exceed {attempts} attempts")]
     InvalidCounters { attempts: u32, successes: u32 },
 
+    #[error("Review session is already complete")]
+    SessionComplete,
+
     #[error("Command not found: {0}")]
     CommandNotFound(String),
 

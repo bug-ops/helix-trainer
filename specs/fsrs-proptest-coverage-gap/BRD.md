@@ -28,7 +28,7 @@ related:
 
 ## Executive Summary
 
-`.claude/rules/continuous-improvement.md` claimed FSRS scheduling used
+the project's continuous-improvement rules claimed FSRS scheduling used
 `proptest` for property-based coverage. It did not — `proptest` was declared
 in `Cargo.toml` but had zero real usages anywhere in the codebase. This
 finding (issue #263) was resolved by adding two property tests to
@@ -44,7 +44,7 @@ original finding's full scope.
   backing implementation. `proptest = "1.11"` sat as dead weight in
   `[dev-dependencies]`.
 - **Who was affected?** Maintainers and coding agents relying on
-  `.claude/rules/continuous-improvement.md` as ground truth for what safety
+  the project's continuous-improvement rules as ground truth for what safety
   nets exist before proposing changes to `src/learning/`.
 - **Impact of not solving it**: false confidence in FSRS correctness beyond
   what example-based tests actually verified; continued unused dependency
@@ -99,7 +99,7 @@ argued property testing would catch that example-based tests would not.
 > `get_due_reviews`, `get_review_queue`) received **zero** property-test
 > coverage from this commit — the diff to that file is empty. FR-004 and
 > FR-005 from [[spec]] remain unimplemented. The
-> `.claude/rules/continuous-improvement.md` claim, taken literally, is
+> the project's continuous-improvement rules claim, taken literally, is
 > therefore still not fully backed by implementation: it is now true for the
 > FSRS *state-transition* half of the scheduler subsystem, but not for the
 > *priority-queue/due-review-selection* half.
@@ -116,7 +116,7 @@ before shipping changes to `src/learning/`.
 
 ### Secondary Users
 Coding agents (including future SDD pipeline runs) that read
-`.claude/rules/continuous-improvement.md` as ground truth.
+the project's continuous-improvement rules as ground truth.
 
 ### Stakeholders
 Project maintainers balancing test-suite completeness against P4 priority
@@ -152,7 +152,7 @@ See [[NFR]] for NFR-001..004, all verified against the shipped tests.
 >   implemented as a standalone property test — the code comment added at
 >   the call site argues it is "correct by construction," which is an
 >   assertion, not a verified property
-> - `.claude/rules/continuous-improvement.md` was not reworded to scope the
+> - the project's continuous-improvement rules were not reworded to scope the
 >   claim precisely to what is actually covered
 
 ## Constraints & Assumptions
@@ -184,7 +184,7 @@ See [[SRS#3.2 Success Criteria]] for the metric-by-metric actual outcome.
 > - [ ] Should `src/learning/scheduler.rs` property coverage (FR-004,
 >       FR-005) be filed as a follow-up P4 finding, given the residual gap
 >       documented above?
-> - [ ] Should `.claude/rules/continuous-improvement.md` be reworded now to
+> - [ ] Should the project's continuous-improvement rules be reworded now to
 >       avoid overclaiming coverage it does not have for `scheduler.rs`?
 
 ## Glossary

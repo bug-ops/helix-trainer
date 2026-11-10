@@ -39,7 +39,7 @@ related:
 ### Problem Statement
 
 The project's own continuous-improvement guidance
-(`.claude/rules/continuous-improvement.md`) states: "FSRS scheduling is
+(the project's continuous-improvement rules) states: "FSRS scheduling is
 deterministic given fixed inputs — use proptest for property-based coverage."
 The workspace `Cargo.toml` declares `proptest = "1.11"` under
 `[dev-dependencies]` (line 45), signaling intent to use it.
@@ -62,7 +62,7 @@ This was a real gap between documented/stated testing practice and actual
 test coverage: `proptest` was dead weight in `Cargo.toml`, and the FSRS
 scheduler carried less correctness confidence than the project's own
 documentation implied to future maintainers and coding agents relying on
-`.claude/rules/continuous-improvement.md` as ground truth.
+the project's continuous-improvement rules as ground truth.
 
 ### Goal
 
@@ -70,7 +70,7 @@ Either (a) `src/learning/scheduler.rs` and the FSRS-related state transitions
 in `src/learning/performance.rs` gain property-based test coverage using the
 declared `proptest` dependency, with invariants matching the documented
 practice, or (b) the `proptest` dependency is removed from `Cargo.toml` and
-the claim in `.claude/rules/continuous-improvement.md` is corrected — so that
+the claim in the project's continuous-improvement rules is corrected — so that
 stated practice and actual coverage are consistent again.
 
 ### Out of Scope
@@ -105,7 +105,7 @@ THEN  property-based tests execute alongside example-based unit tests and
 **Status**: partially satisfied — see [[SRS#3.1 Functional Requirements — Verdict]]. `performance.rs` is covered; `scheduler.rs` is not.
 
 ### US-002: Documentation matches reality
-AS A contributor or coding agent reading `.claude/rules/continuous-improvement.md`
+AS A contributor or coding agent reading the project's continuous-improvement rules
 I WANT the stated testing practice to accurately reflect what is actually
 implemented in the codebase
 SO THAT I do not make false assumptions about existing safety nets.
@@ -180,7 +180,7 @@ by a shipped property test.
 
 ### Ask First
 - Extending this coverage to `src/learning/scheduler.rs` (FR-004/FR-005 remain unimplemented — see [[plan#Residual Work]])
-- Modifying `.claude/rules/continuous-improvement.md` wording
+- Modifying the project's continuous-improvement rules wording
 
 ### Never
 - Silently delete existing example-based unit tests to "replace" them with property tests
@@ -189,7 +189,7 @@ by a shipped property test.
 ## 9. Open Questions
 
 - [NEEDS CLARIFICATION: should `src/learning/scheduler.rs` (FR-004, FR-005 — `ReviewItem` ordering, `get_due_reviews`/`get_review_queue` bounds) receive property-test coverage as a follow-up, given it remains fully untested by this resolution? See [[BRD#Residual Gap]].]
-- [NEEDS CLARIFICATION: should `.claude/rules/continuous-improvement.md` be reworded now to scope the proptest claim to "FSRS state-transition logic in `src/learning/performance.rs`" specifically, until/unless `scheduler.rs` coverage is added?]
+- [NEEDS CLARIFICATION: should the project's continuous-improvement rules be reworded now to scope the proptest claim to "FSRS state-transition logic in `src/learning/performance.rs`" specifically, until/unless `scheduler.rs` coverage is added?]
 
 ## 10. Resolution (Retroactive)
 
@@ -218,4 +218,4 @@ direct result of writing this property-test coverage — see
 - [[MOC-specs]] — all specifications
 - `src/learning/scheduler.rs` — `Scheduler`, `ReviewItem` (uncovered)
 - `src/learning/performance.rs` — `CardState`, `PerformanceTracker` (covered)
-- `.claude/rules/continuous-improvement.md` — source of the proptest claim
+- the project's continuous-improvement rules — source of the proptest claim

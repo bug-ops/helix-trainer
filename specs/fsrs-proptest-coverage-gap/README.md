@@ -36,7 +36,7 @@ commit `33bdaa1` actually implemented.
 
 ## Headline Finding
 
-`.claude/rules/continuous-improvement.md` claimed proptest coverage for FSRS
+the project's continuous-improvement rules claimed proptest coverage for FSRS
 scheduling. It had none. Commit `33bdaa1` added two property tests to
 `src/learning/performance.rs` (state-transition determinism and bounds
 invariants), which in the process **found and fixed a real bug**: a
@@ -77,4 +77,4 @@ selection) — received zero property-test coverage. See
 - [[constitution]] — project principles, Section III (Testing)
 - `src/learning/performance.rs` — covered
 - `src/learning/scheduler.rs` — uncovered, see Residual Work
-- `.claude/rules/continuous-improvement.md` — source of the original claim, still not fully accurate
+- the project's continuous-improvement rules — source of the original claim, still not fully accurate

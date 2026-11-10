@@ -95,7 +95,7 @@ Use EARS notation. Prefix with FR-NNN.
 | FR-003 | WHEN `highlight_code_with_multi_cursor` is invoked THE SYSTEM SHALL resolve the syntect syntax via `find_syntax_by_extension` (or `find_syntax_by_token`, whichever syntect provides for the declared value) using the scenario's effective language string instead of the literal `"rs"` | must |
 | FR-004 | WHEN the declared `language` value does not match any syntax definition known to `SYNTAX_SET` THE SYSTEM SHALL fall back to `SYNTAX_SET.find_syntax_plain_text()` (plain, unhighlighted text) rather than panicking or silently reusing Rust highlighting | must |
 | FR-005 | THE SYSTEM SHALL accept `language` values as file-extension-style tokens (e.g. `"rs"`, `"md"`, `"py"`, `"js"`, `"go"`, `"c"`) consistent with the tokens syntect's bundled `SyntaxSet` resolves via `find_syntax_by_extension`, so scenario authors don't need to know syntect-internal syntax names | should |
-| FR-006 | THE SYSTEM SHALL validate `language` (if present) the same way other scenario string fields are validated/sanitized (see `src/security::sanitizer`/`validators`), rejecting scenario files with malformed or oversized values consistent with existing `MAX_*` limits conventions | should |
+| FR-006 | THE SYSTEM SHALL validate `language` (if present) the same way other scenario string fields are validated/sanitized (see `src/security.rs`, `validators` and `sanitizer` modules), rejecting scenario files with malformed or oversized values consistent with existing `MAX_*` limits conventions | should |
 
 ## 3. Non-Functional Requirements
 
@@ -165,9 +165,11 @@ Measurable metrics that prove the feature works:
   behavior (e.g. future language-aware scoring/diffing), or is its scope
   strictly limited to `highlight.rs` for now? Assumed strictly rendering-only
   for this spec; dependent specs should re-raise if that assumption breaks.]
-- [NEEDS CLARIFICATION: Exact validation rule for FR-006 (max length,
-  allowed character set) — deferred to implementation, follow the pattern
-  of the nearest existing string field validator in `src/security/validators.rs`.]
+- **Resolved**: FR-006 is implemented as `validators::validate_language_field`
+  in `src/security.rs` (permissive character set — rejects only control
+  characters, whitespace, and oversized values; the value is only used as an
+  exact-match syntect lookup key). An earlier version of this spec cited a
+  separate `validators.rs` file that never existed; `validators` is an inline module of `src/security.rs`.
 
 ## 9. See Also
 

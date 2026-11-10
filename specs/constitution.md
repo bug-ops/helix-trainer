@@ -14,9 +14,9 @@ status: permanent
 > [!important]
 > Non-negotiable principles governing ALL development in helix-trainer.
 > Every specification, plan, and task MUST comply with this document.
-> Derived from the existing project conventions in `.claude/CLAUDE.md` and
-> `.claude/rules/*.md` (checked into the repo) rather than invented from
-> scratch — this document formalizes what the project already practices.
+> Derived from the project's existing conventions (architecture guide,
+> commit/issue rules, branching rules, continuous-improvement notes)
+> rather than invented from scratch — this document formalizes what the project already practices.
 > Update this file only through explicit team decision.
 
 ## I. Architecture
@@ -160,11 +160,12 @@ status: permanent
 ## VIII. Git Workflow
 
 - Commit messages: [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification)
-  per `.claude/rules/commits-and-issues.md` — `type(scope): imperative,
+  per the project's commit rules — `type(scope): imperative,
   present-tense description`, no period, no AI/co-author mentions, no
   emoji.
-- Branch naming per `.claude/rules/branching.md`: `feat/{issue}-{slug}`,
-  `fix/{issue}-{slug}`, `hotfix/{issue}-{slug}`, `chore/{slug}`.
+- Branch naming: `feat/{issue}-{slug}`, `fix/{issue}-{slug}`,
+  `hotfix/{issue}-{slug}`, `chore/{slug}`; omit the `{issue}-` segment
+  when no issue exists.
 - All changes land via PR into `main`; sync with `main` via `git fetch
   origin main && git rebase origin/main` before opening a PR.
 - Before every commit/push/PR: `cargo +nightly fmt --check`, `cargo
@@ -174,14 +175,25 @@ status: permanent
   --no-deps`). If new/modified scenario TOML files are included, also run
   `cargo nextest run scenario`.
 - Every GitHub issue carries exactly one `P0`-`P4` priority label plus up
-  to 4 classification labels, per `.claude/rules/commits-and-issues.md`.
+  to 4 classification labels (type and subsystem, e.g. `bug`, `ui`); a
+  missing classification label is created, never replaced by an unrelated
+  one. Priority meaning:
+
+  | Label | Meaning |
+  |-------|---------|
+  | `P0` | Broken core gameplay, data loss, crash on startup |
+  | `P1` | Incorrect scoring, unbeatable scenario, broken FSRS persistence |
+  | `P2` | Suboptimal UX, minor display issue |
+  | `P3` | Cosmetic, edge case unlikely in practice |
+  | `P4` | Nice-to-have, speculative, or process/coverage gap |
+
+- Spec-first workflow: specs are created and updated only in root
+  `specs/` by the sdd agent, and issues for new or changed behavior link
+  to the relevant spec package first.
 - `CHANGELOG.md` `[Unreleased]` section is updated at the end of every
   implementation phase/PR.
 
 ## See Also
 
 - [[MOC-specs]] — all specifications
-- `.claude/CLAUDE.md` — architecture reference this constitution formalizes
-- `.claude/rules/commits-and-issues.md` — commit/issue conventions
-- `.claude/rules/branching.md` — branch naming and pre-PR checklist
-- `.claude/rules/continuous-improvement.md` — subsystem map and testing notes
+- `CONTRIBUTING.md` — Conventional Commits and the pre-commit check suite

@@ -50,8 +50,8 @@ graph TD
 
 **Context**: Establish that `PerformanceTracker::record_attempt` is
 deterministic for a given rating sequence and clock, closing part of the
-gap between `.claude/rules/continuous-improvement.md`'s claim and actual
-coverage.
+gap between the claim made in the project's continuous-improvement rules
+and actual coverage.
 **Spec reference**: [[spec#FR-003]]
 **Acceptance criteria**:
 - [x] `prop_fsrs_state_transition_is_deterministic` added to

@@ -99,9 +99,8 @@ signal appears; a second reference project ships an equivalent mechanic.
 
 ## Investigation Chain
 
-This record synthesizes three rounds of design/critique, all under
-`.local/handoff/` in this worktree (gitignored, not part of this committed
-package):
+This record synthesizes three rounds of design/critique, all kept
+as untracked working notes (not part of this committed package):
 
 1. Architect's first plan (2026-08-09T16:44) — GO at P3, "no new subsystem" claim
 2. Critic's first critique (2026-08-09T16:57) — verdict: significant; 5 gaps, headlined by the targeting-parity finding
@@ -110,7 +109,7 @@ package):
 
 ## See Also
 
-- Original draft spec (pre-critique, uncommitted): `.local/specs/002-arcade-game-mode-variety/spec.md` in the main checkout — superseded by [[spec]] in this package
+- Original draft spec (pre-critique, never committed) — superseded by [[spec]] in this package
 - GitHub issue #264
 - GitHub issue #198 — Helix command content-coverage gap (higher-evidence, separate concern)
 - [vim-be-good](https://github.com/ThePrimeagen/vim-be-good) — sole reference project cited for this gap

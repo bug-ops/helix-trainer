@@ -55,7 +55,7 @@ commit (documented in [[plan#Bundled Unrelated Change]] for completeness).
 
 - [[BRD]] — Business Requirements Document
 - [[NFR]] — Non-Functional Requirements Specification
-- `.claude/rules/continuous-improvement.md` — source of the original claim
+- the project's continuous-improvement rules — source of the original claim
 
 ### 1.5 Document Overview
 

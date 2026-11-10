@@ -14,7 +14,8 @@ status: moc
 > [!abstract]
 > Map of Content for all helix-trainer project specifications. Each entry
 > links to a feature spec with its current phase and status. This index
-> was reconciled 2026-08-09 and again 2026-08-10 (v0.6.0 release prep)
+> was reconciled 2026-08-09, 2026-08-10 (v0.6.0 release prep) and
+> 2026-11-10 (migration of the remaining untracked bug-spec drafts)
 > against actual merged implementation state — see each package's
 > README.md (where present) for the retroactive-documentation
 > methodology.
@@ -38,6 +39,11 @@ superseded)
 | [[regex-selection-and-macro-commands/spec\|Regex Selection (`s`/`S`) and Macro Record/Replay (`q`/`Q`)]] | specify (lightweight, per SDD scaling guidance) | implemented — closes issue #198's remaining scope (macros, selection-regex) |
 | [[custom-helix-keymap-support/spec\|Custom Helix Keymap Remapping (`use_helix_keymap`)]] | specify (lightweight, per SDD scaling guidance) | implemented — closes issue #163 |
 | [[end-game-summary-screen/spec\|End-Game Summary Screen on Curriculum Completion]] | specify (lightweight, per SDD scaling guidance) | implemented — closes issue #145 |
+| [[duplicate-scenario-ids/spec\|Fix Duplicate Scenario IDs]] | specify (lightweight bug-fix spec) | implemented — closes issue #363 via PR #372; uniqueness guard in `tests/scenario_validation.rs` |
+| [[key-history-popup-training-overlap/spec\|Key-History Popup Corrupts Task Screen Panel Borders in Training Mode]] | specify (lightweight bug-fix spec) | implemented — closes issue #364 via PR #372 |
+| [[challenge-attempt-limit-not-enforced/spec\|Daily Challenge Attempt Limit and Best-Score Tracking Enforcement]] | specify (lightweight bug-fix spec) | implemented — closes issue #376 via PR #384 (also part of [[arcade-gamification-session-fixes/spec\|the gamification fix thread]]) |
+| [[backtick-key-misparsed-as-alt/spec\|Bare Backtick Keypress Misparsed as Alt-Backtick]] | specify (lightweight bug-fix spec) | implemented — closes issue #377 via PR #380 |
+| [[arcade-stats-bar-second-line-clipped/spec\|Arcade/Survival/Challenge Stats Bar's Second HUD Line Clipped]] | specify (lightweight bug-fix spec) | implemented — closes issue #393 via PR #397 |
 
 ## Proposed Specs
 
@@ -48,35 +54,33 @@ Not yet built. Drafted for review/prioritization only.
 ## Project Foundation
 
 - [[constitution]] — non-negotiable project principles. Created 2026-08-09,
-  synthesized from `.claude/CLAUDE.md` and `.claude/rules/*.md` (which
+  synthesized from the project's architecture guide and rules (which
   already documented these conventions informally).
 
 ## Reconciliation Notes (2026-08-09)
 
 This index was retroactively reconciled against actual merged
-implementation state, then consolidated from working drafts under
-`.local/specs/` into this git-tracked `specs/` tree. Summary of what
+implementation state, then consolidated from untracked local working drafts into this
+git-tracked `specs/` tree. Summary of what
 changed and why:
 
-- **fsrs-proptest-coverage-gap** — was a `.local/specs/` draft describing a
+- **fsrs-proptest-coverage-gap** — was an untracked local draft describing a
   then-unresolved testing gap. Resolved by commit `33bdaa1`. Full
   BRD/SRS/NFR/plan/tasks/README package added, documenting a **partial**
   resolution: `src/learning/performance.rs` gained proptest coverage (and a
   real bug was found/fixed as a result); `src/learning/scheduler.rs` did
   not, and remains an open residual gap.
 - **arcade-game-mode-variety** — a reflex-drill arcade mechanic (issue
-  #264) was proposed twice: once as a `.local/specs/` draft
+  #264) was proposed twice: once as an untracked local draft
   (`002-arcade-game-mode-variety`), and once as a full, independently-run
   BRD → SRS → NFR → spec → plan → tasks pipeline that reached NO-GO. Only
   the complete, already-committed package lives here; the earlier draft
-  remains in `.local/specs/002-arcade-game-mode-variety/spec.md` (main
-  checkout only, gitignored) purely as a historical artifact — this
-  package's README/SRS/spec cross-reference it explicitly and it is not
-  duplicated in this tree. Commit `623e0a8` (double-XP/streak/level-up
+  was never committed and is not duplicated in this tree; this package's
+  README/SRS/spec refer to it only as the superseded draft. Commit `623e0a8` (double-XP/streak/level-up
   fixes, #322) was investigated as a possible match for this feature and
   found to be **unrelated** — a separate, previously undocumented set of
   gamification bug fixes, now covered by **arcade-gamification-session-fixes**.
-- **register-command-mode-support** — was a `.local/specs/` draft
+- **register-command-mode-support** — was an untracked local draft
   researching named registers and a command-line mode. Resolved by commit
   `1ba668d`. Full BRD/SRS/NFR/plan/tasks/README package added. Named
   registers shipped essentially as drafted; command-line mode shipped
@@ -140,7 +144,45 @@ updated this tree so it stays in sync with what actually shipped. Summary:
   now stale. The MSRV bump in particular is already correctly reflected in
   [[constitution]] (Section II), written after that change landed.
 
+## Reconciliation Notes (2026-11-10, local drafts migration)
+
+Five remaining bug-spec drafts kept in an untracked local directory
+(numbered `001`-`005`, all `status: draft`) were migrated into this tree
+and checked against the code, `CHANGELOG.md`, and `gh issue list`. All five
+bugs were already fixed; the drafts had simply never been updated. Each
+package keeps the original problem analysis and adds a "Resolution (as
+shipped)" and "Resolved Questions" section. The numeric prefixes were
+dropped to match the slug-only naming used by every other package here.
+
+- **duplicate-scenario-ids** — fixed by `7f34268` (PR #372, issue #363).
+  The shipped fix renamed the `basic/delete.toml` and `editing/join.toml`
+  scenarios (`delete_current_line_001`, `join_lines_basic_001`), the
+  opposite of the draft's default. Adds `test_all_scenario_ids_are_unique`
+  and `test_quest_scenario_references_exist`.
+- **key-history-popup-training-overlap** — fixed by `7f34268` (PR #372,
+  issue #364): popup bounded to the Target panel's inner area, skipped when
+  too small.
+- **challenge-attempt-limit-not-enforced** — fixed by `e637c30` (PR #384,
+  issue #376). The `MiniGameData.challenge_progress` snapshot was removed;
+  attempts show as `(N/3)` in the mode submenu. The malformed
+  `last_challenge_date` risk (CR-013) was deliberately left open.
+- **backtick-key-misparsed-as-alt** — fixed by `45bbd1f` (PR #380, issue
+  #377). Root cause was the app's own `map_macos_composed_char` table, not
+  crossterm or tmux as the draft suspected.
+- **arcade-stats-bar-second-line-clipped** — fixed by `f7bf0fe` (PR #397,
+  issue #393): stats bar chunk widened from 3 to 4 rows at all three call
+  sites.
+- **language-aware-syntax-highlighting** — corrected a stale path
+  (it cited a nonexistent `validators.rs` file; the validator is
+  `validators::validate_language_field` in `src/security.rs`).
+- **Open items, not changed here**: the residual `scheduler.rs` proptest
+  gap recorded in [[fsrs-proptest-coverage-gap/BRD#Residual Gap|Residual Gap]]
+  is still present (no `proptest` in `src/learning/scheduler.rs`) and is now
+  tracked by #428 (P4); and the `TODO: CR-013` marker in
+  `src/minigame/challenge.rs` (formerly citing the closed #391) is now
+  tracked by #427 (P3).
+
 ## See Also
 
 - [[constitution]] — project principles
-- `.claude/CLAUDE.md` — architecture reference
+- `CONTRIBUTING.md` — contributor workflow

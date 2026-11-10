@@ -171,7 +171,7 @@ scope and required no separate spec.
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
-| A future reader assumes `.claude/rules/continuous-improvement.md`'s proptest claim is fully backed, given this record exists | Wasted effort assuming `scheduler.rs` safety net exists when it does not | Medium | [[BRD#Residual Gap]] and this section's Residual Work explicitly flag the gap |
+| A future reader assumes the project's continuous-improvement rules' proptest claim is fully backed, given this record exists | Wasted effort assuming `scheduler.rs` safety net exists when it does not | Medium | [[BRD#Residual Gap]] and this section's Residual Work explicitly flag the gap |
 | `scheduler.rs` ships a real ordering/queue-bound bug that proptest would have caught | Incorrect due-review selection reaching users | Low-Medium | Residual Work item recommends follow-up coverage |
 
 ## See Also

@@ -54,7 +54,7 @@ coverage (issue #198).
 
 - [[BRD]] — Business Requirements Document
 - [[NFR]] — Non-Functional Requirements Specification
-- `.local/specs/002-arcade-game-mode-variety/spec.md` (main checkout) — original draft spec this record supersedes
+- Original draft spec (never committed) — superseded by this record
 
 ### 1.5 Document Overview
 
@@ -82,7 +82,7 @@ Unchanged from [[BRD#Target Users (As Originally Framed)]].
 ### 2.4 Operating Environment
 
 Unchanged — TUI via ratatui/crossterm, tokio async runtime, as documented in
-the project's `CLAUDE.md`.
+the project's architecture documentation.
 
 ### 2.5 Design and Implementation Constraints
 
@@ -97,7 +97,7 @@ See [[BRD#Assumptions]].
 ### 3.1 Functional Requirements — Original Text and Verdict
 
 > [!info] Traceability
-> Traces to the draft spec's Functional Requirements section (`.local/specs/002-arcade-game-mode-variety/spec.md:130-141`, main checkout).
+> Traces to the draft spec's Functional Requirements section (the uncommitted original draft).
 
 **FR-001** — WHEN the player selects the new reflex-drill mode THE SYSTEM
 SHALL present a core loop mechanically distinct from scenario-completion

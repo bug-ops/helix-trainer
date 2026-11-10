@@ -162,8 +162,8 @@ under any of the following:
 
 ## 5. Constitution Compliance
 
-No project constitution exists yet for helix-trainer (`.local/specs/
-constitution.md` was not found). Compliance section omitted as not
+No project constitution existed when this record was written (the
+[[constitution]] was added later). Compliance section omitted as not
 applicable.
 
 ## 6. Risks and Mitigations

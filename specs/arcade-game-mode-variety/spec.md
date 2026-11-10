@@ -237,6 +237,6 @@ Remaining open question, not resolved by this record:
 - [[plan]] — kill-criterion experiment and revisit triggers
 - [[tasks]] — experiment protocol steps (not approved for execution)
 - [[appendix-spinoffs]] — independently actionable bugs found during this investigation
-- Original draft spec (superseded by this record): `.local/specs/002-arcade-game-mode-variety/spec.md` in the main checkout
+- Original draft spec (superseded by this record): never committed
 - [vim-be-good](https://github.com/ThePrimeagen/vim-be-good) — sole reference project
 - GitHub issue #198 — Helix command content-coverage gap (higher-evidence, separate concern)

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::LearningError;
 use super::reviewable::ReviewableCommand;
 use super::traits::ProgressionTier;
 use crate::time::{Clock, SystemClock};
@@ -15,11 +16,18 @@ const DEFAULT_DESIRED_RETENTION: f32 = 0.9; // 90% target retention
 /// FSRS model parameters this tracker's [`FSRS`] instance is constructed with.
 ///
 /// Hoisted so the decay value passed to `fsrs::current_retrievability` in
-/// [`PerformanceTracker::update_fsrs_state`] (`FSRS_PARAMS[20]`) is structurally tied
+/// [`CommandPerformance::retrievability`] (`FSRS_PARAMS[20]`) is structurally tied
 /// to whatever parameters actually built the tracker, instead of a same-named
 /// constant that could silently diverge if these parameters ever become
-/// user-configurable.
+/// user-configurable. The decay passed there must be the raw positive weight `w[20]`:
+/// `fsrs::current_retrievability` negates it itself, and a pre-negated value drives the
+/// curve's base negative and yields NaN.
 const FSRS_PARAMS: [f32; 21] = fsrs::DEFAULT_PARAMETERS;
+
+fn default_fsrs() -> FSRS {
+    // Cannot fail: `FSRS_PARAMS` is the crate's own default parameter set.
+    FSRS::new(&FSRS_PARAMS).expect("default FSRS parameters are valid")
+}
 
 /// Card state tracked by the application (FSRS doesn't track this)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,8 +42,9 @@ pub enum CardState {
 ///
 /// The profile and the tracker exchange this named type instead of a bare `HashMap`, and
 /// the on-disk JSON shape stays a plain object. Deserialization drops, rather than fails
-/// on, cards whose id is not a canonical [`ReviewableCommand`] (cards saved before typed
-/// text and arguments were excluded) and logs the dropped count.
+/// on, cards whose id is not a canonical [`ReviewableCommand`] (saved before typed text
+/// and arguments were excluded) and cards that fail validation (non-finite or
+/// out-of-range FSRS values, `successes > attempts`); the dropped count is logged.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(transparent)]
 pub struct PerformanceData(HashMap<String, CommandPerformance>);
@@ -45,24 +54,36 @@ impl<'de> Deserialize<'de> for PerformanceData {
     where
         D: serde::Deserializer<'de>,
     {
-        use serde::de::Error;
-
         let raw = HashMap::<String, serde_json::Value>::deserialize(deserializer)?;
         let mut cards = HashMap::with_capacity(raw.len());
-        let mut dropped = 0_usize;
+        let mut not_reviewable = 0_usize;
+        let mut invalid = Vec::new();
         for (command, value) in raw {
             if ReviewableCommand::from_card_id(&command).is_none() {
-                dropped += 1;
+                not_reviewable += 1;
                 continue;
             }
-            let card = CommandPerformance::deserialize(value).map_err(D::Error::custom)?;
-            cards.insert(command, card);
+            let card = CardRecord::deserialize(value)
+                .map_err(|e| e.to_string())
+                .and_then(|record| {
+                    CommandPerformance::from_record(command.clone(), record)
+                        .map_err(|e| e.to_string())
+                });
+            match card {
+                Ok(card) => {
+                    cards.insert(command, card);
+                }
+                Err(reason) => invalid.push((command, reason)),
+            }
         }
-        if dropped > 0 {
+        if not_reviewable > 0 {
             tracing::warn!(
-                dropped,
+                dropped = not_reviewable,
                 "dropped persisted cards that are not reviewable commands"
             );
+        }
+        if !invalid.is_empty() {
+            tracing::warn!(dropped = invalid.len(), cards = ?invalid, "dropped invalid persisted cards");
         }
         Ok(Self(cards))
     }
@@ -111,56 +132,103 @@ impl From<PerformanceData> for HashMap<String, CommandPerformance> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// FSRS memory stability in days: finite and non-negative.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Stability(f32);
+
+impl Stability {
+    fn new(value: f32) -> Result<Self, LearningError> {
+        if value.is_finite() && value >= 0.0 {
+            Ok(Self(value))
+        } else {
+            Err(LearningError::InvalidStability(f64::from(value)))
+        }
+    }
+}
+
+/// FSRS item difficulty: finite and inside `0..=10`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Difficulty(f32);
+
+impl Difficulty {
+    const DEFAULT: Self = Self(DEFAULT_DIFFICULTY);
+
+    fn new(value: f32) -> Result<Self, LearningError> {
+        if (0.0..=10.0).contains(&value) {
+            Ok(Self(value))
+        } else {
+            Err(LearningError::InvalidDifficulty(f64::from(value)))
+        }
+    }
+}
+
+/// Per-command FSRS card plus practice statistics.
+///
+/// Fields are private so the FSRS update path is the only writer. Stability and
+/// difficulty are range-checked newtypes, and everything derivable (average time, mastery
+/// tier, retrievability) is computed on read instead of stored. The persisted shape is
+/// [`CardRecord`]; cards are only built from disk through [`PerformanceData`]'s
+/// deserializer, which validates them.
+#[derive(Debug, Clone)]
 pub struct CommandPerformance {
     command: String,
+    stability: Stability,
+    difficulty: Difficulty,
+    state: CardState,
+    reps: u32,
+    lapses: u32,
+    attempts: u32,
+    successes: u32,
+    total_time: Duration,
+    last_review: DateTime<Utc>,
+    due: DateTime<Utc>,
+    scheduled_days: u32,
+}
 
-    // FSRS state (stored as Option<MemoryState>)
-    stability: f32,   // Memory stability (days)
-    difficulty: f32,  // Item difficulty (0-10)
-    state: CardState, // Card state (application-managed)
-    reps: u32,        // Total repetitions
-    lapses: u32,      // Number of lapses (forgot)
-
-    // Performance metrics (application-specific)
+/// On-disk shape of a [`CommandPerformance`]. Keys that are derivable (`avg_time`,
+/// `mastery_level`, `retrievability`) or redundant (`command`) are neither written nor
+/// required; older files that still carry them load with those keys ignored.
+#[derive(Serialize, Deserialize)]
+struct CardRecord {
+    stability: f32,
+    difficulty: f32,
+    state: CardState,
+    reps: u32,
+    lapses: u32,
     attempts: u32,
     successes: u32,
     #[serde(with = "duration_serde")]
     total_time: Duration,
-    #[serde(with = "duration_serde")]
-    avg_time: Duration,
-
-    // Scheduling
     last_review: DateTime<Utc>,
     due: DateTime<Utc>,
     scheduled_days: u32,
-
-    // Derived fields
-    mastery_level: MasteryLevel,
-    /// Current recall probability (0.0-1.0).
-    ///
-    /// Deserialized tolerantly: `serde_json` writes a `NaN` `f32` as `null`, and a
-    /// past build could produce one here (see the decay-sign fix in
-    /// `PerformanceTracker::update_fsrs_state`). Without this, a profile saved
-    /// while that bug was live would fail to deserialize at all -- permanently
-    /// bricking `profile.json` -- rather than just having one stale field. A
-    /// *present* key with value `null` recovers as `1.0`, the same default a
-    /// brand-new card gets in [`CommandPerformance::new`] -- this does not cover a
-    /// genuinely missing key, which still errors (no build has ever omitted this
-    /// field, so that case doesn't need tolerance).
-    #[serde(deserialize_with = "deserialize_retrievability")]
-    retrievability: f32,
 }
 
-/// See the `retrievability` field doc on [`CommandPerformance`]. `#[serde(default)]`
-/// alone would not have covered this even if paired here: it only fires when the key
-/// is absent, not when it's present with value `null`, which is what a `NaN` `f32`
-/// round-trips to.
-fn deserialize_retrievability<'de, D>(deserializer: D) -> Result<f32, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    Ok(Option::<f32>::deserialize(deserializer)?.unwrap_or(1.0))
+impl From<&CommandPerformance> for CardRecord {
+    fn from(perf: &CommandPerformance) -> Self {
+        Self {
+            stability: perf.stability.0,
+            difficulty: perf.difficulty.0,
+            state: perf.state,
+            reps: perf.reps,
+            lapses: perf.lapses,
+            attempts: perf.attempts,
+            successes: perf.successes,
+            total_time: perf.total_time,
+            last_review: perf.last_review,
+            due: perf.due,
+            scheduled_days: perf.scheduled_days,
+        }
+    }
+}
+
+impl Serialize for CommandPerformance {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        CardRecord::from(self).serialize(serializer)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -208,21 +276,41 @@ impl CommandPerformance {
     pub fn new(command: String, now: DateTime<Utc>) -> Self {
         Self {
             command,
-            stability: 0.0,
-            difficulty: DEFAULT_DIFFICULTY,
+            stability: Stability(0.0),
+            difficulty: Difficulty::DEFAULT,
             state: CardState::New,
             reps: 0,
             lapses: 0,
             attempts: 0,
             successes: 0,
             total_time: Duration::ZERO,
-            avg_time: Duration::ZERO,
             last_review: now,
             due: now,
             scheduled_days: 0,
-            mastery_level: MasteryLevel::Beginner,
-            retrievability: 1.0, // New card, perfect retrievability
         }
+    }
+
+    fn from_record(command: String, record: CardRecord) -> Result<Self, LearningError> {
+        if record.successes > record.attempts {
+            return Err(LearningError::InvalidCounters {
+                attempts: record.attempts,
+                successes: record.successes,
+            });
+        }
+        Ok(Self {
+            command,
+            stability: Stability::new(record.stability)?,
+            difficulty: Difficulty::new(record.difficulty)?,
+            state: record.state,
+            reps: record.reps,
+            lapses: record.lapses,
+            attempts: record.attempts,
+            successes: record.successes,
+            total_time: record.total_time,
+            last_review: record.last_review,
+            due: record.due,
+            scheduled_days: record.scheduled_days,
+        })
     }
 
     /// Command text this record tracks.
@@ -234,13 +322,13 @@ impl CommandPerformance {
     /// FSRS memory stability in days.
     #[must_use]
     pub fn stability(&self) -> f32 {
-        self.stability
+        self.stability.0
     }
 
     /// FSRS item difficulty (0-10).
     #[must_use]
     pub fn difficulty(&self) -> f32 {
-        self.difficulty
+        self.difficulty.0
     }
 
     /// Application-managed card state.
@@ -279,10 +367,10 @@ impl CommandPerformance {
         self.total_time
     }
 
-    /// Average time per attempt.
+    /// Average time per attempt, derived from the totals.
     #[must_use]
     pub fn avg_time(&self) -> Duration {
-        self.avg_time
+        self.total_time / self.attempts.max(1)
     }
 
     /// Timestamp of the last review.
@@ -303,22 +391,39 @@ impl CommandPerformance {
         self.scheduled_days
     }
 
-    /// Derived mastery tier.
+    /// Mastery tier, derived from the card state, stability and difficulty.
     #[must_use]
     pub fn mastery_level(&self) -> MasteryLevel {
-        self.mastery_level
+        match self.state {
+            CardState::New | CardState::Learning => MasteryLevel::Beginner,
+            CardState::Review | CardState::Relearning => {
+                match (self.stability.0, self.difficulty.0) {
+                    (s, d) if s > 30.0 && d < 5.0 => MasteryLevel::Master,
+                    (s, _) if s > 7.0 => MasteryLevel::Advanced,
+                    _ => MasteryLevel::Intermediate,
+                }
+            }
+        }
     }
 
-    /// Current recall probability (0.0-1.0).
+    /// Recall probability (0.0-1.0) at `now`, derived from the memory state and the time
+    /// since the last review. A card that was never reviewed has probability 1.0.
     #[must_use]
-    pub fn retrievability(&self) -> f32 {
-        self.retrievability
+    pub fn retrievability(&self, now: DateTime<Utc>) -> f32 {
+        let Some(memory) = self.memory_state() else {
+            return 1.0;
+        };
+        if memory.stability <= 0.0 {
+            return 0.0;
+        }
+        let elapsed_days = (now - self.last_review).num_days().max(0) as f32;
+        fsrs::current_retrievability(memory, elapsed_days, FSRS_PARAMS[20])
     }
 
     /// Test-only: overwrite the FSRS difficulty to stage a scheduling scenario.
     #[cfg(test)]
     pub(crate) fn set_difficulty(&mut self, difficulty: f32) {
-        self.difficulty = difficulty;
+        self.difficulty = Difficulty::new(difficulty).expect("test difficulty is in range");
     }
 
     /// Test-only: overwrite the scheduled interval to stage a scheduling scenario.
@@ -341,37 +446,34 @@ impl CommandPerformance {
         }
     }
 
-    pub fn update_mastery_level(&mut self) {
-        self.mastery_level = match self.state {
-            CardState::New | CardState::Learning => MasteryLevel::Beginner,
-            CardState::Review | CardState::Relearning => match (self.stability, self.difficulty) {
-                (s, d) if s > 30.0 && d < 5.0 => MasteryLevel::Master,
-                (s, _) if s > 7.0 => MasteryLevel::Advanced,
-                _ => MasteryLevel::Intermediate,
-            },
-        };
-    }
-
     /// Get MemoryState for FSRS (None if New)
     pub fn memory_state(&self) -> Option<MemoryState> {
         if self.reps == 0 {
             None
         } else {
             Some(MemoryState {
-                stability: self.stability,
-                difficulty: self.difficulty,
+                stability: self.stability.0,
+                difficulty: self.difficulty.0,
             })
         }
     }
 
     /// Update from FSRS NextState and determine card state
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LearningError::InvalidStability`] or [`LearningError::InvalidDifficulty`]
+    /// when `memory` is out of domain; the card is left unchanged.
     pub fn update_from_next_state(
         &mut self,
         memory: MemoryState,
         interval: f32,
         rating_index: usize,
         now: DateTime<Utc>,
-    ) {
+    ) -> Result<(), LearningError> {
+        let stability = Stability::new(memory.stability)?;
+        let difficulty = Difficulty::new(memory.difficulty)?;
+
         // Determine new state based on rating and current state
         self.state = match (self.state, rating_index) {
             // Again (0) - failed
@@ -399,8 +501,8 @@ impl CommandPerformance {
             (CardState::Review, _) => CardState::Review,
         };
 
-        self.stability = memory.stability;
-        self.difficulty = memory.difficulty;
+        self.stability = stability;
+        self.difficulty = difficulty;
         self.scheduled_days = interval.round().max(1.0) as u32;
         self.last_review = now;
 
@@ -414,6 +516,7 @@ impl CommandPerformance {
         }
 
         self.reps = self.reps.saturating_add(1);
+        Ok(())
     }
 }
 
@@ -457,7 +560,7 @@ impl PerformanceTracker {
     pub fn with_clock(clock: Arc<dyn Clock>) -> Self {
         Self {
             stats: HashMap::new(),
-            fsrs: FSRS::new(&FSRS_PARAMS).unwrap(),
+            fsrs: default_fsrs(),
             clock,
         }
     }
@@ -479,6 +582,10 @@ impl PerformanceTracker {
         &self.clock
     }
 
+    /// Record an attempt, logging an FSRS update failure instead of returning it.
+    ///
+    /// For call sites with no recovery path: the attempt is still counted and the schedule
+    /// stays unchanged. See [`Self::try_record_attempt`] to observe the error.
     pub fn record_attempt(
         &mut self,
         command: &str,
@@ -486,107 +593,77 @@ impl PerformanceTracker {
         success: bool,
         optimal_time: Duration,
     ) {
-        // Single `now` read shared by CommandPerformance::new (first-attempt case),
-        // update_fsrs_state's elapsed-days calculation, and the persisted last_review
-        // timestamp — previously each read Utc::now() independently.
+        if let Err(error) = self.try_record_attempt(command, duration, success, optimal_time) {
+            tracing::error!(
+                command,
+                %error,
+                "FSRS update failed; attempt recorded without a schedule change"
+            );
+        }
+    }
+
+    /// Record an attempt and advance the command's FSRS schedule.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LearningError::FsrsError`] (or an invalid stability/difficulty error) when
+    /// the FSRS update fails. The attempt counters and total time are still updated; the
+    /// card's schedule, memory state and review count are not.
+    pub fn try_record_attempt(
+        &mut self,
+        command: &str,
+        duration: Duration,
+        success: bool,
+        optimal_time: Duration,
+    ) -> Result<(), LearningError> {
+        // One `now` read shared by card creation, the elapsed-days calculation and the
+        // persisted last_review timestamp.
         let now = self.clock.now();
 
-        // Get or create performance entry
         let perf = self
             .stats
             .entry(command.to_string())
             .or_insert_with(|| CommandPerformance::new(command.to_string(), now));
 
-        // Update attempt counters
         perf.attempts = perf.attempts.saturating_add(1);
         if success {
             perf.successes = perf.successes.saturating_add(1);
         }
+        perf.total_time = perf.total_time.saturating_add(duration);
 
-        perf.total_time += duration;
-        perf.avg_time = perf.total_time / perf.attempts.max(1);
-
-        // Update FSRS state
-        self.update_fsrs_state(command, duration, success, optimal_time, now);
-
-        // Update mastery level
-        if let Some(perf) = self.stats.get_mut(command) {
-            perf.update_mastery_level();
-        }
+        // Rating index 0-3 for again/hard/good/easy.
+        let rating_index = Self::calculate_rating_index(duration, success, optimal_time);
+        let elapsed_days = Self::elapsed_days_since_review(perf, now);
+        let next_state =
+            Self::next_item_state(&self.fsrs, perf.memory_state(), elapsed_days, rating_index)?;
+        perf.update_from_next_state(next_state.memory, next_state.interval, rating_index, now)
     }
 
-    /// Calculate next FSRS state based on rating
-    fn calculate_next_fsrs_state(
-        &self,
+    fn next_item_state(
+        fsrs: &FSRS,
         memory_state: Option<MemoryState>,
         elapsed_days: u32,
         rating_index: usize,
-    ) -> fsrs::ItemState {
-        let next_states = self
-            .fsrs
+    ) -> Result<fsrs::ItemState, LearningError> {
+        let next_states = fsrs
             .next_states(memory_state, DEFAULT_DESIRED_RETENTION, elapsed_days)
-            .unwrap();
+            .map_err(|error| LearningError::FsrsError(error.to_string()))?;
 
-        match rating_index {
+        Ok(match rating_index {
             0 => next_states.again,
             1 => next_states.hard,
             2 => next_states.good,
             3 => next_states.easy,
             _ => unreachable!("rating_index must be 0-3"),
-        }
+        })
     }
 
-    /// Calculate elapsed days since last review
     fn elapsed_days_since_review(perf: &CommandPerformance, now: DateTime<Utc>) -> u32 {
         if perf.reps == 0 {
             0
         } else {
             (now - perf.last_review).num_days().max(0) as u32
         }
-    }
-
-    fn update_fsrs_state(
-        &mut self,
-        command: &str,
-        duration: Duration,
-        success: bool,
-        optimal_time: Duration,
-        now: DateTime<Utc>,
-    ) {
-        let perf = self.stats.get(command).unwrap();
-
-        // Convert performance to FSRS rating (0-3 index for again/hard/good/easy)
-        let rating_index = Self::calculate_rating_index(duration, success, optimal_time);
-
-        // Get current memory state and elapsed time
-        let memory_state = perf.memory_state();
-        let elapsed_days = Self::elapsed_days_since_review(perf, now);
-
-        // Calculate next state from FSRS
-        let next_state = self.calculate_next_fsrs_state(memory_state, elapsed_days, rating_index);
-
-        // Update performance with new FSRS state
-        let perf = self.stats.get_mut(command).unwrap();
-        perf.update_from_next_state(next_state.memory, next_state.interval, rating_index, now);
-
-        // Update retrievability (current recall probability)
-        //
-        // `decay` must be the raw (positive) model weight `w[20]`, not its negation:
-        // `fsrs::current_retrievability`'s formula mirrors the crate's internal
-        // `power_forgetting_curve`, which computes its own `decay = -w[20]` before use.
-        // Passing a negative value here double-flips the sign, driving the curve's base
-        // negative for perfectly ordinary inputs and producing NaN via `powf`. Read from
-        // `FSRS_PARAMS[20]` (the same array `self.fsrs` above is constructed with, see
-        // `with_clock`/`from_stats_with_clock`) rather than a same-named constant, so
-        // this can't silently diverge if these parameters become configurable later.
-        perf.retrievability = fsrs::current_retrievability(
-            perf.memory_state().unwrap_or(MemoryState {
-                stability: 0.0,
-                difficulty: DEFAULT_DIFFICULTY,
-            }),
-            elapsed_days as f32,
-            FSRS_PARAMS[20],
-        );
     }
 
     fn calculate_rating_index(duration: Duration, success: bool, optimal_time: Duration) -> usize {
@@ -615,7 +692,7 @@ impl PerformanceTracker {
     pub fn from_stats_with_clock(stats: PerformanceData, clock: Arc<dyn Clock>) -> Self {
         Self {
             stats: stats.into(),
-            fsrs: FSRS::new(&FSRS_PARAMS).unwrap(),
+            fsrs: default_fsrs(),
             clock,
         }
     }
@@ -638,14 +715,14 @@ impl PerformanceTracker {
         let old_level = self
             .stats
             .get(command)
-            .map(|p| p.mastery_level)
+            .map(|p| p.mastery_level())
             .unwrap_or(MasteryLevel::Beginner);
 
         // Record the attempt
         self.record_attempt(command, duration, success, optimal_time);
 
         // Get new mastery level
-        let new_level = self.stats.get(command).map(|p| p.mastery_level)?;
+        let new_level = self.stats.get(command).map(|p| p.mastery_level())?;
 
         // Return change if level improved
         if new_level.tier_level() > old_level.tier_level() {
@@ -659,9 +736,9 @@ impl PerformanceTracker {
         self.stats
             .iter()
             .filter(|(_, perf)| {
-                perf.difficulty > 7.0
+                perf.difficulty() > 7.0
                     || perf.success_rate() < 0.7
-                    || perf.mastery_level == MasteryLevel::Beginner
+                    || perf.mastery_level() == MasteryLevel::Beginner
                     || perf.lapses > 2
             })
             .map(|(cmd, _)| cmd.clone())
@@ -687,26 +764,49 @@ mod tests {
     use crate::time::FakeClock;
     use std::assert_matches;
 
+    fn card_json(stability: &str, difficulty: &str, attempts: u32, successes: u32) -> String {
+        format!(
+            r#"{{
+                "stability": {stability},
+                "difficulty": {difficulty},
+                "state": "Review",
+                "reps": 3,
+                "lapses": 1,
+                "attempts": {attempts},
+                "successes": {successes},
+                "total_time": 3000,
+                "last_review": "2026-01-15T12:00:00Z",
+                "due": "2026-01-20T12:00:00Z",
+                "scheduled_days": 5
+            }}"#
+        )
+    }
+
+    fn load(cards: &[(&str, String)]) -> PerformanceData {
+        let body: Vec<String> = cards
+            .iter()
+            .map(|(command, json)| format!("\"{command}\": {json}"))
+            .collect();
+        serde_json::from_str(&format!("{{{}}}", body.join(","))).unwrap()
+    }
+
     #[test]
     fn test_new_command_defaults() {
-        let perf = CommandPerformance::new("x".to_string(), Utc::now());
-        assert_eq!(perf.stability, 0.0);
-        assert_eq!(perf.difficulty, DEFAULT_DIFFICULTY);
-        assert_eq!(perf.reps, 0);
-        assert_eq!(perf.state, CardState::New);
-        assert_eq!(perf.mastery_level, MasteryLevel::Beginner);
-        assert_eq!(perf.retrievability, 1.0);
+        let now = Utc::now();
+        let perf = CommandPerformance::new("x".to_string(), now);
+        assert_eq!(perf.stability(), 0.0);
+        assert_eq!(perf.difficulty(), DEFAULT_DIFFICULTY);
+        assert_eq!(perf.reps(), 0);
+        assert_eq!(perf.state(), CardState::New);
+        assert_eq!(perf.mastery_level(), MasteryLevel::Beginner);
+        assert_eq!(perf.retrievability(now), 1.0);
+        assert_eq!(perf.avg_time(), Duration::ZERO);
         assert!(perf.memory_state().is_none());
     }
 
-    /// Regression test: a `profile.json` written while the decay-sign bug (see
-    /// `PerformanceTracker::update_fsrs_state`) was live could contain a `NaN`
-    /// `retrievability`, which `serde_json` round-trips as `null`. Deserializing that
-    /// must recover as `1.0`, not fail the whole `CommandPerformance` (and therefore
-    /// the whole profile load).
     #[test]
-    fn test_deserialize_null_retrievability_recovers_as_one() {
-        let json = r#"{
+    fn legacy_derived_keys_are_ignored_on_load() {
+        let legacy = r#"{
             "command": "x",
             "stability": 5.0,
             "difficulty": 6.0,
@@ -716,19 +816,138 @@ mod tests {
             "attempts": 3,
             "successes": 2,
             "total_time": 3000,
-            "avg_time": 1000,
+            "avg_time": 99999,
             "last_review": "2026-01-15T12:00:00Z",
             "due": "2026-01-20T12:00:00Z",
             "scheduled_days": 5,
-            "mastery_level": "Intermediate",
+            "mastery_level": "Master",
             "retrievability": null
         }"#;
 
-        let perf: CommandPerformance = serde_json::from_str(json).unwrap();
-        assert_eq!(perf.retrievability, 1.0);
-        // Everything else deserializes normally -- only `retrievability` gets tolerant handling.
-        assert_eq!(perf.command, "x");
-        assert_eq!(perf.stability, 5.0);
+        let data = load(&[("x", legacy.to_string())]);
+
+        let perf = data.get("x").expect("legacy card loads");
+        assert_eq!(perf.command(), "x");
+        assert_eq!(perf.avg_time(), Duration::from_millis(1000));
+        assert_eq!(perf.mastery_level(), MasteryLevel::Intermediate);
+    }
+
+    #[test]
+    fn derived_values_are_not_persisted() {
+        let mut tracker = PerformanceTracker::new();
+        tracker.record_attempt("h", Duration::from_secs(1), true, Duration::from_secs(1));
+
+        let json = serde_json::to_value(tracker.stats_clone()).unwrap();
+
+        let keys: std::collections::BTreeSet<&str> = json["h"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        for derived in ["command", "avg_time", "mastery_level", "retrievability"] {
+            assert!(!keys.contains(derived), "{derived} must not be persisted");
+        }
+    }
+
+    #[test]
+    fn persisted_cards_round_trip() {
+        let mut tracker = PerformanceTracker::new();
+        tracker.record_attempt("h", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("dd", Duration::from_secs(9), false, Duration::from_secs(1));
+
+        let json = serde_json::to_string(&tracker.stats_clone()).unwrap();
+        let data: PerformanceData = serde_json::from_str(&json).unwrap();
+
+        for command in ["h", "dd"] {
+            let before = tracker.performance(command).unwrap();
+            let after = data.get(command).unwrap();
+            assert_eq!(after.command(), command);
+            assert_eq!(after.stability(), before.stability());
+            assert_eq!(after.difficulty(), before.difficulty());
+            assert_eq!(after.attempts(), before.attempts());
+            assert_eq!(after.mastery_level(), before.mastery_level());
+            assert_eq!(after.due(), before.due());
+        }
+    }
+
+    #[test]
+    fn invalid_cards_are_dropped_and_the_rest_load() {
+        let data = load(&[
+            ("h", card_json("5.0", "6.0", 3, 2)),
+            ("j", card_json("5.0", "null", 3, 2)),
+            ("k", card_json("-1.0", "6.0", 3, 2)),
+            ("l", card_json("5.0", "11.0", 3, 2)),
+            ("w", card_json("5.0", "6.0", 2, 3)),
+            ("b", card_json("\"x\"", "6.0", 3, 2)),
+        ]);
+
+        assert_eq!(data.len(), 1);
+        assert!(data.contains_key("h"));
+    }
+
+    #[test]
+    fn review_after_loading_dropped_cards_does_not_panic() {
+        let data = load(&[
+            ("h", card_json("5.0", "6.0", 3, 2)),
+            ("j", card_json("5.0", "null", 3, 2)),
+        ]);
+        let mut tracker = PerformanceTracker::from_stats(data);
+
+        tracker.record_attempt("h", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt("j", Duration::from_secs(1), true, Duration::from_secs(1));
+
+        assert_eq!(tracker.performance("h").unwrap().attempts(), 4);
+        assert_eq!(tracker.performance("j").unwrap().attempts(), 1);
+    }
+
+    #[test]
+    fn mastery_avg_time_and_retrievability_are_derived_on_read() {
+        let now: DateTime<Utc> = "2026-01-15T12:00:00Z".parse().unwrap();
+        let data = load(&[("h", card_json("40.0", "4.0", 4, 4))]);
+        let perf = data.get("h").unwrap();
+
+        assert_eq!(perf.avg_time(), Duration::from_millis(750));
+        assert_eq!(perf.mastery_level(), MasteryLevel::Master);
+        assert!((perf.retrievability(now) - 1.0).abs() < 1e-6);
+        let later = perf.retrievability(now + chrono::Duration::days(100));
+        assert!((0.0..1.0).contains(&later));
+    }
+
+    #[test]
+    fn failed_fsrs_update_counts_the_attempt_and_keeps_the_schedule() {
+        let mut broken = CommandPerformance::new("x".to_string(), Utc::now());
+        broken.reps = 2;
+        broken.state = CardState::Review;
+        broken.stability = Stability(f32::NAN);
+        let mut tracker =
+            PerformanceTracker::from_stats(HashMap::from([("x".into(), broken)]).into());
+
+        let result =
+            tracker.try_record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+
+        assert_matches!(result, Err(LearningError::FsrsError(_)));
+        let perf = tracker.performance("x").unwrap();
+        assert_eq!(perf.attempts(), 1);
+        assert_eq!(perf.successes(), 1);
+        assert_eq!(perf.reps(), 2);
+        assert_eq!(perf.state(), CardState::Review);
+    }
+
+    #[test]
+    fn out_of_domain_memory_leaves_the_card_unchanged() {
+        let now = Utc::now();
+        let mut perf = CommandPerformance::new("x".to_string(), now);
+        let memory = MemoryState {
+            stability: f32::INFINITY,
+            difficulty: 5.0,
+        };
+
+        let result = perf.update_from_next_state(memory, 3.0, 2, now);
+
+        assert_matches!(result, Err(LearningError::InvalidStability(_)));
+        assert_eq!(perf.reps(), 0);
+        assert_eq!(perf.state(), CardState::New);
     }
 
     #[test]
@@ -757,17 +976,17 @@ mod tests {
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
         let perf = tracker.performance("x").unwrap();
-        assert!(perf.stability > 0.0);
+        assert!(perf.stability() > 0.0);
         assert_eq!(perf.reps, 1);
         assert_matches!(perf.state, CardState::Learning | CardState::Review);
 
-        let first_stability = perf.stability;
+        let first_stability = perf.stability();
 
         // Second attempt (perfect)
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
         let perf = tracker.performance("x").unwrap();
-        assert!(perf.stability > first_stability); // FSRS increases stability
+        assert!(perf.stability() > first_stability); // FSRS increases stability
         assert_eq!(perf.reps, 2);
     }
 
@@ -800,8 +1019,8 @@ mod tests {
         }
 
         let perf = tracker.performance("x").unwrap();
-        assert!(perf.difficulty >= 0.0);
-        assert!(perf.difficulty <= 10.0);
+        assert!(perf.difficulty() >= 0.0);
+        assert!(perf.difficulty() <= 10.0);
     }
 
     #[test]
@@ -849,8 +1068,8 @@ mod tests {
         let mut perf = CommandPerformance::new("x".to_string(), Utc::now());
         assert!(perf.memory_state().is_none());
 
-        perf.stability = 5.0;
-        perf.difficulty = 6.0;
+        perf.stability = Stability(5.0);
+        perf.difficulty = Difficulty(6.0);
         perf.reps = 1;
         perf.state = CardState::Review;
 
@@ -862,22 +1081,19 @@ mod tests {
     #[test]
     fn test_mastery_level_progression() {
         let mut perf = CommandPerformance::new("x".to_string(), Utc::now());
-        assert_eq!(perf.mastery_level, MasteryLevel::Beginner);
+        assert_eq!(perf.mastery_level(), MasteryLevel::Beginner);
 
         // Simulate progression through states
         perf.state = CardState::Review;
-        perf.stability = 5.0;
-        perf.update_mastery_level();
-        assert_eq!(perf.mastery_level, MasteryLevel::Intermediate);
+        perf.stability = Stability(5.0);
+        assert_eq!(perf.mastery_level(), MasteryLevel::Intermediate);
 
-        perf.stability = 10.0;
-        perf.update_mastery_level();
-        assert_eq!(perf.mastery_level, MasteryLevel::Advanced);
+        perf.stability = Stability(10.0);
+        assert_eq!(perf.mastery_level(), MasteryLevel::Advanced);
 
-        perf.stability = 35.0;
-        perf.difficulty = 4.0;
-        perf.update_mastery_level();
-        assert_eq!(perf.mastery_level, MasteryLevel::Master);
+        perf.stability = Stability(35.0);
+        perf.difficulty = Difficulty(4.0);
+        assert_eq!(perf.mastery_level(), MasteryLevel::Master);
     }
 
     #[test]
@@ -978,14 +1194,14 @@ mod tests {
             // Same starting state + same rating sequence + same simulated elapsed
             // time between reviews must always produce the same resulting FSRS
             // state -- no hidden randomness or wall-clock reads.
-            prop_assert_eq!(first.stability, second.stability);
-            prop_assert_eq!(first.difficulty, second.difficulty);
+            prop_assert_eq!(first.stability(), second.stability());
+            prop_assert_eq!(first.difficulty(), second.difficulty());
             prop_assert_eq!(first.state, second.state);
             prop_assert_eq!(first.reps, second.reps);
             prop_assert_eq!(first.lapses, second.lapses);
             prop_assert_eq!(first.scheduled_days, second.scheduled_days);
             prop_assert_eq!(first.due, second.due);
-            prop_assert_eq!(first.retrievability, second.retrievability);
+            prop_assert_eq!(first.avg_time(), second.avg_time());
         }
 
         /// Bounds this crate's glue code doesn't itself enforce -- unlike `scheduled_days`
@@ -1015,21 +1231,21 @@ mod tests {
                 let perf = tracker.performance("x").unwrap();
                 // FSRS's own difficulty domain (fsrs::simulation::{D_MIN, D_MAX}).
                 prop_assert!(
-                    (1.0..=10.0).contains(&perf.difficulty),
+                    (1.0..=10.0).contains(&perf.difficulty()),
                     "difficulty {} outside FSRS's [1, 10] domain",
-                    perf.difficulty
+                    perf.difficulty()
                 );
                 // FSRS clamps stability to a strictly positive minimum
                 // (fsrs::simulation::S_MIN); zero would make retrievability degenerate.
                 prop_assert!(
-                    perf.stability > 0.0,
+                    perf.stability() > 0.0,
                     "stability {} must be strictly positive",
-                    perf.stability
+                    perf.stability()
                 );
                 prop_assert!(
-                    (0.0..=1.0).contains(&perf.retrievability),
+                    (0.0..=1.0).contains(&perf.retrievability(clock.now() + chrono::Duration::days(elapsed_days))),
                     "retrievability {} outside the documented [0, 1] probability range",
-                    perf.retrievability
+                    perf.retrievability(clock.now() + chrono::Duration::days(elapsed_days))
                 );
             }
         }

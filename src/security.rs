@@ -165,7 +165,9 @@ impl From<crate::learning::LearningError> for UserError {
         tracing::error!("Learning error occurred: {:?}", err);
 
         match err {
-            LearningError::InvalidStability(_) | LearningError::InvalidDifficulty(_) => {
+            LearningError::InvalidStability(_)
+            | LearningError::InvalidDifficulty(_)
+            | LearningError::InvalidCounters { .. } => {
                 UserError::invalid_state("Invalid learning parameters")
             }
             LearningError::CommandNotFound(_) => {

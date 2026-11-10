@@ -32,6 +32,9 @@ pub enum LearningError {
     #[error("Invalid difficulty: {0} (must be between 0 and 10)")]
     InvalidDifficulty(f64),
 
+    #[error("Invalid counters: {successes} successes exceed {attempts} attempts")]
+    InvalidCounters { attempts: u32, successes: u32 },
+
     #[error("Command not found: {0}")]
     CommandNotFound(String),
 

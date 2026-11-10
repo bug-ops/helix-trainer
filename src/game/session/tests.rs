@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::testing::ScenarioBuilder;
+use crate::time::FakeMonotonicClock;
 use std::assert_matches;
 
 fn create_test_scenario() -> Scenario {
@@ -273,12 +274,12 @@ fn test_reset_session() {
 #[test]
 fn test_elapsed_time() {
     let scenario = create_test_scenario();
-    let session = GameSession::new(scenario).unwrap();
+    let clock = Arc::new(FakeMonotonicClock::new());
+    let session = GameSession::with_clock(scenario, clock.clone()).unwrap();
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    clock.advance(Duration::from_millis(10));
 
-    let elapsed = session.elapsed();
-    assert!(elapsed.as_millis() >= 10);
+    assert_eq!(session.elapsed(), Duration::from_millis(10));
 }
 
 #[test]
@@ -305,7 +306,8 @@ fn test_feedback_summary() {
 #[test]
 fn test_timer_fixed_on_completion() {
     let scenario = create_test_scenario();
-    let session = GameSession::new(scenario).unwrap();
+    let clock = Arc::new(FakeMonotonicClock::new());
+    let session = GameSession::with_clock(scenario, clock.clone()).unwrap();
 
     // Complete with x + d commands
     let result = session.record_action("x".to_string()).unwrap();
@@ -321,17 +323,11 @@ fn test_timer_fixed_on_completion() {
             let feedback1 = completed.feedback().unwrap();
             let duration1 = feedback1.duration;
 
-            // Wait a bit
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            clock.advance(Duration::from_millis(50));
 
-            // Get feedback again - duration should be the same (fixed)
             let feedback2 = completed.feedback().unwrap();
-            let duration2 = feedback2.duration;
-
-            // Durations should be equal (or very close)
-            let diff = duration2.abs_diff(duration1);
-            assert!(
-                diff.as_millis() < 5,
+            assert_eq!(
+                feedback2.duration, duration1,
                 "Timer should be fixed after completion"
             );
         }
@@ -349,7 +345,8 @@ fn test_playable_scenario_elapsed_fixed_after_completion() {
     use crate::game::PlayableScenario;
 
     let scenario = create_test_scenario();
-    let session = GameSession::new(scenario).unwrap();
+    let clock = Arc::new(FakeMonotonicClock::new());
+    let session = GameSession::with_clock(scenario, clock.clone()).unwrap();
 
     let result = session.record_action("x".to_string()).unwrap();
     let session = match result {
@@ -362,7 +359,7 @@ fn test_playable_scenario_elapsed_fixed_after_completion() {
         SessionAfterAction::Completed(completed) => {
             let elapsed1 = PlayableScenario::elapsed(&completed);
 
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            clock.advance(Duration::from_millis(50));
 
             let elapsed2 = PlayableScenario::elapsed(&completed);
             assert_eq!(

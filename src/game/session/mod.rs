@@ -34,9 +34,11 @@ use crate::config::Scenario;
 use crate::game::{CommandExecutor, PerformanceRating, Scorer};
 use crate::helix::{AnyModeSimulator, EditorSnapshot, Mode};
 use crate::security::{self, SecurityError, UserError};
+use crate::time::{MonotonicClock, SystemMonotonicClock};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub use typestate::{Abandoned, Active, Completed, SessionState};
@@ -215,6 +217,8 @@ pub struct GameSession<State: SessionState = Active> {
     started_at: Instant,
     /// When the session completed (None if still active/abandoned)
     completed_at: Option<Instant>,
+    /// Source of `started_at`/`completed_at` instants
+    clock: Arc<dyn MonotonicClock>,
     /// Number of hints shown to user
     hints_shown: usize,
     /// Cached completion progress percentage (0-100)
@@ -232,7 +236,7 @@ impl<State: SessionState> std::fmt::Debug for GameSession<State> {
             .field("scenario_id", &self.scenario.id)
             .field("action_count", &self.user_actions.len())
             .field("hints_shown", &self.hints_shown)
-            .field("elapsed", &self.started_at.elapsed())
+            .field("elapsed", &self.elapsed())
             .field("state", &std::any::type_name::<State>())
             .finish()
     }
@@ -263,7 +267,7 @@ impl<S: SessionState> GameSession<S> {
 
     /// Get elapsed time since session start
     pub fn elapsed(&self) -> Duration {
-        self.started_at.elapsed()
+        self.clock.now().saturating_duration_since(self.started_at)
     }
 
     /// Get current editor mode
@@ -438,6 +442,21 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn new(scenario: Scenario) -> Result<Self, UserError> {
+        Self::with_clock(scenario, Arc::new(SystemMonotonicClock))
+    }
+
+    /// Create a session that reads time from `clock` instead of the system clock.
+    ///
+    /// Tests inject a [`FakeMonotonicClock`](crate::time::FakeMonotonicClock) to
+    /// drive elapsed time without sleeping.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`GameSession::new`].
+    pub fn with_clock(
+        scenario: Scenario,
+        clock: Arc<dyn MonotonicClock>,
+    ) -> Result<Self, UserError> {
         // Use unified ScenarioState helper for initialization
         let state = crate::game::ScenarioState::from_scenario(&scenario)?;
 
@@ -446,8 +465,9 @@ impl GameSession<Active> {
             simulator: state.simulator,
             target_snapshot: state.target_snapshot,
             user_actions: Vec::new(),
-            started_at: Instant::now(),
+            started_at: clock.now(),
             completed_at: None,
+            clock,
             hints_shown: 0,
             cached_progress: Cell::new(None),
             progress_needs_update: Cell::new(true),
@@ -537,7 +557,8 @@ impl GameSession<Active> {
             target_snapshot: self.target_snapshot,
             user_actions: self.user_actions,
             started_at: self.started_at,
-            completed_at: Some(Instant::now()),
+            completed_at: Some(self.clock.now()),
+            clock: self.clock,
             hints_shown: self.hints_shown,
             cached_progress: self.cached_progress,
             progress_needs_update: self.progress_needs_update,
@@ -638,6 +659,7 @@ impl GameSession<Active> {
             user_actions: self.user_actions,
             started_at: self.started_at,
             completed_at: None,
+            clock: self.clock,
             hints_shown: self.hints_shown,
             cached_progress: self.cached_progress,
             progress_needs_update: self.progress_needs_update,
@@ -677,7 +699,7 @@ impl GameSession<Active> {
         );
         self.simulator = AnyModeSimulator::from_snapshot(&initial_snapshot);
         self.user_actions.clear();
-        self.started_at = Instant::now();
+        self.started_at = self.clock.now();
         self.completed_at = None;
         self.hints_shown = 0;
         // Reset progress cache
@@ -817,7 +839,7 @@ impl GameSession<Abandoned> {
             rating: PerformanceRating::Poor,
             actions_taken: self.user_actions.len(),
             optimal_actions: self.scenario.scoring.optimal_count.get(),
-            duration: self.started_at.elapsed(),
+            duration: self.elapsed(),
             hint: Some(format!(
                 "Solution: {}. {}",
                 self.scenario.solution.commands.join(", "),
@@ -873,7 +895,7 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
     }
 
     fn elapsed(&self) -> Duration {
-        S::session_elapsed(self.started_at, self.completed_at)
+        S::session_elapsed(self.started_at, self.completed_at, self.clock.now())
     }
 
     fn language(&self) -> &str {

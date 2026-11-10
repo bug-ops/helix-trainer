@@ -14,6 +14,9 @@ use crate::minigame::{
     select_challenge_scenarios,
 };
 use crate::security::UserError;
+use crate::time::{MonotonicClock, SystemMonotonicClock};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -123,6 +126,9 @@ pub struct ActiveMiniScenario {
     /// Scenario stopwatch (excludes paused spans)
     timer: PausableClock,
 
+    /// Source of the instants fed to `timer`
+    clock: Arc<dyn MonotonicClock>,
+
     /// Time limit for this scenario
     time_limit: Duration,
 
@@ -136,7 +142,11 @@ impl ActiveMiniScenario {
     /// # Errors
     ///
     /// Returns `UserError` if scenario setup or target state is invalid.
-    fn new(scenario: Scenario, time_limit: Duration) -> Result<Self, UserError> {
+    fn new(
+        scenario: Scenario,
+        time_limit: Duration,
+        clock: Arc<dyn MonotonicClock>,
+    ) -> Result<Self, UserError> {
         // Use unified ScenarioState helper for initialization
         let state = crate::game::ScenarioState::from_scenario(&scenario)?;
 
@@ -144,7 +154,8 @@ impl ActiveMiniScenario {
             scenario,
             simulator: state.simulator,
             target_snapshot: state.target_snapshot,
-            timer: PausableClock::start(Instant::now()),
+            timer: PausableClock::start(clock.now()),
+            clock,
             time_limit,
             actions: Vec::new(),
         })
@@ -162,19 +173,19 @@ impl ActiveMiniScenario {
     ///
     /// Idempotent: calling this while already paused has no effect.
     pub fn pause(&mut self) {
-        self.timer.pause(Instant::now());
+        self.timer.pause(self.clock.now());
     }
 
     /// Resume the countdown timer, accumulating the just-finished pause span
     ///
     /// Idempotent: calling this while not paused has no effect.
     pub fn resume(&mut self) {
-        self.timer.resume(Instant::now());
+        self.timer.resume(self.clock.now());
     }
 
     /// Get elapsed time since scenario started, excluding any paused duration
     pub fn elapsed(&self) -> Duration {
-        self.timer.elapsed(Instant::now())
+        self.timer.elapsed(self.clock.now())
     }
 
     /// Get remaining time before timeout
@@ -314,7 +325,7 @@ impl CommandExecutor for ActiveMiniScenario {
 /// - Difficulty adaptation
 /// - State machine management
 /// - FSRS-based weighted scenario selection
-pub struct MiniGameSession {
+pub struct MiniGameSession<R: Rng = StdRng> {
     /// Current active scenario being played
     current: Option<ActiveMiniScenario>,
 
@@ -353,6 +364,12 @@ pub struct MiniGameSession {
 
     /// Source of upcoming scenarios, fixed by the mode
     lineup: Lineup,
+
+    /// Source of every instant the session reads
+    clock: Arc<dyn MonotonicClock>,
+
+    /// Randomness for adaptive scenario selection
+    rng: R,
 
     /// Whether game-over bookkeeping (FSRS recording, XP award, profile save)
     /// has already run for this session.
@@ -423,6 +440,51 @@ impl MiniGameSession {
         tracker: Option<PerformanceTracker>,
         mode: MiniGameMode,
     ) -> Self {
+        Self::with_sources(
+            scenarios,
+            tracker,
+            mode,
+            Arc::new(SystemMonotonicClock),
+            StdRng::from_rng(&mut rand::rng()),
+        )
+    }
+}
+
+impl<R: Rng> MiniGameSession<R> {
+    /// Create a session with explicit time and randomness sources.
+    ///
+    /// [`MiniGameSession::new`] and [`MiniGameSession::with_mode`] use the system
+    /// clock and an OS-seeded RNG; tests inject a
+    /// [`FakeMonotonicClock`](crate::time::FakeMonotonicClock) and a seeded RNG so
+    /// timers and scenario selection are deterministic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use helix_trainer::minigame::{MiniGameMode, MiniGameSession};
+    /// use helix_trainer::time::FakeMonotonicClock;
+    /// use rand::SeedableRng;
+    /// use rand::rngs::StdRng;
+    /// use std::sync::Arc;
+    ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en").unwrap());
+    /// let session = MiniGameSession::with_sources(
+    ///     scenarios,
+    ///     None,
+    ///     MiniGameMode::default(),
+    ///     Arc::new(FakeMonotonicClock::new()),
+    ///     StdRng::seed_from_u64(7),
+    /// );
+    /// assert!(session.state().is_countdown());
+    /// ```
+    pub fn with_sources(
+        scenarios: Arc<Vec<Scenario>>,
+        tracker: Option<PerformanceTracker>,
+        mode: MiniGameMode,
+        clock: Arc<dyn MonotonicClock>,
+        rng: R,
+    ) -> Self {
         let starting_lives = mode.starting_lives();
 
         // For Challenge mode, pre-select scenarios using seeded RNG
@@ -448,6 +510,8 @@ impl MiniGameSession {
             tracker,
             mode,
             lineup,
+            clock,
+            rng,
             game_over_processed: false,
         };
 
@@ -502,7 +566,7 @@ impl MiniGameSession {
                 // Countdown finished, start playing
                 self.phase = Phase::Playing;
                 self.session_timer
-                    .get_or_insert_with(|| PausableClock::start(Instant::now()));
+                    .get_or_insert_with(|| PausableClock::start(self.clock.now()));
                 // Load first scenario if not already loaded
                 if self.current.is_none() {
                     let _ = self.load_next_scenario();
@@ -628,7 +692,7 @@ impl MiniGameSession {
         // Transition state (success)
         self.phase = Phase::Transition {
             success: true,
-            started_at: Instant::now(),
+            started_at: self.clock.now(),
         };
     }
 
@@ -652,7 +716,9 @@ impl MiniGameSession {
     /// Returns true if in transition state and delay (1 second) has passed.
     pub fn should_advance_to_next(&self) -> bool {
         match self.phase {
-            Phase::Transition { started_at, .. } => started_at.elapsed() >= Duration::from_secs(1),
+            Phase::Transition { started_at, .. } => {
+                self.clock.now().saturating_duration_since(started_at) >= Duration::from_secs(1)
+            }
             _ => false,
         }
     }
@@ -703,7 +769,7 @@ impl MiniGameSession {
             // Continue to next scenario (failure transition)
             self.phase = Phase::Transition {
                 success: false,
-                started_at: Instant::now(),
+                started_at: self.clock.now(),
             };
         } else {
             // Game over
@@ -743,7 +809,7 @@ impl MiniGameSession {
     /// Returns `Duration::ZERO` if gameplay has not started yet (still in countdown).
     fn session_elapsed(&self) -> Duration {
         self.session_timer
-            .map_or(Duration::ZERO, |timer| timer.elapsed(Instant::now()))
+            .map_or(Duration::ZERO, |timer| timer.elapsed(self.clock.now()))
     }
 
     /// Check if the mode's session-level time limit has elapsed
@@ -795,7 +861,7 @@ impl MiniGameSession {
                 current.pause();
             }
             if let Some(timer) = self.session_timer.as_mut() {
-                timer.pause(Instant::now());
+                timer.pause(self.clock.now());
             }
         }
     }
@@ -819,7 +885,7 @@ impl MiniGameSession {
                 current.resume();
             }
             if let Some(timer) = self.session_timer.as_mut() {
-                timer.resume(Instant::now());
+                timer.resume(self.clock.now());
             }
         }
     }
@@ -1058,7 +1124,11 @@ impl MiniGameSession {
         let time_limit = self.get_scenario_time_limit(&scenario);
 
         // Create active scenario
-        self.current = Some(ActiveMiniScenario::new(scenario, time_limit)?);
+        self.current = Some(ActiveMiniScenario::new(
+            scenario,
+            time_limit,
+            Arc::clone(&self.clock),
+        )?);
 
         // Refill queue
         self.refill_queue();
@@ -1106,12 +1176,11 @@ impl MiniGameSession {
                 }
             }
             Lineup::Adaptive => {
-                let mut rng = rand::rng();
                 while self.queue.len() < QUEUE_SIZE {
                     let Some(scenario) = self.difficulty.next_scenario(
                         &self.scenarios,
                         self.tracker.as_ref(),
-                        &mut rng,
+                        &mut self.rng,
                     ) else {
                         break; // No more scenarios available
                     };
@@ -1171,6 +1240,15 @@ mod tests {
     use crate::game::PlayableScenario;
     use crate::minigame::{ArcadeConfig, ChallengeConfig, SurvivalConfig};
     use crate::testing::ScenarioBuilder;
+    use crate::time::FakeMonotonicClock;
+
+    fn seeded_session(
+        scenarios: Arc<Vec<Scenario>>,
+        mode: MiniGameMode,
+        clock: Arc<FakeMonotonicClock>,
+    ) -> MiniGameSession {
+        MiniGameSession::with_sources(scenarios, None, mode, clock, StdRng::seed_from_u64(1))
+    }
 
     fn create_test_scenario(id: &str, difficulty: Difficulty) -> Scenario {
         ScenarioBuilder::new()
@@ -1266,7 +1344,12 @@ mod tests {
     #[test]
     fn test_active_scenario_language_defaults_to_rs_when_scenario_omits_it() {
         let scenario = create_test_scenario("s1", Difficulty::Beginner);
-        let active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+        let active = ActiveMiniScenario::new(
+            scenario,
+            Duration::from_secs(60),
+            Arc::new(SystemMonotonicClock),
+        )
+        .unwrap();
         assert_eq!(active.language(), "rs");
     }
 
@@ -1281,107 +1364,93 @@ mod tests {
             .target_cursor(1, 0)
             .optimal_count(1)
             .build();
-        let active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+        let active = ActiveMiniScenario::new(
+            scenario,
+            Duration::from_secs(60),
+            Arc::new(SystemMonotonicClock),
+        )
+        .unwrap();
         assert_eq!(active.language(), "py");
+    }
+
+    fn active_with_clock() -> (ActiveMiniScenario, Arc<FakeMonotonicClock>) {
+        let clock = Arc::new(FakeMonotonicClock::new());
+        let active = ActiveMiniScenario::new(
+            create_test_scenario("s1", Difficulty::Beginner),
+            Duration::from_secs(60),
+            clock.clone(),
+        )
+        .unwrap();
+        (active, clock)
     }
 
     #[test]
     fn test_active_scenario_pause_freezes_elapsed_time() {
-        let scenario = create_test_scenario("s1", Difficulty::Beginner);
-        let mut active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+        let (mut active, clock) = active_with_clock();
 
-        let elapsed_before_pause = active.elapsed();
+        clock.advance(Duration::from_millis(10));
         active.pause();
+        clock.advance(Duration::from_millis(50));
 
-        std::thread::sleep(Duration::from_millis(50));
-        let elapsed_while_paused = active.elapsed();
-
-        // Elapsed time must not advance while paused, even though real time passed.
-        assert!(
-            elapsed_while_paused < elapsed_before_pause + Duration::from_millis(20),
-            "elapsed grew while paused: before={elapsed_before_pause:?} during={elapsed_while_paused:?}"
-        );
+        assert_eq!(active.elapsed(), Duration::from_millis(10));
 
         active.resume();
-        std::thread::sleep(Duration::from_millis(30));
-        let elapsed_after_resume = active.elapsed();
+        clock.advance(Duration::from_millis(30));
 
-        // Once resumed, elapsed time should advance again.
-        assert!(
-            elapsed_after_resume > elapsed_while_paused,
-            "elapsed did not advance after resume: during={elapsed_while_paused:?} after={elapsed_after_resume:?}"
-        );
+        assert_eq!(active.elapsed(), Duration::from_millis(40));
     }
 
     #[test]
     fn test_active_scenario_repeated_pause_resume_accumulates_total_paused() {
-        let scenario = create_test_scenario("s1", Difficulty::Beginner);
-        let mut active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+        let (mut active, clock) = active_with_clock();
 
-        // First pause/resume cycle.
         active.pause();
-        std::thread::sleep(Duration::from_millis(30));
+        clock.advance(Duration::from_millis(30));
         active.resume();
-        let total_paused_after_first = active.timer.total_paused;
-        assert!(total_paused_after_first >= Duration::from_millis(20));
+        assert_eq!(active.timer.total_paused, Duration::from_millis(30));
 
-        // Second pause/resume cycle should add to the accumulated total, not reset it.
         active.pause();
-        std::thread::sleep(Duration::from_millis(30));
+        clock.advance(Duration::from_millis(20));
         active.resume();
-        let total_paused_after_second = active.timer.total_paused;
-
-        assert!(
-            total_paused_after_second > total_paused_after_first,
-            "second pause cycle did not accumulate: first={total_paused_after_first:?} second={total_paused_after_second:?}"
-        );
+        assert_eq!(active.timer.total_paused, Duration::from_millis(50));
     }
 
     #[test]
     fn test_active_scenario_pause_resume_idempotent() {
-        let scenario = create_test_scenario("s1", Difficulty::Beginner);
-        let mut active = ActiveMiniScenario::new(scenario, Duration::from_secs(60)).unwrap();
+        let (mut active, clock) = active_with_clock();
 
-        // Resuming without a prior pause is a no-op.
         active.resume();
         assert_eq!(active.timer.total_paused, Duration::ZERO);
         assert!(active.timer.paused_at.is_none());
 
-        // Pausing twice in a row should not reset the paused_at anchor.
         active.pause();
         let paused_at_first = active.timer.paused_at;
-        std::thread::sleep(Duration::from_millis(10));
+        clock.advance(Duration::from_millis(10));
         active.pause();
         assert_eq!(active.timer.paused_at, paused_at_first);
 
         active.resume();
-        assert!(active.timer.total_paused >= Duration::from_millis(5));
+        assert_eq!(active.timer.total_paused, Duration::from_millis(10));
     }
 
     #[test]
     fn test_minigame_session_pause_resume_freezes_scenario_elapsed() {
+        let clock = Arc::new(FakeMonotonicClock::new());
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
-        let mut session = MiniGameSession::new(scenarios, None);
+        let mut session = seeded_session(scenarios, MiniGameMode::default(), clock.clone());
         session.phase = Phase::Playing;
         let _ = session.load_next_scenario();
 
+        clock.advance(Duration::from_millis(5));
         session.pause();
         assert!(session.state().is_paused());
-
-        let elapsed_at_pause = session
-            .current_scenario()
-            .expect("scenario should be active")
-            .elapsed();
-        std::thread::sleep(Duration::from_millis(40));
+        clock.advance(Duration::from_millis(40));
 
         let elapsed_while_paused = session
             .current_scenario()
             .expect("scenario should still be active")
             .elapsed();
-        assert!(
-            elapsed_while_paused < elapsed_at_pause + Duration::from_millis(20),
-            "session-level pause did not freeze scenario elapsed time"
-        );
+        assert_eq!(elapsed_while_paused, Duration::from_millis(5));
 
         session.resume();
         assert!(session.state().is_playing());
@@ -1659,16 +1728,17 @@ mod tests {
         assert!(!challenge.has_session_timer());
     }
 
-    /// Helper for #327 tests: an Arcade session with a very short session
-    /// duration so tests can wait it out with a real (short) sleep rather
-    /// than mocking `Instant`.
-    fn short_arcade_session(session_duration: Duration) -> MiniGameSession {
+    /// An Arcade session with a short session duration, driven by `clock`.
+    fn short_arcade_session(
+        session_duration: Duration,
+        clock: Arc<FakeMonotonicClock>,
+    ) -> MiniGameSession {
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
         let mode = MiniGameMode::Arcade(ArcadeConfig {
             session_duration,
             ..ArcadeConfig::default()
         });
-        let mut session = MiniGameSession::with_mode(scenarios, None, mode);
+        let mut session = seeded_session(scenarios, mode, clock);
         session.start();
         session.tick_countdown();
         session.tick_countdown();
@@ -1679,20 +1749,22 @@ mod tests {
 
     #[test]
     fn test_session_expires_after_duration_elapses() {
-        // A generous limit (well above typical session-construction time) and an
-        // even more generous sleep multiple keep this robust on loaded CI runners.
-        let session = short_arcade_session(Duration::from_millis(200));
+        let clock = Arc::new(FakeMonotonicClock::new());
+        let session = short_arcade_session(Duration::from_millis(200), clock.clone());
 
         assert!(!session.is_session_expired());
-        std::thread::sleep(Duration::from_millis(500));
+        clock.advance(Duration::from_millis(199));
+        assert!(!session.is_session_expired());
+        clock.advance(Duration::from_millis(1));
         assert!(session.is_session_expired());
     }
 
     #[test]
     fn test_end_session_on_timeout_transitions_to_game_over_without_consuming_life() {
-        let mut session = short_arcade_session(Duration::from_millis(200));
+        let clock = Arc::new(FakeMonotonicClock::new());
+        let mut session = short_arcade_session(Duration::from_millis(200), clock.clone());
         let lives_before = session.stats().lives();
-        std::thread::sleep(Duration::from_millis(500));
+        clock.advance(Duration::from_millis(500));
         assert!(session.is_session_expired());
 
         session.end_session_on_timeout();
@@ -1707,36 +1779,21 @@ mod tests {
 
     #[test]
     fn test_session_pause_freezes_session_elapsed_time() {
-        let mut session = short_arcade_session(Duration::from_secs(60));
+        let clock = Arc::new(FakeMonotonicClock::new());
+        let mut session = short_arcade_session(Duration::from_secs(60), clock.clone());
 
+        clock.advance(Duration::from_millis(10));
         session.pause();
         assert!(session.state().is_paused());
-        assert!(
-            !session.is_session_expired(),
-            "sanity: 60s session should not already be expired"
-        );
+        assert!(!session.is_session_expired());
 
-        let elapsed_at_pause = session.session_elapsed();
-        std::thread::sleep(Duration::from_millis(50));
-        let elapsed_while_paused = session.session_elapsed();
-
-        // Wide margin: the paused-duration subtraction cancels wall-clock drift
-        // exactly (mathematically constant while paused, mod the sub-millisecond
-        // gap between `pause()` and reading `elapsed_at_pause`), so this is not a
-        // tight race against the sleep above — 200ms leaves ample headroom on a
-        // loaded CI runner.
-        assert!(
-            elapsed_while_paused < elapsed_at_pause + Duration::from_millis(200),
-            "session-level elapsed time advanced while paused: before={elapsed_at_pause:?} during={elapsed_while_paused:?}"
-        );
+        clock.advance(Duration::from_millis(50));
+        assert_eq!(session.session_elapsed(), Duration::from_millis(10));
 
         session.resume();
         assert!(session.state().is_playing());
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(
-            session.session_elapsed() > elapsed_while_paused,
-            "session-level elapsed time did not resume advancing after resume"
-        );
+        clock.advance(Duration::from_millis(50));
+        assert_eq!(session.session_elapsed(), Duration::from_millis(60));
     }
 
     #[test]
@@ -1744,7 +1801,8 @@ mod tests {
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
 
         let survival_mode = MiniGameMode::Survival(SurvivalConfig::default());
-        let mut survival = MiniGameSession::with_mode(scenarios.clone(), None, survival_mode);
+        let clock = Arc::new(FakeMonotonicClock::new());
+        let mut survival = seeded_session(scenarios.clone(), survival_mode, clock.clone());
         survival.start();
         survival.tick_countdown();
         survival.tick_countdown();
@@ -1752,18 +1810,56 @@ mod tests {
 
         let challenge_mode =
             MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
-        let mut challenge = MiniGameSession::with_mode(scenarios, None, challenge_mode);
+        let mut challenge = seeded_session(scenarios, challenge_mode, clock.clone());
         challenge.start();
         challenge.tick_countdown();
         challenge.tick_countdown();
         challenge.tick_countdown();
 
-        std::thread::sleep(Duration::from_millis(30));
+        clock.advance(Duration::from_secs(3600));
 
         assert!(!survival.mode().has_session_timer());
         assert!(!survival.is_session_expired());
         assert!(!challenge.mode().has_session_timer());
         assert!(!challenge.is_session_expired());
+    }
+
+    #[test]
+    fn test_same_seed_yields_same_queue() {
+        let scenarios = Arc::new(
+            (0..12)
+                .map(|i| create_test_scenario(&format!("s{i}"), Difficulty::Beginner))
+                .collect::<Vec<_>>(),
+        );
+        let queue_ids = |seed: u64| {
+            let session = MiniGameSession::with_sources(
+                scenarios.clone(),
+                None,
+                MiniGameMode::default(),
+                Arc::new(FakeMonotonicClock::new()),
+                StdRng::seed_from_u64(seed),
+            );
+            session
+                .queue()
+                .iter()
+                .map(|s| s.id.clone())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(queue_ids(42), queue_ids(42));
+    }
+
+    #[test]
+    fn test_transition_auto_advances_after_one_second() {
+        let clock = Arc::new(FakeMonotonicClock::new());
+        let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
+        let mut session = seeded_session(scenarios, MiniGameMode::default(), clock.clone());
+        session.advance_to_next();
+
+        clock.advance(Duration::from_millis(999));
+        assert!(!session.should_advance_to_next());
+        clock.advance(Duration::from_millis(1));
+        assert!(session.should_advance_to_next());
     }
 
     #[test]

@@ -3,6 +3,8 @@
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Range, Selection, Transaction, line_ending::get_line_ending_of_str};
+use std::iter::{Chain, Repeat};
+use std::slice::Iter;
 
 /// Yank (copy) the active selection to the unnamed register
 ///
@@ -105,6 +107,14 @@ pub fn paste_before_from_register<M: EditorMode>(
     paste_from_register(sim, register, PastePlacement::Before)
 }
 
+/// Yields value `i` for range `i`, repeating the last value for extra ranges.
+pub(super) fn values_by_range<'a>(
+    values: &'a [String],
+    last_value: &'a String,
+) -> Chain<Iter<'a, String>, Repeat<&'a String>> {
+    values.iter().chain(std::iter::repeat(last_value))
+}
+
 fn paste_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
@@ -117,7 +127,7 @@ fn paste_from_register<M: EditorMode>(
         return Ok(());
     };
     let linewise = values.iter().any(|v| get_line_ending_of_str(v).is_some());
-    let mut value_iter = values.iter().chain(std::iter::repeat(last_value));
+    let mut value_iter = values_by_range(values, last_value);
 
     let doc = &sim.doc;
     let len_chars = doc.len_chars();

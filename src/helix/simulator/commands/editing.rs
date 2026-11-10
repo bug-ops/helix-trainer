@@ -1,6 +1,6 @@
 //! Editing commands (delete, join, indent, dedent)
 
-use super::clipboard::yank_to_register;
+use super::clipboard::{values_by_range, yank_to_register};
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::line_ending::line_end_char_index;
@@ -391,18 +391,17 @@ pub fn replace_with_yanked_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
 ) -> Result<(), UserError> {
-    let Some(yanked) = sim.registers.get(register) else {
-        return Ok(()); // Nothing yanked
+    let Some(values) = sim.registers.get_values(register).map(<[String]>::to_vec) else {
+        return Ok(());
     };
-
-    if yanked.is_empty() {
-        return Ok(()); // Nothing to paste
-    }
+    let Some(last_value) = values.last() else {
+        return Ok(());
+    };
+    let mut value_iter = values_by_range(&values, last_value);
 
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
-        let start = range.from();
-        let end = range.to();
-        (start, end, Some(yanked.into()))
+        let value = value_iter.next().map_or("", String::as_str);
+        (range.from(), range.to(), Some(value.into()))
     });
 
     sim.apply_transaction(transaction);

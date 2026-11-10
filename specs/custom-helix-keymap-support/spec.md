@@ -202,7 +202,54 @@ reachability) has a documented workaround (`d7003ca`); #389 (Alt-c) is
 resolved by a separate, unrelated fix — see
 [[../register-command-mode-support/spec#11. Post-Release Extensions (v0.6.0)|register-command-mode-support's Post-Release Extensions]].
 
-## 10. See Also
+## 10. Bug-Fix: Helix Config Path on macOS (#458, keymap path and docs only)
+
+> [!info] Added 2026-11-10 (spec-first update for the P1-P3 bug batch)
+
+### 10.1 Problem
+
+`dirs::config_dir()` resolves to `~/Library/Application Support` on macOS, so `use_helix_keymap` looks for the Helix config at `~/Library/Application Support/helix/config.toml`. Helix itself reads `~/.config/helix/config.toml` on macOS, so the feature reports "Helix config file not found" for a typical macOS user. The README, `SECURITY.md` and the `AppConfig` doc comment also state paths that do not match where the trainer stores its own files on macOS.
+
+### 10.2 Requirements
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-011 | THE SYSTEM SHALL resolve the Helix `config.toml` path as Helix does: `$XDG_CONFIG_HOME/helix/config.toml` when `XDG_CONFIG_HOME` is set to a non-empty absolute path, otherwise `~/.config/helix/config.toml` on macOS and Linux; on Windows `%AppData%\helix\config.toml` | must |
+| FR-012 | THE PATH RESOLUTION SHALL be a pure function of its inputs (environment value and home directory passed in) so it is unit-testable without touching the process environment | must |
+| FR-013 | WHEN the resolved file does not exist THE SYSTEM SHALL keep the existing behavior (stock keymap plus a "not found" warning naming the resolved path) | must |
+| FR-014 | `README.md`, `SECURITY.md` and the `AppConfig` doc comment SHALL describe the real trainer data and config locations per platform (the directory returned by `dirs::config_dir()` joined with `helix-trainer`, so `~/Library/Application Support/helix-trainer/` on macOS) and the Helix config path from FR-011 | must |
+
+### 10.3 Acceptance Criteria
+
+```
+GIVEN macOS, XDG_CONFIG_HOME unset, HOME=/h
+WHEN  the Helix config path is resolved
+THEN  it is /h/.config/helix/config.toml
+```
+```
+GIVEN XDG_CONFIG_HOME=/x (absolute)
+WHEN  the Helix config path is resolved
+THEN  it is /x/helix/config.toml
+```
+```
+GIVEN XDG_CONFIG_HOME is empty or relative
+WHEN  the Helix config path is resolved
+THEN  it falls back to ~/.config/helix/config.toml
+```
+
+### 10.4 Out of Scope (explicitly deferred)
+
+> [!danger] Not part of this batch
+> Relocating the trainer's own data directory (`profile.json`, `config.json`) to `~/.config/helix-trainer/`, and any migration of existing macOS users' files. Moving the directory without a migration would silently orphan existing profiles. Tracked as a separate follow-up; until then the docs describe the real location (FR-014).
+
+### 10.5 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-011 | Unit tests for the FR-011 cases above; Windows branch under `cfg(windows)` | Pass |
+| SC-012 | Docs grep: no remaining claim that the trainer stores data in `~/.config/helix-trainer/` on macOS | Verified in review |
+
+## 11. See Also
 
 - [[constitution]] — project principles, Section I (typestate pattern)
 - [[MOC-specs]] — all specifications

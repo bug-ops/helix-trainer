@@ -292,7 +292,54 @@ No changes to `Profile`, `CardState`, or `MiniGameStats` schema.
 - Consume a Daily Challenge attempt before a launch is confirmed to
   succeed (FR-008)
 
-## 8. See Also
+## 8. Bug-Fix: Profile Level and XP Consistency (#450)
+
+> [!info] Added 2026-11-10 (spec-first update for the P1-P3 bug batch)
+
+`profile.json` is user-editable. A `level` inconsistent with `total_xp` (hand edit, downgrade, sync conflict) currently panics the Profile screen in debug builds (`attempt to subtract with overflow` in `UserProfile::xp_progress`, `attempt to add with overflow` for `level = u32::MAX`) and renders a garbage XP bar in release builds.
+
+### 8.1 Requirements
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-009 | WHEN a profile is loaded THE SYSTEM SHALL recompute `level` from `total_xp` (single source of truth: the level-from-XP function), replacing a stored inconsistent value | must |
+| FR-010 | WHEN `xp_progress` or the Profile screen computes progress for ANY `(level, total_xp)` pair THE SYSTEM SHALL use saturating arithmetic and SHALL NOT panic or wrap, including `level = u32::MAX` and `total_xp = 0` | must |
+| FR-011 | WHEN level and `total_xp` are consistent THE SYSTEM SHALL render the same XP bar values as before this fix | must |
+| FR-012 | WHEN the displayed XP-into-level value would be negative or exceed the level span THE SYSTEM SHALL clamp it to `[0, span]` so the bar never overflows its gauge | must |
+
+### 8.2 Acceptance Criteria
+
+```
+GIVEN a profile with level 50 and total_xp 0
+WHEN  the profile is loaded and the Profile screen is rendered
+THEN  level is 1 (from XP) and the screen renders without panic
+```
+```
+GIVEN a UserProfile constructed in memory with level u32::MAX and total_xp 0 (bypassing load)
+WHEN  xp_progress and the render helper run
+THEN  neither panics (debug and release overflow semantics) and the progress is within [0, span]
+```
+```
+GIVEN level 1 with total_xp 1_000_000 in the file
+WHEN  the profile is loaded
+THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0 XP"
+```
+
+### 8.3 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| `total_xp` at the maximum level boundary | Span is the last defined level span; progress clamped |
+| Load recomputes a lower level than stored | No level notification is emitted for the silent correction [NEEDS CLARIFICATION: confirm no notification] |
+
+### 8.4 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-009 | Property test over arbitrary `(level, total_xp)` for `xp_progress` and the render computation | Never panics, result in range |
+| SC-010 | Regression tests for the two reproduction profiles in #450 | Pass |
+
+## 9. See Also
 
 - [[constitution]] — project principles
 - [[../end-game-summary-screen/spec|End-Game Summary Screen]] — sibling

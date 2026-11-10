@@ -22,8 +22,22 @@ status: moc
 
 ## Active Specs
 
-(none — all specs below are either fully documented against shipped code or
-superseded)
+Specified 2026-11-10 for the P1-P3 bug batch (PR for #487); implementation
+follows these packages. The batch also appends "Bug-Fix Batch" sections to
+[[regex-selection-and-macro-commands/spec]],
+[[register-command-mode-support/spec]],
+[[custom-helix-keymap-support/spec]],
+[[arcade-gamification-session-fixes/spec]],
+[[fsrs-proptest-coverage-gap/spec]] and amends [[constitution]] Section V.
+
+| Feature | Phase | Status |
+|---------|-------|--------|
+| [[helix-core-post-25-07-1-upgrade-readiness/spec\|Helix Core Upgrade Readiness and Simulator Fidelity at the Pinned Core]] | specify (lightweight) | proposed — upgrade checklist (sections 3.1-3.7) not built; section 3.8 (simulator fidelity, #490-#499, #501) specified for the bug batch |
+| [[cli-version-and-help-flags/spec\|`--version` and `--help` Command-Line Flags]] | specify (lightweight bug-fix spec) | proposed — #452 |
+| [[training-progress-indicator/spec\|Training Progress Indicator Reflects Cursor and Selection]] | specify (lightweight bug-fix spec) | proposed — #451 |
+| [[optimal-count-action-counter-unit/spec\|`optimal_count` and Action Counter Use the Same Unit]] | specify (lightweight bug-fix spec) | proposed — #488 |
+| [[sound-setting-persistence/spec\|Sound Toggle Persists Across Restarts]] | specify (lightweight bug-fix spec) | proposed — #459 |
+| [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444 |
 
 ## Completed Specs
 

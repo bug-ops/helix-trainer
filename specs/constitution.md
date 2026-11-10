@@ -125,6 +125,7 @@ status: permanent
   `src/security.rs` (`UserError`, `SecurityError`) — never panic on
   malformed user input (invalid register names, malformed command-line
   expressions, oversized input) and never silently no-op it either.
+- A recoverable `UserError` (including a message that arrives for a screen other than the current one, a failed background save, or a rejected simulator command) MUST NOT terminate the TUI session. The event loop reports it (user-visible notification where the user can act on it, `tracing` otherwise; a stale-screen message is a silent debug-level no-op) and keeps running. Only unrecoverable terminal I/O failure ends the session: an input-stream error is reported and the loop exits only after a bounded number of consecutive errors, never by spinning. A single `apply_update` boundary in `src/event_loop.rs` owns this policy; `?` on `update()`/`handle_data_message()` inside the loop is forbidden.
 - Never commit secrets, API keys, or credentials. This project has no
   external services/API keys in scope today; if any are ever introduced,
   they must go through the vault mechanism described in the user's global

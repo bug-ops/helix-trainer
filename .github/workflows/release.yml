@@ -157,7 +157,7 @@ jobs:
       - name: Install cross (for ARM targets)
         if: matrix.use_cross == true
         run: |
-          cargo install cross --git https://github.com/cross-rs/cross
+          cargo install cross --locked --version 0.2.5
 
       - name: Build release binary (with cross)
         if: matrix.use_cross == true && matrix.no_audio != true

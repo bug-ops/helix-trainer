@@ -12,7 +12,7 @@
 //!
 //! - `config`: Configuration and scenario loading
 //! - `game`: Game engine and session management
-//! - `helix`: Helix editor integration and PTY control
+//! - `helix`: Helix editor simulation built on `helix-core`
 //! - `ui`: Terminal user interface components built with ratatui
 //! - `security`: Security utilities, validation, and error handling
 //! - `learning`: Spaced repetition learning system with FSRS algorithm

@@ -4,7 +4,6 @@
 //! error definitions, validation utilities, and security helpers.
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 use thiserror::Error;
 
 /// Security-specific errors
@@ -28,9 +27,6 @@ pub enum SecurityError {
     #[error("Too many scenarios in file (max {max}, got {actual})")]
     TooManyScenarios { max: usize, actual: usize },
 
-    #[error("Invalid scenario ID: must be alphanumeric with underscores")]
-    InvalidScenarioId,
-
     #[error("Content too large (max {max} bytes, got {actual} bytes)")]
     ContentTooLarge { max: usize, actual: usize },
 
@@ -43,35 +39,14 @@ pub enum SecurityError {
     #[error("Too many alternatives (max {max})")]
     TooManyAlternatives { max: usize },
 
-    #[error("Process spawn failed: {0}")]
-    ProcessSpawnFailed(String),
-
-    #[error("Session timeout (max duration: {0:?})")]
-    SessionTimeout(Duration),
-
     #[error("Too many actions (max: 1000000)")]
     TooManyActions,
 
     #[error("Score calculation overflow")]
     ScoreOverflow,
 
-    #[error("Invalid duration")]
-    InvalidDuration,
-
     #[error("Command sequence too long (max {max})")]
     CommandSequenceTooLong { max: usize },
-
-    #[error("Invalid command")]
-    InvalidCommand,
-
-    #[error("Too many active sessions (max {max})")]
-    TooManySessions { max: usize },
-
-    #[error("Too many temporary files (max {max})")]
-    TooManyTempFiles { max: usize },
-
-    #[error("Rate limit exceeded, retry after {0:?}")]
-    RateLimitExceeded(Duration),
 
     #[error("Invalid content: contains null bytes or invalid encoding")]
     InvalidContent,
@@ -112,17 +87,11 @@ pub enum UserError {
     #[error("The scenario file is too large or complex. Please use a smaller file.")]
     ScenarioTooComplex,
 
-    #[error("Failed to start editor. Please ensure Helix is installed.")]
-    EditorStartFailed,
-
     #[error("Operation failed. Please try again.")]
     OperationFailed,
 
     #[error("Command execution failed: {context}")]
     CommandFailed { context: String },
-
-    #[error("Session has expired. Please start a new session.")]
-    SessionExpired,
 }
 
 impl UserError {
@@ -157,13 +126,18 @@ impl From<SecurityError> for UserError {
             | SecurityError::TooManyHints { .. }
             | SecurityError::TooManyAlternatives { .. } => UserError::ScenarioTooComplex,
 
-            SecurityError::ProcessSpawnFailed(_) => UserError::EditorStartFailed,
-
-            SecurityError::SessionTimeout(_) => UserError::SessionExpired,
-
             SecurityError::InvalidState(msg) => UserError::InvalidState { message: msg },
 
-            _ => UserError::OperationFailed,
+            SecurityError::InvalidCursorPosition
+            | SecurityError::TooManyActions
+            | SecurityError::ScoreOverflow
+            | SecurityError::CommandSequenceTooLong { .. }
+            | SecurityError::InvalidContent
+            | SecurityError::InvalidEncoding
+            | SecurityError::InvalidInput(_)
+            | SecurityError::TooManyKeymapBindings { .. }
+            | SecurityError::NotRegularFile
+            | SecurityError::ReadFailed(_) => UserError::OperationFailed,
         }
     }
 }
@@ -204,8 +178,6 @@ impl From<crate::learning::LearningError> for UserError {
 
 /// Security configuration constants
 pub mod limits {
-    use std::time::Duration;
-
     /// Maximum size of a scenario TOML file (10 MB)
     pub const MAX_SCENARIO_FILE_SIZE: u64 = 10 * 1024 * 1024;
 
@@ -250,21 +222,6 @@ pub mod limits {
     /// `regex-cursor` is finite-automaton based, so catastrophic backtracking
     /// is not a concern here.
     pub const MAX_REGEX_SELECTION_MATCHES: usize = 10_000;
-
-    /// Command timeout
-    pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
-
-    /// Maximum active sessions
-    pub const MAX_ACTIVE_SESSIONS: usize = 10;
-
-    /// Maximum temporary files
-    pub const MAX_TEMP_FILES: usize = 100;
-
-    /// Session timeout (1 hour)
-    pub const SESSION_TIMEOUT: Duration = Duration::from_secs(3600);
-
-    /// Minimum interval between scenario loads
-    pub const MIN_LOAD_INTERVAL: Duration = Duration::from_millis(100);
 
     /// Maximum number of quest templates per file
     pub const MAX_QUEST_TEMPLATES_PER_FILE: usize = 100;
@@ -905,26 +862,6 @@ mod tests {
     }
 
     #[test]
-    fn test_error_conversion_process_spawn_failed() {
-        let err = SecurityError::ProcessSpawnFailed("spawn error".to_string());
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to start editor. Please ensure Helix is installed."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_session_timeout() {
-        let err = SecurityError::SessionTimeout(Duration::from_secs(3600));
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Session has expired. Please start a new session."
-        );
-    }
-
-    #[test]
     fn test_error_conversion_invalid_state() {
         let err = SecurityError::InvalidState("bad state".to_string());
         let user_err = UserError::from(err);
@@ -1106,11 +1043,6 @@ mod tests {
             .contains("scenarios")
         );
         assert!(
-            SecurityError::InvalidScenarioId
-                .to_string()
-                .contains("scenario ID")
-        );
-        assert!(
             SecurityError::ContentTooLarge {
                 max: 100,
                 actual: 200
@@ -1134,16 +1066,6 @@ mod tests {
                 .contains("alternatives")
         );
         assert!(
-            SecurityError::ProcessSpawnFailed("err".to_string())
-                .to_string()
-                .contains("spawn")
-        );
-        assert!(
-            SecurityError::SessionTimeout(Duration::from_secs(60))
-                .to_string()
-                .contains("timeout")
-        );
-        assert!(
             SecurityError::TooManyActions
                 .to_string()
                 .contains("actions")
@@ -1154,34 +1076,9 @@ mod tests {
                 .contains("overflow")
         );
         assert!(
-            SecurityError::InvalidDuration
-                .to_string()
-                .contains("duration")
-        );
-        assert!(
             SecurityError::CommandSequenceTooLong { max: 100 }
                 .to_string()
                 .contains("sequence")
-        );
-        assert!(
-            SecurityError::InvalidCommand
-                .to_string()
-                .contains("command")
-        );
-        assert!(
-            SecurityError::TooManySessions { max: 10 }
-                .to_string()
-                .contains("sessions")
-        );
-        assert!(
-            SecurityError::TooManyTempFiles { max: 100 }
-                .to_string()
-                .contains("files")
-        );
-        assert!(
-            SecurityError::RateLimitExceeded(Duration::from_secs(30))
-                .to_string()
-                .contains("Rate limit")
         );
         assert!(
             SecurityError::InvalidContent
@@ -1221,7 +1118,6 @@ mod tests {
                 .to_string()
                 .contains("too large")
         );
-        assert!(UserError::EditorStartFailed.to_string().contains("editor"));
         assert!(
             UserError::OperationFailed
                 .to_string()
@@ -1234,7 +1130,6 @@ mod tests {
             .to_string()
             .contains("Command")
         );
-        assert!(UserError::SessionExpired.to_string().contains("expired"));
     }
 
     mod read_capped {

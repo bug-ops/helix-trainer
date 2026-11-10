@@ -146,6 +146,38 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Check without default features
+        run: cargo check --no-default-features --all-targets
+
+  docs:
+    name: Rustdoc
+    needs: [changes]
+    if: needs.changes.outputs.run-heavy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUSTFLAGS: "-D warnings"
+      RUSTDOCFLAGS: "--deny rustdoc::broken_intra_doc_links"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: "docs"
+
+      - name: Install ALSA development libraries
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Rustdoc gate
+        run: cargo doc --no-deps --workspace --all-features
+
   security:
     name: Security Audit
     needs: [changes]
@@ -379,7 +411,7 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [changes, test, fmt, clippy, security, shellcheck, msrv, build, coverage]
+    needs: [changes, test, fmt, clippy, docs, security, shellcheck, msrv, build, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs
@@ -411,6 +443,7 @@ jobs:
 
           check_gated "fmt" "${{ needs.fmt.result }}" "$run_heavy"
           check_gated "clippy" "${{ needs.clippy.result }}" "$run_heavy"
+          check_gated "docs" "${{ needs.docs.result }}" "$run_heavy"
           check_gated "security" "${{ needs.security.result }}" "$run_heavy"
           check_gated "test" "${{ needs.test.result }}" "$run_heavy"
           check_gated "msrv" "${{ needs.msrv.result }}" "$run_heavy"

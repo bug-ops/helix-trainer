@@ -432,6 +432,37 @@ mod tests {
     }
 
     #[test]
+    fn test_load_malformed_last_challenge_date_keeps_rest_of_profile() {
+        for malformed in [
+            serde_json::json!("not-a-date"),
+            serde_json::json!(12345),
+            serde_json::json!([1, 2]),
+            serde_json::json!({"a": 1}),
+        ] {
+            let temp_dir = TempDir::new().unwrap();
+            let file_path = temp_dir.path().join("profile.json");
+            let storage = ProfileStorage::with_path(&file_path);
+
+            let mut profile = UserProfile::new();
+            profile.add_xp(100);
+            profile.challenge_progress.all_time_best_score = 42;
+            storage.save(&profile).unwrap();
+
+            let mut json: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&file_path).unwrap()).unwrap();
+            json["profile"]["challenge_progress"]["last_challenge_date"] = malformed.clone();
+            fs::write(&file_path, json.to_string()).unwrap();
+
+            let loaded = storage
+                .load()
+                .unwrap_or_else(|e| panic!("{malformed}: {e}"));
+            assert!(loaded.challenge_progress.last_challenge_date.is_none());
+            assert_eq!(loaded.challenge_progress.all_time_best_score, 42);
+            assert_eq!(loaded.total_xp, profile.total_xp);
+        }
+    }
+
+    #[test]
     fn test_load_oversized_file_rejected() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("profile.json");

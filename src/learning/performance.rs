@@ -167,7 +167,7 @@ impl Difficulty {
 /// Fields are private so the FSRS update path is the only writer. Stability and
 /// difficulty are range-checked newtypes, and everything derivable (average time, mastery
 /// tier, retrievability) is computed on read instead of stored. The persisted shape is
-/// [`CardRecord`]; cards are only built from disk through [`PerformanceData`]'s
+/// `CardRecord`; cards are only built from disk through [`PerformanceData`]'s
 /// deserializer, which validates them.
 #[derive(Debug, Clone)]
 pub struct CommandPerformance {

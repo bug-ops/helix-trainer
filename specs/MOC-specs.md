@@ -185,4 +185,4 @@ dropped to match the slug-only naming used by every other package here.
 ## See Also
 
 - [[constitution]] — project principles
-- `CONTRIBUTING.md` — contributor workflow
+- `CONTRIBUTING.md` — Conventional Commits and the pre-commit check suite

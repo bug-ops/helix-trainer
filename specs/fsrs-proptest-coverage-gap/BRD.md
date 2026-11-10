@@ -152,7 +152,7 @@ See [[NFR]] for NFR-001..004, all verified against the shipped tests.
 >   implemented as a standalone property test — the code comment added at
 >   the call site argues it is "correct by construction," which is an
 >   assertion, not a verified property
-> - the project's continuous-improvement rules was not reworded to scope the
+> - the project's continuous-improvement rules were not reworded to scope the
 >   claim precisely to what is actually covered
 
 ## Constraints & Assumptions

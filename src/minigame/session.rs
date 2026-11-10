@@ -21,6 +21,80 @@ use std::time::{Duration, Instant};
 /// Size of scenario queue (number of upcoming scenarios visible)
 const QUEUE_SIZE: usize = 3;
 
+/// Stopwatch that excludes paused spans; the one pause-accounting implementation
+/// shared by per-scenario and session-level timers.
+#[derive(Debug, Clone, Copy)]
+struct PausableClock {
+    started_at: Instant,
+    paused_at: Option<Instant>,
+    total_paused: Duration,
+}
+
+impl PausableClock {
+    fn start(now: Instant) -> Self {
+        Self {
+            started_at: now,
+            paused_at: None,
+            total_paused: Duration::ZERO,
+        }
+    }
+
+    /// Idempotent: pausing while already paused has no effect.
+    fn pause(&mut self, now: Instant) {
+        self.paused_at.get_or_insert(now);
+    }
+
+    /// Idempotent: resuming while not paused has no effect.
+    fn resume(&mut self, now: Instant) {
+        if let Some(paused_at) = self.paused_at.take() {
+            self.total_paused += now.saturating_duration_since(paused_at);
+        }
+    }
+
+    fn elapsed(&self, now: Instant) -> Duration {
+        let open_span = self
+            .paused_at
+            .map_or(Duration::ZERO, |p| now.saturating_duration_since(p));
+        now.saturating_duration_since(self.started_at)
+            .saturating_sub(self.total_paused + open_span)
+    }
+}
+
+/// Internal state machine; each phase owns the data only it needs.
+/// [`MiniGameState`] is the public, data-free projection.
+#[derive(Debug, Clone, Copy)]
+enum Phase {
+    Countdown { remaining: u8 },
+    Playing,
+    Paused,
+    Transition { success: bool, started_at: Instant },
+    GameOver,
+}
+
+impl Phase {
+    fn state(self) -> MiniGameState {
+        match self {
+            Self::Countdown { remaining } => MiniGameState::Countdown { remaining },
+            Self::Playing => MiniGameState::Playing,
+            Self::Paused => MiniGameState::Paused,
+            Self::Transition { success, .. } => MiniGameState::Transition { success },
+            Self::GameOver => MiniGameState::GameOver,
+        }
+    }
+}
+
+/// Where the next queued scenarios come from.
+enum Lineup {
+    /// Difficulty-controller selection (Arcade and Survival).
+    Adaptive,
+    /// Pre-selected seeded list (Challenge): `next` indexes `scenarios`, `limit` caps the run.
+    Challenge {
+        scenarios: Vec<Scenario>,
+        next: usize,
+        limit: usize,
+    },
+}
+
 /// Helper to execute operations on a target snapshot's EditorDisplay
 fn with_target_display<T, F>(snapshot: &EditorSnapshot, f: F) -> T
 where
@@ -46,20 +120,14 @@ pub struct ActiveMiniScenario {
     /// Target as snapshot for efficient completion checking
     target_snapshot: EditorSnapshot,
 
-    /// When scenario started
-    started_at: Instant,
+    /// Scenario stopwatch (excludes paused spans)
+    timer: PausableClock,
 
     /// Time limit for this scenario
     time_limit: Duration,
 
     /// Actions taken so far
     actions: Vec<String>,
-
-    /// When the current pause span began, if paused
-    paused_at: Option<Instant>,
-
-    /// Total duration accumulated across all completed pause spans
-    total_paused: Duration,
 }
 
 impl ActiveMiniScenario {
@@ -76,11 +144,9 @@ impl ActiveMiniScenario {
             scenario,
             simulator: state.simulator,
             target_snapshot: state.target_snapshot,
-            started_at: Instant::now(),
+            timer: PausableClock::start(Instant::now()),
             time_limit,
             actions: Vec::new(),
-            paused_at: None,
-            total_paused: Duration::ZERO,
         })
     }
 
@@ -96,28 +162,19 @@ impl ActiveMiniScenario {
     ///
     /// Idempotent: calling this while already paused has no effect.
     pub fn pause(&mut self) {
-        if self.paused_at.is_none() {
-            self.paused_at = Some(Instant::now());
-        }
+        self.timer.pause(Instant::now());
     }
 
     /// Resume the countdown timer, accumulating the just-finished pause span
     ///
     /// Idempotent: calling this while not paused has no effect.
     pub fn resume(&mut self) {
-        if let Some(paused_at) = self.paused_at.take() {
-            self.total_paused += paused_at.elapsed();
-        }
+        self.timer.resume(Instant::now());
     }
 
     /// Get elapsed time since scenario started, excluding any paused duration
     pub fn elapsed(&self) -> Duration {
-        let paused = self.total_paused
-            + self
-                .paused_at
-                .map(|p| p.elapsed())
-                .unwrap_or(Duration::ZERO);
-        self.started_at.elapsed().saturating_sub(paused)
+        self.timer.elapsed(Instant::now())
     }
 
     /// Get remaining time before timeout
@@ -276,23 +333,14 @@ pub struct MiniGameSession {
     /// Last score breakdown (for UI display)
     last_score_breakdown: Option<ScoreBreakdown>,
 
-    /// Current game state
-    state: MiniGameState,
+    /// Current phase of the state machine
+    phase: Phase,
 
     /// All available scenarios (reference)
     scenarios: Arc<Vec<Scenario>>,
 
-    /// When transition state started (for auto-advance)
-    transition_started_at: Option<Instant>,
-
-    /// When the session-level clock started (set once gameplay begins after countdown)
-    session_started_at: Option<Instant>,
-
-    /// When the current session-level pause span began, if paused
-    session_paused_at: Option<Instant>,
-
-    /// Total duration accumulated across all completed session-level pause spans
-    session_total_paused: Duration,
+    /// Session-level stopwatch; `None` until gameplay begins after the countdown
+    session_timer: Option<PausableClock>,
 
     /// Performance tracker for FSRS-based scenario selection (read-only clone)
     ///
@@ -303,11 +351,8 @@ pub struct MiniGameSession {
     /// Game mode configuration
     mode: MiniGameMode,
 
-    /// Pre-selected scenarios for Challenge mode (None for other modes)
-    selected_scenarios: Option<Vec<Scenario>>,
-
-    /// Index into selected_scenarios for Challenge mode
-    challenge_scenario_index: usize,
+    /// Source of upcoming scenarios, fixed by the mode
+    lineup: Lineup,
 
     /// Whether game-over bookkeeping (FSRS recording, XP award, profile save)
     /// has already run for this session.
@@ -381,9 +426,13 @@ impl MiniGameSession {
         let starting_lives = mode.starting_lives();
 
         // For Challenge mode, pre-select scenarios using seeded RNG
-        let selected_scenarios = match &mode {
-            MiniGameMode::Challenge(config) => Some(select_challenge_scenarios(&scenarios, config)),
-            _ => None,
+        let lineup = match &mode {
+            MiniGameMode::Challenge(config) => Lineup::Challenge {
+                scenarios: select_challenge_scenarios(&scenarios, config),
+                next: 0,
+                limit: config.scenario_count,
+            },
+            _ => Lineup::Adaptive,
         };
 
         let mut session = Self {
@@ -393,16 +442,12 @@ impl MiniGameSession {
             difficulty: DifficultyController::new(),
             score_calculator: ScoreCalculator::new(),
             last_score_breakdown: None,
-            state: MiniGameState::default(),
+            phase: Phase::Countdown { remaining: 3 },
             scenarios,
-            transition_started_at: None,
-            session_started_at: None,
-            session_paused_at: None,
-            session_total_paused: Duration::ZERO,
+            session_timer: None,
             tracker,
             mode,
-            selected_scenarios,
-            challenge_scenario_index: 0,
+            lineup,
             game_over_processed: false,
         };
 
@@ -426,7 +471,7 @@ impl MiniGameSession {
     /// assert!(session.state().is_countdown());
     /// ```
     pub fn start(&mut self) {
-        self.state = MiniGameState::Countdown { remaining: 3 };
+        self.phase = Phase::Countdown { remaining: 3 };
     }
 
     /// Process countdown tick
@@ -448,17 +493,16 @@ impl MiniGameSession {
     /// assert!(session.state().is_playing());
     /// ```
     pub fn tick_countdown(&mut self) {
-        if let MiniGameState::Countdown { remaining } = self.state {
+        if let Phase::Countdown { remaining } = self.phase {
             if remaining > 1 {
-                self.state = MiniGameState::Countdown {
+                self.phase = Phase::Countdown {
                     remaining: remaining - 1,
                 };
             } else {
                 // Countdown finished, start playing
-                self.state = MiniGameState::Playing;
-                if self.session_started_at.is_none() {
-                    self.session_started_at = Some(Instant::now());
-                }
+                self.phase = Phase::Playing;
+                self.session_timer
+                    .get_or_insert_with(|| PausableClock::start(Instant::now()));
                 // Load first scenario if not already loaded
                 if self.current.is_none() {
                     let _ = self.load_next_scenario();
@@ -487,7 +531,7 @@ impl MiniGameSession {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn handle_command(&mut self, command: &str) -> Result<(), UserError> {
-        if !self.state.is_playing() {
+        if !self.state().is_playing() {
             return Ok(()); // Ignore commands in non-playing states
         }
 
@@ -582,8 +626,10 @@ impl MiniGameSession {
         }
 
         // Transition state (success)
-        self.state = MiniGameState::Transition { success: true };
-        self.transition_started_at = Some(Instant::now());
+        self.phase = Phase::Transition {
+            success: true,
+            started_at: Instant::now(),
+        };
     }
 
     /// Complete transition and load next scenario
@@ -594,9 +640,8 @@ impl MiniGameSession {
     ///
     /// Returns `UserError` if scenario loading fails.
     pub fn complete_transition(&mut self) -> Result<(), UserError> {
-        if self.state.is_transition() {
-            self.state = MiniGameState::Playing;
-            self.transition_started_at = None;
+        if matches!(self.phase, Phase::Transition { .. }) {
+            self.phase = Phase::Playing;
             self.load_next_scenario()?;
         }
         Ok(())
@@ -606,12 +651,10 @@ impl MiniGameSession {
     ///
     /// Returns true if in transition state and delay (1 second) has passed.
     pub fn should_advance_to_next(&self) -> bool {
-        if !self.state.is_transition() {
-            return false;
+        match self.phase {
+            Phase::Transition { started_at, .. } => started_at.elapsed() >= Duration::from_secs(1),
+            _ => false,
         }
-        self.transition_started_at
-            .map(|t| t.elapsed() >= Duration::from_secs(1))
-            .unwrap_or(false)
     }
 
     /// Handle timeout for current scenario
@@ -658,13 +701,14 @@ impl MiniGameSession {
 
         if has_lives {
             // Continue to next scenario (failure transition)
-            self.state = MiniGameState::Transition { success: false };
-            self.transition_started_at = Some(Instant::now());
+            self.phase = Phase::Transition {
+                success: false,
+                started_at: Instant::now(),
+            };
         } else {
             // Game over
-            self.state = MiniGameState::GameOver;
+            self.phase = Phase::GameOver;
             self.current = None;
-            self.transition_started_at = None;
         }
     }
 
@@ -698,15 +742,8 @@ impl MiniGameSession {
     ///
     /// Returns `Duration::ZERO` if gameplay has not started yet (still in countdown).
     fn session_elapsed(&self) -> Duration {
-        let Some(started_at) = self.session_started_at else {
-            return Duration::ZERO;
-        };
-        let paused = self.session_total_paused
-            + self
-                .session_paused_at
-                .map(|p| p.elapsed())
-                .unwrap_or(Duration::ZERO);
-        started_at.elapsed().saturating_sub(paused)
+        self.session_timer
+            .map_or(Duration::ZERO, |timer| timer.elapsed(Instant::now()))
     }
 
     /// Check if the mode's session-level time limit has elapsed
@@ -736,9 +773,8 @@ impl MiniGameSession {
     /// Unlike [`Self::handle_timeout`], this does not consume a life: the
     /// session clock ran out, so the run ends regardless of lives remaining.
     pub fn end_session_on_timeout(&mut self) {
-        self.state = MiniGameState::GameOver;
+        self.phase = Phase::GameOver;
         self.current = None;
-        self.transition_started_at = None;
     }
 
     /// Pause the game
@@ -753,13 +789,13 @@ impl MiniGameSession {
     /// assert!(session.state().is_paused());
     /// ```
     pub fn pause(&mut self) {
-        if self.state.is_playing() {
-            self.state = MiniGameState::Paused;
+        if matches!(self.phase, Phase::Playing) {
+            self.phase = Phase::Paused;
             if let Some(ref mut current) = self.current {
                 current.pause();
             }
-            if self.session_paused_at.is_none() {
-                self.session_paused_at = Some(Instant::now());
+            if let Some(timer) = self.session_timer.as_mut() {
+                timer.pause(Instant::now());
             }
         }
     }
@@ -777,13 +813,13 @@ impl MiniGameSession {
     /// assert!(session.state().is_playing());
     /// ```
     pub fn resume(&mut self) {
-        if self.state.is_paused() {
-            self.state = MiniGameState::Playing;
+        if matches!(self.phase, Phase::Paused) {
+            self.phase = Phase::Playing;
             if let Some(ref mut current) = self.current {
                 current.resume();
             }
-            if let Some(paused_at) = self.session_paused_at.take() {
-                self.session_total_paused += paused_at.elapsed();
+            if let Some(timer) = self.session_timer.as_mut() {
+                timer.resume(Instant::now());
             }
         }
     }
@@ -805,7 +841,7 @@ impl MiniGameSession {
 
     /// Get current game state
     pub fn state(&self) -> MiniGameState {
-        self.state
+        self.phase.state()
     }
 
     /// Check-and-set, in a single call, whether game-over bookkeeping should
@@ -1058,31 +1094,29 @@ impl MiniGameSession {
     /// - Arcade/Survival: FSRS-weighted selection if tracker available
     /// - Challenge: Uses pre-selected scenarios
     fn refill_queue(&mut self) {
-        // Challenge mode uses pre-selected scenarios
-        if let MiniGameMode::Challenge(config) = &self.mode {
-            if let Some(ref selected) = self.selected_scenarios {
-                while self.queue.len() < QUEUE_SIZE
-                    && self.challenge_scenario_index < config.scenario_count
-                    && self.challenge_scenario_index < selected.len()
-                {
-                    self.queue
-                        .push_back(selected[self.challenge_scenario_index].clone());
-                    self.challenge_scenario_index += 1;
+        match &mut self.lineup {
+            Lineup::Challenge {
+                scenarios,
+                next,
+                limit,
+            } => {
+                while self.queue.len() < QUEUE_SIZE && *next < *limit && *next < scenarios.len() {
+                    self.queue.push_back(scenarios[*next].clone());
+                    *next += 1;
                 }
             }
-            return;
-        }
-
-        // Arcade and Survival use difficulty controller
-        let mut rng = rand::rng();
-        while self.queue.len() < QUEUE_SIZE {
-            if let Some(scenario) =
-                self.difficulty
-                    .next_scenario(&self.scenarios, self.tracker.as_ref(), &mut rng)
-            {
-                self.queue.push_back(scenario);
-            } else {
-                break; // No more scenarios available
+            Lineup::Adaptive => {
+                let mut rng = rand::rng();
+                while self.queue.len() < QUEUE_SIZE {
+                    let Some(scenario) = self.difficulty.next_scenario(
+                        &self.scenarios,
+                        self.tracker.as_ref(),
+                        &mut rng,
+                    ) else {
+                        break; // No more scenarios available
+                    };
+                    self.queue.push_back(scenario);
+                }
             }
         }
     }
@@ -1162,7 +1196,7 @@ mod tests {
 
         assert_eq!(session.stats.lives(), 3);
         assert_eq!(session.stats.score, 0);
-        assert!(session.state.is_countdown());
+        assert!(session.state().is_countdown());
         assert_eq!(session.queue.len(), QUEUE_SIZE);
     }
 
@@ -1184,23 +1218,23 @@ mod tests {
         let mut session = MiniGameSession::new(scenarios, None);
 
         session.start();
-        assert_eq!(session.state.countdown_remaining(), Some(3));
+        assert_eq!(session.state().countdown_remaining(), Some(3));
 
         session.tick_countdown();
-        assert_eq!(session.state.countdown_remaining(), Some(2));
+        assert_eq!(session.state().countdown_remaining(), Some(2));
 
         session.tick_countdown();
-        assert_eq!(session.state.countdown_remaining(), Some(1));
+        assert_eq!(session.state().countdown_remaining(), Some(1));
 
         session.tick_countdown();
-        assert!(session.state.is_playing());
+        assert!(session.state().is_playing());
     }
 
     #[test]
     fn test_timeout_loses_life() {
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
-        session.state = MiniGameState::Playing;
+        session.phase = Phase::Playing;
         let _ = session.load_next_scenario();
 
         assert_eq!(session.stats.lives(), 3);
@@ -1213,20 +1247,20 @@ mod tests {
 
         session.handle_timeout();
         assert_eq!(session.stats.lives(), 0);
-        assert!(session.state.is_game_over());
+        assert!(session.state().is_game_over());
     }
 
     #[test]
     fn test_pause_resume() {
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
-        session.state = MiniGameState::Playing;
+        session.phase = Phase::Playing;
 
         session.pause();
-        assert!(session.state.is_paused());
+        assert!(session.state().is_paused());
 
         session.resume();
-        assert!(session.state.is_playing());
+        assert!(session.state().is_playing());
     }
 
     #[test]
@@ -1288,14 +1322,14 @@ mod tests {
         active.pause();
         std::thread::sleep(Duration::from_millis(30));
         active.resume();
-        let total_paused_after_first = active.total_paused;
+        let total_paused_after_first = active.timer.total_paused;
         assert!(total_paused_after_first >= Duration::from_millis(20));
 
         // Second pause/resume cycle should add to the accumulated total, not reset it.
         active.pause();
         std::thread::sleep(Duration::from_millis(30));
         active.resume();
-        let total_paused_after_second = active.total_paused;
+        let total_paused_after_second = active.timer.total_paused;
 
         assert!(
             total_paused_after_second > total_paused_after_first,
@@ -1310,29 +1344,29 @@ mod tests {
 
         // Resuming without a prior pause is a no-op.
         active.resume();
-        assert_eq!(active.total_paused, Duration::ZERO);
-        assert!(active.paused_at.is_none());
+        assert_eq!(active.timer.total_paused, Duration::ZERO);
+        assert!(active.timer.paused_at.is_none());
 
         // Pausing twice in a row should not reset the paused_at anchor.
         active.pause();
-        let paused_at_first = active.paused_at;
+        let paused_at_first = active.timer.paused_at;
         std::thread::sleep(Duration::from_millis(10));
         active.pause();
-        assert_eq!(active.paused_at, paused_at_first);
+        assert_eq!(active.timer.paused_at, paused_at_first);
 
         active.resume();
-        assert!(active.total_paused >= Duration::from_millis(5));
+        assert!(active.timer.total_paused >= Duration::from_millis(5));
     }
 
     #[test]
     fn test_minigame_session_pause_resume_freezes_scenario_elapsed() {
         let scenarios = Arc::new(vec![create_test_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
-        session.state = MiniGameState::Playing;
+        session.phase = Phase::Playing;
         let _ = session.load_next_scenario();
 
         session.pause();
-        assert!(session.state.is_paused());
+        assert!(session.state().is_paused());
 
         let elapsed_at_pause = session
             .current_scenario()
@@ -1350,7 +1384,7 @@ mod tests {
         );
 
         session.resume();
-        assert!(session.state.is_playing());
+        assert!(session.state().is_playing());
     }
 
     #[test]
@@ -1438,7 +1472,7 @@ mod tests {
         session.tick_countdown();
         session.tick_countdown();
         assert!(
-            session.state.is_playing(),
+            session.state().is_playing(),
             "Should be playing after countdown"
         );
 
@@ -1478,7 +1512,7 @@ mod tests {
         session.tick_countdown();
         session.tick_countdown();
         session.tick_countdown();
-        assert!(session.state.is_playing());
+        assert!(session.state().is_playing());
 
         session.handle_command("\"ay").unwrap();
         session.handle_command("\"by").unwrap();
@@ -1516,7 +1550,7 @@ mod tests {
         session.tick_countdown();
         session.tick_countdown();
         session.tick_countdown();
-        assert!(session.state.is_playing());
+        assert!(session.state().is_playing());
 
         for cmd in ["2l", "fb", "i", "!", "Escape"] {
             session.handle_command(cmd).unwrap();

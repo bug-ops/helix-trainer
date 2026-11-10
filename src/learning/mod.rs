@@ -9,6 +9,7 @@ pub mod scenario_history;
 pub mod scheduler;
 pub mod session;
 pub mod traits;
+pub mod urgency;
 
 pub use analytics::{Analytics, MasterySummary};
 pub use performance::{
@@ -21,6 +22,7 @@ pub use scenario_history::{
 pub use scheduler::{ReviewItem, Scheduler};
 pub use session::{ReviewResult, ReviewSession, SessionSummary};
 pub use traits::{Modifier, ProgressTracker, ProgressionTier};
+pub use urgency::{Urgency, command_urgency};
 
 use thiserror::Error;
 

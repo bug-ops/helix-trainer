@@ -1,4 +1,5 @@
 use super::performance::{CommandPerformance, PerformanceTracker};
+use super::urgency::{Urgency, command_urgency};
 use crate::time::{Clock, SystemClock};
 use chrono::{DateTime, Utc};
 use std::collections::BinaryHeap;
@@ -202,16 +203,21 @@ impl Scheduler {
     ///
     /// Higher priority = more urgent to review
     ///
-    /// Formula:
-    /// - `urgency` = days_overdue / scheduled_days (how late is it?)
+    /// Review projection of [`command_urgency`]:
+    /// - `overdue_ratio` = days_overdue / scheduled_days (how late is it?)
     /// - `difficulty_weight` = difficulty / 5.0 (harder = more important)
-    /// - `priority` = urgency * difficulty_weight
+    /// - `priority` = overdue_ratio * difficulty_weight
+    ///
+    /// A [`Urgency::Novel`] command has no card and is never queued, so it scores 0.
     fn calculate_priority(perf: &CommandPerformance, now: DateTime<Utc>) -> f64 {
-        let days_overdue = (now - perf.due()).num_days().max(0) as f64;
-        let urgency = days_overdue / perf.scheduled_days().max(1) as f64;
-        let difficulty_weight = perf.difficulty() as f64 / 5.0; // Normalize 0-10 to 0-2
-
-        urgency * difficulty_weight
+        match command_urgency(Some(perf), now) {
+            Urgency::Practiced {
+                overdue_ratio,
+                difficulty,
+                ..
+            } => overdue_ratio * (difficulty / 5.0),
+            Urgency::Novel => 0.0,
+        }
     }
 
     /// Recommend practice session content
@@ -365,6 +371,28 @@ mod tests {
 
         // Hard + overdue should have higher priority
         assert!(priority1 > priority2);
+    }
+
+    #[test]
+    fn test_priority_keeps_the_pre_urgency_formula_exactly() {
+        let now = Utc::now();
+        for (difficulty, scheduled_days, days_overdue) in [
+            (8.0, 10, 20),
+            (3.0, 10, 5),
+            (5.0, 1, 0),
+            (9.5, 3, 7),
+            (0.0, 4, 9),
+        ] {
+            let mut perf = CommandPerformance::new("c".to_string(), now);
+            perf.set_difficulty(difficulty);
+            perf.set_scheduled_days(scheduled_days);
+            perf.set_due(now - ChronoDuration::days(days_overdue));
+
+            let expected = days_overdue as f64 / scheduled_days.max(1) as f64
+                * (perf.difficulty() as f64 / 5.0);
+
+            assert_eq!(Scheduler::calculate_priority(&perf, now), expected);
+        }
     }
 
     #[test]

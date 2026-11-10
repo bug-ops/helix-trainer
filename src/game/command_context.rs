@@ -139,68 +139,29 @@ pub fn parse_command_buffer(buffer: &str) -> ParsedCommand {
     }
 }
 
-/// Extract count prefix and command from a command string
+/// Trait for executing commands, including count-prefixed ones
 ///
-/// Returns (count, command) where count defaults to 1 if no prefix.
-///
-/// # Examples
-/// - "3h" -> (3, "h")
-/// - "12j" -> (12, "j")
-/// - "h" -> (1, "h")
-/// - "gg" -> (1, "gg")
-pub fn extract_count_and_command(cmd: &str) -> (usize, &str) {
-    use crate::helix::registry::split_count_prefix;
-
-    match split_count_prefix(cmd) {
-        (Some(count), rest) if !rest.is_empty() => (count, rest),
-        _ => (1, cmd),
-    }
-}
-
-/// Trait for executing commands with count prefix support
-///
-/// Provides unified command execution logic for both training and arcade modes.
-/// Implementations handle the actual command execution through their simulator,
-/// while this trait provides the common count prefix handling.
+/// Provides unified command execution for both training and arcade modes.
+/// Implementations forward the command string to their simulator, which is the
+/// only place a count prefix (`3d`, `2G`, `3fa`) is interpreted.
 ///
 /// # Examples
 ///
 /// ```ignore
 /// use helix_trainer::game::CommandExecutor;
 ///
-/// fn execute_with_count<E: CommandExecutor>(executor: &mut E, cmd: &str) -> Result<(), UserError> {
-///     // "3d" executes "d" three times but counts as one action
-///     executor.execute_with_count(cmd)
+/// fn run<E: CommandExecutor>(executor: &mut E) -> Result<(), UserError> {
+///     // "3d" is one action; the simulator applies the count
+///     executor.execute_single("3d")
 /// }
 /// ```
 pub trait CommandExecutor {
-    /// Execute a single base command (without count prefix)
+    /// Execute one command string, possibly with a count prefix
     ///
-    /// This is the low-level execution method that implementations must provide.
-    /// It should execute exactly one command through the simulator.
+    /// The whole string (e.g. `"3d"`) is passed to the simulator unchanged, so
+    /// the count is applied according to the command's `CountBehavior`.
+    /// This counts as ONE action for scoring purposes.
     fn execute_single(&mut self, command: &str) -> Result<(), UserError>;
-
-    /// Execute a command with count prefix support
-    ///
-    /// Parses the command to extract count prefix (e.g., "3d" -> count=3, cmd="d"),
-    /// then executes the base command `count` times. This counts as ONE action
-    /// for scoring purposes.
-    ///
-    /// # Arguments
-    /// * `command` - Full command string, possibly with count prefix
-    ///
-    /// # Returns
-    /// * `Ok(())` on success
-    /// * `Err(UserError)` if any execution fails
-    fn execute_with_count(&mut self, command: &str) -> Result<(), UserError> {
-        let (count, base_cmd) = extract_count_and_command(command);
-
-        for _ in 0..count {
-            self.execute_single(base_cmd)?;
-        }
-
-        Ok(())
-    }
 
     /// Check if scenario is completed after command execution
     fn check_completion(&self) -> bool;
@@ -626,27 +587,5 @@ mod tests {
         assert!(parse_command_buffer("3r").is_invalid());
         // Count + multi-key is invalid
         assert!(parse_command_buffer("3gg").is_invalid());
-    }
-
-    #[test]
-    fn test_extract_count_and_command_with_count() {
-        assert_eq!(extract_count_and_command("3h"), (3, "h"));
-        assert_eq!(extract_count_and_command("12j"), (12, "j"));
-        assert_eq!(extract_count_and_command("999k"), (999, "k"));
-    }
-
-    #[test]
-    fn test_extract_count_and_command_no_count() {
-        assert_eq!(extract_count_and_command("h"), (1, "h"));
-        assert_eq!(extract_count_and_command("gg"), (1, "gg"));
-        assert_eq!(extract_count_and_command("fx"), (1, "fx"));
-    }
-
-    #[test]
-    fn test_extract_count_and_command_edge_cases() {
-        // Just digits - should return (1, original)
-        assert_eq!(extract_count_and_command("3"), (1, "3"));
-        // Empty - should return (1, empty)
-        assert_eq!(extract_count_and_command(""), (1, ""));
     }
 }

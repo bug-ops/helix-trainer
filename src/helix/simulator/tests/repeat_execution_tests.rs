@@ -167,14 +167,16 @@ fn test_repeat_replace_with_q_argument() {
 fn test_repeat_find_char_with_q_argument() {
     let mut sim = AnyModeSimulator::new("aqbqcq".to_string());
 
+    // The range extends from the old cursor through the found char, so its
+    // head sits one past the char.
     sim.execute_command("fq").unwrap();
     let state = sim.state().unwrap();
-    assert_eq!(state.cursor_position(), (0, 1));
+    assert_eq!(state.cursor_position(), (0, 2));
 
     // Repeat find (should move to the next 'q')
     sim.execute_command(".").unwrap();
     let state = sim.state().unwrap();
-    assert_eq!(state.cursor_position(), (0, 3));
+    assert_eq!(state.cursor_position(), (0, 4));
 }
 
 #[test]
@@ -245,13 +247,13 @@ fn test_repeat_insert_mode() {
     let state = sim.state().unwrap();
     assert_eq!(state.content(), "hiworld");
 
-    // Move to end (use 'gl' in Helix, not '$')
+    // `gl` lands on the last character, so `i` inserts before it
     sim.execute_command(CMD_GOTO_LINE_END).unwrap();
 
     // Repeat insert
     sim.execute_command(".").unwrap();
     let state = sim.state().unwrap();
-    assert_eq!(state.content(), "hiworldhi");
+    assert_eq!(state.content(), "hiworlhid");
 }
 
 #[test]
@@ -306,10 +308,10 @@ fn test_repeat_insert_with_movements() {
     // Repeat insert with movements
     sim.execute_command(".").unwrap();
     let state = sim.state().unwrap();
-    // Should insert "hi" at end, then move left once
-    assert_eq!(state.content(), "hiworldhi");
-    // Cursor moved left from position 9 to position 8
-    assert_eq!(state.cursor_position().1, 8);
+    // Should insert "hi" before the last char, then move left once
+    assert_eq!(state.content(), "hiworlhid");
+    // Cursor moved left from position 8 to position 7
+    assert_eq!(state.cursor_position().1, 7);
 }
 
 #[test]
@@ -400,7 +402,7 @@ fn test_scenario_repeat_insert_001() {
     // Scenario says cursor_position = [0, 5] which means we start at position 5
     // Actually let's check what the scenario expects - it inserts AFTER "TODO:"
     // So we need to be at the ':' (col 4) or use append mode
-    // Use 'gl' in Helix, not '$'
+    // `gl` lands on the ':' (last char), so `i` inserts before it
     sim.execute_command(CMD_GOTO_LINE_END).unwrap();
 
     // Enter insert mode and type " Update docs"
@@ -413,7 +415,7 @@ fn test_scenario_repeat_insert_001() {
     let state = sim.state().unwrap();
     assert_eq!(
         state.content(),
-        "TODO: Update docs\nFIX:\nNOTE:",
+        "TODO Update docs:\nFIX:\nNOTE:",
         "After first insert"
     );
 
@@ -432,7 +434,7 @@ fn test_scenario_repeat_insert_001() {
     let state = sim.state().unwrap();
     assert_eq!(
         state.content(),
-        "TODO: Update docs\nFIX: Update docs\nNOTE:",
-        "Both lines should have ' Update docs' appended"
+        "TODO Update docs:\nFIX Update docs:\nNOTE:",
+        "Both lines should have ' Update docs' inserted before the ':'"
     );
 }

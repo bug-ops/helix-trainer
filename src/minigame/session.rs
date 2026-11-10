@@ -486,8 +486,8 @@ impl MiniGameSession {
 
         let current = self.current.as_mut().ok_or(UserError::OperationFailed)?;
 
-        // Use CommandExecutor trait for unified count prefix handling (e.g., "3d" -> 3x "d")
-        current.execute_with_count(command)?;
+        // The simulator interprets any count prefix (e.g. "3d", "2G")
+        current.execute_single(command)?;
 
         Ok(())
     }
@@ -967,15 +967,15 @@ impl MiniGameSession {
             let optimal_count = scenario.scenario.scoring.optimal_count.get();
             let optimal_time_per_command = scenario.time_limit / optimal_count as u32;
 
-            // Record each unique command used, normalized to the same card
-            // id training mode uses (`"ay` -> `"y`, `:g 3` -> `:goto`) so
-            // arcade and training practice of the same skill share one card.
+            // Same card ids as training mode, so arcade and training practice of one
+            // skill share a card; typed text and arguments never become cards.
             let mut recorded_commands = std::collections::HashSet::new();
-            for command in actions {
-                let normalized = crate::helix::commands::normalize_command_id(command).into_owned();
-                if recorded_commands.insert(normalized.clone()) {
+            for command in
+                crate::learning::ReviewableCommand::from_actions(actions.iter().map(String::as_str))
+            {
+                if recorded_commands.insert(command.clone()) {
                     tracker.record_attempt(
-                        &normalized,
+                        command.as_str(),
                         time_per_command,
                         success,
                         optimal_time_per_command,
@@ -1491,6 +1491,36 @@ mod tests {
             tracker.performance("\"by").is_none(),
             "raw '\"by' must not exist as its own card"
         );
+    }
+
+    #[test]
+    fn test_record_to_fsrs_skips_counts_arguments_and_typed_text() {
+        let scenario = ScenarioBuilder::new()
+            .id("test_reviewable_fsrs")
+            .setup_content("alpha beta")
+            .target_content("zzz")
+            .optimal_count(1)
+            .difficulty(Difficulty::Beginner)
+            .build();
+
+        let scenarios = Arc::new(vec![scenario]);
+        let mut session = MiniGameSession::new(scenarios, None);
+        session.start();
+        session.tick_countdown();
+        session.tick_countdown();
+        session.tick_countdown();
+        assert!(session.state.is_playing());
+
+        for cmd in ["2l", "fb", "i", "!", "Escape"] {
+            session.handle_command(cmd).unwrap();
+        }
+
+        let mut tracker = PerformanceTracker::new();
+        session.record_to_fsrs(&mut tracker, true);
+
+        let mut cards: Vec<&str> = tracker.all_commands();
+        cards.sort_unstable();
+        assert_eq!(cards, ["f", "i", "l"]);
     }
 
     #[test]

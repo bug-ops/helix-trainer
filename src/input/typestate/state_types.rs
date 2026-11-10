@@ -3,6 +3,8 @@
 //! This module contains zero-sized marker types that encode input state at the type level,
 //! providing compile-time guarantees about state transitions.
 
+use std::num::NonZeroUsize;
+
 // ============================================================================
 // Handler state marker types (zero-sized)
 // ============================================================================
@@ -71,6 +73,26 @@ pub enum FindType {
 }
 
 impl FindType {
+    /// The find type bound to `key` in Normal mode (`f`, `F`, `t`, `T`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::input::typestate::FindType;
+    ///
+    /// assert_eq!(FindType::from_key('t'), Some(FindType::TillForward));
+    /// assert_eq!(FindType::from_key('x'), None);
+    /// ```
+    pub fn from_key(key: char) -> Option<Self> {
+        match key {
+            'f' => Some(Self::FindForward),
+            'F' => Some(Self::FindBackward),
+            't' => Some(Self::TillForward),
+            'T' => Some(Self::TillBackward),
+            _ => None,
+        }
+    }
+
     /// Get the command prefix for this find type
     pub fn prefix(&self) -> &'static str {
         match self {
@@ -80,6 +102,22 @@ impl FindType {
             Self::TillBackward => "T",
         }
     }
+}
+
+/// Waiting for character after a counted `f`/`F`/`t`/`T` (e.g. `3f`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CountedFindCharPending {
+    /// The direction and type of find operation
+    pub find_type: FindType,
+    /// The occurrence to find
+    pub count: NonZeroUsize,
+}
+
+/// Waiting for the second `g` after a count (e.g. `3g` -> `3gg`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CountedGotoPending {
+    /// The line number to go to
+    pub count: NonZeroUsize,
 }
 
 /// Waiting for character after 'r' (replace command)
@@ -104,12 +142,12 @@ pub struct CommandLinePending {
     pub buffer: String,
 }
 
-/// Accumulating an `s`/`S` regex-selection prompt buffer
+/// Accumulating an `s`/`S`/`/` regex prompt buffer
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegexPromptPending {
-    /// Which command (`s` or `S`) this prompt was opened for
+    /// Which command (`s`, `S` or `/`) this prompt was opened for
     pub kind: super::input_state::RegexPromptKind,
-    /// Buffer contents typed after the leading 's'/'S'
+    /// Buffer contents typed after the leading 's'/'S'/'/'
     pub buffer: String,
 }
 
@@ -117,7 +155,7 @@ pub struct RegexPromptPending {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CountPending {
     /// The accumulated count value
-    pub count: usize,
+    pub count: NonZeroUsize,
 }
 
 /// Waiting for second key after '[' (unmatched previous commands)
@@ -147,6 +185,8 @@ impl private::Sealed for SurroundReplaceToPending {}
 impl private::Sealed for TextObjectAroundPending {}
 impl private::Sealed for TextObjectInsidePending {}
 impl private::Sealed for FindCharPending {}
+impl private::Sealed for CountedFindCharPending {}
+impl private::Sealed for CountedGotoPending {}
 impl private::Sealed for ReplaceCharPending {}
 impl private::Sealed for RegisterPending {}
 impl private::Sealed for RegisterOpPending {}
@@ -227,6 +267,18 @@ impl HandlerState for TextObjectInsidePending {
 impl HandlerState for FindCharPending {
     fn state_name() -> &'static str {
         "FIND_CHAR_PENDING"
+    }
+}
+
+impl HandlerState for CountedFindCharPending {
+    fn state_name() -> &'static str {
+        "COUNTED_FIND_CHAR_PENDING"
+    }
+}
+
+impl HandlerState for CountedGotoPending {
+    fn state_name() -> &'static str {
+        "COUNTED_GOTO_PENDING"
     }
 }
 

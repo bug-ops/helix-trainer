@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
-use crate::security::{limits::MAX_PROFILE_FILE_SIZE, path_validator};
+use crate::security::{SecurityError, limits::MAX_PROFILE_FILE_SIZE, path_validator, private_fs};
 
 use super::{GamificationError, Result, UserProfile};
 
@@ -89,6 +89,16 @@ struct ProfileData {
     profile: UserProfile,
 }
 
+/// Result of preserving an unreadable `profile.json` via [`ProfileStorage::quarantine`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuarantineOutcome {
+    /// The original file was copied to this path; the original is untouched.
+    BackedUp(PathBuf),
+
+    /// The backup could not be made; the original is untouched.
+    Failed(String),
+}
+
 /// Outcome of [`ProfileStorage::check_and_refresh_lock`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LockStatus {
@@ -109,7 +119,7 @@ pub struct ProfileStorage {
 impl ProfileStorage {
     /// Create a new storage handler
     ///
-    /// Default path: `~/.config/helix-trainer/profile.json`
+    /// Default path: `helix-trainer/profile.json` in the OS config directory
     ///
     /// # Examples
     ///
@@ -136,7 +146,7 @@ impl ProfileStorage {
     ///
     /// This is the single safe default for test fixtures: every call returns a
     /// distinct path, so it can never collide with the real
-    /// `~/.config/helix-trainer/profile.json` or with another test's storage, even
+    /// `helix-trainer/profile.json` or with another test's storage, even
     /// under parallel `cargo nextest` execution. All test fixture builders (
     /// `src/testing/app_state.rs` and the per-file `create_test_state()` helpers)
     /// must construct `ProfileStorage` through this function, not `new()` — `new()`
@@ -161,7 +171,7 @@ impl ProfileStorage {
 
     /// Get default storage path
     ///
-    /// Returns `~/.config/helix-trainer/profile.json`
+    /// Returns `helix-trainer/profile.json` in the OS config directory
     fn default_path() -> PathBuf {
         let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
         path.push("helix-trainer");
@@ -171,11 +181,14 @@ impl ProfileStorage {
 
     /// Load profile from disk
     ///
-    /// Returns new profile if file doesn't exist
+    /// Returns a new profile only if the file does not exist. The stored
+    /// `level` is recomputed from `total_xp` and unknown achievement ids are
+    /// dropped.
     ///
     /// # Errors
     ///
-    /// Returns error if file exists but cannot be read or parsed
+    /// Returns error if the path exists but cannot be read (not a regular
+    /// file, over [`MAX_PROFILE_FILE_SIZE`], I/O failure) or parsed
     ///
     /// # Examples
     ///
@@ -187,23 +200,78 @@ impl ProfileStorage {
     /// println!("Level: {}", profile.level);
     /// ```
     pub fn load(&self) -> Result<UserProfile> {
-        if !self.file_path.exists() {
-            return Ok(UserProfile::new());
+        match fs::metadata(&self.file_path) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(UserProfile::new()),
+            Err(e) => {
+                return Err(GamificationError::StorageError(format!(
+                    "Failed to read profile: {e}"
+                )));
+            }
         }
 
-        path_validator::validate_file_size(&self.file_path, MAX_PROFILE_FILE_SIZE).map_err(
-            |e| GamificationError::StorageError(format!("Profile file too large: {}", e)),
-        )?;
+        let contents = path_validator::read_capped(&self.file_path, MAX_PROFILE_FILE_SIZE)
+            .map_err(|e| match e {
+                SecurityError::FileTooLarge { .. } => {
+                    GamificationError::StorageError(format!("Profile file too large: {e}"))
+                }
+                _ => GamificationError::StorageError(format!("Failed to read profile: {e}")),
+            })?;
 
-        let contents = fs::read_to_string(&self.file_path).map_err(|e| {
-            GamificationError::StorageError(format!("Failed to read profile: {}", e))
-        })?;
-
-        let data: ProfileData = serde_json::from_str(&contents).map_err(|e| {
+        let mut data: ProfileData = serde_json::from_str(&contents).map_err(|e| {
             GamificationError::StorageError(format!("Failed to parse profile: {}", e))
         })?;
+        data.profile.recompute_level();
 
         Ok(data.profile)
+    }
+
+    /// Copy an unreadable profile file to `profile.json.corrupt-<timestamp>`
+    /// so its contents survive whatever the application does next.
+    ///
+    /// Never modifies or deletes the original. A name collision (two
+    /// quarantines in the same second) gets a numeric suffix. Anything that
+    /// is not a regular file is not copied (reading it could block or never
+    /// end).
+    pub fn quarantine(&self) -> QuarantineOutcome {
+        match self.try_quarantine() {
+            Ok(path) => QuarantineOutcome::BackedUp(path),
+            Err(e) => QuarantineOutcome::Failed(e.to_string()),
+        }
+    }
+
+    fn try_quarantine(&self) -> std::io::Result<PathBuf> {
+        let not_regular = || std::io::Error::other("not a regular file");
+        if !fs::metadata(&self.file_path)?.is_file() {
+            return Err(not_regular());
+        }
+        let mut source = fs::File::open(&self.file_path)?;
+        if !source.metadata()?.is_file() {
+            return Err(not_regular());
+        }
+
+        let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S");
+        let mut attempt = 0u32;
+        let (backup_path, mut backup) = loop {
+            let extension = if attempt == 0 {
+                format!("corrupt-{stamp}")
+            } else {
+                format!("corrupt-{stamp}-{attempt}")
+            };
+            let candidate = self.file_path.with_added_extension(extension);
+            match private_fs::create_new_file(&candidate) {
+                Ok(file) => break (candidate, file),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
+                Err(e) => return Err(e),
+            }
+        };
+
+        let copied = std::io::copy(&mut source, &mut backup).and_then(|_| backup.sync_all());
+        if let Err(e) = copied {
+            let _ = fs::remove_file(&backup_path);
+            return Err(e);
+        }
+        Ok(backup_path)
     }
 
     /// Save profile to disk
@@ -236,7 +304,7 @@ impl ProfileStorage {
     pub fn save(&self, profile: &UserProfile) -> Result<()> {
         // Create parent directory if needed
         if let Some(parent) = self.file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
+            private_fs::create_dir_all(parent).map_err(|e| {
                 GamificationError::StorageError(format!("Failed to create directory: {}", e))
             })?;
         }
@@ -253,7 +321,7 @@ impl ProfileStorage {
         let tmp_path = tmp_write_path(&self.file_path, suffix);
 
         let write_result = (|| {
-            let mut tmp_file = fs::File::create(&tmp_path)?;
+            let mut tmp_file = private_fs::create_file(&tmp_path)?;
             tmp_file.write_all(json.as_bytes())?;
             tmp_file.sync_all()
         })();
@@ -263,13 +331,6 @@ impl ProfileStorage {
                 "Failed to write profile: {}",
                 e
             )));
-        }
-
-        // Best-effort: carry the existing file's permissions onto the temp file so a
-        // save doesn't silently reset them to the umask default via the rename below.
-        // Skipped (not an error) if the target doesn't exist yet or metadata can't be read.
-        if let Ok(metadata) = fs::metadata(&self.file_path) {
-            let _ = fs::set_permissions(&tmp_path, metadata.permissions());
         }
 
         fs::rename(&tmp_path, &self.file_path).map_err(|e| {
@@ -316,7 +377,9 @@ impl ProfileStorage {
         let suffix = TMP_SUFFIX_COUNTER.fetch_add(1, Ordering::Relaxed);
         let tmp_path = tmp_write_path(&lock_path, suffix);
 
-        if fs::write(&tmp_path, std::process::id().to_string()).is_ok() {
+        let written = private_fs::create_file(&tmp_path)
+            .and_then(|mut file| file.write_all(std::process::id().to_string().as_bytes()));
+        if written.is_ok() {
             let _ = fs::rename(&tmp_path, &lock_path);
         } else {
             let _ = fs::remove_file(&tmp_path);
@@ -723,5 +786,167 @@ mod tests {
         storage.delete().unwrap();
 
         assert!(!lock_path.exists());
+    }
+
+    fn saved_profile_json(storage: &ProfileStorage, profile: &UserProfile) -> serde_json::Value {
+        storage.save(profile).unwrap();
+        serde_json::from_str(&fs::read_to_string(storage.path()).unwrap()).unwrap()
+    }
+
+    /// FR-004 (#440): an achievement id written by a newer version is
+    /// ignored; the rest of the profile still loads.
+    #[test]
+    fn test_load_ignores_unknown_achievement_ids() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        let mut profile = UserProfile::new();
+        profile.add_xp(300);
+        let mut json = saved_profile_json(&storage, &profile);
+        json["profile"]["achievements_unlocked"] =
+            serde_json::json!(["Streak7Days", "FutureAchievement", 42]);
+        fs::write(storage.path(), json.to_string()).unwrap();
+
+        let loaded = storage.load().unwrap();
+
+        assert_eq!(loaded.total_xp, 300);
+        assert_eq!(loaded.achievements_unlocked.len(), 1);
+        assert!(loaded.has_achievement(&crate::gamification::AchievementId::Streak7Days));
+    }
+
+    /// #450: a stored level inconsistent with `total_xp` is silently corrected.
+    #[test]
+    fn test_load_recomputes_level_from_total_xp() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
+        let mut json = saved_profile_json(&storage, &UserProfile::new());
+        json["profile"]["level"] = serde_json::json!(50);
+        fs::write(storage.path(), json.to_string()).unwrap();
+        assert_eq!(storage.load().unwrap().level, 1);
+
+        json["profile"]["level"] = serde_json::json!(1);
+        json["profile"]["total_xp"] = serde_json::json!(1_000_000u64);
+        fs::write(storage.path(), json.to_string()).unwrap();
+        assert_eq!(
+            storage.load().unwrap().level,
+            crate::gamification::XPCalculator::level_from_xp(1_000_000)
+        );
+    }
+
+    #[test]
+    fn test_quarantine_copies_without_touching_original_and_names_are_unique() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+        let storage = ProfileStorage::with_path(&path);
+
+        let first = storage.quarantine();
+        let second = storage.quarantine();
+
+        let (QuarantineOutcome::BackedUp(a), QuarantineOutcome::BackedUp(b)) = (first, second)
+        else {
+            panic!("both quarantines should succeed");
+        };
+        assert_ne!(a, b);
+        for backup in [&a, &b] {
+            assert!(
+                backup
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("profile.json.corrupt-")
+            );
+            assert_eq!(fs::read_to_string(backup).unwrap(), "{broken");
+        }
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{broken");
+    }
+
+    #[test]
+    fn test_quarantine_fails_without_a_regular_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(temp_dir.path().join("missing.json"));
+        assert!(matches!(storage.quarantine(), QuarantineOutcome::Failed(_)));
+
+        let dir_storage = ProfileStorage::with_path(temp_dir.path());
+        assert!(matches!(
+            dir_storage.quarantine(),
+            QuarantineOutcome::Failed(_)
+        ));
+    }
+
+    #[test]
+    fn test_load_unreadable_path_is_error_not_new_profile() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(temp_dir.path());
+        assert!(storage.load().is_err());
+    }
+
+    /// #441: a symlink to a device must be rejected, not read without bound.
+    #[cfg(unix)]
+    #[test]
+    fn test_load_symlink_to_dev_zero_is_rejected() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("profile.json");
+        std::os::unix::fs::symlink("/dev/zero", &path).unwrap();
+
+        let err = ProfileStorage::with_path(&path).load().unwrap_err();
+
+        assert!(err.to_string().contains("Not a regular file"), "{err}");
+    }
+
+    /// #441: a FIFO must be rejected without blocking.
+    #[cfg(unix)]
+    #[test]
+    fn test_load_fifo_is_rejected_without_blocking() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("profile.json");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&path)
+                .status()
+                .unwrap()
+                .success()
+        );
+
+        assert!(ProfileStorage::with_path(&path).load().is_err());
+    }
+
+    #[cfg(unix)]
+    fn mode_of(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    /// #444: fresh data directory is 0700; profile and lock files are 0600.
+    #[cfg(unix)]
+    #[test]
+    fn test_save_creates_private_directory_and_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path().join("data");
+        let path = dir.join("profile.json");
+
+        ProfileStorage::with_path(&path)
+            .save(&UserProfile::new())
+            .unwrap();
+
+        assert_eq!(mode_of(&dir), 0o700);
+        assert_eq!(mode_of(&path), 0o600);
+        assert_eq!(mode_of(&dir.join("profile.json.lock")), 0o600);
+    }
+
+    /// #444 / FR-021: an existing world-readable profile is tightened on save.
+    #[cfg(unix)]
+    #[test]
+    fn test_save_tightens_existing_broad_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("profile.json");
+        fs::write(&path, "x").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+
+        ProfileStorage::with_path(&path)
+            .save(&UserProfile::new())
+            .unwrap();
+
+        assert_eq!(mode_of(&path), 0o600);
     }
 }

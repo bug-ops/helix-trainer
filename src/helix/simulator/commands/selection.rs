@@ -231,17 +231,23 @@ pub fn remove_selections_matching<M: EditorMode>(
     Ok(())
 }
 
-/// Keep only the primary selection (, command)
-pub fn keep_primary_selection<M: EditorMode>(
-    _sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+/// Keep only the primary selection (`,` command)
+pub fn keep_primary_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let range = sim.selection.primary();
+    sim.selection = Selection::single(range.anchor, range.head);
     Ok(())
 }
 
-/// Remove the primary selection (Alt-, command)
+/// Remove the primary selection (`Alt-,` command)
+///
+/// Like Helix, a lone selection is never removed: the editor must always
+/// keep at least one range.
 pub fn remove_primary_selection<M: EditorMode>(
-    _sim: &mut HelixSimulator<M>,
+    sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
+    if sim.selection.len() > 1 {
+        sim.selection = sim.selection.clone().remove(sim.selection.primary_index());
+    }
     Ok(())
 }
 

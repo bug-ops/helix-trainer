@@ -23,7 +23,7 @@ file_content = """fn main() {
     let x = 42;
     println!("{}", x);
 }"""
-cursor_position = [1, 15]
+cursor_position = [1, 14]
 
 [scenarios.solution]
 commands = ["gl"]

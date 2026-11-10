@@ -5,13 +5,14 @@ use crate::constants::{
     BIG_TEXT_CHAR_WIDTH_CELLS, BIG_TEXT_HEIGHT_LINES, HINT_POPUP_MAX_HEIGHT, HINT_POPUP_MAX_WIDTH,
     KEY_HISTORY_DISPLAY_SIZE, KEY_HISTORY_MIN_WIDTH,
 };
-use crate::ui::state::{AppState, TypedScreen};
+use crate::gamification::QuarantineOutcome;
+use crate::ui::state::{AppState, ProfilePersistence, TypedScreen};
 use ratatui::{
     Frame,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 use rust_i18n::t;
 use tui_big_text::{BigText, PixelSize};
@@ -237,10 +238,117 @@ pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
     }
 }
 
+/// Render a persistent banner at the top of the screen while the profile
+/// could not be loaded and saving is disabled.
+///
+/// Unlike a timed notification it stays until the session ends, so the user
+/// always knows their progress is not being recorded. It sits at the top so
+/// it never covers the bottom-row footer (key hints, `/`, `:` and `s`
+/// prompts), and wraps so the backup path stays readable on narrow terminals.
+pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
+    let ProfilePersistence::Quarantined(backup) = state.progress.persistence() else {
+        return;
+    };
+    let area = frame.area();
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+
+    let backup_line = match backup {
+        QuarantineOutcome::BackedUp(path) => format!("Backup kept at: {}", path.display()),
+        QuarantineOutcome::Failed(reason) => format!("No backup made: {reason}"),
+    };
+    let lines = [
+        "Profile load failed: saving is disabled this session.".to_string(),
+        backup_line,
+    ];
+
+    // +1 line of slack because word wrapping can need more rows than a plain
+    // character count suggests.
+    let width = usize::from(area.width);
+    let wanted: usize = lines
+        .iter()
+        .map(|l| l.chars().count().div_ceil(width))
+        .sum::<usize>()
+        + 1;
+    let height = u16::try_from(wanted)
+        .unwrap_or(u16::MAX)
+        .min((area.height / 2).max(1));
+
+    let banner_area = Rect { height, ..area };
+    frame.render_widget(Clear, banner_area);
+    frame.render_widget(
+        Paragraph::new(lines.map(Line::from).to_vec())
+            .wrap(Wrap { trim: false })
+            .style(
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::Red)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        banner_area,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ratatui::{Terminal, backend::TestBackend, buffer::Buffer};
+
+    fn rows(buffer: &Buffer) -> Vec<String> {
+        (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol().to_string())
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn render_banner(state: &AppState, width: u16, height: u16) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| render_profile_load_banner(frame, state))
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn quarantined_state(path: &str) -> AppState {
+        let mut state = crate::testing::app_state::empty_test_app_state();
+        state
+            .progress
+            .quarantine_profile(QuarantineOutcome::BackedUp(path.into()));
+        state
+    }
+
+    #[test]
+    fn test_profile_load_banner_hidden_unless_quarantined() {
+        let state = crate::testing::app_state::empty_test_app_state();
+        let all = rows(&render_banner(&state, 80, 10)).join("");
+        assert!(!all.contains("saving is disabled"));
+    }
+
+    #[test]
+    fn test_profile_load_banner_shows_full_backup_path_when_narrow() {
+        let path = "/Users/someone/Library/Application Support/helix-trainer/profile.json.corrupt-20261110T224813";
+        let state = quarantined_state(path);
+
+        let rendered = rows(&render_banner(&state, 40, 20));
+
+        let joined: String = rendered.join("").split_whitespace().collect();
+        let expected: String = path.split_whitespace().collect();
+        assert!(joined.contains(&expected), "{rendered:#?}");
+        assert!(rendered[0].contains("Profile load failed"));
+    }
+
+    #[test]
+    fn test_profile_load_banner_leaves_bottom_row_untouched() {
+        let state = quarantined_state("/tmp/profile.json.corrupt-1");
+
+        let rendered = rows(&render_banner(&state, 80, 10));
+
+        assert!(rendered.last().unwrap().trim().is_empty());
+    }
 
     fn render_popup(width: u16, height: u16, bounds: Rect, keys: &[String]) -> Buffer {
         let backend = TestBackend::new(width, height);

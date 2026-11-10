@@ -1,5 +1,6 @@
 //! Tests for InputState enum
 
+use super::nz;
 use crate::input::typestate::{FindType, InputState};
 
 #[test]
@@ -21,7 +22,7 @@ fn test_input_state_predicates() {
         .is_find_char_pending()
     );
     assert!(InputState::ReplaceCharPending.is_replace_char_pending());
-    assert!(InputState::CountPending { count: 5 }.is_count_pending());
+    assert!(InputState::CountPending { count: nz(5) }.is_count_pending());
 }
 
 #[test]
@@ -42,7 +43,7 @@ fn test_is_prefix_state() {
     assert!(!InputState::Base.is_prefix_state());
     assert!(InputState::GotoPending.is_prefix_state());
     assert!(InputState::ViewPending.is_prefix_state());
-    assert!(InputState::CountPending { count: 3 }.is_prefix_state());
+    assert!(InputState::CountPending { count: nz(3) }.is_prefix_state());
 }
 
 // ============================================================================
@@ -155,7 +156,7 @@ fn test_name_returns_correct_strings() {
         "REPLACE_CHAR_PENDING"
     );
     assert_eq!(
-        InputState::CountPending { count: 5 }.name(),
+        InputState::CountPending { count: nz(5) }.name(),
         "COUNT_PENDING"
     );
     assert_eq!(

@@ -132,8 +132,6 @@ fn execute_minigame_command(
         return Ok(());
     };
 
-    // handle_command internally uses CommandExecutor::execute_with_count
-    // for unified count prefix handling (e.g., "3d" -> 3x "d")
     session.handle_command(command)?;
 
     // Update quest progress for command used (shared function)
@@ -582,7 +580,8 @@ mod tests {
                 UserProfile::new(),
                 PerformanceTracker::new(),
                 ProfileStorage::for_test(),
-            ),
+            )
+            .loaded(),
             config: ConfigState::default(),
         }
     }
@@ -602,7 +601,8 @@ mod tests {
                 UserProfile::new(),
                 PerformanceTracker::new(),
                 ProfileStorage::for_test(),
-            ),
+            )
+            .loaded(),
             config: ConfigState::default(),
         }
     }
@@ -1696,6 +1696,25 @@ mod tests {
             .and_then(|s| s.state().countdown_remaining());
 
         assert_eq!(countdown_before, countdown_after);
+    }
+
+    /// Regression test for #466: a simulator error in arcade mode is returned
+    /// as a recoverable error and keeps the session and screen.
+    #[test]
+    fn test_rejected_command_keeps_minigame_session_and_screen() {
+        let mut state = create_test_state();
+        start_minigame(&mut state);
+        if let Some(ref mut session) = state.game.minigame_session {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        let result = execute_minigame_command(&mut state, "not_a_command", "not_a_command");
+
+        assert!(result.is_err());
+        assert!(state.game.minigame_session.is_some());
+        assert!(matches!(state.screen, TypedScreen::MiniGame(_)));
     }
 
     #[test]

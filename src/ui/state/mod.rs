@@ -39,7 +39,7 @@ pub use handler_context::{HandlerContext, HandlerOutcome};
 
 // Sub-structures for organizing AppState
 mod substates;
-pub use substates::{ConfigState, GameState, ProgressState, UIState};
+pub use substates::{ConfigState, GameState, ProfilePersistence, ProgressState, UIState};
 
 // Type-safe screen variants with required data
 pub mod screen;
@@ -486,8 +486,9 @@ impl AppState {
 
     /// Prepare the application's exit-time save. See
     /// [`ProgressState::prepare_final_save_request`] for the ordering
-    /// guarantee this depends on the caller upholding.
-    pub fn prepare_final_save_request(&mut self) -> SaveRequest {
+    /// guarantee this depends on the caller upholding. `None` means the
+    /// profile must not be written (still loading, or its load failed).
+    pub fn prepare_final_save_request(&mut self) -> Option<SaveRequest> {
         self.progress.prepare_final_save_request()
     }
 }
@@ -506,11 +507,7 @@ macro_rules! extract_screen {
             apply_outcome($state, outcome);
             Ok(())
         } else {
-            Err(UserError::invalid_state(concat!(
-                "Expected ",
-                stringify!($variant),
-                " screen"
-            )))
+            Err(UserError::WrongScreen)
         }
     };
     // Handler with context (immutable data)
@@ -527,11 +524,7 @@ macro_rules! extract_screen {
             apply_outcome($state, outcome);
             Ok(())
         } else {
-            Err(UserError::invalid_state(concat!(
-                "Expected ",
-                stringify!($variant),
-                " screen"
-            )))
+            Err(UserError::WrongScreen)
         }
     };
     // Handler with context (mutable data)
@@ -548,11 +541,7 @@ macro_rules! extract_screen {
             apply_outcome($state, outcome);
             Ok(())
         } else {
-            Err(UserError::invalid_state(concat!(
-                "Expected ",
-                stringify!($variant),
-                " screen"
-            )))
+            Err(UserError::WrongScreen)
         }
     };
 }
@@ -776,7 +765,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                         data.command_buffer.clone(),
                     )
                 } else {
-                    return Err(UserError::invalid_state("Expected Menu screen"));
+                    return Err(UserError::WrongScreen);
                 };
 
             let menu_data = MenuData {
@@ -826,9 +815,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.screen = new_screen;
                 Ok(())
             } else {
-                Err(UserError::invalid_state(
-                    "Expected Task screen for AbandonScenario",
-                ))
+                Err(UserError::WrongScreen)
             }
         }
         Message::RetryScenario => {
@@ -846,9 +833,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 state.screen = new_screen;
                 Ok(())
             } else {
-                Err(UserError::invalid_state(
-                    "Expected Results screen for RetryScenario",
-                ))
+                Err(UserError::WrongScreen)
             }
         }
         Message::NextScenario => {
@@ -881,9 +866,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 apply_outcome(state, outcome);
                 Ok(())
             } else {
-                Err(UserError::invalid_state(
-                    "Expected Results screen for NextLesson",
-                ))
+                Err(UserError::WrongScreen)
             }
         }
         Message::GoToScenarioList => {
@@ -898,9 +881,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 apply_outcome(state, outcome);
                 Ok(())
             } else {
-                Err(UserError::invalid_state(
-                    "Expected Results screen for GoToScenarioList",
-                ))
+                Err(UserError::WrongScreen)
             }
         }
 
@@ -1119,7 +1100,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             Ok(())
         }
         Message::ToggleSound => {
-            let enabled = state.progress.sound_manager.toggle();
+            let enabled = state.progress.toggle_sound();
             tracing::info!("Sound toggled: {}", if enabled { "on" } else { "off" });
             Ok(())
         }

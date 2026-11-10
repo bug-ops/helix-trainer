@@ -69,7 +69,7 @@ commands = ["q", "A", "!", "Escape", "j", "gh", "q", "Q"]
 description = "Record appending '!' and moving to the next line, then 'Q' to replay it once more"
 
 [scenarios.scoring]
-optimal_count = 9
+optimal_count = 8
 max_points = 100
 tolerance = 1
 

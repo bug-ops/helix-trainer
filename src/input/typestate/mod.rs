@@ -15,6 +15,7 @@
 //!                  -> FindCharPending (after 'f'/'F'/'t'/'T')
 //!                  -> ReplaceCharPending (after 'r')
 //!                  -> CountPending (after digit 1-9)
+//!                  -> RegexPromptPending (after 's'/'S'/'/')
 //!
 //! GotoPending      -> BaseState (after 'g'/'h'/'l'/'s'/'e' or cancel)
 //! ViewPending      -> BaseState (after 'z'/'t'/'b'/'m'/'j'/'k' or cancel)
@@ -22,6 +23,7 @@
 //! FindCharPending  -> BaseState (after any char or cancel)
 //! ReplaceCharPending -> BaseState (after any char or cancel)
 //! CountPending     -> BaseState (after command char or cancel)
+//!                  -> CountedGotoPending (after 'g') / CountedFindCharPending (after 'f'/'F'/'t'/'T')
 //! ```
 //!
 //! # Example
@@ -58,15 +60,16 @@ pub use handler_result::HandlerResult;
 pub use handlers::{InputHandler, KeyHandler};
 pub use input_state::{InputState, RegexPromptKind};
 pub use key_mapping::{
-    command_to_key_event, handle_insert_mode_input, map_key_to_helix_command, normalize_key_event,
-    parse_helix_key_string,
+    Chord, command_to_key_event, handle_insert_mode_input, map_key_to_helix_command,
+    normalize_key_event, parse_helix_key_string,
 };
 pub use state_machine::{InputStateMachine, RegisterPreview, SurroundPreview};
 pub use state_types::{
-    BaseState, CommandLinePending, CountPending, FindCharPending, FindType, GotoPending,
-    HandlerState, MatchPending, RegexPromptPending, RegisterOpPending, RegisterPending,
-    ReplaceCharPending, SurroundAddPending, SurroundDeletePending, SurroundReplaceFromPending,
-    SurroundReplaceToPending, TextObjectAroundPending, TextObjectInsidePending,
-    UnmatchedNextPending, UnmatchedPrevPending, ViewPending,
+    BaseState, CommandLinePending, CountPending, CountedFindCharPending, CountedGotoPending,
+    FindCharPending, FindType, GotoPending, HandlerState, MatchPending, RegexPromptPending,
+    RegisterOpPending, RegisterPending, ReplaceCharPending, SurroundAddPending,
+    SurroundDeletePending, SurroundReplaceFromPending, SurroundReplaceToPending,
+    TextObjectAroundPending, TextObjectInsidePending, UnmatchedNextPending, UnmatchedPrevPending,
+    ViewPending,
 };
 pub use typestate_wrapper::{TypestateHandler, TypestateHandlerState};

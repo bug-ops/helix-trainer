@@ -123,6 +123,29 @@ pub fn search_forward<M: crate::helix::simulator::EditorMode>(
     search_next_match(sim)
 }
 
+/// Search forward for `pattern` (`/ <pattern>` prompt invocation)
+///
+/// Stores the pattern so `n`/`N` continue from it, then selects the next
+/// match after the cursor, wrapping at the end of the buffer. An empty
+/// pattern is a no-op.
+///
+/// # Errors
+///
+/// Returns a `UserError` if `pattern` is not a valid regex or exceeds the
+/// maximum pattern length; the selection is left unchanged.
+pub fn search_pattern_forward<M: crate::helix::simulator::EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    pattern: &str,
+) -> Result<(), UserError> {
+    if pattern.is_empty() {
+        return Ok(());
+    }
+    sim.search_state
+        .set_pattern(pattern, SearchDirection::Forward)
+        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+    search_forward(sim)
+}
+
 /// Search backward (?) command
 pub fn search_backward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,

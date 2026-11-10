@@ -10,10 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Breaking**: `ChallengeProgress::last_challenge_date` is now `Option<NaiveDate>` instead of `Option<String>`; the stored `YYYY-MM-DD` format is unchanged (#435)
+- **Breaking**: `prepare_final_save_request` returns `Option`, `DataLoadMessage::ProfileError` carries a `backup` path, and `load_profile_async` is replaced by `load_profile_message` (#508)
+- **Breaking**: remove `validate_file_size` (use `path_validator::read_capped`), `extract_count_and_command`, `execute_with_count` and `record_action_with_count`; counted commands run through one simulator API with `CountBehavior` (#508)
+- **Breaking**: registers store `Vec<String>` and `UserError::WrongScreen` no longer carries a screen name (#508)
+- `--version` and `--help` print and exit instead of launching the TUI; unknown arguments exit with code 2 (#508)
+- Profile and config files are created owner-only (directory 0700, files 0600 on Unix) and reads reject symlinks to devices and FIFOs (#508)
+- `~` and other commands that ignore a count in Helix no longer repeat; `d`, `c`, `i`, `a`, `.` and others follow Helix count semantics (#508)
 
 ### Fixed
 
 - A malformed `last_challenge_date` in `profile.json` now loads as `None` instead of failing the whole profile load (#435)
+- An unreadable `profile.json` is copied to `profile.json.corrupt-<timestamp>` and never overwritten; a banner shows the backup path (#508)
+- A recoverable error no longer ends the session or drops the active scenario (#508)
+- A panic restores the terminal; the Helix keymap is read from `~/.config/helix` on macOS (#508)
+- Alt-s splits the selection on newlines instead of opening the select prompt; counted `G`, `gg`, `f`, `t`, `F` and `T` work with a count (#508)
+- `/` opens a search prompt; Ctrl-w, Ctrl-u, Ctrl-k, Ctrl-d, Alt-d and Delete edit in Insert mode; AltGr characters still type (#508)
+- Helix commands now match Helix: `x`, `f`/`t`, `r`, `~`, `J`, `ms`/`md`/`mr`, `,`, `gl`, `p`/`P`, `o`/`O`, undo selection and multi-range yank/paste (#508)
+- Review queue is sorted before the limit is applied, `ReviewItem` equality matches its ordering, and typed text no longer becomes review cards (#508)
+- Profile screen no longer panics on an inconsistent level, attempt counters saturate, and the sound setting persists (#508)
+- Training progress no longer starts at 100% and `optimal_count` matches the solution length in 37 scenarios (#508)
 
 ### Testing
 

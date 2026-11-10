@@ -4,6 +4,7 @@
 //! by determining if a buffer contains a complete command, partial sequence, or invalid input.
 
 use std::collections::{HashMap, HashSet};
+use std::num::NonZeroUsize;
 
 /// Maximum allowed count prefix to prevent abuse
 pub const MAX_COUNT_PREFIX: usize = 999;
@@ -45,6 +46,33 @@ pub fn split_count_prefix(buffer: &str) -> (Option<usize>, &str) {
         Ok(count) if count <= MAX_COUNT_PREFIX => (Some(count), cmd_str),
         _ => (None, buffer), // Invalid count, treat as invalid
     }
+}
+
+/// Split a command string into a non-zero count and its base command.
+///
+/// Returns `None` when the string has no count prefix, the count is zero or
+/// above [`MAX_COUNT_PREFIX`], or nothing follows the digits. A leading `0`
+/// is never a count (it is not a command in Helix either).
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::helix::registry::parse_counted_command;
+///
+/// let (count, base) = parse_counted_command("3fa").unwrap();
+/// assert_eq!((count.get(), base), (3, "fa"));
+/// assert!(parse_counted_command("fa").is_none());
+/// assert!(parse_counted_command("0").is_none());
+/// assert!(parse_counted_command("3").is_none());
+/// ```
+pub fn parse_counted_command(cmd: &str) -> Option<(NonZeroUsize, &str)> {
+    let (Some(count), base) = split_count_prefix(cmd) else {
+        return None;
+    };
+    if base.is_empty() {
+        return None;
+    }
+    Some((NonZeroUsize::new(count)?, base))
 }
 
 /// KeyTrie for resolving multi-key command sequences

@@ -3,27 +3,53 @@
 use super::clipboard::yank_to_register;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
+use helix_core::line_ending::line_end_char_index;
+use helix_core::movement::skip_while;
 use helix_core::surround::find_nth_pairs_pos;
 use helix_core::textobject::{TextObject, textobject_paragraph, textobject_word};
-use helix_core::{Range, Selection, Transaction};
+use helix_core::{Range, Selection, Tendril, Transaction};
 
-/// Join current line with next line
-pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
+/// Changes that join the lines of every range, as upstream Helix's
+/// `join_selections`: each line break plus the next line's leading blanks
+/// becomes one space (none when the next line is blank).
+///
+/// A range within a single line joins that line with the next one. Comment
+/// tokens are not stripped: the simulator is language-agnostic.
+fn join_changes<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<(usize, usize, Option<Tendril>)> {
+    let slice = sim.doc.slice(..);
+    let last_line = sim.doc.len_lines() - 1;
+    let mut changes = Vec::new();
 
-    if current_line + 1 >= sim.doc.len_lines() {
-        return Ok(());
+    for range in sim.selection.ranges() {
+        let (start, mut end) = range.line_range(slice);
+        if start == end {
+            end = (end + 1).min(last_line);
+        }
+        for line in start..end {
+            let from = line_end_char_index(&slice, line);
+            let next_start = sim.doc.line_to_char(line + 1);
+            let to =
+                skip_while(slice, next_start, |ch| matches!(ch, ' ' | '\t')).unwrap_or(next_start);
+            let separator = (to != line_end_char_index(&slice, line + 1)).then(|| " ".into());
+            changes.push((from, to, separator));
+        }
     }
 
-    let line_end = sim.doc.line_to_char(current_line + 1) - 1;
-    let transaction = Transaction::change(
-        &sim.doc,
-        [(line_end, line_end + 1, Some(" ".into()))].into_iter(),
-    );
+    changes.sort_unstable_by_key(|&(from, _, _)| from);
+    changes.dedup();
+    changes
+}
 
+/// Join lines (Helix 'J' command)
+///
+/// Joins every selected line, or the current line with the next one for a
+/// single-line range, and keeps the selection mapped over the edit. Never
+/// repeated by a count prefix, as in Helix.
+pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let transaction = Transaction::change(&sim.doc, join_changes(sim).into_iter());
+    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(transaction);
-
+    sim.selection = mapped;
     Ok(())
 }
 
@@ -215,13 +241,31 @@ pub(crate) fn change_selection_linewise<M: EditorMode>(sim: &mut HelixSimulator<
     Selection::new(new_ranges.into(), primary_idx)
 }
 
+/// Apply `transaction` and keep the selection: non-empty ranges are mapped
+/// over the edit, empty ranges stay where they were (mapping would push a
+/// cursor on a replaced character past it).
+fn apply_keeping_selection<M: EditorMode>(sim: &mut HelixSimulator<M>, transaction: Transaction) {
+    let mapped = sim.selection.clone().map(transaction.changes());
+    sim.apply_transaction(transaction);
+    sim.selection = if mapped.len() == sim.selection.len() {
+        let ranges: Vec<Range> = sim
+            .selection
+            .ranges()
+            .iter()
+            .zip(mapped.ranges())
+            .map(|(old, new)| if old.is_empty() { *old } else { *new })
+            .collect();
+        Selection::new(ranges.into(), mapped.primary_index())
+    } else {
+        mapped
+    };
+}
+
 /// Switch case of selected text (Helix '~' command)
 ///
-/// Toggles case of all characters in the selection. Cursor stays at selection start.
+/// Toggles case of all characters in the selection and keeps the selection,
+/// so the next command still applies to the same span.
 pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    // Capture cursor position (start of selection) before transaction
-    let cursor_pos = sim.selection.primary().from();
-
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = range
@@ -233,7 +277,6 @@ pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
             return (start, end, None);
         }
 
-        // Toggle case of all characters in the range
         let text: String = sim
             .doc
             .slice(start..end)
@@ -252,44 +295,45 @@ pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
         (start, end, Some(text.into()))
     });
 
-    sim.apply_transaction(transaction);
-
-    // Keep cursor at selection start (Helix behavior)
-    let safe_pos = cursor_pos.min(sim.doc.len_chars().saturating_sub(1));
-    sim.selection = Selection::point(safe_pos);
-
+    apply_keeping_selection(sim, transaction);
     Ok(())
 }
 
-/// Select current line (Helix 'x' command)
+/// Select the line below, or extend a whole-line selection by one more line
+/// (Helix 'x' command), for every range.
+///
+/// Produces forward ranges ending on the next line start, so vertical motion
+/// starts from the selected line's newline and repeating `x` (also via a
+/// count) grows the selection one line at a time.
 pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(line);
-    let line_content = sim.doc.line(line);
-    let line_len = line_content.len_chars();
-    let line_end = line_start + line_len;
-
-    sim.selection = Selection::single(line_end, line_start);
+    let doc = &sim.doc;
+    let slice = doc.slice(..);
+    sim.selection = sim.selection.clone().transform(|range| {
+        let (start_line, end_line) = range.line_range(slice);
+        let start = doc.line_to_char(start_line);
+        let end = doc.line_to_char((end_line + 1).min(doc.len_lines()));
+        let last_selected_line = if range.from() == start && range.to() == end {
+            end_line + 1
+        } else {
+            end_line
+        };
+        let head = doc.line_to_char((last_selected_line + 1).min(doc.len_lines()));
+        Range::new(start, head)
+    });
     Ok(())
 }
 
-/// Extend selection to line bounds (Helix 'X' command)
+/// Extend every range to whole-line bounds, keeping its direction
+/// (Helix 'X' command, `extend_to_line_bounds`).
 pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let range = sim.selection.primary();
-    let start_line = sim.doc.char_to_line(range.from());
-    let end_line = sim
-        .doc
-        .char_to_line(range.to().saturating_sub(1).max(range.from()));
-
-    let line_start = sim.doc.line_to_char(start_line);
-    let line_end = if end_line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(end_line + 1)
-    } else {
-        sim.doc.len_chars()
-    };
-
-    sim.selection = Selection::single(line_end, line_start);
+    let doc = &sim.doc;
+    let slice = doc.slice(..);
+    sim.selection = sim.selection.clone().transform(|range| {
+        let (start_line, end_line) = range.line_range(slice);
+        let start = doc.line_to_char(start_line);
+        let end = doc.line_to_char((end_line + 1).min(doc.len_lines()));
+        Range::new(start, end).with_direction(range.direction())
+    });
     Ok(())
 }
 
@@ -299,14 +343,15 @@ pub fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), User
     Ok(())
 }
 
-/// Collapse selection to cursor (Helix ';' command)
+/// Collapse every range to its block cursor (Helix ';' command)
+///
+/// A forward range's cursor is its last selected character (`head - 1`), as in Helix.
 pub fn collapse_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    sim.selection = Selection::point(head);
+    sim.selection = sim.selection.clone().cursors(sim.doc.slice(..));
     Ok(())
 }
 
-/// Switch selected text to uppercase (Helix 'Alt-`' command)
+/// Switch selected text to uppercase (Helix 'Alt-`' command), keeping the selection
 pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
@@ -322,7 +367,7 @@ pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
         (start, end, Some(uppercase.into()))
     });
 
-    sim.apply_transaction(transaction);
+    apply_keeping_selection(sim, transaction);
     Ok(())
 }
 
@@ -356,69 +401,79 @@ pub fn replace_with_yanked_from_register<M: EditorMode>(
     Ok(())
 }
 
-/// Surround selection with character pair (Helix 'ms{char}' command)
+/// Surround every range with a character pair (Helix 'ms{char}' command)
+///
+/// One transaction (one undo step); each range then spans its surround
+/// characters, keeping its direction.
 pub fn surround_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     surround_char: char,
 ) -> Result<(), UserError> {
     let (open, close) = get_surround_pair(surround_char);
 
-    let range = sim.selection.primary();
-    let start = range.from();
-    let end = range.to();
+    let mut changes = Vec::with_capacity(sim.selection.len() * 2);
+    let mut ranges = Vec::with_capacity(sim.selection.len());
+    let mut offset = 0;
+    for range in sim.selection.ranges() {
+        changes.push((
+            range.from(),
+            range.from(),
+            Some(Tendril::from(open.to_string())),
+        ));
+        changes.push((
+            range.to(),
+            range.to(),
+            Some(Tendril::from(close.to_string())),
+        ));
+        ranges.push(
+            Range::new(offset + range.from(), offset + range.to() + 2)
+                .with_direction(range.direction()),
+        );
+        offset += 2;
+    }
 
-    let close_str: String = close.into();
-    let open_str: String = open.into();
-
-    let transaction = Transaction::change(
-        &sim.doc,
-        [(start, start, Some(open_str.into()))].into_iter(),
-    );
+    let selection = Selection::new(ranges.into(), sim.selection.primary_index());
+    let transaction = Transaction::change(&sim.doc, changes.into_iter());
     sim.apply_transaction(transaction);
-
-    let new_end = end + 1;
-    let transaction = Transaction::change(
-        &sim.doc,
-        [(new_end, new_end, Some(close_str.into()))].into_iter(),
-    );
-    sim.apply_transaction(transaction);
-
-    sim.selection = Selection::single(start + 1, new_end);
+    sim.selection = selection;
 
     Ok(())
 }
 
 /// Delete surrounding pair (Helix 'md{char}' command)
+///
+/// One transaction (one undo step); the selection is mapped over the edit.
 pub fn delete_surround<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     surround_char: char,
 ) -> Result<(), UserError> {
     let (open, close) = get_surround_pair(surround_char);
-    let head = sim.selection.primary().head;
 
-    let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, open, close) else {
+    let Some((open_pos, close_pos)) =
+        find_surrounding_pair(sim, sim.selection.primary().head, open, close)
+    else {
         return Ok(());
     };
 
-    let transaction = Transaction::change(&sim.doc, [(close_pos, close_pos + 1, None)].into_iter());
+    let transaction = Transaction::change(
+        &sim.doc,
+        [
+            (open_pos, open_pos + 1, None),
+            (close_pos, close_pos + 1, None),
+        ]
+        .into_iter(),
+    );
+    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(transaction);
-
-    let transaction = Transaction::change(&sim.doc, [(open_pos, open_pos + 1, None)].into_iter());
-    sim.apply_transaction(transaction);
-
-    let new_head = if head > close_pos {
-        head.saturating_sub(2)
-    } else if head > open_pos {
-        head.saturating_sub(1)
-    } else {
-        head
-    };
-    sim.selection = Selection::point(new_head.min(sim.doc.len_chars().saturating_sub(1)));
+    sim.selection = mapped;
 
     Ok(())
 }
 
 /// Replace surrounding pair (Helix 'mr{from}{to}' command)
+///
+/// One transaction (one undo step); the selection is unchanged because the
+/// replacement characters have the same width.
 pub fn replace_surround<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     from_char: char,
@@ -426,24 +481,28 @@ pub fn replace_surround<M: EditorMode>(
 ) -> Result<(), UserError> {
     let (from_open, from_close) = get_surround_pair(from_char);
     let (to_open, to_close) = get_surround_pair(to_char);
-    let head = sim.selection.primary().head;
 
-    let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, from_open, from_close)
+    let Some((open_pos, close_pos)) =
+        find_surrounding_pair(sim, sim.selection.primary().head, from_open, from_close)
     else {
         return Ok(());
     };
 
-    let close_str: String = to_close.into();
     let transaction = Transaction::change(
         &sim.doc,
-        [(close_pos, close_pos + 1, Some(close_str.into()))].into_iter(),
-    );
-    sim.apply_transaction(transaction);
-
-    let open_str: String = to_open.into();
-    let transaction = Transaction::change(
-        &sim.doc,
-        [(open_pos, open_pos + 1, Some(open_str.into()))].into_iter(),
+        [
+            (
+                open_pos,
+                open_pos + 1,
+                Some(Tendril::from(to_open.to_string())),
+            ),
+            (
+                close_pos,
+                close_pos + 1,
+                Some(Tendril::from(to_close.to_string())),
+            ),
+        ]
+        .into_iter(),
     );
     sim.apply_transaction(transaction);
 
@@ -631,42 +690,27 @@ fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
     Ok(())
 }
 
-/// Join lines in selection with space (Helix 'Alt-J' command)
-///
-/// Like J but joins all selected lines and selects the inserted spaces.
+/// Join lines like [`join_lines`] and select every inserted space
+/// (Helix 'Alt-J' command).
 pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let range = sim.selection.primary();
-    let start_line = sim.doc.char_to_line(range.from());
-    let end_line = sim
-        .doc
-        .char_to_line(range.to().saturating_sub(1).max(range.from()));
-
-    if start_line >= end_line {
-        return Ok(());
-    }
-
-    let mut first_space_pos = None;
-
-    for line in (start_line..end_line).rev() {
-        if line + 1 >= sim.doc.len_lines() {
-            continue;
+    let changes = join_changes(sim);
+    let mut offset = 0;
+    let mut spaces = Vec::new();
+    for (from, to, separator) in &changes {
+        if separator.is_some() {
+            let pos = from - offset;
+            spaces.push(Range::new(pos, pos + 1));
+            offset += to - from - 1;
+        } else {
+            offset += to - from;
         }
-
-        let line_end = sim.doc.line_to_char(line + 1) - 1;
-        let transaction = Transaction::change(
-            &sim.doc,
-            [(line_end, line_end + 1, Some(" ".into()))].into_iter(),
-        );
-
-        sim.apply_transaction(transaction);
-
-        first_space_pos = Some(line_end);
     }
 
-    if let Some(first_pos) = first_space_pos {
-        sim.selection = Selection::single(first_pos, first_pos + 1);
+    let transaction = Transaction::change(&sim.doc, changes.into_iter());
+    sim.apply_transaction(transaction);
+    if !spaces.is_empty() {
+        sim.selection = Selection::new(spaces.into(), 0);
     }
-
     Ok(())
 }
 
@@ -760,7 +804,7 @@ mod tests {
         // Joining 3 lines - verifies first space is selected (not last)
         let mut sim: HelixSimulator<NormalMode> =
             HelixSimulator::new("line 1\nline 2\nline 3".to_string());
-        sim.selection = Selection::single(0, 21); // All 3 lines
+        sim.selection = Selection::single(0, 20); // All 3 lines
 
         join_selections_space(&mut sim).unwrap();
 

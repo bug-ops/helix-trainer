@@ -99,7 +99,15 @@ argued property testing would catch that example-based tests would not.
 > are `#[ignore]`d because they expose real defects: #433 (`get_review_queue`
 > not sorted / not top-N, 2 properties) and #434 (`PartialEq` inconsistent
 > with `Ord`, 1 property). The residual gap is now only those ignored
-> properties. Original state at commit `33bdaa1`: `scheduler.rs` had zero
+> properties. Update (2026-11-10 bug batch): #433 and #434 are specified for
+> fixing in [[spec#11. Follow-Up Requirements: Review Queue Ordering, Eq/Ord Agreement, Reviewable Commands (#433, #434, #505)|spec section 11]]
+> (FR-008..FR-011), which also removes the `#[ignore]` markers and so closes
+> this residual gap once implemented. The same batch (#505) adds the typed
+> `ReviewableCommand` (`src/learning/reviewable.rs`) so only real Helix
+> commands become review cards (Escape, Insert-mode text and non-command
+> characters are dropped; `3h` gives `h`, `f=` gives `f`, `/ sum` gives `/`,
+> `ma(` stays); `normalize_command_id` and `profile.commands_executed` are
+> unchanged (FR-012..FR-019). Original state at commit `33bdaa1`: `scheduler.rs` had zero
 > property coverage. The
 > the project's continuous-improvement rules claim, taken literally, is
 > therefore still not fully backed by implementation: it is now true for the

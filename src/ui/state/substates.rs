@@ -7,10 +7,10 @@ use crate::async_state::SaveRequest;
 use crate::config::{AppConfig, Difficulty, ScenarioCategory, ScenarioCollection, SortMode};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
-use crate::gamification::{ProfileStorage, UserProfile};
+use crate::gamification::{ProfileStorage, QuarantineOutcome, UserProfile};
 use crate::input::keymap::KeymapOverlay;
 use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
-use crate::sound::SoundManager;
+use crate::sound::{SoundConfig, SoundManager};
 use crate::time::Clock;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -167,6 +167,30 @@ impl std::fmt::Debug for GameState {
     }
 }
 
+/// Whether the in-memory profile may be written to disk.
+///
+/// Every save path consults this, so a placeholder or fallback profile can
+/// never overwrite the user's real `profile.json`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProfilePersistence {
+    /// The real profile is still loading; the in-memory one is a placeholder.
+    Loading,
+
+    /// The profile was loaded (or legitimately created on first launch).
+    Writable,
+
+    /// Loading failed; the in-memory profile is a throwaway fallback and
+    /// saving is disabled for the rest of the session.
+    Quarantined(QuarantineOutcome),
+}
+
+impl ProfilePersistence {
+    /// Whether saves are allowed.
+    pub fn is_writable(&self) -> bool {
+        matches!(self, Self::Writable)
+    }
+}
+
 /// User progress (profile, learning, achievements)
 pub struct ProgressState {
     /// User profile with XP, level, achievements
@@ -216,6 +240,9 @@ pub struct ProgressState {
     /// The real application wires this up via
     /// [`ProgressState::set_save_channel`] during startup.
     save_tx: Option<mpsc::Sender<SaveRequest>>,
+
+    /// Whether `profile` may be persisted; see [`ProfilePersistence`].
+    persistence: ProfilePersistence,
 }
 
 impl ProgressState {
@@ -262,7 +289,61 @@ impl ProgressState {
             sound_manager,
             clock,
             save_tx: None,
+            persistence: ProfilePersistence::Loading,
         }
+    }
+
+    /// Test fixture helper: treat the constructor's profile as already loaded
+    /// (production starts in [`ProfilePersistence::Loading`], fail-safe).
+    #[cfg(test)]
+    pub(crate) fn loaded(mut self) -> Self {
+        self.mark_profile_loaded();
+        self
+    }
+
+    /// Current persistence state of the profile.
+    pub fn persistence(&self) -> &ProfilePersistence {
+        &self.persistence
+    }
+
+    /// Declare the in-memory profile a placeholder until the real one loads.
+    ///
+    /// While loading, every save (including the exit-time one) is refused, so
+    /// quitting before the loader reports back cannot overwrite the real file.
+    pub fn begin_profile_load(&mut self) {
+        self.persistence = ProfilePersistence::Loading;
+    }
+
+    /// Declare `profile` the successfully loaded profile: enable saving and
+    /// apply its saved sound settings to the sound manager.
+    pub fn mark_profile_loaded(&mut self) {
+        self.persistence = ProfilePersistence::Writable;
+        let config = SoundConfig::new(
+            self.profile.sound_config.volume,
+            self.profile.sound_config.enabled,
+        );
+        self.sound_manager.set_volume(config.volume);
+        self.sound_manager.set_enabled(config.enabled);
+        self.profile.sound_config = config;
+    }
+
+    /// Declare `profile` a throwaway fallback after a failed load: saving is
+    /// disabled for the rest of the session.
+    pub fn quarantine_profile(&mut self, backup: QuarantineOutcome) {
+        self.persistence = ProfilePersistence::Quarantined(backup);
+    }
+
+    /// Toggle sound and, when the profile is saveable, record the new state
+    /// in it and mark it dirty so the next save persists it.
+    ///
+    /// Returns the new enabled state.
+    pub fn toggle_sound(&mut self) -> bool {
+        let enabled = self.sound_manager.toggle();
+        if self.persistence.is_writable() {
+            self.profile.sound_config.enabled = enabled;
+            self.mark_unsaved();
+        }
+        enabled
     }
 
     /// Get the current time from the injected clock
@@ -335,6 +416,9 @@ impl ProgressState {
 
     /// Synchronously write the profile to disk, bypassing off-thread dispatch.
     fn save_sync(&mut self) -> Result<(), crate::gamification::GamificationError> {
+        if !self.persistence.is_writable() {
+            return Ok(());
+        }
         self.storage.save(&self.profile)?;
         self.mark_saved();
         Ok(())
@@ -374,6 +458,10 @@ impl ProgressState {
     /// write outcome otherwise arrives later as a
     /// [`crate::async_state::DataLoadMessage`].
     pub fn save_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
+        if !self.persistence.is_writable() {
+            tracing::debug!(state = ?self.persistence, "Profile save skipped: profile is not saveable");
+            return Ok(());
+        }
         self.profile.performance_data = self.performance_tracker.stats_clone();
 
         let Some(tx) = &self.save_tx else {
@@ -446,12 +534,18 @@ impl ProgressState {
     /// this guarantees the final, most up-to-date snapshot is written last
     /// — and so is never overwritten by an older mid-session save that was
     /// still in flight when the app exited.
-    pub fn prepare_final_save_request(&mut self) -> SaveRequest {
+    ///
+    /// Returns `None` while the profile is not saveable (still loading, or
+    /// its load failed): the file on disk must stay as it is.
+    pub fn prepare_final_save_request(&mut self) -> Option<SaveRequest> {
+        if !self.persistence.is_writable() {
+            return None;
+        }
         self.profile.performance_data = self.performance_tracker.stats_clone();
-        SaveRequest {
+        Some(SaveRequest {
             storage: self.storage.clone(),
             profile: self.profile.clone(),
-        }
+        })
     }
 }
 
@@ -542,6 +636,112 @@ mod tests {
     use super::*;
     use std::assert_matches;
 
+    fn writable_progress() -> ProgressState {
+        ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::for_test(),
+        )
+        .loaded()
+    }
+
+    /// Regression test for #440: neither a loading placeholder nor a
+    /// quarantined fallback profile may ever reach the disk.
+    #[test]
+    fn test_non_writable_profile_refuses_every_save_path() {
+        for state in [
+            ProfilePersistence::Loading,
+            ProfilePersistence::Quarantined(QuarantineOutcome::Failed("x".into())),
+        ] {
+            let mut progress = writable_progress();
+            match &state {
+                ProfilePersistence::Loading => progress.begin_profile_load(),
+                ProfilePersistence::Quarantined(b) => progress.quarantine_profile(b.clone()),
+                ProfilePersistence::Writable => unreachable!(),
+            }
+
+            progress.save_immediate().unwrap();
+            progress.save_debounced().unwrap();
+
+            assert!(!progress.storage.exists(), "{state:?} must not write");
+            assert!(progress.prepare_final_save_request().is_none());
+        }
+    }
+
+    /// Fail-safe default: a freshly constructed `ProgressState` must not be
+    /// saveable until a loaded profile is declared.
+    #[test]
+    fn test_new_progress_state_is_not_saveable_until_loaded() {
+        let mut progress = ProgressState::new(
+            UserProfile::new(),
+            PerformanceTracker::new(),
+            ProfileStorage::for_test(),
+        );
+
+        assert_eq!(progress.persistence(), &ProfilePersistence::Loading);
+        progress.save_immediate().unwrap();
+        assert!(!progress.storage.exists());
+        assert!(progress.prepare_final_save_request().is_none());
+    }
+
+    #[test]
+    fn test_mark_profile_loaded_applies_saved_sound_config_clamped() {
+        let mut progress = writable_progress();
+        progress.begin_profile_load();
+        progress.profile.sound_config = SoundConfig {
+            volume: 12.0,
+            enabled: false,
+        };
+
+        progress.mark_profile_loaded();
+
+        assert!(progress.persistence().is_writable());
+        assert!(!progress.sound_manager.config().enabled);
+        assert!((progress.sound_manager.config().volume - 1.0).abs() < f32::EPSILON);
+        assert!((progress.profile.sound_config.volume - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_mark_profile_loaded_rejects_non_finite_volume() {
+        let mut progress = writable_progress();
+        progress.profile.sound_config = SoundConfig {
+            volume: f32::NAN,
+            enabled: true,
+        };
+
+        progress.mark_profile_loaded();
+
+        assert!(
+            (progress.sound_manager.config().volume - SoundConfig::DEFAULT_VOLUME).abs()
+                < f32::EPSILON
+        );
+    }
+
+    /// Regression test for #459: the toggle is mirrored into the profile and
+    /// the profile is marked dirty so it is persisted.
+    #[test]
+    fn test_toggle_sound_mirrors_into_profile_and_marks_dirty() {
+        let mut progress = writable_progress();
+        progress.mark_saved();
+        assert!(progress.profile.sound_config.enabled);
+
+        let enabled = progress.toggle_sound();
+
+        assert!(!enabled);
+        assert!(!progress.profile.sound_config.enabled);
+        assert!(progress.should_save());
+    }
+
+    #[test]
+    fn test_toggle_sound_does_not_touch_quarantined_profile() {
+        let mut progress = writable_progress();
+        progress.quarantine_profile(QuarantineOutcome::Failed("x".into()));
+
+        progress.toggle_sound();
+
+        assert!(progress.profile.sound_config.enabled);
+    }
+
     #[test]
     fn test_ui_state_new() {
         let ui = UIState::new();
@@ -614,7 +814,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::for_test(),
-        );
+        )
+        .loaded();
 
         // Should save immediately when no previous save
         assert!(progress.should_save());
@@ -629,7 +830,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::for_test(),
-        );
+        )
+        .loaded();
 
         assert!(progress.last_save_time.is_none());
         progress.mark_saved();
@@ -655,7 +857,8 @@ mod tests {
             PerformanceTracker::new(), // built with the default SystemClock
             ProfileStorage::for_test(),
             clock.clone(),
-        );
+        )
+        .loaded();
 
         progress.performance_tracker.record_attempt(
             "x",
@@ -686,7 +889,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::for_test(),
-        );
+        )
+        .loaded();
 
         // First save should be allowed
         assert!(progress.should_save());
@@ -728,7 +932,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
-        );
+        )
+        .loaded();
 
         progress.performance_tracker.record_attempt(
             "x",
@@ -761,7 +966,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
-        );
+        )
+        .loaded();
 
         // Establish a recent save so the debounce window is active.
         progress.save_immediate().unwrap();
@@ -798,7 +1004,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
-        );
+        )
+        .loaded();
 
         // Simulate a save that happened long enough ago for the debounce to elapse,
         // without needing to sleep in the test.
@@ -842,7 +1049,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
-        );
+        )
+        .loaded();
         let (result_tx, mut result_rx) = mpsc::channel(4);
         let (save_tx, writer_handle) = spawn_save_writer(result_tx);
         progress.set_save_channel(save_tx.clone());
@@ -886,7 +1094,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
-        );
+        )
+        .loaded();
 
         // No writer task drains this, and its capacity is 1, so the first
         // dispatch fills it and the second is guaranteed to see `Full`.
@@ -939,7 +1148,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
-        );
+        )
+        .loaded();
         let (result_tx, mut result_rx) = mpsc::channel(4);
         let (save_tx, _writer_handle) = spawn_save_writer(result_tx);
         progress.set_save_channel(save_tx);
@@ -981,7 +1191,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
-        );
+        )
+        .loaded();
         let (result_tx, mut result_rx) = mpsc::channel(8);
         let (save_tx, writer_handle) = spawn_save_writer(result_tx);
         progress.set_save_channel(save_tx.clone());
@@ -1039,7 +1250,8 @@ mod tests {
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
-        );
+        )
+        .loaded();
         let (result_tx, mut result_rx) = mpsc::channel(8);
         let (save_tx, writer_handle) = spawn_save_writer(result_tx);
         progress.set_save_channel(save_tx.clone());
@@ -1054,7 +1266,9 @@ mod tests {
 
         // The exit path: build the final snapshot, enqueue it last, drop
         // every sender clone, and drain.
-        let final_request = progress.prepare_final_save_request();
+        let final_request = progress
+            .prepare_final_save_request()
+            .expect("a writable profile yields an exit-time save");
         save_tx.send(final_request).await.unwrap();
         drop(save_tx);
         drop(progress);

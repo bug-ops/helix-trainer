@@ -12,21 +12,23 @@ pub struct ReviewItem {
     pub priority: f64,
 }
 
-// Equality compares priority only (for heap ordering)
+// Defined via `Ord` so that `a == b` iff `a.cmp(&b) == Equal` (incl. `-0.0` and NaN).
 impl PartialEq for ReviewItem {
     fn eq(&self, other: &Self) -> bool {
-        self.priority == other.priority
+        self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
 impl Eq for ReviewItem {}
 
-// Ordering for BinaryHeap: higher priority = higher value (max-heap)
+// Higher priority = greater (max-heap). Ties: earlier `due`, then smaller `id`, rank greater,
+// so the queue order does not depend on hash-map iteration order.
 impl Ord for ReviewItem {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // Direct comparison (no reverse) - higher priority > lower priority
-        // Use total_cmp for f64 to handle NaN correctly
-        self.priority.total_cmp(&other.priority)
+        self.priority
+            .total_cmp(&other.priority)
+            .then_with(|| other.due.cmp(&self.due))
+            .then_with(|| other.id.cmp(&self.id))
     }
 }
 
@@ -189,8 +191,11 @@ impl Scheduler {
             })
             .collect();
 
-        // Extract top N items
-        heap.into_iter().take(limit).collect()
+        heap.into_sorted_vec()
+            .into_iter()
+            .rev()
+            .take(limit)
+            .collect()
     }
 
     /// Calculate priority score for a command
@@ -518,6 +523,45 @@ mod tests {
         );
     }
 
+    /// #433/FR-009: equal priority orders by `due` ascending, then `id` ascending,
+    /// independent of hash-map iteration order, and `limit` truncates that order.
+    #[test]
+    fn test_get_review_queue_breaks_priority_ties_by_due_then_id() {
+        use crate::time::FakeClock;
+
+        let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
+        let now = clock.now();
+        let card = |id: &str, overdue: ChronoDuration| {
+            let mut perf = CommandPerformance::new(id.to_string(), now);
+            perf.scheduled_days = 10;
+            perf.due = now - overdue;
+            (id.to_string(), perf)
+        };
+        // Same whole overdue days (3) => identical priority; different `due` / `id`.
+        let day3 = ChronoDuration::days(3);
+        let stats = std::collections::HashMap::from([
+            card("c", day3),
+            card("b", day3 + ChronoDuration::hours(1)),
+            card("a", day3 + ChronoDuration::hours(1)),
+            card("z", day3 + ChronoDuration::hours(2)),
+            card("low", ChronoDuration::days(1)),
+        ]);
+        let tracker = PerformanceTracker::from_stats_with_clock(stats, clock.clone());
+        let scheduler = Scheduler::with_clock(clock);
+
+        let ids = |limit| -> Vec<String> {
+            scheduler
+                .get_review_queue(&tracker, limit)
+                .into_iter()
+                .map(|item| item.id)
+                .collect()
+        };
+
+        assert_eq!(ids(10), ["z", "a", "b", "c", "low"]);
+        assert_eq!(ids(3), ["z", "a", "b"]);
+        assert_eq!(ids(1), ["z"]);
+    }
+
     #[test]
     fn test_review_item_ordering() {
         let now = Utc::now();
@@ -644,7 +688,6 @@ mod tests {
             }
 
             #[test]
-            #[ignore = "#434"]
             fn prop_review_item_eq_agrees_with_ord(
                 a in review_item_strategy(),
                 b in review_item_strategy(),
@@ -710,7 +753,6 @@ mod tests {
             }
 
             #[test]
-            #[ignore = "#433"]
             fn prop_get_review_queue_is_sorted_by_priority_descending(
                 events in prop::collection::vec(event_strategy(), 1..30),
                 final_days in 0i64..400,
@@ -730,7 +772,6 @@ mod tests {
             }
 
             #[test]
-            #[ignore = "#433"]
             fn prop_get_review_queue_keeps_the_highest_priority_items(
                 events in prop::collection::vec(event_strategy(), 1..30),
                 final_days in 0i64..400,

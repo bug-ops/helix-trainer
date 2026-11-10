@@ -10,7 +10,6 @@
 //! silently dropped.
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use toml::Value;
@@ -100,8 +99,7 @@ pub fn load_keymap_file(path: &Path) -> Result<(KeymapOverlay, KeymapReport), Ke
     if !path.exists() {
         return Err(KeymapLoadError::NotFound);
     }
-    path_validator::validate_file_size(path, limits::MAX_KEYMAP_FILE_SIZE)?;
-    let content = fs::read_to_string(path).map_err(|_| SecurityError::InvalidPath)?;
+    let content = path_validator::read_capped(path, limits::MAX_KEYMAP_FILE_SIZE)?;
     Ok(resolve_str(&content)?)
 }
 

@@ -25,7 +25,7 @@ commands = ["miw", "ms[", ";", "a", "(", "u", "r", "l", ")", "Escape"]
 description = "Select the word, wrap it in brackets, collapse the selection, then append the URL"
 
 [scenarios.scoring]
-optimal_count = 14
+optimal_count = 10
 max_points = 100
 tolerance = 1
 

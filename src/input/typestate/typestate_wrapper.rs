@@ -4,6 +4,7 @@
 //! about state transitions.
 
 use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 
 use crossterm::event::KeyEvent;
 
@@ -105,7 +106,7 @@ pub enum TypestateHandlerState {
     TextObjectInsidePending(TypestateHandler<TextObjectInsidePending>),
     FindCharPending(TypestateHandler<FindCharPending>, FindType),
     ReplaceCharPending(TypestateHandler<ReplaceCharPending>),
-    CountPending(TypestateHandler<CountPending>, usize),
+    CountPending(TypestateHandler<CountPending>, NonZeroUsize),
     UnmatchedPrevPending(TypestateHandler<UnmatchedPrevPending>),
     UnmatchedNextPending(TypestateHandler<UnmatchedNextPending>),
 }

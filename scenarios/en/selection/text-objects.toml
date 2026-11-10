@@ -31,7 +31,7 @@ commands = ["miw"]
 description = "Press 'miw' to select 'beautiful'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -66,7 +66,7 @@ commands = ["miw"]
 description = "Press 'miw' to select 'value'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -101,7 +101,7 @@ commands = ["maw"]
 description = "Press 'maw' to select 'beautiful ' (word with trailing space)"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -135,7 +135,7 @@ commands = ["maw", "d"]
 description = "Press 'maw' to select 'two ' then 'd' to delete"
 
 [scenarios.scoring]
-optimal_count = 4
+optimal_count = 2
 max_points = 100
 tolerance = 0
 
@@ -174,7 +174,7 @@ commands = ["mip"]
 description = "Press 'mip' to select first paragraph"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -209,7 +209,7 @@ commands = ["mip"]
 description = "Press 'mip' to select the first function block"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -244,7 +244,7 @@ commands = ["map"]
 description = "Press 'map' to select second paragraph (with trailing blank line)"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -278,7 +278,7 @@ commands = ["map", "d"]
 description = "Press 'map' to select paragraph, then 'd' to delete"
 
 [scenarios.scoring]
-optimal_count = 4
+optimal_count = 2
 max_points = 100
 tolerance = 0
 
@@ -318,7 +318,7 @@ commands = ["mi("]
 description = "Press 'mi(' to select 'x + y * 2'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -353,7 +353,7 @@ commands = ["ma("]
 description = "Press 'ma(' to select '(arg1, arg2)'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -392,7 +392,7 @@ commands = ["mi["]
 description = "Press 'mi[' to select '1, 2, 3'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -427,7 +427,7 @@ commands = ["ma["]
 description = "Press 'ma[' to select '[index]'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -467,7 +467,7 @@ commands = ["mi{"]
 description = "Press 'mi{' to select ' return 42; '"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -502,7 +502,7 @@ commands = ["ma{"]
 description = "Press 'ma{' to select '{ body(); }'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -541,7 +541,7 @@ commands = ["mi\""]
 description = "Press 'mi\"' to select 'Hello World'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -576,7 +576,7 @@ commands = ["ma\""]
 description = "Press 'ma\"' to select '\"old text\"'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -615,7 +615,7 @@ commands = ["mi'"]
 description = "Press \"mi'\" to select 'x'"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -650,7 +650,7 @@ commands = ["ma'"]
 description = "Press \"ma'\" to select \"'a'\""
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 

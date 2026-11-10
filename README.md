@@ -14,7 +14,7 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 <img src="assets/training.gif" width="600" alt="Training Mode Demo">
 
 > [!IMPORTANT]
-> **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in `~/.config/helix-trainer/`
+> **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in the `helix-trainer` folder of your OS config directory (`~/.config/` on Linux, `~/Library/Application Support/` on macOS, `%AppData%` on Windows)
 
 ## Features
 
@@ -60,7 +60,7 @@ All modes feature:
 - **95+ Commands** — Movement, editing, clipboard, undo/redo, repeat, surround, text objects, multi-cursor, registers, macros
 - **160 Training Scenarios** — From basics to intermediate workflows with difficulty indicators
 - **70 Daily Quests** — Easy, medium, and hard challenges across all commands
-- **100% Offline** — No cloud, no tracking, all data stays local (`~/.config/helix-trainer/`)
+- **100% Offline** — No cloud, no tracking, all data stays local (OS config directory, `helix-trainer/` subfolder)
 - **Arrow Key Navigation** — Optional `enable_arrow_keys_in_normal_mode` configuration for cursor movement
 - **Custom Keymap Support** — Optional `use_helix_keymap` configuration trains against your own Helix `config.toml` remaps instead of the stock keymap (gameplay only — see [Custom Helix keymap](#custom-helix-keymap-optional))
 
@@ -207,7 +207,7 @@ All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
 ### Custom Helix keymap (optional)
 
-If you've remapped keys in your own Helix `config.toml`, the trainer can train against *your* bindings instead of the stock ones. Opt in by setting `use_helix_keymap: true` in `~/.config/helix-trainer/config.json`:
+If you've remapped keys in your own Helix `config.toml`, the trainer can train against *your* bindings instead of the stock ones. Opt in by setting `use_helix_keymap: true` in the trainer's `config.json` (`~/.config/helix-trainer/` on Linux, `~/Library/Application Support/helix-trainer/` on macOS, `%AppData%\helix-trainer\` on Windows):
 
 ```json
 {
@@ -217,7 +217,7 @@ If you've remapped keys in your own Helix `config.toml`, the trainer can train a
 }
 ```
 
-When enabled, the trainer reads `~/.config/helix/config.toml` (the same file Helix itself reads) at startup and translates your gameplay keypresses through it — `[keys.normal]` remaps, plus nested `[keys.normal.g]`/`[keys.normal.m]`/`[keys.normal.z]`/`[keys.normal.[]`/`[keys.normal.]]` minor-mode remaps. Unsupported forms (key sequences, `@`-macros, `:`-typable commands, minor-mode relocation to a different prefix) are reported via a startup notification rather than silently ignored.
+When enabled, the trainer reads `$XDG_CONFIG_HOME/helix/config.toml` or `~/.config/helix/config.toml` (`%AppData%\helix\config.toml` on Windows) — the same file Helix itself reads — at startup and translates your gameplay keypresses through it — `[keys.normal]` remaps, plus nested `[keys.normal.g]`/`[keys.normal.m]`/`[keys.normal.z]`/`[keys.normal.[]`/`[keys.normal.]]` minor-mode remaps. Unsupported forms (key sequences, `@`-macros, `:`-typable commands, minor-mode relocation to a different prefix) are reported via a startup notification rather than silently ignored.
 
 This is **gameplay-only**: menus, results, filter screens, and scenario hint prose always use the stock keymap (`j`/`k`/`gg`), even with a custom keymap active, since remapping trainer UI chrome would break the canonical command identity FSRS review history depends on. A malformed config, a missing file, or an oversized/excessive config falls back to the stock keymap without blocking startup.
 
@@ -285,7 +285,7 @@ Duolingo-proven mechanics:
 ### Privacy-first architecture
 
 - No cloud services, no internet required
-- All data stored locally (`~/.config/helix-trainer/`)
+- All data stored locally (OS config directory, `helix-trainer/` subfolder)
 - No telemetry, tracking, or data collection
 - Your learning stays on your machine
 

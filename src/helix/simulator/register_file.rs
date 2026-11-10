@@ -38,7 +38,7 @@ pub const BLACKHOLE_REGISTER: char = '_';
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct RegisterFile {
-    registers: HashMap<char, String>,
+    registers: HashMap<char, Vec<String>>,
 }
 
 impl RegisterFile {
@@ -49,27 +49,44 @@ impl RegisterFile {
         }
     }
 
-    /// Read the contents of a register.
+    /// Read the first value of a register.
     ///
-    /// `None` addresses the unnamed register, so `get(None)` is what plain
-    /// `p`/`P`/`R` read from.
+    /// `None` addresses the unnamed register. Callers that must honor every
+    /// selection range use [`Self::get_values`].
     pub fn get(&self, register: Option<char>) -> Option<&str> {
-        let key = register.unwrap_or(UNNAMED_REGISTER);
-        self.registers.get(&key).map(String::as_str)
+        self.get_values(register)
+            .and_then(<[String]>::first)
+            .map(String::as_str)
     }
 
-    /// Write content into a register, overwriting any previous content.
+    /// Read every value of a register, one per yanked selection range.
     ///
-    /// `None` addresses the unnamed register, so `set(None, ...)` is what
-    /// plain `y` writes to. Writes to the blackhole register
-    /// ([`BLACKHOLE_REGISTER`]) are silently discarded, matching Helix's
-    /// `"_`.
+    /// `None` addresses the unnamed register, so `get_values(None)` is what
+    /// plain `p`/`P` read from.
+    pub fn get_values(&self, register: Option<char>) -> Option<&[String]> {
+        let key = register.unwrap_or(UNNAMED_REGISTER);
+        self.registers.get(&key).map(Vec::as_slice)
+    }
+
+    /// Write a single value into a register, overwriting any previous content.
+    ///
+    /// See [`Self::set_values`].
     pub fn set(&mut self, register: Option<char>, content: String) {
+        self.set_values(register, vec![content]);
+    }
+
+    /// Write one value per yanked selection range, overwriting any previous
+    /// content.
+    ///
+    /// `None` addresses the unnamed register, so plain `y` writes there.
+    /// Writes to the blackhole register ([`BLACKHOLE_REGISTER`]) are silently
+    /// discarded, matching Helix's `"_`.
+    pub fn set_values(&mut self, register: Option<char>, values: Vec<String>) {
         let key = register.unwrap_or(UNNAMED_REGISTER);
         if key == BLACKHOLE_REGISTER {
             return;
         }
-        self.registers.insert(key, content);
+        self.registers.insert(key, values);
     }
 
     /// Remove a register's content entirely.
@@ -111,6 +128,17 @@ mod tests {
         let registers = RegisterFile::new();
         assert_eq!(registers.get(Some('z')), None);
         assert_eq!(registers.get(None), None);
+    }
+
+    #[test]
+    fn multi_value_register_keeps_each_value_separate() {
+        let mut registers = RegisterFile::new();
+        registers.set_values(None, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(
+            registers.get_values(None),
+            Some(["a".to_string(), "b".to_string()].as_slice())
+        );
+        assert_eq!(registers.get(None), Some("a"));
     }
 
     #[test]

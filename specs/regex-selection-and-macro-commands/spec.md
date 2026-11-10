@@ -194,7 +194,98 @@ transition that resets simulator state (see Edge Cases).
   prioritized as a follow-up, given named registers already exist for
   yank/paste via [[../register-command-mode-support/spec|register-command-mode-support]]?]
 
-## 10. See Also
+## 10. Bug-Fix Batch: Input Chords, Counted Commands, Surround and Primary Selection (#487, #493, #502, #503, #455)
+
+> [!info] Added 2026-11-10 (spec-first update for the P1-P3 bug batch)
+> Behavior changes below are specified before implementation. Reference behavior for every criterion is `hx` 25.07.1 (the version vendored as `helix-core`). Tests MUST assert the resulting selection, not only the final buffer text. Related: [[../helix-core-post-25-07-1-upgrade-readiness/spec#3.8 Simulator Fidelity at the Pinned Core (25.07.1)|simulator fidelity requirements]] (shared count mechanism), [[../register-command-mode-support/spec#12. Bug-Fix Batch: Search Prompt, Linewise and Multi-Range Paste, Insert-Mode Keys|register-command-mode-support bug-fix batch]].
+
+### 10.1 Requirements
+
+| ID | Requirement | Issue | Priority |
+|----|------------|-------|----------|
+| FR-101 | WHEN a Normal-mode key arrives with the Alt modifier THE INPUT LAYER SHALL NOT enter any plain-key pending state (`s`/`S` regex prompt, `g`/`z`/`m`/`[`/`]` leaders, `f`/`t`/`r` argument states, `"`, `:`, `q`, count digits); it SHALL either emit the Alt-bound command or stay in the current state. Chord classification SHALL be a closed type (`Plain`, `Alt`, `Ctrl`) matched exhaustively so an unhandled modifier is a compile error | #487 | must |
+| FR-102 | WHEN the user presses `Alt-s` in Normal mode THE SYSTEM SHALL execute `split_selection_on_newline` immediately, increment the action counter once, and leave the footer without a pending prompt; scenario 126 ("Split selection on newlines") SHALL be completable with solution `Alt-s` | #487 | must |
+| FR-103 | WHEN a count prefix is followed by `G` or `gg` THE SYSTEM SHALL go to that line (`2G` and `2gg` both go to line 2) and SHALL NOT cancel the command or re-interpret the following keys | #493 | must |
+| FR-104 | WHEN a count prefix is followed by `f`, `t`, `F` or `T` and a target character THE SYSTEM SHALL use the Nth occurrence (`3fa` selects up to the 3rd `a`), as a single command and a single action | #493 | must |
+| FR-105 | THE INPUT LAYER SHALL carry the count as a non-zero value through the `g`/`f`/`t`/`F`/`T`/`G` pending states and emit one canonical command string that includes the count (for example `3fa`, `2G`); every string it emits SHALL be accepted by the simulator (a unit test iterates the input layer's emittable grammar against the simulator) | #493 | must |
+| FR-106 | THE SIMULATOR SHALL be the only place that applies a count (one counted-execution mechanism, see [[../helix-core-post-25-07-1-upgrade-readiness/spec#3.8 Simulator Fidelity at the Pinned Core (25.07.1)\\|section 3.8 FR-025]]); the game layer SHALL NOT repeat the base command to emulate a count | #493 | must |
+| FR-107 | WHEN `ms<char>` (surround add) completes THE SYSTEM SHALL leave each range covering the surrounded span including both inserted delimiters (`w m s [ d` deletes the whole `[fn ]`) | #502 | must |
+| FR-108 | WHEN `md<char>` (surround delete) completes THE SYSTEM SHALL leave each range covering the former inner text with the delimiters removed (not collapse to a point) | #502 | must |
+| FR-109 | WHEN `mr<old><new>` (surround replace) completes THE SYSTEM SHALL leave each range covering the span including the new delimiters | #502 | must |
+| FR-110 | WHEN `,` (`keep_primary_selection`) is executed with several ranges THE SYSTEM SHALL reduce the selection to the primary range only; with one range it is a no-op | #503 | must |
+| FR-111 | WHEN `Alt-,` (`remove_primary_selection`) is executed with several ranges THE SYSTEM SHALL remove the primary range, promoting the next one; WHEN only one range exists THE SYSTEM SHALL leave it unchanged without error | #503 | must |
+| FR-112 | WHEN several ranges are yanked and pasted THE SYSTEM SHALL yank one value per range and paste value N at range N (see [[../register-command-mode-support/spec#12. Bug-Fix Batch: Search Prompt, Linewise and Multi-Range Paste, Insert-Mode Keys\|register-command-mode-support FR-213/FR-214]]) | #455 | must |
+
+### 10.2 Acceptance Criteria
+
+```
+GIVEN scenario 126 is active with a pre-set multi-line selection
+WHEN  the user presses Alt-s
+THEN  the selection becomes [[0,0,0,10],[1,0,1,10],[2,0,2,10]]
+ AND  no prompt is pending
+ AND  the action counter is 1
+```
+```
+GIVEN the text of scenario 14 and the cursor at (0,0)
+WHEN  the user presses 2, G, d
+THEN  the first character of line 2 is deleted and nothing else changes
+```
+```
+GIVEN the text of scenario 14 and the cursor at (0,0)
+WHEN  the user presses 3, f, a, d
+THEN  the text from the start through the 3rd `a` is deleted (identical to hx 25.07.1)
+ AND  the action counter is 2 (one counted find, one delete)
+```
+```
+GIVEN the text of scenario 14 and the cursor at (0,0)
+WHEN  the user presses w, m, s, [, d
+THEN  the buffer starts with `add(a: i32, ...`
+```
+```
+GIVEN the text of scenario 14 and `% s a Enter` produced two ranges
+WHEN  the user presses `,` then d
+THEN  only the first `a` is deleted (`fn dd(a: i32, ...`)
+ AND  with `Alt-,` instead of `,` only the second `a` is deleted
+```
+```
+GIVEN `% s um Enter` produced two ranges (the `um` in `sum` on lines 2 and 3)
+WHEN  the user presses y then p
+THEN  line 2 is `let sumum = a + b;` and line 3 is `    sumum`
+```
+
+### 10.3 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Alt-modified digit, `g`, `f`, `t`, `r`, `m`, `z`, `"`, `:`, `q` keys | Never open a pending state; Alt-bound commands execute, unbound Alt chords are ignored (no action recorded) |
+| Count larger than the available matches for `f`/`t` (`9fa`) | Selection unchanged, no error, same as the uncounted failure path |
+| `{n}G` / `{n}gg` with `n` beyond the last line | Clamped to the last line as in hx |
+| Bare `G` with no count | No-op (verified against helix-term 25.07.1); bare `gg` goes to the file start |
+| `md` / `mr` with no surrounding pair found | Selection and buffer unchanged, `UserError` per the existing path |
+| `,` / `Alt-,` with a single range | No-op, no error |
+| Surround add/delete/replace undo granularity | One undo step per operation (see helix-core spec 3.8 FR-027) |
+
+### 10.4 Out of Scope (this batch)
+
+- `Alt-K`, `K`, `&` stubs (`keep_selections`, `remove_selections`, align) remain unimplemented, tracked separately
+- Named macro registers (unchanged from section 1)
+- Backward search `?` (see register-command-mode-support section 12)
+
+### 10.5 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-101 | A `BaseState` handler test sends Alt-modified keys for every pending-state-opening key | No pending state entered; Alt-s emits `split_selection_on_newline` |
+| SC-102 | `cargo nextest run scenario` | Scenario 126 passes with solution `Alt-s` |
+| SC-103 | Counted-command tests through the real input layer and `HelixSimulator` | `2G`, `3gg`, `3fa`, `2ti`, `2Fi` match the hx 25.07.1 outcomes in 10.2 |
+| SC-104 | Selection assertions after `ms`, `md`, `mr`, `,`, `Alt-,` | Match hx 25.07.1 |
+
+### 10.6 Agent Boundaries (additions)
+
+- Always: land simulator acceptance of a new command string before the input layer starts emitting it (unknown strings are errors in the registry, and recoverable errors must not end the session, see [[constitution#V. Security]])
+- Never: emulate a count by repeating the base command outside the simulator (FR-106)
+
+## 11. See Also
 
 - [[constitution]] — project principles
 - [[../register-command-mode-support/spec]] — sibling feature; this spec

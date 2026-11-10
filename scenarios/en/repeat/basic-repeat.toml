@@ -176,7 +176,7 @@ commands = ["r_", "l", "l", "l", "l", "."]
 description = "Replace '-' with '_' using 'r_', move to next '-' with 'llll', repeat with '.'"
 
 [scenarios.scoring]
-optimal_count = 7
+optimal_count = 6
 max_points = 100
 tolerance = 3
 [scenarios.metadata]

@@ -4,6 +4,7 @@
 
 pub mod analytics;
 pub mod performance;
+pub mod reviewable;
 pub mod scenario_history;
 pub mod scheduler;
 pub mod session;
@@ -11,6 +12,7 @@ pub mod traits;
 
 pub use analytics::{Analytics, MasterySummary};
 pub use performance::{CardState, CommandPerformance, MasteryLevel, PerformanceTracker};
+pub use reviewable::ReviewableCommand;
 pub use scenario_history::{
     MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery, is_valid_scenario_id,
 };

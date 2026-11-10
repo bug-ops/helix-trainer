@@ -5,7 +5,7 @@
 //! (Loading, Ready, Failed) to ensure compile-time safety for resource access.
 
 use crate::config::Scenario;
-use crate::gamification::{ProfileStorage, QuestTemplateRegistry, UserProfile};
+use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile};
 
 /// Represents the loading state of an async resource
 ///
@@ -95,9 +95,14 @@ pub enum DataLoadMessage {
     ProfileReady(UserProfile),
 
     /// Profile failed to load (with fallback new profile)
+    ///
+    /// The fallback is for display only: the application must not write it
+    /// over the unreadable file (see `ProfilePersistence::Quarantined`).
     ProfileError {
         error: String,
         fallback: UserProfile,
+        /// Whether the unreadable file was preserved as a backup copy.
+        backup: QuarantineOutcome,
     },
 
     /// Quest registry loaded (lazy, for Profile screen)

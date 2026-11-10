@@ -8,9 +8,7 @@
 //! (gs, gg, ge) that would fail in the UI due to missing command buffer handling.
 
 use helix_trainer::config::{QuestLoader, QuestSpec, ScenarioLoader};
-use helix_trainer::game::command_context::{
-    ParsedCommand, extract_count_and_command, parse_command_buffer,
-};
+use helix_trainer::game::command_context::{ParsedCommand, parse_command_buffer};
 use helix_trainer::game::{GameSession, PlayableScenario};
 use helix_trainer::helix::commands::{
     CMD_REPLAY_MACRO, CMD_SELECT_REGEX, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
@@ -338,6 +336,10 @@ fn test_all_scenario_command_line_entries_parse() {
     );
 }
 
+/// Scenarios exempt from the `actions == optimal_count` check.
+// completion is state-based; undo/redo revisit states; tracked in follow-up
+const ACTION_COUNT_EXEMPT_SCENARIO_IDS: &[&str] = &["undo_redo_001"];
+
 #[test]
 fn test_all_scenarios_execute_solution() {
     let loader = ScenarioLoader::new();
@@ -382,32 +384,18 @@ fn test_all_scenarios_execute_solution() {
             if let Some(state) = session_or_completed.take() {
                 match state {
                     SessionAfterAction::StillActive(s) => {
-                        // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
-                        let (count, base_cmd) = extract_count_and_command(cmd);
-
-                        // Execute base command `count` times
-                        let mut current_session = Some(s);
+                        // The full command string, count prefix included, is one action
+                        let mut current_session = None;
                         let mut execution_error = None;
 
-                        for _ in 0..count {
-                            if let Some(active) = current_session.take() {
-                                match active.record_action(base_cmd.to_string()) {
-                                    Ok(result) => match result {
-                                        SessionAfterAction::Completed(c) => {
-                                            session_or_completed =
-                                                Some(SessionAfterAction::Completed(c));
-                                            break;
-                                        }
-                                        SessionAfterAction::StillActive(next) => {
-                                            current_session = Some(next);
-                                        }
-                                    },
-                                    Err(e) => {
-                                        execution_error = Some(e);
-                                        break;
-                                    }
-                                }
+                        match s.record_action(cmd.clone()) {
+                            Ok(SessionAfterAction::Completed(c)) => {
+                                session_or_completed = Some(SessionAfterAction::Completed(c));
                             }
+                            Ok(SessionAfterAction::StillActive(next)) => {
+                                current_session = Some(next);
+                            }
+                            Err(e) => execution_error = Some(e),
                         }
 
                         // Handle execution error
@@ -443,8 +431,25 @@ fn test_all_scenarios_execute_solution() {
         // Check if scenario is completed
         if let Some(final_state) = session_or_completed {
             match final_state {
-                SessionAfterAction::Completed(_) => {
-                    // Success!
+                SessionAfterAction::Completed(done) => {
+                    if done.completion_progress() != 100 {
+                        failed_scenarios.push((
+                            scenario.id.clone(),
+                            format!("final progress {} != 100", done.completion_progress()),
+                        ));
+                    }
+                    if !ACTION_COUNT_EXEMPT_SCENARIO_IDS.contains(&scenario.id.as_str())
+                        && done.action_count() != scenario.scoring.optimal_count.get()
+                    {
+                        failed_scenarios.push((
+                            scenario.id.clone(),
+                            format!(
+                                "actions {} != optimal_count {}",
+                                done.action_count(),
+                                scenario.scoring.optimal_count
+                            ),
+                        ));
+                    }
                 }
                 SessionAfterAction::StillActive(s) => {
                     if !s.check_completion() {

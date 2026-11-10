@@ -1,15 +1,17 @@
 //! Application configuration storage and persistence
 //!
 //! Handles loading and saving application configuration to disk.
-//! Configuration is stored in `~/.config/helix-trainer/config.json`.
+//! Configuration is stored in `helix-trainer/config.json` under the OS config
+//! directory (`dirs::config_dir()`: `~/.config` on Linux,
+//! `~/Library/Application Support` on macOS, `%AppData%` on Windows).
 
-use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::security::{limits::MAX_CONFIG_FILE_SIZE, path_validator};
+use crate::security::{limits::MAX_CONFIG_FILE_SIZE, path_validator, private_fs};
 
 /// Application configuration
 ///
@@ -23,7 +25,8 @@ pub struct AppConfig {
     /// Enable arrow keys for movement in normal mode (for exotic keyboard layouts like bépo).
     ///
     /// To enable this feature, manually create or edit the config file at
-    /// `~/.config/helix-trainer/config.json` with the following structure:
+    /// `helix-trainer/config.json` in the OS config directory (see the module
+    /// docs) with the following structure:
     ///
     /// ```json
     /// {
@@ -62,7 +65,7 @@ pub struct ConfigStorage {
 impl ConfigStorage {
     /// Create a new storage handler
     ///
-    /// Default path: `~/.config/helix-trainer/config.json`
+    /// Default path: `helix-trainer/config.json` in the OS config directory
     ///
     /// # Examples
     ///
@@ -87,7 +90,7 @@ impl ConfigStorage {
 
     /// Get default storage path
     ///
-    /// Returns `~/.config/helix-trainer/config.json`
+    /// Returns `helix-trainer/config.json` in the OS config directory
     fn default_path() -> PathBuf {
         let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
         path.push("helix-trainer");
@@ -116,10 +119,8 @@ impl ConfigStorage {
             return Ok(AppConfig::default());
         }
 
-        path_validator::validate_file_size(&self.file_path, MAX_CONFIG_FILE_SIZE)
-            .context("Config file too large")?;
-
-        let contents = fs::read_to_string(&self.file_path).context("Failed to read config file")?;
+        let contents = path_validator::read_capped(&self.file_path, MAX_CONFIG_FILE_SIZE)
+            .map_err(|e| anyhow::anyhow!("Failed to read config file: {e}"))?;
 
         let data: ConfigData =
             serde_json::from_str(&contents).context("Failed to parse config JSON")?;
@@ -147,7 +148,7 @@ impl ConfigStorage {
     pub fn save(&self, config: &AppConfig) -> Result<()> {
         // Create parent directory if needed
         if let Some(parent) = self.file_path.parent() {
-            fs::create_dir_all(parent).context("Failed to create config directory")?;
+            private_fs::create_dir_all(parent).context("Failed to create config directory")?;
         }
 
         let data = ConfigData {
@@ -156,7 +157,9 @@ impl ConfigStorage {
 
         let json = serde_json::to_string_pretty(&data).context("Failed to serialize config")?;
 
-        fs::write(&self.file_path, json).context("Failed to write config file")?;
+        private_fs::create_file(&self.file_path)
+            .and_then(|mut file| file.write_all(json.as_bytes()))
+            .context("Failed to write config file")?;
 
         Ok(())
     }
@@ -181,6 +184,7 @@ impl Default for ConfigStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::TempDir;
 
     #[test]
@@ -387,5 +391,40 @@ mod tests {
         let result = storage.load();
         // Should return an error when trying to read a directory as a file
         assert!(result.is_err());
+    }
+
+    /// #444: a fresh config directory is 0700 and `config.json` is 0600.
+    #[cfg(unix)]
+    #[test]
+    fn test_save_creates_private_directory_and_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path().join("cfg");
+        let path = dir.join("config.json");
+
+        ConfigStorage::with_path(&path)
+            .save(&AppConfig::default())
+            .unwrap();
+
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(&path), 0o600);
+    }
+
+    /// #441: a FIFO at the config path is rejected instead of blocking.
+    #[cfg(unix)]
+    #[test]
+    fn test_load_fifo_is_rejected_without_blocking() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("config.json");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&path)
+                .status()
+                .unwrap()
+                .success()
+        );
+
+        assert!(ConfigStorage::with_path(&path).load().is_err());
     }
 }

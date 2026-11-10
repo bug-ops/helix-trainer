@@ -4,7 +4,7 @@
 
 use crate::helix::commands::*;
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
-use crate::helix::registry::metadata::{Category, CommandMetadata};
+use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior};
 use crate::helix::simulator::NormalMode;
 use crate::helix::simulator::commands::movement;
 
@@ -158,7 +158,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Movement,
             false,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Native),
         movement::move_document_start,
     ));
 
@@ -239,7 +240,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Movement,
             false,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         movement::flip_selections,
     ));
 
@@ -253,7 +255,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Movement,
             false,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         |_sim| Ok(()), // No-op
     ));
 }

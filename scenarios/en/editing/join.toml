@@ -20,7 +20,7 @@ cursor_position = [1, 4]
 
 [scenarios.target]
 file_content = """fn main() {
-    let msg = "Hello"         .to_string();
+    let msg = "Hello" .to_string();
 }"""
 cursor_position = [1, 4]
 

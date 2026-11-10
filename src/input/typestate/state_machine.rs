@@ -72,6 +72,16 @@ impl InputStateMachine {
                 },
                 key,
             ),
+            InputState::CountedFindCharPending { find_type, count } => KeyHandler::handle_key(
+                &CountedFindCharPending {
+                    find_type: *find_type,
+                    count: *count,
+                },
+                key,
+            ),
+            InputState::CountedGotoPending { count } => {
+                KeyHandler::handle_key(&CountedGotoPending { count: *count }, key)
+            }
             InputState::ReplaceCharPending => KeyHandler::handle_key(&ReplaceCharPending, key),
             InputState::RegisterPending => KeyHandler::handle_key(&RegisterPending, key),
             InputState::RegisterOpPending { register } => KeyHandler::handle_key(
@@ -133,7 +143,7 @@ impl InputStateMachine {
     /// Get current count if in count pending state
     pub fn pending_count(&self) -> Option<usize> {
         match &self.state {
-            InputState::CountPending { count } => Some(*count),
+            InputState::CountPending { count } => Some(count.get()),
             _ => None,
         }
     }
@@ -223,10 +233,10 @@ impl InputStateMachine {
         None
     }
 
-    /// Get the in-progress `s`/`S` regex-selection prompt buffer, if pending.
+    /// Get the in-progress `s`/`S`/`/` regex prompt buffer, if pending.
     ///
     /// Returns the command kind and the pattern typed so far (not including
-    /// the leading 's'/'S'), for rendering a live prompt line.
+    /// the leading 's'/'S'/'/'), for rendering a live prompt line.
     pub fn pending_regex_prompt(&self) -> Option<(super::input_state::RegexPromptKind, &str)> {
         match &self.state {
             InputState::RegexPromptPending { kind, buffer } => Some((*kind, buffer.as_str())),

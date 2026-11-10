@@ -29,7 +29,7 @@ commands = ["md("]
 description = "Press 'md(' to delete the parentheses"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -63,7 +63,7 @@ commands = ["md["]
 description = "Press 'md[' to delete the brackets"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -97,7 +97,7 @@ commands = ["md{"]
 description = "Press 'md{' to delete the braces"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -131,7 +131,7 @@ commands = ["md\""]
 description = "Press 'md\"' to remove the quotes"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -165,7 +165,7 @@ commands = ["md("]
 description = "Press 'md(' to delete the inner parentheses"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -203,7 +203,7 @@ commands = ["mr(["]
 description = "Press 'mr([' to change parens to brackets"
 
 [scenarios.scoring]
-optimal_count = 4
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -237,7 +237,7 @@ commands = ["mr[{"]
 description = "Press 'mr[{' to change brackets to braces"
 
 [scenarios.scoring]
-optimal_count = 4
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -271,7 +271,7 @@ commands = ["mr\"'"]
 description = "Press m r \" ' to change double to single quotes"
 
 [scenarios.scoring]
-optimal_count = 4
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -305,7 +305,7 @@ commands = ["mr{("]
 description = "Press 'mr{(' to change braces to parens"
 
 [scenarios.scoring]
-optimal_count = 4
+optimal_count = 1
 max_points = 100
 tolerance = 0
 
@@ -339,7 +339,7 @@ commands = ["mr<("]
 description = "Press 'mr<(' to change angle brackets to parens"
 
 [scenarios.scoring]
-optimal_count = 4
+optimal_count = 1
 max_points = 100
 tolerance = 0
 

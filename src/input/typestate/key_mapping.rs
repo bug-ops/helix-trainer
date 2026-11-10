@@ -278,6 +278,46 @@ pub(crate) fn is_named_key(s: &str) -> bool {
     named_key_code(s).is_some()
 }
 
+/// Modifier class of a key press, with `Ctrl` taking precedence over `Alt`.
+///
+/// Handlers `match` on this exhaustively so a key carrying a modifier can never
+/// silently fall into a bare-key arm (the `Alt-s` -> `s` regex prompt bug, #487).
+/// `SHIFT` alone is `Plain`: `normalize_key_event` already folds it into the
+/// character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Chord {
+    /// No `Ctrl` or `Alt` modifier.
+    Plain,
+    /// `Alt` held, `Ctrl` not held.
+    Alt,
+    /// `Ctrl` held (with or without `Alt`).
+    Ctrl,
+}
+
+impl Chord {
+    /// Classify a modifier set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossterm::event::KeyModifiers;
+    /// use helix_trainer::input::typestate::Chord;
+    ///
+    /// assert_eq!(Chord::of(KeyModifiers::SHIFT), Chord::Plain);
+    /// assert_eq!(Chord::of(KeyModifiers::ALT), Chord::Alt);
+    /// assert_eq!(Chord::of(KeyModifiers::ALT | KeyModifiers::CONTROL), Chord::Ctrl);
+    /// ```
+    pub fn of(modifiers: KeyModifiers) -> Self {
+        if modifiers.contains(KeyModifiers::CONTROL) {
+            Self::Ctrl
+        } else if modifiers.contains(KeyModifiers::ALT) {
+            Self::Alt
+        } else {
+            Self::Plain
+        }
+    }
+}
+
 /// Map a single-key command character to its command string
 ///
 /// Returns None for invalid commands or prefix commands.
@@ -377,7 +417,9 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
         ('.', false, false) => Some(CMD_REPEAT),
 
         // Search (no Alt)
-        ('/', false, false) => Some(CMD_SEARCH_FORWARD),
+        //
+        // '/' is NOT mapped here: it opens the search prompt
+        // (`SearchPromptPending`) via a dedicated `base.rs` arm (#504).
         ('?', _, false) => Some(CMD_SEARCH_BACKWARD),
         ('n', false, false) => Some(CMD_SEARCH_NEXT),
         ('N', _, false) => Some(CMD_SEARCH_PREV),
@@ -457,18 +499,40 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
 /// Handle insert mode input and convert to command string
 ///
 /// Returns the character/command to insert or execute in insert mode.
-/// This handles printable characters, escape, backspace, and arrow keys.
+/// This handles printable characters, escape, backspace, arrow keys and the
+/// Helix insert-mode editing chords (`Ctrl-w`, `Ctrl-u`, `Ctrl-k`, `Ctrl-d`,
+/// `Alt-d`, `Alt-Backspace`, `Delete`). A `Ctrl`/`Alt`-modified character with
+/// no insert-mode binding yields `None`: it must never be typed as text (#489).
 pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
-    match key.code {
-        KeyCode::Char(c) => Some(Cow::Owned(c.to_string())),
-        KeyCode::Esc => Some(Cow::Borrowed(CMD_ESCAPE)),
-        KeyCode::Backspace => Some(Cow::Borrowed(CMD_BACKSPACE)),
-        KeyCode::Enter => Some(Cow::Borrowed("\n")),
-        KeyCode::Tab => Some(Cow::Borrowed("\t")),
-        KeyCode::Left => Some(Cow::Borrowed(CMD_ARROW_LEFT)),
-        KeyCode::Right => Some(Cow::Borrowed(CMD_ARROW_RIGHT)),
-        KeyCode::Up => Some(Cow::Borrowed(CMD_ARROW_UP)),
-        KeyCode::Down => Some(Cow::Borrowed(CMD_ARROW_DOWN)),
+    let chord = Chord::of(key.modifiers);
+    let borrowed = |cmd: &'static str| Some(Cow::Borrowed(cmd));
+    match (chord, key.code) {
+        (Chord::Plain, KeyCode::Char(c)) => Some(Cow::Owned(c.to_string())),
+        // crossterm on Windows reports AltGr (`@`, `{`, `[` on German/Polish
+        // layouts) as Ctrl+Alt without stripping either flag.
+        (_, KeyCode::Char(c))
+            if key
+                .modifiers
+                .contains(KeyModifiers::ALT | KeyModifiers::CONTROL) =>
+        {
+            Some(Cow::Owned(c.to_string()))
+        }
+        (Chord::Ctrl, KeyCode::Char('w')) => borrowed(CMD_INSERT_DELETE_WORD_BACKWARD),
+        (Chord::Ctrl, KeyCode::Char('u')) => borrowed(CMD_INSERT_DELETE_TO_LINE_START),
+        (Chord::Ctrl, KeyCode::Char('k')) => borrowed(CMD_INSERT_DELETE_TO_LINE_END),
+        (Chord::Ctrl, KeyCode::Char('d')) => borrowed(CMD_INSERT_DELETE_CHAR_FORWARD),
+        (Chord::Alt, KeyCode::Char('d')) => borrowed(CMD_INSERT_DELETE_WORD_FORWARD),
+        (Chord::Alt, KeyCode::Backspace) => borrowed(CMD_INSERT_ALT_BACKSPACE),
+        (Chord::Ctrl | Chord::Alt, KeyCode::Char(_)) => None,
+        (_, KeyCode::Esc) => borrowed(CMD_ESCAPE),
+        (_, KeyCode::Backspace) => borrowed(CMD_BACKSPACE),
+        (_, KeyCode::Delete) => borrowed(CMD_INSERT_DELETE_KEY),
+        (_, KeyCode::Enter) => borrowed("\n"),
+        (_, KeyCode::Tab) => borrowed("\t"),
+        (_, KeyCode::Left) => borrowed(CMD_ARROW_LEFT),
+        (_, KeyCode::Right) => borrowed(CMD_ARROW_RIGHT),
+        (_, KeyCode::Up) => borrowed(CMD_ARROW_UP),
+        (_, KeyCode::Down) => borrowed(CMD_ARROW_DOWN),
         _ => None,
     }
 }

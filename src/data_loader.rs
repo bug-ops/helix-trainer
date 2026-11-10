@@ -9,7 +9,7 @@
 use crate::async_state::{DataLoadMessage, SaveRequest, SaveWriterOutcome};
 use crate::config::{Scenario, ScenarioLoader};
 use crate::constants::PROFILE_SAVE_QUEUE_CAPACITY;
-use crate::gamification::{ProfileStorage, QuestTemplateRegistry, UserProfile};
+use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile};
 use anyhow::Result;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -58,12 +58,12 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
 
     // Spawn profile loader (runs in parallel)
     tokio::spawn(async move {
-        let result = load_profile_async().await;
-        let msg = match result {
-            Ok(profile) => DataLoadMessage::ProfileReady(profile),
+        let msg = match load_profile_message(ProfileStorage::new()).await {
+            Ok(msg) => msg,
             Err(e) => DataLoadMessage::ProfileError {
                 error: e.to_string(),
                 fallback: UserProfile::new(),
+                backup: QuarantineOutcome::Failed("profile loader task failed".to_string()),
             },
         };
         if tx_profile.send(msg).await.is_err() {
@@ -184,19 +184,25 @@ pub async fn load_scenarios_async() -> Result<Vec<Scenario>> {
 
 /// Async profile loading
 ///
-/// Loads user profile from storage using tokio's blocking task pool.
+/// Loads the profile from `storage` on tokio's blocking task pool and
+/// reports the outcome as a message. When the load fails, the unreadable
+/// file is copied aside (see [`ProfileStorage::quarantine`]) before the
+/// failure is reported, so the original can never be lost to a later save.
 ///
 /// # Errors
 ///
-/// Returns an error if the profile cannot be loaded from storage.
-pub async fn load_profile_async() -> Result<UserProfile> {
-    tokio::task::spawn_blocking(move || {
-        let storage = ProfileStorage::new();
-        storage
-            .load()
-            .map_err(|e| anyhow::anyhow!("Profile load error: {:?}", e))
+/// Returns an error only if the blocking task itself panics or is cancelled;
+/// load failures are reported as [`DataLoadMessage::ProfileError`].
+pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage> {
+    Ok(tokio::task::spawn_blocking(move || match storage.load() {
+        Ok(profile) => DataLoadMessage::ProfileReady(profile),
+        Err(e) => DataLoadMessage::ProfileError {
+            error: e.to_string(),
+            fallback: UserProfile::new(),
+            backup: storage.quarantine(),
+        },
     })
-    .await?
+    .await?)
 }
 
 /// Async quest registry loading (lazy loaded)
@@ -252,28 +258,36 @@ mod tests {
 
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
-    async fn test_load_profile_async() {
-        let result = load_profile_async().await;
+    async fn test_load_profile_message_missing_file_is_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
 
-        // Profile loading should succeed - either loads existing or creates new
-        match result {
-            Ok(profile) => {
-                // Profile should have valid level (1 for new, or higher for existing)
-                assert!(
-                    profile.level >= 1,
-                    "Profile level should be at least 1, got {}",
-                    profile.level
-                );
-            }
-            Err(e) => {
-                // Profile load should not fail in normal circumstances
-                // If config directory is inaccessible, this may fail
-                panic!(
-                    "Profile loading should succeed (creates new if missing). Error: {}",
-                    e
-                );
-            }
-        }
+        let msg = load_profile_message(storage).await.unwrap();
+
+        assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
+    }
+
+    /// Regression test for #440: an unparsable profile is reported as an
+    /// error with a backup copy, and the original file is left untouched.
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_load_profile_message_unparsable_file_is_backed_up_and_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.json");
+        std::fs::write(&path, "{broken").unwrap();
+
+        let msg = load_profile_message(ProfileStorage::with_path(&path))
+            .await
+            .unwrap();
+
+        let DataLoadMessage::ProfileError { backup, .. } = msg else {
+            panic!("expected ProfileError, got {msg:?}");
+        };
+        let QuarantineOutcome::BackedUp(backup_path) = backup else {
+            panic!("expected a backup, got {backup:?}");
+        };
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{broken");
+        assert_eq!(std::fs::read_to_string(backup_path).unwrap(), "{broken");
     }
 
     #[tokio::test]

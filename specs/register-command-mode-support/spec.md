@@ -270,7 +270,94 @@ These extend FR-002/FR-003 (register-scoped yank on `y`, paste on `p`/`P`)
 to also cover register-scoped delete/change (`d`/`c`), and add the
 blackhole register as a new addressable register alongside named ones.
 
-## 12. See Also
+## 12. Bug-Fix Batch: Search Prompt, Linewise and Multi-Range Paste, Insert-Mode Keys (#504, #449, #455, #489)
+
+> [!info] Added 2026-11-10 (spec-first update for the P1-P3 bug batch)
+> Reference behavior for every criterion is `hx` 25.07.1. Tests MUST assert the resulting selection and cursor as well as buffer text. FR numbers in this section (FR-201 and up) are scoped here; FR-001..FR-010 above are unchanged.
+
+> [!danger] Explicitly deferred
+> - Backward search `?` (#504, second half): `?` is the hint key on the Task and MiniGame screens, so it cannot also search without a product decision. Not part of this batch.
+> - Insert-mode `Tab` (indent) from #489: needs a per-language indent unit, which the simulator does not have. Not part of this batch.
+
+### 12.1 Search prompt (`/`) (#504, `/` only)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-201 | WHEN the user presses `/` in Normal mode THE SYSTEM SHALL enter a search-prompt pending state (typestate, same pattern as the `s`/`S` regex prompt and the `:` prompt, per [[constitution#I. Architecture]]) and show the typed pattern in the footer; `/` SHALL NOT be recorded as an action on its own and typed characters SHALL NOT be executed as commands | must |
+| FR-202 | WHEN the user presses Enter in the search prompt with a non-empty pattern THE SYSTEM SHALL select the next match after the cursor (wrapping at the end of the buffer), execute it as one command carrying the pattern, and increment the action counter once | must |
+| FR-203 | WHEN the user presses Escape in the search prompt THE SYSTEM SHALL discard the pattern, leave selection and action counter unchanged, and return to Normal mode | must |
+| FR-204 | WHEN the pattern is not a valid regex (checked with the same `helix-stdx` regex engine as `s`/`S`) THE SYSTEM SHALL surface a `UserError`, leave the selection unchanged and return to Normal mode | must |
+| FR-205 | WHEN a search completes THE SYSTEM SHALL store the pattern so `n` and `N` continue from it (same state `*` uses) | must |
+| FR-206 | WHEN the pattern reaches the maximum pattern length used by the regex prompt THE SYSTEM SHALL reject further input rather than grow unbounded | must |
+| FR-207 | WHEN an empty pattern is confirmed THE SYSTEM SHALL return to Normal mode without a selection change and without an action | should |
+
+### 12.2 Linewise and multi-range paste (#449, #455)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-210 | WHEN a register value ENDS WITH a line ending THE SYSTEM SHALL paste it linewise: `p` inserts at the start of the line after the range's last line, `P` at the start of the line of the range's first line (upstream `paste_impl`: linewise = the value ends with a line ending; a multi-line value without a trailing line ending is pasted inline) | must |
+| FR-211 | WHEN a linewise paste targets the last line of a buffer with no trailing newline THE SYSTEM SHALL insert the line separator needed so the pasted line does not merge into the last line | must |
+| FR-212 | WHEN a register value does not end with a line ending (including a multi-line value without a trailing line ending) THE SYSTEM SHALL paste inline exactly as before this batch | must |
+| FR-213 | WHEN a yank runs over several selection ranges THE SYSTEM SHALL store one value per range in the target register (the register value type changes from a single `String` to an ordered list of strings; internal change, no persisted format) | must |
+| FR-214 | WHEN `p`/`P` run with N ranges and M stored values THE SYSTEM SHALL paste value i at range i, repeating the last value when M < N and ignoring surplus values when M > N | must |
+| FR-214a | `R` (replace with yanked) with several stored values pasting value i into range i is NOT part of this batch (explicitly deferred; needs `RegisterFile::get_values` consumption in `R`); `R` keeps using the first value (FR-215) | deferred |
+| FR-215 | WHEN a register holding several values is read by an operation expecting one string THE SYSTEM SHALL use the first value | should |
+| FR-216 | WHEN text is pasted THE SYSTEM SHALL select the pasted text in every range (see [[../helix-core-post-25-07-1-upgrade-readiness/spec#3.8 Simulator Fidelity at the Pinned Core (25.07.1)\|section 3.8 FR-024]]) | must |
+
+### 12.3 Insert-mode editing keys (#489)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-220 | WHILE in Insert mode THE SYSTEM SHALL execute `Ctrl-w` (delete word backward), `Alt-Backspace` (delete word backward), `Ctrl-u` (delete to line start), `Ctrl-k` (delete to line end), `Ctrl-d` and `Delete` (delete char forward; at end of line joins the next line), and `Alt-d` (delete word forward) with `hx` 25.07.1 semantics | must |
+| FR-221 | WHILE in Insert mode THE SYSTEM SHALL NEVER insert the bare letter of a Ctrl- or Alt-modified key; a modified key with no Insert-mode binding is ignored (no text, no action) | must |
+| FR-222 | THE INPUT LAYER SHALL emit these keys as canonical command strings (`Ctrl-w`, `Ctrl-u`, `Ctrl-k`, `Ctrl-d`, `Alt-d`, `Alt-Backspace`, `Delete`) and the simulator SHALL model them as a closed typed set of insert commands rather than treating any unknown string as text | must |
+| FR-223 | WHEN an Insert-mode session containing these keys is repeated with `.` THE SYSTEM SHALL replay them like other insert commands | must |
+
+### 12.4 Acceptance Criteria
+
+```
+GIVEN the text of scenario 14, cursor at (0,0)
+WHEN  the user presses /, types sum, presses Enter, then d
+THEN  the first `sum` after the cursor (line 2) is selected and removed
+ AND  the action counter is 2 (search, delete)
+```
+```
+GIVEN the search prompt is open with pattern `a(`
+WHEN  the user presses Enter
+THEN  a UserError is shown, the selection is unchanged, no prompt is pending
+```
+```
+GIVEN scenario 14, the user pressed x (line 1), y, j
+WHEN  the user presses p
+THEN  `fn add(a: i32, b: i32) -> i32 {` is inserted as a new line between lines 2 and 3
+```
+```
+GIVEN scenario 14, after A (append at end of line 1)
+WHEN  the user presses Ctrl-w
+THEN  the trailing `{` is removed (not the letter `w` inserted)
+```
+
+### 12.5 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| `/` pressed while a count is pending | [NEEDS CLARIFICATION: hx ignores the count for search; this batch ignores it too, confirm] |
+| Search with no match | Selection unchanged, notification shown, no panic |
+| `"_` (blackhole) yank over several ranges | Stores nothing, as before |
+| `Ctrl-w` at line start in Insert mode | Deletes the preceding newline as hx does |
+| `Delete` at the very end of the buffer | No-op |
+| Register value `"a\nb"` (multi-line, no trailing line ending) | Pasted inline, not linewise |
+| Register value `"a\n"` (ends with a line ending) | Pasted linewise |
+
+### 12.6 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-201 | Typestate unit tests for the search prompt | Enter, Escape, invalid regex, empty pattern, over-length pattern covered |
+| SC-202 | Simulator tests for linewise `p`/`P`, last-line paste, multi-range yank/paste | Match hx 25.07.1 |
+| SC-203 | Insert-mode tests for each key in FR-220 plus `.` repeat | Match hx 25.07.1 |
+
+## 13. See Also
 
 - [[constitution]] — project principles
 - [[BRD]] — business rationale and what actually shipped

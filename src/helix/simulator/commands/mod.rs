@@ -7,11 +7,18 @@ pub mod search;
 pub mod selection;
 pub mod view;
 
-use super::{AnyModeSimulator, HelixSimulator, InsertMode, Mode, NormalMode};
+use super::{
+    AnyModeSimulator, FindDirection, FindType, HelixSimulator, InsertCommand, InsertMode, Mode,
+    NormalMode,
+};
 use crate::helix::commands::*;
+use crate::helix::registry::{
+    CountBehavior, NativeCounted, normal_registry, parse_counted_command,
+};
 use crate::helix::repeat::is_repeatable_command;
 use crate::security::UserError;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use std::num::NonZeroUsize;
 
 fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
     if cmd == CMD_GOTO_FILE_START {
@@ -214,6 +221,12 @@ fn execute_insert_mode_command_internal(
                 .record_movement(crate::helix::repeat::Movement::Down);
         }
         result
+    } else if let Some(command) = InsertCommand::parse(cmd) {
+        let result = sim.apply_insert_command(command);
+        if result.is_ok() && !sim.is_repeating {
+            sim.repeat_buffer.insert_recorder_mut().record_edit(command);
+        }
+        result
     } else {
         let result = sim.insert_text(cmd);
         if result.is_ok() && !sim.is_repeating {
@@ -225,13 +238,82 @@ fn execute_insert_mode_command_internal(
     }
 }
 
+/// Apply `base` `count` times according to its [`CountBehavior`].
+///
+/// The single place a count prefix is interpreted: `Repeat` runs the command
+/// `count` times, `Ignore` once, and `Native` hands the count to the command
+/// as a `{count}{base}` string (`3fa`, `2G`, `2gg`).
+pub(super) fn execute_counted_any_mode(
+    sim: &mut AnyModeSimulator,
+    base: &str,
+    count: NonZeroUsize,
+) -> Result<(), UserError> {
+    match normal_registry().count_behavior(base) {
+        CountBehavior::Repeat => {
+            for _ in 0..count.get() {
+                execute_command_any_mode(sim, base)?;
+                // A command that entered Insert mode must not run again as typed text.
+                if matches!(sim, AnyModeSimulator::Insert(_)) {
+                    break;
+                }
+            }
+            Ok(())
+        }
+        CountBehavior::Ignore => execute_command_any_mode(sim, base),
+        CountBehavior::Native => execute_command_any_mode(sim, &format!("{count}{base}")),
+    }
+}
+
+/// Run a `Native` counted command (`3fa`, `2G`, `2gg`) in Normal mode.
+fn execute_native_counted(
+    sim: &mut HelixSimulator<NormalMode>,
+    count: NonZeroUsize,
+    base: &str,
+) -> Result<(), UserError> {
+    match NativeCounted::parse(base) {
+        Some(NativeCounted::GotoLine) => {
+            movement::goto_line(sim, count);
+            Ok(())
+        }
+        Some(NativeCounted::Find {
+            find_type,
+            direction,
+            ch,
+        }) => {
+            let count = count.get();
+            match (find_type, direction) {
+                (FindType::Find, FindDirection::Forward) => {
+                    movement::find_next_char(sim, ch, count)
+                }
+                (FindType::Find, FindDirection::Backward) => {
+                    movement::find_prev_char(sim, ch, count)
+                }
+                (FindType::Till, FindDirection::Forward) => {
+                    movement::till_next_char(sim, ch, count)
+                }
+                (FindType::Till, FindDirection::Backward) => {
+                    movement::till_prev_char(sim, ch, count)
+                }
+            }
+        }
+        None => Err(UserError::command_failed("command does not accept a count")),
+    }
+}
+
 pub(super) fn execute_normal_mode_command_internal(
     sim: &mut HelixSimulator<NormalMode>,
     cmd: &str,
 ) -> Result<(), UserError> {
-    use crate::helix::registry::normal_registry;
-
     let registry = normal_registry();
+
+    if let Some((count, base)) = parse_counted_command(cmd) {
+        return execute_native_counted(sim, count, base);
+    }
+
+    // Bare `G` is `goto_line`, a no-op without a count in helix-term 25.07.1.
+    if cmd == CMD_GOTO_LINE {
+        return Ok(());
+    }
 
     if cmd.len() == 2 {
         let first = cmd.chars().next().unwrap();
@@ -352,6 +434,13 @@ pub(super) fn execute_normal_mode_command_internal(
     {
         return selection::split_selection(sim, pattern);
     }
+    // Search-prompt invocation ("/ <pattern>"); bare "/" stays in the registry.
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_SEARCH_FORWARD)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return search::search_pattern_forward(sim, pattern);
+    }
 
     registry.execute(sim, cmd)?;
 
@@ -416,6 +505,13 @@ pub(super) fn execute_command_any_mode(
         }
         return sim.execute_macro_replay();
         // Insert mode: falls through, 'Q' is inserted as literal text.
+    }
+
+    if matches!(sim, AnyModeSimulator::Normal(_))
+        && let Some((count, base)) = parse_counted_command(cmd)
+        && normal_registry().count_behavior(base) != CountBehavior::Native
+    {
+        return execute_counted_any_mode(sim, base, count);
     }
 
     let placeholder = AnyModeSimulator::Normal(HelixSimulator::new(String::new()));

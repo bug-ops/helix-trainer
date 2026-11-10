@@ -2,39 +2,51 @@
 
 use super::{EditorMode, HelixSimulator};
 use crate::security::UserError;
-use helix_core::Selection;
+use helix_core::{Rope, Selection};
+
+/// A document state paired with the selection that went with it.
+///
+/// Stored on the undo and redo stacks so restoring a state also restores
+/// where the cursor and selections were, as Helix does.
+#[derive(Debug, Clone)]
+pub(in crate::helix) struct HistoryEntry {
+    pub(super) doc: Rope,
+    pub(super) selection: Selection,
+}
 
 impl<M: EditorMode> HelixSimulator<M> {
+    /// Swap the live document and selection for `entry`, returning the state
+    /// that was replaced.
+    fn swap_state(&mut self, entry: HistoryEntry) -> HistoryEntry {
+        HistoryEntry {
+            doc: std::mem::replace(&mut self.doc, entry.doc),
+            selection: std::mem::replace(&mut self.selection, entry.selection),
+        }
+    }
+
     /// Undo the last operation
     ///
-    /// The document state being undone away from is moved onto the redo
-    /// stack, so a subsequent `redo` can restore it.
+    /// Restores the document and the selection from before the change. The
+    /// state being undone away from is moved onto the redo stack, so a
+    /// subsequent `redo` can restore it.
     pub fn undo(&mut self) -> Result<(), UserError> {
-        if let Some(prev_doc) = self.history.pop() {
-            let undone_doc = std::mem::replace(&mut self.doc, prev_doc);
-            self.redo_stack.push(undone_doc);
-
-            // Clamp cursor to valid position
-            let head = self.selection.primary().head.min(self.doc.len_chars());
-            self.selection = Selection::point(head);
+        if let Some(prev) = self.history.pop() {
+            let undone = self.swap_state(prev);
+            self.redo_stack.push(undone);
         }
         Ok(())
     }
 
     /// Redo the most recently undone operation
     ///
-    /// Restores the document state that `undo` last moved onto the redo
-    /// stack and pushes the state being redone away from back onto the undo
-    /// history, so repeated `Ctrl-r` presses walk forward through history
-    /// and `undo`/`redo` round-trip.
+    /// Restores the document and selection that `undo` last moved onto the
+    /// redo stack and pushes the state being redone away from back onto the
+    /// undo history, so repeated `Ctrl-r` presses walk forward through
+    /// history and `undo`/`redo` round-trip.
     pub fn redo(&mut self) -> Result<(), UserError> {
-        if let Some(redone_doc) = self.redo_stack.pop() {
-            let prev_doc = std::mem::replace(&mut self.doc, redone_doc);
-            self.history.push(prev_doc);
-
-            // Clamp cursor to valid position
-            let head = self.selection.primary().head.min(self.doc.len_chars());
-            self.selection = Selection::point(head);
+        if let Some(redone) = self.redo_stack.pop() {
+            let prev = self.swap_state(redone);
+            self.history.push(prev);
         }
         Ok(())
     }
@@ -44,7 +56,7 @@ impl<M: EditorMode> HelixSimulator<M> {
 mod tests {
     use crate::helix::simulator::HelixSimulator;
     use crate::helix::simulator::NormalMode;
-    use helix_core::Transaction;
+    use helix_core::{Selection, Transaction};
 
     #[test]
     fn test_apply_transaction_skips_noop_history_entry() {
@@ -81,5 +93,54 @@ mod tests {
             1,
             "a no-op transaction must not discard valid redo history"
         );
+    }
+
+    #[test]
+    fn test_undo_restores_selection_from_before_the_change() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("abc\ndef\n".to_string());
+        sim.selection = Selection::single(0, 4);
+
+        let edit = Transaction::change(&sim.doc, [(0, 4, None)].into_iter());
+        sim.apply_transaction(edit);
+        sim.selection = Selection::point(0);
+
+        sim.undo().unwrap();
+
+        assert_eq!(sim.doc.to_string(), "abc\ndef\n");
+        assert_eq!(sim.selection, Selection::single(0, 4));
+    }
+
+    #[test]
+    fn test_redo_restores_selection_from_after_the_change() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("abc\ndef\n".to_string());
+        sim.selection = Selection::single(0, 4);
+
+        let edit = Transaction::change(&sim.doc, [(0, 4, None)].into_iter());
+        sim.apply_transaction(edit);
+        sim.selection = Selection::point(2);
+
+        sim.undo().unwrap();
+        sim.redo().unwrap();
+
+        assert_eq!(sim.doc.to_string(), "def\n");
+        assert_eq!(sim.selection, Selection::point(2));
+    }
+
+    #[test]
+    fn test_select_line_delete_undo_delete_removes_the_line_again() {
+        use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE, CMD_UNDO};
+        use crate::helix::simulator::AnyModeSimulator;
+
+        let text = "fn add() {\n    sum\n}\n";
+        let mut sim = AnyModeSimulator::new(text.to_string());
+        for cmd in [
+            CMD_SELECT_LINE,
+            CMD_DELETE_SELECTION,
+            CMD_UNDO,
+            CMD_DELETE_SELECTION,
+        ] {
+            sim.execute_command(cmd).unwrap();
+        }
+        assert_eq!(sim.state().unwrap().content(), "    sum\n}\n");
     }
 }

@@ -74,7 +74,7 @@ pub(super) fn inner_rect(outer: Rect) -> Rect {
 pub(super) use crate::helix::find_surrounding_brackets;
 
 /// Build a live feedback string for an in-progress `"`-register selection,
-/// `:`-command-line buffer, or `s`/`S` regex-selection prompt, so the user
+/// `:`-command-line buffer, or `s`/`S`/`/` regex prompt, so the user
 /// can see what they're typing.
 ///
 /// Returns an empty string when none is pending. Shared between Training
@@ -87,12 +87,7 @@ pub(super) fn pending_input_indicator(
         return format!(" :{} ", buffer);
     }
     if let Some((kind, pattern)) = input_state.pending_regex_prompt() {
-        use crate::input::typestate::RegexPromptKind;
-        let prefix = match kind {
-            RegexPromptKind::SelectRegex => 's',
-            RegexPromptKind::SplitSelection => 'S',
-        };
-        return format!(" {}{} ", prefix, pattern);
+        return format!(" {}{} ", kind.prefix(), pattern);
     }
     if let Some(preview) = input_state.pending_register() {
         use crate::input::typestate::RegisterPreview;
@@ -102,4 +97,33 @@ pub(super) fn pending_input_indicator(
         };
     }
     String::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::pending_input_indicator;
+    use crate::input::typestate::InputStateMachine;
+
+    fn press(sm: &mut InputStateMachine, keys: &str) {
+        for c in keys.chars() {
+            sm.process_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+    }
+
+    #[test]
+    fn search_prompt_shows_slash_and_typed_pattern() {
+        let mut sm = InputStateMachine::new();
+        assert_eq!(pending_input_indicator(&sm), "");
+        press(&mut sm, "/su");
+        assert_eq!(pending_input_indicator(&sm), " /su ");
+    }
+
+    #[test]
+    fn regex_selection_prompts_keep_their_prefix() {
+        let mut sm = InputStateMachine::new();
+        press(&mut sm, "sa");
+        assert_eq!(pending_input_indicator(&sm), " sa ");
+    }
 }

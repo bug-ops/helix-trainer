@@ -27,7 +27,15 @@ fn process_session_result(
             Ok(false)
         }
         SessionAfterAction::Completed(s) => {
-            let feedback = s.feedback().map_err(UserError::from)?;
+            let feedback = match s.feedback() {
+                Ok(feedback) => feedback,
+                Err(e) => {
+                    // Keep the completed session rather than dropping the
+                    // player's progress with it.
+                    state.game.pending_completed_session = Some(s);
+                    return Err(UserError::from(e));
+                }
+            };
             state.ui.last_feedback = Some(feedback.clone());
             // Start success animation - keep Task screen, just mark completion time
             // The event loop will transition to Results after 1.5s delay
@@ -90,7 +98,6 @@ pub fn handle_execute_command(
     }
 
     // Temporarily replace screen with a placeholder to get ownership
-    // We'll replace it back at the end
     let placeholder = TypedScreen::Menu(crate::ui::state::MenuData::default());
     let old_screen = std::mem::replace(&mut state.screen, placeholder);
 
@@ -98,6 +105,44 @@ pub fn handle_execute_command(
         unreachable!("Already checked above")
     };
 
+    // The Task screen is restored whatever the outcome, so a recoverable
+    // error (e.g. the simulator rejecting a command) never costs the player
+    // their session.
+    let outcome = execute_on_task(state, &mut task_data, keys, typed);
+    state.screen = TypedScreen::Task(task_data);
+
+    // Update quest progress for executed command (after releasing session borrow)
+    if let Some(executed) = outcome? {
+        update(
+            state,
+            Message::UpdateQuestProgress {
+                command: Some(executed.command),
+                scenario_completed: executed.completed,
+                scenario_id: None,
+                duration: Duration::from_secs(0),
+            },
+        )?;
+    }
+
+    Ok(HandlerOutcome::Stay)
+}
+
+/// A normal-mode command that was executed, for quest tracking.
+struct ExecutedCommand {
+    command: String,
+    completed: bool,
+}
+
+/// Run one resolved key against the Task screen's session.
+///
+/// Returns the executed normal-mode command (if any) for quest tracking. On
+/// `Err` the session is left as it was before the failing action.
+fn execute_on_task(
+    state: &mut AppState,
+    task_data: &mut crate::ui::state::TaskData,
+    keys: crate::input::keymap::CanonicalKeys,
+    typed: Cow<'static, str>,
+) -> Result<Option<ExecutedCommand>, UserError> {
     // Add key to history for display (format for readability). Uses the
     // physically-typed key, not the translated command - and, matching
     // pre-keymap-overlay behavior, happens for every keystroke
@@ -110,29 +155,19 @@ pub fn handle_execute_command(
 
     let is_insert_mode = task_data.session.is_insert_mode();
 
-    // Track command for quest progress (only execute once per complete command)
-    let mut executed_command: Option<String> = None;
-    let session_completed;
-
     if is_insert_mode {
         // R1: never translated in insert mode - `keys` is a single token
         // identical to `typed`. Execute directly (bypass input state machine).
         let cmd = keys.into_cow().into_owned();
 
-        // Store last command for display (only for Escape)
-        if cmd == CMD_ESCAPE {
-            task_data.last_command = Some(cmd.clone());
-        }
+        let is_escape = cmd == CMD_ESCAPE;
+        apply_to_session(state, task_data, cmd)?;
 
-        // Execute the command
-        let scenario = task_data.session.scenario().clone();
-        let session = std::mem::replace(
-            &mut task_data.session,
-            crate::game::GameSession::new(scenario)?,
-        );
-        let result = session.record_action(cmd)?;
-        session_completed = process_session_result(result, &mut task_data, state)?;
-        state.screen = TypedScreen::Task(task_data);
+        // Store last command for display (only for Escape), once it was accepted
+        if is_escape {
+            task_data.last_command = Some(CMD_ESCAPE.to_string());
+        }
+        Ok(None)
     } else {
         // Normal mode - use InputStateMachine for multi-key command handling.
         // Single-token keys (the overwhelmingly common case) are dispatched
@@ -154,15 +189,10 @@ pub fn handle_execute_command(
                 .process_key(command_to_key_event(keys.as_str()))
             {
                 HandlerResult::Execute(cmd) => Some(cmd.to_string()),
-                HandlerResult::Transition(_) => {
-                    // Waiting for more keys - state machine already updated
-                    state.screen = TypedScreen::Task(task_data);
-                    return Ok(HandlerOutcome::Stay);
-                }
-                HandlerResult::Cancel | HandlerResult::Stay => {
-                    // Cancelled or unknown key - restore screen and stay
-                    state.screen = TypedScreen::Task(task_data);
-                    return Ok(HandlerOutcome::Stay);
+                // Waiting for more keys (state machine already updated), or
+                // cancelled / unknown key
+                HandlerResult::Transition(_) | HandlerResult::Cancel | HandlerResult::Stay => {
+                    return Ok(None);
                 }
             }
         };
@@ -175,47 +205,92 @@ pub fn handle_execute_command(
                 keys = keys.as_str(),
                 "keymap expansion did not resolve; discarding"
             );
-            state.screen = TypedScreen::Task(task_data);
-            return Ok(HandlerOutcome::Stay);
+            return Ok(None);
         };
 
-        // Store last command for display
+        // The simulator applies any count prefix; records as ONE action
+        let completed = apply_to_session(state, task_data, cmd_str.clone())?;
+
+        // Store last command for display only once the simulator accepted it
         task_data.last_command = Some(cmd_str.clone());
-        executed_command = Some(cmd_str.clone());
 
-        // Extract count and base command (e.g., "3h" -> count=3, base_cmd="h")
-        let (count, base_cmd) = crate::game::extract_count_and_command(&cmd_str);
-        let base_cmd = base_cmd.to_string();
+        Ok(Some(ExecutedCommand {
+            command: cmd_str,
+            completed,
+        }))
+    }
+}
 
-        // Clone scenario before taking session (to avoid borrow conflict)
-        let scenario = task_data.session.scenario().clone();
+/// Apply `cmd` to the Task screen's session and route the result.
+///
+/// The failing step (`apply_action`) borrows the session, so an error leaves
+/// it in place. Returns whether the scenario completed.
+fn apply_to_session(
+    state: &mut AppState,
+    task_data: &mut crate::ui::state::TaskData,
+    cmd: String,
+) -> Result<bool, UserError> {
+    task_data.session.apply_action(cmd)?;
 
-        // Take session for state transition
-        let session = std::mem::replace(
-            &mut task_data.session,
-            crate::game::GameSession::new(scenario)?,
+    let scenario = task_data.session.scenario().clone();
+    let session = std::mem::replace(
+        &mut task_data.session,
+        crate::game::GameSession::new(scenario)?,
+    );
+    process_session_result(session.finish_action(), task_data, state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::game::GameSession;
+    use crate::testing::{default_test_scenario, empty_test_app_state};
+    use crate::ui::state::TaskData;
+
+    fn task_state() -> AppState {
+        let mut state = empty_test_app_state();
+        let session = GameSession::new(default_test_scenario()).unwrap();
+        state.screen = TypedScreen::Task(TaskData::new(session));
+        state
+    }
+
+    /// Regression test for #466: a simulator error must leave the session in
+    /// place with its action count unchanged.
+    #[test]
+    fn test_rejected_command_keeps_session_and_action_count() {
+        let mut state = task_state();
+        let TypedScreen::Task(mut task_data) = std::mem::replace(
+            &mut state.screen,
+            TypedScreen::Menu(crate::ui::state::MenuData::default()),
+        ) else {
+            unreachable!()
+        };
+
+        let result = apply_to_session(&mut state, &mut task_data, "not_a_command".to_string());
+
+        assert!(result.is_err());
+        assert_eq!(task_data.session.action_count(), 0);
+    }
+
+    #[test]
+    fn test_execute_command_error_restores_task_screen() {
+        let mut state = task_state();
+        // `a(` is an invalid search regex: Enter is rejected by the simulator.
+        for c in "/a(".chars() {
+            let key = crate::input::keymap::CanonicalKeys::from_owned(c.to_string());
+            handle_execute_command(&mut state, key, Cow::Owned(c.to_string())).unwrap();
+        }
+        let enter = crate::input::keymap::CanonicalKeys::from_static("Enter");
+        let result = handle_execute_command(&mut state, enter, Cow::Borrowed("Enter"));
+
+        assert!(result.is_err());
+        let TypedScreen::Task(task_data) = &state.screen else {
+            panic!("player was thrown off the Task screen");
+        };
+        assert_eq!(task_data.session.action_count(), 0);
+        assert!(
+            task_data.last_command.is_none(),
+            "a rejected command must not be shown as executed"
         );
-
-        // Execute command with count - records as ONE action
-        let result = session.record_action_with_count(cmd_str, &base_cmd, count)?;
-        session_completed = process_session_result(result, &mut task_data, state)?;
-
-        // Always restore Task screen - even when completed, we show success popup
-        state.screen = TypedScreen::Task(task_data);
     }
-
-    // Update quest progress for executed command (after releasing session borrow)
-    if let Some(cmd) = executed_command {
-        update(
-            state,
-            Message::UpdateQuestProgress {
-                command: Some(cmd),
-                scenario_completed: session_completed,
-                scenario_id: None,
-                duration: Duration::from_secs(0),
-            },
-        )?;
-    }
-
-    Ok(HandlerOutcome::Stay)
 }

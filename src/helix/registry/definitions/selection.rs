@@ -6,7 +6,7 @@
 
 use crate::helix::commands::*;
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
-use crate::helix::registry::metadata::{Category, CommandMetadata};
+use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior};
 use crate::helix::simulator::NormalMode;
 use crate::helix::simulator::commands::editing;
 use crate::helix::simulator::commands::selection;
@@ -202,7 +202,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Selection,
             true, // repeatable
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         selection::toggle_comments,
     ));
 
@@ -229,7 +230,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
             Category::Selection,
             false,
             None,
-        ),
+        )
+        .with_count_behavior(CountBehavior::Ignore),
         selection::remove_primary_selection,
     ));
 

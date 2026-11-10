@@ -10,8 +10,8 @@ use helix_trainer::{
     async_state::DataLoadMessage,
     config::{ScenarioCollection, keymap::keymap_fingerprint_mismatch_message},
     gamification::{
-        Achievement, AchievementEngine, LockStatus, QuestGenerator, QuestTemplateRegistry,
-        StreakChange, StreakManager, UserProfile,
+        Achievement, AchievementEngine, LockStatus, QuarantineOutcome, QuestGenerator,
+        QuestTemplateRegistry, StreakChange, StreakManager, UserProfile,
     },
     learning::PerformanceTracker,
     ui::{AppState, Notification, NotificationType},
@@ -23,6 +23,20 @@ use helix_trainer::{
 /// about possible silent data loss, not a routine gameplay event, and the
 /// user needs time to notice and act on it.
 const WARNING_NOTIFICATION_DURATION: Duration = Duration::from_secs(8);
+
+/// Short popup text for a failed profile load; the persistent banner (see
+/// `ui::render`) carries the backup location.
+fn profile_load_failure_message(backup: &QuarantineOutcome) -> String {
+    match backup {
+        QuarantineOutcome::BackedUp(_) => {
+            "Progress could not be loaded. Saving is disabled this session; a backup was kept."
+        }
+        QuarantineOutcome::Failed(_) => {
+            "Progress could not be loaded and no backup was made. Saving is disabled this session."
+        }
+    }
+    .to_string()
+}
 
 /// Check if daily quests should be refreshed
 ///
@@ -172,6 +186,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                 state.progress.clock(),
             );
             state.progress.profile = updated_profile;
+            state.progress.mark_profile_loaded();
 
             warn_keymap_fingerprint_mismatch(state);
 
@@ -194,16 +209,39 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                             description: achievement.description,
                         }));
                 }
-                state.progress.storage.save(&state.progress.profile)?;
-                state.progress.mark_saved();
+                match state.progress.storage.save(&state.progress.profile) {
+                    Ok(()) => state.progress.mark_saved(),
+                    Err(e) => {
+                        tracing::error!("Failed to save profile after startup unlocks: {}", e);
+                        state.ui.notifications.push(Notification::with_duration(
+                            NotificationType::Info {
+                                message: format!(
+                                    "Failed to save progress: {e}. Will retry automatically."
+                                ),
+                            },
+                            WARNING_NOTIFICATION_DURATION,
+                        ));
+                    }
+                }
             }
 
             tracing::info!("Profile loaded");
         }
 
-        DataLoadMessage::ProfileError { error, fallback } => {
+        DataLoadMessage::ProfileError {
+            error,
+            fallback,
+            backup,
+        } => {
             state.progress.profile = fallback;
-            tracing::warn!("Profile load failed, using default: {}", error);
+            tracing::error!(backup = ?backup, "Profile load failed, saving disabled: {}", error);
+            state.ui.notifications.push(Notification::with_duration(
+                NotificationType::Info {
+                    message: profile_load_failure_message(&backup),
+                },
+                WARNING_NOTIFICATION_DURATION,
+            ));
+            state.progress.quarantine_profile(backup);
             warn_if_other_instance_running(state);
         }
 
@@ -899,12 +937,122 @@ mod tests {
             DataLoadMessage::ProfileError {
                 error: "Corrupted file".to_string(),
                 fallback,
+                backup: QuarantineOutcome::Failed("test".to_string()),
             },
         );
 
         assert!(result.is_ok());
         let loaded_profile = &state.progress.profile;
         assert_eq!(loaded_profile.total_xp, 100); // Fallback was used
+    }
+
+    /// Regression test for #440: after a failed load the unparsable file is
+    /// never replaced by the fallback profile, on the exit path or the
+    /// debounced/immediate save paths, and the user is told.
+    #[test]
+    fn test_profile_error_never_overwrites_unparsable_file() {
+        let storage = test_profile_storage();
+        std::fs::write(storage.path(), "{broken").unwrap();
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            storage.clone(),
+            PerformanceTracker::new(),
+        );
+        state.progress.begin_profile_load();
+
+        let backup = storage.quarantine();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileError {
+                error: "Failed to parse profile".to_string(),
+                fallback: UserProfile::new(),
+                backup: backup.clone(),
+            },
+        )
+        .unwrap();
+
+        assert!(state.progress.prepare_final_save_request().is_none());
+        state.progress.save_immediate().unwrap();
+        state.progress.save_debounced().unwrap();
+        assert_eq!(std::fs::read_to_string(storage.path()).unwrap(), "{broken");
+        let QuarantineOutcome::BackedUp(backup_path) = backup else {
+            panic!("expected a backup copy");
+        };
+        assert_eq!(std::fs::read_to_string(backup_path).unwrap(), "{broken");
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                &n.notification_type,
+                NotificationType::Info { message } if message.contains("Saving is disabled")
+            )),
+            "a failed profile load must be announced"
+        );
+    }
+
+    /// Regression test for the #440 follow-up trigger: quitting before
+    /// `ProfileReady` arrives must not overwrite the real file with the
+    /// placeholder profile.
+    #[test]
+    fn test_exit_before_profile_ready_does_not_save_placeholder() {
+        let mut state = empty_test_app_state();
+        state.progress.begin_profile_load();
+
+        assert!(state.progress.prepare_final_save_request().is_none());
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        )
+        .unwrap();
+        assert!(state.progress.prepare_final_save_request().is_some());
+    }
+
+    /// Regression test for #459: the saved sound settings are applied to the
+    /// sound manager when the profile arrives (volume clamped).
+    #[test]
+    fn test_profile_ready_applies_saved_sound_config() {
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        profile.sound_config.enabled = false;
+        profile.sound_config.volume = 12.0;
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+
+        let config = state.progress.sound_manager.config();
+        assert!(!config.enabled);
+        assert!((config.volume - 1.0).abs() < f32::EPSILON);
+    }
+
+    /// Regression test for #466: a failed startup save is reported, not
+    /// propagated as a fatal error.
+    #[test]
+    fn test_profile_ready_startup_save_failure_is_not_fatal() {
+        let dir = tempfile::tempdir().unwrap();
+        // A directory in place of the profile file makes the save's rename fail.
+        let path = dir.path().join("profile.json");
+        std::fs::create_dir(&path).unwrap();
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            ProfileStorage::with_path(&path),
+            PerformanceTracker::new(),
+        );
+        let mut profile = UserProfile::new();
+        // A long streak guarantees a startup achievement unlock (and so a save).
+        profile.current_streak = 400;
+        profile.longest_streak = 400;
+        profile.last_activity = state.progress.now();
+
+        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        assert!(result.is_ok());
+        assert!(
+            state.ui.notifications.visible().iter().any(|n| matches!(
+                &n.notification_type,
+                NotificationType::Info { message } if message.contains("Failed to save progress")
+            )),
+            "the failed startup save must be surfaced"
+        );
     }
 
     /// Regression test for a non-blocking finding in the #298 critique: the
@@ -940,6 +1088,7 @@ mod tests {
             DataLoadMessage::ProfileError {
                 error: "Corrupted file".to_string(),
                 fallback: UserProfile::new(),
+                backup: QuarantineOutcome::Failed("test".to_string()),
             },
         );
 

@@ -3,13 +3,16 @@
 use crate::helix::simulator::{EditorMode, FindDirection, FindType, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{
-    Selection,
+    Range, RopeSlice, Selection,
     doc_formatter::TextFormat,
+    graphemes::prev_grapheme_boundary,
+    line_ending::line_end_char_index,
     match_brackets::find_matching_bracket_plaintext,
     movement::{self, Movement},
     search::{find_nth_next, find_nth_prev},
     text_annotations::TextAnnotations,
 };
+use std::num::NonZeroUsize;
 
 /// Move left by count characters
 pub fn move_left<M: EditorMode>(
@@ -210,19 +213,18 @@ pub fn move_line_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
     Ok(())
 }
 
-/// Move to end of current line
+/// Move to the last character of the current line (Helix `gl`)
+///
+/// Lands on the last character, not on the line ending, and never past the
+/// end of a final line without a trailing newline. An empty line stays put.
 pub fn move_line_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let line = sim.doc.char_to_line(head);
-
-    // Get position of next line, or end of document
-    let line_end = if line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(line + 1) - 1
-    } else {
-        sim.doc.len_chars()
-    };
-
-    sim.selection = Selection::point(line_end);
+    let text = sim.doc.slice(..);
+    sim.selection = sim.selection.clone().transform(|range| {
+        let line = range.cursor_line(text);
+        let line_start = text.line_to_char(line);
+        let pos = prev_grapheme_boundary(text, line_end_char_index(&text, line)).max(line_start);
+        range.put_cursor(text, pos, false)
+    });
     Ok(())
 }
 
@@ -239,56 +241,87 @@ pub fn move_document_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(
     Ok(())
 }
 
-/// Find next occurrence of character on current line (Helix 'f' command)
+/// Port of helix-term 25.07.1 `find_next_char_impl` / `find_prev_char_impl`
+/// (`find_char_impl`'s `search_fn`): the head position for the new range.
+fn find_target(
+    text: RopeSlice,
+    ch: char,
+    search_start: usize,
+    count: usize,
+    find_type: FindType,
+    direction: FindDirection,
+) -> Option<usize> {
+    match (direction, find_type) {
+        (FindDirection::Forward, FindType::Find) => {
+            let start = (search_start + 1).min(text.len_chars());
+            find_nth_next(text, ch, start, count)
+        }
+        (FindDirection::Forward, FindType::Till) => {
+            let start = (search_start + 1).min(text.len_chars());
+            let n = if text.get_char(start) == Some(ch) {
+                count + 1
+            } else {
+                count
+            };
+            find_nth_next(text, ch, start, n).map(|found| found.saturating_sub(1))
+        }
+        (FindDirection::Backward, FindType::Find) => find_nth_prev(text, ch, search_start, count),
+        (FindDirection::Backward, FindType::Till) => {
+            let n = if text.get_char(search_start.saturating_sub(1)) == Some(ch) {
+                count + 1
+            } else {
+                count
+            };
+            find_nth_prev(text, ch, search_start, n).map(|found| (found + 1).min(text.len_chars()))
+        }
+    }
+}
+
+/// Shared body of `f`/`F`/`t`/`T` and `Alt-.`.
+///
+/// Each range extends from its cursor to the found position, as in
+/// helix-term 25.07.1 (`f a d` deletes through the `a`). The search spans the
+/// whole buffer, not just the cursor line; a range with no match is unchanged.
+fn find_char<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    ch: char,
+    find_type: FindType,
+    direction: FindDirection,
+    count: usize,
+) {
+    sim.find_state.set(ch, find_type, direction);
+
+    let text = sim.doc.slice(..);
+    sim.selection = sim.selection.clone().transform(|range| {
+        let search_start = if range.anchor < range.head {
+            range.head - 1
+        } else {
+            range.head
+        };
+        match find_target(text, ch, search_start, count, find_type, direction) {
+            Some(head) => Range::point(range.cursor(text)).put_cursor(text, head, true),
+            None => range,
+        }
+    });
+}
+
+/// Find next occurrence of character (Helix 'f' command)
 pub fn find_next_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
-    sim.find_state
-        .set(ch, FindType::Find, FindDirection::Forward);
-
-    let head = sim.selection.primary().head;
-    let line = sim.doc.char_to_line(head);
-    let line_end = if line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(line + 1)
-    } else {
-        sim.doc.len_chars()
-    };
-
-    let slice = sim.doc.slice(..);
-
-    if let Some(found_pos) = find_nth_next(slice, ch, head + 1, count)
-        && found_pos < line_end
-    {
-        sim.selection = Selection::point(found_pos);
-    }
-
+    find_char(sim, ch, FindType::Find, FindDirection::Forward, count);
     Ok(())
 }
 
-/// Find previous occurrence of character on current line (Helix 'F' command)
+/// Find previous occurrence of character (Helix 'F' command)
 pub fn find_prev_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
-    sim.find_state
-        .set(ch, FindType::Find, FindDirection::Backward);
-
-    let head = sim.selection.primary().head;
-    let line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(line);
-
-    let slice = sim.doc.slice(..);
-
-    if head > line_start
-        && let Some(found_pos) = find_nth_prev(slice, ch, head, count)
-        && found_pos >= line_start
-    {
-        sim.selection = Selection::point(found_pos);
-    }
-
+    find_char(sim, ch, FindType::Find, FindDirection::Backward, count);
     Ok(())
 }
 
@@ -298,26 +331,7 @@ pub fn till_next_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
-    sim.find_state
-        .set(ch, FindType::Till, FindDirection::Forward);
-
-    let head = sim.selection.primary().head;
-    let line = sim.doc.char_to_line(head);
-    let line_end = if line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(line + 1)
-    } else {
-        sim.doc.len_chars()
-    };
-
-    let slice = sim.doc.slice(..);
-
-    if let Some(found_pos) = find_nth_next(slice, ch, head + 1, count)
-        && found_pos < line_end
-        && found_pos > head + 1
-    {
-        sim.selection = Selection::point(found_pos - 1);
-    }
-
+    find_char(sim, ch, FindType::Till, FindDirection::Forward, count);
     Ok(())
 }
 
@@ -327,23 +341,28 @@ pub fn till_prev_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), UserError> {
-    sim.find_state
-        .set(ch, FindType::Till, FindDirection::Backward);
-
-    let head = sim.selection.primary().head;
-    let line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(line);
-
-    let slice = sim.doc.slice(..);
-
-    if head > line_start
-        && let Some(found_pos) = find_nth_prev(slice, ch, head, count)
-        && found_pos >= line_start
-    {
-        sim.selection = Selection::point(found_pos + 1);
-    }
-
+    find_char(sim, ch, FindType::Till, FindDirection::Backward, count);
     Ok(())
+}
+
+/// Go to line `count` (1-based), clamped to the last real line (Helix `{n}G`, `{n}gg`)
+///
+/// A trailing empty line produced by a final newline is not a target, matching
+/// helix-term 25.07.1 `goto_line_without_jumplist`. Bare `G`/`gg` without a
+/// count never reach this function.
+pub fn goto_line<M: EditorMode>(sim: &mut HelixSimulator<M>, count: NonZeroUsize) {
+    let text = sim.doc.slice(..);
+    let len_lines = text.len_lines();
+    let max_line = if text.line(len_lines - 1).len_chars() == 0 {
+        len_lines.saturating_sub(2)
+    } else {
+        len_lines - 1
+    };
+    let pos = text.line_to_char((count.get() - 1).min(max_line));
+    sim.selection = sim
+        .selection
+        .clone()
+        .transform(|range| range.put_cursor(text, pos, false));
 }
 
 /// Move to first non-whitespace character on line (Helix 'gs' command)
@@ -450,64 +469,9 @@ pub fn goto_next_paragraph<M: EditorMode>(
 
 /// Repeat last f/F/t/T motion in the same direction (Helix 'Alt-.' command)
 pub fn repeat_last_motion<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let Some((ch, find_type, direction)) = sim.find_state.get() else {
-        return Ok(());
-    };
-
-    let head = sim.selection.primary().head;
-    let line = sim.doc.char_to_line(head);
-    let slice = sim.doc.slice(..);
-
-    match (find_type, direction) {
-        (FindType::Find, FindDirection::Forward) => {
-            let line_end = if line + 1 < sim.doc.len_lines() {
-                sim.doc.line_to_char(line + 1)
-            } else {
-                sim.doc.len_chars()
-            };
-
-            if let Some(found_pos) = find_nth_next(slice, ch, head + 1, 1)
-                && found_pos < line_end
-            {
-                sim.selection = Selection::point(found_pos);
-            }
-        }
-        (FindType::Find, FindDirection::Backward) => {
-            let line_start = sim.doc.line_to_char(line);
-
-            if head > line_start
-                && let Some(found_pos) = find_nth_prev(slice, ch, head, 1)
-                && found_pos >= line_start
-            {
-                sim.selection = Selection::point(found_pos);
-            }
-        }
-        (FindType::Till, FindDirection::Forward) => {
-            let line_end = if line + 1 < sim.doc.len_lines() {
-                sim.doc.line_to_char(line + 1)
-            } else {
-                sim.doc.len_chars()
-            };
-
-            if let Some(found_pos) = find_nth_next(slice, ch, head + 1, 1)
-                && found_pos < line_end
-                && found_pos > head + 1
-            {
-                sim.selection = Selection::point(found_pos - 1);
-            }
-        }
-        (FindType::Till, FindDirection::Backward) => {
-            let line_start = sim.doc.line_to_char(line);
-
-            if head > line_start
-                && let Some(found_pos) = find_nth_prev(slice, ch, head, 1)
-                && found_pos >= line_start
-            {
-                sim.selection = Selection::point(found_pos + 1);
-            }
-        }
+    if let Some((ch, find_type, direction)) = sim.find_state.get() {
+        find_char(sim, ch, find_type, direction, 1);
     }
-
     Ok(())
 }
 
@@ -621,6 +585,15 @@ mod tests {
     use super::*;
     use crate::helix::simulator::HelixSimulator;
 
+    fn cursor(sim: &HelixSimulator) -> usize {
+        sim.selection.primary().cursor(sim.doc.slice(..))
+    }
+
+    fn bounds(sim: &HelixSimulator) -> (usize, usize) {
+        let r = sim.selection.primary();
+        (r.anchor, r.head)
+    }
+
     #[test]
     fn test_find_records_state() {
         let mut sim = HelixSimulator::new("hello world".to_string());
@@ -662,11 +635,11 @@ mod tests {
         let mut sim = HelixSimulator::new("abcabc".to_string());
         // First find 'b'
         find_next_char(&mut sim, 'b', 1).unwrap();
-        assert_eq!(sim.selection.primary().head, 1);
+        assert_eq!(cursor(&sim), 1);
 
         // Repeat should find next 'b'
         repeat_last_motion(&mut sim).unwrap();
-        assert_eq!(sim.selection.primary().head, 4);
+        assert_eq!(cursor(&sim), 4);
     }
 
     #[test]
@@ -869,31 +842,21 @@ mod tests {
             Some(1),
             "helix-core find_nth_prev crosses line boundaries"
         );
-
-        // This confirms we MUST keep line boundary checks when using helix-core
-        // since Helix f/F/t/T commands only search within the current line
     }
 
     #[test]
-    fn test_find_next_char_stays_on_line() {
-        // Verify that our find_next_char implementation stays on current line
+    fn test_find_next_char_crosses_lines() {
         let mut sim = HelixSimulator::new("abc\nxyz".to_string());
-        // Cursor at 'a', try to find 'x' which is on the next line
         find_next_char(&mut sim, 'x', 1).unwrap();
-        // Cursor should NOT move because 'x' is on a different line
-        assert_eq!(sim.selection.primary().head, 0);
+        assert_eq!(bounds(&sim), (0, 5));
     }
 
     #[test]
-    fn test_find_prev_char_stays_on_line() {
-        // Verify that our find_prev_char implementation stays on current line
+    fn test_find_prev_char_crosses_lines() {
         let mut sim = HelixSimulator::new("abc\nxyz".to_string());
-        // Move cursor to 'z' (position 6)
         sim.selection = Selection::point(6);
-        // Try to find 'a' which is on the previous line
         find_prev_char(&mut sim, 'a', 1).unwrap();
-        // Cursor should NOT move because 'a' is on a different line
-        assert_eq!(sim.selection.primary().head, 6);
+        assert_eq!(bounds(&sim), (7, 0));
     }
 
     #[test]
@@ -904,7 +867,7 @@ mod tests {
         find_next_char(&mut sim, 'a', 2).unwrap();
         // 1st 'a' after position 0 is at position 2
         // 2nd 'a' after position 0 is at position 4
-        assert_eq!(sim.selection.primary().head, 4);
+        assert_eq!(cursor(&sim), 4);
     }
 
     #[test]
@@ -916,7 +879,7 @@ mod tests {
         find_prev_char(&mut sim, 'c', 2).unwrap();
         // 1st 'c' before position 6 is at position 4
         // 2nd 'c' before position 6 is at position 2
-        assert_eq!(sim.selection.primary().head, 2);
+        assert_eq!(cursor(&sim), 2);
     }
 
     #[test]
@@ -924,7 +887,7 @@ mod tests {
         let mut sim = HelixSimulator::new("hello".to_string());
         // Till 'o' should stop at 'l' (position 3), one before 'o' (position 4)
         till_next_char(&mut sim, 'o', 1).unwrap();
-        assert_eq!(sim.selection.primary().head, 3);
+        assert_eq!(cursor(&sim), 3);
     }
 
     #[test]
@@ -933,7 +896,7 @@ mod tests {
         sim.selection = Selection::point(4); // at 'o'
         // Till 'e' backward should stop at 'l' (position 2), one after 'e' (position 1)
         till_prev_char(&mut sim, 'e', 1).unwrap();
-        assert_eq!(sim.selection.primary().head, 2);
+        assert_eq!(cursor(&sim), 2);
     }
 
     #[test]
@@ -942,10 +905,10 @@ mod tests {
         let mut sim = HelixSimulator::new("abcabc".to_string());
         sim.selection = Selection::point(5); // at last 'c'
         find_prev_char(&mut sim, 'b', 1).unwrap();
-        assert_eq!(sim.selection.primary().head, 4); // found 'b' at position 4
+        assert_eq!(cursor(&sim), 4); // found 'b' at position 4
 
         repeat_last_motion(&mut sim).unwrap();
-        assert_eq!(sim.selection.primary().head, 1); // found earlier 'b' at position 1
+        assert_eq!(cursor(&sim), 1); // found earlier 'b' at position 1
     }
 
     #[test]
@@ -954,9 +917,9 @@ mod tests {
         let mut sim = HelixSimulator::new("axbxc".to_string());
         sim.selection = Selection::point(4); // at 'c'
         till_prev_char(&mut sim, 'x', 1).unwrap();
-        // 'x' at position 3, till stops one after at position 4 - no movement
-        // Actually let's use a better test case
-        assert_eq!(sim.selection.primary().head, 4);
+        // 'x' at 3 is adjacent, so hx skips it and tills the next 'x' (at 1),
+        // landing right after it.
+        assert_eq!(cursor(&sim), 2);
     }
 
     #[test]
@@ -971,26 +934,18 @@ mod tests {
     }
 
     #[test]
-    fn test_till_next_char_stays_on_line() {
+    fn test_till_next_char_crosses_lines() {
         let mut sim = HelixSimulator::new("abc\nxyz".to_string());
         till_next_char(&mut sim, 'x', 1).unwrap();
-        assert_eq!(
-            sim.selection.primary().head,
-            0,
-            "till should not cross line boundary"
-        );
+        assert_eq!(bounds(&sim), (0, 4));
     }
 
     #[test]
-    fn test_till_prev_char_stays_on_line() {
+    fn test_till_prev_char_crosses_lines() {
         let mut sim = HelixSimulator::new("abc\nxyz".to_string());
-        sim.selection = Selection::point(6); // at 'z'
+        sim.selection = Selection::point(6);
         till_prev_char(&mut sim, 'a', 1).unwrap();
-        assert_eq!(
-            sim.selection.primary().head,
-            6,
-            "till should not cross line boundary"
-        );
+        assert_eq!(bounds(&sim), (7, 1));
     }
 
     #[test]
@@ -1003,5 +958,95 @@ mod tests {
             4,
             "cursor should not move when char not found"
         );
+    }
+
+    #[test]
+    fn test_find_forward_extends_from_cursor() {
+        let mut sim = HelixSimulator::new("fn add(a: i32)".to_string());
+        find_next_char(&mut sim, 'a', 1).unwrap();
+        assert_eq!(bounds(&sim), (0, 4));
+    }
+
+    #[test]
+    fn test_till_forward_extends_to_before_target() {
+        let mut sim = HelixSimulator::new("fn add(a: i32)".to_string());
+        till_next_char(&mut sim, '(', 1).unwrap();
+        assert_eq!(bounds(&sim), (0, 6));
+    }
+
+    #[test]
+    fn test_find_backward_selects_backwards() {
+        let mut sim = HelixSimulator::new("abcabc".to_string());
+        sim.selection = Selection::point(5);
+        find_prev_char(&mut sim, 'b', 1).unwrap();
+        assert_eq!(bounds(&sim), (6, 4));
+    }
+
+    #[test]
+    fn test_till_backward_selects_backwards() {
+        let mut sim = HelixSimulator::new("abcabc".to_string());
+        sim.selection = Selection::point(5);
+        till_prev_char(&mut sim, 'a', 1).unwrap();
+        assert_eq!(bounds(&sim), (6, 4));
+    }
+
+    #[test]
+    fn test_find_counted_selects_nth_match() {
+        let mut sim = HelixSimulator::new("banana".to_string());
+        find_next_char(&mut sim, 'a', 3).unwrap();
+        assert_eq!(bounds(&sim), (0, 6));
+    }
+
+    #[test]
+    fn test_find_counted_beyond_matches_is_unchanged() {
+        let mut sim = HelixSimulator::new("banana".to_string());
+        find_next_char(&mut sim, 'a', 9).unwrap();
+        assert_eq!(bounds(&sim), (0, 0));
+    }
+
+    #[test]
+    fn test_find_extends_every_range() {
+        let mut sim = HelixSimulator::new("xa\nya".to_string());
+        sim.selection = Selection::new(helix_core::smallvec![Range::point(0), Range::point(3)], 0);
+        find_next_char(&mut sim, 'a', 1).unwrap();
+        let ranges: Vec<_> = sim
+            .selection
+            .ranges()
+            .iter()
+            .map(|r| (r.anchor, r.head))
+            .collect();
+        assert_eq!(ranges, vec![(0, 2), (3, 5)]);
+    }
+
+    #[test]
+    fn test_goto_line_end_lands_on_last_char() {
+        let mut sim = HelixSimulator::new("abc\ndef".to_string());
+        move_line_end(&mut sim).unwrap();
+        assert_eq!(bounds(&sim), (2, 2));
+    }
+
+    #[test]
+    fn test_goto_line_end_on_last_line_without_newline() {
+        let mut sim = HelixSimulator::new("abc\ndef".to_string());
+        sim.selection = Selection::point(4);
+        move_line_end(&mut sim).unwrap();
+        assert_eq!(bounds(&sim), (6, 6));
+    }
+
+    #[test]
+    fn test_goto_line_end_on_empty_line_stays() {
+        let mut sim = HelixSimulator::new("abc\n\ndef".to_string());
+        sim.selection = Selection::point(4);
+        move_line_end(&mut sim).unwrap();
+        assert_eq!(bounds(&sim), (4, 4));
+    }
+
+    #[test]
+    fn test_goto_line_clamps_and_skips_trailing_blank_line() {
+        let mut sim = HelixSimulator::new("a\nb\nc\n".to_string());
+        goto_line(&mut sim, NonZeroUsize::new(2).unwrap());
+        assert_eq!(bounds(&sim), (2, 2));
+        goto_line(&mut sim, NonZeroUsize::new(99).unwrap());
+        assert_eq!(bounds(&sim), (4, 4));
     }
 }

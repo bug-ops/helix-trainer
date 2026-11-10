@@ -23,7 +23,9 @@ pub fn test_app_state_with_scenarios(scenarios: Vec<Scenario>) -> AppState {
     let profile = UserProfile::new();
     let storage = ProfileStorage::for_test();
     let tracker = PerformanceTracker::new();
-    AppState::new(scenarios, profile, storage, tracker)
+    let mut state = AppState::new(scenarios, profile, storage, tracker);
+    state.progress.mark_profile_loaded();
+    state
 }
 
 /// Builder for creating test AppState with custom configuration
@@ -94,7 +96,7 @@ impl TestAppStateBuilder {
         let profile = self.profile.unwrap_or_default();
         let storage = self.storage.unwrap_or_else(ProfileStorage::for_test);
         let tracker = self.tracker.unwrap_or_default();
-        match self.clock {
+        let mut state = match self.clock {
             Some(clock) => AppState::with_clock(
                 self.scenarios,
                 profile,
@@ -104,7 +106,9 @@ impl TestAppStateBuilder {
                 clock,
             ),
             None => AppState::new(self.scenarios, profile, storage, tracker),
-        }
+        };
+        state.progress.mark_profile_loaded();
+        state
     }
 }
 

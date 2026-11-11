@@ -164,6 +164,15 @@ mod tests {
         assert_eq!(registry.count_behavior("C"), CountBehavior::Repeat);
     }
 
+    /// #596: `o` and `O` take their count natively (N lines, N cursors)
+    #[test]
+    fn counted_open_line_entries_take_the_count_natively() {
+        let registry = normal_registry();
+        for key in ["o", "O"] {
+            assert_eq!(registry.count_behavior(key), CountBehavior::Native, "{key}");
+        }
+    }
+
     #[test]
     fn every_command_has_a_summary_and_help_text() {
         for meta in normal_registry().all_commands() {

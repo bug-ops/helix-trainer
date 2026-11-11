@@ -271,14 +271,13 @@ fn test_count_then_o_and_big_o_execute_with_the_count_swallowed_by_the_simulator
     );
 }
 
-/// #577: the keys typed after a counted `o` go into the opened line, not into Normal mode
+/// #577, #596: the keys typed after a counted `o` go into every opened line, not into Normal mode
 #[test]
-fn test_counted_open_line_opens_one_line_and_does_not_leak_the_typed_text() {
+fn test_counted_open_line_opens_n_lines_and_does_not_leak_the_typed_text() {
     let counted = run_keys("abc\n", "2ox\u{1b}");
-    assert_eq!(counted.content, "abc\nx\n");
-    assert_eq!(counted, run_keys("abc\n", "ox\u{1b}"));
+    assert_eq!(counted.content, "abc\nx\nx\n");
     let above = run_keys("abc\n", "2Ox\u{1b}");
-    assert_eq!(above.content, "x\nabc\n");
+    assert_eq!(above.content, "x\nx\nabc\n");
 }
 
 /// Helix ignores the count for these commands, so `{n}<keys>` equals `<keys>`

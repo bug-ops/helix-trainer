@@ -33,7 +33,7 @@ use crate::helix::language::LanguageRules;
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
 use helix_core::graphemes::next_grapheme_boundary;
-use helix_core::{Range, Rope, Selection, Transaction};
+use helix_core::{ChangeSet, Range, Rope, Selection, Transaction};
 use mode::Session;
 
 // Re-export mode typestate markers
@@ -140,6 +140,10 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Find state for f/F/t/T and Alt-. commands
     pub(super) find_state: FindState,
 
+    /// Composition of the edits made while an Insert-entering command runs,
+    /// so the Insert session can start from them; `None` the rest of the time.
+    pub(super) entry_changes: Option<ChangeSet>,
+
     /// What the mode carries between commands: nothing in Normal mode, the
     /// open Insert session in Insert mode
     pub(super) session: M::Session,
@@ -236,6 +240,10 @@ impl<M: EditorMode> HelixSimulator<M> {
                     selection: self.selection.clone(),
                 },
             );
+            if let Some(entry_changes) = &mut self.entry_changes {
+                let before = std::mem::replace(entry_changes, ChangeSet::with_capacity(0));
+                *entry_changes = before.compose(transaction.changes().clone());
+            }
             transaction.apply(&mut self.doc);
         }
         self.selection = selection;
@@ -278,6 +286,7 @@ impl<M: EditorMode> HelixSimulator<M> {
             view_state: self.view_state,
             find_state: self.find_state,
             macro_recorder: self.macro_recorder,
+            entry_changes: None,
             session,
         }
     }
@@ -312,6 +321,7 @@ impl HelixSimulator<NormalMode> {
             view_state: ViewState::new(),
             find_state: FindState::new(),
             macro_recorder: MacroRecorder::new(),
+            entry_changes: None,
             session: (),
         }
     }
@@ -342,39 +352,31 @@ impl HelixSimulator<NormalMode> {
 
     /// Transition to Insert mode without running an entering command
     ///
-    /// Collapses the selection to a single cursor at the primary range's
-    /// head, discarding every other range, and opens an Insert session (see
-    /// [`InsertSession`]) whose edits form one undo step. Commands that enter
-    /// Insert mode go through [`Self::begin_insert`] instead.
-    ///
-    /// Known limitation: real Helix keeps every cursor active through
-    /// Insert mode (typing/backspacing at each one), but this simulator's
-    /// Insert-mode commands (`insert_text`, `backspace`, the arrow-key
-    /// handlers) all read/write only `selection.primary()` and overwrite the
-    /// whole selection with a single point, not just at entry. Preserving
-    /// the full selection here would still leave every secondary cursor
-    /// frozen (or panicking on stale offsets) as soon as the user typed, so
-    /// the collapse happens up front instead. Fixing this for real means
-    /// reworking Insert mode's commands to operate over every range, not
-    /// just entry - out of scope for a single-method change.
+    /// Collapses every range to a point cursor at its head and opens an
+    /// Insert session (see [`InsertSession`]) whose edits form one undo step.
+    /// Commands that enter Insert mode go through [`Self::begin_insert`]
+    /// instead.
     pub fn enter_insert_mode(mut self) -> HelixSimulator<InsertMode> {
         let saved_redo = std::mem::take(&mut self.redo_stack);
         let session = InsertSession::new(
             self.history.len(),
             saved_redo,
             insert_session::SessionChange::Pristine(insert_session::EntrySelection {
-                cursor: self.collapse_to_cursor(),
+                cursor: self.collapse_to_points(),
                 restore: self.selection.clone(),
             }),
             insert_session::InsertEntry::Other,
-            None,
+            ChangeSet::new(self.doc.slice(..)),
         );
         self.into_mode(session)
     }
 
-    /// Collapse the selection to a point at the primary range's head and return it
-    fn collapse_to_cursor(&mut self) -> Selection {
-        self.selection = Selection::point(self.selection.primary().head);
+    /// Collapse every range to a point at its head and return the selection
+    fn collapse_to_points(&mut self) -> Selection {
+        self.selection = self
+            .selection
+            .clone()
+            .transform(|range| Range::point(range.head));
         self.selection.clone()
     }
 
@@ -412,21 +414,32 @@ impl HelixSimulator<InsertMode> {
         let entry = self
             .session
             .close(&self.doc, &mut self.history, &mut self.redo_stack);
-        if let insert_session::InsertEntry::Append { anchor } = entry {
-            self.select_inserted_text(anchor);
+        if let insert_session::InsertEntry::Append { anchors } = entry {
+            self.select_inserted_text(&anchors);
         }
         self.into_mode(())
     }
 
-    /// Select from `anchor` to the cursor; a single grapheme is a plain cursor
-    fn select_inserted_text(&mut self, anchor: usize) {
-        let head = self.selection.primary().head;
-        let one_wide = head == next_grapheme_boundary(self.doc.slice(..), anchor);
-        self.selection = Selection::from(if one_wide {
-            Range::point(anchor)
-        } else {
-            Range::new(anchor, head)
-        });
+    /// Select, per range, from its anchor to the cursor; a single grapheme is
+    /// a plain cursor
+    fn select_inserted_text(&mut self, anchors: &[usize]) {
+        let slice = self.doc.slice(..);
+        let ranges: Vec<Range> = anchors
+            .iter()
+            .zip(self.selection.ranges())
+            .map(|(&anchor, range)| {
+                if range.head == next_grapheme_boundary(slice, anchor) {
+                    Range::point(anchor)
+                } else {
+                    Range::new(anchor, range.head)
+                }
+            })
+            .collect();
+        let primary = self
+            .selection
+            .primary_index()
+            .min(ranges.len().saturating_sub(1));
+        self.selection = Selection::new(ranges.into(), primary);
     }
 }
 

@@ -257,7 +257,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         .with_summary("Open line below")
         .with_help("Insert a new line below and enter insert mode.")
         .with_repeat(Repeat::Repeatable)
-        .with_mode_change(ModeTransition::ToInsert),
+        .with_mode_change(ModeTransition::ToInsert)
+        .with_count_behavior(CountBehavior::Native),
         HelixSimulator::open_below,
     ));
 
@@ -270,7 +271,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         .with_summary("Open line above")
         .with_help("Insert a new line above and enter insert mode.")
         .with_repeat(Repeat::Repeatable)
-        .with_mode_change(ModeTransition::ToInsert),
+        .with_mode_change(ModeTransition::ToInsert)
+        .with_count_behavior(CountBehavior::Native),
         HelixSimulator::open_above,
     ));
 

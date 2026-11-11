@@ -438,12 +438,17 @@ fn tabs_are_copied_and_extended_by_the_detected_unit() {
 
 #[test]
 fn counted_open_repeats_the_rule() {
-    check("rs", "fn f() {\n}\n", &["2o", "y"], "fn f() {\n    y\n}\n");
+    check(
+        "rs",
+        "fn f() {\n}\n",
+        &["2o", "y"],
+        "fn f() {\n    y\n    y\n}\n",
+    );
     check(
         "rs",
         "fn f() {\n    a;\n}\n",
         &["j", "2O", "y"],
-        "fn f() {\n    y\n    a;\n}\n",
+        "fn f() {\n    y\n    y\n    a;\n}\n",
     );
 }
 

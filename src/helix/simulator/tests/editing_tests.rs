@@ -530,12 +530,8 @@ fn test_change_selection_multi_range_maps_cursor_through_earlier_deletions() {
     // offset that lands past the end of the document once the first
     // range's deletion has shifted everything after it left by one.
     //
-    // Note: `enter_insert_mode` (pre-existing, unrelated to this fix, and
-    // shared by every insert-entry command such as `a`/`i`/`o`/`O`)
-    // collapses the selection to its primary range before Insert mode
-    // starts, so only ONE cursor - the correctly mapped primary - survives
-    // here. Fixing that shared single-cursor-insert-mode limitation is a
-    // separate, larger change out of scope for #395/#396.
+    // Insert mode keeps every cursor (#596), so both survive and typing
+    // reaches each of them.
     let mut sim = AnyModeSimulator::new("ab\ncd".to_string());
 
     sim.execute_command(CMD_COPY_SELECTION_NEXT).unwrap();
@@ -544,21 +540,19 @@ fn test_change_selection_multi_range_maps_cursor_through_earlier_deletions() {
     let snapshot = sim.to_snapshot();
     assert_eq!(snapshot.content, "b\nd");
     assert_eq!(sim.mode(), Mode::Insert);
+    assert_eq!(snapshot.selections.len(), 2);
+    assert_eq!(snapshot.selections[0].head, 0);
     assert_eq!(
-        snapshot.selections.len(),
-        1,
-        "insert mode carries a single cursor (enter_insert_mode collapses to primary)"
-    );
-    assert_eq!(
-        snapshot.selections[0].head, 2,
+        snapshot.selections[1].head, 2,
         "primary cursor must map through the FIRST range's deletion too, \
          landing on 'd' (position 2), not the stale pre-transaction offset 3"
     );
+    assert_eq!(snapshot.primary_idx, 1);
 
-    // Typing at the (correctly mapped) cursor must land between the
-    // newline and 'd', not after 'd'
+    // Typing at the (correctly mapped) cursors must land before 'b' and
+    // between the newline and 'd', not after 'd'
     sim.execute_command("X").unwrap();
-    assert_eq!(sim.display().content(), "b\nXd");
+    assert_eq!(sim.display().content(), "Xb\nXd");
 }
 
 #[test]

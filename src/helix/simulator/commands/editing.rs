@@ -53,61 +53,79 @@ pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), User
     Ok(())
 }
 
-/// Indent current line (add 2 spaces)
-pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(current_line);
+/// Sorted, deduplicated lines touched by any range of the selection
+fn touched_lines<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<usize> {
+    let slice = sim.doc.slice(..);
+    let mut lines: Vec<usize> = sim
+        .selection
+        .ranges()
+        .iter()
+        .flat_map(|range| {
+            let (start, end) = range.line_range(slice);
+            start..=end
+        })
+        .collect();
+    lines.sort_unstable();
+    lines.dedup();
+    lines
+}
 
-    let transaction = Transaction::change(
-        &sim.doc,
-        [(line_start, line_start, Some("  ".into()))].into_iter(),
-    );
-
+/// Apply `changes` and map the selection over them, so ranges stay on their text
+fn apply_changes_mapping_selection<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    changes: Vec<(usize, usize, Option<Tendril>)>,
+) {
+    let transaction = Transaction::change(&sim.doc, changes.into_iter());
+    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(transaction);
+    sim.selection = mapped;
+}
 
-    let new_head = head + 2;
-    sim.selection = Selection::point(new_head.min(sim.doc.len_chars()));
-
+/// Indent every line touched by the selection by one indent unit (Helix '>' command)
+///
+/// The unit comes from the document language; blank lines are left alone.
+/// A count prefix repeats the command, so `2>` indents twice.
+pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let unit = sim.indent_unit.to_string();
+    let changes = touched_lines(sim)
+        .into_iter()
+        .filter(|&line| !sim.doc.line(line).chars().all(char::is_whitespace))
+        .map(|line| {
+            let start = sim.doc.line_to_char(line);
+            (start, start, Some(Tendril::from(unit.as_str())))
+        })
+        .collect();
+    apply_changes_mapping_selection(sim, changes);
     Ok(())
 }
 
-/// Dedent current line (remove up to 2 spaces)
+/// Remove up to one indent unit of leading whitespace from every line touched
+/// by the selection (Helix '<' command)
+///
+/// Tabs count as one tab stop of the language, as in Helix.
 pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(current_line);
-
-    let slice = sim.doc.slice(..);
-    let mut spaces_to_remove = 0;
-
-    for i in 0..2 {
-        let pos = line_start + i;
-        if pos < sim.doc.len_chars() && slice.char(pos) == ' ' {
-            spaces_to_remove += 1;
-        } else {
-            break;
-        }
-    }
-
-    if spaces_to_remove == 0 {
-        return Ok(());
-    }
-
-    let transaction = Transaction::change(
-        &sim.doc,
-        [(line_start, line_start + spaces_to_remove, None)].into_iter(),
-    );
-
-    sim.apply_transaction(transaction);
-
-    let new_head = if head <= line_start + spaces_to_remove {
-        line_start
-    } else {
-        head - spaces_to_remove
-    };
-    sim.selection = Selection::point(new_head);
-
+    let unit_width = sim.indent_unit.width();
+    let changes = touched_lines(sim)
+        .into_iter()
+        .filter_map(|line| {
+            let mut width = 0;
+            let mut removable = 0;
+            for ch in sim.doc.line(line).chars() {
+                match ch {
+                    ' ' => width += 1,
+                    '\t' => width = (width / unit_width + 1) * unit_width,
+                    _ => break,
+                }
+                removable += 1;
+                if width >= unit_width {
+                    break;
+                }
+            }
+            let start = sim.doc.line_to_char(line);
+            (removable > 0).then_some((start, start + removable, None))
+        })
+        .collect();
+    apply_changes_mapping_selection(sim, changes);
     Ok(())
 }
 

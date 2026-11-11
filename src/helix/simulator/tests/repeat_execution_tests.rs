@@ -99,23 +99,23 @@ fn test_repeat_indent() {
     // Indent
     sim.execute_command(CMD_INDENT).unwrap();
     let state = sim.state().unwrap();
-    assert_eq!(state.content(), "  line 1\nline 2");
+    assert_eq!(state.content(), "    line 1\nline 2");
 
     // Repeat indent
     sim.execute_command(".").unwrap();
     let state = sim.state().unwrap();
     // Line should be double-indented
-    assert_eq!(state.content(), "    line 1\nline 2");
+    assert_eq!(state.content(), "        line 1\nline 2");
 }
 
 #[test]
 fn test_repeat_dedent() {
-    let mut sim = AnyModeSimulator::new("    code".to_string());
+    let mut sim = AnyModeSimulator::new("        code".to_string());
 
     // Dedent
     sim.execute_command(CMD_DEDENT).unwrap();
     let state = sim.state().unwrap();
-    assert_eq!(state.content(), "  code");
+    assert_eq!(state.content(), "    code");
 
     // Repeat dedent
     sim.execute_command(".").unwrap();

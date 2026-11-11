@@ -26,6 +26,7 @@ mod tests;
 
 use crate::game::EditorState;
 use crate::game::editor_state::{CursorPosition, Selection as GameSelection};
+use crate::helix::indent::IndentUnit;
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
 use crate::security::UserError;
@@ -119,6 +120,9 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Only meaningful in Normal mode (`v` toggles it, Esc and the editing
     /// commands of `exits_select_mode` clear it) and always false in Insert mode.
     pub(super) select_mode: bool,
+
+    /// Indent unit of the document language, used by `>`, `<` and Insert `Tab`
+    pub(super) indent_unit: IndentUnit,
 
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
@@ -318,6 +322,7 @@ impl HelixSimulator<NormalMode> {
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
+            indent_unit: IndentUnit::DEFAULT,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -363,6 +368,7 @@ impl HelixSimulator<NormalMode> {
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
+            indent_unit: IndentUnit::DEFAULT,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -435,6 +441,7 @@ impl HelixSimulator<NormalMode> {
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
+            indent_unit: IndentUnit::DEFAULT,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -474,6 +481,7 @@ impl HelixSimulator<NormalMode> {
             registers: self.registers,
             repeat_buffer: self.repeat_buffer,
             select_mode: false,
+            indent_unit: self.indent_unit,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -519,6 +527,7 @@ impl HelixSimulator<InsertMode> {
             registers: self.registers,
             repeat_buffer: self.repeat_buffer,
             select_mode: false,
+            indent_unit: self.indent_unit,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -595,11 +604,15 @@ impl AnyModeSimulator {
 
     /// Declare the content language of the edited document
     ///
-    /// The language selects language-specific editor behavior (for example the
-    /// indent unit). Currently a pass-through; callers already supply the
-    /// effective language so no call site changes when behavior lands.
+    /// The language selects the indent unit used by `>`, `<` and Insert-mode
+    /// `Tab`; a language without a table entry keeps [`IndentUnit::DEFAULT`].
     #[must_use]
-    pub fn with_language(self, _language: &str) -> Self {
+    pub fn with_language(mut self, language: &str) -> Self {
+        let unit = IndentUnit::for_language(language).unwrap_or_default();
+        match &mut self {
+            Self::Normal(sim) => sim.indent_unit = unit,
+            Self::Insert(sim) => sim.indent_unit = unit,
+        }
         self
     }
 

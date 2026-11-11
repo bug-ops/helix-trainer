@@ -14,6 +14,7 @@
 mod basic_tests;
 mod clipboard_tests;
 mod editing_tests;
+mod indent_tests;
 mod insert_indent_replace_tests;
 mod insert_keys_tests;
 mod macro_tests;

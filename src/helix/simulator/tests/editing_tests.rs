@@ -283,9 +283,9 @@ fn test_indent_line() {
     sim.execute_command(CMD_INDENT).unwrap();
 
     let state = sim.state().unwrap();
-    assert_eq!(state.content(), "  hello\nworld");
-    // Cursor should move forward by 2
-    assert_eq!(state.cursor_position().1, 2);
+    assert_eq!(state.content(), "    hello\nworld");
+    // The cursor stays on its character
+    assert_eq!(state.cursor_position().1, 4);
 }
 
 #[test]
@@ -332,8 +332,8 @@ fn test_multiple_indent() {
     sim.execute_command(CMD_INDENT).unwrap();
 
     let state = sim.state().unwrap();
-    assert_eq!(state.content(), "    code");
-    assert_eq!(state.cursor_position().1, 4);
+    assert_eq!(state.content(), "        code");
+    assert_eq!(state.cursor_position().1, 8);
 }
 
 // ============================================================================

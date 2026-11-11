@@ -12,18 +12,11 @@
 //!
 //! # Usage
 //!
-//! ```ignore
-//! use helix_trainer::config::quests::embedded::{get_embedded_quests, available_embedded_locales};
+//! ```
+//! use helix_trainer::config::quests::embedded::{available_embedded_locales, get_embedded_quests};
 //!
-//! // Get quest content for English locale
-//! if let Some(content) = get_embedded_quests("en") {
-//!     // Parse TOML content
-//! }
-//!
-//! // List available locales
-//! for locale in available_embedded_locales() {
-//!     println!("Available locale: {}", locale);
-//! }
+//! assert!(get_embedded_quests("en").is_some());
+//! assert!(available_embedded_locales().contains(&"en"));
 //! ```
 
 // =============================================================================
@@ -52,13 +45,11 @@ const EN_DAILY: &str = include_str!("../../../quests/en/daily.toml");
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::config::quests::embedded::get_embedded_quests;
 ///
-/// if let Some(content) = get_embedded_quests("en") {
-///     assert!(content.contains("[metadata]"));
-/// }
-///
+/// let content = get_embedded_quests("en").expect("English quests are embedded");
+/// assert!(content.contains("[metadata]"));
 /// assert!(get_embedded_quests("invalid").is_none());
 /// ```
 pub fn get_embedded_quests(locale: &str) -> Option<&'static str> {
@@ -74,7 +65,7 @@ pub fn get_embedded_quests(locale: &str) -> Option<&'static str> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::config::quests::embedded::available_embedded_locales;
 ///
 /// let locales = available_embedded_locales();

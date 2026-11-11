@@ -120,7 +120,7 @@ impl Notification {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::ui::notification::{Notification, NotificationType};
     ///
     /// let notif = Notification::new(NotificationType::LevelUp { new_level: 5 });
@@ -138,7 +138,7 @@ impl Notification {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::ui::notification::{Notification, NotificationType};
     /// use std::time::Duration;
     ///
@@ -146,6 +146,7 @@ impl Notification {
     ///     NotificationType::LevelUp { new_level: 5 },
     ///     Duration::from_secs(5),
     /// );
+    /// assert_eq!(notif.duration, Duration::from_secs(5));
     /// ```
     pub fn with_duration(notification_type: NotificationType, duration: Duration) -> Self {
         Self {

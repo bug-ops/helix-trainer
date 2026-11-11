@@ -308,10 +308,13 @@ impl QuestLoader {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::quests::QuestLoader;
+    ///
     /// let loader = QuestLoader::new();
     /// let templates = loader.load_from_embedded("en")?;
     /// assert!(!templates.is_empty());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<QuestTemplate>, UserError> {
         let content = embedded::get_embedded_quests(locale).ok_or_else(|| {
@@ -457,9 +460,15 @@ impl QuestTemplate {
     /// Convert template to runtime quest instance
     ///
     /// # Examples
-    /// ```ignore
-    /// let template = QuestTemplate { /* ... */ };
-    /// let quest = template.to_quest();
+    ///
+    /// ```
+    /// use helix_trainer::config::quests::QuestLoader;
+    ///
+    /// let templates = QuestLoader::new().load_from_embedded("en")?;
+    /// let quest = templates[0].to_quest();
+    /// assert_eq!(quest.id, templates[0].id);
+    /// assert!(!quest.completed);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn to_quest(&self) -> crate::gamification::Quest {
         use crate::gamification::Quest;

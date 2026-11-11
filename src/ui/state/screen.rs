@@ -701,12 +701,26 @@ impl MiniGameData {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// use helix_trainer::input::typestate::InputStateMachine;
 /// use helix_trainer::ui::state::InputStateAccess;
 ///
-/// fn check_waiting_for_char<T: InputStateAccess>(data: &T) -> bool {
-///     data.input_state().is_waiting_for_char()
+/// #[derive(Default)]
+/// struct Panel {
+///     input: InputStateMachine,
 /// }
+///
+/// impl InputStateAccess for Panel {
+///     fn input_state(&self) -> &InputStateMachine {
+///         &self.input
+///     }
+///
+///     fn input_state_mut(&mut self) -> &mut InputStateMachine {
+///         &mut self.input
+///     }
+/// }
+///
+/// assert!(!Panel::default().is_waiting_for_char());
 /// ```
 pub trait InputStateAccess {
     /// Get reference to the input state machine

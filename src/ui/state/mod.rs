@@ -415,14 +415,15 @@ impl AppState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+    /// use helix_trainer::learning::PerformanceTracker;
     /// use helix_trainer::ui::AppState;
-    /// use helix_trainer::config::Scenario;
-    /// use std::assert_matches;
+    /// use helix_trainer::ui::state::TypedScreen;
     ///
-    /// let scenarios = vec![/* ... */];
-    /// let state = AppState::new(scenarios, profile, storage, tracker);
-    /// assert_matches!(state.screen, TypedScreen::Menu(_));
+    /// let storage = ProfileStorage::with_path(std::env::temp_dir().join("doc-profile.json"));
+    /// let state = AppState::new(vec![], UserProfile::new(), storage, PerformanceTracker::new());
+    /// assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
     /// ```
     pub fn new(
         scenarios: Vec<Scenario>,
@@ -451,15 +452,23 @@ impl AppState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+    /// use helix_trainer::learning::PerformanceTracker;
     /// use helix_trainer::ui::AppState;
-    /// use helix_trainer::config::Scenario;
     /// use helix_trainer::ui::state::ConfigState;
     ///
-    /// let scenarios = vec![/* ... */];
     /// let mut config = ConfigState::default();
     /// config.persistent.enable_arrow_keys_in_normal_mode = true;
-    /// let state = AppState::with_config(scenarios, profile, storage, tracker, config);
+    /// let storage = ProfileStorage::with_path(std::env::temp_dir().join("doc-profile.json"));
+    /// let state = AppState::with_config(
+    ///     vec![],
+    ///     UserProfile::new(),
+    ///     storage,
+    ///     PerformanceTracker::new(),
+    ///     config,
+    /// );
+    /// assert!(state.config.persistent.enable_arrow_keys_in_normal_mode);
     /// ```
     pub fn with_config(
         scenarios: Vec<Scenario>,
@@ -635,11 +644,15 @@ fn apply_outcome(state: &mut AppState, outcome: HandlerOutcome) {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use helix_trainer::ui::{AppState, Screen, Message, update};
+/// ```
+/// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+/// use helix_trainer::learning::PerformanceTracker;
+/// use helix_trainer::ui::{AppState, Message, update};
 ///
-/// let mut state = AppState::new(vec![]);
-/// update(&mut state, Message::QuitApp, &mut Vec::new())?;
+/// let storage = ProfileStorage::with_path(std::env::temp_dir().join("doc-profile.json"));
+/// let mut state = AppState::new(vec![], UserProfile::new(), storage, PerformanceTracker::new());
+/// let mut effects = Vec::new();
+/// update(&mut state, Message::QuitApp, &mut effects)?;
 /// assert!(!state.ui.running);
 /// # Ok::<(), helix_trainer::security::UserError>(())
 /// ```

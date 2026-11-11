@@ -624,10 +624,13 @@ impl ScenarioLoader {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    ///
     /// let loader = ScenarioLoader::new();
     /// let scenarios = loader.load_from_embedded("en")?;
     /// assert!(!scenarios.is_empty());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<Scenario>, UserError> {
         let embedded_contents = embedded::get_embedded_scenarios(locale);

@@ -644,9 +644,12 @@ pub mod arithmetic {
     /// Returns `ScoreOverflow` if the calculation would overflow
     ///
     /// # Examples
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::security::arithmetic::checked_score_calculation;
+    ///
     /// let score = checked_score_calculation(5, 10, 100)?;
     /// assert_eq!(score, 50);
+    /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
     pub fn checked_score_calculation(
         optimal_count: usize,

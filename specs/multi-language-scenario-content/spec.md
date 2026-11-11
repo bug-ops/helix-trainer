@@ -18,6 +18,9 @@ related:
 
 # Feature: Multi-Language Scenario Content
 
+> [!info] Amended 2026-11-11 (#544, #605)
+> `Setup.language` is the closed `Language` enum (`rs`, `md`, `py`; unknown or empty is a scenario load error, see [[language-aware-syntax-highlighting/spec]]), and `ScenarioMetadata` rejects unknown keys (FR-007).
+
 > [!info] Metadata
 > **Origin**: `rust-researcher` continuous-improvement cycle, 2026-08-09 —
 > content-expansion research alongside the writing/markup track proposal.
@@ -144,6 +147,8 @@ THEN  it loads successfully with no changes required to ScenarioCategory
 | FR-004 | THE SYSTEM SHALL prioritize Python pilot scenarios that specifically exercise indentation-significant behavior (`>`, `<`, `=` commands against `if`/`for`/`def` blocks) since this is the syntax dimension with no Rust equivalent | should |
 | FR-005 | WHEN no `language` field is present on a scenario's `Setup` THE SYSTEM SHALL default to Rust syntax highlighting, preserving current behavior for all 149 existing scenarios | must |
 | FR-006 | THE SYSTEM SHALL NOT modify or renumber any existing Rust scenario's `id` when adding parallel-language variants — new scenarios get new, distinct IDs | must |
+| FR-007 | THE `[scenarios.metadata]` table SHALL reject unknown keys (`#[serde(deny_unknown_fields)]` on `ScenarioMetadata`): removed or misspelled keys such as `estimated_time_seconds` and `locale` make the scenario file fail to load with an error naming the key. The existing test that pins the silent acceptance is flipped. This is a BREAKING change for any scenario TOML that still carries a stale metadata key (no bundled scenario does) and is recorded in `CHANGELOG.md` | must |
+| FR-008 | THE `language` of a scenario SHALL be one of the `Language` variants. A second-wave language (Go, JS/TS, C) is added by its own spec as a new variant with its rules entry and syntax ([[language-aware-syntax-highlighting/spec]] FR-005); a scenario naming it earlier is a load error | must |
 
 ## 4. Non-Functional Requirements
 
@@ -165,7 +170,7 @@ the prerequisite spec, not this one.
 | Entity | Description | Relevant Fields (existing, unchanged) |
 |--------|-------------|----------------|
 | `Scenario` | A single trainable drill | `id`, `setup`, `target`, `solution`, `metadata` |
-| `ScenarioMetadata` | Filtering/quest metadata | `category` (existing `ScenarioCategory` enum, unchanged). `ScenarioMetadata` no longer has a `locale` field (#554): the locale comes from the embedded file set (`scenarios/<locale>/`), not from per-scenario metadata |
+| `ScenarioMetadata` | Filtering/quest metadata | `category` (existing `ScenarioCategory` enum, unchanged). `ScenarioMetadata` no longer has a `locale` field (#554): the locale comes from the embedded file set (`scenarios/<locale>/`), not from per-scenario metadata; since #605 any unknown key in the table (including the removed `locale` and `estimated_time_seconds`) is a load error |
 | `Setup` / `TargetState` | Initial/goal editor content | `file_content` (will hold Python source for pilot scenarios) |
 
 ## 6. Edge Cases and Error Handling
@@ -174,6 +179,8 @@ the prerequisite spec, not this one.
 |----------|-------------------|
 | A Python-variant scenario is authored before the highlighting prerequisite lands | Content is valid TOML and passes `cargo nextest run scenario`, but is not surfaced to end users until highlighting support ships (per NFR-003) |
 | A scenario's Python solution requires a Helix command with no direct Rust-scenario equivalent (e.g. reindent after `def`) | Author it as a new scenario testing that command explicitly rather than forcing a 1:1 mirror of an existing Rust scenario |
+| A scenario TOML carries a removed metadata key such as `estimated_time_seconds` or `locale` | Load error naming the key (FR-007, #605) |
+| A scenario names a `language` outside `rs`, `md`, `py` | Load error (FR-008, #544) |
 | Difficulty/category filters are applied by the user in the scenario browser | Python-variant scenarios appear identically alongside Rust scenarios in the same category/difficulty buckets — no separate "language" filter is introduced by this feature |
 
 ## 7. Success Criteria

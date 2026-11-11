@@ -22,7 +22,7 @@ related:
 # Feature: User-Data Safety and Runtime Robustness Hardening
 
 > [!info] Metadata
-> **Issues**: #440 (P1), #441, #444, #442, #443; extended 2026-11-11 with #467, #484, #515, #518; extended again 2026-11-11 with #460, #457, #456, #531, #454, #523, #463 (section 7)
+> **Issues**: #440 (P1), #441, #444, #442, #443; extended 2026-11-11 with #467, #484, #515, #518; extended again 2026-11-11 with #460, #457, #456, #531, #454, #523, #463 (section 7); extended 2026-11-11 with #543 and #539 (section 8)
 > **Status**: Proposed
 > **Depth**: Lightweight spec covering five related findings of the CI-011 security audit. Constitution V (security) and the recoverable-error rule in [[constitution#V. Security]] apply.
 
@@ -46,7 +46,7 @@ A failed profile load never destroys the file on disk; reads are bounded and rej
 - Pruning review cards already persisted by earlier versions (specified separately: [[fsrs-proptest-coverage-gap/spec#12. Bug-Fix Batch: Persisted Card Integrity, Panic-Free FSRS Updates, Single Urgency Authority (#511, #464, #469, #470)|FSRS spec section 12]])
 - Windows ACL permissions (Unix modes only)
 - Multi-generation history of the profile (only one `profile.json.prev` is kept)
-- cargo-fuzz targets for the loaders (optional part of #454, tracked as a follow-up)
+- cargo-fuzz targets for the loaders (optional part of #454; specified in section 8, #543)
 
 ## 2. Functional Requirements
 
@@ -353,9 +353,21 @@ THEN  those cards are dropped and counted in a warning, the rest of the profile 
 | SC-015 | A level of `u32::MAX` renders on menu and results without panic | Pass |
 
 > [!question] Out of this batch
-> Optional cargo-fuzz targets for the config and keymap loaders (part of #454) are tracked as a separate follow-up issue.
+> Optional cargo-fuzz targets for the config and keymap loaders (part of #454) were tracked as a separate follow-up issue (#543) and are specified in section 8.
 
-## 8. See Also
+## 8. Fuzz Targets and Collection Sort Cost (#543, #539)
+
+> [!info] Added 2026-11-11
+> Implementation starts only from issues that link this section.
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-160 | THE repository SHALL contain a `fuzz/` crate with its OWN `[workspace]` (so the main workspace, `cargo deny` and the main gate are unaffected) with two cargo-fuzz targets: `config_load` (the fuzz input is written to a temporary file and loaded through `ConfigStorage::load`) and `keymap_resolve` (the input goes to the keymap `resolve_str`). A target must never panic on any input; an input that makes a loader return an error is a normal outcome | must |
+| FR-161 | A scheduled workflow (and manual dispatch) SHALL build and run the two targets for a bounded time. It is NOT a required PR check, every third-party action is pinned to a full commit SHA with the version as a trailing comment, and `cargo-fuzz` is installed with an explicit `--version` and `--locked`. The tool version is checked with the dependency documentation tool before it is pinned | must |
+| FR-162 | THE main gate SHALL also verify that the fuzz crate still compiles (`cargo check --manifest-path fuzz/Cargo.toml`), so a change of a loader API (for example the error type move of [[module-layering-and-typed-commands/spec]] FR-010, #606) cannot silently break the fuzz targets | must |
+| FR-163 | WHEN FR-132 sorting by progress or by mastery is measured THE comparators SHALL use a cached sort key (`sort_by_cached_key`, stable) while keeping the no-panic guarantee of FR-132. Acceptance, measured in a quiet window with the `filtering_sorting` bench on three trees built in separate scratch directories with separate target directories (the tree before the comparator rewrite of #545, current `main`, and the change): the change is no slower than the pre-rewrite tree plus 3%. A failing measurement reopens #539 before the PR is merged | should |
+
+## 9. See Also
 
 - [[constitution]] - Section V (security, recoverable errors)
 - [[custom-helix-keymap-support/spec]] - keymap config path; shares the XDG resolver (FR-080)

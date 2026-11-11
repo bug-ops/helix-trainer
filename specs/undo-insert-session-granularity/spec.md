@@ -153,7 +153,7 @@ No bundled scenario solution changes (see the resolution above); the list of aff
 |----|----------|-------------|
 | NFR-001 | Fidelity | Behavior matches real Helix 25.07.1 for the sequences in section 1; the differential table is reproduced as regression tests |
 | NFR-002 | Type safety | Session state is not a bare `bool` or `Option` consulted ad hoc; per the constitution, the invariant is carried by the existing typestate (`HelixSimulator<InsertMode>`) or one owning type |
-| NFR-003 | Performance | Typing in Insert mode must not become slower per keystroke; recording one entry per session must not clone the document per keystroke |
+| NFR-003 | Performance | Typing in Insert mode must not become slower per keystroke; recording one entry per session must not clone the document per keystroke. The cost of recording one key is amortized constant in the session length: the session's accumulated changes are never cloned and re-composed per key (quadratic growth with 10 cursors measured in #617). The measurable rule is FR-065 of [[helix-core-post-25-07-1-upgrade-readiness/spec]] |
 | NFR-004 | Documentation | Public docs of `undo`, `redo`, `enter_insert_mode`, `exit_insert_mode` and the module docs describe the session rule |
 
 ## 5. Data Model

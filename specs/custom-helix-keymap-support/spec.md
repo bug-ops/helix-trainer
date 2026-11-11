@@ -128,6 +128,7 @@ Use EARS notation. Prefix with FR-NNN.
 | FR-008 | WHEN the active keymap mapping changes (enabled, disabled, or a different custom mapping loaded) THE SYSTEM SHALL update `UserProfile.keymap_fingerprint` so a mismatch across a review history is detectable, regardless of whether the *current* keymap is the stock one. The fingerprint SHALL be FNV-1a 64 over the bindings sorted by (context, key); each binding contributes its context name, its Helix key string and its bound canonical target, each length-prefixed (u64 little-endian length followed by the UTF-8 bytes), so remapping a key to another command changes the fingerprint (#560). The stored value SHALL carry an algorithm tag (`Fnv1a64V1`); a legacy untagged number in an existing profile SHALL be accepted, SHALL NOT trigger the mismatch notification, and SHALL be replaced by the current tagged value on the next save | must |
 | FR-009 | WHERE menu, results, filter screens, or scenario hint prose are rendered THE SYSTEM SHALL always use the stock `j`/`k`/`gg`/`G` navigation, never the custom keymap | must |
 | FR-010 | WHEN `AppConfig`/`ConfigData` gains a new field THE SYSTEM SHALL default it via `#[serde(default)]` so an existing `config.json` is merged with defaults rather than discarded wholesale | must |
+| FR-015 | WHEN a stored keymap fingerprint carries a tag this version does not know (a profile written by a NEWER version, then opened after a downgrade) THE SYSTEM SHALL load the profile and treat the fingerprint as absent: a field-level lenient deserializer maps a JSON object with a single unknown tag key to `None`, which takes the same no-notice path as a first activation, and the value is replaced by the current tagged value on the next save. Any OTHER malformed shape (wrong type, several keys, a malformed known tag) is still a load error and quarantines the profile as before. No enum variant that is never serialized is added to represent the unknown tag (#601) | must |
 
 ## 4. Non-Functional Requirements
 
@@ -144,11 +145,12 @@ Use EARS notation. Prefix with FR-NNN.
 | Entity | Description |
 |--------|-------------|
 | `AppConfig.use_helix_keymap: bool` | Opt-in flag, default `false` |
+| `CanonicalKeys` (`src/ids/`) | Typed canonical key text with its parsed key events, equality and fingerprint by text only ([[module-layering-and-typed-commands/spec]] FR-002, #614) |
 | `PhysicalKey` (`src/input/keymap/keys.rs`) | Normalized newtype identifying a physical keystroke; sole lookup key for remap resolution |
 | `KeymapOverlay` (`src/input/keymap/overlay.rs`) | `HashMap`-backed `(context, PhysicalKey) -> canonical key(s)` resolution built from parsed config entries |
 | `KeymapWarningReason` (`src/input/keymap/parse.rs`, moved from `src/config/keymap/parse.rs` by #558) | `UnknownCommand`, `UnparsableKey`, `UnsupportedBindingForm`, `UnsupportedMinorMode`, `UnsupportedRelocation`, `Shadowed`, plus a resolve-time replay-mismatch variant — every unsupported binding is one of these, never silently dropped |
 | `KeymapFingerprint` types (`src/config/keymap/fingerprint.rs`, moved from `gamification` by #558 so that `gamification` no longer imports `input`; importers `input/keymap/{mod,overlay}.rs`, `data_handling.rs`, `gamification/profile.rs` use the new path, no re-export) | Fingerprint value types (`Fnv1a64V1`) computed from the active mapping; keymap TOML resolution lives in `src/input/keymap/` (moved from `config` by #558, layer order in [[constitution]]) |
-| `UserProfile.keymap_fingerprint` | Optional tagged value (`Fnv1a64V1` plus the 64-bit hash, FR-008) that detects when review history spans more than one binding mapping, including transitions to/from the stock keymap; a legacy untagged `u64` is read as a legacy value that never raises the mismatch notification |
+| `UserProfile.keymap_fingerprint` | Optional tagged value (`Fnv1a64V1` plus the 64-bit hash, FR-008) that detects when review history spans more than one binding mapping, including transitions to/from the stock keymap; a legacy untagged `u64` is read as a legacy value that never raises the mismatch notification, and an object with a single unknown future tag key is read as absent, also without notification (FR-015, #601) |
 
 No changes to `Scenario`/`Setup`/`TargetState` — this feature only affects
 the physical-key-to-canonical-key translation layer, not scenario content.
@@ -161,6 +163,7 @@ the physical-key-to-canonical-key translation layer, not scenario content.
 | `config.toml` larger than the path-validator size limit | Rejected via the same `validate_file_size` guard used for scenario TOML and profile/config files; falls back to stock |
 | Two TOML keys normalize to the same physical key | Detected at insert time, reported `Shadowed`, first-wins is not silently assumed |
 | A multi-token expansion is looked up from a pending state (count/register prefix) | Falls through to the stock key rather than executing partway |
+| Profile fingerprint written by a newer version with an unknown tag (downgrade) | The profile loads; the fingerprint is treated as absent (no mismatch notification) and is rewritten as the current tag on the next save (FR-015) |
 | Custom keymap disabled after being active | `keymap_fingerprint` tracking still runs (stock keymap is fingerprinted like any other mapping, per `463d363`), so re-enabling later against a stretch under stock is still detected as a genuine transition |
 | A command name in the config doesn't match any `CommandMetadata.name` this trainer implements | Reported as `UnknownCommand`, not applied, does not block other valid bindings |
 | Alt-`s` (`split_selection_on_newline`) physically unreachable on a terminal without kitty keyboard protocol support (e.g. macOS Terminal.app, since real Option+s composition was removed for layout-collision reasons — see `cd8751c`) | Documented workaround (`d7003ca`): remap a reachable key to `split_selection_on_newline` via this feature |

@@ -161,7 +161,7 @@ mod tests {
         state.simulator.execute_command("o").unwrap();
         assert_eq!(
             state.simulator.display().content(),
-            scenario.target.file_content
+            "fn add(a: i32, b: i32) -> i32 {\n    \n    a + b\n}"
         );
         assert!(
             !state.is_completed(),

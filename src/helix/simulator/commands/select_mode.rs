@@ -70,6 +70,9 @@ fn is_extending_motion(base: &str) -> bool {
             | CMD_GOTO_LINE_END
             | CMD_GOTO_FIRST_NONWHITESPACE
             | CMD_GOTO_LINE
+            | CMD_HALF_PAGE_UP
+            | CMD_HALF_PAGE_DOWN
+            | CMD_MATCH_BRACKETS
     ) || is_find_command(base)
 }
 

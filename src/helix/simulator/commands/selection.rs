@@ -4,30 +4,31 @@ use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use crate::security::limits::MAX_REGEX_SELECTION_MATCHES;
 use helix_core::comment::toggle_line_comments;
+use helix_core::graphemes::{ensure_grapheme_boundary_prev, grapheme_width};
 use helix_core::ropey::RopeSlice;
 use helix_core::selection::{
     keep_or_remove_matches, select_on_matches, split_on_matches, split_on_newline,
 };
 use helix_core::{Range, Selection, Transaction};
-use helix_stdx::rope::Regex;
+use helix_stdx::rope::{Regex, RopeSliceExt};
+use std::borrow::Cow;
 
 /// Tab width `hx` assumes for `&` when the language does not set one
 const ALIGN_TAB_WIDTH: usize = 4;
 
-/// `(row, visual column)` of `pos`, expanding tabs to `ALIGN_TAB_WIDTH` stops
-///
-/// Every other character counts as one column; `hx` uses grapheme widths,
-/// which only differ for wide or combining characters.
+/// `(row, visual column)` of `pos`: tabs expand to `ALIGN_TAB_WIDTH` stops and
+/// every other grapheme counts its display width, as `hx` `align_selections`
 fn visual_position(slice: RopeSlice, pos: usize) -> (usize, usize) {
     let row = slice.char_to_line(pos);
+    let pos = ensure_grapheme_boundary_prev(slice, pos);
     let col = slice
         .slice(slice.line_to_char(row)..pos)
-        .chars()
-        .fold(0, |col, ch| {
-            if ch == '\t' {
+        .graphemes()
+        .fold(0, |col, grapheme| {
+            if grapheme == "\t" {
                 col + ALIGN_TAB_WIDTH - col % ALIGN_TAB_WIDTH
             } else {
-                col + 1
+                col + grapheme_width(&Cow::from(grapheme))
             }
         });
     (row, col)

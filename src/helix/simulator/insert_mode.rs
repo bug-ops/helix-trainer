@@ -87,6 +87,42 @@ fn leading_whitespace(doc: &Rope, line: usize) -> String {
         .collect()
 }
 
+impl<M: super::EditorMode> HelixSimulator<M> {
+    /// Indent for a new line that follows `line`, considering its text up to
+    /// char index `text_end`: the line's indent, plus one unit when the
+    /// language says that text opens a block
+    fn indent_after(&self, line: usize, text_end: usize) -> String {
+        let line_start = self.doc.line_to_char(line);
+        let mut indent = leading_whitespace(&self.doc, line);
+        if self
+            .language
+            .opens_block(&self.doc.slice(line_start..text_end).to_string())
+        {
+            indent.push_str(&self.indent_unit.to_string());
+        }
+        indent
+    }
+
+    /// Indent for the line `o` opens below `line`
+    fn indent_below(&self, line: usize) -> String {
+        self.indent_after(line, line_end_char_index(&self.doc.slice(..), line))
+    }
+
+    /// Indent for the line `O` opens above `line`
+    ///
+    /// Languages with block openers use what `o` would give below the
+    /// previous line (as `hx` indents it inside the surrounding block); the
+    /// others, and the first line, copy the line's own indent.
+    fn indent_above(&self, line: usize) -> String {
+        match line.checked_sub(1) {
+            Some(previous) if !self.language.block_openers.is_empty() => {
+                self.indent_below(previous)
+            }
+            _ => leading_whitespace(&self.doc, line),
+        }
+    }
+}
+
 // Operations that prepare for entering insert mode (Normal mode methods)
 impl HelixSimulator<NormalMode> {
     /// Append: move cursor after current character (prepare for insert mode)
@@ -140,8 +176,9 @@ impl HelixSimulator<NormalMode> {
         Ok(())
     }
 
-    /// Open below: insert new line below the selection's last line, carrying
-    /// that line's indentation (prepare for insert mode)
+    /// Open below: insert new line below the selection's last line, indented
+    /// by the language rule of [`LanguageRules`](crate::helix::LanguageRules)
+    /// (prepare for insert mode)
     pub fn open_below(&mut self) -> Result<(), UserError> {
         let range = self.selection.primary();
         let last_char = if range.anchor == range.head {
@@ -151,7 +188,7 @@ impl HelixSimulator<NormalMode> {
         };
         let current_line = self.doc.char_to_line(last_char.min(self.doc.len_chars()));
         let line_end = line_end_char_index(&self.doc.slice(..), current_line);
-        let indent = leading_whitespace(&self.doc, current_line);
+        let indent = self.indent_below(current_line);
 
         let transaction = Transaction::change(
             &self.doc,
@@ -165,13 +202,14 @@ impl HelixSimulator<NormalMode> {
         Ok(())
     }
 
-    /// Open above: insert new line above the selection's first line, carrying
-    /// that line's indentation (prepare for insert mode)
+    /// Open above: insert new line above the selection's first line, indented
+    /// as the line `o` would open below the previous one (prepare for insert
+    /// mode)
     pub fn open_above(&mut self) -> Result<(), UserError> {
         let head = self.selection.primary().from();
         let current_line = self.doc.char_to_line(head.min(self.doc.len_chars()));
         let line_start = self.doc.line_to_char(current_line);
-        let indent = leading_whitespace(&self.doc, current_line);
+        let indent = self.indent_above(current_line);
 
         let transaction = Transaction::change(
             &self.doc,
@@ -294,7 +332,8 @@ impl HelixSimulator<InsertMode> {
     /// Insert a line break the way Helix's Enter does.
     ///
     /// When the line has text before the cursor, trailing whitespace before
-    /// the cursor is dropped and the new line copies the line's indentation.
+    /// the cursor is dropped and the new line gets the indentation of the
+    /// language rule (the line's indent, plus one unit after a block opener).
     /// When only whitespace precedes the cursor, the line break goes at the
     /// line start so the old line, indentation included, moves down intact.
     fn insert_newline(&mut self) {
@@ -305,7 +344,7 @@ impl HelixSimulator<InsertMode> {
 
         let (from, to, text, cursor, strips_indent) = match before.last_non_whitespace_char() {
             Some(idx) => {
-                let indent = leading_whitespace(&self.doc, line);
+                let indent = self.indent_after(line, head);
                 let from = line_start + idx + 1;
                 let cursor = from + 1 + indent.chars().count();
                 (from, head, format!("\n{indent}"), cursor, true)

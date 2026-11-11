@@ -443,15 +443,29 @@ pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
     Ok(())
 }
 
+/// Move every range with `motion`, extending in Select mode as `hx` does
+fn move_paragraph<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+    motion: fn(RopeSlice, Range, usize, Movement) -> Range,
+) {
+    let slice = sim.doc.slice(..);
+    sim.selection = if sim.select_mode {
+        sim.selection
+            .clone()
+            .transform(|range| motion(slice, range, count, Movement::Extend))
+    } else {
+        let range = motion(slice, sim.selection.primary(), count, Movement::Move);
+        Selection::single(range.anchor, range.head)
+    };
+}
+
 /// Move to previous paragraph (Helix '[p' command)
 pub fn goto_prev_paragraph<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
-    let slice = sim.doc.slice(..);
-    let range =
-        movement::move_prev_paragraph(slice, sim.selection.primary(), count, Movement::Move);
-    sim.selection = Selection::single(range.anchor, range.head);
+    move_paragraph(sim, count, movement::move_prev_paragraph);
     Ok(())
 }
 
@@ -460,10 +474,7 @@ pub fn goto_next_paragraph<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), UserError> {
-    let slice = sim.doc.slice(..);
-    let range =
-        movement::move_next_paragraph(slice, sim.selection.primary(), count, Movement::Move);
-    sim.selection = Selection::single(range.anchor, range.head);
+    move_paragraph(sim, count, movement::move_next_paragraph);
     Ok(())
 }
 

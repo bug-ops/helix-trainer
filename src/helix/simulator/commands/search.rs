@@ -6,8 +6,8 @@
 use crate::helix::simulator::HelixSimulator;
 use crate::helix::simulator::search_state::SearchDirection;
 use crate::security::UserError;
-use helix_core::Selection;
 use helix_core::ropey::RopeSlice;
+use helix_core::{Range, Selection};
 use std::hash::{Hash, Hasher};
 
 #[inline]
@@ -73,6 +73,25 @@ fn compute_doc_version(doc: &helix_core::Rope) -> u64 {
     hasher.finish()
 }
 
+/// Select the found `range` (byte offsets): replaces the selection, or in
+/// Select mode adds a new primary range that keeps the direction of the old
+/// primary, as `hx` does for `/`, `?`, `n` and `N` while extending
+fn place_match<M: crate::helix::simulator::EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    range: std::ops::Range<usize>,
+) {
+    let start = sim.doc.byte_to_char(range.start);
+    let end = sim.doc.byte_to_char(range.end);
+    sim.selection = if sim.select_mode {
+        let direction = sim.selection.primary().direction();
+        sim.selection
+            .clone()
+            .push(Range::new(start, end).with_direction(direction))
+    } else {
+        Selection::single(start, end)
+    };
+}
+
 /// Search forward from cursor position
 pub fn search_next_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
@@ -86,9 +105,7 @@ pub fn search_next_match<M: crate::helix::simulator::EditorMode>(
 
     let head_byte = sim.doc.char_to_byte(head);
     if let Some((_, range)) = sim.search_state.find_next(head_byte) {
-        let start_chars = sim.doc.byte_to_char(range.start);
-        let end_chars = sim.doc.byte_to_char(range.end);
-        sim.selection = Selection::single(start_chars, end_chars);
+        place_match(sim, range);
     }
 
     Ok(())
@@ -107,9 +124,7 @@ pub fn search_prev_match<M: crate::helix::simulator::EditorMode>(
 
     let head_byte = sim.doc.char_to_byte(head);
     if let Some((_, range)) = sim.search_state.find_prev(head_byte) {
-        let start_chars = sim.doc.byte_to_char(range.start);
-        let end_chars = sim.doc.byte_to_char(range.end);
-        sim.selection = Selection::single(start_chars, end_chars);
+        place_match(sim, range);
     }
 
     Ok(())

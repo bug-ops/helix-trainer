@@ -53,17 +53,19 @@ hints = [
 
 [scenarios.setup]
 file_content = """fn process() {
+    if ready {
         let value = 0;
-    return value;
+    }
 }"""
-cursor_position = [1, 0]
+cursor_position = [2, 0]
 
 [scenarios.target]
 file_content = """fn process() {
+    if ready {
     let value = 0;
-    return value;
+    }
 }"""
-cursor_position = [1, 0]
+cursor_position = [2, 0]
 
 [scenarios.solution]
 commands = ["<"]

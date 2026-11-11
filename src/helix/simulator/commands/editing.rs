@@ -8,16 +8,25 @@ use helix_core::movement::skip_while;
 use helix_core::surround::find_nth_pairs_pos;
 use helix_core::textobject::{TextObject, textobject_paragraph, textobject_word};
 use helix_core::{Range, Selection, Tendril, Transaction};
+use helix_stdx::rope::RopeSliceExt;
 
 /// Changes that join the lines of every range, as upstream Helix's
-/// `join_selections`: each line break plus the next line's leading blanks
+/// `join_selections_impl`: each line break plus the next line's leading blanks
 /// becomes one space (none when the next line is blank).
 ///
-/// A range within a single line joins that line with the next one. Comment
-/// tokens are not stripped: the simulator is language-agnostic.
+/// A range within a single line joins that line with the next one. When the
+/// joined line starts with the comment token of the range's first line, that
+/// token is removed too; a different token becomes the current one and stays.
 fn join_changes<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<(usize, usize, Option<Tendril>)> {
     let slice = sim.doc.slice(..);
     let last_line = sim.doc.len_lines() - 1;
+    let blanks = |at: usize| skip_while(slice, at, |ch| matches!(ch, ' ' | '\t')).unwrap_or(at);
+    let token_at = |at: usize| {
+        sim.language
+            .comment_tokens
+            .iter()
+            .find(|token| slice.slice(at..).starts_with(token))
+    };
     let mut changes = Vec::new();
 
     for range in sim.selection.ranges() {
@@ -25,11 +34,18 @@ fn join_changes<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<(usize, usize, Op
         if start == end {
             end = (end + 1).min(last_line);
         }
+        let mut current_token = token_at(blanks(sim.doc.line_to_char(start)));
+
         for line in start..end {
             let from = line_end_char_index(&slice, line);
-            let next_start = sim.doc.line_to_char(line + 1);
-            let to =
-                skip_while(slice, next_start, |ch| matches!(ch, ' ' | '\t')).unwrap_or(next_start);
+            let mut to = blanks(sim.doc.line_to_char(line + 1));
+            if let Some(token) = token_at(to) {
+                if current_token == Some(token) {
+                    to = blanks(to + token.chars().count());
+                } else {
+                    current_token = Some(token);
+                }
+            }
             let separator = (to != line_end_char_index(&slice, line + 1)).then(|| " ".into());
             changes.push((from, to, separator));
         }

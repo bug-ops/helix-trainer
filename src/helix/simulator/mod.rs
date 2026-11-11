@@ -27,6 +27,7 @@ mod tests;
 use crate::game::EditorState;
 use crate::game::editor_state::{CursorPosition, Selection as GameSelection};
 use crate::helix::indent::IndentUnit;
+use crate::helix::language::LanguageRules;
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
 use crate::security::UserError;
@@ -121,8 +122,11 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// commands of `exits_select_mode` clear it) and always false in Insert mode.
     pub(super) select_mode: bool,
 
-    /// Indent unit of the document language, used by `>`, `<` and Insert `Tab`
+    /// Indent unit of the document, used by `>`, `<`, `Tab` and new lines
     pub(super) indent_unit: IndentUnit,
+
+    /// Language rules for `J` comment tokens and new-line block openers
+    pub(super) language: &'static LanguageRules,
 
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
@@ -288,6 +292,13 @@ impl<M: EditorMode> HelixSimulator<M> {
         self.macro_recorder.toggle();
     }
 
+    /// Adopt `language`, taking the indent unit from the current text when it
+    /// reveals one and from the language table otherwise
+    pub(super) fn set_language(&mut self, language: &'static LanguageRules) {
+        self.language = language;
+        self.indent_unit = IndentUnit::detect(&self.doc).unwrap_or(language.indent_unit);
+    }
+
     /// Apply transaction and save history
     ///
     /// No-op transactions (empty change set) are skipped entirely: they
@@ -323,6 +334,7 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
+            language: &LanguageRules::UNLISTED,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -369,6 +381,7 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
+            language: &LanguageRules::UNLISTED,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -442,6 +455,7 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
+            language: &LanguageRules::UNLISTED,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -482,6 +496,7 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: self.repeat_buffer,
             select_mode: false,
             indent_unit: self.indent_unit,
+            language: self.language,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -528,6 +543,7 @@ impl HelixSimulator<InsertMode> {
             repeat_buffer: self.repeat_buffer,
             select_mode: false,
             indent_unit: self.indent_unit,
+            language: self.language,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -604,14 +620,17 @@ impl AnyModeSimulator {
 
     /// Declare the content language of the edited document
     ///
-    /// The language selects the indent unit used by `>`, `<` and Insert-mode
-    /// `Tab`; a language without a table entry keeps [`IndentUnit::DEFAULT`].
+    /// The indent unit is auto-detected from the current text (as `hx` does)
+    /// and falls back to the language table. The language also selects the
+    /// comment tokens `J` strips and the lines that open a block for
+    /// `o`/`O`/Enter; a language without a table entry gets the default unit,
+    /// no comment tokens and plain indent copying.
     #[must_use]
     pub fn with_language(mut self, language: &str) -> Self {
-        let unit = IndentUnit::for_language(language).unwrap_or_default();
+        let rules = LanguageRules::for_language(language).unwrap_or(&LanguageRules::UNLISTED);
         match &mut self {
-            Self::Normal(sim) => sim.indent_unit = unit,
-            Self::Insert(sim) => sim.indent_unit = unit,
+            Self::Normal(sim) => sim.set_language(rules),
+            Self::Insert(sim) => sim.set_language(rules),
         }
         self
     }
@@ -950,19 +969,4 @@ fn execute_key_sequence(
     }
 
     Ok(())
-}
-
-// Implement CommandExecutor trait for AnyModeSimulator
-impl super::executor::CommandExecutor for AnyModeSimulator {
-    fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
-        self.execute_command(cmd)
-    }
-
-    fn state(&self) -> Result<EditorState, UserError> {
-        self.state()
-    }
-
-    fn mode(&self) -> Mode {
-        self.mode()
-    }
 }

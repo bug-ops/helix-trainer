@@ -205,6 +205,52 @@ pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMes
     .await?)
 }
 
+/// Async "Start fresh" for a quarantined profile.
+///
+/// Runs [`ProfileStorage::start_fresh`] on tokio's blocking task pool: the
+/// unreadable file's backup is kept, a new profile is written, and the
+/// outcome is reported as [`DataLoadMessage::ProfileReady`] carrying the
+/// fresh profile, which the usual profile-loaded handling then adopts and
+/// re-enables saving with. A refusal (no backup could be made, write error)
+/// is reported as [`DataLoadMessage::ProfileError`] and the file is untouched.
+///
+/// # Errors
+///
+/// Returns an error only if the blocking task itself panics or is cancelled.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::async_state::DataLoadMessage;
+/// use helix_trainer::data_loader::start_fresh_profile_message;
+/// use helix_trainer::gamification::ProfileStorage;
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() {
+/// let dir = tempfile::tempdir().unwrap();
+/// let path = dir.path().join("profile.json");
+/// std::fs::write(&path, "{broken").unwrap();
+///
+/// let msg = start_fresh_profile_message(ProfileStorage::with_path(&path))
+///     .await
+///     .unwrap();
+/// assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
+/// # }
+/// ```
+pub async fn start_fresh_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage> {
+    Ok(
+        tokio::task::spawn_blocking(move || match storage.start_fresh() {
+            Ok(profile) => DataLoadMessage::ProfileReady(profile),
+            Err(e) => DataLoadMessage::ProfileError {
+                error: e.to_string(),
+                fallback: UserProfile::new(),
+                backup: storage.quarantine(),
+            },
+        })
+        .await?,
+    )
+}
+
 /// Async quest registry loading (lazy loaded)
 ///
 /// Loads quest templates from the default path using tokio's blocking task pool.
@@ -288,6 +334,41 @@ mod tests {
         };
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{broken");
         assert_eq!(std::fs::read_to_string(backup_path).unwrap(), "{broken");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_start_fresh_message_keeps_backup_and_reports_fresh_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.json");
+        std::fs::write(&path, "{broken").unwrap();
+        let storage = ProfileStorage::with_path(&path);
+        let DataLoadMessage::ProfileError { backup, .. } =
+            load_profile_message(storage.clone()).await.unwrap()
+        else {
+            panic!("expected a load failure");
+        };
+
+        let msg = start_fresh_profile_message(storage.clone()).await.unwrap();
+
+        assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 0));
+        assert!(storage.load().is_ok());
+        let QuarantineOutcome::BackedUp(backup_path) = backup else {
+            panic!("expected a backup");
+        };
+        assert_eq!(std::fs::read_to_string(backup_path).unwrap(), "{broken");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_start_fresh_message_without_a_profile_file_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        let msg = start_fresh_profile_message(storage.clone()).await.unwrap();
+
+        assert!(matches!(msg, DataLoadMessage::ProfileError { .. }));
+        assert!(!storage.exists());
     }
 
     #[tokio::test]

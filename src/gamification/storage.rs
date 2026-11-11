@@ -1,7 +1,7 @@
 //! Profile storage and persistence
 
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,25 @@ fn is_process_alive(pid: u32) -> bool {
 }
 
 const PROFILE_FILE_NAME: &str = "profile.json";
+
+/// Whether two files of equal length hold the same bytes; `a` is rewound first.
+fn same_content(a: &mut fs::File, b: &mut fs::File) -> std::io::Result<bool> {
+    a.rewind()?;
+    let mut buf_a = [0u8; 8192];
+    let mut buf_b = [0u8; 8192];
+    loop {
+        let n = a.read(&mut buf_a)?;
+        if n == 0 {
+            return Ok(b.read(&mut buf_b)? == 0);
+        }
+        match b.read_exact(&mut buf_b[..n]) {
+            Ok(()) if buf_a[..n] == buf_b[..n] => {}
+            Ok(()) => return Ok(false),
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(false),
+            Err(e) => return Err(e),
+        }
+    }
+}
 
 /// Wrapper for profile serialization
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -189,6 +208,10 @@ impl ProfileStorage {
     /// Copy an unreadable profile file to `profile.json.corrupt-<timestamp>`
     /// so its contents survive whatever the application does next.
     ///
+    /// When a byte-identical `profile.json.corrupt-*` already exists, no new
+    /// copy is made and that backup's path is returned, so repeated launches
+    /// with the same broken file keep a single backup.
+    ///
     /// Never modifies or deletes the original. A name collision (two
     /// quarantines in the same second) gets a numeric suffix. Anything that
     /// is not a regular file is not copied (reading it could block or never
@@ -209,6 +232,10 @@ impl ProfileStorage {
         if !source.metadata()?.is_file() {
             return Err(not_regular());
         }
+        if let Some(existing) = self.find_identical_backup(&mut source) {
+            return Ok(existing);
+        }
+        source.rewind()?;
 
         let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S");
         let mut attempt = 0u32;
@@ -232,6 +259,72 @@ impl ProfileStorage {
             return Err(e);
         }
         Ok(backup_path)
+    }
+
+    /// An existing `<file>.corrupt-*` sibling that is byte-identical to
+    /// `source`, so repeated launches with the same unreadable file do not pile
+    /// up copies. Unreadable candidates are skipped (the caller then makes a
+    /// fresh copy, the safe direction).
+    fn find_identical_backup(&self, source: &mut fs::File) -> Option<PathBuf> {
+        let prefix = format!("{}.corrupt-", self.path().file_name()?.to_str()?);
+        let source_len = source.metadata().ok()?.len();
+        let mut candidates: Vec<PathBuf> = fs::read_dir(self.path().parent()?)
+            .ok()?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .map(|entry| entry.path())
+            .collect();
+        candidates.sort();
+        candidates.into_iter().find(|candidate| {
+            fs::File::open(candidate)
+                .and_then(|mut file| {
+                    if !file.metadata()?.is_file() || file.metadata()?.len() != source_len {
+                        return Ok(false);
+                    }
+                    same_content(source, &mut file)
+                })
+                .unwrap_or(false)
+        })
+    }
+
+    /// Replace an unreadable profile with a new default one, keeping its backup.
+    ///
+    /// The unreadable file is first quarantined (an identical existing backup
+    /// is reused), and only when a backup exists on disk is `profile.json`
+    /// overwritten with a fresh [`UserProfile`]; unreadable data is never
+    /// replaced without a copy. The caller then adopts the returned profile
+    /// and re-enables saving.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error, leaving the file untouched, when no backup could be
+    /// made (including when there is no profile file), or when the new
+    /// profile cannot be written.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::ProfileStorage;
+    ///
+    /// let dir = tempfile::tempdir().unwrap();
+    /// let path = dir.path().join("profile.json");
+    /// std::fs::write(&path, "{broken").unwrap();
+    ///
+    /// let storage = ProfileStorage::with_path(&path);
+    /// assert!(storage.load().is_err());
+    /// let fresh = storage.start_fresh().unwrap();
+    /// assert_eq!(fresh.level, 1);
+    /// assert_eq!(storage.load().unwrap().level, 1);
+    /// ```
+    pub fn start_fresh(&self) -> Result<UserProfile> {
+        if let QuarantineOutcome::Failed(reason) = self.quarantine() {
+            return Err(GamificationError::StorageError(format!(
+                "Refusing to replace the profile without a backup: {reason}"
+            )));
+        }
+        let profile = UserProfile::new();
+        self.save(&profile)?;
+        Ok(profile)
     }
 
     /// Save profile to disk
@@ -714,10 +807,10 @@ mod tests {
     fn test_quarantine_copies_without_touching_original_and_names_are_unique() {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("profile.json");
-        fs::write(&path, "{broken").unwrap();
         let storage = ProfileStorage::with_path(&path);
-
+        fs::write(&path, "{broken-a").unwrap();
         let first = storage.quarantine();
+        fs::write(&path, "{broken-b").unwrap();
         let second = storage.quarantine();
 
         let (QuarantineOutcome::BackedUp(a), QuarantineOutcome::BackedUp(b)) = (first, second)
@@ -725,7 +818,7 @@ mod tests {
             panic!("both quarantines should succeed");
         };
         assert_ne!(a, b);
-        for backup in [&a, &b] {
+        for (backup, content) in [(&a, "{broken-a"), (&b, "{broken-b")] {
             assert!(
                 backup
                     .file_name()
@@ -733,9 +826,118 @@ mod tests {
                     .to_string_lossy()
                     .starts_with("profile.json.corrupt-")
             );
-            assert_eq!(fs::read_to_string(backup).unwrap(), "{broken");
+            assert_eq!(fs::read_to_string(backup).unwrap(), content);
         }
-        assert_eq!(fs::read_to_string(&path).unwrap(), "{broken");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{broken-b");
+    }
+
+    fn backups_in(dir: &Path) -> Vec<PathBuf> {
+        let mut paths: Vec<_> = fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.to_string_lossy().contains(".corrupt-"))
+            .collect();
+        paths.sort();
+        paths
+    }
+
+    #[test]
+    fn test_quarantine_skips_copy_when_identical_backup_exists() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+        let storage = ProfileStorage::with_path(&path);
+
+        let first = storage.quarantine();
+        let second = storage.quarantine();
+
+        assert!(matches!(first, QuarantineOutcome::BackedUp(_)));
+        assert_eq!(first, second);
+        assert_eq!(backups_in(dir.path()).len(), 1);
+    }
+
+    #[test]
+    fn test_quarantine_copies_again_when_content_differs() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        let storage = ProfileStorage::with_path(&path);
+        fs::write(&path, "{broken-a").unwrap();
+        storage.quarantine();
+        fs::write(&path, "{much-longer-broken").unwrap();
+
+        let QuarantineOutcome::BackedUp(second) = storage.quarantine() else {
+            panic!("expected a backup");
+        };
+
+        assert_eq!(backups_in(dir.path()).len(), 2);
+        assert_eq!(fs::read_to_string(second).unwrap(), "{much-longer-broken");
+    }
+
+    #[test]
+    fn test_quarantine_dedup_handles_files_larger_than_one_read_buffer() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        let storage = ProfileStorage::with_path(&path);
+        let mut body = "x".repeat(20_000);
+        fs::write(&path, &body).unwrap();
+        storage.quarantine();
+        body.replace_range(19_999.., "y");
+        fs::write(&path, &body).unwrap();
+
+        let QuarantineOutcome::BackedUp(second) = storage.quarantine() else {
+            panic!("expected a backup");
+        };
+
+        assert_eq!(backups_in(dir.path()).len(), 2);
+        assert_eq!(fs::read_to_string(second).unwrap(), body);
+    }
+
+    #[test]
+    fn test_start_fresh_keeps_backup_and_writes_new_profile() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+        let storage = ProfileStorage::with_path(&path);
+        assert!(storage.load().is_err());
+        storage.quarantine();
+
+        let fresh = storage.start_fresh().unwrap();
+
+        assert_eq!(fresh.level, 1);
+        assert_eq!(storage.load().unwrap().total_xp, 0);
+        let backups = backups_in(dir.path());
+        assert_eq!(backups.len(), 1);
+        assert_eq!(fs::read_to_string(&backups[0]).unwrap(), "{broken");
+    }
+
+    #[test]
+    fn test_start_fresh_makes_a_backup_when_none_exists_yet() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+
+        ProfileStorage::with_path(&path).start_fresh().unwrap();
+
+        assert_eq!(backups_in(dir.path()).len(), 1);
+    }
+
+    #[test]
+    fn test_start_fresh_refuses_without_a_profile_file_to_back_up() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        assert!(storage.start_fresh().is_err());
+        assert!(!storage.exists());
+    }
+
+    #[test]
+    fn test_start_fresh_refuses_a_non_regular_path() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::create_dir(&path).unwrap();
+
+        assert!(ProfileStorage::with_path(&path).start_fresh().is_err());
+        assert!(path.is_dir());
     }
 
     fn moved_data_dir(root: &Path) -> DataDir {

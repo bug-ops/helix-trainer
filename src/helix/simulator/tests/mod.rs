@@ -11,6 +11,7 @@
 //! - `repeat_execution_tests`: Dot command execution tests
 //! - `multi_cursor_tests`: Multi-cursor snapshot round-trips (Issue #141)
 
+mod auto_pair_tests;
 mod basic_tests;
 mod clipboard_tests;
 mod editing_tests;

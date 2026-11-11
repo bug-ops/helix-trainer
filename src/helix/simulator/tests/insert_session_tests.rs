@@ -206,11 +206,11 @@ fn dot_repeat_of_a_session_is_one_undo_step() {
 
 #[test]
 fn auto_indent_is_kept_once_text_is_typed_after_it() {
-    let mut sim = AnyModeSimulator::new("foo {".to_string()).with_language("rs");
+    let mut sim = AnyModeSimulator::new("foo {\n}".to_string()).with_language("rs");
     for key in [CMD_OPEN_BELOW, "x", CMD_ESCAPE] {
         sim.execute_command(key).unwrap();
     }
-    assert_eq!(sim.display().content(), "foo {\n    x");
+    assert_eq!(sim.display().content(), "foo {\n    x\n}");
 }
 
 #[test]

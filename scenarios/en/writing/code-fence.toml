@@ -23,11 +23,11 @@ print("hello")
 cursor_position = [2, 3]
 
 [scenarios.solution]
-commands = ["O", "`", "`", "`", "Escape", "j", "o", "`", "`", "`", "Escape"]
-description = "Open a fence line above with 'O', then a fence line below with 'o'"
+commands = ["O", "`", "`", "`", "Delete", "Escape", "j", "o", "`", "`", "`", "Delete", "Escape"]
+description = "Open a fence line above with 'O', type the fence (auto-pairing leaves one extra backtick that 'Delete' removes), then do the same below with 'o'"
 
 [scenarios.scoring]
-optimal_count = 11
+optimal_count = 13
 max_points = 100
 tolerance = 1
 

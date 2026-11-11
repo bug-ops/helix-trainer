@@ -32,6 +32,7 @@ use crate::helix::indent::IndentUnit;
 use crate::helix::language::LanguageRules;
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
+use helix_core::auto_pairs::AutoPairs;
 use helix_core::graphemes::next_grapheme_boundary;
 use helix_core::{ChangeSet, Range, Rope, Selection, Transaction};
 use mode::Session;
@@ -125,6 +126,9 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Language rules for `J` comment tokens and the `o`/`O`/Enter indent rule
     pub(super) language: &'static LanguageRules,
 
+    /// The language's auto-pairs as the Helix hook consumes them
+    pub(super) auto_pairs: AutoPairs,
+
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
 
@@ -212,6 +216,7 @@ impl<M: EditorMode> HelixSimulator<M> {
     /// reveals one and from the language table otherwise
     pub(super) fn set_language(&mut self, language: &'static LanguageRules) {
         self.language = language;
+        self.auto_pairs = AutoPairs::new(language.auto_pairs);
         self.indent_unit = IndentUnit::detect(&self.doc).unwrap_or(language.indent_unit);
     }
 
@@ -280,6 +285,7 @@ impl<M: EditorMode> HelixSimulator<M> {
             select_mode: false,
             indent_unit: self.indent_unit,
             language: self.language,
+            auto_pairs: self.auto_pairs,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -315,6 +321,7 @@ impl HelixSimulator<NormalMode> {
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
             language: &LanguageRules::UNLISTED,
+            auto_pairs: AutoPairs::new(LanguageRules::UNLISTED.auto_pairs),
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),

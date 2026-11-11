@@ -156,6 +156,7 @@ fn test_quest_scenario_references_exist() {
 const SPECIAL_KEY_COMMANDS: &[&str] = &[
     "Escape",     // Exit insert mode
     "Backspace",  // Delete character in insert mode
+    "Delete",     // Delete the character after the cursor in insert mode
     "ArrowLeft",  // Cursor movement in insert mode
     "ArrowRight", // Cursor movement in insert mode
     "ArrowUp",    // Cursor movement in insert mode

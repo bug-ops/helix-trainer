@@ -253,35 +253,30 @@ fn python_open_bracket_beats_dedent_and_closer_line_dedents() {
 }
 
 #[test]
-fn unclosed_trailing_opener_still_indents() {
-    // hx gives 0 for these parse errors; the simulator keeps +1 because typing
-    // an opener makes hx auto-insert its closer (recorded divergence).
+fn an_unclosed_opener_with_no_closer_gives_indent_zero() {
+    // hx auto-pairs a typed opener, so a loaded text with an unmatched one is a
+    // parse error and hx gives 0 (#597).
     let cases: [(&str, &str, &[&str], &str); 5] = [
-        (
-            "rs",
-            "fn f() -> u8 {\n",
-            &[O, "y"],
-            "fn f() -> u8 {\n    y\n",
-        ),
+        ("rs", "fn f() -> u8 {\n", &[O, "y"], "fn f() -> u8 {\ny\n"),
         (
             "rs",
             "fn f() -> u8 {\n",
             &[ENTER_AT_END[0], ENTER_AT_END[1], "y"],
-            "fn f() -> u8 {\n    y\n",
+            "fn f() -> u8 {\ny\n",
         ),
         (
             "rs",
             "let v = vec![\n    1,\n",
             &[O, "y"],
-            "let v = vec![\n    y\n    1,\n",
+            "let v = vec![\ny\n    1,\n",
         ),
         (
             "rs",
             "fn f() {\n    a;\n",
             &["j", UPPER_O, "y"],
-            "fn f() {\n    y\n    a;\n",
+            "fn f() {\ny\n    a;\n",
         ),
-        ("py", "x = {\n", &[O, "y"], "x = {\n    y\n"),
+        ("py", "x = {\n", &[O, "y"], "x = {\ny\n"),
     ];
     for (language, text, keys, expected) in cases {
         check(language, text, keys, expected);

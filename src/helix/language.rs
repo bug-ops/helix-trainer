@@ -23,7 +23,8 @@ pub struct LanguageRules {
     pub indent_unit: IndentUnit,
     /// Line-comment tokens, longest first so `///` wins over `//`
     pub comment_tokens: &'static [&'static str],
-    /// Opener and closer pairs that Enter between them splits onto three lines
+    /// Opener and closer pairs typed text closes automatically and Enter
+    /// between them splits onto three lines
     pub auto_pairs: &'static [(char, char)],
     /// How `o`/`O`/Enter derive the indent of the new line, or `None` to copy
     /// the current line's indent
@@ -93,7 +94,7 @@ impl LanguageRules {
     pub const UNLISTED: Self = Self {
         indent_unit: IndentUnit::DEFAULT,
         comment_tokens: &[],
-        auto_pairs: DEFAULT_PAIRS,
+        auto_pairs: helix_core::auto_pairs::DEFAULT_PAIRS,
         newline: None,
     };
 

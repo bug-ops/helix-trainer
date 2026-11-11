@@ -99,8 +99,9 @@ pub fn merge_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 
 /// Copy selection to next line (C command)
 ///
-/// Creates an additional cursor on the next line at the same column (with clamping).
-/// Preserves existing cursors - the new cursor becomes the primary selection.
+/// Copies the primary range one line down, each end at the same column as its
+/// original (with clamping), so a selection is copied whole and a cursor stays
+/// a cursor. Preserves existing ranges - the copy becomes the primary selection.
 ///
 /// # Errors
 ///
@@ -110,34 +111,29 @@ pub fn copy_selection_next_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     let range = sim.selection.primary();
-    let head = range.head;
-
-    let current_line = sim.doc.char_to_line(head);
     let total_lines = sim.doc.len_lines();
 
-    if current_line + 1 >= total_lines {
+    if sim.doc.char_to_line(range.head) + 1 >= total_lines {
         return Ok(());
     }
 
-    let line_start = sim.doc.line_to_char(current_line);
-    let col = head - line_start;
-
-    let next_line_start = sim.doc.line_to_char(current_line + 1);
-    let next_line_len = if current_line + 2 < total_lines {
-        sim.doc.line_to_char(current_line + 2) - next_line_start - 1 // -1 for newline
-    } else {
-        sim.doc.len_chars() - next_line_start
+    let one_line_down = |pos: usize| {
+        let line = sim.doc.char_to_line(pos);
+        let col = pos - sim.doc.line_to_char(line);
+        let next_line_start = sim.doc.line_to_char((line + 1).min(total_lines - 1));
+        let next_line_len = if line + 2 < total_lines {
+            sim.doc.line_to_char(line + 2) - next_line_start - 1 // -1 for newline
+        } else {
+            sim.doc.len_chars() - next_line_start
+        };
+        (next_line_start + col.min(next_line_len)).min(sim.doc.len_chars())
     };
 
-    let new_col = col.min(next_line_len);
-    let new_head = next_line_start + new_col;
-
-    // Accumulate existing ranges and add the new cursor
-    let new_range = Range::point(new_head.min(sim.doc.len_chars()));
+    let copy = Range::new(one_line_down(range.anchor), one_line_down(range.head));
     let mut ranges: Vec<Range> = sim.selection.ranges().to_vec();
-    ranges.push(new_range);
+    ranges.push(copy);
     let primary_index = ranges.len() - 1;
-    // Primary index is the newly added cursor (last index)
+    // Primary index is the newly added range (last index)
     sim.selection = Selection::new(ranges.into(), primary_index);
 
     Ok(())

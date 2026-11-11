@@ -15,7 +15,7 @@ use crate::helix::newline_indent::{
     CommentContinuation, NewLineStart, NewlineIndent, leading_whitespace,
 };
 use helix_core::{
-    Assoc, ChangeSet, Range, Selection, Transaction,
+    Assoc, ChangeSet, Range, Selection, Transaction, auto_pairs,
     graphemes::{next_grapheme_boundary, prev_grapheme_boundary},
     line_ending::line_end_char_index,
     movement,
@@ -661,6 +661,12 @@ impl HelixSimulator<InsertMode> {
             self.insert_newline();
             return Ok(());
         }
+        let mut chars = text.chars();
+        if let (Some(ch), None) = (chars.next(), chars.next())
+            && self.insert_with_auto_pairs(ch)
+        {
+            return Ok(());
+        }
         let edits = self
             .heads()
             .into_iter()
@@ -668,6 +674,30 @@ impl HelixSimulator<InsertMode> {
             .collect();
         self.apply_cursor_edits(edits);
         Ok(())
+    }
+
+    /// Type `ch` through Helix's auto-pair hook, one character at a time, and
+    /// return whether the hook handled it. Each range ends up as a point
+    /// cursor at its head, so several ranges pair independently.
+    fn insert_with_auto_pairs(&mut self, ch: char) -> bool {
+        // Helix hands the hook its Insert-mode ranges: one grapheme wide and
+        // backward, the shape `i` leaves, which the hook's cursor math expects.
+        let slice = self.doc.slice(..);
+        let hook_selection = self
+            .selection
+            .clone()
+            .transform(|range| Range::new(next_grapheme_boundary(slice, range.head), range.head));
+        let Some(transaction) = auto_pairs::hook(&self.doc, &hook_selection, ch, &self.auto_pairs)
+        else {
+            return false;
+        };
+        let cursors = transaction
+            .selection()
+            .unwrap_or(&hook_selection)
+            .clone()
+            .transform(|range| Range::point(range.head));
+        self.apply_transaction(&transaction.with_selection(cursors));
+        true
     }
 
     /// Insert a line break at every cursor the way Helix's Enter does.
@@ -737,7 +767,8 @@ impl HelixSimulator<InsertMode> {
         self.apply_transaction(&transaction);
     }
 
-    /// Delete the character before every cursor (backspace)
+    /// Delete the character before every cursor (backspace), both halves of
+    /// an auto-pair when the cursor sits between them
     ///
     /// # Errors
     ///
@@ -748,7 +779,14 @@ impl HelixSimulator<InsertMode> {
         let edits = self
             .heads()
             .into_iter()
-            .map(|head| CursorEdit::delete(prev_grapheme_boundary(slice, head), head))
+            .map(|head| {
+                let start = prev_grapheme_boundary(slice, head);
+                if self.between_auto_pair(head, 0) {
+                    CursorEdit::delete(start, next_grapheme_boundary(slice, head))
+                } else {
+                    CursorEdit::delete(start, head)
+                }
+            })
             .collect();
         self.apply_cursor_edits(edits);
         Ok(())

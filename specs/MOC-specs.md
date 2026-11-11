@@ -38,7 +38,7 @@ The 2026-11-11 P2-P3 batch (PR for #509) further extends [[helix-core-post-25-07
 | [[training-progress-indicator/spec\|Training Progress Indicator Reflects Cursor and Selection]] | specify (lightweight bug-fix spec) | proposed — #451 |
 | [[optimal-count-action-counter-unit/spec\|`optimal_count` and Action Counter Use the Same Unit]] | specify (lightweight bug-fix spec) | proposed — #488; section 7 adds the opt-in `after_taught_commands` completion rule (#512) |
 | [[sound-setting-persistence/spec\|Sound Toggle Persists Across Restarts]] | specify (lightweight bug-fix spec) | proposed — #459 |
-| [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444; extended 2026-11-11 with #467, #484, #515, #518, #460, #457, #456, #531, #454, #523, #463 (section 13) |
+| [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444; extended 2026-11-11 with #467, #484, #515, #518, #460, #457, #456, #531, #454, #523, #463 (section 7) |
 
 ## Completed Specs
 

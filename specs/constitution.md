@@ -103,6 +103,7 @@ status: permanent
   `#![forbid(unsafe_code)]` crate attributes in `main.rs` and `lib.rs`) MUST
   remain in force project-wide — no exceptions, no `#[allow(unsafe_code)]`
   overrides.
+- Clippy pedantic lints are enabled project-wide (#532). Kept allowed in `Cargo.toml`, each with a one-line reason: `module_name_repetitions` and `must_use_candidate` (user decision), and, as a deferred residual, `assert_is_empty`, `match_same_arms`, `similar_names` and `too_many_lines`.
 - Every `pub` type, trait, function, and method must have a `///` doc
   comment explaining *what* and *why*, not merely restating the name;
   non-trivial public APIs need a runnable `# Examples` doc-test.

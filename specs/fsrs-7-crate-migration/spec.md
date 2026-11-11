@@ -160,9 +160,9 @@ No project data-model change.
 > - 7.0.0 compiles and runs on the project MSRV: a probe built and ran fsrs 7.0.0 with `cargo +1.98`. MSRV stays 1.98; no bump.
 > - `f32` output is not bitwise stable across the bump: 295 of 3652 probed values differ from 6.6.2, max relative error 1.13e-7. SC-001 therefore uses the 1e-6 relative tolerance branch.
 
-> [!question] Unresolved
-> - [NEEDS CLARIFICATION: Do `next_states` / `memory_state_from_sm2` / other APIs used by `performance.rs` and `scheduler.rs` keep their 6.6 signatures in 7.0.0, beyond the four items verified above?]
-> - [NEEDS CLARIFICATION: Should the project keep `fsrs` pinned to `6.6` and ignore the Dependabot major until [[fsrs-7-model-adoption/spec]] is decided? Default: migrate now, since 6.x is unlikely to receive updates.]
+> [!success] Resolved by the migration
+> - API signatures: `FSRS6_DEFAULT_PARAMETERS` is `[f32; 21]`, `current_retrievability` is a method on a shared `FSRS`, and `MemoryState.stability_fast` is set equal to `stability` (FSRS-6 behavior preserved); `next_states` and `memory_state_from_sm2` kept the signatures used by `performance.rs` and `scheduler.rs`.
+> - Pin: the project migrated to fsrs 7 now instead of pinning 6.6.
 
 ## 10. See Also
 

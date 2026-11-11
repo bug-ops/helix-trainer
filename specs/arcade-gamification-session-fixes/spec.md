@@ -356,7 +356,7 @@ THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0
 | FR-018 | WHEN starting an arcade session finds no scenarios THE SYSTEM SHALL stay on the current screen and raise a notification instead of navigating to an inert MiniGame screen; this applies to `StartMiniGame`, arcade mode selection and `NavigateTo(MiniGame)` | #461 | must |
 
 > [!success] Deferred items delivered (updated 2026-11-11)
-> The parts originally deferred from this batch (#461 remainder and #482, #480, #481, #483) are specified in section 10 and delivered by the issues #527, #528, #529 and #530 (see the mapping there; #529 delivered the typed viewport and the single post-update `AppState::normalize_view`). The typed `QuestId` of #463 is delivered in [[data-and-runtime-hardening/spec#13.7 Command, scenario and quest identifiers (#463)|data-and-runtime-hardening section 13.7]]; `QuestBonus.quest` becomes that type.
+> The parts originally deferred from this batch (#461 remainder and #482, #480, #481, #483) are specified in section 10 and delivered by the issues #527, #528, #529 and #530 (see the mapping there; #529 delivered the typed viewport and the single post-update `AppState::normalize_view`). The typed `QuestId` of #463 is delivered in [[data-and-runtime-hardening/spec#7.7 Command, scenario and quest identifiers (#463)|data-and-runtime-hardening section 7.7]]; `QuestBonus.quest` becomes that type.
 
 ### 9.2 Acceptance Criteria
 
@@ -397,7 +397,7 @@ THEN  the user stays on the selection screen and sees a notification
 > [!info] Added 2026-11-11 (spec-first update; delivers the items deferred in section 9)
 > FR numbers continue after FR-018. Issue mapping: #527 closes the remainder of #461 and #482; #528 closes #480; #529 closes #481; #530 closes #483.
 
-### 11.1 Requirements
+### 10.1 Requirements
 
 | ID | Requirement | Issue | Priority |
 |----|------------|-------|----------|
@@ -408,7 +408,7 @@ THEN  the user stays on the selection screen and sees a notification
 | FR-023 | THE LAYOUT arithmetic shared by state clamping and rendering (visible rows of the menu and the achievements list for a given viewport) SHALL be one pure function per list, used by both; the renderer keeps a read-only defensive clamp and takes the state by shared reference | #529 | must |
 | FR-024 | THE RESULT of a finished task SHALL be one closed enum, `Optimal`, `Completed` or `Abandoned`, computed once; the boolean views `success` and `is_optimal` are derived from it. The tolerance rule that decides `Optimal` versus `Completed` is unchanged | #530 | must |
 
-### 11.2 Acceptance Criteria
+### 10.2 Acceptance Criteria
 
 ```
 GIVEN a scenario is completed
@@ -430,17 +430,17 @@ GIVEN a completion within tolerance but not at the optimal count
 THEN  the feedback outcome is Completed, success is true and is_optimal is false (unchanged behavior)
 ```
 
-### 11.3 Edge Cases
+### 10.3 Edge Cases
 
 | Scenario | Expected Behavior |
 |----------|-------------------|
 | Resize event while a non-list screen is active | Normalization is a no-op for that screen |
 | Zero-height viewport | Visible rows saturate to 0; selection stays valid, no panic |
 | Data message arrives while the menu is open | Normalized after handling (FR-022) |
-| Completed task whose feedback can be derived from its session | Derived, not stored twice |
+| Completed task | Stores its feedback next to the session: feedback derivation is fallible, so it is computed once at completion and not re-derived (FR-019) |
 | Commands or `AbandonScenario` arrive during the command-success animation | Ignored (previously they acted on a placeholder session) |
 
-### 11.4 Success Criteria
+### 10.4 Success Criteria
 
 | ID | Metric | Target |
 |----|--------|--------|

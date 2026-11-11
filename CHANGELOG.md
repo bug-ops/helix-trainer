@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Syntect highlighting is pre-warmed on a background thread after the first frame, removing the first-view hitch (#538)
+- Syntect highlighting is pre-warmed on a background thread after the first frame, removing the first-view hitch (#538, #547)
 - Restore action (Ctrl-R) on the corrupt-profile banner restores `profile.json.prev`, a validated copy rotated from the last good in-memory bytes on every save (#545)
 - `ScenarioId`, `QuestId`, `CommandId` and `NormalizedCommand` newtypes with validating serde; the on-disk JSON is unchanged (#545)
 - Config load failures are shown as a startup notification (#545)
@@ -19,8 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking**: `LanguageRules::opens_block` and `LanguageRules::block_openers` are removed; newline indent is a bracket and comment aware rule in `helix::newline_indent` (#540)
-- Newline indent matches Helix 25.07.1 for comment continuation, Enter between auto-pairs, python dedent and brackets, argument continuation, blank lines and unclosed blocks (#540)
+- **Breaking**: `LanguageRules::opens_block` and `LanguageRules::block_openers` are removed; newline indent is a bracket and comment aware rule in `helix::newline_indent` (#540, #547)
+- Newline indent matches Helix 25.07.1 for comment continuation, Enter between auto-pairs, python dedent and brackets, argument continuation, blank lines and unclosed blocks (#540, #547)
 - **Breaking**: the app exits with code 1 without an absolute config directory instead of falling back to the current directory; `ProfileStorage::new`, `ConfigStorage::new` and their `Default` are removed and `DataDir::resolve` returns `Option` (#545)
 - **Breaking**: persistence and loader errors are typed (`StorageError`, `LoaderError`, `SaveFailure`) and `UserError` keeps its `ErrorCause` (#545)
 - **Breaking**: `ReviewableCommand` is now `CommandId` (card ids only), scenario, quest and command ids are newtypes, `CommandPerformance.command` is removed and `ScenarioHistory` ids follow the `ScenarioId` rule (#545)

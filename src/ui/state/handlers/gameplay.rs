@@ -221,6 +221,16 @@ fn execute_on_task(
     }
 }
 
+/// Check that a finished scenario with `action_count` actions can be scored.
+fn ensure_scorable(
+    scoring: &crate::config::ScoringConfig,
+    action_count: usize,
+) -> Result<(), UserError> {
+    crate::game::Scorer::score_with_config(scoring, action_count)
+        .map(drop)
+        .map_err(UserError::from)
+}
+
 /// Apply `cmd` to the Task screen's session and route the result.
 ///
 /// The failing step (`apply_action`) borrows the session, so an error leaves
@@ -231,6 +241,16 @@ fn apply_to_session(
     cmd: String,
 ) -> Result<bool, UserError> {
     task_data.session.apply_action(cmd)?;
+
+    // Everything that can fail when finishing a scenario (the score, hence the feedback) is
+    // checked while the session is still in place, so the transition to Completed cannot fail
+    // halfway and strand the player.
+    if task_data.session.check_completion() {
+        ensure_scorable(
+            &task_data.session.scenario().scoring,
+            task_data.session.action_count(),
+        )?;
+    }
 
     let scenario = task_data.session.scenario().clone();
     let session = std::mem::replace(
@@ -270,6 +290,23 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(task_data.session.action_count(), 0);
+    }
+
+    /// Regression test for #525: a scenario that cannot be scored is rejected while the
+    /// session is still active, instead of after it was consumed by the Completed transition.
+    #[test]
+    fn test_ensure_scorable_rejects_unscorable_completion() {
+        use crate::config::ScoringConfig;
+        use std::num::NonZeroUsize;
+
+        let scoring = ScoringConfig {
+            optimal_count: NonZeroUsize::new(1 << 40).unwrap(),
+            max_points: u32::MAX,
+            tolerance: 0,
+        };
+
+        assert!(ensure_scorable(&scoring, (1 << 40) + 1).is_err());
+        assert!(ensure_scorable(&scoring, 1).is_ok());
     }
 
     #[test]

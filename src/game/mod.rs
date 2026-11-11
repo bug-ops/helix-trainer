@@ -14,9 +14,7 @@ pub mod scorer;
 pub mod services;
 pub mod session;
 
-pub use command_context::{
-    CommandExecutor, ParsedCommand, format_key_for_display, parse_command_buffer,
-};
+pub use command_context::{CommandExecutor, format_key_for_display};
 pub use editor_state::EditorState;
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};

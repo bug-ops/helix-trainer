@@ -8,12 +8,12 @@
 //! (gs, gg, ge) that would fail in the UI due to missing command buffer handling.
 
 use helix_trainer::config::{QuestLoader, QuestSpec, ScenarioLoader};
-use helix_trainer::game::command_context::{ParsedCommand, parse_command_buffer};
 use helix_trainer::game::{GameSession, PlayableScenario};
 use helix_trainer::helix::commands::{
     CMD_REPLAY_MACRO, CMD_SELECT_REGEX, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
 };
 use helix_trainer::helix::simulator::command_line::CommandLine;
+use helix_trainer::input::typestate::{HandlerResult, InputStateMachine, command_to_key_event};
 
 #[test]
 fn test_all_scenarios_load_successfully() {
@@ -152,7 +152,7 @@ fn test_quest_scenario_references_exist() {
 }
 
 /// Commands that are special keys handled outside the normal command buffer
-/// These are processed directly by the UI without going through parse_command_buffer
+/// These are processed directly by the UI without going through the input state machine
 const SPECIAL_KEY_COMMANDS: &[&str] = &[
     "Escape",     // Exit insert mode
     "Backspace",  // Delete character in insert mode
@@ -217,7 +217,7 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
 
         // Handle 'q'/'Q' (macro record toggle/replay) - dispatched directly
         // by `execute_command_any_mode`'s early return, not the
-        // registry-backed KeyTrie that `parse_command_buffer` walks, so
+        // registry-backed KeyTrie that the input state machine walks, so
         // char-by-char validation has no entry for them.
         if cmd == CMD_TOGGLE_MACRO_RECORDING || cmd == CMD_REPLAY_MACRO {
             continue;
@@ -271,40 +271,34 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// Validate a single normal mode command through command buffer parsing
+/// Validate a single normal mode command by feeding it key by key through the same
+/// `InputStateMachine` the gameplay screens use
 fn validate_single_command(cmd: &str) -> Result<(), String> {
-    let mut buffer = String::new();
+    let mut machine = InputStateMachine::new();
+    let last = cmd.chars().count().saturating_sub(1);
 
     for (i, ch) in cmd.chars().enumerate() {
-        buffer.push(ch);
-
-        match parse_command_buffer(&buffer) {
-            ParsedCommand::Complete(resolved) => {
-                // Command resolved - check it matches expected
-                if resolved != *cmd {
+        match machine.process_key(command_to_key_event(&ch.to_string())) {
+            HandlerResult::Execute(resolved) => {
+                if resolved.as_ref() != cmd {
                     return Err(format!(
-                        "Buffer resolved to '{}' but expected '{}' at char {} ('{}')",
+                        "Input resolved to '{}' but expected '{}' at char {} ('{}')",
                         resolved, cmd, i, ch
                     ));
                 }
                 return Ok(());
             }
-            ParsedCommand::Partial => {
-                // Still waiting for more input - continue
-                if i == cmd.len() - 1 {
-                    return Err("Left buffer in partial state - missing key handler".to_string());
+            HandlerResult::Transition(_) => {
+                if i == last {
+                    return Err("Left input in a pending state - missing key handler".to_string());
                 }
             }
-            ParsedCommand::Invalid => {
-                return Err(format!(
-                    "Became invalid at char {} ('{}') - buffer: '{}'",
-                    i, ch, buffer
-                ));
+            HandlerResult::Cancel | HandlerResult::Stay => {
+                return Err(format!("Became invalid at char {} ('{}')", i, ch));
             }
         }
     }
 
-    // Buffer should have resolved by now
     Err("Never completed".to_string())
 }
 

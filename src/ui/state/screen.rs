@@ -203,16 +203,6 @@ pub struct MenuData {
     pub command_buffer: String,
 }
 
-impl CommandBufferAccess for MenuData {
-    fn command_buffer(&self) -> &str {
-        &self.command_buffer
-    }
-
-    fn command_buffer_mut(&mut self) -> &mut String {
-        &mut self.command_buffer
-    }
-}
-
 /// Data required for task screen (contains active session)
 #[derive(Debug)]
 pub struct TaskData {
@@ -637,28 +627,6 @@ impl MiniGameData {
     }
 }
 
-/// Trait for types that manage a command buffer for multi-key commands
-///
-/// Used by MenuData for menu navigation commands like `gg`, `5j`, `G`.
-/// For gameplay screens (TaskData, MiniGameData), use [`InputStateAccess`] instead.
-pub trait CommandBufferAccess {
-    /// Get reference to the command buffer
-    fn command_buffer(&self) -> &str;
-
-    /// Get mutable reference to the command buffer
-    fn command_buffer_mut(&mut self) -> &mut String;
-
-    /// Push a command string to the buffer
-    fn push_command(&mut self, cmd: &str) {
-        self.command_buffer_mut().push_str(cmd);
-    }
-
-    /// Clear the command buffer
-    fn clear_buffer(&mut self) {
-        self.command_buffer_mut().clear();
-    }
-}
-
 /// Trait for types that use typestate-based input state machine
 ///
 /// TaskData and MiniGameData use `InputStateMachine` for handling multi-key
@@ -714,22 +682,6 @@ impl InputStateAccess for MiniGameData {
 
     fn input_state_mut(&mut self) -> &mut InputStateMachine {
         &mut self.input_state
-    }
-}
-
-// Implement game::CommandBuffer for MenuData only
-// (TaskData and MiniGameData now use InputStateMachine)
-impl crate::game::CommandBuffer for MenuData {
-    fn buffer(&self) -> &str {
-        self.command_buffer()
-    }
-
-    fn push(&mut self, input: &str) {
-        self.push_command(input);
-    }
-
-    fn clear(&mut self) {
-        self.clear_buffer();
     }
 }
 

@@ -44,10 +44,10 @@ pub use substates::{ConfigState, GameState, ProfilePersistence, ProgressState, U
 // Type-safe screen variants with required data
 pub mod screen;
 pub use screen::{
-    AchievementsData, CategoryFiltersData, CommandBufferAccess, CompletedOrAbandoned,
-    EndGameSummaryData, InputStateAccess, KeyHistory, MenuData, MiniGameData,
-    MiniGameModeSelection, ModeSelectionData, NextStep, ProfileData, ResultsData,
-    ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
+    AchievementsData, CategoryFiltersData, CompletedOrAbandoned, EndGameSummaryData,
+    InputStateAccess, KeyHistory, MenuData, MiniGameData, MiniGameModeSelection, ModeSelectionData,
+    NextStep, ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData,
+    TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario

@@ -6,7 +6,6 @@
 //!
 //! # Key Traits
 //!
-//! - [`CommandContext`]: Read-only access to command buffer and mode
 //! - [`CommandExecutor`]: Execute commands with count prefix support
 
 use crate::helix::commands::*;
@@ -40,37 +39,6 @@ pub fn format_key_for_display(command: &str) -> String {
         cmd if cmd.len() == 1 => cmd.to_string(),
         cmd => cmd.to_string(),
     }
-}
-
-/// Read-only access to command execution context
-///
-/// Provides information needed for command parsing and buffering,
-/// without requiring execution capabilities. This separation allows
-/// handlers to maintain control over actual command execution and
-/// state transitions.
-///
-/// # Examples
-///
-/// ```ignore
-/// use helix_trainer::game::CommandContext;
-///
-/// fn check_mode<C: CommandContext>(ctx: &C) -> &'static str {
-///     if ctx.is_insert_mode() {
-///         "INSERT"
-///     } else {
-///         "NORMAL"
-///     }
-/// }
-/// ```
-pub trait CommandContext {
-    /// Get reference to command buffer for multi-key commands
-    fn command_buffer(&self) -> &str;
-
-    /// Check if currently in insert mode
-    fn is_insert_mode(&self) -> bool;
-
-    /// Get last command executed (for repeat functionality)
-    fn last_command(&self) -> Option<&str>;
 }
 
 /// Result of parsing command buffer
@@ -165,104 +133,6 @@ pub trait CommandExecutor {
 
     /// Check if scenario is completed after command execution
     fn check_completion(&self) -> bool;
-}
-
-/// Result of processing command input through the buffer
-///
-/// Returned by `process_command_input` to indicate what action
-/// the caller should take.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandInputResult {
-    /// Execute command directly (insert mode or complete command)
-    Execute(String),
-    /// Invalid sequence - buffer was cleared, no action needed
-    Invalid,
-    /// Waiting for more input (partial multi-key command)
-    Partial,
-}
-
-impl CommandInputResult {
-    /// Check if this result requires command execution
-    pub fn should_execute(&self) -> bool {
-        matches!(self, Self::Execute(_))
-    }
-
-    /// Get the command to execute, if any
-    pub fn command(&self) -> Option<&str> {
-        match self {
-            Self::Execute(cmd) => Some(cmd),
-            _ => None,
-        }
-    }
-}
-
-/// Trait for types that provide command buffer access
-///
-/// Used by `process_command_input` to manage the command buffer
-/// for multi-key command sequences.
-pub trait CommandBuffer {
-    /// Get reference to the command buffer
-    fn buffer(&self) -> &str;
-
-    /// Push input to the command buffer
-    fn push(&mut self, input: &str);
-
-    /// Clear the command buffer
-    fn clear(&mut self);
-}
-
-/// Process command input through the buffer with unified logic
-///
-/// This function handles the common pattern of:
-/// 1. In insert mode: execute directly
-/// 2. In normal mode: buffer input, parse, and determine action
-///
-/// # Arguments
-/// * `buffer` - Command buffer for multi-key sequences
-/// * `input` - The input key/command to process
-/// * `is_insert_mode` - Whether currently in insert mode
-///
-/// # Returns
-/// * `CommandInputResult::Execute(cmd)` - Execute the command
-/// * `CommandInputResult::Invalid` - Invalid sequence, buffer cleared
-/// * `CommandInputResult::Partial` - Waiting for more input
-///
-/// # Examples
-///
-/// ```ignore
-/// use helix_trainer::game::{CommandBuffer, CommandInputResult, process_command_input};
-///
-/// let mut buffer = MyBuffer::new();
-/// match process_command_input(&mut buffer, "g", false) {
-///     CommandInputResult::Partial => { /* waiting for more */ }
-///     CommandInputResult::Execute(cmd) => { /* execute cmd */ }
-///     CommandInputResult::Invalid => { /* invalid sequence */ }
-/// }
-/// ```
-pub fn process_command_input<B: CommandBuffer>(
-    buffer: &mut B,
-    input: &str,
-    is_insert_mode: bool,
-) -> CommandInputResult {
-    // In insert mode, execute directly without buffering
-    if is_insert_mode {
-        return CommandInputResult::Execute(input.to_string());
-    }
-
-    // Normal mode: buffer and parse
-    buffer.push(input);
-
-    match parse_command_buffer(buffer.buffer()) {
-        ParsedCommand::Invalid => {
-            buffer.clear();
-            CommandInputResult::Invalid
-        }
-        ParsedCommand::Complete(cmd) => {
-            buffer.clear();
-            CommandInputResult::Execute(cmd)
-        }
-        ParsedCommand::Partial => CommandInputResult::Partial,
-    }
 }
 
 #[cfg(test)]

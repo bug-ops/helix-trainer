@@ -15,8 +15,7 @@ pub mod services;
 pub mod session;
 
 pub use command_context::{
-    CommandBuffer, CommandContext, CommandExecutor, CommandInputResult, ParsedCommand,
-    format_key_for_display, parse_command_buffer, process_command_input,
+    CommandExecutor, ParsedCommand, format_key_for_display, parse_command_buffer,
 };
 pub use editor_state::EditorState;
 pub use scenario_state::ScenarioState;

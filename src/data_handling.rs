@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use std::sync::Arc;
 use std::time::Duration;
 
 use helix_trainer::{
@@ -11,7 +12,7 @@ use helix_trainer::{
     config::{ScenarioCollection, keymap::keymap_fingerprint_mismatch_message},
     gamification::{
         Achievement, AchievementEngine, LockStatus, QuarantineOutcome, QuestGenerator,
-        QuestTemplateRegistry, StreakChange, StreakManager, UserProfile,
+        QuestRegistrySlot, StreakChange, StreakManager, UserProfile,
     },
     learning::PerformanceTracker,
     ui::{AppState, Notification, NotificationType},
@@ -53,6 +54,48 @@ fn save_failed_notification(error: &impl std::fmt::Display) -> Notification {
 /// Returns true if the current date differs from the last quest refresh date.
 pub fn should_refresh_quests(profile: &UserProfile, now: DateTime<Utc>) -> bool {
     now.date_naive() != profile.last_quest_refresh.date_naive()
+}
+
+/// Regenerate the daily quests when a new day began or none exist.
+///
+/// Waits (does nothing) while the profile is not saveable or the quest
+/// registry is still loading; whichever of the profile and the registry
+/// arrives last triggers the refresh. A registry that is unavailable or lacks
+/// templates leaves quest slots empty and raises one warning, never a panic.
+fn refresh_daily_quests_if_due(state: &mut AppState) {
+    if !state.progress.persistence().is_writable() {
+        return;
+    }
+    let now = state.progress.now();
+    if !should_refresh_quests(&state.progress.profile, now)
+        && !state.progress.profile.daily_quests.is_empty()
+    {
+        return;
+    }
+    let Some(registry) = state.progress.quest_registry.resolved() else {
+        tracing::debug!("Daily quest refresh deferred until the quest registry loads");
+        return;
+    };
+
+    tracing::info!("Refreshing daily quests for new day");
+    state.progress.profile.reset_daily_quests(now);
+    let generation =
+        QuestGenerator::generate_quests(&state.progress.profile, &registry, now.date_naive());
+    state.progress.profile.daily_quests = generation.quests;
+    if generation.unfilled_slots > 0 {
+        tracing::warn!(
+            unfilled = generation.unfilled_slots,
+            "Quest templates missing; daily quests incomplete"
+        );
+        state.ui.notifications.push(Notification::with_duration(
+            NotificationType::Info {
+                message:
+                    "Daily quests could not be fully generated: quest templates are unavailable."
+                        .to_string(),
+            },
+            WARNING_NOTIFICATION_DURATION,
+        ));
+    }
 }
 
 /// Warn the user if another live instance already appears to be using this
@@ -165,38 +208,14 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                 _ => {}
             }
 
-            // Check if we need to refresh daily quests
-            if should_refresh_quests(&updated_profile, now)
-                || updated_profile.daily_quests.is_empty()
-            {
-                tracing::info!("Refreshing daily quests for new day");
-                let tracker = PerformanceTracker::new();
-                updated_profile.reset_daily_quests(now);
-
-                // Load quest registry synchronously
-                let quest_registry = QuestTemplateRegistry::load_from_default_path("en")
-                    .unwrap_or_else(|e| {
-                        tracing::warn!(
-                            "Failed to load quest templates: {}, using empty registry",
-                            e
-                        );
-                        QuestTemplateRegistry::new()
-                    });
-
-                updated_profile.daily_quests = QuestGenerator::generate_quests(
-                    &updated_profile,
-                    &tracker,
-                    &quest_registry,
-                    now.date_naive(),
-                );
-            }
-
             state.progress.performance_tracker = PerformanceTracker::from_stats_with_clock(
                 updated_profile.performance_data.clone(),
                 state.progress.clock(),
             );
             state.progress.profile = updated_profile;
             state.progress.mark_profile_loaded();
+
+            refresh_daily_quests_if_due(state);
 
             warn_keymap_fingerprint_mismatch(state);
 
@@ -245,12 +264,16 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
             warn_if_other_instance_running(state);
         }
 
-        DataLoadMessage::QuestRegistryReady(_registry) => {
-            tracing::debug!("Quest registry loaded");
+        DataLoadMessage::QuestRegistryReady(registry) => {
+            tracing::debug!(templates = registry.len(), "Quest registry loaded");
+            state.progress.quest_registry = QuestRegistrySlot::Ready(Arc::new(registry));
+            refresh_daily_quests_if_due(state);
         }
 
         DataLoadMessage::QuestRegistryError(err) => {
             tracing::error!("Failed to load quest registry: {}", err);
+            state.progress.quest_registry = QuestRegistrySlot::Unavailable;
+            refresh_daily_quests_if_due(state);
         }
 
         DataLoadMessage::ProfileSaved => {
@@ -278,7 +301,7 @@ mod tests {
     use helix_trainer::{
         config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState},
         constants::STREAK_FREEZE_MAX_GAP_DAYS,
-        gamification::ProfileStorage,
+        gamification::{ProfileStorage, QuestTemplateRegistry},
     };
 
     // Binary crate tests cannot access the library's #[cfg(test)]-gated
@@ -1166,14 +1189,169 @@ mod tests {
         );
     }
 
+    fn embedded_quest_registry() -> QuestTemplateRegistry {
+        QuestTemplateRegistry::from_embedded("en").unwrap()
+    }
+
+    fn quest_warning_count(state: &AppState) -> usize {
+        state
+            .ui
+            .notifications
+            .visible()
+            .iter()
+            .filter(|n| {
+                matches!(&n.notification_type, NotificationType::Info { message }
+                if message.contains("Daily quests could not be fully generated"))
+            })
+            .count()
+    }
+
     #[test]
     fn test_handle_quest_registry_ready() {
         let mut state = empty_test_app_state();
-        let registry = QuestTemplateRegistry::new();
 
-        let result = handle_data_message(&mut state, DataLoadMessage::QuestRegistryReady(registry));
+        let result = handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
+        );
 
         assert!(result.is_ok());
+        assert!(matches!(
+            state.progress.quest_registry,
+            QuestRegistrySlot::Ready(_)
+        ));
+    }
+
+    #[test]
+    fn test_quests_are_generated_when_registry_arrives_before_profile() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
+        )
+        .unwrap();
+        assert!(state.progress.profile.daily_quests.is_empty());
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        )
+        .unwrap();
+
+        assert_eq!(state.progress.profile.daily_quests.len(), 3);
+        assert_eq!(quest_warning_count(&state), 0);
+    }
+
+    #[test]
+    fn test_quest_refresh_is_deferred_until_registry_arrives_after_profile() {
+        let mut state = empty_test_app_state();
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        )
+        .unwrap();
+        assert!(matches!(
+            state.progress.quest_registry,
+            QuestRegistrySlot::Pending
+        ));
+        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(quest_warning_count(&state), 0);
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
+        )
+        .unwrap();
+
+        assert_eq!(state.progress.profile.daily_quests.len(), 3);
+        assert_eq!(quest_warning_count(&state), 0);
+    }
+
+    /// Regression test for #469: a registry that failed to load leaves quests
+    /// empty with one warning instead of aborting the process.
+    #[test]
+    fn test_unavailable_registry_after_profile_warns_once_without_panicking() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        )
+        .unwrap();
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            state.progress.quest_registry,
+            QuestRegistrySlot::Unavailable
+        ));
+        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(quest_warning_count(&state), 1);
+    }
+
+    #[test]
+    fn test_unavailable_registry_before_profile_warns_once_without_panicking() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+        )
+        .unwrap();
+        assert_eq!(quest_warning_count(&state), 0);
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        )
+        .unwrap();
+
+        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(quest_warning_count(&state), 1);
+    }
+
+    #[test]
+    fn test_empty_ready_registry_warns_without_panicking() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(QuestTemplateRegistry::new()),
+        )
+        .unwrap();
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        )
+        .unwrap();
+
+        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(quest_warning_count(&state), 1);
+    }
+
+    #[test]
+    fn test_quarantined_profile_does_not_generate_quests() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
+        )
+        .unwrap();
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileError {
+                error: "bad".to_string(),
+                fallback: UserProfile::new(),
+                backup: QuarantineOutcome::Failed("x".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert!(state.progress.profile.daily_quests.is_empty());
     }
 
     #[test]

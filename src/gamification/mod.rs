@@ -11,8 +11,8 @@ pub mod streak;
 pub use achievements::{Achievement, AchievementEngine, AchievementId, speed_time_ratio};
 pub use profile::{UserProfile, XPCalculator, XPComponents};
 pub use quests::{
-    Quest, QuestDifficulty, QuestGenerator, QuestRegistrySlot, QuestTemplateRegistry, QuestTracker,
-    QuestType,
+    Quest, QuestDifficulty, QuestGeneration, QuestGenerator, QuestRegistrySlot,
+    QuestTemplateRegistry, QuestTracker, QuestType,
 };
 pub use storage::{LockStatus, ProfileStorage, QuarantineOutcome};
 pub use streak::{StreakChange, StreakManager};

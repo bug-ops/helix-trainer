@@ -6,7 +6,8 @@ use crate::config::Scenario;
 use crate::game::format_key_for_display;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::XPCalculator;
-use crate::input::typestate::{HandlerResult, command_to_key_event};
+use crate::helix::ModeKind;
+use crate::input::resolve::{Resolution, ResolvedFrom, resolve_keys};
 use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
@@ -248,13 +249,12 @@ fn execute_minigame_command(
 
 /// Handle executing a Helix command during mini-game
 ///
-/// Uses typestate-based `InputStateMachine` for multi-key commands (dd, gg, rx).
+/// Keys are interpreted by the shared [`resolve_keys`] (multi-key commands
+/// such as dd, gg, rx included).
 ///
 /// `keys` is the canonical command (post keymap-overlay translation) to
 /// dispatch; `typed` is the physically-pressed key, for `KeyHistory`
-/// display. A multi-token `keys` (a keymap remap whose target spans more
-/// than one canonical key, e.g. `G` -> `"ge"`) is applied atomically via
-/// [`InputStateMachine::apply_canonical_expansion`].
+/// display.
 pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
     keys: &crate::input::keymap::CanonicalKeys,
@@ -265,71 +265,32 @@ pub(in crate::ui::state) fn handle_minigame_command(
         return Ok(());
     }
 
-    // Check if we're in insert mode
-    let is_insert_mode = state
-        .minigame_session()
-        .is_some_and(crate::minigame::MiniGameSession::is_insert_mode);
-
-    if is_insert_mode {
-        // Insert mode is never translated (R1), so `keys` is always a
-        // single token identical to `typed`. Execute directly, bypassing
-        // the input state machine.
-        return execute_minigame_command(state, keys.as_str(), typed);
-    }
-
-    // Single-token keys (the overwhelmingly common case) are checked before
-    // any screen access so the `Vec` allocation `tokens()` would incur can
-    // be skipped entirely.
-    let is_single_token = keys.is_single_token();
-
+    let mode = state.minigame_session().map_or(
+        ModeKind::Normal,
+        crate::minigame::MiniGameSession::mode_kind,
+    );
     let TypedScreen::MiniGame(ref mut minigame_data) = state.screen else {
         return Ok(());
     };
 
-    if !is_single_token {
-        // An empty `keys` (never produced today - the keymap parser rejects
-        // empty bindings at config-load time) would land here with an empty
-        // `tokens`; `apply_canonical_expansion` handles that by returning
-        // `None`, unlike the old `tokens[0]` indexing this replaced, which
-        // would have panicked.
-        let tokens = keys.tokens();
-        let resolved = minigame_data
-            .input_state_mut()
-            .apply_canonical_expansion(&tokens);
-        return resolved.map_or_else(
-            || {
-                tracing::warn!(
-                    keys = keys.as_str(),
-                    "keymap expansion did not resolve; discarding"
-                );
-                Ok(())
-            },
-            |cmd| execute_minigame_command(state, &cmd, typed),
-        );
-    }
-
-    // Single token - the common, un-remapped-or-simply-remapped path,
-    // dispatched exactly as before the keymap overlay existed.
-    let was_base = minigame_data.input_state().state().is_base();
-    let Some(key_event) = command_to_key_event(keys.as_str()) else {
-        tracing::warn!(keys = keys.as_str(), "unparsable key token; dropping");
-        return Ok(());
-    };
-    let handler_result = minigame_data.input_state_mut().process_key(key_event);
-
-    match handler_result {
-        HandlerResult::Execute(cmd) => {
+    match resolve_keys(minigame_data.input_state_mut(), mode, keys) {
+        // Insert mode is never translated (R1), so `keys` is a single token
+        // identical to `typed`.
+        Resolution::Insert(command) => execute_minigame_command(state, &command, typed),
+        Resolution::Execute { command, from } => {
             // Only the physically-typed key is more informative than the
             // resolved command when this single keystroke, from Base,
             // resolved it directly. A multi-keystroke stock sequence
-            // (e.g. "gg") only calls this on its final keystroke, from a
+            // (e.g. "gg") only completes on its final keystroke, from a
             // non-Base context - showing the resolved command there
             // matches pre-keymap-overlay behavior.
-            let display = if was_base { typed } else { cmd.as_ref() };
-            execute_minigame_command(state, cmd.as_ref(), display)
+            let display = match from {
+                ResolvedFrom::Base => typed,
+                ResolvedFrom::Pending => command.as_ref(),
+            };
+            execute_minigame_command(state, command.as_ref(), display)
         }
-        HandlerResult::Transition(_) => Ok(()), // Waiting for more keys
-        HandlerResult::Cancel | HandlerResult::Stay => Ok(()), // Cancelled or unknown
+        Resolution::Pending | Resolution::Discarded => Ok(()),
     }
 }
 

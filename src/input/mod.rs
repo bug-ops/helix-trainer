@@ -13,7 +13,9 @@
 //! transitions. It encodes the current input context (base state, waiting for
 //! character argument, building count prefix, etc.) at the type level.
 //!
-//! See [`typestate`] for the state machine implementation.
+//! See [`typestate`] for the state machine implementation. The Task and Arcade
+//! screens share one interpretation of a key through [`resolve`].
 
 pub mod keymap;
+pub(crate) mod resolve;
 pub mod typestate;

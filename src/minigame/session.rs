@@ -1055,6 +1055,15 @@ impl<R: Rng> MiniGameSession<R> {
             .is_some_and(ActiveMiniScenario::is_insert_mode)
     }
 
+    /// The editor mode of the current scenario for display and key dispatch
+    /// (Normal when there is none)
+    pub fn mode_kind(&self) -> crate::helix::ModeKind {
+        self.current.as_ref().map_or(
+            crate::helix::ModeKind::Normal,
+            crate::game::PlayableScenario::mode_kind,
+        )
+    }
+
     /// Check if a `q`/`Q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
         self.current

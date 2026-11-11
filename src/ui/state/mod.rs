@@ -519,6 +519,22 @@ macro_rules! extract_screen {
     };
 }
 
+/// Run a handler that needs only the shared (non-screen) state, then apply its outcome
+fn run_with_context(
+    state: &mut AppState,
+    handler: impl FnOnce(&mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError>,
+) -> Result<(), UserError> {
+    let mut ctx = HandlerContext::new(
+        &mut state.ui,
+        &mut state.game,
+        &mut state.progress,
+        &state.config,
+    );
+    let outcome = handler(&mut ctx)?;
+    apply_outcome(state, outcome);
+    Ok(())
+}
+
 /// Apply a HandlerOutcome to the state
 ///
 /// If the outcome is a Transition, update the screen.
@@ -592,17 +608,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::ModeSelectionBack => {
             extract_screen!(state, ModeSelection, data => handlers::handle_mode_selection_back(data))
         }
-        Message::SelectArcadeMode => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_select_arcade_mode(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
-        }
+        Message::SelectArcadeMode => run_with_context(state, handlers::handle_select_arcade_mode),
 
         // Mini-game messages
         Message::PauseMiniGame => {
@@ -823,15 +829,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             extract_screen!(state, CategoryFilters, data, ctx => handlers::handle_category_filter_toggle(data, &mut ctx))
         }
         Message::CategoryFilterSelectAll => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_category_filter_select_all(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
+            run_with_context(state, handlers::handle_category_filter_select_all)
         }
 
         // Review session messages
@@ -854,15 +852,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             extract_screen!(state, Review, mut data, ctx => handlers::handle_complete_review_command(data, &mut ctx, success))
         }
         Message::AbandonReviewSession => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_abandon_review_session(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
+            run_with_context(state, handlers::handle_abandon_review_session)
         }
 
         // Notification messages

@@ -265,6 +265,28 @@ fn test_map_single_key_page_movement() {
     );
 }
 
+/// #592: every Ctrl key of the Base-state handler is also a mapped key, so the
+/// gameplay key dispatch cannot drop one the state machine knows.
+#[test]
+fn test_ctrl_command_table_backs_both_mappings() {
+    use crate::input::typestate::ctrl_command;
+    for c in ['b', 'f', 'u', 'd', 'c', 'r'] {
+        let command = ctrl_command(c).expect("bound Ctrl key");
+        assert_eq!(
+            map_single_key_command(c, KeyModifiers::CONTROL),
+            Some(command)
+        );
+        assert_eq!(
+            map_key_to_helix_command(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)),
+            Some(command)
+        );
+    }
+    assert_eq!(
+        map_single_key_command('r', KeyModifiers::CONTROL),
+        Some(CMD_CTRL_R)
+    );
+}
+
 #[test]
 fn test_map_single_key_control_does_not_fall_back_to_bare_key_commands() {
     // Regression test for issue #198: Ctrl-modified keys must not resolve to

@@ -60,7 +60,7 @@ pub use handler_result::HandlerResult;
 pub use handlers::{InputHandler, KeyHandler};
 pub use input_state::{InputState, RegexPromptKind};
 pub use key_mapping::{
-    Chord, command_to_key_event, handle_insert_mode_input, map_key_to_helix_command,
+    Chord, command_to_key_event, ctrl_command, handle_insert_mode_input, map_key_to_helix_command,
     normalize_key_event, parse_helix_key_string,
 };
 pub use state_machine::{InputStateMachine, RegisterPreview, SurroundPreview};

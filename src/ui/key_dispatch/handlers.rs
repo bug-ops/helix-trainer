@@ -2081,6 +2081,47 @@ mod tests {
         }
     }
 
+    /// #592: `Ctrl-r` is redo on the task screen, not a dropped key.
+    mod redo_key_tests {
+        use super::*;
+        use crate::testing::update_executing_effects as update;
+        use crate::ui::key_dispatch::handle_key_event;
+
+        fn press(state: &mut AppState, key: KeyEvent) {
+            if let Some(msg) = handle_key_event(key, state) {
+                update(state, msg).unwrap();
+            }
+        }
+
+        fn content(state: &AppState) -> String {
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
+            };
+            task_data.session.playable().current_content()
+        }
+
+        #[test]
+        fn ctrl_r_redoes_an_undone_edit_through_the_key_dispatch() {
+            let mut state = create_test_app_state();
+            state.screen = TypedScreen::Task(TaskData::new(make_active_task_session()));
+            let plain = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+
+            press(&mut state, plain('x'));
+            press(&mut state, plain('d'));
+            let edited = content(&state);
+            assert_ne!(edited, "test");
+
+            press(&mut state, plain('u'));
+            assert_eq!(content(&state), "test");
+
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
+            );
+            assert_eq!(content(&state), edited);
+        }
+    }
+
     /// #504 / FR-204: an invalid `/` pattern reaches the simulator, which
     /// rejects it; the failure must be a recoverable `UserError` that leaves
     /// the player on the task screen with the session intact (#466).

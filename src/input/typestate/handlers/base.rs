@@ -7,17 +7,14 @@ use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::{
-    CMD_CTRL_R, CMD_ESCAPE, CMD_HALF_PAGE_DOWN, CMD_HALF_PAGE_UP, CMD_PAGE_DOWN, CMD_PAGE_UP,
-    CMD_REPLAY_MACRO, CMD_TOGGLE_COMMENTS, CMD_TOGGLE_MACRO_RECORDING,
-};
+use crate::helix::commands::{CMD_ESCAPE, CMD_REPLAY_MACRO, CMD_TOGGLE_MACRO_RECORDING};
 
 use super::count::count_from_digit;
 use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{
     handler_result::HandlerResult,
     input_state::{InputState, RegexPromptKind},
-    key_mapping::{Chord, map_single_key_command, normalize_key_event},
+    key_mapping::{Chord, ctrl_command, map_single_key_command, normalize_key_event},
     state_types::{BaseState, FindType},
 };
 
@@ -34,12 +31,7 @@ fn regex_prompt(kind: RegexPromptKind) -> HandlerResult {
 
 fn ctrl_key(code: KeyCode) -> HandlerResult {
     match code {
-        KeyCode::Char('r') => execute(CMD_CTRL_R),
-        KeyCode::Char('c') => execute(CMD_TOGGLE_COMMENTS),
-        KeyCode::Char('b') => execute(CMD_PAGE_UP),
-        KeyCode::Char('f') => execute(CMD_PAGE_DOWN),
-        KeyCode::Char('u') => execute(CMD_HALF_PAGE_UP),
-        KeyCode::Char('d') => execute(CMD_HALF_PAGE_DOWN),
+        KeyCode::Char(c) => ctrl_command(c).map_or(HandlerResult::Stay, execute),
         _ => HandlerResult::Stay,
     }
 }

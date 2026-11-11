@@ -10,8 +10,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::helix::commands::{
     CMD_ALIGN_SELECTIONS, CMD_APPEND, CMD_APPEND_LINE_END, CMD_ARROW_DOWN, CMD_ARROW_LEFT,
     CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK,
-    CMD_COLLAPSE_SELECTION, CMD_COPY_SELECTION_NEXT, CMD_COPY_SELECTION_PREV, CMD_DEDENT,
-    CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK, CMD_ESCAPE, CMD_EXTEND_LINE,
+    CMD_COLLAPSE_SELECTION, CMD_COPY_SELECTION_NEXT, CMD_COPY_SELECTION_PREV, CMD_CTRL_R,
+    CMD_DEDENT, CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK, CMD_ESCAPE, CMD_EXTEND_LINE,
     CMD_FLIP_SELECTIONS, CMD_HALF_PAGE_DOWN, CMD_HALF_PAGE_UP, CMD_INDENT, CMD_INSERT,
     CMD_INSERT_ALT_BACKSPACE, CMD_INSERT_DELETE_CHAR_FORWARD, CMD_INSERT_DELETE_KEY,
     CMD_INSERT_DELETE_TO_LINE_END, CMD_INSERT_DELETE_TO_LINE_START,
@@ -344,6 +344,31 @@ impl Chord {
     }
 }
 
+/// The command a `Ctrl`-modified character runs on a gameplay screen.
+///
+/// The one table behind both [`map_single_key_command`] and the Base-state
+/// handler, so a Ctrl key cannot be bound in one and dropped in the other.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::input::typestate::ctrl_command;
+///
+/// assert_eq!(ctrl_command('r'), Some("Ctrl-r"));
+/// assert_eq!(ctrl_command('x'), None);
+/// ```
+pub fn ctrl_command(c: char) -> Option<&'static str> {
+    match c {
+        'c' => Some(CMD_TOGGLE_COMMENTS),
+        'b' => Some(CMD_PAGE_UP),
+        'f' => Some(CMD_PAGE_DOWN),
+        'u' => Some(CMD_HALF_PAGE_UP),
+        'd' => Some(CMD_HALF_PAGE_DOWN),
+        'r' => Some(CMD_CTRL_R),
+        _ => None,
+    }
+}
+
 /// Map a single-key command character to its command string
 ///
 /// Returns None for invalid commands or prefix commands.
@@ -354,14 +379,7 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
     // so a Ctrl-modified char would otherwise silently fall into the bare-key
     // arms (e.g. Ctrl-d resolving to plain 'd' / delete_selection).
     if modifiers.contains(KeyModifiers::CONTROL) {
-        return match c {
-            'c' => Some(CMD_TOGGLE_COMMENTS), // Ctrl-c
-            'b' => Some(CMD_PAGE_UP),         // Ctrl-b
-            'f' => Some(CMD_PAGE_DOWN),       // Ctrl-f
-            'u' => Some(CMD_HALF_PAGE_UP),    // Ctrl-u
-            'd' => Some(CMD_HALF_PAGE_DOWN),  // Ctrl-d
-            _ => None,
-        };
+        return ctrl_command(c);
     }
 
     let is_shift = modifiers.contains(KeyModifiers::SHIFT);

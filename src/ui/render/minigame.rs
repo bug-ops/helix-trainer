@@ -246,7 +246,7 @@ fn render_scenario_editor<S: PlayableScenario>(
 fn render_timer_bar(frame: &mut Frame, area: Rect, scenario: &crate::minigame::ActiveMiniScenario) {
     let remaining = scenario.remaining_time().as_secs_f64();
     // Clamp progress to [0.0, 1.0] - can exceed 1.0 when time expires
-    let progress = scenario.progress_percent().clamp(0.0, 1.0);
+    let progress = scenario.time_used().get().clamp(0.0, 1.0);
 
     // Color based on time remaining
     let color = if progress < 0.5 {

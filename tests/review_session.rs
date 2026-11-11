@@ -651,9 +651,6 @@ fn test_review_result_records_duration() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    // Wait a tiny bit (simulated)
-    std::thread::sleep(Duration::from_millis(10));
-
     update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
 
     // Session is complete, so we can't check duration directly

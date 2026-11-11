@@ -203,13 +203,6 @@ impl ActiveMiniScenario {
         Ratio::new(self.elapsed().as_secs_f64() / self.time_limit.as_secs_f64())
     }
 
-    /// Time used as a float in `0.0..=1.0` (a fraction, not a percentage).
-    ///
-    /// Prefer [`Self::time_used`], which carries the unit in its type.
-    pub fn progress_percent(&self) -> f64 {
-        self.time_used().get()
-    }
-
     /// Get number of actions taken
     pub fn action_count(&self) -> usize {
         self.actions.len()

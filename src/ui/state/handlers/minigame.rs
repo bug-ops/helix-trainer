@@ -1812,16 +1812,22 @@ mod tests {
 
         let scenario =
             create_completable_scenario_with_difficulty("advanced1", Difficulty::Advanced);
-        let mut state = create_single_scenario_state(scenario);
-        start_minigame(&mut state);
-
-        if let Some(session) = state.minigame_session_mut() {
-            session.tick_countdown();
-            session.tick_countdown();
+        let mut state = create_single_scenario_state(scenario.clone());
+        let clock = Arc::new(crate::time::FakeMonotonicClock::new());
+        let mut session = MiniGameSession::with_sources(
+            Arc::new(vec![scenario]),
+            None,
+            crate::minigame::MiniGameMode::default(),
+            clock.clone(),
+            rand::SeedableRng::seed_from_u64(1),
+        );
+        session.start();
+        for _ in 0..3 {
             session.tick_countdown();
         }
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
-        std::thread::sleep(std::time::Duration::from_millis(3_500));
+        clock.advance(std::time::Duration::from_millis(3_500));
 
         let _ = execute_minigame_command(&mut state, "x", "x");
         let _ = execute_minigame_command(&mut state, "d", "d");
@@ -2094,14 +2100,20 @@ mod tests {
         start_minigame(&mut state);
 
         // Swap in a short session-duration Arcade mode so the session timer can be
-        // waited out with a short real-time sleep, mirroring
-        // `test_active_scenario_pause_freezes_elapsed_time`'s real-time approach.
+        // waited out with a short real-time sleep, using an injected fake clock.
         let scenarios = Arc::new(vec![create_test_scenario("s1")]);
         let mode = MiniGameMode::Arcade(ArcadeConfig {
             session_duration: Duration::from_millis(200),
             ..ArcadeConfig::default()
         });
-        let mut session = MiniGameSession::with_mode(scenarios, None, mode);
+        let clock = Arc::new(crate::time::FakeMonotonicClock::new());
+        let mut session = MiniGameSession::with_sources(
+            scenarios,
+            None,
+            mode,
+            clock.clone(),
+            rand::SeedableRng::seed_from_u64(1),
+        );
         session.start();
         session.tick_countdown();
         session.tick_countdown();
@@ -2113,7 +2125,7 @@ mod tests {
         let lives_before = session.stats().lives();
         state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
-        std::thread::sleep(Duration::from_millis(500));
+        clock.advance(Duration::from_millis(500));
         assert!(state.minigame_session().unwrap().is_session_expired());
 
         let initial_xp = state.progress.profile.total_xp;
@@ -2161,14 +2173,21 @@ mod tests {
             session_duration: Duration::from_millis(200),
             ..ArcadeConfig::default()
         });
-        let mut session = MiniGameSession::with_mode(scenarios, None, mode);
+        let clock = Arc::new(crate::time::FakeMonotonicClock::new());
+        let mut session = MiniGameSession::with_sources(
+            scenarios,
+            None,
+            mode,
+            clock.clone(),
+            rand::SeedableRng::seed_from_u64(1),
+        );
         session.start();
         session.tick_countdown();
         session.tick_countdown();
         session.tick_countdown();
         state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
-        std::thread::sleep(Duration::from_millis(500));
+        clock.advance(Duration::from_millis(500));
 
         // Ends the run via the session-timer path (not lives depleted) - this
         // already runs `handle_minigame_game_over` once.

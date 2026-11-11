@@ -234,7 +234,13 @@ impl HelixSimulator<NormalMode> {
         entry: InsertEntryCommand,
     ) -> Result<Option<usize>, SimulatorError> {
         match entry {
-            InsertEntryCommand::Insert => Ok(None),
+            InsertEntryCommand::Insert => {
+                self.selection = self
+                    .selection
+                    .clone()
+                    .transform(|range| Range::new(range.to(), range.from()));
+                Ok(None)
+            }
             InsertEntryCommand::Append => self.append().map(|()| None),
             InsertEntryCommand::InsertLineStart => self.insert_at_line_start().map(|()| None),
             InsertEntryCommand::AppendLineEnd => self.append_at_line_end().map(|()| None),

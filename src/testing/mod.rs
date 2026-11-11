@@ -78,6 +78,16 @@ pub fn normal(raw: &str) -> crate::helix::normal_command::NormalCommand {
     crate::helix::normal_command::NormalCommand::parse(raw).expect("valid command fixture")
 }
 
+/// Parse canonical Helix keys, panicking on a bad fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a canonical key sequence.
+#[must_use]
+pub fn keys(raw: &str) -> crate::input::keymap::CanonicalKeys {
+    crate::input::keymap::CanonicalKeys::parse(raw.to_owned()).expect("valid keys fixture")
+}
+
 /// A quarantined profile with `backup` and no restorable previous copy.
 #[must_use]
 pub fn quarantine(backup: QuarantineOutcome) -> Quarantine {

@@ -17,7 +17,7 @@ use toml::Value;
 use super::{CanonicalKeys, KeyContext, KeymapOverlay, PhysicalKey};
 use crate::helix::registry::{CommandRegistry, normal_registry};
 use crate::helix::simulator::NormalMode;
-use crate::input::typestate::{HandlerResult, InputStateMachine, parse_helix_key_string};
+use crate::input::typestate::{HandlerResult, InputStateMachine};
 use crate::limits;
 use crate::security::{SecurityError, path_validator};
 
@@ -289,7 +289,10 @@ fn apply_base_binding(
         );
         return;
     };
-    let canonical = CanonicalKeys::from_static(canonical_key);
+    let Ok(canonical) = CanonicalKeys::parse(canonical_key) else {
+        resolution.ignore(path, KeymapWarningReason::DidNotResolve);
+        return;
+    };
     if !resolves_cleanly_from_base(&canonical) {
         resolution.ignore(path, KeymapWarningReason::DidNotResolve);
         return;
@@ -318,7 +321,10 @@ fn apply_minor_mode_binding(
         );
         return;
     };
-    let full = CanonicalKeys::from_static(canonical_key);
+    let Ok(full) = CanonicalKeys::parse(canonical_key) else {
+        resolution.ignore(path, KeymapWarningReason::DidNotResolve);
+        return;
+    };
     let &[prefix, remainder_token] = full.tokens().as_slice() else {
         resolution.ignore(path, KeymapWarningReason::UnsupportedRelocation);
         return;
@@ -334,7 +340,10 @@ fn apply_minor_mode_binding(
         );
         return;
     };
-    let remainder = CanonicalKeys::from_owned(remainder_token.to_string());
+    let Ok(remainder) = CanonicalKeys::parse(remainder_token.to_string()) else {
+        resolution.ignore(path, KeymapWarningReason::DidNotResolve);
+        return;
+    };
     resolution.apply(context, physical, remainder, path);
 }
 
@@ -359,19 +368,16 @@ fn apply_minor_mode_binding(
 /// guards against a *future* registry change silently producing a binding
 /// that's reported as "applied" but dead at runtime.
 fn resolves_cleanly_from_base(canonical: &CanonicalKeys) -> bool {
-    let tokens = canonical.tokens();
-    let Some(last) = tokens.len().checked_sub(1) else {
+    let events = canonical.events();
+    let Some(last) = events.len().checked_sub(1) else {
         return false;
     };
     let mut machine = InputStateMachine::new();
-    for (i, token) in tokens.iter().enumerate() {
-        let Some(key_event) = parse_helix_key_string(token) else {
-            return false;
-        };
+    for (i, &key_event) in events.iter().enumerate() {
         let result = machine.process_key(key_event);
         if i == last {
             return matches!(result, HandlerResult::Execute(_))
-                || (tokens.len() == 1 && matches!(result, HandlerResult::Transition(_)));
+                || (events.len() == 1 && matches!(result, HandlerResult::Transition(_)));
         }
         if !matches!(result, HandlerResult::Transition(_)) {
             return false;
@@ -399,17 +405,13 @@ mod tests {
     fn no_registered_multi_token_key_ends_in_a_prefix() {
         let registry = normal_registry();
         for meta in registry.all_commands() {
-            let canonical = CanonicalKeys::from_static(meta.key());
-            let tokens = canonical.tokens();
-            if tokens.len() < 2 {
+            let canonical = crate::testing::keys(meta.key());
+            if canonical.is_single_token() {
                 continue;
             }
             let mut machine = InputStateMachine::new();
             let mut result = None;
-            for token in &tokens {
-                let key_event = parse_helix_key_string(token).unwrap_or_else(|| {
-                    panic!("registry key {:?} token {:?} unparsable", meta.key(), token)
-                });
+            for &key_event in canonical.events() {
                 result = Some(machine.process_key(key_event));
             }
             assert_matches!(
@@ -445,7 +447,7 @@ mod tests {
         let key = PhysicalKey::try_from("j").unwrap();
         assert_eq!(
             overlay.lookup(KeyContext::Base, key),
-            Some(&CanonicalKeys::from_static("h"))
+            Some(&crate::testing::keys("h"))
         );
     }
 
@@ -465,7 +467,7 @@ mod tests {
         let key = PhysicalKey::try_from("C-s").unwrap();
         assert_eq!(
             overlay.lookup(KeyContext::Base, key),
-            Some(&CanonicalKeys::from_static("Alt-s"))
+            Some(&crate::testing::keys("Alt-s"))
         );
     }
 
@@ -483,7 +485,7 @@ mod tests {
         let key = PhysicalKey::try_from("G").unwrap();
         assert_eq!(
             overlay.lookup(KeyContext::Base, key),
-            Some(&CanonicalKeys::from_static("ge"))
+            Some(&crate::testing::keys("ge"))
         );
     }
 
@@ -535,7 +537,7 @@ mod tests {
         let key = PhysicalKey::try_from("x").unwrap();
         assert_eq!(
             overlay.lookup(KeyContext::Goto, key),
-            Some(&CanonicalKeys::from_static("e"))
+            Some(&crate::testing::keys("e"))
         );
     }
 
@@ -641,7 +643,7 @@ mod tests {
         let key = PhysicalKey::try_from("G").unwrap();
         assert_eq!(
             overlay.lookup(KeyContext::Base, key),
-            Some(&CanonicalKeys::from_static("gg"))
+            Some(&crate::testing::keys("gg"))
         );
     }
 
@@ -667,12 +669,12 @@ mod tests {
         let plain_key = PhysicalKey::try_from("`").unwrap();
         assert_eq!(
             overlay.lookup(KeyContext::Base, plain_key),
-            Some(&CanonicalKeys::from_static("ge"))
+            Some(&crate::testing::keys("ge"))
         );
         let alt_key = PhysicalKey::try_from("A-`").unwrap();
         assert_eq!(
             overlay.lookup(KeyContext::Base, alt_key),
-            Some(&CanonicalKeys::from_static("gg"))
+            Some(&crate::testing::keys("gg"))
         );
     }
 

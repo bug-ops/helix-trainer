@@ -541,6 +541,62 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
     }
 }
 
+/// The `h`/`j`/`k`/`l` key an unmodified arrow key stands for in Normal mode.
+pub(crate) fn arrow_movement(key_code: KeyCode) -> Option<KeyEvent> {
+    let movement = match key_code {
+        KeyCode::Left => 'h',
+        KeyCode::Right => 'l',
+        KeyCode::Up => 'k',
+        KeyCode::Down => 'j',
+        _ => return None,
+    };
+    Some(KeyEvent::new(KeyCode::Char(movement), KeyModifiers::NONE))
+}
+
+/// Convert a key event to a command string for the state machine
+///
+/// In normal mode, all keys are passed to `InputStateMachine` which handles:
+/// - Multi-key commands (gg, dd)
+/// - Character arguments (fx, rx)
+/// - Count prefixes (3j, 10k)
+/// - Modifier commands (Alt-C, Ctrl-r)
+///
+/// Uses `map_key_to_helix_command` for known commands (which returns constants
+/// like `CMD_COPY_SELECTION_PREV` = "Alt-C"), and builds strings for prefix keys
+/// that the state machine needs to handle.
+pub(crate) fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
+    // First try to get the command constant from map_key_to_helix_command
+    // This handles all known single-key commands including modifier commands
+    if let Some(cmd) = map_key_to_helix_command(key) {
+        return Some(Cow::Borrowed(cmd));
+    }
+
+    // For unknown commands (prefix keys like 'g', 'm', 'f', etc.),
+    // normalize and return the character for the state machine to process.
+    // Guard is applied AFTER normalization so macOS Option-composed chars
+    // are judged on their post-normalization modifiers.
+    let key = normalize_key_event(key);
+
+    match key.code {
+        // Only bare ASCII chars fall through here: known ALT/CTRL commands
+        // are already returned above by `map_key_to_helix_command`, so an
+        // ALT/CTRL-carrying char reaching this arm is unmapped and must be
+        // dropped rather than silently serialized as the bare character
+        // (previously: unmapped Alt-x reached the state machine as plain
+        // "x", executing `select line` instead of being ignored).
+        KeyCode::Char(c)
+            if c.is_ascii()
+                && !key.modifiers.contains(KeyModifiers::ALT)
+                && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
+            Some(Cow::Owned(c.to_string()))
+        }
+        KeyCode::Enter => Some(Cow::Borrowed("Enter")),
+        KeyCode::Tab => Some(Cow::Borrowed("Tab")),
+        _ => None,
+    }
+}
+
 /// Handle insert mode input and convert to command string
 ///
 /// Returns the character/command to insert or execute in insert mode.

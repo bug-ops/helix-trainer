@@ -169,8 +169,8 @@ pub enum Message {
     /// `KeyHistory` display. Equal on every keystroke when the overlay is
     /// disabled or misses.
     MiniGameCommand {
-        /// Canonical command to dispatch.
-        keys: crate::input::keymap::CanonicalKeys,
+        /// Canonical command to dispatch, or the text typed in Insert mode.
+        keys: crate::input::keymap::GameplayKey,
         /// Physically pressed key, for key-history display.
         typed: std::borrow::Cow<'static, str>,
     },
@@ -230,8 +230,8 @@ pub enum Message {
     /// `KeyHistory` display. Equal on every keystroke when the overlay is
     /// disabled or misses.
     ExecuteCommand {
-        /// Canonical command to dispatch.
-        keys: crate::input::keymap::CanonicalKeys,
+        /// Canonical command to dispatch, or the text typed in Insert mode.
+        keys: crate::input::keymap::GameplayKey,
         /// Physically pressed key, for key-history display.
         typed: std::borrow::Cow<'static, str>,
     },

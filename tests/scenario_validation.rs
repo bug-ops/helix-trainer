@@ -573,7 +573,7 @@ fn type_through_ui(scenario_id: &str, keys: &[&'static str]) -> UiRun {
         send(
             &mut state,
             Message::ExecuteCommand {
-                keys: CanonicalKeys::from_static(key),
+                keys: CanonicalKeys::parse(*key).unwrap().into(),
                 typed: Cow::Borrowed(key),
             },
         );

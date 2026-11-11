@@ -1,7 +1,7 @@
 //! Common test utilities for UI state tests
 
 use crate::config::Scenario;
-use crate::input::keymap::CanonicalKeys;
+use crate::input::keymap::GameplayKey;
 use crate::testing::{ScenarioBuilder, test_app_state_with_scenarios};
 use crate::ui::{AppState, Message};
 
@@ -10,7 +10,7 @@ use crate::ui::{AppState, Message};
 /// keystroke these tests simulate.
 pub(super) fn exec(key: &'static str) -> Message {
     Message::ExecuteCommand {
-        keys: CanonicalKeys::from_static(key),
+        keys: GameplayKey::Keys(crate::testing::keys(key)),
         typed: std::borrow::Cow::Borrowed(key),
     }
 }

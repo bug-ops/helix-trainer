@@ -8,7 +8,6 @@ use crossterm::event::KeyEvent;
 use super::handler_result::HandlerResult;
 use super::handlers::{InputHandler, KeyHandler};
 use super::input_state::InputState;
-use super::key_mapping::parse_helix_key_string;
 use super::state_types::{
     BaseState, CommandLinePending, CountPending, CountedFindCharPending, CountedGotoPending,
     FindCharPending, GotoPending, MatchPending, RegexPromptPending, RegisterOpPending,
@@ -190,13 +189,12 @@ impl InputStateMachine {
     /// Attempt a multi-token keymap-overlay expansion via
     /// clone-and-commit-or-discard.
     ///
-    /// `tokens` must be the tokens of a canonical key sequence resolved by
-    /// the keymap overlay (see `crate::input::keymap::CanonicalKeys::tokens`).
-    /// Every token is replayed against a private clone of `self`; the
+    /// `keys` must be the events of a canonical key sequence resolved by
+    /// the keymap overlay (see `crate::input::keymap::CanonicalKeys::events`).
+    /// Every key is replayed against a private clone of `self`; the
     /// clone is committed back into `self` only if every intermediate
-    /// token transitions and the final token executes. On any other
-    /// outcome — an unparsable token, a `Cancel`/`Stay`, or a `Transition`
-    /// on the final token — `self` is left completely untouched and
+    /// key transitions and the final key executes. On any other
+    /// outcome — a `Cancel`/`Stay`, or a `Transition` on the final key — `self` is left completely untouched and
     /// `None` is returned.
     ///
     /// Only meant for multi-token expansions: a single-token target that
@@ -212,18 +210,14 @@ impl InputStateMachine {
     /// keymap overlay only ever produces a multi-token expansion for a
     /// `Base`-context lookup (see the design decision record), so this
     /// would catch a caller wiring bug, not user input.
-    pub fn apply_canonical_expansion(&mut self, tokens: &[&str]) -> Option<NormalCommand> {
+    pub fn apply_canonical_expansion(&mut self, keys: &[KeyEvent]) -> Option<NormalCommand> {
         debug_assert!(
             self.state.is_base(),
             "multi-token keymap expansion applied outside Base context"
         );
-        if tokens.is_empty() {
-            return None;
-        }
+        let last = keys.len().checked_sub(1)?;
         let mut clone = self.clone();
-        let last = tokens.len() - 1;
-        for (i, token) in tokens.iter().enumerate() {
-            let key_event = parse_helix_key_string(token)?;
+        for (i, &key_event) in keys.iter().enumerate() {
             match clone.process_key(key_event) {
                 HandlerResult::Execute(command) if i == last => {
                     *self = clone;

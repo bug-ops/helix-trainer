@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use super::SessionInput;
-use crate::game::format_key_for_display;
+use super::key_history;
 use crate::grammar::commands::CMD_ESCAPE;
 use crate::input::resolve::{Resolution, resolve_keys};
 use crate::security::{UserError, error_chain};
@@ -57,7 +57,7 @@ pub(crate) fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
 /// so it requires full `AppState` access
 pub(crate) fn handle_execute_command(
     state: &mut AppState,
-    keys: &crate::input::keymap::CanonicalKeys,
+    keys: &crate::input::keymap::GameplayKey,
     typed: &str,
 ) -> Result<HandlerOutcome, UserError> {
     // Only handle if we're on Task screen
@@ -125,7 +125,7 @@ struct ExecutedCommand {
 fn execute_on_task(
     state: &mut AppState,
     task_data: &mut crate::ui::state::TaskData,
-    keys: &crate::input::keymap::CanonicalKeys,
+    keys: &crate::input::keymap::GameplayKey,
     typed: &str,
 ) -> Result<Option<ExecutedCommand>, UserError> {
     // A finished task shows its success animation; it takes no more input
@@ -133,15 +133,7 @@ fn execute_on_task(
         return Ok(None);
     }
 
-    // Add key to history for display (format for readability). Uses the
-    // physically-typed key, not the translated command - and, matching
-    // pre-keymap-overlay behavior, happens for every keystroke
-    // unconditionally, including ones that only extend a pending prefix.
-    let display_key = format_key_for_display(typed);
-    task_data.add_key_to_history(display_key);
-
-    // Show key history popup after first keypress
-    state.ui.show_key_history = true;
+    key_history::record_key(&mut state.ui, &mut task_data.key_history, typed);
 
     let mode = task_data.session.playable().mode_kind();
     match resolve_keys(task_data.input_state_mut(), mode, keys) {
@@ -264,10 +256,10 @@ mod tests {
         let mut state = task_state();
         // `a(` is an invalid search regex: Enter is rejected by the simulator.
         for c in "/a(".chars() {
-            let key = crate::input::keymap::CanonicalKeys::from_owned(c.to_string());
+            let key = crate::input::keymap::GameplayKey::Keys(crate::testing::keys(&c.to_string()));
             handle_execute_command(&mut state, &key, &c.to_string()).unwrap();
         }
-        let enter = crate::input::keymap::CanonicalKeys::from_static("Enter");
+        let enter = crate::input::keymap::GameplayKey::Keys(crate::testing::keys("Enter"));
         let result = handle_execute_command(&mut state, &enter, "Enter");
 
         assert!(result.is_err());

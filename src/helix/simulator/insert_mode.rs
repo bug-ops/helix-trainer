@@ -15,8 +15,10 @@ use crate::helix::newline_indent::{
     CommentContinuation, NewLineStart, NewlineIndent, leading_whitespace,
 };
 use helix_core::{
-    Range, Selection, Transaction, graphemes::next_grapheme_boundary,
-    line_ending::line_end_char_index, movement,
+    Range, Selection, Transaction,
+    graphemes::{next_grapheme_boundary, prev_grapheme_boundary},
+    line_ending::line_end_char_index,
+    movement,
 };
 use helix_stdx::rope::RopeSliceExt;
 
@@ -620,8 +622,7 @@ impl HelixSimulator<InsertMode> {
             return Ok(());
         }
 
-        // Delete character before cursor
-        let delete_start = head - 1;
+        let delete_start = prev_grapheme_boundary(self.doc.slice(..), head);
         let transaction = Transaction::change(&self.doc, [(delete_start, head, None)].into_iter())
             .with_selection(Selection::point(delete_start));
         self.apply_transaction(&transaction);
@@ -678,10 +679,11 @@ impl HelixSimulator<InsertMode> {
             InsertCommand::DeleteToLineEnd => {
                 let line = text.char_to_line(head);
                 let line_end = line_end_char_index(&text, line);
-                if head == line_end {
-                    (head, text.line_to_char(line + 1).max(head))
-                } else {
-                    (head, line_end)
+                match head.cmp(&line_end) {
+                    std::cmp::Ordering::Less => (head, line_end),
+                    std::cmp::Ordering::Equal => (head, text.line_to_char(line + 1).max(head)),
+                    // Inside a CRLF pair typed one character at a time: nothing to delete
+                    std::cmp::Ordering::Greater => (head, head),
                 }
             }
             InsertCommand::DeleteCharForward => (head, next_grapheme_boundary(text, head)),

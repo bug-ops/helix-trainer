@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 //! Main entry point for the Helix Keybindings Trainer
 //!
 //! This is the application's entry point. It initializes the terminal UI,

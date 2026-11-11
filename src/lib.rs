@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 //! Helix Keybindings Trainer
 //!
 //! An interactive terminal user interface (TUI) application for learning Helix editor keybindings.

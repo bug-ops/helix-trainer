@@ -32,9 +32,9 @@ We will respond within 48 hours.
 
 ### What We Protect
 
-- **No first-party `unsafe` code** — `#![forbid(unsafe_code)]` in the crate; third-party dependencies are outside this guarantee
+- **No first-party `unsafe` code** — `unsafe_code = "forbid"` in the `Cargo.toml` lints table; third-party dependencies are outside this guarantee
 - **Path validation for scenario and quest files** — directory loaders canonicalize paths and check them against an allow-list
-- **Bounded file reads** — every file read from disk (profile, config, keymap, scenario and quest files) goes through a size-capped reader that rejects non-regular files such as FIFOs and device nodes
+- **Bounded file reads** — every file read into memory (profile, profile lock, config, keymap, scenario and quest files) goes through a size-capped reader that rejects non-regular files such as FIFOs and device nodes
 - **Local-only data** — No network, no telemetry, no cloud sync
 - **Owner-only persisted data** — on Unix the data directory is created `0700` and files `0600`; other platforms use process defaults
 

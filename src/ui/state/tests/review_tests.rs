@@ -14,7 +14,8 @@ use std::time::{Duration, Instant};
 
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::testing::review_session;
-use crate::ui::state::{Message, ReviewData, ReviewSessionState, TypedScreen, update};
+use crate::testing::update_executing_effects as update;
+use crate::ui::state::{Message, ReviewData, ReviewSessionState, TypedScreen};
 
 #[test]
 fn test_review_session_with_no_due_reviews() {

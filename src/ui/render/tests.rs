@@ -789,7 +789,7 @@ mod popup_tests {
 
         // Start scenario and show hint
         crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
-        crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
+        crate::testing::update_executing_effects(&mut state, crate::ui::Message::ShowHint).unwrap();
 
         terminal
             .draw(|f| {
@@ -2458,7 +2458,7 @@ mod popup_additional_tests {
 
         let mut state = create_test_app_state(vec![scenario]);
         crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
-        crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
+        crate::testing::update_executing_effects(&mut state, crate::ui::Message::ShowHint).unwrap();
 
         terminal
             .draw(|f| {

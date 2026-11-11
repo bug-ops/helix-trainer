@@ -1990,7 +1990,8 @@ mod tests {
         use super::*;
         use crate::config::keymap::resolve_str;
         use crate::input::keymap::CanonicalKeys;
-        use crate::ui::state::{ConfigState, TaskData, update};
+        use crate::testing::update_executing_effects as update;
+        use crate::ui::state::{ConfigState, TaskData};
 
         /// A task-screen `AppState` with a keymap overlay remapping `G` to
         /// `goto_last_line` (canonical `"ge"`, 2 tokens) at the top level.
@@ -2113,7 +2114,7 @@ mod tests {
     /// the player on the task screen with the session intact (#466).
     mod search_prompt_error_tests {
         use super::*;
-        use crate::ui::state::update;
+        use crate::testing::update_executing_effects as update;
 
         fn task_state() -> AppState {
             let mut state = create_test_app_state();

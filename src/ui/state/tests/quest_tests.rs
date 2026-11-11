@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::gamification::{Quest, QuestDifficulty, QuestType, StreakManager};
+use crate::testing::update_executing_effects as update;
 use crate::ui::notification::NotificationType;
-use crate::ui::state::{Message, update};
+use crate::ui::state::Message;
 
 #[test]
 fn test_quest_progress_command_practice() {

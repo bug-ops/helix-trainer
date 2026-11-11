@@ -10,7 +10,7 @@ use crate::helix::commands::CMD_ESCAPE;
 use crate::input::typestate::{HandlerResult, command_to_key_event};
 use crate::security::UserError;
 use crate::ui::state::{
-    AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, update,
+    AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, dispatch,
 };
 
 /// Process session result and update state accordingly
@@ -113,7 +113,7 @@ pub fn handle_execute_command(
 
     // Update quest progress for executed command (after releasing session borrow)
     if let Some(executed) = outcome? {
-        update(
+        dispatch(
             state,
             Message::UpdateQuestProgress {
                 command: Some(executed.command),

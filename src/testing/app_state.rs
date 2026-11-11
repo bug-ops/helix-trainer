@@ -10,8 +10,8 @@ use crate::security::UserError;
 use crate::testing::default_test_scenario;
 use crate::time::Clock;
 use crate::ui::state::{
-    AppState, ConfigState, MenuData, Message, MiniGameData, ReturnDestination, ReviewSessionState,
-    TypedScreen, update,
+    AppState, ConfigState, MenuData, Message, MiniGameData, ProgressState, ReturnDestination,
+    ReviewSessionState, TypedScreen, UIState, update,
 };
 use std::sync::Arc;
 
@@ -132,7 +132,29 @@ pub fn start_scenario_from_menu(state: &mut AppState, index: usize) -> Result<()
         selected_item: index,
         ..MenuData::default()
     });
-    update(state, Message::MenuSelect)
+    update_executing_effects(state, Message::MenuSelect)
+}
+
+/// Execute the effects handlers queued on `ui`, for tests that call a handler directly.
+pub fn run_queued_effects(ui: &mut UIState, progress: &mut ProgressState) {
+    for effect in ui.effects.drain(..) {
+        drop(effect.execute(progress));
+    }
+}
+
+/// Run [`update`] and execute the effects it requests against the in-memory state, so tests see
+/// sounds and saves happen as they do in the event loop.
+///
+/// # Errors
+///
+/// Propagates the [`UserError`] returned by [`update`]; effects are executed either way.
+pub fn update_executing_effects(state: &mut AppState, msg: Message) -> Result<(), UserError> {
+    let mut effects = Vec::new();
+    let result = update(state, msg, &mut effects);
+    for effect in effects {
+        drop(effect.execute(&mut state.progress));
+    }
+    result
 }
 
 /// The review session currently on screen, if the state is on the review screen.

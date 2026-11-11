@@ -718,8 +718,9 @@ mod tests {
     // pipeline, not just the scroll-math helpers directly.
     mod quit_reachable_end_to_end {
         use super::*;
+        use crate::testing::update_executing_effects as update;
         use crate::testing::{ScenarioBuilder, test_app_state_with_scenarios};
-        use crate::ui::state::{MenuData, Message, TypedScreen, update};
+        use crate::ui::state::{MenuData, Message, TypedScreen};
         use ratatui::Terminal;
         use ratatui::backend::TestBackend;
 

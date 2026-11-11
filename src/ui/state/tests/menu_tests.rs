@@ -4,7 +4,8 @@ use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::game::PlayableScenario;
-use crate::ui::state::{Message, TypedScreen, update};
+use crate::testing::update_executing_effects as update;
+use crate::ui::state::{Message, TypedScreen};
 
 #[test]
 fn test_menu_navigation_up() {

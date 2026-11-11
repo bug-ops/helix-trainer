@@ -13,10 +13,11 @@ use helix_trainer::{
     async_state::DataLoadMessage,
     constants::{ANIMATION_TICK_INTERVAL, COUNTDOWN_TICK_INTERVAL, SUCCESS_SCREEN_DELAY},
     security::UserError,
-    ui::{self, AppState, Message, Notification, NotificationType},
+    ui::{self, AppState, Message, Notification, NotificationType, state::Effect},
 };
 
 use crate::data_handling::handle_data_message;
+use helix_trainer::data_loader::start_fresh_profile_message;
 use helix_trainer::input::handle_key_event;
 
 /// Consecutive terminal input errors tolerated before the event loop gives up.
@@ -48,12 +49,43 @@ fn report_update_error(state: &mut AppState, error: &UserError) {
         }));
 }
 
+/// Execute the effects an update requested; those that need the async runtime are returned.
+fn run_effects(state: &mut AppState, effects: Vec<Effect>) -> Vec<Effect> {
+    effects
+        .into_iter()
+        .filter_map(|effect| effect.execute(&mut state.progress))
+        .collect()
+}
+
+/// Start a fresh profile in the background and report the outcome over `data_tx` (#518).
+fn spawn_start_fresh_profile(state: &AppState, data_tx: &mpsc::Sender<DataLoadMessage>) {
+    let storage = state.progress.storage.clone();
+    let data_tx = data_tx.clone();
+    tokio::spawn(async move {
+        match start_fresh_profile_message(storage).await {
+            Ok(msg) => {
+                if let Err(e) = data_tx.send(msg).await {
+                    tracing::error!("Failed to report the fresh profile: {}", e);
+                }
+            }
+            Err(e) => tracing::error!("Failed to start a fresh profile: {:#}", e),
+        }
+    });
+}
+
 /// Apply `msg` to `state`; recoverable errors are reported, never propagated.
 ///
 /// The single boundary that owns the event loop's error policy (see
-/// constitution section V): no `?` on `update()` inside the loop.
-fn apply_update(state: &mut AppState, msg: Message) {
-    if let Err(error) = ui::update(state, msg) {
+/// constitution section V): no `?` on `update()` inside the loop. The requested effects are
+/// executed whether or not the update failed, so a save or sound queued before the failing
+/// step is not lost.
+fn apply_update(state: &mut AppState, msg: Message, data_tx: &mpsc::Sender<DataLoadMessage>) {
+    let mut effects = Vec::new();
+    let result = ui::update(state, msg, &mut effects);
+    if !run_effects(state, effects).is_empty() {
+        spawn_start_fresh_profile(state, data_tx);
+    }
+    if let Err(error) = result {
         report_update_error(state, &error);
     }
 }
@@ -141,6 +173,7 @@ pub async fn run_async_event_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     state: &mut AppState,
     data_rx: &mut mpsc::Receiver<DataLoadMessage>,
+    data_tx: &mpsc::Sender<DataLoadMessage>,
 ) -> Result<()> {
     // Create event stream from crossterm
     let mut event_stream = EventStream::new();
@@ -167,7 +200,7 @@ pub async fn run_async_event_loop(
             && completion_time.elapsed() >= SUCCESS_SCREEN_DELAY
         {
             tracing::debug!("Success screen delay elapsed, transitioning to results");
-            apply_update(state, Message::CompleteScenario);
+            apply_update(state, Message::CompleteScenario, data_tx);
             state.ui.completion_time = None;
         }
 
@@ -189,14 +222,14 @@ pub async fn run_async_event_loop(
                             && key.modifiers.contains(KeyModifiers::CONTROL)
                         {
                             tracing::debug!("User pressed Ctrl+C");
-                            apply_update(state, Message::QuitApp);
+                            apply_update(state, Message::QuitApp, data_tx);
                             continue;
                         }
 
                         // Dispatch to screen-specific handlers
                         if let Some(msg) = handle_key_event(key, state) {
                             tracing::debug!("Message: {:?}", msg);
-                            apply_update(state, msg);
+                            apply_update(state, msg, data_tx);
                         }
                     }
                     Some(Ok(_)) => consecutive_input_errors = 0,
@@ -224,7 +257,7 @@ pub async fn run_async_event_loop(
 
             // Countdown tick for mini-game (1 second)
             _ = countdown_tick_interval.tick(), if is_minigame_countdown(state) => {
-                apply_update(state, Message::MiniGameTick);
+                apply_update(state, Message::MiniGameTick, data_tx);
             }
 
             // Fast tick for animations and mini-game timeout checking (100ms)
@@ -234,16 +267,16 @@ pub async fn run_async_event_loop(
                 // Not gated on is_minigame_playing: it must also fire during the
                 // between-scenario Transition state (see is_minigame_session_expired).
                 if is_minigame_session_expired(state) {
-                    apply_update(state, Message::MiniGameSessionTimeout);
+                    apply_update(state, Message::MiniGameSessionTimeout, data_tx);
                 } else if is_minigame_playing(state) && is_minigame_timed_out(state) {
-                    apply_update(state, Message::MiniGameTimeout);
+                    apply_update(state, Message::MiniGameTimeout, data_tx);
                 }
                 // Check for mini-game transition auto-advance
                 if should_minigame_advance(state) {
-                    apply_update(state, Message::MiniGameNextScenario);
+                    apply_update(state, Message::MiniGameNextScenario, data_tx);
                 }
                 // Cleanup expired notifications
-                apply_update(state, Message::CleanupNotifications);
+                apply_update(state, Message::CleanupNotifications, data_tx);
             }
         }
     }
@@ -276,10 +309,32 @@ mod tests {
     fn test_wrong_screen_message_is_silent_noop() {
         let mut state = test_state();
 
-        apply_update(&mut state, Message::RetryScenario);
+        let (data_tx, _data_rx) = mpsc::channel(1);
+        apply_update(&mut state, Message::RetryScenario, &data_tx);
 
         assert!(state.ui.running);
         assert_eq!(state.ui.notifications.count(), 0);
+    }
+
+    /// Regression test for #481: effects queued before a failing step are still executed.
+    #[test]
+    fn test_effects_run_even_when_the_update_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.json");
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            ProfileStorage::with_path(&path),
+            PerformanceTracker::new(),
+        );
+        state.progress.mark_profile_loaded();
+        state.ui.effects.push(Effect::SaveProfile);
+        let (data_tx, _data_rx) = mpsc::channel(1);
+
+        // RetryScenario fails with WrongScreen on the mode-selection screen
+        apply_update(&mut state, Message::RetryScenario, &data_tx);
+
+        assert!(path.exists(), "the queued save must run despite the error");
     }
 
     /// Regression test for #466: any other recoverable error becomes a

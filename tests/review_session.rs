@@ -10,9 +10,19 @@
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::ui::state::{AppState, Message, ReviewSessionState, TypedScreen};
-use helix_trainer::ui::update;
+
 use std::assert_matches;
 use std::time::Duration;
+
+/// Run `update` and execute the effects it requests, as the event loop does
+fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
+    let mut effects = Vec::new();
+    let result = helix_trainer::ui::update(state, msg, &mut effects);
+    for effect in effects {
+        drop(effect.execute(&mut state.progress));
+    }
+    result
+}
 
 /// The review session currently on screen, if any
 fn review_session(state: &AppState) -> Option<&ReviewSessionState> {

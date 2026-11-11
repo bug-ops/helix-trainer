@@ -12,6 +12,7 @@ use crate::minigame::MiniGameSession;
 use crate::security::UserError;
 use crate::sound::SoundEffect;
 use crate::ui::notification::{Notification, NotificationType};
+use crate::ui::state::Effect;
 use crate::ui::state::{
     AppState, GameState, HandlerContext, HandlerOutcome, InputStateAccess, MiniGameData,
     ModeSelectionData, TypedScreen,
@@ -74,7 +75,7 @@ pub(in crate::ui::state) fn handle_minigame_tick(
 ) -> Result<HandlerOutcome, UserError> {
     if data.session.state().is_countdown() {
         // Play countdown sound on each tick
-        ctx.progress.sound_manager.play(SoundEffect::Countdown);
+        ctx.ui.effects.push(Effect::Play(SoundEffect::Countdown));
         data.session.tick_countdown();
     }
     Ok(HandlerOutcome::Stay)
@@ -130,9 +131,9 @@ fn execute_minigame_command(
     if session.check_completion() {
         // Play success sound
         state
-            .progress
-            .sound_manager
-            .play(SoundEffect::ScenarioComplete);
+            .ui
+            .effects
+            .push(Effect::Play(SoundEffect::ScenarioComplete));
 
         // Get current streak before advancing
         let current_streak = session.stats().streak();
@@ -207,11 +208,14 @@ fn execute_minigame_command(
 
             // Check for multiplier increase and play sound
             if session.take_multiplier_change().is_some() {
-                state.progress.sound_manager.play(SoundEffect::MultiplierUp);
+                state
+                    .ui
+                    .effects
+                    .push(Effect::Play(SoundEffect::MultiplierUp));
             }
             // Check for level increase and play sound
             if session.take_level_change().is_some() {
-                state.progress.sound_manager.play(SoundEffect::LevelUp);
+                state.ui.effects.push(Effect::Play(SoundEffect::LevelUp));
             }
         }
         // Transition state will be handled by timer
@@ -347,11 +351,11 @@ pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) -> Res
 
         if session.state().is_game_over() {
             // Play game over sound
-            state.progress.sound_manager.play(SoundEffect::GameOver);
+            state.ui.effects.push(Effect::Play(SoundEffect::GameOver));
             handle_minigame_game_over(state)?;
         } else {
             // Play life lost sound (still has lives remaining)
-            state.progress.sound_manager.play(SoundEffect::LifeLost);
+            state.ui.effects.push(Effect::Play(SoundEffect::LifeLost));
         }
     }
     Ok(())
@@ -371,7 +375,7 @@ pub(in crate::ui::state) fn handle_minigame_session_timeout(
         .map(|data| &mut *data.session)
     {
         session.end_session_on_timeout();
-        state.progress.sound_manager.play(SoundEffect::GameOver);
+        state.ui.effects.push(Effect::Play(SoundEffect::GameOver));
         handle_minigame_game_over(state)?;
     }
     Ok(())
@@ -483,10 +487,7 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
         }
 
         // 4. Persist profile to disk (non-fatal error - log but continue)
-        if let Err(e) = state.progress.save_immediate() {
-            tracing::error!("Failed to save profile after mini-game: {:?}", e);
-            // Don't return error - game over screen should still display
-        }
+        state.ui.effects.push(Effect::SaveProfile);
     }
 
     Ok(())
@@ -864,7 +865,11 @@ mod tests {
         }
 
         {
-            crate::ui::state::update(&mut state, crate::ui::state::Message::PauseMiniGame).unwrap();
+            crate::testing::update_executing_effects(
+                &mut state,
+                crate::ui::state::Message::PauseMiniGame,
+            )
+            .unwrap();
         }
 
         if let Some(session) = state.minigame_session() {
@@ -872,8 +877,11 @@ mod tests {
         }
 
         {
-            crate::ui::state::update(&mut state, crate::ui::state::Message::ResumeMiniGame)
-                .unwrap();
+            crate::testing::update_executing_effects(
+                &mut state,
+                crate::ui::state::Message::ResumeMiniGame,
+            )
+            .unwrap();
         }
 
         if let Some(session) = state.minigame_session() {
@@ -910,7 +918,11 @@ mod tests {
         }
 
         {
-            crate::ui::state::update(&mut state, crate::ui::state::Message::MiniGameTick).unwrap();
+            crate::testing::update_executing_effects(
+                &mut state,
+                crate::ui::state::Message::MiniGameTick,
+            )
+            .unwrap();
         }
 
         if let Some(session) = state.minigame_session() {
@@ -951,6 +963,7 @@ mod tests {
 
         // Trigger game over
         handle_minigame_game_over(&mut state).unwrap();
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Check XP was awarded
         let final_xp = state.progress.profile.total_xp;
@@ -980,6 +993,8 @@ mod tests {
         }
 
         handle_minigame_game_over(&mut state).unwrap();
+
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Check high score was updated
         assert_eq!(state.progress.profile.minigame_high_score, 5000);
@@ -1031,6 +1046,8 @@ mod tests {
 
         handle_minigame_game_over(&mut state).unwrap();
 
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
+
         let progress = &state.progress.profile.challenge_progress;
         assert_eq!(progress.best_score_today, 5000);
         assert_eq!(progress.best_scenarios_today, 7);
@@ -1071,6 +1088,8 @@ mod tests {
         );
 
         handle_minigame_game_over(&mut state).unwrap();
+
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(!persisted.performance_data.is_empty());
@@ -1554,7 +1573,11 @@ mod tests {
             .minigame_session()
             .and_then(|s| s.state().countdown_remaining());
 
-        crate::ui::state::update(&mut state, crate::ui::state::Message::MiniGameTick).unwrap();
+        crate::testing::update_executing_effects(
+            &mut state,
+            crate::ui::state::Message::MiniGameTick,
+        )
+        .unwrap();
 
         // Countdown should not change when not in countdown state
         let countdown_after = state
@@ -1635,6 +1658,8 @@ mod tests {
 
         handle_minigame_game_over(&mut state).unwrap();
 
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
+
         // Best streak should be updated
         assert_eq!(state.progress.profile.minigame_best_streak, 15);
     }
@@ -1661,6 +1686,8 @@ mod tests {
         }
 
         handle_minigame_game_over(&mut state).unwrap();
+
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // High score should not decrease
         assert_eq!(state.progress.profile.minigame_high_score, 10000);
@@ -1798,6 +1825,8 @@ mod tests {
         );
 
         handle_minigame_game_over(&mut state).unwrap();
+
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         assert!(profile_path.exists(), "arcade must persist at game over");
     }
@@ -1944,6 +1973,7 @@ mod tests {
 
         // Trigger game over
         handle_minigame_game_over(&mut state).unwrap();
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Games played should be incremented
         assert_eq!(state.progress.profile.minigame_games_played, 1);
@@ -1956,6 +1986,7 @@ mod tests {
             session.tick_countdown();
         }
         handle_minigame_game_over(&mut state).unwrap();
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Should be 2 now
         assert_eq!(state.progress.profile.minigame_games_played, 2);
@@ -1986,6 +2017,8 @@ mod tests {
         }
 
         handle_minigame_game_over(&mut state).unwrap();
+
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         assert!(
             state.progress.profile.level >= 2,
@@ -2074,6 +2107,8 @@ mod tests {
 
         handle_minigame_game_over(&mut state).unwrap();
 
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
+
         assert!(
             !state.ui.notifications.visible().iter().any(|n| matches!(
                 n.notification_type,
@@ -2131,6 +2166,8 @@ mod tests {
         let initial_xp = state.progress.profile.total_xp;
 
         handle_minigame_session_timeout(&mut state).unwrap();
+
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Same bookkeeping as an ordinary timeout game-over: XP awarded, high
         // score updated, games_played incremented.
@@ -2192,6 +2229,7 @@ mod tests {
         // Ends the run via the session-timer path (not lives depleted) - this
         // already runs `handle_minigame_game_over` once.
         handle_minigame_session_timeout(&mut state).unwrap();
+        crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
         assert!(
             state
                 .minigame_session()

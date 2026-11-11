@@ -20,7 +20,7 @@
 
 use crate::async_state::SaveRequest;
 use crate::config::Scenario;
-use crate::gamification::{ProfileStorage, UserProfile};
+use crate::gamification::{ProfileStorage, QuarantineOutcome, UserProfile};
 use crate::learning::PerformanceTracker;
 use crate::security::UserError;
 use crate::sound::SoundEffect;
@@ -32,6 +32,9 @@ use tokio::sync::mpsc;
 
 // Message handlers in separate modules
 mod handlers;
+
+mod effect;
+pub use effect::Effect;
 
 // Handler infrastructure for type-safe handlers
 mod handler_context;
@@ -307,6 +310,9 @@ pub enum Message {
 
     /// Toggle sound on/off
     ToggleSound,
+
+    /// Replace the quarantined profile with a fresh one (only offered after a backup was made)
+    StartFreshProfile,
 }
 
 /// Main application state
@@ -582,12 +588,14 @@ fn apply_outcome(state: &mut AppState, outcome: HandlerOutcome) {
 ///
 /// This function is the heart of the Elm Architecture pattern.
 /// It takes the current state and a message, and returns the new state.
-/// It has no side effects - all effects are handled elsewhere.
+/// It performs no I/O itself - side effects are returned through `effects`.
 ///
 /// # Arguments
 ///
 /// * `state` - The current application state (will be modified)
 /// * `msg` - The message/action that triggered the update
+/// * `effects` - Receives the side effects (sound, saves) the update requests; filled even when
+///   the update returns an error
 ///
 /// # Errors
 ///
@@ -599,11 +607,23 @@ fn apply_outcome(state: &mut AppState, outcome: HandlerOutcome) {
 /// use helix_trainer::ui::{AppState, Screen, Message, update};
 ///
 /// let mut state = AppState::new(vec![]);
-/// update(&mut state, Message::QuitApp)?;
+/// update(&mut state, Message::QuitApp, &mut Vec::new())?;
 /// assert!(!state.ui.running);
 /// # Ok::<(), helix_trainer::security::UserError>(())
 /// ```
-pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
+pub fn update(
+    state: &mut AppState,
+    msg: Message,
+    effects: &mut Vec<Effect>,
+) -> Result<(), UserError> {
+    let result = dispatch(state, msg);
+    // Delivered on the error path too: effects pushed before a failing step must not be lost
+    effects.append(&mut state.ui.effects);
+    result
+}
+
+/// Handle `msg` without draining the effect queue, for handlers that dispatch follow-up messages
+pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserError> {
     match msg {
         // Navigation messages (don't require specific screen)
         Message::QuitApp => {
@@ -719,9 +739,9 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             let outcome = handlers::handle_complete_scenario(state)?;
             // Play success sound for training mode completion
             state
-                .progress
-                .sound_manager
-                .play(SoundEffect::ScenarioComplete);
+                .ui
+                .effects
+                .push(Effect::Play(SoundEffect::ScenarioComplete));
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -733,9 +753,9 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 let new_screen = handlers::handle_abandon_scenario(task_data)?;
                 // Play failure sound for abandoned scenario
                 state
-                    .progress
-                    .sound_manager
-                    .play(SoundEffect::ScenarioFailed);
+                    .ui
+                    .effects
+                    .push(Effect::Play(SoundEffect::ScenarioFailed));
                 state.screen = new_screen;
                 Ok(())
             } else {
@@ -774,7 +794,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 // for that call.
                 if matches!(&outcome, HandlerOutcome::Transition(s) if matches!(**s, TypedScreen::EndGameSummary(_)))
                 {
-                    state.progress.sound_manager.play(SoundEffect::LevelUp);
+                    state.ui.effects.push(Effect::Play(SoundEffect::LevelUp));
                 }
                 apply_outcome(state, outcome);
                 Ok(())
@@ -892,6 +912,15 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
         Message::CleanupNotifications => {
             let outcome = handlers::handle_cleanup_notifications(&mut state.ui)?;
             apply_outcome(state, outcome);
+            Ok(())
+        }
+        Message::StartFreshProfile => {
+            if matches!(
+                state.progress.persistence(),
+                ProfilePersistence::Quarantined(QuarantineOutcome::BackedUp(_))
+            ) {
+                state.ui.effects.push(Effect::StartFreshProfile);
+            }
             Ok(())
         }
         Message::ToggleSound => {

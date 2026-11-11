@@ -10,9 +10,19 @@ use helix_trainer::input::keymap::CanonicalKeys;
 use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::security::UserError;
 use helix_trainer::ui::state::{InputStateAccess, MenuData, TypedScreen};
-use helix_trainer::ui::{AppState, Message, update};
+use helix_trainer::ui::{AppState, Message};
 use std::assert_matches;
 use std::borrow::Cow;
+
+/// Run `update` and execute the effects it requests, as the event loop does
+fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
+    let mut effects = Vec::new();
+    let result = helix_trainer::ui::update(state, msg, &mut effects);
+    for effect in effects {
+        drop(effect.execute(&mut state.progress));
+    }
+    result
+}
 
 /// Build an `ExecuteCommand` message for a single physical key with no
 /// keymap remap active - `keys` and `typed` are identical, matching every

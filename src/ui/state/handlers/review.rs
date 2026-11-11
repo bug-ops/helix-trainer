@@ -6,6 +6,7 @@ use crate::constants::OPTIMAL_REVIEW_TIME;
 use crate::gamification::XPCalculator;
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
+use crate::ui::state::Effect;
 use crate::ui::state::{
     HandlerContext, HandlerOutcome, MenuData, ReviewData, ReviewOutcome, ReviewResult,
     ReviewSessionState, TypedScreen,
@@ -127,9 +128,7 @@ fn handle_next_review_command(
 
         // Persist FSRS state and profile now that the review session has ended
         // (non-fatal error - log but continue, matches handle_minigame_game_over's policy)
-        if let Err(e) = ctx.progress.save_immediate() {
-            tracing::error!("Failed to save profile after review session: {:?}", e);
-        }
+        ctx.ui.effects.push(Effect::SaveProfile);
 
         // Return to menu
         return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
@@ -149,12 +148,7 @@ pub fn handle_abandon_review_session(
 ) -> Result<HandlerOutcome, UserError> {
     // Persist attempts already recorded so far - abandoning mid-session (e.g. Esc)
     // is the likelier interrupted-user path, so it should flush just like completion does
-    if let Err(e) = ctx.progress.save_immediate() {
-        tracing::error!(
-            "Failed to save profile after abandoning review session: {:?}",
-            e
-        );
-    }
+    ctx.ui.effects.push(Effect::SaveProfile);
 
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
         MenuData::default(),

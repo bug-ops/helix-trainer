@@ -10,6 +10,7 @@ use crate::gamification::UserProfile;
 use crate::learning::Analytics;
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
+use crate::ui::state::Effect;
 use crate::ui::state::{
     AppState, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData, NextStep, ResultsData,
     TaskData, TypedScreen, XPBreakdown,
@@ -97,9 +98,7 @@ fn record_scenario_completion(
     // scenario's review history, not the state before it.
     // (non-fatal error - log but continue, matches handle_minigame_game_over's policy)
     if leveled_up {
-        if let Err(e) = ctx.progress.save_immediate() {
-            tracing::error!("Failed to save profile after scenario completion: {:?}", e);
-        }
+        ctx.ui.effects.push(Effect::SaveProfile);
     } else if let Err(e) = ctx.progress.save_debounced() {
         tracing::error!("Failed to save profile after scenario completion: {:?}", e);
     }
@@ -127,9 +126,7 @@ fn record_scenario_completion(
         // Persist through the shared save path (non-fatal, matches the policy
         // above) instead of a raw `storage.save`, which would skip the FSRS
         // sync and leave `profile.performance_data` stale.
-        if let Err(e) = ctx.progress.save_immediate() {
-            tracing::error!("Failed to save profile after achievement unlock: {:?}", e);
-        }
+        ctx.ui.effects.push(Effect::SaveProfile);
     }
 
     // Generate a notification for an account-level level up (distinct from the
@@ -1099,6 +1096,7 @@ mod tests {
             &state.config,
         );
         record_scenario_completion(&mut ctx, &feedback, 1, false, None).unwrap();
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert_eq!(ctx.progress.profile.commands_executed, before + 5);
         let mut cards = ctx.progress.performance_tracker.all_commands();
@@ -1134,6 +1132,7 @@ mod tests {
         // Small XP amount that should not trigger a level-up, exercising the
         // save_debounced branch.
         record_scenario_completion(&mut ctx, &feedback, 1, false, None).unwrap();
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(
@@ -1179,6 +1178,7 @@ mod tests {
         // Small XP amount that should not trigger a level-up, exercising the
         // skipped save_debounced branch alongside the achievement-unlock save.
         record_scenario_completion(&mut ctx, &feedback, 1, false, None).unwrap();
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert!(
             ctx.progress
@@ -1223,6 +1223,8 @@ mod tests {
         );
 
         record_scenario_completion(&mut ctx, &feedback, 100, false, None).unwrap();
+
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
@@ -1289,6 +1291,8 @@ mod tests {
         );
 
         record_scenario_completion(&mut ctx, &feedback, 100, false, None).unwrap();
+
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
 
         assert!(
@@ -1316,6 +1320,7 @@ mod tests {
 
         // Small XP amount that should not trigger a level-up.
         record_scenario_completion(&mut ctx, &feedback, 1, false, None).unwrap();
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert!(
             !ctx.ui.notifications.visible().iter().any(|n| matches!(

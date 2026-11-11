@@ -122,7 +122,7 @@ async fn main() -> Result<()> {
     app_state.progress.begin_profile_load();
 
     // Spawn background data loaders
-    spawn_data_loaders(data_tx);
+    spawn_data_loaders(data_tx.clone());
 
     // Force full redraw on first render by clearing the terminal
     // This ensures the UI is visible immediately on startup
@@ -132,7 +132,7 @@ async fn main() -> Result<()> {
     io::Write::flush(terminal.backend_mut())?;
 
     // Run the async event loop
-    let result = run_async_event_loop(&mut terminal, &mut app_state, &mut data_rx).await;
+    let result = run_async_event_loop(&mut terminal, &mut app_state, &mut data_rx, &data_tx).await;
 
     // Snapshot the exit-time save before anything else touches `progress`.
     let final_save_request = app_state.prepare_final_save_request();

@@ -40,6 +40,9 @@ pub struct UIState {
     /// Notification queue for transient messages (level-up, achievements, etc.)
     pub notifications: NotificationQueue,
 
+    /// Side effects queued during one `update`; drained into its `effects` sink at the end
+    pub effects: Vec<super::Effect>,
+
     /// Last selected scenario index in menu (session-only, for position persistence)
     pub last_menu_selected: usize,
 
@@ -56,6 +59,7 @@ impl UIState {
             completion_time: None,
             last_feedback: None,
             notifications: NotificationQueue::new(),
+            effects: Vec::new(),
             last_menu_selected: 0,
             last_menu_scroll: 0,
         }

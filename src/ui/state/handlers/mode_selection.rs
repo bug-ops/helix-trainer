@@ -6,6 +6,7 @@
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
+use crate::ui::state::Effect;
 use crate::ui::state::{
     HandlerContext, HandlerOutcome, MenuData, MiniGameData, MiniGameModeSelection,
     ModeSelectionData, TopMode, TypedScreen,
@@ -158,12 +159,7 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
         ctx.progress.profile.challenge_progress.start_attempt(today);
         // Save immediately (not debounced): a crash/quit within the debounce
         // window would otherwise refund the attempt just consumed in memory.
-        if let Err(e) = ctx.progress.save_immediate() {
-            tracing::error!(
-                "Failed to save profile after starting challenge attempt: {:?}",
-                e
-            );
-        }
+        ctx.ui.effects.push(Effect::SaveProfile);
     }
 
     // Clone tracker for session's internal weighted selection

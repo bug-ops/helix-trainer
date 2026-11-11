@@ -1,17 +1,20 @@
 //! Application configuration storage and persistence
 //!
 //! Handles loading and saving application configuration to disk.
-//! Configuration is stored in `helix-trainer/config.json` under the OS config
-//! directory (`dirs::config_dir()`: `~/.config` on Linux,
-//! `~/Library/Application Support` on macOS, `%AppData%` on Windows).
+//! Configuration is stored in `config.json` in the data directory
+//! ([`DataDir`]): `~/.config/helix-trainer` on Linux and macOS (honoring
+//! `$XDG_CONFIG_HOME` on macOS), `%AppData%\helix-trainer` on Windows.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use super::data_dir::DataDir;
 use super::json_store::JsonStore;
 use crate::security::limits::MAX_CONFIG_FILE_SIZE;
+
+const CONFIG_FILE_NAME: &str = "config.json";
 
 /// Application configuration
 ///
@@ -66,7 +69,7 @@ pub struct ConfigStorage {
 impl ConfigStorage {
     /// Create a new storage handler
     ///
-    /// Default path: `helix-trainer/config.json` in the OS config directory
+    /// Default path: `config.json` in the data directory ([`DataDir::resolve`])
     ///
     /// # Examples
     ///
@@ -76,7 +79,20 @@ impl ConfigStorage {
     /// let storage = ConfigStorage::new();
     /// ```
     pub fn new() -> Self {
-        Self::with_path(Self::default_path())
+        Self::in_data_dir(&DataDir::resolve())
+    }
+
+    /// Create storage for `config.json` in `data_dir`, copying it from the
+    /// previous data directory on first load when the location moved (macOS).
+    pub fn in_data_dir(data_dir: &DataDir) -> Self {
+        Self {
+            store: JsonStore::new(
+                data_dir.file(CONFIG_FILE_NAME),
+                "config",
+                MAX_CONFIG_FILE_SIZE,
+            )
+            .migrating_from(data_dir.legacy_file(CONFIG_FILE_NAME)),
+        }
     }
 
     /// Create storage with custom path
@@ -84,16 +100,6 @@ impl ConfigStorage {
         Self {
             store: JsonStore::new(path.as_ref(), "config", MAX_CONFIG_FILE_SIZE),
         }
-    }
-
-    /// Get default storage path
-    ///
-    /// Returns `helix-trainer/config.json` in the OS config directory
-    fn default_path() -> PathBuf {
-        let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-        path.push("helix-trainer");
-        path.push("config.json");
-        path
     }
 
     /// Load configuration from disk
@@ -189,6 +195,45 @@ mod tests {
             loaded.enable_arrow_keys_in_normal_mode,
             config.enable_arrow_keys_in_normal_mode
         );
+    }
+
+    #[test]
+    fn test_in_data_dir_migrates_legacy_config() {
+        let root = TempDir::new().unwrap();
+        let data_dir = DataDir::resolve_for(
+            true,
+            Some(root.path().join("xdg")),
+            Some(root.path().join("os")),
+        );
+        let legacy = ConfigStorage::with_path(root.path().join("os/helix-trainer/config.json"));
+        legacy
+            .save(&AppConfig {
+                use_helix_keymap: true,
+                ..AppConfig::default()
+            })
+            .unwrap();
+
+        let storage = ConfigStorage::in_data_dir(&data_dir);
+
+        assert!(storage.load().unwrap().use_helix_keymap);
+        assert_eq!(storage.path(), data_dir.file("config.json"));
+        assert!(legacy.exists());
+    }
+
+    #[test]
+    fn test_in_data_dir_failed_migration_is_an_error_and_creates_nothing() {
+        let root = TempDir::new().unwrap();
+        let data_dir = DataDir::resolve_for(
+            true,
+            Some(root.path().join("xdg")),
+            Some(root.path().join("os")),
+        );
+        fs::create_dir_all(root.path().join("os/helix-trainer/config.json")).unwrap();
+
+        let storage = ConfigStorage::in_data_dir(&data_dir);
+
+        assert!(storage.load().is_err());
+        assert!(!storage.exists());
     }
 
     #[test]

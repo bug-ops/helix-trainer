@@ -4,6 +4,7 @@
 //! as well as application configuration.
 
 pub mod app_config;
+pub mod data_dir;
 pub mod json_store;
 pub mod keymap;
 mod loader;

@@ -124,6 +124,18 @@ pub enum JsonStoreError {
         source: serde_json::Error,
     },
 
+    /// Copying the document from its previous location failed; the
+    /// destination was not created.
+    #[error("Failed to migrate {label} from {}: {reason}", from.display())]
+    Migrate {
+        /// Document name.
+        label: &'static str,
+        /// The previous location.
+        from: PathBuf,
+        /// Underlying cause.
+        reason: String,
+    },
+
     /// Writing, syncing or renaming the file failed.
     #[error("Failed to write {label}: {source}")]
     Write {
@@ -157,6 +169,7 @@ pub struct JsonStore<T> {
     path: PathBuf,
     label: &'static str,
     max_size: u64,
+    legacy: Option<PathBuf>,
     document: PhantomData<fn() -> T>,
 }
 
@@ -168,8 +181,43 @@ impl<T> JsonStore<T> {
             path: path.into(),
             label,
             max_size,
+            legacy: None,
             document: PhantomData,
         }
+    }
+
+    /// Declares the document's previous location (`None` keeps the store
+    /// as it is).
+    ///
+    /// On [`JsonStore::load`], when the destination file is absent and the
+    /// previous one exists, it is copied (never moved) into place through a
+    /// temporary file, `fsync` and rename. Once the destination exists the
+    /// previous location is never read again, and it is left untouched.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::config::json_store::JsonStore;
+    /// use serde::{Deserialize, Serialize};
+    ///
+    /// #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    /// struct Doc {
+    ///     value: u32,
+    /// }
+    ///
+    /// let dir = tempfile::tempdir().unwrap();
+    /// let old = JsonStore::<Doc>::new(dir.path().join("old.json"), "doc", 1024);
+    /// old.save(&Doc { value: 5 }).unwrap();
+    ///
+    /// let new = JsonStore::<Doc>::new(dir.path().join("new.json"), "doc", 1024)
+    ///     .migrating_from(Some(old.path().to_path_buf()));
+    /// assert_eq!(new.load().unwrap(), Some(Doc { value: 5 }));
+    /// assert!(old.exists());
+    /// ```
+    #[must_use]
+    pub fn migrating_from(mut self, legacy: Option<PathBuf>) -> Self {
+        self.legacy = legacy;
+        self
     }
 
     /// Path of the document file.
@@ -189,8 +237,10 @@ impl<T: DeserializeOwned> JsonStore<T> {
     /// # Errors
     ///
     /// Returns [`JsonStoreError`] when the path exists but is not a regular
-    /// file, is unreadable, exceeds the size cap, or does not parse.
+    /// file, is unreadable, exceeds the size cap, or does not parse, or when
+    /// copying from the declared previous location fails.
     pub fn load(&self) -> Result<Option<T>, JsonStoreError> {
+        self.migrate_legacy()?;
         match fs::metadata(&self.path) {
             Ok(_) => {}
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -225,6 +275,39 @@ impl<T: DeserializeOwned> JsonStore<T> {
     }
 }
 
+impl<T> JsonStore<T> {
+    fn migrate_legacy(&self) -> Result<(), JsonStoreError> {
+        let Some(legacy) = &self.legacy else {
+            return Ok(());
+        };
+        match fs::symlink_metadata(&self.path) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            _ => return Ok(()),
+        }
+        if let Err(e) = fs::metadata(legacy)
+            && e.kind() == io::ErrorKind::NotFound
+        {
+            return Ok(());
+        }
+
+        let migrate_err = |reason: String| JsonStoreError::Migrate {
+            label: self.label,
+            from: legacy.clone(),
+            reason,
+        };
+        let contents = path_validator::read_capped(legacy, self.max_size)
+            .map_err(|e| migrate_err(e.to_string()))?;
+        write_atomic(&self.path, contents.as_bytes()).map_err(|e| migrate_err(e.to_string()))?;
+        tracing::info!(
+            label = self.label,
+            from = %legacy.display(),
+            to = %self.path.display(),
+            "Migrated document to the new data directory"
+        );
+        Ok(())
+    }
+}
+
 impl<T: Serialize> JsonStore<T> {
     /// Atomically persists `document`, creating the parent directory if needed.
     ///
@@ -251,6 +334,7 @@ impl<T> Clone for JsonStore<T> {
             path: self.path.clone(),
             label: self.label,
             max_size: self.max_size,
+            legacy: self.legacy.clone(),
             document: PhantomData,
         }
     }
@@ -262,6 +346,7 @@ impl<T> fmt::Debug for JsonStore<T> {
             .field("path", &self.path)
             .field("label", &self.label)
             .field("max_size", &self.max_size)
+            .field("legacy", &self.legacy)
             .finish()
     }
 }
@@ -357,6 +442,77 @@ mod tests {
         let store = store(dir.path(), 1024);
         fs::create_dir_all(store.path()).unwrap();
         assert!(matches!(store.load(), Err(JsonStoreError::Read { .. })));
+    }
+
+    fn migrating_store(dir: &Path, max_size: u64) -> (JsonStore<Doc>, JsonStore<Doc>) {
+        let old = JsonStore::new(dir.join("old").join("doc.json"), "doc", max_size);
+        let new = JsonStore::new(dir.join("new").join("doc.json"), "doc", max_size)
+            .migrating_from(Some(old.path().to_path_buf()));
+        (old, new)
+    }
+
+    #[test]
+    fn migration_copies_when_destination_is_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old, new) = migrating_store(dir.path(), 1024);
+        old.save(&Doc { value: 9 }).unwrap();
+
+        assert_eq!(new.load().unwrap(), Some(Doc { value: 9 }));
+        assert_eq!(
+            fs::read(old.path()).unwrap(),
+            fs::read(new.path()).unwrap(),
+            "copy, not move: the source stays byte-identical"
+        );
+    }
+
+    #[test]
+    fn existing_destination_wins_and_source_is_not_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old, new) = migrating_store(dir.path(), 1024);
+        old.save(&Doc { value: 1 }).unwrap();
+        new.save(&Doc { value: 2 }).unwrap();
+        fs::write(old.path(), "{garbage").unwrap();
+
+        assert_eq!(new.load().unwrap(), Some(Doc { value: 2 }));
+    }
+
+    #[test]
+    fn migration_is_a_noop_without_a_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, new) = migrating_store(dir.path(), 1024);
+        assert_eq!(new.load().unwrap(), None);
+        assert!(!new.exists());
+    }
+
+    #[test]
+    fn migration_resumes_per_document() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old, new) = migrating_store(dir.path(), 1024);
+        old.save(&Doc { value: 4 }).unwrap();
+        assert_eq!(new.load().unwrap(), Some(Doc { value: 4 }));
+        fs::remove_file(new.path()).unwrap();
+
+        assert_eq!(new.load().unwrap(), Some(Doc { value: 4 }));
+    }
+
+    #[test]
+    fn oversized_source_fails_migration_and_creates_no_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old, new) = migrating_store(dir.path(), 8);
+        old.save(&Doc { value: 1234567 }).unwrap();
+
+        assert!(matches!(new.load(), Err(JsonStoreError::Migrate { .. })));
+        assert!(!new.exists());
+    }
+
+    #[test]
+    fn non_regular_source_fails_migration_and_creates_no_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old, new) = migrating_store(dir.path(), 1024);
+        fs::create_dir_all(old.path()).unwrap();
+
+        assert!(matches!(new.load(), Err(JsonStoreError::Migrate { .. })));
+        assert!(!new.exists());
     }
 
     #[cfg(unix)]

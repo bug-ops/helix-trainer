@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::data_dir::DataDir;
 use crate::config::json_store::{JsonStore, unique_tmp_path};
 use crate::security::{limits::MAX_PROFILE_FILE_SIZE, private_fs};
 
@@ -51,6 +52,8 @@ fn is_process_alive(pid: u32) -> bool {
     }
 }
 
+const PROFILE_FILE_NAME: &str = "profile.json";
+
 /// Wrapper for profile serialization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProfileData {
@@ -87,7 +90,8 @@ pub struct ProfileStorage {
 impl ProfileStorage {
     /// Create a new storage handler
     ///
-    /// Default path: `helix-trainer/profile.json` in the OS config directory
+    /// Default path: `profile.json` in the data directory ([`DataDir::resolve`]):
+    /// `dirs::config_dir()/helix-trainer`, or `~/.config/helix-trainer` on macOS
     ///
     /// # Examples
     ///
@@ -97,7 +101,24 @@ impl ProfileStorage {
     /// let storage = ProfileStorage::new();
     /// ```
     pub fn new() -> Self {
-        Self::with_path(Self::default_path())
+        Self::in_data_dir(&DataDir::resolve())
+    }
+
+    /// Create storage for `profile.json` in `data_dir`.
+    ///
+    /// When the data directory moved (macOS), [`ProfileStorage::load`] first
+    /// copies the profile from the previous directory if the new one has
+    /// none; a failed copy is a load failure, so the caller never replaces
+    /// an untransferred profile with a default one.
+    pub fn in_data_dir(data_dir: &DataDir) -> Self {
+        Self {
+            store: JsonStore::new(
+                data_dir.file(PROFILE_FILE_NAME),
+                "profile",
+                MAX_PROFILE_FILE_SIZE,
+            )
+            .migrating_from(data_dir.legacy_file(PROFILE_FILE_NAME)),
+        }
     }
 
     /// Create storage with custom path
@@ -133,16 +154,6 @@ impl ProfileStorage {
         let dir = TEST_DIR.get_or_init(|| tempfile::TempDir::new().expect("create test temp dir"));
         let id = FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
         Self::with_path(dir.path().join(format!("profile-{id}.json")))
-    }
-
-    /// Get default storage path
-    ///
-    /// Returns `helix-trainer/profile.json` in the OS config directory
-    fn default_path() -> PathBuf {
-        let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-        path.push("helix-trainer");
-        path.push("profile.json");
-        path
     }
 
     /// Load profile from disk
@@ -725,6 +736,87 @@ mod tests {
             assert_eq!(fs::read_to_string(backup).unwrap(), "{broken");
         }
         assert_eq!(fs::read_to_string(&path).unwrap(), "{broken");
+    }
+
+    fn moved_data_dir(root: &Path) -> DataDir {
+        DataDir::resolve_for(true, Some(root.join("xdg")), Some(root.join("os")))
+    }
+
+    fn legacy_profile_path(root: &Path) -> PathBuf {
+        root.join("os").join("helix-trainer").join("profile.json")
+    }
+
+    #[test]
+    fn test_in_data_dir_migrates_legacy_profile_and_keeps_the_source() {
+        let root = TempDir::new().unwrap();
+        let data_dir = moved_data_dir(root.path());
+        let mut profile = UserProfile::new();
+        profile.add_xp(250);
+        ProfileStorage::with_path(legacy_profile_path(root.path()))
+            .save(&profile)
+            .unwrap();
+
+        let storage = ProfileStorage::in_data_dir(&data_dir);
+        let loaded = storage.load().unwrap();
+
+        assert_eq!(loaded.total_xp, 250);
+        assert_eq!(storage.path(), data_dir.file("profile.json"));
+        assert!(storage.exists());
+        assert!(legacy_profile_path(root.path()).exists());
+    }
+
+    #[test]
+    fn test_in_data_dir_prefers_new_profile_over_legacy() {
+        let root = TempDir::new().unwrap();
+        let data_dir = moved_data_dir(root.path());
+        let mut old = UserProfile::new();
+        old.add_xp(100);
+        ProfileStorage::with_path(legacy_profile_path(root.path()))
+            .save(&old)
+            .unwrap();
+        let mut new = UserProfile::new();
+        new.add_xp(900);
+        let storage = ProfileStorage::in_data_dir(&data_dir);
+        ProfileStorage::with_path(storage.path())
+            .save(&new)
+            .unwrap();
+
+        assert_eq!(storage.load().unwrap().total_xp, 900);
+    }
+
+    #[test]
+    fn test_in_data_dir_does_not_migrate_backups_or_lock() {
+        let root = TempDir::new().unwrap();
+        let data_dir = moved_data_dir(root.path());
+        let legacy = ProfileStorage::with_path(legacy_profile_path(root.path()));
+        legacy.save(&UserProfile::new()).unwrap();
+        let legacy_dir = legacy.path().parent().unwrap().to_path_buf();
+        fs::write(legacy_dir.join("profile.json.corrupt-20260101T000000"), "x").unwrap();
+
+        let storage = ProfileStorage::in_data_dir(&data_dir);
+        storage.load().unwrap();
+
+        let mut names: Vec<_> = fs::read_dir(storage.path().parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        assert_eq!(names, ["profile.json"]);
+    }
+
+    /// A failed copy must surface as a load failure and leave no destination,
+    /// so the caller can never overwrite untransferred data with a default.
+    #[test]
+    fn test_in_data_dir_failed_migration_is_a_load_error_without_destination() {
+        let root = TempDir::new().unwrap();
+        let data_dir = moved_data_dir(root.path());
+        fs::create_dir_all(legacy_profile_path(root.path())).unwrap();
+
+        let storage = ProfileStorage::in_data_dir(&data_dir);
+
+        assert!(storage.load().is_err());
+        assert!(!storage.exists());
+        assert!(matches!(storage.quarantine(), QuarantineOutcome::Failed(_)));
     }
 
     #[test]

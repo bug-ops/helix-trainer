@@ -13,18 +13,20 @@
 )]
 
 pub mod achievements;
+pub mod challenge_progress;
 pub mod profile;
 pub mod quests;
 pub mod storage;
 pub mod streak;
 
 pub use achievements::{Achievement, AchievementEngine, AchievementId, speed_time_ratio};
+pub use challenge_progress::ChallengeProgress;
 pub use profile::{LevelProgress, UserProfile, XPCalculator, XPComponents};
 pub use quests::{
     Quest, QuestDifficulty, QuestGeneration, QuestGenerator, QuestRegistrySlot,
     QuestTemplateRegistry, QuestTracker, QuestType,
 };
-pub use storage::{LockStatus, PreviousCopy, ProfileStorage, QuarantineError, QuarantineOutcome};
+pub use storage::{LockStatus, PreviousCopy, ProfileStorage, QuarantineOutcome};
 pub use streak::{StreakChange, StreakManager};
 
 use thiserror::Error;

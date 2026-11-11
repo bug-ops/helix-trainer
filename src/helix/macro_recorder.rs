@@ -52,7 +52,7 @@
 //! - TODO: unifying `.`-repeat's recorder with this one - see "Relationship
 //!   to `.`-repeat" above; tracked as a follow-up, not attempted here.
 
-use crate::security::limits::MAX_MACRO_LENGTH;
+use crate::limits::MAX_MACRO_LENGTH;
 
 /// Maximum macro-replay recursion depth
 ///

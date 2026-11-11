@@ -560,7 +560,7 @@ fn test_undo_redo_counted_taught_command_completes() {
 #[test]
 fn test_reset_keeps_language_indent_unit() {
     use crate::game::PlayableScenario;
-    use crate::helix::commands::CMD_INDENT;
+    use crate::grammar::commands::CMD_INDENT;
 
     let scenario = ScenarioBuilder::new()
         .id("md_indent")

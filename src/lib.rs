@@ -31,6 +31,7 @@ pub mod helix;
 pub mod ids;
 pub mod input;
 pub mod learning;
+pub mod limits;
 pub mod minigame;
 mod numeric;
 pub mod security;
@@ -39,5 +40,8 @@ pub mod time;
 pub mod ui;
 
 // Test utilities - only compiled in test builds
+#[cfg(test)]
+mod layering_tests;
+
 #[cfg(test)]
 pub mod testing;

@@ -107,7 +107,7 @@ fn test_scenario_with_empty_language_field_accepted() {
 
 #[test]
 fn test_scenario_with_oversized_language_rejected() {
-    let oversized = "a".repeat(crate::security::limits::MAX_LANGUAGE_LENGTH + 1);
+    let oversized = "a".repeat(crate::limits::MAX_LANGUAGE_LENGTH + 1);
     let toml = format!(
         "{}\n",
         create_test_scenario_toml().replace(

@@ -14,11 +14,12 @@ use std::path::Path;
 
 use toml::Value;
 
+use super::{CanonicalKeys, KeyContext, KeymapOverlay, PhysicalKey};
 use crate::helix::registry::{CommandRegistry, normal_registry};
 use crate::helix::simulator::NormalMode;
-use crate::input::keymap::{CanonicalKeys, KeyContext, KeymapOverlay, PhysicalKey};
 use crate::input::typestate::{HandlerResult, InputStateMachine, parse_helix_key_string};
-use crate::security::{SecurityError, limits, path_validator};
+use crate::limits;
+use crate::security::{SecurityError, path_validator};
 
 /// One binding from the user's Helix config that could not be applied.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,7 +115,7 @@ pub fn load_keymap_file(path: &Path) -> Result<(KeymapOverlay, KeymapReport), Ke
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::config::keymap::resolve_str;
+/// use helix_trainer::input::keymap::resolve_str;
 ///
 /// let (overlay, report) = resolve_str(r#"
 ///     [keys.normal]

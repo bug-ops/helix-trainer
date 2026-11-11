@@ -8,7 +8,7 @@
 //! [`InsertEntryCommand`], so an unclosed boundary cannot exist.
 
 use super::undo::HistoryEntry;
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_APPEND, CMD_APPEND_LINE_END, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_INSERT,
     CMD_INSERT_LINE_START, CMD_OPEN_ABOVE, CMD_OPEN_BELOW, CMD_SELECT_REGISTER,
 };

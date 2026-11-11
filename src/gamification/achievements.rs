@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Difficulty;
 use crate::learning::{MasteryLevel, PerformanceTracker};
-use crate::minigame::base_time_limit_for;
 
 use super::UserProfile;
 
@@ -33,7 +32,7 @@ use super::UserProfile;
 /// assert!((ratio - 0.4).abs() < f64::EPSILON);
 /// ```
 pub fn speed_time_ratio(elapsed: Duration, difficulty: Option<Difficulty>) -> f64 {
-    let budget = base_time_limit_for(difficulty.unwrap_or(Difficulty::Beginner));
+    let budget = difficulty.unwrap_or(Difficulty::Beginner).base_time_limit();
     (elapsed.as_secs_f64() / budget.as_secs_f64()).clamp(0.0, 1.0)
 }
 

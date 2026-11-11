@@ -4,7 +4,7 @@
 //! configuration (spec 3.8.6, tables C and the two-cursor entry goldens).
 
 use super::{ranges_of, run_keys, run_keys_in};
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 
 const I1: &str = "fn f() {\n    a\n    b\n}";
 const I1_NO_EOL: &str = "fn f() {\n    a";

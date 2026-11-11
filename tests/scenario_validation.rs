@@ -9,7 +9,7 @@
 
 use helix_trainer::config::{QuestLoader, QuestSpec, ScenarioLoader};
 use helix_trainer::game::{GameSession, PlayableScenario};
-use helix_trainer::helix::commands::{
+use helix_trainer::grammar::commands::{
     CMD_REPLAY_MACRO, CMD_SELECT_REGEX, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
 };
 use helix_trainer::helix::simulator::command_line::CommandLine;
@@ -512,7 +512,7 @@ fn test_bundled_commands_taught_are_normalized() {
             let taught = scenario["metadata"]["commands_taught"].as_array();
             for command in taught.into_iter().flatten().filter_map(toml::Value::as_str) {
                 assert_eq!(
-                    helix_trainer::helix::commands::normalize_command_id(command),
+                    helix_trainer::grammar::commands::normalize_command_id(command),
                     command,
                     "{}: commands_taught value is not normalized",
                     entry.path().display()

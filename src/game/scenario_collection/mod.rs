@@ -5,7 +5,7 @@
 //! - Sorting by name, difficulty, category, progress, mastery
 //! - Efficient index mapping for menu display
 
-use super::scenarios::{Difficulty, Scenario, ScenarioCategory, ScenarioMetadata};
+use crate::config::{Difficulty, Scenario, ScenarioCategory, ScenarioMetadata};
 use crate::gamification::UserProfile;
 use crate::ids::NormalizedCommand;
 use std::collections::HashSet;
@@ -371,9 +371,10 @@ impl ScenarioCollection {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::config::{
-    ///     CursorSpec, Pos, Scenario, ScenarioCollection, ScenarioMetadata, ScoringConfig, Setup, Solution,
+    ///     CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution,
     ///     TargetState,
     /// };
+    /// use helix_trainer::game::ScenarioCollection;
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::ids::ScenarioId;
     ///
@@ -420,9 +421,10 @@ impl ScenarioCollection {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::config::{
-    ///     CursorSpec, Pos, Scenario, ScenarioCollection, ScenarioMetadata, ScoringConfig, Setup, Solution,
+    ///     CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution,
     ///     TargetState,
     /// };
+    /// use helix_trainer::game::ScenarioCollection;
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::ids::ScenarioId;
     ///
@@ -473,9 +475,10 @@ impl ScenarioCollection {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::config::{
-    ///     CursorSpec, Pos, Scenario, ScenarioCategory, ScenarioCollection, ScenarioMetadata,
+    ///     CursorSpec, Pos, Scenario, ScenarioCategory, ScenarioMetadata,
     ///     ScoringConfig, Setup, Solution, TargetState,
     /// };
+    /// use helix_trainer::game::ScenarioCollection;
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::ids::ScenarioId;
     ///

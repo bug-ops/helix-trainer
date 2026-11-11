@@ -183,11 +183,11 @@ fn execute_minigame_command(
 
         // Check and unlock any achievements newly satisfied by this completion
         // (mastery/exploration/speed counters all just changed above)
-        for notification in ScenarioCompletionService::check_and_notify_achievements(
+        for event in ScenarioCompletionService::check_and_notify_achievements(
             &mut state.progress.profile,
             &state.progress.performance_tracker,
         ) {
-            state.ui.notifications.push(notification);
+            state.ui.notifications.push(event.into());
         }
 
         // Award XP for scenario completion in arcade mode
@@ -236,7 +236,7 @@ fn execute_minigame_command(
     if let Some(notification) =
         ScenarioCompletionService::level_up_notification(leveled_up, state.progress.profile.level)
     {
-        state.ui.notifications.push(notification);
+        state.ui.notifications.push(notification.into());
     }
 
     // Store total XP earned for display in the transition popup (only shown when this
@@ -794,7 +794,7 @@ mod tests {
     #[test]
     fn test_start_minigame_no_scenarios() {
         let mut state = create_test_state();
-        state.game.scenario_collection = crate::config::ScenarioCollection::new(vec![]);
+        state.game.scenario_collection = crate::game::ScenarioCollection::new(vec![]);
 
         start_minigame(&mut state);
 
@@ -1399,7 +1399,7 @@ mod tests {
     #[test]
     fn test_create_minigame_session_empty_scenarios() {
         let mut state = create_test_state();
-        state.game.scenario_collection = crate::config::ScenarioCollection::new(vec![]);
+        state.game.scenario_collection = crate::game::ScenarioCollection::new(vec![]);
 
         assert!(create_minigame_session(&state.game, None).is_none());
     }

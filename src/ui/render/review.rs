@@ -1,6 +1,6 @@
 //! Review session screen rendering
 
-use crate::helix::commands::CMD_ESCAPE;
+use crate::grammar::commands::CMD_ESCAPE;
 use crate::helix::registry::normal_registry;
 use crate::ids::CommandId;
 use crate::learning::ReviewSession;

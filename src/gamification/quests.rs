@@ -8,7 +8,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::quests::{QuestLoader, QuestTemplate};
+use crate::config::quests::{
+    QuestDifficulty as TemplateDifficulty, QuestLoader, QuestSpec, QuestTemplate,
+};
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::security::UserError;
 
@@ -202,6 +204,62 @@ pub struct Quest {
     pub xp_reward: u32,
     /// Whether the reward has been earned.
     pub completed: bool,
+}
+
+/// Instantiate a runtime quest from its template.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::quests::QuestLoader;
+/// use helix_trainer::gamification::Quest;
+///
+/// let templates = QuestLoader::new().load_from_embedded("en")?;
+/// let quest = Quest::from(&templates[0]);
+/// assert_eq!(quest.id, templates[0].id);
+/// assert!(!quest.completed);
+/// # Ok::<(), helix_trainer::security::UserError>(())
+/// ```
+impl From<&QuestTemplate> for Quest {
+    fn from(template: &QuestTemplate) -> Self {
+        let quest_type = match &template.spec {
+            QuestSpec::CommandPractice { command, target } => QuestType::CommandPractice {
+                command: command.clone(),
+                target: *target,
+                current: 0,
+            },
+            QuestSpec::ScenarioCompletion { target } => QuestType::ScenarioCompletion {
+                target: *target,
+                current: 0,
+            },
+            QuestSpec::SpeedRun {
+                scenario_id,
+                time_limit_seconds,
+            } => QuestType::SpeedRun {
+                scenario_id: scenario_id.clone(),
+                time_limit: Duration::from_secs(*time_limit_seconds),
+            },
+            QuestSpec::TimeInvested { target_minutes } => QuestType::TimeInvested {
+                target_minutes: *target_minutes,
+                current_minutes: 0,
+            },
+            QuestSpec::Exploration { target_commands } => QuestType::Exploration {
+                target_commands: *target_commands,
+                commands_used: HashSet::new(),
+            },
+        };
+        let difficulty = match template.difficulty {
+            TemplateDifficulty::Easy => QuestDifficulty::Easy,
+            TemplateDifficulty::Medium => QuestDifficulty::Medium,
+            TemplateDifficulty::Hard => QuestDifficulty::Hard,
+        };
+        Self::new(
+            template.id.clone(),
+            quest_type,
+            template.description.clone(),
+            difficulty,
+        )
+    }
 }
 
 impl Quest {
@@ -613,7 +671,7 @@ impl QuestGenerator {
         let template = candidates.get(rng.random_range(0..candidates.len()))?;
         tracing::debug!(id = %template.id, kind, "Selected quest template");
         picked.insert(template.id.clone());
-        Some(template.to_quest())
+        Some(Quest::from(**template))
     }
 
     fn generate_easy_quest(
@@ -757,7 +815,7 @@ impl QuestTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_YANK};
+    use crate::grammar::commands::{CMD_DELETE_SELECTION, CMD_YANK};
     use crate::testing::{ncmd, qid, sid};
 
     /// Helper to create a registry for tests
@@ -994,7 +1052,7 @@ mod tests {
 
         QuestTracker::update_command_progress(
             &mut quests,
-            &ncmd(crate::helix::commands::CMD_PASTE_AFTER),
+            &ncmd(crate::grammar::commands::CMD_PASTE_AFTER),
         );
         assert!(quests[0].is_completed());
     }

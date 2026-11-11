@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::input::typestate::key_mapping::{
     handle_insert_mode_input, is_count_compatible_command, map_key_to_helix_command,
     map_single_key_command, normalize_key_event, parse_helix_key_string,

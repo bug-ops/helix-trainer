@@ -4,13 +4,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::context::KeyContext;
-use super::fingerprint::{Fnv1a64, KeymapFingerprint};
 use super::keys::{CanonicalKeys, PhysicalKey};
+use crate::config::keymap::fingerprint::{Fnv1a64, KeymapFingerprint};
 
 /// A forward-only translation table from `(context, physical key)` to the
 /// canonical Helix key sequence that should execute instead.
 ///
-/// Built once at startup by `src/config/keymap/parse.rs` from the user's
+/// Built once at startup by `src/input/keymap/parse.rs` from the user's
 /// Helix `config.toml`, then consulted on every gameplay keypress in
 /// `src/ui/key_dispatch/handlers.rs::handle_gameplay_input`. The overlay *overrides*,
 /// it never removes: a miss simply falls through to the stock keymap, so
@@ -60,7 +60,7 @@ impl KeymapOverlay {
     }
 
     /// Build an overlay from already-resolved `(context, key) -> canonical`
-    /// entries. Used by `src/config/keymap/parse.rs` once every binding has
+    /// entries. Used by `src/input/keymap/parse.rs` once every binding has
     /// been validated.
     pub(crate) fn from_entries(
         entries: impl IntoIterator<Item = ((KeyContext, PhysicalKey), CanonicalKeys)>,

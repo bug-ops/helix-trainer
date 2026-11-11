@@ -48,8 +48,12 @@ status: permanent
 - **Module layer order (#558).** Library modules are ranked, and a module
   may depend (`use crate::...`, in code or macro bodies; `#[cfg(test)]`
   items, doc comments and `src/testing/` excepted) only on a STRICTLY lower
-  rank. There are no exceptions and no allow-list: a cycle is fixed by
-  moving code, never by a back edge or a forwarding re-export shim.
+  rank. A cycle is fixed by moving code, never by a back edge or a forwarding
+  re-export shim. The ONLY exception is a fixed allow-list of four edges,
+  `security -> {config, gamification, helix, learning}`, which exist because
+  `UserError` (the public error type of about 32 files) lives in
+  `src/security.rs` (#606); the layering test fails when an allow-listed
+  edge disappears, so the list can only shrink.
 
   | Rank | Modules |
   |------|---------|
@@ -61,7 +65,7 @@ status: permanent
   | 5 | `gamification` |
   | 6 | `game` |
   | 7 | `minigame` |
-  | 8 | `error` |
+  | 8 | `error` (reserved for the user-facing error hub, #606; no module yet) |
   | 9 | `input` |
   | 10 | `async_state` |
   | 11 | `ui` |
@@ -154,9 +158,8 @@ status: permanent
 
 ## V. Security
 
-- Input validation lives in `src/security.rs` (`SecurityError`); the
-  user-facing error hub (`UserError` and the domain `From` conversions) is
-  `src/error.rs`, a layer above every domain module (#558) — never panic on
+- All user-facing input validation and error types route through
+  `src/security.rs` (`UserError`, `SecurityError`) — never panic on
   malformed user input (invalid register names, malformed command-line
   expressions, oversized input) and never silently no-op it either.
 - A recoverable `UserError` (including a message that arrives for a screen other than the current one, a failed background save, or a rejected simulator command) MUST NOT terminate the TUI session. The event loop reports it (user-visible notification where the user can act on it, `tracing` otherwise; a stale-screen message is a silent debug-level no-op) and keeps running. Only unrecoverable terminal I/O failure ends the session: an input-stream error is reported and the loop exits only after 5 consecutive errors, never by spinning. A `WrongScreen` error is ignored silently; every other `UserError` is shown as a notification. A single `apply_update` boundary in `src/event_loop.rs` owns this policy; `?` on `update()`/`handle_data_message()` inside the loop is forbidden.

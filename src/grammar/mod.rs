@@ -4,4 +4,5 @@
 //! the identity types all need, so no one of them has to own it and none has
 //! to import another to name it.
 
+pub mod commands;
 pub mod find;

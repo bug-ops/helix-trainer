@@ -17,7 +17,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::CMD_TOGGLE_COMMENTS;
+use crate::grammar::commands::CMD_TOGGLE_COMMENTS;
 
 use super::{InputHandler, KeyHandler, execute_registered};
 use crate::helix::normal_command::{NormalCommand, RegisterOp};

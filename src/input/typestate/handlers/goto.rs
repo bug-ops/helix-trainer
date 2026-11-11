@@ -4,7 +4,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_GOTO_FILE_START, CMD_GOTO_FIRST_NONWHITESPACE, CMD_GOTO_LAST_LINE, CMD_GOTO_LINE_END,
     CMD_GOTO_LINE_START,
 };

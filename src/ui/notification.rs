@@ -11,6 +11,7 @@
 use crate::constants::{
     DEFAULT_NOTIFICATION_DURATION, MAX_VISIBLE_NOTIFICATIONS, STREAK_FREEZE_MAX_GAP_DAYS,
 };
+use crate::game::services::CompletionEvent;
 use crate::time::{MonotonicClock, SystemMonotonicClock};
 use rust_i18n::t;
 use std::fmt;
@@ -92,6 +93,23 @@ pub enum NotificationType {
         /// Display name of the new level.
         new_level: String,
     },
+}
+
+impl From<CompletionEvent> for NotificationType {
+    fn from(event: CompletionEvent) -> Self {
+        match event {
+            CompletionEvent::AchievementUnlocked { name, description } => {
+                Self::Achievement { name, description }
+            }
+            CompletionEvent::LevelUp { new_level } => Self::LevelUp { new_level },
+        }
+    }
+}
+
+impl From<CompletionEvent> for Notification {
+    fn from(event: CompletionEvent) -> Self {
+        Self::new(event.into())
+    }
 }
 
 /// A notification to display in the UI

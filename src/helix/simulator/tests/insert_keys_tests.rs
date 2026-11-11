@@ -3,7 +3,7 @@
 //!
 //! Expected buffers were captured from `hx` 25.07.1 on the same text and keys.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, InsertCommand};
 
 const SCENARIO_14: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";
@@ -231,7 +231,7 @@ fn dot_replays_tab_in_its_original_position() {
 
 /// #595: Insert-mode deletions around line breaks, with CRLF counted as one break.
 mod insert_deletion_at_line_ends {
-    use crate::helix::commands::*;
+    use crate::grammar::commands::*;
     use crate::helix::simulator::tests::run_keys;
 
     fn typed(text: &str, keys: &[&str]) -> String {

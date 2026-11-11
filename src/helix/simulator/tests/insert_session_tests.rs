@@ -5,7 +5,7 @@
 //! configuration on scenario 14, each sequence followed by the probe
 //! `c @ Escape` that exposes the selection a command leaves behind.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::registry::{ModeTransition, normal_registry};
 use crate::helix::simulator::{
     AnyModeSimulator, HelixSimulator, InsertEntryCommand, NormalMode,

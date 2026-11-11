@@ -1,18 +1,18 @@
 //! Profile storage and persistence
 
+use crate::config::json_store::QuarantineError;
 use std::fs;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 use crate::config::data_dir::DataDir;
 use crate::config::json_store::{
     Document, JsonStore, StorageError, create_unique_tmp, write_atomic,
 };
-use crate::security::limits::{MAX_LOCK_FILE_SIZE, MAX_PROFILE_FILE_SIZE};
+use crate::limits::{MAX_LOCK_FILE_SIZE, MAX_PROFILE_FILE_SIZE};
 use crate::security::{CappedReadError, path_validator, private_fs};
 
 use super::UserProfile;
@@ -109,33 +109,6 @@ fn is_independent_copy_shape(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProfileData {
     profile: UserProfile,
-}
-
-/// Why an unreadable `profile.json` could not be backed up.
-#[derive(Debug, Error)]
-pub enum QuarantineError {
-    /// There is no profile file (and no untransferred legacy file) to back up.
-    #[error("there is no profile file to back up")]
-    Missing,
-
-    /// The path exists but is not a regular file, so it is not copied (reading it could block
-    /// or never end).
-    #[error("the profile path is not a regular file")]
-    NotRegularFile,
-
-    /// Inspecting, reading or copying the file failed.
-    #[error("failed to copy the profile file")]
-    Copy {
-        /// The I/O error.
-        #[source]
-        source: std::io::Error,
-    },
-}
-
-impl From<std::io::Error> for QuarantineError {
-    fn from(source: std::io::Error) -> Self {
-        Self::Copy { source }
-    }
 }
 
 /// Result of preserving an unreadable `profile.json` via [`ProfileStorage::quarantine`].

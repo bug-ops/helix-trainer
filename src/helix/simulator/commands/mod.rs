@@ -12,11 +12,11 @@ use super::{
     AnyModeSimulator, HelixSimulator, InsertCommand, InsertEntryCommand, InsertMode, Mode,
     NormalMode,
 };
-use crate::grammar::find::{FindDirection, FindKind};
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_COMMAND_LINE,
     CMD_ESCAPE, CMD_REPEAT,
 };
+use crate::grammar::find::{FindDirection, FindKind};
 use crate::helix::error::SimulatorError;
 use crate::helix::normal_command::{
     MacroOp, NormalCommand, PromptKind, RegisterOp, SurroundOp, TextObjectScope,

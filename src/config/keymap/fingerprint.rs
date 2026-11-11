@@ -13,10 +13,10 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 /// Incremental FNV-1a 64-bit hasher.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Fnv1a64(u64);
+pub(crate) struct Fnv1a64(u64);
 
 impl Fnv1a64 {
-    pub(super) const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self(FNV_OFFSET_BASIS)
     }
 
@@ -28,12 +28,12 @@ impl Fnv1a64 {
 
     /// Hash a UTF-8 field as its byte length (`u64` little-endian) followed by its bytes,
     /// so adjacent fields can never merge into an ambiguous byte stream.
-    pub(super) fn write_field(&mut self, field: &str) {
+    pub(crate) fn write_field(&mut self, field: &str) {
         self.write(&(field.len() as u64).to_le_bytes());
         self.write(field.as_bytes());
     }
 
-    pub(super) const fn finish(self) -> u64 {
+    pub(crate) const fn finish(self) -> u64 {
         self.0
     }
 }
@@ -67,7 +67,8 @@ pub enum KeymapFingerprint {
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::input::keymap::{KeymapOverlay, StoredKeymapFingerprint};
+/// use helix_trainer::config::keymap::fingerprint::StoredKeymapFingerprint;
+/// use helix_trainer::input::keymap::KeymapOverlay;
 ///
 /// let legacy: StoredKeymapFingerprint = serde_json::from_str("12345").unwrap();
 /// let current = KeymapOverlay::identity().fingerprint();

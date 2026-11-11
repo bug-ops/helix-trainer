@@ -22,7 +22,7 @@ use crate::helix::normal_command::NormalCommand;
 use crate::input::typestate::{
     handler_result::HandlerResult, input_state::InputState, state_types::RegexPromptPending,
 };
-use crate::security::limits::MAX_COMMAND_LINE_LEN;
+use crate::limits::MAX_COMMAND_LINE_LEN;
 
 impl InputHandler<RegexPromptPending> for KeyHandler {
     fn handle_key(state: &RegexPromptPending, key: KeyEvent) -> HandlerResult {

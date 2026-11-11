@@ -7,9 +7,10 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use helix_trainer::config::{
-    CompletionFilter, CursorSpec, Difficulty, Pos, Scenario, ScenarioCategory, ScenarioCollection,
-    ScenarioFilter, ScenarioMetadata, ScoringConfig, Setup, Solution, SortMode, TargetState,
+    CursorSpec, Difficulty, Pos, Scenario, ScenarioCategory, ScenarioMetadata, ScoringConfig,
+    Setup, Solution, TargetState,
 };
+use helix_trainer::game::{CompletionFilter, ScenarioCollection, ScenarioFilter, SortMode};
 use helix_trainer::gamification::UserProfile;
 use helix_trainer::ids::{NormalizedCommand, ScenarioId};
 use std::collections::HashSet;

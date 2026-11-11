@@ -4,7 +4,7 @@ use crate::testing::{ncmd, qid};
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario, exec};
-use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE};
+use crate::grammar::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE};
 use crate::testing::update_executing_effects as update;
 use crate::ui::state::{Message, TypedScreen};
 

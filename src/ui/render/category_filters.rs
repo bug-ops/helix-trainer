@@ -367,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_render_category_filters_with_partial_filter() {
-        use crate::config::ScenarioFilter;
+        use crate::game::ScenarioFilter;
         use std::collections::HashSet;
 
         let backend = TestBackend::new(80, 24);
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_render_category_filters_no_categories_enabled() {
-        use crate::config::ScenarioFilter;
+        use crate::game::ScenarioFilter;
         use std::collections::HashSet;
 
         let backend = TestBackend::new(80, 24);

@@ -5,7 +5,7 @@
 //! - Insert mode repeat: Text insertion with entry commands
 //! - Complex scenarios: Real-world usage patterns
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
 // ============================================================================

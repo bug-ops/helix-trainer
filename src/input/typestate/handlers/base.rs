@@ -5,7 +5,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::CMD_ESCAPE;
+use crate::grammar::commands::CMD_ESCAPE;
 use crate::helix::normal_command::{MacroOp, NormalCommand, PromptKind};
 
 use super::count::count_from_digit;

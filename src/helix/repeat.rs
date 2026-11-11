@@ -26,9 +26,9 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
 // Re-export Mode from simulator to avoid duplication
-use super::commands::{CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP};
 use super::simulator::InsertCommand;
 pub use super::simulator::Mode;
+use crate::grammar::commands::{CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP};
 
 /// Maximum length of insert mode text recording (security limit)
 const MAX_INSERT_TEXT_LENGTH: usize = 1000;

@@ -4,7 +4,7 @@
 //! the half-page cases, which depend on the terminal height in `hx` and
 //! assert only that the anchor is kept.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, ModeKind};
 
 const PARAGRAPHS: &str = "alpha beta\n\nfoo bar\nbaz\n\nqux\n";

@@ -87,7 +87,7 @@ THEN  they are identical (one-off check) and `cargo nextest run scenario` passes
 ## 5. Agent Boundaries
 
 ### Always
-- Reuse `security::limits` constants (now `limits`, see [[module-layering-and-typed-commands/spec]]) for the bounds
+- Reuse `limits` constants (now `limits`, see [[module-layering-and-typed-commands/spec]]) for the bounds
 - Make illegal states unrepresentable; no stringly or untyped cursor data
 
 ### Ask First

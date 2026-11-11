@@ -106,7 +106,7 @@ that a sealed-trait `CommandMode` variant would have provided.
 
 | ID | Requirement | Target | Status |
 |----|------------|--------|--------|
-| NFR-006 | All new user-facing failure modes (invalid register name, malformed command-line input) MUST route through `UserError`/`SecurityError` | No panics on malformed input | **Met.** `CommandLine::parse` returns `UserError::CommandFailed` on malformed input; invalid register-name characters route through the same convention. A new `security::limits::MAX_COMMAND_LINE_LEN = 256` bound was added, going beyond the letter of NFR-006 into explicit input-length hardening. |
+| NFR-006 | All new user-facing failure modes (invalid register name, malformed command-line input) MUST route through `UserError`/`SecurityError` | No panics on malformed input | **Met.** `CommandLine::parse` returns `UserError::CommandFailed` on malformed input; invalid register-name characters route through the same convention. A new `limits::MAX_COMMAND_LINE_LEN = 256` bound was added, going beyond the letter of NFR-006 into explicit input-length hardening. |
 
 ## 6. Unanticipated Finding — Input Robustness Hardening
 

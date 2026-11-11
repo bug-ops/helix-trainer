@@ -13,15 +13,15 @@ use std::num::NonZeroUsize;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::commands::{
-    CMD_ESCAPE, CMD_GOTO_FILE_START, CMD_GOTO_LINE, CMD_KEEP_MATCHING, CMD_REMOVE_MATCHING,
-    CMD_REPEAT, CMD_REPLAY_MACRO, CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD, CMD_SELECT_REGEX,
-    CMD_SELECT_REGISTER, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
-};
 use super::error::{SimulatorError, bound};
 use super::registry::{normal_registry, parse_counted_command};
 use super::simulator::InsertEntryCommand;
 use super::simulator::command_line::CommandLine;
+use crate::grammar::commands::{
+    CMD_ESCAPE, CMD_GOTO_FILE_START, CMD_GOTO_LINE, CMD_KEEP_MATCHING, CMD_REMOVE_MATCHING,
+    CMD_REPEAT, CMD_REPLAY_MACRO, CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD, CMD_SELECT_REGEX,
+    CMD_SELECT_REGISTER, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
+};
 use crate::grammar::find::FindMotion;
 
 /// A command of the Normal-mode registry, by its canonical key.
@@ -533,7 +533,7 @@ fn insert_entry_keys(entry: InsertEntryCommand) -> Vec<KeyEvent> {
 /// character; the other multi-key and modified commands are not replayed.
 fn registered_keys(key: &str) -> Vec<KeyEvent> {
     let plain = |ch: char| KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE);
-    if key == super::commands::CMD_FLIP_SELECTIONS {
+    if key == crate::grammar::commands::CMD_FLIP_SELECTIONS {
         return vec![KeyEvent::new(KeyCode::Char(';'), KeyModifiers::ALT)];
     }
     let chars: Vec<char> = key.chars().collect();

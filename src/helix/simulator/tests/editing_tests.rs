@@ -9,7 +9,7 @@
 //! - Change command: c
 
 use super::sim_with_selection;
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, Mode};
 
 // ============================================================================

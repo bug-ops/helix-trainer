@@ -127,8 +127,8 @@ fn record_scenario_completion(
         &ctx.progress.performance_tracker,
     );
     if !newly_unlocked_notifications.is_empty() {
-        for notification in newly_unlocked_notifications {
-            ctx.ui.notifications.push(notification);
+        for event in newly_unlocked_notifications {
+            ctx.ui.notifications.push(event.into());
         }
         // Persist through the shared save path (non-fatal, matches the policy
         // above) instead of a raw `storage.save`, which would skip the FSRS
@@ -143,7 +143,7 @@ fn record_scenario_completion(
     if let Some(notification) =
         ScenarioCompletionService::level_up_notification(leveled_up, ctx.progress.profile.level)
     {
-        ctx.ui.notifications.push(notification);
+        ctx.ui.notifications.push(notification.into());
     }
 }
 

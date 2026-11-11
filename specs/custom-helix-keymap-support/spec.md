@@ -40,7 +40,7 @@ day — the trainer's drilled muscle memory would not transfer to their real
 editor configuration.
 
 A prerequisite surfaced during investigation: `CommandMetadata.name`
-(`src/helix/commands.rs`, moved to `src/grammar/commands.rs` by #558) held ~35-40 values that did not match real Helix
+(`src/grammar/commands.rs`, moved to `src/grammar/commands.rs` by #558) held ~35-40 values that did not match real Helix
 25.07.1 command identifiers, with no production consumer to catch the
 drift. This had to be corrected first (mechanical, behavior-preserving) so
 that `CommandMetadata.name` could become the authoritative key a user's

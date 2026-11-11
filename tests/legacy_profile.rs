@@ -1,9 +1,9 @@
 //! Legacy-profile loading with the strict identifier types (specs/data-and-runtime-hardening,
 //! FR-154, FR-155, SC-014). A profile written before the id newtypes existed must still load.
 
+use helix_trainer::config::keymap::fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
 use helix_trainer::gamification::{ProfileStorage, QuestType, UserProfile};
 use helix_trainer::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
-use helix_trainer::input::keymap::{KeymapFingerprint, StoredKeymapFingerprint};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 

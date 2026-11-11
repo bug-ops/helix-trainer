@@ -5,7 +5,7 @@ use super::insert_session::{
     EntrySelection, InsertEntry, InsertEntryCommand, InsertSession, SessionChange,
 };
 use super::{HelixSimulator, InsertMode, NormalMode};
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_INSERT_ALT_BACKSPACE, CMD_INSERT_DELETE_CHAR_FORWARD, CMD_INSERT_DELETE_KEY,
     CMD_INSERT_DELETE_TO_LINE_END, CMD_INSERT_DELETE_TO_LINE_START,
     CMD_INSERT_DELETE_WORD_BACKWARD, CMD_INSERT_DELETE_WORD_FORWARD, CMD_INSERT_TAB,

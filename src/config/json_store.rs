@@ -17,7 +17,6 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
-use crate::gamification::QuarantineError;
 use crate::security::{CappedReadError, path_validator, private_fs};
 
 /// Per-process counter used to make temporary save files unique.
@@ -474,6 +473,33 @@ impl<T> fmt::Debug for JsonStore<T> {
             .field("max_size", &self.max_size)
             .field("legacy", &self.legacy)
             .finish()
+    }
+}
+
+/// Why an unreadable `profile.json` could not be backed up.
+#[derive(Debug, Error)]
+pub enum QuarantineError {
+    /// There is no profile file (and no untransferred legacy file) to back up.
+    #[error("there is no profile file to back up")]
+    Missing,
+
+    /// The path exists but is not a regular file, so it is not copied (reading it could block
+    /// or never end).
+    #[error("the profile path is not a regular file")]
+    NotRegularFile,
+
+    /// Inspecting, reading or copying the file failed.
+    #[error("failed to copy the profile file")]
+    Copy {
+        /// The I/O error.
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+impl From<std::io::Error> for QuarantineError {
+    fn from(source: std::io::Error) -> Self {
+        Self::Copy { source }
     }
 }
 

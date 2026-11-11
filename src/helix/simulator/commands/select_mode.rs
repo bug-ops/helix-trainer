@@ -2,7 +2,7 @@
 //! the editing commands of Helix leave it.
 
 use super::execute_normal_mode_command;
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_ALIGN_SELECTIONS, CMD_DEDENT, CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK,
     CMD_ESCAPE, CMD_GOTO_FILE_START, CMD_GOTO_FIRST_NONWHITESPACE, CMD_GOTO_LAST_LINE,
     CMD_GOTO_LINE, CMD_GOTO_LINE_END, CMD_GOTO_LINE_START, CMD_HALF_PAGE_DOWN, CMD_HALF_PAGE_UP,
@@ -99,7 +99,7 @@ fn is_find_command(base: &str) -> bool {
 }
 
 fn leaves_select_mode(base: &str) -> bool {
-    let command = crate::helix::commands::normalize_command_id(base);
+    let command = crate::grammar::commands::normalize_command_id(base);
     matches!(
         command.as_ref(),
         CMD_ESCAPE

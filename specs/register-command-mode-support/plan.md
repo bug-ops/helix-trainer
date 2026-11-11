@@ -69,7 +69,7 @@ graph TD
 | Where command-line state lives | Input-typestate layer only (`CommandLinePending`), not `EditorMode` | Faster to ship, avoids touching the sealed-trait `EditorMode` machinery and its call sites throughout the simulator; the behavior (a distinct, reachable prompt) is achievable without it | A new `EditorMode::CommandMode` sealed-trait variant, as drafted in FR-005/NFR-002 — not taken |
 | Command-line surface | `:goto N` / `:g N` alias only | `:s` substitute, `:g` global, `:sort`, `:clear-register` evaluated and explicitly dropped as "not verifiable against the snapshot-based scenario completion model" (from the commit message) — a completion-detection constraint the draft did not anticipate | Full `:s/pattern/replacement/` as originally targeted in FR-006/US-002 — not taken |
 | Register storage | Rename+generalize `clipboard: Option<String>` → `registers: RegisterFile` (`HashMap<char, String>`) | Additive without duplicating structure; single source of truth for both unnamed and named slots | A separate parallel register map alongside the untouched `clipboard` field — rejected, would violate FR-004's "no regression" requirement more riskily |
-| FSRS command-taught mapping | New `normalize_command_id()` canonicalization function at 3 call sites, rather than a `src/learning/` mapping table change | Keeps the normalization concern in `src/helix/commands.rs` (where the raw command-string format is defined) rather than duplicating knowledge of register/command-line syntax inside `src/learning/` | A `src/learning/`-side lookup table keyed on raw command strings — not taken |
+| FSRS command-taught mapping | New `normalize_command_id()` canonicalization function at 3 call sites, rather than a `src/learning/` mapping table change | Keeps the normalization concern in `src/grammar/commands.rs` (where the raw command-string format is defined) rather than duplicating knowledge of register/command-line syntax inside `src/learning/` | A `src/learning/`-side lookup table keyed on raw command strings — not taken |
 
 ## 2. Project Structure
 
@@ -169,7 +169,7 @@ primitives underneath.
 - Input validation: `CommandLine::parse` rejects non-digit and
   out-of-range input via `UserError::CommandFailed`; register-name
   characters validated as part of the `RegisterOpPending` transition.
-- New bound: `limits::MAX_COMMAND_LINE_LEN = 256` (`src/limits.rs`, originally `security::limits`; moved by #558) caps
+- New bound: `limits::MAX_COMMAND_LINE_LEN = 256` (`src/limits.rs`, originally `limits`; moved by #558) caps
   command-line buffer growth.
 - Sensitive data: not applicable — registers hold only in-session buffer
   text, never persisted or exposed externally.

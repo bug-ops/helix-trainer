@@ -46,10 +46,8 @@ mod stats;
 mod tests;
 
 // Re-export public types
-pub use challenge::{ChallengeProgress, select_challenge_scenarios};
-pub use difficulty::{
-    DifficultyController, DifficultyLevel, LevelChange, PerformancePoint, base_time_limit_for,
-};
+pub use challenge::select_challenge_scenarios;
+pub use difficulty::{DifficultyController, DifficultyLevel, LevelChange, PerformancePoint};
 pub use modes::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig, TimeDecreaseMode};
 pub use prioritizer::ScenarioPrioritizer;
 pub use ratio::Ratio;

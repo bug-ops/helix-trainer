@@ -4,7 +4,7 @@
 //! Expected buffers are recorded from `hx` 25.07.1 started with an empty
 //! configuration on the same text and keys.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
 fn run_in(language: &str, text: &str, keys: &[&str]) -> String {

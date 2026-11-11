@@ -6,7 +6,7 @@
 //! of `d` is written out as the resulting text.
 
 use super::{SCENARIO_14, probed, run_keys, run_keys_in};
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 
 fn line(content: &str, index: usize) -> &str {
     content.lines().nth(index).unwrap_or_default()

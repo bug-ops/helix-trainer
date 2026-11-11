@@ -297,7 +297,7 @@ pub const CMD_SCROLL_UP: &str = "zk";
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::helix::commands::normalize_command_id;
+/// use helix_trainer::grammar::commands::normalize_command_id;
 ///
 /// assert_eq!(normalize_command_id("\"ay"), "\"y");
 /// assert_eq!(normalize_command_id(":goto 3"), ":goto");

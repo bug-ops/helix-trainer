@@ -4,7 +4,7 @@ use std::assert_matches;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::input::typestate::{GotoPending, HandlerResult, InputHandler, KeyHandler};
 
 #[test]

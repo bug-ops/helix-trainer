@@ -13,8 +13,7 @@ use crate::config::json_store::{Document, StorageError};
 use crate::config::{Scenario, ScenarioLoader};
 use crate::constants::PROFILE_SAVE_QUEUE_CAPACITY;
 use crate::gamification::{
-    PreviousCopy, ProfileStorage, QuarantineError, QuarantineOutcome, QuestTemplateRegistry,
-    UserProfile,
+    PreviousCopy, ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile,
 };
 use crate::security::CappedReadError;
 use std::sync::Arc;
@@ -245,9 +244,11 @@ fn profile_task_failed(storage: &ProfileStorage, error: JoinError) -> DataLoadMe
             source: CappedReadError::Io(std::io::Error::other(error)),
         },
         fallback: UserProfile::new(),
-        backup: QuarantineOutcome::Failed(Arc::new(QuarantineError::Copy {
-            source: std::io::Error::other("the profile task failed"),
-        })),
+        backup: QuarantineOutcome::Failed(Arc::new(
+            crate::config::json_store::QuarantineError::Copy {
+                source: std::io::Error::other("the profile task failed"),
+            },
+        )),
         previous: PreviousCopy::Unavailable,
     }
 }

@@ -12,7 +12,6 @@ use crate::ids::{CommandId, ScenarioId};
 use crate::learning::{
     MasteryLevel, PerformanceTracker, ReferenceTime, ScenarioMastery, Scheduler,
 };
-use crate::ui::notification::{Notification, NotificationType};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
 
@@ -53,6 +52,26 @@ pub struct XPScalingResult {
     /// Session repeat-penalty factor that was applied to this completion,
     /// captured *before* recording
     pub applied_repeat_penalty: f64,
+}
+
+/// What a scenario completion earned that the player should be told about.
+///
+/// The game layer reports the event; the UI decides how to show it (it converts
+/// each into its notification type).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompletionEvent {
+    /// An achievement was unlocked.
+    AchievementUnlocked {
+        /// Achievement name.
+        name: String,
+        /// How it was earned.
+        description: String,
+    },
+    /// The account level went up.
+    LevelUp {
+        /// The level reached.
+        new_level: u32,
+    },
 }
 
 /// Service for scenario completion operations
@@ -206,62 +225,55 @@ impl ScenarioCompletionService {
     /// use helix_trainer::game::services::ScenarioCompletionService;
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::learning::PerformanceTracker;
-    /// use helix_trainer::ui::NotificationType;
+    /// use helix_trainer::game::services::CompletionEvent;
     /// use std::assert_matches;
     ///
     /// let mut profile = UserProfile::new();
     /// profile.perfect_scenarios = 1;
     ///
     /// let tracker = PerformanceTracker::new();
-    /// let notifications =
+    /// let events =
     ///     ScenarioCompletionService::check_and_notify_achievements(&mut profile, &tracker);
     ///
     /// // Should unlock FirstPerfect
-    /// assert_eq!(notifications.len(), 1);
-    /// assert_matches!(
-    ///     notifications[0].notification_type,
-    ///     NotificationType::Achievement { .. }
-    /// );
+    /// assert_eq!(events.len(), 1);
+    /// assert_matches!(events[0], CompletionEvent::AchievementUnlocked { .. });
     /// ```
     #[must_use]
     pub fn check_and_notify_achievements(
         profile: &mut UserProfile,
         tracker: &PerformanceTracker,
-    ) -> Vec<Notification> {
+    ) -> Vec<CompletionEvent> {
         AchievementEngine::check_and_unlock(profile, tracker)
             .into_iter()
             .map(|achievement_id| {
                 let achievement = Achievement::new(achievement_id);
-                Notification::new(NotificationType::Achievement {
+                CompletionEvent::AchievementUnlocked {
                     name: achievement.name,
                     description: achievement.description,
-                })
+                }
             })
             .collect()
     }
 
-    /// Build a `LevelUp` notification if this completion crossed an
-    /// account-level threshold, for the caller to push into its own
-    /// notification queue.
+    /// Build a `LevelUp` event if this completion crossed an account-level
+    /// threshold, for the caller to show in its own notification queue.
     ///
     /// # Examples
     ///
     /// ```
     /// use helix_trainer::game::services::ScenarioCompletionService;
-    /// use helix_trainer::ui::NotificationType;
+    /// use helix_trainer::game::services::CompletionEvent;
     /// use std::assert_matches;
     ///
-    /// let notification = ScenarioCompletionService::level_up_notification(true, 5);
-    /// assert_matches!(
-    ///     notification.unwrap().notification_type,
-    ///     NotificationType::LevelUp { new_level: 5 }
-    /// );
+    /// let event = ScenarioCompletionService::level_up_notification(true, 5);
+    /// assert_matches!(event, Some(CompletionEvent::LevelUp { new_level: 5 }));
     ///
     /// assert!(ScenarioCompletionService::level_up_notification(false, 5).is_none());
     /// ```
     #[must_use]
-    pub fn level_up_notification(leveled_up: bool, new_level: u32) -> Option<Notification> {
-        leveled_up.then(|| Notification::new(NotificationType::LevelUp { new_level }))
+    pub fn level_up_notification(leveled_up: bool, new_level: u32) -> Option<CompletionEvent> {
+        leveled_up.then_some(CompletionEvent::LevelUp { new_level })
     }
 }
 

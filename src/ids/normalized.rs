@@ -1,8 +1,8 @@
 //! Normalized command strings used by quests and scenario metadata.
 
 use super::IdError;
-use crate::helix::commands::normalize_command_id;
-use crate::security::limits::MAX_COMMAND_LINE_LEN;
+use crate::grammar::commands::normalize_command_id;
+use crate::limits::MAX_COMMAND_LINE_LEN;
 use serde::{Deserialize, Serialize, Serializer};
 use std::borrow::Borrow;
 use std::fmt;

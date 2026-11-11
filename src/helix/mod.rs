@@ -15,7 +15,6 @@
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
-pub mod commands;
 pub mod error;
 pub mod indent;
 pub mod language;
@@ -26,7 +25,6 @@ pub mod registry;
 pub mod repeat;
 pub mod simulator;
 
-pub use commands::*;
 pub use indent::IndentUnit;
 pub use language::LanguageRules;
 pub use repeat::{

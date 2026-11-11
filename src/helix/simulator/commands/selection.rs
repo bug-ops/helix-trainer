@@ -2,7 +2,7 @@
 
 use crate::helix::error::SimulatorError;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
-use crate::security::limits::MAX_REGEX_SELECTION_MATCHES;
+use crate::limits::MAX_REGEX_SELECTION_MATCHES;
 use helix_core::comment::toggle_line_comments;
 use helix_core::graphemes::{ensure_grapheme_boundary_prev, grapheme_width};
 use helix_core::ropey::RopeSlice;

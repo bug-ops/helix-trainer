@@ -14,12 +14,11 @@
 
 use crate::config::{Difficulty, Scenario};
 use crate::constants::{
-    ADVANCED_DIFFICULTY_WEIGHT, ADVANCED_TIME_LIMIT, BEGINNER_DIFFICULTY_WEIGHT,
-    BEGINNER_TIME_LIMIT, DEFAULT_PERFORMANCE_SCORE, DIFFICULTY_DECREASE_SCORE,
-    DIFFICULTY_INCREASE_SCORE, FALLBACK_TIME_LIMIT, FSRS_BASE_WEIGHT,
-    INTERMEDIATE_DIFFICULTY_WEIGHT, INTERMEDIATE_TIME_LIMIT, LEVEL_1_3_TIME_SCALE,
-    LEVEL_4_6_TIME_SCALE, LEVEL_7_10_TIME_SCALE, LEVEL_ADVANCED_MAX, LEVEL_BEGINNER_MAX,
-    LEVEL_BEGINNER_MIN, LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN, MIN_SCENARIOS_FOR_DECREASE,
+    ADVANCED_DIFFICULTY_WEIGHT, BEGINNER_DIFFICULTY_WEIGHT, DEFAULT_PERFORMANCE_SCORE,
+    DIFFICULTY_DECREASE_SCORE, DIFFICULTY_INCREASE_SCORE, FALLBACK_TIME_LIMIT, FSRS_BASE_WEIGHT,
+    INTERMEDIATE_DIFFICULTY_WEIGHT, LEVEL_1_3_TIME_SCALE, LEVEL_4_6_TIME_SCALE,
+    LEVEL_7_10_TIME_SCALE, LEVEL_ADVANCED_MAX, LEVEL_BEGINNER_MAX, LEVEL_BEGINNER_MIN,
+    LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN, MIN_SCENARIOS_FOR_DECREASE,
     MIN_SCENARIOS_FOR_INCREASE, PERFORMANCE_EFFICIENCY_WEIGHT, PERFORMANCE_HISTORY_SIZE,
     PERFORMANCE_SPEED_WEIGHT, PERFORMANCE_SUCCESS_WEIGHT, RECENCY_BASE_WEIGHT,
     RECENCY_WEIGHT_INCREMENT, RECENT_SUCCESS_RATE_FOR_DECREASE, RECENT_SUCCESS_RATE_FOR_INCREASE,
@@ -326,30 +325,6 @@ pub struct DifficultyController {
     level_changed: Option<LevelChange>,
 }
 
-/// Base per-difficulty time budget, independent of arcade's adaptive level scaling.
-///
-/// [`DifficultyController::time_limit_for`] scales this by the controller's current
-/// level; callers with no controller instance (e.g. Training mode, which has no
-/// adaptive difficulty state) use this directly as the "speed" reference budget for
-/// achievement thresholds.
-///
-/// # Examples
-///
-/// ```
-/// use helix_trainer::config::Difficulty;
-/// use helix_trainer::minigame::base_time_limit_for;
-/// use std::time::Duration;
-///
-/// assert_eq!(base_time_limit_for(Difficulty::Beginner), Duration::from_secs(10));
-/// ```
-pub fn base_time_limit_for(difficulty: Difficulty) -> Duration {
-    match difficulty {
-        Difficulty::Beginner => BEGINNER_TIME_LIMIT,
-        Difficulty::Intermediate => INTERMEDIATE_TIME_LIMIT,
-        Difficulty::Advanced => ADVANCED_TIME_LIMIT,
-    }
-}
-
 impl DifficultyController {
     /// Create a new difficulty controller starting at level 1
     ///
@@ -419,7 +394,7 @@ impl DifficultyController {
         let base = scenario
             .metadata
             .difficulty
-            .map_or(FALLBACK_TIME_LIMIT, base_time_limit_for);
+            .map_or(FALLBACK_TIME_LIMIT, Difficulty::base_time_limit);
 
         let scale = match self.level.tier() {
             Difficulty::Beginner => LEVEL_1_3_TIME_SCALE,

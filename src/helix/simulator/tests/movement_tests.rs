@@ -6,7 +6,7 @@
 //! - Line movement: gh, gl, gs
 //! - Document navigation: gg, ge
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::error::SimulatorError;
 use crate::helix::simulator::AnyModeSimulator;
 use std::assert_matches;

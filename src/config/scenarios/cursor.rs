@@ -9,7 +9,7 @@ use std::fmt;
 use serde::Deserialize;
 
 use super::ScenarioValidationError;
-use crate::security::limits::{MAX_CURSORS_PER_SCENARIO, MAX_SELECTIONS_PER_SCENARIO};
+use crate::limits::{MAX_CURSORS_PER_SCENARIO, MAX_SELECTIONS_PER_SCENARIO};
 
 /// Largest accepted row or column of a scenario position.
 const MAX_COORDINATE: usize = 10_000;

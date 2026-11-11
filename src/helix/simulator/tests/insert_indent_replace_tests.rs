@@ -2,7 +2,7 @@
 //!
 //! Expected buffers match `hx` 25.07.1 on the same text and keys.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
 const SCENARIO_14: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";
@@ -117,7 +117,7 @@ fn escape_keeps_indent_once_text_was_typed() {
 
 #[test]
 fn stripped_auto_indent_is_part_of_the_open_undo_step() {
-    use crate::helix::commands::CMD_UNDO;
+    use crate::grammar::commands::CMD_UNDO;
     let out = run(
         MAIN_FN,
         &[CMD_MOVE_DOWN, CMD_OPEN_BELOW, CMD_ESCAPE, CMD_UNDO],

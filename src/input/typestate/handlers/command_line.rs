@@ -25,7 +25,7 @@ use crate::helix::simulator::command_line::CommandLine;
 use crate::input::typestate::{
     handler_result::HandlerResult, input_state::InputState, state_types::CommandLinePending,
 };
-use crate::security::limits::MAX_COMMAND_LINE_LEN;
+use crate::limits::MAX_COMMAND_LINE_LEN;
 
 impl InputHandler<CommandLinePending> for KeyHandler {
     fn handle_key(state: &CommandLinePending, key: KeyEvent) -> HandlerResult {

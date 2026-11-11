@@ -3,17 +3,17 @@
 //! A scenario solution records every keystroke, including text typed in Insert mode and
 //! command arguments. [`CommandId`] is the only way to mint a review-card id from
 //! such a recording, so typed text, `Escape` and argument characters can never become cards.
-//! It is separate from [`crate::helix::commands::normalize_command_id`], whose contract
+//! It is separate from [`crate::grammar::commands::normalize_command_id`], whose contract
 //! (quests, minigame scorer) is unchanged; see [`super::NormalizedCommand`] for that form.
 
 use super::IdError;
 use crate::grammar::find::takes_char_argument;
-use crate::security::limits::MAX_ID_LENGTH;
+use crate::limits::MAX_ID_LENGTH;
 use serde::{Deserialize, Serialize, Serializer};
 use std::borrow::Borrow;
 use std::fmt;
 
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_APPEND, CMD_APPEND_LINE_END, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_ESCAPE,
     CMD_INSERT, CMD_INSERT_LINE_START, CMD_OPEN_ABOVE, CMD_OPEN_BELOW, CMD_SEARCH_BACKWARD,
     CMD_SEARCH_FORWARD, CMD_SELECT_REGISTER, normalize_command_id,

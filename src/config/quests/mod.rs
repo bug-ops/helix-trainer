@@ -4,7 +4,7 @@
 //! security patterns as scenario loading.
 
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
-use crate::security::limits::{
+use crate::limits::{
     MAX_CUSTOM_XP_REWARD, MAX_LOCALE_LENGTH, MAX_QUEST_DESCRIPTION_LENGTH, MAX_QUEST_NAME_LENGTH,
     MAX_QUEST_TARGET, MAX_QUEST_TEMPLATES_PER_FILE, MAX_REQUIRED_CONDITIONS,
     MAX_SCENARIO_FILE_SIZE, MAX_SPEED_RUN_TIME_SECONDS, MAX_VERSION_LENGTH,
@@ -17,7 +17,6 @@ pub use error::QuestTemplateError;
 /// Longest command name a command-practice quest may target.
 const MAX_QUEST_COMMAND_NAME_LENGTH: usize = 10;
 use serde::Deserialize;
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// File wrapper for quest templates
@@ -464,78 +463,6 @@ impl QuestLoader {
 impl Default for QuestLoader {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl QuestTemplate {
-    /// Convert template to runtime quest instance
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::config::quests::QuestLoader;
-    ///
-    /// let templates = QuestLoader::new().load_from_embedded("en")?;
-    /// let quest = templates[0].to_quest();
-    /// assert_eq!(quest.id, templates[0].id);
-    /// assert!(!quest.completed);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
-    /// ```
-    pub fn to_quest(&self) -> crate::gamification::Quest {
-        use crate::gamification::Quest;
-
-        let quest_type = self.spec_to_quest_type();
-        let difficulty = self.difficulty_to_runtime();
-
-        Quest::new(
-            self.id.clone(),
-            quest_type,
-            self.description.clone(),
-            difficulty,
-        )
-    }
-
-    /// Convert template spec to runtime `QuestType`
-    fn spec_to_quest_type(&self) -> crate::gamification::QuestType {
-        use crate::gamification::QuestType;
-
-        match &self.spec {
-            QuestSpec::CommandPractice { command, target } => QuestType::CommandPractice {
-                command: command.clone(),
-                target: *target,
-                current: 0,
-            },
-            QuestSpec::ScenarioCompletion { target } => QuestType::ScenarioCompletion {
-                target: *target,
-                current: 0,
-            },
-            QuestSpec::SpeedRun {
-                scenario_id,
-                time_limit_seconds,
-            } => QuestType::SpeedRun {
-                scenario_id: scenario_id.clone(),
-                time_limit: std::time::Duration::from_secs(*time_limit_seconds),
-            },
-            QuestSpec::TimeInvested { target_minutes } => QuestType::TimeInvested {
-                target_minutes: *target_minutes,
-                current_minutes: 0,
-            },
-            QuestSpec::Exploration { target_commands } => QuestType::Exploration {
-                target_commands: *target_commands,
-                commands_used: HashSet::new(),
-            },
-        }
-    }
-
-    /// Convert template difficulty to runtime difficulty
-    fn difficulty_to_runtime(&self) -> crate::gamification::QuestDifficulty {
-        use crate::gamification::QuestDifficulty as RuntimeDifficulty;
-
-        match self.difficulty {
-            QuestDifficulty::Easy => RuntimeDifficulty::Easy,
-            QuestDifficulty::Medium => RuntimeDifficulty::Medium,
-            QuestDifficulty::Hard => RuntimeDifficulty::Hard,
-        }
     }
 }
 

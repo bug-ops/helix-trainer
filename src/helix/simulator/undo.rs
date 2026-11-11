@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn test_select_line_delete_undo_delete_removes_the_line_again() {
-        use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE, CMD_UNDO};
+        use crate::grammar::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE, CMD_UNDO};
         use crate::helix::simulator::AnyModeSimulator;
 
         let text = "fn add() {\n    sum\n}\n";

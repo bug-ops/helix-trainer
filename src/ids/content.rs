@@ -1,7 +1,7 @@
 //! Validated identifiers of TOML-defined content: scenarios and quests.
 
 use super::IdError;
-use crate::security::limits::MAX_ID_LENGTH;
+use crate::limits::MAX_ID_LENGTH;
 use serde::{Deserialize, Serialize, Serializer};
 use std::borrow::Borrow;
 use std::fmt;

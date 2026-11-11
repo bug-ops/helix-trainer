@@ -229,7 +229,7 @@ fn test_quest_template_to_quest_conversion() {
         conditions: QuestConditions::default(),
     };
 
-    let quest = template.to_quest();
+    let quest = crate::gamification::Quest::from(&template);
     assert_eq!(quest.id.as_str(), "test_quest");
     assert_eq!(quest.description, "Delete 3 lines");
     assert!(!quest.completed);
@@ -554,7 +554,7 @@ fn test_validate_all_quest_templates() {
         }
 
         // 7. Validate template converts to runtime Quest
-        let quest = template.to_quest();
+        let quest = crate::gamification::Quest::from(template);
         assert_eq!(quest.id, template.id);
         assert_eq!(quest.description, template.description);
         assert!(!quest.completed, "New quest should not be completed");

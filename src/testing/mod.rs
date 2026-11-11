@@ -36,8 +36,9 @@ pub use scenario::{
     ScenarioBuilder, default_test_scenario, test_scenario_with_difficulty, test_scenario_with_id,
 };
 
+use crate::config::json_store::QuarantineError;
 use crate::config::{CursorRange, CursorSpec, Pos};
-use crate::gamification::{PreviousCopy, QuarantineError, QuarantineOutcome};
+use crate::gamification::{PreviousCopy, QuarantineOutcome};
 use crate::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
 use crate::ui::state::Quarantine;
 

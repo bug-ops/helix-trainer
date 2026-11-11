@@ -10,7 +10,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::CMD_MATCH_BRACKETS;
+use crate::grammar::commands::CMD_MATCH_BRACKETS;
 
 use super::{InputHandler, KeyHandler, execute_registered};
 use crate::helix::normal_command::{NormalCommand, SurroundOp};

@@ -4,7 +4,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::{CMD_GOTO_NEXT_PARAGRAPH, CMD_GOTO_PREV_PARAGRAPH};
+use crate::grammar::commands::{CMD_GOTO_NEXT_PARAGRAPH, CMD_GOTO_PREV_PARAGRAPH};
 
 use super::{InputHandler, KeyHandler, execute_registered};
 use crate::input::typestate::{

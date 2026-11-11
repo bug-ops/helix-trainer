@@ -2,7 +2,7 @@
 //!
 //! Expected buffers match `hx` 25.07.1 (`paste_impl`) on the same keys.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, Mode};
 
 const SCENARIO_14: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";

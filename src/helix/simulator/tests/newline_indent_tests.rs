@@ -7,7 +7,7 @@
 //! Cases where the rule differs from `hx` are not asserted here; they are
 //! listed as divergences in the helix-core readiness spec (3.8.4).
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
 pub(super) fn run_in(language: &str, text: &str, keys: &[&str]) -> String {

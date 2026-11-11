@@ -6,4 +6,4 @@
 
 mod scenario_completion;
 
-pub use scenario_completion::{CompletionResult, ScenarioCompletionService};
+pub use scenario_completion::{CompletionEvent, CompletionResult, ScenarioCompletionService};

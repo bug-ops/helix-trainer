@@ -698,7 +698,7 @@ impl AnyModeSimulator {
                 keys,
             } => {
                 // Execute insert sequence through wrapper
-                use crate::helix::commands::{CMD_ESCAPE, CMD_INSERT};
+                use crate::grammar::commands::{CMD_ESCAPE, CMD_INSERT};
 
                 // Enter insert mode with the same command that was used originally
                 let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
@@ -790,7 +790,7 @@ fn execute_key_sequence(
     sim: &mut AnyModeSimulator,
     keys: &[crossterm::event::KeyEvent],
 ) -> Result<(), SimulatorError> {
-    use crate::helix::commands::{
+    use crate::grammar::commands::{
         CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
         CMD_GOTO_FILE_START, CMD_SELECT_REGISTER,
     };

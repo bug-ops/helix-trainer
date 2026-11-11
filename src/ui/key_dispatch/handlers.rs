@@ -169,7 +169,7 @@ pub(super) fn gameplay_input_state(state: &AppState) -> Option<&InputStateMachin
 /// Returns the corresponding movement command if the key is an arrow key,
 /// None otherwise.
 fn map_arrow_to_movement(key_code: KeyCode) -> Option<&'static str> {
-    use crate::helix::commands::{CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP};
+    use crate::grammar::commands::{CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP};
     match key_code {
         KeyCode::Left => Some(CMD_MOVE_LEFT),   // "h"
         KeyCode::Right => Some(CMD_MOVE_RIGHT), // "l"
@@ -629,7 +629,7 @@ mod tests {
     /// #513: `?` is a gameplay key (backward search), never the hint key.
     #[test]
     fn test_task_key_question_mark_is_backward_search_not_hint() {
-        use crate::helix::commands::CMD_SEARCH_BACKWARD;
+        use crate::grammar::commands::CMD_SEARCH_BACKWARD;
         let key = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
@@ -644,7 +644,7 @@ mod tests {
 
     #[test]
     fn test_task_key_h_moves_left() {
-        use crate::helix::commands::CMD_MOVE_LEFT;
+        use crate::grammar::commands::CMD_MOVE_LEFT;
         let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
@@ -976,7 +976,7 @@ mod tests {
     /// state instead of being intercepted as a screen-level key.
     mod question_mark_typing_tests {
         use super::*;
-        use crate::helix::commands::CMD_INSERT;
+        use crate::grammar::commands::CMD_INSERT;
         use crate::input::typestate::InputState;
 
         fn question_mark_message(state: &AppState) -> Option<Message> {
@@ -1037,7 +1037,7 @@ mod tests {
     /// #570: `Ctrl-c` never quits a gameplay screen; each input state follows Helix
     mod ctrl_c_tests {
         use super::*;
-        use crate::helix::commands::{CMD_ESCAPE, CMD_TOGGLE_COMMENTS};
+        use crate::grammar::commands::{CMD_ESCAPE, CMD_TOGGLE_COMMENTS};
         use crate::ui::key_dispatch::handle_key_event;
 
         fn ctrl_c() -> KeyEvent {
@@ -1244,7 +1244,7 @@ mod tests {
     // Escape must exit Insert mode before it dismisses the hint panel.
     mod task_keys_hint_panel_escape_tests {
         use super::*;
-        use crate::helix::commands::CMD_INSERT;
+        use crate::grammar::commands::CMD_INSERT;
 
         #[test]
         fn test_escape_exits_insert_mode_even_with_hint_panel_open() {
@@ -1269,8 +1269,8 @@ mod tests {
             assert_eq!(
                 msg,
                 Some(Message::ExecuteCommand {
-                    keys: CanonicalKeys::from_static(crate::helix::commands::CMD_ESCAPE),
-                    typed: Cow::Borrowed(crate::helix::commands::CMD_ESCAPE),
+                    keys: CanonicalKeys::from_static(crate::grammar::commands::CMD_ESCAPE),
+                    typed: Cow::Borrowed(crate::grammar::commands::CMD_ESCAPE),
                 })
             );
         }
@@ -1478,7 +1478,7 @@ mod tests {
 
         #[test]
         fn test_map_arrow_to_movement() {
-            use crate::helix::commands::{
+            use crate::grammar::commands::{
                 CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
             };
 
@@ -1545,7 +1545,7 @@ mod tests {
         #[test]
         fn test_arrow_keys_mapped_when_enabled() {
             use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
-            use crate::helix::commands::{
+            use crate::grammar::commands::{
                 CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
             };
             use crate::ui::state::screen::TaskData;
@@ -2011,8 +2011,8 @@ mod tests {
     /// `handle_gameplay_input` doc comment on the guard this exercises).
     mod multi_token_remap_outside_base_tests {
         use super::*;
-        use crate::config::keymap::resolve_str;
         use crate::input::keymap::CanonicalKeys;
+        use crate::input::keymap::resolve_str;
         use crate::testing::update_executing_effects as update;
         use crate::ui::state::{ConfigState, TaskData};
 

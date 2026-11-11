@@ -4,7 +4,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_SCROLL_DOWN, CMD_SCROLL_UP, CMD_VIEW_BOTTOM, CMD_VIEW_CENTER, CMD_VIEW_CENTER_HORIZONTAL,
     CMD_VIEW_TOP,
 };

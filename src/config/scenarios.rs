@@ -2,8 +2,9 @@
 //!
 //! This module handles loading TOML scenario files with security validations.
 
+use crate::constants::{ADVANCED_TIME_LIMIT, BEGINNER_TIME_LIMIT, INTERMEDIATE_TIME_LIMIT};
 use crate::ids::{CommandId, NormalizedCommand, ScenarioId};
-use crate::security::limits::{
+use crate::limits::{
     MAX_COMMAND_SEQUENCE_LENGTH, MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE,
     MAX_SCENARIOS_PER_FILE,
 };
@@ -251,6 +252,29 @@ impl Difficulty {
         Difficulty::Intermediate,
         Difficulty::Advanced,
     ];
+
+    /// Base per-difficulty time budget, independent of arcade's adaptive level scaling.
+    ///
+    /// The arcade difficulty controller scales this by its current level; callers
+    /// with no controller (Training mode) use it directly as the "speed" reference
+    /// budget for achievement thresholds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::config::Difficulty;
+    /// use std::time::Duration;
+    ///
+    /// assert_eq!(Difficulty::Beginner.base_time_limit(), Duration::from_secs(10));
+    /// ```
+    #[must_use]
+    pub fn base_time_limit(self) -> std::time::Duration {
+        match self {
+            Self::Beginner => BEGINNER_TIME_LIMIT,
+            Self::Intermediate => INTERMEDIATE_TIME_LIMIT,
+            Self::Advanced => ADVANCED_TIME_LIMIT,
+        }
+    }
 }
 
 /// Scenario definition

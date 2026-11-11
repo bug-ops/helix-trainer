@@ -4,7 +4,7 @@
 //! the document must leave the selection mapped or replaced, never stale.
 
 use super::{ranges_of, selection_in_bounds};
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 use proptest::prelude::*;
 

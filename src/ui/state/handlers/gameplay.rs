@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use crate::game::format_key_for_display;
-use crate::helix::commands::CMD_ESCAPE;
+use crate::grammar::commands::CMD_ESCAPE;
 use crate::input::resolve::{Resolution, resolve_keys};
 use crate::security::{UserError, error_chain};
 use crate::ui::state::{

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::data_dir::DataDir;
 use super::json_store::{Document, JsonStore, StorageError};
-use crate::security::limits::MAX_CONFIG_FILE_SIZE;
+use crate::limits::MAX_CONFIG_FILE_SIZE;
 
 const CONFIG_FILE_NAME: &str = "config.json";
 

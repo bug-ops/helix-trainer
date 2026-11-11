@@ -8,7 +8,7 @@
 //! Unclosed trailing openers are a recorded divergence (see the test).
 
 use super::newline_indent_tests::run_in;
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 
 fn check(language: &str, text: &str, keys: &[&str], expected: &str) {
     assert_eq!(run_in(language, text, keys), expected, "{text:?} {keys:?}");

@@ -46,7 +46,7 @@ under issue #198).
 | `RegisterPending` / `RegisterOpPending` | Typestate marker states for `"` and `"<reg>` respectively, `src/input/typestate/state_types.rs` |
 | `CommandLinePending` | Typestate marker state for an open `:` prompt |
 | `CommandLine::Goto(usize)` | The sole implemented command-line command |
-| `normalize_command_id` | canonicalizes raw command strings before FSRS/quest tracking, `src/grammar/commands.rs` (originally `src/helix/commands.rs:153-175`; moved by #558) |
+| `normalize_command_id` | canonicalizes raw command strings before FSRS/quest tracking, `src/grammar/commands.rs` (originally `src/grammar/commands.rs:153-175`; moved by #558) |
 
 ### 1.4 References
 
@@ -197,7 +197,7 @@ valid taught command for FSRS tracking.
 - *Priority*: should
 - *Verdict*: **Implemented differently.** No changes to a `src/learning/`
   command-mapping table. Instead, a new `grammar::commands::
-  normalize_command_id()` (`src/grammar/commands.rs`, originally `helix::commands`, `src/helix/commands.rs:153-175`; moved by #558) canonicalizes
+  normalize_command_id()` (`src/grammar/commands.rs`, originally `helix::commands`, `src/grammar/commands.rs:153-175`; moved by #558) canonicalizes
   raw command strings (e.g. `"ay` → `"y`, `:g 3` → `:goto`) at three call
   sites before they reach FSRS/quest tracking: `scenario_completion.rs:163`,
   `minigame/session.rs:848`, `ui/state/handlers/quests.rs:21`. This means

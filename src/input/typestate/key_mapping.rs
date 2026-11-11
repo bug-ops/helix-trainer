@@ -7,7 +7,7 @@ use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_ALIGN_SELECTIONS, CMD_APPEND, CMD_APPEND_LINE_END, CMD_ARROW_DOWN, CMD_ARROW_LEFT,
     CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK,
     CMD_COLLAPSE_SELECTION, CMD_COPY_SELECTION_NEXT, CMD_COPY_SELECTION_PREV, CMD_CTRL_R,

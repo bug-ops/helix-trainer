@@ -2,7 +2,7 @@
 //!
 //! Registers clipboard commands (y, p, P)
 
-use crate::helix::commands::{CMD_PASTE_AFTER, CMD_PASTE_BEFORE, CMD_YANK};
+use crate::grammar::commands::{CMD_PASTE_AFTER, CMD_PASTE_BEFORE, CMD_YANK};
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
 use crate::helix::registry::metadata::{
     Binding, Category, CommandMetadata, CountBehavior, HelixName, Repeat,

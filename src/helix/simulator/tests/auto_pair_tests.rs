@@ -4,7 +4,7 @@
 //! configuration (spec 3.8.6, tables D and E).
 
 use super::run_keys_in;
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 
 fn typed(language: &str, text: &str, keys: &[&str]) -> String {
     let keys: Vec<&str> = keys.iter().copied().chain([CMD_ESCAPE]).collect();

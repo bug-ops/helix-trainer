@@ -51,7 +51,7 @@ Investigation confirmed this is cheaper to deliver than the issue title
 
 1. The core mechanic issue #152 leans on hardest — `ms`/`md`/`mr`
    (add/delete/replace surround) — is **already fully implemented**:
-   `CMD_SURROUND_ADD_PREFIX` in `src/grammar/commands.rs` (originally `src/helix/commands.rs`, moved by #558), the `ms` chord
+   `CMD_SURROUND_ADD_PREFIX` in `src/grammar/commands.rs` (originally `src/grammar/commands.rs`, moved by #558), the `ms` chord
    resolution in `src/helix/registry/keytrie.rs`, `surround_selection` /
    `delete_surround` / `replace_surround` in
    `src/helix/simulator/commands/editing.rs`, and full typestate coverage

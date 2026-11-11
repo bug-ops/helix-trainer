@@ -8,11 +8,12 @@ use std::time::Duration;
 
 use helix_trainer::{
     async_state::DataLoadMessage,
-    config::{ScenarioCollection, keymap::keymap_fingerprint_mismatch_message},
+    game::ScenarioCollection,
     gamification::{
         Achievement, AchievementEngine, LockStatus, QuarantineOutcome, QuestGenerator,
         QuestRegistrySlot, StreakChange, StreakManager, UserProfile,
     },
+    input::keymap::keymap_fingerprint_mismatch_message,
     learning::PerformanceTracker,
     security::error_chain,
     ui::{AppState, Notification, NotificationType, state::Quarantine},
@@ -309,10 +310,11 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
 mod tests {
     use super::*;
     use helix_trainer::async_state::{LoaderError, SaveFailure};
+    use helix_trainer::config::json_store::QuarantineError;
     use helix_trainer::config::json_store::{Document, StorageError};
-    use helix_trainer::gamification::{PreviousCopy, QuarantineError};
+    use helix_trainer::config::keymap::fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
+    use helix_trainer::gamification::PreviousCopy;
     use helix_trainer::ids::{QuestId, ScenarioId};
-    use helix_trainer::input::keymap::{KeymapFingerprint, StoredKeymapFingerprint};
     use helix_trainer::security::UserError;
     use helix_trainer::{
         config::{
@@ -435,7 +437,7 @@ mod tests {
     }
 
     fn app_state_with_keymap_toml(toml: &str) -> AppState {
-        use helix_trainer::config::keymap::resolve_str;
+        use helix_trainer::input::keymap::resolve_str;
         use helix_trainer::ui::state::ConfigState;
 
         let (keymap, _) = resolve_str(toml).unwrap();
@@ -512,7 +514,7 @@ mod tests {
                 .notifications
                 .visible()
                 .any(|n| matches!(&n.notification_type, NotificationType::Info { message }
-                    if message == &helix_trainer::config::keymap::keymap_fingerprint_mismatch_message())),
+                    if message == &helix_trainer::input::keymap::keymap_fingerprint_mismatch_message())),
             "expected a keymap fingerprint mismatch notification"
         );
         assert_eq!(

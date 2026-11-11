@@ -6,7 +6,7 @@
 //! - Backspace in insert mode
 //! - Arrow keys in insert mode
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, Mode};
 
 // ============================================================================

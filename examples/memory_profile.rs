@@ -6,6 +6,11 @@
 //! View results:
 //!   Open dhat-heap.json at https://nnethercote.github.io/dh_view/dh_view.html
 
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "the example replicates the production XP float-to-integer formula verbatim"
+)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,28 +19,28 @@ use std::collections::HashMap;
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ScenarioMastery {
+enum ScenarioMastery {
     Learning,
     Proficient,
     Mastered,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScenarioCompletion {
-    pub scenario_id: String,
-    pub attempts: u32,
-    pub best_score: u32,
-    pub perfect_count: u32,
-    pub total_xp_earned: u64,
-    pub first_attempt: DateTime<Utc>,
-    pub last_attempt: DateTime<Utc>,
-    pub mastery_level: ScenarioMastery,
-    pub attempts_today: u32,
-    pub last_attempt_date: String,
+struct ScenarioCompletion {
+    scenario_id: String,
+    attempts: u32,
+    best_score: u32,
+    perfect_count: u32,
+    total_xp_earned: u64,
+    first_attempt: DateTime<Utc>,
+    last_attempt: DateTime<Utc>,
+    mastery_level: ScenarioMastery,
+    attempts_today: u32,
+    last_attempt_date: String,
 }
 
 impl ScenarioCompletion {
-    pub fn new(scenario_id: String) -> Self {
+    fn new(scenario_id: String) -> Self {
         let now = Utc::now();
         Self {
             scenario_id,
@@ -51,7 +56,7 @@ impl ScenarioCompletion {
         }
     }
 
-    pub fn record_completion(&mut self, score: u32, xp_earned: u64) {
+    fn record_completion(&mut self, score: u32, xp_earned: u64) {
         let now = Utc::now();
         let today = now.format("%Y-%m-%d").to_string();
 
@@ -82,7 +87,7 @@ impl ScenarioCompletion {
         };
     }
 
-    pub fn xp_multiplier(&self) -> f64 {
+    fn xp_multiplier(&self) -> f64 {
         let mastery_mult = match self.mastery_level {
             ScenarioMastery::Learning => 1.0,
             ScenarioMastery::Proficient => 0.5,
@@ -99,7 +104,7 @@ impl ScenarioCompletion {
     }
 }
 
-pub struct ScenarioHistoryTracker {
+struct ScenarioHistoryTracker {
     completions: HashMap<String, ScenarioCompletion>,
 }
 
@@ -110,26 +115,26 @@ impl Default for ScenarioHistoryTracker {
 }
 
 impl ScenarioHistoryTracker {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             completions: HashMap::new(),
         }
     }
 
-    pub fn get_or_create(&mut self, scenario_id: &str) -> &mut ScenarioCompletion {
+    fn get_or_create(&mut self, scenario_id: &str) -> &mut ScenarioCompletion {
         self.completions
             .entry(scenario_id.to_string())
             .or_insert_with(|| ScenarioCompletion::new(scenario_id.to_string()))
     }
 
-    pub fn get_xp_multiplier(&self, scenario_id: &str) -> f64 {
+    fn get_xp_multiplier(&self, scenario_id: &str) -> f64 {
         self.completions
             .get(scenario_id)
             .map(|c| c.xp_multiplier())
             .unwrap_or(1.0)
     }
 
-    pub fn record_completion(&mut self, scenario_id: &str, score: u32, base_xp: u64) -> u64 {
+    fn record_completion(&mut self, scenario_id: &str, score: u32, base_xp: u64) -> u64 {
         let multiplier = self.get_xp_multiplier(scenario_id);
         let actual_xp = (base_xp as f64 * multiplier) as u64;
 
@@ -139,7 +144,7 @@ impl ScenarioHistoryTracker {
         actual_xp
     }
 
-    pub fn to_json(&self) -> String {
+    fn to_json(&self) -> String {
         serde_json::to_string(&self.completions).unwrap()
     }
 }

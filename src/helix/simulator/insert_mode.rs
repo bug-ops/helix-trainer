@@ -14,6 +14,7 @@ use crate::helix::error::SimulatorError;
 use crate::helix::newline_indent::{
     CommentContinuation, NewLineStart, NewlineIndent, leading_whitespace,
 };
+use crate::limits::MAX_REGEX_SELECTION_MATCHES;
 use helix_core::{
     Assoc, ChangeSet, Range, Selection, Transaction, auto_pairs,
     graphemes::{next_grapheme_boundary, prev_grapheme_boundary},
@@ -188,11 +189,14 @@ impl<M: super::EditorMode> HelixSimulator<M> {
                 )
             }),
         );
-        let cursors = edits
+        let mut anchors: Vec<usize> = edits.iter().map(|edit| edit.anchor).collect();
+        transaction
+            .changes()
+            .update_positions(anchors.iter_mut().zip(edits.iter().map(|edit| edit.assoc)));
+        let cursors = anchors
             .iter()
-            .map(|edit| {
-                Range::point(transaction.changes().map_pos(edit.anchor, edit.assoc) + edit.plus)
-            })
+            .zip(&edits)
+            .map(|(&anchor, edit)| Range::point(anchor + edit.plus))
             .collect();
         self.apply_transaction(&transaction.with_selection(Selection::new(cursors, primary)));
     }
@@ -363,14 +367,8 @@ impl HelixSimulator<NormalMode> {
             InsertEntryCommand::Append => self.append(),
             InsertEntryCommand::InsertLineStart => self.insert_at_line_start(),
             InsertEntryCommand::AppendLineEnd => self.append_at_line_end(),
-            InsertEntryCommand::OpenBelow { count } => {
-                self.open_lines(OpenSide::Below, count);
-                Ok(())
-            }
-            InsertEntryCommand::OpenAbove { count } => {
-                self.open_lines(OpenSide::Above, count);
-                Ok(())
-            }
+            InsertEntryCommand::OpenBelow { count } => self.open_lines(OpenSide::Below, count),
+            InsertEntryCommand::OpenAbove { count } => self.open_lines(OpenSide::Above, count),
             InsertEntryCommand::Change { register } => {
                 self.change_selection_from_register(register)
             }
@@ -387,17 +385,32 @@ impl HelixSimulator<NormalMode> {
     /// with the fallible commands that share the registry's function type.
     pub fn append(&mut self) -> Result<(), SimulatorError> {
         let len = self.doc.len_chars();
-        self.selection = self.selection.clone().transform(|range| {
-            // In Helix, when head > anchor (forward selection), the visual cursor
-            // is on head-1, so appending after it inserts at head; a point or
-            // backward range has its visual cursor on head, so one more to the right.
-            let at = if range.head > range.anchor {
-                range.head
-            } else {
-                range.head + 1
-            };
-            Range::point(at.min(len))
-        });
+        let ranges = self.selection.ranges();
+        let merged = self.append_selection();
+        let mut members = ranges.iter().peekable();
+        let cursors = merged
+            .ranges()
+            .iter()
+            .map(|group| {
+                // Ranges are sorted, so a merged group takes its members in a
+                // row and its cursor sits after the last one.
+                let mut at = group.from();
+                while let Some(member) = members
+                    .next_if(|member| member.from() < group.to() || member.from() == group.from())
+                {
+                    // In Helix, when head > anchor (forward selection), the visual cursor
+                    // is on head-1, so appending after it inserts at head; a point or
+                    // backward range has its visual cursor on head, so one more to the right.
+                    at = if member.head > member.anchor {
+                        member.head
+                    } else {
+                        member.head + 1
+                    };
+                }
+                Range::point(at.min(len))
+            })
+            .collect();
+        self.selection = Selection::new(cursors, merged.primary_index());
         Ok(())
     }
 
@@ -474,11 +487,10 @@ impl HelixSimulator<NormalMode> {
     ///
     /// # Errors
     ///
-    /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-    /// with the fallible commands that share the registry's function type.
+    /// [`SimulatorError::TooManyCursors`] when the document already holds more
+    /// ranges than a session may have cursors.
     pub fn open_below(&mut self) -> Result<(), SimulatorError> {
-        self.open_lines(OpenSide::Below, NonZeroUsize::MIN);
-        Ok(())
+        self.open_lines(OpenSide::Below, NonZeroUsize::MIN)
     }
 
     /// Open above: insert a new line above the first line of every range,
@@ -487,17 +499,26 @@ impl HelixSimulator<NormalMode> {
     ///
     /// # Errors
     ///
-    /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-    /// with the fallible commands that share the registry's function type.
+    /// [`SimulatorError::TooManyCursors`] when the document already holds more
+    /// ranges than a session may have cursors.
     pub fn open_above(&mut self) -> Result<(), SimulatorError> {
-        self.open_lines(OpenSide::Above, NonZeroUsize::MIN);
-        Ok(())
+        self.open_lines(OpenSide::Above, NonZeroUsize::MIN)
     }
 
     /// Open `count` lines on `side` of every range and put one cursor on each
     /// new line, as Helix's `open`: the primary index is kept, so it points
     /// at the first opened line of a single range.
-    fn open_lines(&mut self, side: OpenSide, count: NonZeroUsize) {
+    ///
+    /// # Errors
+    ///
+    /// [`SimulatorError::TooManyCursors`] when the cursors opened would exceed
+    /// [`MAX_REGEX_SELECTION_MATCHES`]; nothing is changed then.
+    fn open_lines(&mut self, side: OpenSide, count: NonZeroUsize) -> Result<(), SimulatorError> {
+        if self.selection.len().saturating_mul(count.get()) > MAX_REGEX_SELECTION_MATCHES {
+            return Err(SimulatorError::TooManyCursors {
+                max: MAX_REGEX_SELECTION_MATCHES,
+            });
+        }
         let slice = self.doc.slice(..);
         let mut inserts: Vec<(usize, String)> = Vec::new();
         let mut cursors = Vec::new();
@@ -559,6 +580,7 @@ impl HelixSimulator<NormalMode> {
             self.selection.primary_index(),
         ));
         self.apply_transaction(&transaction);
+        Ok(())
     }
 
     /// Replace every character of every selection range with `ch` (Helix `r`)

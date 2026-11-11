@@ -431,10 +431,20 @@ impl HelixSimulator<InsertMode> {
     /// a plain cursor
     fn select_inserted_text(&mut self, anchors: &[usize]) {
         let slice = self.doc.slice(..);
-        let ranges: Vec<Range> = anchors
+        // Cursors that merged during the session leave fewer ranges than
+        // anchors: each cursor takes the first anchor not past it.
+        let mut pending = anchors.iter().copied().peekable();
+        let ranges: Vec<Range> = self
+            .selection
+            .ranges()
             .iter()
-            .zip(self.selection.ranges())
-            .map(|(&anchor, range)| {
+            .map(|range| {
+                let anchor = pending
+                    .peek()
+                    .copied()
+                    .filter(|&anchor| anchor <= range.head)
+                    .unwrap_or(range.head);
+                while pending.next_if(|&past| past <= range.head).is_some() {}
                 if range.head == next_grapheme_boundary(slice, anchor) {
                     Range::point(anchor)
                 } else {

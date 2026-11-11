@@ -231,9 +231,11 @@ impl InsertSession {
             self.change = SessionChange::Changed { before };
         }
         if let InsertEntry::Append { anchors } = &mut self.entry {
-            for anchor in anchors {
-                *anchor = changes.map_pos(*anchor, Assoc::AfterSticky);
-            }
+            changes.update_positions(
+                anchors
+                    .iter_mut()
+                    .map(|anchor| (anchor, Assoc::AfterSticky)),
+            );
         }
         let composed = std::mem::replace(&mut *self.changes, ChangeSet::with_capacity(0));
         *self.changes = composed.compose(changes.clone());

@@ -152,3 +152,58 @@ fn editing_keys_apply_to_every_cursor() {
         "ab \nef \nij kl"
     );
 }
+
+#[test]
+fn escape_keeps_every_range_after_cursors_merged_in_the_session() {
+    let sim = run_keys(
+        "abcd\nef",
+        &[
+            CMD_SELECT_ALL,
+            "s [ace]",
+            "a",
+            CMD_INSERT_DELETE_TO_LINE_START,
+            CMD_ESCAPE,
+        ],
+    );
+    assert_eq!(sim.display().content(), "d\nf");
+    assert_eq!(ranges_of(&sim), [(0, 0), (2, 2)]);
+}
+
+#[test]
+fn append_on_separated_ranges_keeps_one_cursor_per_range() {
+    let sim = run_keys(
+        "abcdef",
+        &[CMD_SELECT_ALL, "s [abd]", "a", CMD_BACKSPACE, CMD_ESCAPE],
+    );
+    assert_eq!(sim.display().content(), "acef");
+    assert_eq!(ranges_of(&sim).len(), 2);
+}
+
+#[test]
+fn append_on_adjacent_ranges_merges_them_like_hx() {
+    let sim = run_keys("abc", &[CMD_SELECT_ALL, "s [ab]", "a", "x", CMD_ESCAPE]);
+    assert_eq!(sim.display().content(), "abxc");
+    assert_eq!(ranges_of(&sim).len(), 1);
+}
+
+const MANY_CURSORS: usize = crate::limits::MAX_REGEX_SELECTION_MATCHES;
+
+#[test]
+fn a_session_with_the_maximum_cursor_count_applies_to_every_cursor() {
+    let text = "a\n".repeat(MANY_CURSORS);
+    let sim = run_keys(&text, &[CMD_SELECT_ALL, "s a", "o", "x", CMD_ESCAPE]);
+    assert_eq!(sim.display().content(), "a\nx\n".repeat(MANY_CURSORS));
+}
+
+#[test]
+fn counted_open_beyond_the_cursor_cap_is_rejected_and_changes_nothing() {
+    let text = "a\n".repeat(MANY_CURSORS);
+    let mut sim = run_keys(&text, &[CMD_SELECT_ALL, "s a"]);
+    let error = sim.execute_command("2o").unwrap_err();
+    assert!(matches!(
+        error,
+        crate::helix::error::SimulatorError::TooManyCursors { max: MANY_CURSORS }
+    ));
+    assert!(!sim.is_insert_mode());
+    assert_eq!(sim.display().content(), text);
+}

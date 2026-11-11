@@ -104,6 +104,13 @@ pub enum SimulatorError {
     #[error("align cannot work with multi line selections")]
     AlignSpansLines,
 
+    /// The command would create more cursors than the simulator allows.
+    #[error("operation would create more than {max} cursors")]
+    TooManyCursors {
+        /// The maximum number of cursors.
+        max: usize,
+    },
+
     /// The operation would leave no selection.
     #[error("no selections remaining")]
     NoSelections,

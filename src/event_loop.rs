@@ -13,10 +13,7 @@ use helix_trainer::{
     async_state::DataLoadMessage,
     constants::{ANIMATION_TICK_INTERVAL, COUNTDOWN_TICK_INTERVAL, SUCCESS_SCREEN_DELAY},
     security::UserError,
-    ui::{
-        self, AppState, Message, Notification, NotificationType,
-        state::{AsyncEffect, Effect},
-    },
+    ui::{self, AppState, Message, Notification, NotificationType, state::Effect},
 };
 
 use crate::data_handling::handle_data_message;
@@ -53,7 +50,7 @@ fn report_update_error(state: &mut AppState, error: &UserError) {
 }
 
 /// Execute the effects an update requested; those that need the async runtime are returned.
-fn run_effects(state: &mut AppState, effects: Vec<Effect>) -> Vec<AsyncEffect> {
+fn run_effects(state: &mut AppState, effects: Vec<Effect>) -> Vec<Effect> {
     effects
         .into_iter()
         .filter_map(|effect| effect.execute(&mut state.progress))
@@ -97,7 +94,9 @@ fn settle_update(
 ) {
     for deferred in run_effects(state, effects) {
         match deferred {
-            AsyncEffect::StartFreshProfile => spawn_start_fresh_profile(state, data_tx),
+            Effect::StartFreshProfile => spawn_start_fresh_profile(state, data_tx),
+            // Already executed by `Effect::execute`; listed so a new async variant fails to compile here
+            Effect::Play(_) | Effect::SaveProfile => {}
         }
     }
     if let Err(error) = result {

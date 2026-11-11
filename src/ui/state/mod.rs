@@ -34,7 +34,7 @@ use tokio::sync::mpsc;
 mod handlers;
 
 mod effect;
-pub use effect::{AsyncEffect, Effect};
+pub use effect::Effect;
 
 // Handler infrastructure for type-safe handlers
 mod handler_context;

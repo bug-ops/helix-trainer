@@ -166,8 +166,65 @@ fn insert_command_parse_roundtrips_canonical_strings() {
         InsertCommand::DeleteToLineEnd,
         InsertCommand::DeleteCharForward,
         InsertCommand::DeleteWordForward,
+        InsertCommand::Indent,
     ] {
         assert_eq!(InsertCommand::parse(cmd.as_str()), Some(cmd));
     }
     assert_eq!(InsertCommand::parse("w"), None);
+}
+
+#[test]
+fn tab_inserts_one_indent_unit_not_a_tab_character() {
+    assert_eq!(
+        run("x\ny\n", &[CMD_INSERT, CMD_INSERT_TAB, "z", CMD_ESCAPE]),
+        "    zx\ny\n"
+    );
+    assert_eq!(
+        run(
+            "x\ny\n",
+            &[CMD_INSERT, CMD_INSERT_TAB, CMD_INSERT_TAB, "z", CMD_ESCAPE]
+        ),
+        "        zx\ny\n"
+    );
+}
+
+#[test]
+fn tab_at_the_start_of_an_indented_line_keeps_the_existing_indent() {
+    assert_eq!(
+        run(
+            SCENARIO_14,
+            &[CMD_MOVE_DOWN, CMD_INSERT, CMD_INSERT_TAB, "z", CMD_ESCAPE]
+        ),
+        "fn add(a: i32, b: i32) -> i32 {\n    z    let sum = a + b;\n    sum\n}\n"
+    );
+}
+
+#[test]
+fn tab_unit_follows_the_language() {
+    for (language, text, expected) in [("md", "- a\n", "  z- a\n"), ("py", "x\n", "    zx\n")] {
+        let mut sim = AnyModeSimulator::new(text.to_string()).with_language(language);
+        for cmd in [CMD_INSERT, CMD_INSERT_TAB, "z", CMD_ESCAPE] {
+            sim.execute_command(cmd).unwrap();
+        }
+        assert_eq!(sim.state().unwrap().content(), expected, "{language}");
+    }
+}
+
+#[test]
+fn dot_replays_tab_in_its_original_position() {
+    assert_eq!(
+        run(
+            "x\ny\n",
+            &[
+                CMD_INSERT,
+                CMD_INSERT_TAB,
+                "z",
+                CMD_ESCAPE,
+                CMD_MOVE_DOWN,
+                CMD_GOTO_LINE_START,
+                CMD_REPEAT,
+            ]
+        ),
+        "    zx\n    zy\n"
+    );
 }

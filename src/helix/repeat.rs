@@ -57,7 +57,7 @@ pub enum Movement {
 pub enum InsertAction {
     /// An arrow key
     Move(Movement),
-    /// A deleting key (`Ctrl-w`, `Ctrl-u`, ...)
+    /// An Insert-mode editing key (`Ctrl-w`, `Ctrl-u`, `Tab`, ...)
     Edit(InsertCommand),
 }
 
@@ -106,7 +106,7 @@ pub enum RepeatableAction {
     ///
     /// - `entry_command`: The command used to enter insert mode (`i`, `a`, `A`, `I`, `o`, `O`, `c`, `Alt-c`, `"<reg>c`)
     /// - `text`: The text that was typed
-    /// - `keys`: Arrow movements and deleting keys (`Ctrl-w`, `Ctrl-u`, ...) in press order, interleaved with `text`
+    /// - `keys`: Arrow movements and editing keys (`Ctrl-w`, `Ctrl-u`, `Tab`, ...) in press order, interleaved with `text`
     InsertSequence {
         entry_command: Option<String>,
         text: String,
@@ -321,13 +321,13 @@ impl InsertModeRecorder {
 
     /// Record an arrow key movement at the current text position
     ///
-    /// Keys share one ordered list with deleting keys so replay keeps their
+    /// Keys share one ordered list with editing keys so replay keeps their
     /// original order relative to the text. The list is limited to 100 keys.
     pub fn record_movement(&mut self, movement: Movement) {
         self.record_key(InsertAction::Move(movement));
     }
 
-    /// Record a deleting Insert-mode key at the current text position
+    /// Record an Insert-mode editing key at the current text position
     ///
     /// Bounded like [`Self::record_movement`].
     pub fn record_edit(&mut self, command: InsertCommand) {

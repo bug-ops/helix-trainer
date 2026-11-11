@@ -1,4 +1,5 @@
 use super::performance::{CommandPerformance, PerformanceTracker};
+use super::urgency::{Urgency, command_urgency};
 use crate::time::{Clock, SystemClock};
 use chrono::{DateTime, Utc};
 use std::collections::BinaryHeap;
@@ -7,8 +8,11 @@ use std::sync::Arc;
 /// Review item with priority information
 #[derive(Debug, Clone)]
 pub struct ReviewItem {
+    /// Command id.
     pub id: String,
+    /// When the review becomes due.
     pub due: DateTime<Utc>,
+    /// Urgency score; higher is reviewed first.
     pub priority: f64,
 }
 
@@ -88,7 +92,7 @@ impl Scheduler {
         }
 
         // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = total_duration / commands.len() as u32;
+        let avg_duration = total_duration / u32::try_from(commands.len()).unwrap_or(u32::MAX);
 
         // Optimal time is slightly less than avg (assume user could be 20% faster)
         let optimal_time = avg_duration.mul_f32(0.8);
@@ -116,7 +120,7 @@ impl Scheduler {
         }
 
         // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = total_duration / commands.len() as u32;
+        let avg_duration = total_duration / u32::try_from(commands.len()).unwrap_or(u32::MAX);
 
         // Optimal time is slightly less than avg (assume user could be 20% faster)
         let optimal_time = avg_duration.mul_f32(0.8);
@@ -153,7 +157,7 @@ impl Scheduler {
             .filter_map(|cmd| {
                 tracker
                     .performance(cmd)
-                    .filter(|perf| perf.due <= now)
+                    .filter(|perf| perf.due() <= now)
                     .map(|_| cmd.to_string())
             })
             .collect()
@@ -178,10 +182,10 @@ impl Scheduler {
             .into_iter()
             .filter_map(|cmd| {
                 tracker.performance(cmd).and_then(|perf| {
-                    if perf.due <= now {
+                    if perf.due() <= now {
                         Some(ReviewItem {
                             id: cmd.to_string(),
-                            due: perf.due,
+                            due: perf.due(),
                             priority: Self::calculate_priority(perf, now),
                         })
                     } else {
@@ -202,16 +206,21 @@ impl Scheduler {
     ///
     /// Higher priority = more urgent to review
     ///
-    /// Formula:
-    /// - `urgency` = days_overdue / scheduled_days (how late is it?)
+    /// Review projection of [`command_urgency`]:
+    /// - `overdue_ratio` = days_overdue / scheduled_days (how late is it?)
     /// - `difficulty_weight` = difficulty / 5.0 (harder = more important)
-    /// - `priority` = urgency * difficulty_weight
+    /// - `priority` = overdue_ratio * difficulty_weight
+    ///
+    /// A [`Urgency::Novel`] command has no card and is never queued, so it scores 0.
     fn calculate_priority(perf: &CommandPerformance, now: DateTime<Utc>) -> f64 {
-        let days_overdue = (now - perf.due).num_days().max(0) as f64;
-        let urgency = days_overdue / perf.scheduled_days.max(1) as f64;
-        let difficulty_weight = perf.difficulty as f64 / 5.0; // Normalize 0-10 to 0-2
-
-        urgency * difficulty_weight
+        match command_urgency(Some(perf), now) {
+            Urgency::Practiced {
+                overdue_ratio,
+                difficulty,
+                ..
+            } => overdue_ratio * (difficulty / 5.0),
+            Urgency::Novel => 0.0,
+        }
     }
 
     /// Recommend practice session content
@@ -235,8 +244,9 @@ impl Scheduler {
         let max_items = duration_minutes / AVG_SCENARIO_TIME_MINUTES;
 
         // Split session: 50% reviews, 50% new/weak content
-        let review_count = (max_items / 2) as usize;
-        let new_content_count = (max_items - review_count as u32) as usize;
+        let review_items = max_items / 2;
+        let review_count = review_items as usize;
+        let new_content_count = (max_items - review_items) as usize;
 
         // Get review items (commands due for practice)
         let review_items = self.get_review_queue(tracker, review_count);
@@ -350,21 +360,43 @@ mod tests {
 
         // Command 1: Very overdue, hard difficulty
         let mut cmd1 = CommandPerformance::new("hard_overdue".to_string(), now);
-        cmd1.difficulty = 8.0;
-        cmd1.scheduled_days = 10;
-        cmd1.due = now - ChronoDuration::days(20); // 20 days overdue
+        cmd1.set_difficulty(8.0);
+        cmd1.set_scheduled_days(10);
+        cmd1.set_due(now - ChronoDuration::days(20)); // 20 days overdue
 
         // Command 2: Slightly overdue, easy difficulty
         let mut cmd2 = CommandPerformance::new("easy_overdue".to_string(), now);
-        cmd2.difficulty = 3.0;
-        cmd2.scheduled_days = 10;
-        cmd2.due = now - ChronoDuration::days(5); // 5 days overdue
+        cmd2.set_difficulty(3.0);
+        cmd2.set_scheduled_days(10);
+        cmd2.set_due(now - ChronoDuration::days(5)); // 5 days overdue
 
         let priority1 = Scheduler::calculate_priority(&cmd1, now);
         let priority2 = Scheduler::calculate_priority(&cmd2, now);
 
         // Hard + overdue should have higher priority
         assert!(priority1 > priority2);
+    }
+
+    #[test]
+    fn test_priority_keeps_the_pre_urgency_formula_exactly() {
+        let now = Utc::now();
+        for (difficulty, scheduled_days, days_overdue) in [
+            (8.0, 10, 20),
+            (3.0, 10, 5),
+            (5.0, 1, 0),
+            (9.5, 3, 7),
+            (0.0, 4, 9),
+        ] {
+            let mut perf = CommandPerformance::new("c".to_string(), now);
+            perf.set_difficulty(difficulty);
+            perf.set_scheduled_days(scheduled_days);
+            perf.set_due(now - ChronoDuration::days(days_overdue));
+
+            let expected = days_overdue as f64 / scheduled_days.max(1) as f64
+                * (perf.difficulty() as f64 / 5.0);
+
+            assert_eq!(Scheduler::calculate_priority(&perf, now), expected);
+        }
     }
 
     #[test]
@@ -484,9 +516,9 @@ mod tests {
         let now = Utc::now();
 
         let mut cmd = CommandPerformance::new("not_due".to_string(), now);
-        cmd.difficulty = 8.0;
-        cmd.scheduled_days = 10;
-        cmd.due = now + ChronoDuration::days(5); // Future due date
+        cmd.set_difficulty(8.0);
+        cmd.set_scheduled_days(10);
+        cmd.set_due(now + ChronoDuration::days(5)); // Future due date
 
         let priority = Scheduler::calculate_priority(&cmd, now);
 
@@ -503,7 +535,7 @@ mod tests {
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
 
-        let scheduled_days = tracker.performance("x").unwrap().scheduled_days;
+        let scheduled_days = tracker.performance("x").unwrap().scheduled_days();
         assert!(
             scheduled_days >= 1,
             "second review should push the due date forward"
@@ -533,8 +565,8 @@ mod tests {
         let now = clock.now();
         let card = |id: &str, overdue: ChronoDuration| {
             let mut perf = CommandPerformance::new(id.to_string(), now);
-            perf.scheduled_days = 10;
-            perf.due = now - overdue;
+            perf.set_scheduled_days(10);
+            perf.set_due(now - overdue);
             (id.to_string(), perf)
         };
         // Same whole overdue days (3) => identical priority; different `due` / `id`.
@@ -546,7 +578,7 @@ mod tests {
             card("z", day3 + ChronoDuration::hours(2)),
             card("low", ChronoDuration::days(1)),
         ]);
-        let tracker = PerformanceTracker::from_stats_with_clock(stats, clock.clone());
+        let tracker = PerformanceTracker::from_stats_with_clock(stats.into(), clock.clone());
         let scheduler = Scheduler::with_clock(clock);
 
         let ids = |limit| -> Vec<String> {
@@ -583,8 +615,8 @@ mod tests {
 
         // Test heap ordering (BinaryHeap is max-heap with our reversed Ord impl)
         let mut heap = BinaryHeap::new();
-        heap.push(item1.clone());
-        heap.push(item2.clone());
+        heap.push(item1);
+        heap.push(item2);
 
         let top = heap.pop().unwrap();
         assert_eq!(top.id, "high"); // Higher priority should come first
@@ -725,7 +757,7 @@ mod tests {
                 let expected: HashSet<String> = tracker
                     .all_commands()
                     .into_iter()
-                    .filter(|cmd| tracker.performance(cmd).is_some_and(|p| p.due <= now))
+                    .filter(|cmd| tracker.performance(cmd).is_some_and(|p| p.due() <= now))
                     .map(str::to_string)
                     .collect();
                 prop_assert_eq!(returned_set, expected);

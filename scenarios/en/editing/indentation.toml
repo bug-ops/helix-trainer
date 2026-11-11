@@ -7,7 +7,7 @@ name = "Indent code line"
 description = "Add indentation to a line of code"
 
 hints = [
-    "'>' adds 2 spaces of indentation at the start of the line",
+    "'>' adds one indent level at the start of the line (4 spaces in Rust)",
     "Use multiple times to add more indentation",
 ]
 
@@ -20,10 +20,10 @@ cursor_position = [1, 0]
 
 [scenarios.target]
 file_content = """fn main() {
-  let x = 42;
+    let x = 42;
     println!("{}", x);
 }"""
-cursor_position = [1, 2]
+cursor_position = [1, 4]
 
 [scenarios.solution]
 commands = [">"]
@@ -47,13 +47,13 @@ name = "Remove indentation"
 description = "Remove indentation from a line"
 
 hints = [
-    "'<' removes up to 2 spaces of indentation from the start of the line",
+    "'<' removes one indent level from the start of the line (up to 4 spaces in Rust)",
     "Use multiple times to remove more indentation",
 ]
 
 [scenarios.setup]
 file_content = """fn process() {
-      let value = 0;
+        let value = 0;
     return value;
 }"""
 cursor_position = [1, 0]

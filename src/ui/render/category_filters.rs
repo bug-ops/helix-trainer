@@ -58,7 +58,9 @@ pub(super) fn render_category_filters(frame: &mut Frame, state: &AppState) {
     // Calculate popup dimensions based on content
     let categories = state.game.scenario_collection.categories();
     // Height: categories + 2 padding lines + 1 summary + 1 spacing + 1 instructions
-    let content_height = categories.len() as u16 + 5;
+    let content_height = u16::try_from(categories.len())
+        .unwrap_or(u16::MAX)
+        .saturating_add(5);
     // Add 2 for popup borders
     let popup_height = (content_height + 2).min(20);
     let popup_width = 52u16;
@@ -493,9 +495,19 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let mut state = create_test_state_with_categories();
+        let mut session = crate::minigame::MiniGameSession::new(
+            std::sync::Arc::new(vec![create_test_scenario_with_category(
+                "s1",
+                ScenarioCategory::Movement,
+            )]),
+            None,
+        );
+        session.start();
         state.screen = TypedScreen::CategoryFilters(CategoryFiltersData {
             selected_index: 0,
-            return_to: crate::ui::state::ReturnDestination::PausedMiniGame,
+            return_to: crate::ui::state::ReturnDestination::PausedMiniGame(Box::new(
+                crate::ui::state::MiniGameData::new(session),
+            )),
         });
 
         let result = terminal.draw(|f| render_category_filters(f, &state));

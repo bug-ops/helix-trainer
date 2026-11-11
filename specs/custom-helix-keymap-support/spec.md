@@ -134,7 +134,7 @@ Use EARS notation. Prefix with FR-NNN.
 | ID | Category | Requirement |
 |----|----------|-------------|
 | NFR-001 | Architectural consistency | New pending-input handling for remap expansion MUST follow the existing typestate pattern in `src/input/typestate/`; no parallel ad-hoc state tracking |
-| NFR-002 | Safety | `#![forbid(unsafe_code)]` MUST be preserved; a malformed, missing, or oversized `config.toml` MUST fall back to the stock keymap without blocking startup |
+| NFR-002 | Safety | `unsafe_code = "forbid"` (Cargo lint) MUST be preserved; a malformed, missing, or oversized `config.toml` MUST fall back to the stock keymap without blocking startup |
 | NFR-003 | Performance | Physical-key lookup on the gameplay hot path MUST NOT allocate for the common single-token case with no active remap (see `CanonicalKeys::is_single_token()`, added in the follow-up perf fix `8e0b6ef`) |
 | NFR-004 | Testability | Load-time validation, atomic apply, and every `KeymapWarningReason` variant MUST have dedicated unit coverage |
 | NFR-005 | Backward compatibility | Adding `use_helix_keymap` (or any future `AppConfig`/`ConfigData` field) MUST NOT discard an existing `config.json`'s other fields (FR-010) |
@@ -240,7 +240,7 @@ THEN  it falls back to ~/.config/helix/config.toml
 ### 10.4 Out of Scope (explicitly deferred)
 
 > [!danger] Not part of this batch
-> Relocating the trainer's own data directory (`profile.json`, `config.json`) to `~/.config/helix-trainer/`, and any migration of existing macOS users' files. Moving the directory without a migration would silently orphan existing profiles. Tracked as a separate follow-up; until then the docs describe the real location (FR-014).
+> Relocating the trainer's own data directory (`profile.json`, `config.json`) to `~/.config/helix-trainer/`, and any migration of existing macOS users' files, was deferred from this batch. It is now specified with a per-file copy migration in [[data-and-runtime-hardening/spec#2.9 Data directory on macOS and one-time migration (#515)|data-and-runtime-hardening section 2.9]] (#515); that section also shares the XDG resolver of FR-011/FR-012. FR-014's macOS location text is updated when #515 lands.
 
 ### 10.5 Success Criteria
 

@@ -162,6 +162,6 @@ mod tests {
             CanonicalKeys::from_static("k"),
         )]);
         let cloned = overlay.clone();
-        assert_eq!(cloned.len(), 1);
+        assert_eq!(cloned.len(), overlay.len());
     }
 }

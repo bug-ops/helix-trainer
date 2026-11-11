@@ -15,7 +15,10 @@ pub enum StreakChange {
     /// Streak continued (same day activity)
     Continued,
     /// Streak incremented (new day)
-    Incremented { new_streak: u32 },
+    Incremented {
+        /// Streak length after the increment.
+        new_streak: u32,
+    },
     /// Streak broken (missed day)
     ///
     /// `freeze_could_not_cover_gap` is true exactly when a freeze was held
@@ -25,7 +28,9 @@ pub enum StreakChange {
     /// gap). Only meaningful when `was_streak > 0` - callers only surface
     /// this reason when there was an actual streak at stake.
     Broken {
+        /// Streak length before it was reset.
         was_streak: u32,
+        /// Whether a held freeze was too short for the gap.
         freeze_could_not_cover_gap: bool,
     },
     /// Streak protected by freeze

@@ -9,7 +9,7 @@ name = "Indent code line (Python)"
 description = "Add indentation to a line so it sits inside its enclosing if-block"
 
 hints = [
-    "'>' adds 2 spaces of indentation at the start of the line",
+    "'>' adds one indent level at the start of the line (4 spaces in Python)",
     "Use multiple times to add more indentation",
 ]
 
@@ -24,9 +24,9 @@ cursor_position = [2, 4]
 [scenarios.target]
 file_content = """def process(items):
     if items:
-      result = compute(items)
+        result = compute(items)
     return result"""
-cursor_position = [2, 6]
+cursor_position = [2, 8]
 
 [scenarios.solution]
 commands = [">"]
@@ -50,7 +50,7 @@ name = "Remove indentation (Python)"
 description = "Remove excess indentation from a line inside a for-loop body"
 
 hints = [
-    "'<' removes up to 2 spaces of indentation from the start of the line",
+    "'<' removes one indent level from the start of the line (up to 4 spaces in Python)",
     "Use multiple times to remove more indentation",
 ]
 
@@ -58,7 +58,7 @@ hints = [
 language = "py"
 file_content = """def process(items):
     for item in items:
-          result = item
+            result = item
     return result"""
 cursor_position = [2, 0]
 

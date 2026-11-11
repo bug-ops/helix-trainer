@@ -14,12 +14,12 @@
 //!
 //! # Examples
 //!
-//! ```ignore
+//! ```
 //! use helix_trainer::minigame::MiniGameSession;
-//! use helix_trainer::config::ScenarioCollection;
+//! use helix_trainer::config::ScenarioLoader;
 //! use std::sync::Arc;
 //!
-//! let scenarios = Arc::new(ScenarioCollection::load()?);
+//! let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
 //! let mut session = MiniGameSession::new(scenarios, None);
 //!
 //! session.start();
@@ -35,7 +35,8 @@
 mod challenge;
 mod difficulty;
 mod modes;
-mod scorer;
+mod prioritizer;
+mod ratio;
 mod scoring;
 mod session;
 mod state;
@@ -46,9 +47,12 @@ mod tests;
 
 // Re-export public types
 pub use challenge::{ChallengeProgress, select_challenge_scenarios};
-pub use difficulty::{DifficultyController, LevelChange, PerformancePoint, base_time_limit_for};
+pub use difficulty::{
+    DifficultyController, DifficultyLevel, LevelChange, PerformancePoint, base_time_limit_for,
+};
 pub use modes::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig, TimeDecreaseMode};
-pub use scorer::ScenarioScorer;
+pub use prioritizer::ScenarioPrioritizer;
+pub use ratio::Ratio;
 pub use scoring::{PerformanceTier, ScoreBreakdown, ScoreCalculator};
 pub use session::{ActiveMiniScenario, MiniGameSession};
 pub use state::MiniGameState;

@@ -7,30 +7,30 @@
 //!
 //! The UI follows the Elm Architecture with three main components:
 //!
-//! - **State (`state.rs`)**: Centralized `AppState` containing all UI state
-//! - **Messages (`state.rs`)**: User actions that trigger state changes
-//! - **Update (`state.rs`)**: Pure function that transforms state based on messages
-//! - **Rendering (`render.rs`)**: Pure functions that render UI based on state
+//! - **State (`state/`)**: Centralized `AppState` containing all UI state
+//! - **Messages (`state/`)**: User actions that trigger state changes
+//! - **Update (`state/`)**: Function that transforms state based on messages and returns side effects
+//! - **Rendering (`render/`)**: Pure functions that render UI based on state
 //!
 //! # Example Usage
 //!
-//! ```ignore
-//! use helix_trainer::ui::{AppState, Message, update, render, Screen};
-//! use helix_trainer::config::ScenarioLoader;
+//! ```
+//! use helix_trainer::gamification::{ProfileStorage, UserProfile};
+//! use helix_trainer::learning::PerformanceTracker;
+//! use helix_trainer::ui::{AppState, Message, render, update};
+//! use ratatui::{Terminal, backend::TestBackend};
 //!
-//! // Load scenarios
-//! let loader = ScenarioLoader::with_default_paths()?;
-//! let scenarios = loader.load_from_file("scenarios.toml")?.scenarios;
+//! let storage = ProfileStorage::with_path(std::env::temp_dir().join("doc-profile.json"));
+//! let mut app_state = AppState::new(vec![], UserProfile::new(), storage, PerformanceTracker::new());
 //!
-//! // Initialize app state
-//! let mut app_state = AppState::new(scenarios);
+//! // In the event loop: apply a message, then run the returned side effects.
+//! let mut effects = Vec::new();
+//! update(&mut app_state, Message::ModeSelectionDown, &mut effects)?;
 //!
-//! // In event loop:
-//! let message = Message::MenuDown;
-//! update(&mut app_state, message)?;
-//!
-//! // Render:
-//! terminal.draw(|f| render(f, &app_state))?;
+//! // Render the new state (a test backend stands in for the terminal).
+//! let mut terminal = Terminal::new(TestBackend::new(80, 24))?;
+//! terminal.draw(|f| render(f, &mut app_state))?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 pub mod notification;
@@ -39,4 +39,4 @@ pub mod state;
 
 pub use notification::{Notification, NotificationQueue, NotificationType};
 pub use render::render;
-pub use state::{AppState, Message, Screen, update};
+pub use state::{AppState, Message, NavTarget, update};

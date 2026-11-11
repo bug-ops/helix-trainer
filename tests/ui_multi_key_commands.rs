@@ -8,10 +8,21 @@ use helix_trainer::game::PlayableScenario;
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::input::keymap::CanonicalKeys;
 use helix_trainer::learning::PerformanceTracker;
-use helix_trainer::ui::state::{InputStateAccess, TypedScreen};
-use helix_trainer::ui::{AppState, Message, update};
+use helix_trainer::security::UserError;
+use helix_trainer::ui::state::{InputStateAccess, MenuData, TypedScreen};
+use helix_trainer::ui::{AppState, Message};
 use std::assert_matches;
 use std::borrow::Cow;
+
+/// Run `update` and execute the effects it requests, as the event loop does
+fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
+    let mut effects = Vec::new();
+    let result = helix_trainer::ui::update(state, msg, &mut effects);
+    for effect in effects {
+        drop(effect.execute(&mut state.progress));
+    }
+    result
+}
 
 /// Build an `ExecuteCommand` message for a single physical key with no
 /// keymap remap active - `keys` and `typed` are identical, matching every
@@ -21,6 +32,15 @@ fn exec(key: &'static str) -> Message {
         keys: CanonicalKeys::from_static(key),
         typed: Cow::Borrowed(key),
     }
+}
+
+/// Start the scenario at `index` the way the UI does: select it in the scenario list.
+fn start_scenario_from_menu(state: &mut AppState, index: usize) -> Result<(), UserError> {
+    state.screen = TypedScreen::Menu(MenuData {
+        selected_item: index,
+        ..MenuData::default()
+    });
+    update(state, Message::MenuSelect)
 }
 
 /// Helper to create AppState for testing
@@ -88,10 +108,10 @@ fn test_replace_command_multi_key() {
         (0, 1),
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
 
     // Start the scenario
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     // First key: 'r' - should transition to ReplaceCharPending state
     update(&mut state, exec("r")).unwrap();
@@ -156,8 +176,8 @@ fn test_xd_command_line_delete() {
         (1, 0),
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     // 'x' - selects current line (executes immediately)
     update(&mut state, exec("x")).unwrap();
@@ -199,8 +219,8 @@ fn test_gg_command_multi_key() {
         (0, 2), // cursor at different position - won't auto-complete on gg
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     // First 'g' - should transition to GotoPending state
     update(&mut state, exec("g")).unwrap();
@@ -234,8 +254,8 @@ fn test_replace_command_valid_sequence() {
     // Target is different to avoid auto-complete
     let scenario = create_test_scenario("test", "test", (0, 0), "best", (0, 0));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Press 'r' - should transition to ReplaceCharPending state
     update(&mut state, exec("r")).unwrap();
@@ -275,8 +295,8 @@ fn test_single_key_command_immediate_execution() {
         (0, 2), // Different target position - won't auto-complete on 'l'
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Press 'l' (move right) - should execute immediately
     update(&mut state, exec("l")).unwrap();
@@ -297,8 +317,8 @@ fn test_replace_with_special_chars() {
     // Target is different to avoid auto-complete
     let scenario = create_test_scenario("test_special", "x", (0, 0), "!!", (0, 0));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Replace with '!'
     update(&mut state, exec("r")).unwrap();
@@ -323,8 +343,8 @@ fn test_undo_integration() {
         (0, 0),
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Delete line using Helix idiom: xd (select line + delete selection)
     update(&mut state, exec("x")).unwrap();
@@ -357,8 +377,8 @@ fn test_register_yank_paste_multi_key() {
     let scenario =
         create_test_scenario("test_register", "alpha beta", (0, 0), "aalpha beta", (0, 1));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     // '"' - transitions to RegisterPending
     update(&mut state, exec("\"")).unwrap();
@@ -419,8 +439,8 @@ fn test_register_op_cancels_on_out_of_scope_operator() {
     // back to Base rather than executing a bare command.
     let scenario = create_test_scenario("test_register_cancel", "hello", (0, 0), "world", (0, 0));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     update(&mut state, exec("\"")).unwrap();
     update(&mut state, exec("a")).unwrap();
@@ -446,8 +466,8 @@ fn test_command_line_goto_multi_key() {
         (2, 0),
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     update(&mut state, exec(":")).unwrap();
     if let TypedScreen::Task(task_data) = &state.screen {
@@ -501,8 +521,8 @@ fn test_command_line_goto_multi_key() {
 fn test_command_line_escape_cancels_buffer() {
     let scenario = create_test_scenario("test_cmdline_cancel", "hello", (0, 0), "world", (0, 0));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
 
     update(&mut state, exec(":")).unwrap();
     update(&mut state, exec("g")).unwrap();

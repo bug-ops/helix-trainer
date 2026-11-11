@@ -6,9 +6,13 @@
 use std::num::NonZeroUsize;
 
 use super::state_types::FindType;
+use crate::helix::commands::{
+    CMD_KEEP_MATCHING, CMD_REMOVE_MATCHING, CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD,
+    CMD_SELECT_REGEX, CMD_SPLIT_SELECTION,
+};
 use crate::input::keymap::KeyContext;
 
-/// Which `s`/`S`/`/` command a `RegexPromptPending` buffer is for
+/// Which prompt command a `RegexPromptPending` buffer is for
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegexPromptKind {
     /// `s` - select all regex matches within the current selection
@@ -17,17 +21,53 @@ pub enum RegexPromptKind {
     SplitSelection,
     /// `/` - select the next regex match after the cursor
     Search,
+    /// `?` - select the previous regex match before the cursor
+    SearchBackward,
+    /// `K` - keep the selections whose text matches a regex
+    KeepSelections,
+    /// `Alt-K` - remove the selections whose text matches a regex
+    RemoveSelections,
 }
 
 impl RegexPromptKind {
-    /// The command prefix character this prompt assembles a command for; also
-    /// the prompt character shown in the footer.
+    /// The command id this prompt assembles its `"<id> <pattern>"` command from.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::input::typestate::RegexPromptKind;
+    ///
+    /// assert_eq!(RegexPromptKind::SearchBackward.command_id(), "?");
+    /// assert_eq!(RegexPromptKind::RemoveSelections.command_id(), "Alt-K");
+    /// ```
+    pub fn command_id(self) -> &'static str {
+        match self {
+            Self::SelectRegex => CMD_SELECT_REGEX,
+            Self::SplitSelection => CMD_SPLIT_SELECTION,
+            Self::Search => CMD_SEARCH_FORWARD,
+            Self::SearchBackward => CMD_SEARCH_BACKWARD,
+            Self::KeepSelections => CMD_KEEP_MATCHING,
+            Self::RemoveSelections => CMD_REMOVE_MATCHING,
+        }
+    }
+
+    /// The single prompt character shown in the footer; `Alt-K` shows `!`
+    /// (negated keep) to stay distinguishable from `K`.
     pub fn prefix(self) -> char {
         match self {
             Self::SelectRegex => 's',
             Self::SplitSelection => 'S',
             Self::Search => '/',
+            Self::SearchBackward => '?',
+            Self::KeepSelections => 'K',
+            Self::RemoveSelections => '!',
         }
+    }
+
+    /// Whether Enter forwards an invalid pattern to the simulator so its
+    /// `UserError` reaches the user (search prompts); the other prompts cancel.
+    pub fn forwards_invalid_pattern(self) -> bool {
+        matches!(self, Self::Search | Self::SearchBackward)
     }
 }
 
@@ -53,35 +93,57 @@ pub enum InputState {
     /// After 'mr' - waiting for surround replace from character
     SurroundReplaceFromPending,
     /// After 'mr{char}' - waiting for surround replace to character
-    SurroundReplaceToPending { from_char: char },
+    SurroundReplaceToPending {
+        /// Character being replaced.
+        from_char: char,
+    },
     /// After 'ma' - waiting for text object (around)
     TextObjectAroundPending,
     /// After 'mi' - waiting for text object (inside)
     TextObjectInsidePending,
     /// After 'f'/'F'/'t'/'T' - waiting for character
-    FindCharPending { find_type: FindType },
+    FindCharPending {
+        /// Which of `f`/`F`/`t`/`T` started the sequence.
+        find_type: FindType,
+    },
     /// After `{n}f`/`{n}F`/`{n}t`/`{n}T` - waiting for character
     CountedFindCharPending {
+        /// Which of `f`/`F`/`t`/`T` started the sequence.
         find_type: FindType,
+        /// Repeat count typed before the command.
         count: NonZeroUsize,
     },
     /// After `{n}g` - waiting for the second 'g'
-    CountedGotoPending { count: NonZeroUsize },
+    CountedGotoPending {
+        /// Repeat count typed before `g`.
+        count: NonZeroUsize,
+    },
     /// After 'r' - waiting for replacement character
     ReplaceCharPending,
     /// After '"' - waiting for register character
     RegisterPending,
     /// After '"{register}' - waiting for operator character (y/p/P/R/d/c)
-    RegisterOpPending { register: char },
+    RegisterOpPending {
+        /// Register chosen after `"`.
+        register: char,
+    },
     /// After ':' - accumulating a command-line buffer
-    CommandLinePending { buffer: String },
-    /// After 's'/'S'/'/' - accumulating a regex prompt buffer
+    CommandLinePending {
+        /// Text typed after `:` so far.
+        buffer: String,
+    },
+    /// After a regex-prompt key - accumulating the pattern buffer
     RegexPromptPending {
+        /// Which regex-taking command opened the prompt.
         kind: RegexPromptKind,
+        /// Pattern typed so far.
         buffer: String,
     },
     /// After digit 1-9 - building count prefix
-    CountPending { count: NonZeroUsize },
+    CountPending {
+        /// Count accumulated from the digits typed so far.
+        count: NonZeroUsize,
+    },
     /// After '[' - waiting for unmatched previous command second key
     UnmatchedPrevPending,
     /// After ']' - waiting for unmatched next command second key

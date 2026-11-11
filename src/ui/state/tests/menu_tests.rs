@@ -4,13 +4,14 @@ use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::game::PlayableScenario;
-use crate::ui::state::{Message, TypedScreen, update};
+use crate::testing::update_executing_effects as update;
+use crate::ui::state::{Message, TypedScreen};
 
 #[test]
 fn test_menu_navigation_up() {
     let mut state = create_test_app_state(vec![]);
     // Navigate to Menu screen first (starts on ModeSelection)
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
     // Set initial menu item to 1
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 1;
@@ -35,7 +36,7 @@ fn test_menu_navigation_down() {
     let mut state = create_test_app_state(vec![scenario1, scenario2]);
 
     // Navigate to Menu screen first (starts on ModeSelection)
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     if let TypedScreen::Menu(menu_data) = &state.screen {
         assert_eq!(menu_data.selected_item, 0);
@@ -83,7 +84,7 @@ fn test_menu_select_start_training() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
     // Navigate to menu first (start on ModeSelection)
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     update(&mut state, Message::MenuSelect).unwrap();
 
@@ -102,7 +103,7 @@ fn test_menu_select_quit() {
     let scenario2 = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario1, scenario2]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Select Quit option (index = scenario_count + 3)
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
@@ -114,50 +115,53 @@ fn test_menu_select_quit() {
     assert!(!state.ui.running);
 }
 
-/// Regression test for #324 (impl-critic finding S1): `ui.running` has a
-/// second writer besides `QuitApp` - the main-menu "Quit" item - which
-/// previously set it directly and skipped arcade game-over bookkeeping. A
-/// live arcade session reaches this menu without ever passing through
-/// `QuitApp`: pausing arcade and then abandoning a review session (started
-/// as a detour, e.g. via `p` -> Profile -> `r`) unconditionally lands on
-/// `TypedScreen::Menu` without touching `game.minigame_session`. Selecting
-/// Quit from there must still award that session's XP/score.
+fn pause_arcade_with_score(state: &mut crate::ui::state::AppState, score: u64) {
+    update(state, Message::SelectArcadeMode).unwrap();
+    let session = state.minigame_session_mut().unwrap();
+    for _ in 0..3 {
+        session.tick_countdown();
+    }
+    session.stats.score = score;
+    update(state, Message::PauseMiniGame).unwrap();
+}
+
+/// Regression test for #324: quitting while an arcade run is parked behind a detour screen
+/// (here Profile) must still award the run's XP and score. The detour screen owns the run
+/// (#461), so `QuitApp` finds it through the screen.
 #[test]
-fn test_menu_select_quit_awards_live_minigame_session_reached_via_review_detour() {
+fn test_quit_awards_paused_arcade_session_parked_behind_detour_screen() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
+    pause_arcade_with_score(&mut state, 7777);
 
-    update(&mut state, Message::StartMiniGame).unwrap();
-    assert!(state.game.minigame_session.is_some());
-    if let Some(ref mut session) = state.game.minigame_session {
-        session.stats.score = 7777;
-    }
-
-    // Abandoning a review session unconditionally lands on Menu, regardless
-    // of whether a review was actually in progress, and never touches
-    // `minigame_session` - reproducing the menu-Quit-reachable-with-a-live-
-    // session path without needing due reviews to be seeded.
-    update(&mut state, Message::AbandonReviewSession).unwrap();
-    assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(
-        state.game.minigame_session.is_some(),
-        "the paused arcade session must still be live once the Menu screen is reached"
-    );
-
-    let scenario_count = state.game.scenario_collection.count();
-    if let TypedScreen::Menu(menu_data) = &mut state.screen {
-        menu_data.selected_item = scenario_count + 3; // Quit
-    }
+    update(&mut state, Message::ShowProfile).unwrap();
+    assert_matches!(state.screen, TypedScreen::Profile(_));
     let initial_xp = state.progress.profile.total_xp;
 
-    update(&mut state, Message::MenuSelect).unwrap();
+    update(&mut state, Message::QuitApp).unwrap();
 
     assert!(!state.ui.running);
-    assert!(
-        state.progress.profile.total_xp > initial_xp,
-        "quitting via the main menu's Quit item must award the still-live session's XP too"
-    );
+    assert!(state.progress.profile.total_xp > initial_xp);
     assert_eq!(state.progress.profile.minigame_high_score, 7777);
+}
+
+/// Hopping between detour screens must keep handing the paused run along, so Back still
+/// returns to it.
+#[test]
+fn test_detour_chain_returns_to_paused_arcade_session() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    pause_arcade_with_score(&mut state, 100);
+
+    update(&mut state, Message::ShowProfile).unwrap();
+    update(&mut state, Message::ShowStatistics).unwrap();
+    update(&mut state, Message::ShowAchievements).unwrap();
+    update(&mut state, Message::BackToMenu).unwrap();
+
+    assert_matches!(state.screen, TypedScreen::MiniGame(_));
+    let session = state.minigame_session().unwrap();
+    assert!(session.state().is_paused());
+    assert_eq!(session.stats().score, 100);
 }
 
 #[test]
@@ -165,7 +169,7 @@ fn test_menu_select_profile() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 2; // Profile is at index 2 (after 1 scenario + Review)
@@ -180,7 +184,7 @@ fn test_menu_select_statistics() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 3; // Statistics is at index 3 (after 1 scenario + Review + Profile)
@@ -195,7 +199,7 @@ fn test_menu_with_zero_scenarios() {
     // Edge case: no scenarios loaded
     let mut state = create_test_app_state(vec![]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Review should be at index 0 (no scenarios)
     update(&mut state, Message::MenuSelect).unwrap();
@@ -236,7 +240,7 @@ fn test_menu_up_by() {
     ];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Set to item 5
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
@@ -261,7 +265,7 @@ fn test_menu_down_by() {
     let scenarios = vec![create_test_scenario(), create_test_scenario()];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Move down by 2
     update(&mut state, Message::MenuDownBy(2)).unwrap();
@@ -282,7 +286,7 @@ fn test_menu_jump_to_first() {
     let scenarios = vec![create_test_scenario(), create_test_scenario()];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Set to some item
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
@@ -301,7 +305,7 @@ fn test_menu_jump_to_last() {
     let scenarios = vec![create_test_scenario(), create_test_scenario()];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Jump to last (G command)
     update(&mut state, Message::MenuJumpToLast).unwrap();
@@ -320,7 +324,7 @@ fn test_menu_jump_to_specific() {
     ];
     let mut state = create_test_app_state(scenarios);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Jump to line 3 (1-indexed, so 0-indexed = 2)
     update(&mut state, Message::MenuJumpTo(3)).unwrap();
@@ -353,7 +357,7 @@ fn test_menu_select_review_no_due() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
     // Navigate to menu first
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Select Review option (index = scenario_count = 1)
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
@@ -364,4 +368,44 @@ fn test_menu_select_review_no_due() {
 
     // No reviews due, should stay on menu
     assert_matches!(state.screen, TypedScreen::Menu(_));
+}
+
+/// Starting a review while an arcade run is parked behind a detour screen ends that run for
+/// good: its score and XP are awarded and the screen is the review.
+#[test]
+fn test_starting_review_ends_the_paused_arcade_run_and_awards_it() {
+    use std::time::Duration;
+
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    pause_arcade_with_score(&mut state, 4242);
+    update(&mut state, Message::ShowProfile).unwrap();
+    state.progress.performance_tracker.record_attempt(
+        "x",
+        Duration::from_secs(5),
+        false,
+        Duration::from_secs(1),
+    );
+    let initial_xp = state.progress.profile.total_xp;
+
+    update(&mut state, Message::StartReviewSession).unwrap();
+
+    assert_matches!(state.screen, TypedScreen::Review(_));
+    assert!(state.minigame_session().is_none(), "the run must be gone");
+    assert!(state.progress.profile.total_xp > initial_xp);
+    assert_eq!(state.progress.profile.minigame_high_score, 4242);
+}
+
+/// Without due reviews the paused run is left alone.
+#[test]
+fn test_starting_review_without_due_reviews_keeps_the_paused_run() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    pause_arcade_with_score(&mut state, 100);
+    update(&mut state, Message::ShowProfile).unwrap();
+
+    update(&mut state, Message::StartReviewSession).unwrap();
+
+    assert_matches!(state.screen, TypedScreen::Profile(_));
+    assert!(state.minigame_session().is_some());
 }

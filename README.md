@@ -14,7 +14,7 @@ Stop learning commands in isolation. Train real development workflows with FSRS-
 <img src="assets/training.gif" width="600" alt="Training Mode Demo">
 
 > [!IMPORTANT]
-> **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in the `helix-trainer` folder of your OS config directory (`~/.config/` on Linux, `~/Library/Application Support/` on macOS, `%AppData%` on Windows)
+> **100% Offline & Privacy-First** — No internet required, no telemetry, no cloud sync. All data stays on your machine in the `helix-trainer` folder of your OS config directory (`~/.config/` on Linux and macOS, `%AppData%` on Windows). On macOS, files from the former `~/Library/Application Support/helix-trainer/` are copied once, per file, into `~/.config/helix-trainer/` on first start; the old files are left in place, so older versions keep using the old directory
 
 ## Features
 
@@ -207,7 +207,7 @@ All commands powered by `helix-core` v25.07.1 for 100% accuracy.
 
 ### Custom Helix keymap (optional)
 
-If you've remapped keys in your own Helix `config.toml`, the trainer can train against *your* bindings instead of the stock ones. Opt in by setting `use_helix_keymap: true` in the trainer's `config.json` (`~/.config/helix-trainer/` on Linux, `~/Library/Application Support/helix-trainer/` on macOS, `%AppData%\helix-trainer\` on Windows):
+If you've remapped keys in your own Helix `config.toml`, the trainer can train against *your* bindings instead of the stock ones. Opt in by setting `use_helix_keymap: true` in the trainer's `config.json` (`~/.config/helix-trainer/` on Linux and macOS, `%AppData%\helix-trainer\` on Windows):
 
 ```json
 {
@@ -221,7 +221,7 @@ When enabled, the trainer reads `$XDG_CONFIG_HOME/helix/config.toml` or `~/.conf
 
 This is **gameplay-only**: menus, results, filter screens, and scenario hint prose always use the stock keymap (`j`/`k`/`gg`), even with a custom keymap active, since remapping trainer UI chrome would break the canonical command identity FSRS review history depends on. A malformed config, a missing file, or an oversized/excessive config falls back to the stock keymap without blocking startup.
 
-A handful of keys are reserved by the trainer's own UI and intercepted before gameplay dispatch, so remapping onto them has no effect: <kbd>F1</kbd>, <kbd>?</kbd>, <kbd>Shift</kbd>+<kbd>/</kbd>, and <kbd>Ctrl</kbd>+<kbd>Q</kbd> everywhere; in Arcade mode, also <kbd>Esc</kbd>, <kbd>q</kbd>, <kbd>m</kbd>, <kbd>p</kbd>, <kbd>s</kbd>, <kbd>a</kbd>, and <kbd>M</kbd> while paused or on the game-over screen.
+A handful of keys are reserved by the trainer's own UI and intercepted before gameplay dispatch, so remapping onto them has no effect: <kbd>F1</kbd> (the only hint key; <kbd>?</kbd> is Helix's backward search) and <kbd>Ctrl</kbd>+<kbd>Q</kbd> everywhere, plus <kbd>Ctrl</kbd>+<kbd>N</kbd> while a corrupt profile is quarantined; in Arcade mode, also <kbd>Esc</kbd>, <kbd>q</kbd>, <kbd>m</kbd>, <kbd>p</kbd>, <kbd>s</kbd>, <kbd>a</kbd>, and <kbd>M</kbd> while paused or on the game-over screen.
 
 #### macOS Terminal.app and other non-kitty terminals
 

@@ -5,7 +5,7 @@ use super::{HelixSimulator, InsertMode, NormalMode};
 use crate::helix::commands::{
     CMD_INSERT_ALT_BACKSPACE, CMD_INSERT_DELETE_CHAR_FORWARD, CMD_INSERT_DELETE_KEY,
     CMD_INSERT_DELETE_TO_LINE_END, CMD_INSERT_DELETE_TO_LINE_START,
-    CMD_INSERT_DELETE_WORD_BACKWARD, CMD_INSERT_DELETE_WORD_FORWARD,
+    CMD_INSERT_DELETE_WORD_BACKWARD, CMD_INSERT_DELETE_WORD_FORWARD, CMD_INSERT_TAB,
 };
 use crate::security::UserError;
 use helix_core::{
@@ -14,10 +14,10 @@ use helix_core::{
 };
 use helix_stdx::rope::RopeSliceExt;
 
-/// An Insert-mode editing key that deletes text instead of inserting it.
+/// An Insert-mode editing key beyond typed characters, `Backspace` and the
+/// arrow keys.
 ///
-/// This is the closed set of Insert-mode commands beyond typed characters,
-/// `Backspace` and the arrow keys, so a modified key is never mistaken for
+/// This is a closed set, so a modified key or `Tab` is never mistaken for
 /// literal text. Each variant mirrors the Helix 25.07.1 default binding.
 ///
 /// # Examples
@@ -27,6 +27,7 @@ use helix_stdx::rope::RopeSliceExt;
 ///
 /// assert_eq!(InsertCommand::parse("Ctrl-w"), Some(InsertCommand::DeleteWordBackward));
 /// assert_eq!(InsertCommand::parse("Alt-Backspace"), Some(InsertCommand::DeleteWordBackward));
+/// assert_eq!(InsertCommand::parse("\t"), Some(InsertCommand::Indent));
 /// assert_eq!(InsertCommand::parse("x"), None);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +42,12 @@ pub enum InsertCommand {
     DeleteCharForward,
     /// `Alt-d`: delete the word after the cursor.
     DeleteWordForward,
+    /// `Tab`: insert one indent unit of the document language at the cursor.
+    ///
+    /// ASSUMPTION: `hx` jumps to the end of the parent syntax node when the
+    /// cursor is not in leading whitespace; the simulator has no syntax tree
+    /// and always inserts the unit.
+    Indent,
 }
 
 impl InsertCommand {
@@ -54,6 +61,7 @@ impl InsertCommand {
             CMD_INSERT_DELETE_TO_LINE_END => Some(Self::DeleteToLineEnd),
             CMD_INSERT_DELETE_CHAR_FORWARD | CMD_INSERT_DELETE_KEY => Some(Self::DeleteCharForward),
             CMD_INSERT_DELETE_WORD_FORWARD => Some(Self::DeleteWordForward),
+            CMD_INSERT_TAB => Some(Self::Indent),
             _ => None,
         }
     }
@@ -66,6 +74,7 @@ impl InsertCommand {
             Self::DeleteToLineEnd => CMD_INSERT_DELETE_TO_LINE_END,
             Self::DeleteCharForward => CMD_INSERT_DELETE_CHAR_FORWARD,
             Self::DeleteWordForward => CMD_INSERT_DELETE_WORD_FORWARD,
+            Self::Indent => CMD_INSERT_TAB,
         }
     }
 }
@@ -219,13 +228,15 @@ impl HelixSimulator<NormalMode> {
         register: Option<char>,
     ) -> Result<(), UserError> {
         yank_to_register(self, register)?;
-        self.change_selection_impl()
+        self.change_selection_impl();
+        Ok(())
     }
 
     /// Change selection without yanking: delete the full selection, leaving
     /// registers untouched (prepare for insert mode; Helix 'Alt-c').
     pub fn change_selection_noyank(&mut self) -> Result<(), UserError> {
-        self.change_selection_impl()
+        self.change_selection_impl();
+        Ok(())
     }
 
     /// Delete the full active selection (respecting multi-range selections,
@@ -243,13 +254,12 @@ impl HelixSimulator<NormalMode> {
     /// with a blank line and the cursor lands on it (`Open::Above`), so
     /// `xc` behaves like `O` rather than a plain insert at the deletion
     /// point.
-    fn change_selection_impl(&mut self) -> Result<(), UserError> {
+    fn change_selection_impl(&mut self) {
         self.selection = if super::commands::editing::is_selection_linewise(self) {
             super::commands::editing::change_selection_linewise(self)
         } else {
             super::commands::editing::delete_active_selection(self)
         };
-        Ok(())
     }
 }
 
@@ -263,7 +273,8 @@ impl HelixSimulator<InsertMode> {
     /// mode entry.
     pub fn insert_text(&mut self, text: &str) -> Result<(), UserError> {
         if text == "\n" {
-            return self.insert_newline();
+            self.insert_newline();
+            return Ok(());
         }
         let head = self.selection.primary().head;
         let text_len = text.chars().count();
@@ -286,7 +297,7 @@ impl HelixSimulator<InsertMode> {
     /// the cursor is dropped and the new line copies the line's indentation.
     /// When only whitespace precedes the cursor, the line break goes at the
     /// line start so the old line, indentation included, moves down intact.
-    fn insert_newline(&mut self) -> Result<(), UserError> {
+    fn insert_newline(&mut self) {
         let head = self.selection.primary().head.min(self.doc.len_chars());
         let line = self.doc.char_to_line(head);
         let line_start = self.doc.line_to_char(line);
@@ -307,7 +318,6 @@ impl HelixSimulator<InsertMode> {
         self.apply_transaction(transaction);
         self.selection = Selection::point(cursor);
         self.auto_indent_end = strips_indent.then_some(cursor);
-        Ok(())
     }
 
     /// Strip the indentation of a line break nothing was typed after, on
@@ -359,6 +369,10 @@ impl HelixSimulator<InsertMode> {
     /// is computed as in Helix's `delete_by_selection_insert_mode` and the
     /// cursor lands at its start.
     pub fn apply_insert_command(&mut self, command: InsertCommand) -> Result<(), UserError> {
+        if command == InsertCommand::Indent {
+            let unit = self.indent_unit.to_string();
+            return self.insert_text(&unit);
+        }
         let head = self.selection.primary().head.min(self.doc.len_chars());
         let (start, end) = self.insert_command_span(command, head);
 
@@ -404,6 +418,7 @@ impl HelixSimulator<InsertMode> {
                 let end = movement::move_next_word_end(text, Range::point(head), 1).to();
                 (head, end.max(head))
             }
+            InsertCommand::Indent => (head, head),
         }
     }
 }

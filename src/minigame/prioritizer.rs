@@ -1,4 +1,4 @@
-//! FSRS-based scenario scoring for arcade mode
+//! FSRS-based scenario prioritization for arcade mode
 //!
 //! This module provides scenario prioritization based on FSRS learning data.
 //! Scenarios containing commands that are overdue, weak, or never practiced
@@ -13,34 +13,36 @@
 //! ```
 //!
 //! Where:
-//! - `overdue_factor` = min(days_overdue / max_overdue_days, 1.0)
+//! - `overdue_factor` = min(overdue_ratio, 1.0), the days past due relative to the
+//!   scheduled interval (from [`command_urgency`])
 //! - `weakness_factor` = 1.0 - success_rate
 //!
-//! Novel (never practiced) commands receive a fixed novelty weight.
+//! Novel commands (no tracker entry) receive a fixed novelty weight.
 //!
 //! The scenario score is the **maximum** score among all its commands,
 //! since a scenario is as urgent as its most urgent command.
 //!
 //! # Examples
 //!
-//! ```ignore
+//! ```
+//! use helix_trainer::config::ScenarioLoader;
 //! use helix_trainer::learning::PerformanceTracker;
-//! use helix_trainer::minigame::ScenarioScorer;
+//! use helix_trainer::minigame::ScenarioPrioritizer;
 //!
+//! let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
 //! let tracker = PerformanceTracker::new();
-//! let scorer = ScenarioScorer::new(&tracker);
+//! let scorer = ScenarioPrioritizer::new(&tracker);
 //!
-//! let score = scorer.score(&scenario);
-//! assert!(score >= 0.0 && score <= 1.0);
+//! let score = scorer.score(&scenarios[0]);
+//! assert!((0.0..=1.0).contains(&score));
+//! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
 use chrono::{DateTime, Utc};
 
 use crate::config::Scenario;
-use crate::constants::{
-    FSRS_MAX_OVERDUE_DAYS, FSRS_NOVELTY_WEIGHT, FSRS_OVERDUE_WEIGHT, FSRS_WEAKNESS_WEIGHT,
-};
-use crate::learning::PerformanceTracker;
+use crate::constants::{FSRS_NOVELTY_WEIGHT, FSRS_OVERDUE_WEIGHT, FSRS_WEAKNESS_WEIGHT};
+use crate::learning::{PerformanceTracker, Urgency, command_urgency};
 
 /// Scores scenarios based on FSRS learning priority.
 ///
@@ -50,21 +52,24 @@ use crate::learning::PerformanceTracker;
 ///
 /// The scorer uses FSRS data from the `PerformanceTracker` to determine
 /// which commands need review based on their overdue status and success rate.
-pub struct ScenarioScorer<'a> {
+pub struct ScenarioPrioritizer<'a> {
     tracker: &'a PerformanceTracker,
     now: DateTime<Utc>,
 }
 
-impl std::fmt::Debug for ScenarioScorer<'_> {
+impl std::fmt::Debug for ScenarioPrioritizer<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ScenarioScorer")
+        f.debug_struct("ScenarioPrioritizer")
             .field("now", &self.now)
             .finish_non_exhaustive()
     }
 }
 
-impl<'a> ScenarioScorer<'a> {
-    /// Creates a new scorer using the current time.
+impl<'a> ScenarioPrioritizer<'a> {
+    /// Creates a new scorer reading the time from the tracker's clock.
+    ///
+    /// Using the tracker's clock (not the system clock) keeps arcade selection
+    /// deterministic under an injected `FakeClock`.
     ///
     /// # Arguments
     ///
@@ -72,18 +77,19 @@ impl<'a> ScenarioScorer<'a> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::learning::PerformanceTracker;
-    /// use helix_trainer::minigame::ScenarioScorer;
+    /// use helix_trainer::minigame::ScenarioPrioritizer;
     ///
     /// let tracker = PerformanceTracker::new();
-    /// let scorer = ScenarioScorer::new(&tracker);
+    /// let prioritizer = ScenarioPrioritizer::new(&tracker);
+    /// assert_eq!(prioritizer.score_command("dd"), helix_trainer::constants::FSRS_NOVELTY_WEIGHT);
     /// ```
     #[must_use]
     pub fn new(tracker: &'a PerformanceTracker) -> Self {
         Self {
             tracker,
-            now: Utc::now(),
+            now: tracker.clock().now(),
         }
     }
 
@@ -120,11 +126,18 @@ impl<'a> ScenarioScorer<'a> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// let score = scorer.score(&scenario);
-    /// if score > 0.5 {
-    ///     println!("This scenario needs practice!");
-    /// }
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::minigame::ScenarioPrioritizer;
+    ///
+    /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
+    /// let tracker = PerformanceTracker::new();
+    /// let scorer = ScenarioPrioritizer::new(&tracker);
+    ///
+    /// // An untracked scenario consists of novel commands and gets the novelty weight.
+    /// assert!(scorer.score(&scenarios[0]) > 0.0);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     #[must_use]
     pub fn score(&self, scenario: &Scenario) -> f64 {
@@ -164,11 +177,12 @@ impl<'a> ScenarioScorer<'a> {
     /// score = OVERDUE_WEIGHT * overdue_factor + WEAKNESS_WEIGHT * weakness_factor
     /// ```
     ///
-    /// Where:
-    /// - `overdue_factor` = min(days_overdue / MAX_OVERDUE_DAYS, 1.0)
+    /// Where (both from [`command_urgency`]):
+    /// - `overdue_factor` = min(overdue_ratio, 1.0), the days past due relative to the
+    ///   scheduled interval
     /// - `weakness_factor` = 1.0 - success_rate
     ///
-    /// For novel (never practiced) commands:
+    /// For novel commands (no tracker entry):
     /// ```text
     /// score = NOVELTY_WEIGHT
     /// ```
@@ -182,19 +196,13 @@ impl<'a> ScenarioScorer<'a> {
     /// A score indicating the command's priority for practice.
     #[must_use]
     pub fn score_command(&self, command: &str) -> f64 {
-        match self.tracker.performance(command) {
-            Some(perf) => {
-                // Command has been practiced before
-                let days_overdue = (self.now - perf.due).num_days().max(0) as f64;
-                let overdue_factor = (days_overdue / FSRS_MAX_OVERDUE_DAYS).min(1.0);
-                let weakness_factor = 1.0 - perf.success_rate();
-
-                FSRS_OVERDUE_WEIGHT * overdue_factor + FSRS_WEAKNESS_WEIGHT * weakness_factor
-            }
-            None => {
-                // Command never practiced - novelty bonus
-                FSRS_NOVELTY_WEIGHT
-            }
+        match command_urgency(self.tracker.performance(command), self.now) {
+            Urgency::Practiced {
+                overdue_ratio,
+                weakness,
+                ..
+            } => FSRS_OVERDUE_WEIGHT * overdue_ratio.min(1.0) + FSRS_WEAKNESS_WEIGHT * weakness,
+            Urgency::Novel => FSRS_NOVELTY_WEIGHT,
         }
     }
 }
@@ -203,7 +211,9 @@ impl<'a> ScenarioScorer<'a> {
 mod tests {
     use super::*;
     use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
+    use crate::time::{Clock, FakeClock};
     use chrono::Duration;
+    use std::sync::Arc;
     use std::time::Duration as StdDuration;
 
     /// Creates a test scenario with the given commands.
@@ -249,7 +259,7 @@ mod tests {
     #[test]
     fn test_score_command_never_practiced() {
         let tracker = PerformanceTracker::new();
-        let scorer = ScenarioScorer::new(&tracker);
+        let scorer = ScenarioPrioritizer::new(&tracker);
 
         let score = scorer.score_command("dd");
 
@@ -258,64 +268,6 @@ mod tests {
             (score - FSRS_NOVELTY_WEIGHT).abs() < 0.001,
             "Expected novelty weight {}, got {}",
             FSRS_NOVELTY_WEIGHT,
-            score
-        );
-    }
-
-    #[test]
-    fn test_score_command_overdue() {
-        let mut tracker = PerformanceTracker::new();
-
-        // Record an attempt to create initial FSRS state
-        tracker.record_attempt(
-            "dd",
-            StdDuration::from_secs(1),
-            true,
-            StdDuration::from_secs(1),
-        );
-
-        // Get the due date and create a scorer 7 days after
-        let perf = tracker.performance("dd").unwrap();
-        let seven_days_later = perf.due + Duration::days(7);
-
-        let scorer = ScenarioScorer::with_time(&tracker, seven_days_later);
-        let score = scorer.score_command("dd");
-
-        // 7 days overdue should give max overdue factor (1.0)
-        // With high success rate (1.0), weakness_factor = 0
-        // Score = 0.4 * 1.0 + 0.4 * 0.0 = 0.4
-        assert!(
-            score >= FSRS_OVERDUE_WEIGHT * 0.9,
-            "Expected overdue score >= {}, got {}",
-            FSRS_OVERDUE_WEIGHT * 0.9,
-            score
-        );
-    }
-
-    #[test]
-    fn test_score_command_partially_overdue() {
-        let mut tracker = PerformanceTracker::new();
-
-        // Record an attempt
-        tracker.record_attempt(
-            "x",
-            StdDuration::from_secs(1),
-            true,
-            StdDuration::from_secs(1),
-        );
-
-        // Get the due date and create a scorer 3.5 days after (half of max overdue)
-        let perf = tracker.performance("x").unwrap();
-        let half_overdue = perf.due + Duration::days(3) + Duration::hours(12);
-
-        let scorer = ScenarioScorer::with_time(&tracker, half_overdue);
-        let score = scorer.score_command("x");
-
-        // 3.5 days overdue should give ~0.5 overdue factor
-        // Expected: 0.4 * 0.5 = 0.2 (approximately)
-        assert!(
-            (0.15..=0.25).contains(&score),
-            "Expected score around 0.2 for half-overdue, got {}",
             score
         );
     }
@@ -336,7 +288,7 @@ mod tests {
 
         // Score at the due time (not overdue)
         let perf = tracker.performance("dd").unwrap();
-        let scorer = ScenarioScorer::with_time(&tracker, perf.due);
+        let scorer = ScenarioPrioritizer::with_time(&tracker, perf.due());
 
         let score = scorer.score_command("dd");
 
@@ -373,7 +325,7 @@ mod tests {
 
         // Score at due time
         let perf = tracker.performance("dd").unwrap();
-        let scorer = ScenarioScorer::with_time(&tracker, perf.due);
+        let scorer = ScenarioPrioritizer::with_time(&tracker, perf.due());
 
         let score = scorer.score_command("dd");
 
@@ -406,7 +358,7 @@ mod tests {
         let scenario = make_scenario(vec!["h", "dd"]);
 
         let perf = tracker.performance("h").unwrap();
-        let scorer = ScenarioScorer::with_time(&tracker, perf.due);
+        let scorer = ScenarioPrioritizer::with_time(&tracker, perf.due());
 
         let score = scorer.score(&scenario);
         let h_score = scorer.score_command("h");
@@ -430,7 +382,7 @@ mod tests {
     #[test]
     fn test_score_scenario_empty_commands() {
         let tracker = PerformanceTracker::new();
-        let scorer = ScenarioScorer::new(&tracker);
+        let scorer = ScenarioPrioritizer::new(&tracker);
 
         let scenario = make_scenario(vec![]);
         let score = scorer.score(&scenario);
@@ -446,7 +398,7 @@ mod tests {
     #[test]
     fn test_empty_tracker_gives_novelty_scores() {
         let tracker = PerformanceTracker::new();
-        let scorer = ScenarioScorer::new(&tracker);
+        let scorer = ScenarioPrioritizer::new(&tracker);
 
         let scenario1 = make_scenario(vec!["dd"]);
         let scenario2 = make_scenario(vec!["x", "p"]);
@@ -477,7 +429,7 @@ mod tests {
     #[test]
     fn test_extract_commands() {
         let scenario = make_scenario(vec!["d", "w", "i"]);
-        let commands = ScenarioScorer::extract_commands(&scenario);
+        let commands = ScenarioPrioritizer::extract_commands(&scenario);
 
         assert_eq!(commands.len(), 3);
         assert_eq!(commands[0], "d");
@@ -488,7 +440,7 @@ mod tests {
     #[test]
     fn test_score_bounds() {
         let tracker = PerformanceTracker::new();
-        let scorer = ScenarioScorer::new(&tracker);
+        let scorer = ScenarioPrioritizer::new(&tracker);
 
         // Test various commands - all scores should be reasonable
         for cmd in ["dd", "x", "yy", "p", "w", "b", "h", "j", "k", "l"] {
@@ -540,9 +492,9 @@ mod tests {
         // Score at the later due date to avoid overdue effects
         let h_perf = tracker.performance("h").unwrap();
         let dd_perf = tracker.performance("dd").unwrap();
-        let now = h_perf.due.max(dd_perf.due);
+        let now = h_perf.due().max(dd_perf.due());
 
-        let scorer = ScenarioScorer::with_time(&tracker, now);
+        let scorer = ScenarioPrioritizer::with_time(&tracker, now);
 
         let h_score = scorer.score_command("h");
         let dd_score = scorer.score_command("dd");
@@ -575,36 +527,84 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_overdue_capped_at_max_days() {
+    /// Tracker with one perfect attempt on `cmd` and the interval FSRS scheduled for it.
+    fn tracker_with_one_attempt(cmd: &str) -> (PerformanceTracker, i64) {
         let mut tracker = PerformanceTracker::new();
+        tracker.record_attempt(
+            cmd,
+            StdDuration::from_secs(1),
+            true,
+            StdDuration::from_secs(1),
+        );
+        let interval = i64::from(tracker.performance(cmd).unwrap().scheduled_days());
+        (tracker, interval)
+    }
 
-        // Record an attempt
+    #[test]
+    fn test_score_command_overdue_by_one_interval_gets_full_overdue_weight() {
+        let (tracker, interval) = tracker_with_one_attempt("dd");
+        let due = tracker.performance("dd").unwrap().due();
+
+        let scorer = ScenarioPrioritizer::with_time(&tracker, due + Duration::days(interval));
+
+        // success rate 1.0, so only the overdue term remains
+        assert!((scorer.score_command("dd") - FSRS_OVERDUE_WEIGHT).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_score_command_overdue_is_relative_to_the_interval() {
+        let (tracker, interval) = tracker_with_one_attempt("x");
+        let due = tracker.performance("x").unwrap().due();
+
+        let scorer = ScenarioPrioritizer::with_time(&tracker, due + Duration::days(1));
+
+        let expected = FSRS_OVERDUE_WEIGHT * (1.0 / interval as f64).min(1.0);
+        assert!((scorer.score_command("x") - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_overdue_term_is_capped_at_one_interval() {
+        let (tracker, interval) = tracker_with_one_attempt("dd");
+        let due = tracker.performance("dd").unwrap().due();
+
+        let at_cap = ScenarioPrioritizer::with_time(&tracker, due + Duration::days(interval))
+            .score_command("dd");
+        let far_beyond =
+            ScenarioPrioritizer::with_time(&tracker, due + Duration::days(interval * 50))
+                .score_command("dd");
+
+        assert!((at_cap - far_beyond).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_new_reads_the_trackers_injected_clock() {
+        let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
+        let mut tracker = PerformanceTracker::with_clock(clock.clone());
         tracker.record_attempt(
             "dd",
             StdDuration::from_secs(1),
             true,
             StdDuration::from_secs(1),
         );
+        let interval = i64::from(tracker.performance("dd").unwrap().scheduled_days());
 
-        let perf = tracker.performance("dd").unwrap();
+        let before = ScenarioPrioritizer::new(&tracker).score_command("dd");
+        clock.advance_days(interval);
+        let after = ScenarioPrioritizer::new(&tracker).score_command("dd");
 
-        // Test at exactly max overdue days
-        let at_max = perf.due + Duration::days(FSRS_MAX_OVERDUE_DAYS as i64);
-        let scorer_max = ScenarioScorer::with_time(&tracker, at_max);
-        let score_max = scorer_max.score_command("dd");
-
-        // Test at double max overdue days - should be capped
-        let beyond_max = perf.due + Duration::days((FSRS_MAX_OVERDUE_DAYS * 2.0) as i64);
-        let scorer_beyond = ScenarioScorer::with_time(&tracker, beyond_max);
-        let score_beyond = scorer_beyond.score_command("dd");
-
-        // Both should give the same overdue factor (capped at 1.0)
-        assert!(
-            (score_max - score_beyond).abs() < 0.001,
-            "Overdue factor should be capped: at_max={}, beyond={}",
-            score_max,
-            score_beyond
+        assert!(after > before, "overdue score must follow the fake clock");
+        assert_eq!(
+            after,
+            ScenarioPrioritizer::with_time(&tracker, clock.now()).score_command("dd")
         );
+    }
+
+    #[test]
+    fn test_novelty_requires_no_tracker_entry() {
+        let (tracker, _) = tracker_with_one_attempt("dd");
+        let scorer = ScenarioPrioritizer::with_time(&tracker, tracker.clock().now());
+
+        assert_ne!(scorer.score_command("dd"), FSRS_NOVELTY_WEIGHT);
+        assert_eq!(scorer.score_command("zz"), FSRS_NOVELTY_WEIGHT);
     }
 }

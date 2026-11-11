@@ -39,10 +39,10 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
     frame.render_widget(&background, popup_area);
 
     // Render hint text inside popup
-    if let Some(hint) = &task_data.current_hint {
+    if let Some(hint) = task_data.hint.text() {
         let inner = inner_rect(popup_area);
 
-        let hint_text = Paragraph::new(hint.as_str())
+        let hint_text = Paragraph::new(hint)
             .wrap(Wrap { trim: true })
             .style(Style::default().fg(Color::Yellow))
             .alignment(Alignment::Center);
@@ -97,9 +97,11 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String]
     // PixelSize::HalfHeight only halves the glyph height, not the width - each
     // character (including the space separators) is still BIG_TEXT_CHAR_WIDTH_CELLS wide
     let chars_count = key_text.chars().count();
-    let popup_width =
-        ((chars_count * BIG_TEXT_CHAR_WIDTH_CELLS).max(KEY_HISTORY_MIN_WIDTH as usize) as u16)
-            .min(safe_area.width);
+    let popup_width = u16::try_from(
+        (chars_count * BIG_TEXT_CHAR_WIDTH_CELLS).max(usize::from(KEY_HISTORY_MIN_WIDTH)),
+    )
+    .unwrap_or(u16::MAX)
+    .min(safe_area.width);
 
     // Create BigText widget with large font and cyan color
     let big_text = BigText::builder()
@@ -194,7 +196,8 @@ pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
 
     // Render each visible notification
     for (idx, notification) in visible.iter().enumerate() {
-        let y_offset = base_y + (idx as u16 * (notification_height + spacing));
+        let y_offset =
+            base_y + (u16::try_from(idx).unwrap_or(u16::MAX) * (notification_height + spacing));
 
         // Don't render if it would go off-screen
         if y_offset + notification_height > area.height {
@@ -258,10 +261,13 @@ pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
         QuarantineOutcome::BackedUp(path) => format!("Backup kept at: {}", path.display()),
         QuarantineOutcome::Failed(reason) => format!("No backup made: {reason}"),
     };
-    let lines = [
+    let mut lines = vec![
         "Profile load failed: saving is disabled this session.".to_string(),
         backup_line,
     ];
+    if matches!(backup, QuarantineOutcome::BackedUp(_)) {
+        lines.push(t!("profile.start_fresh_action").to_string());
+    }
 
     // +1 line of slack because word wrapping can need more rows than a plain
     // character count suggests.
@@ -278,7 +284,7 @@ pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
     let banner_area = Rect { height, ..area };
     frame.render_widget(Clear, banner_area);
     frame.render_widget(
-        Paragraph::new(lines.map(Line::from).to_vec())
+        Paragraph::new(lines.into_iter().map(Line::from).collect::<Vec<_>>())
             .wrap(Wrap { trim: false })
             .style(
                 Style::default()

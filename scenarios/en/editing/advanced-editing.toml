@@ -129,7 +129,7 @@ name = "Indent a line"
 description = "Use '>' to add indentation to the current line"
 
 hints = [
-    "'>' adds leading whitespace (typically spaces or tab)",
+    "'>' adds one indent level of leading whitespace (4 spaces in Rust)",
     "Useful for formatting code blocks",
 ]
 
@@ -141,13 +141,13 @@ cursor_position = [1, 0]
 
 [scenarios.target]
 file_content = """fn main() {
-  println!("test");
+    println!("test");
 }"""
-cursor_position = [1, 2]
+cursor_position = [1, 4]
 
 [scenarios.solution]
 commands = [">"]
-description = "Press '>' to indent the line (adds 2 spaces)"
+description = "Press '>' to indent the line (adds 4 spaces)"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -167,15 +167,15 @@ name = "Remove indentation"
 description = "Use '<' to remove indentation from the current line"
 
 hints = [
-    "'<' removes leading whitespace",
+    "'<' removes one indent level of leading whitespace (up to 4 spaces in Rust)",
     "Opposite of '>' command",
 ]
 
 [scenarios.setup]
 file_content = """fn main() {
-      let x = 1;
+        let x = 1;
 }"""
-cursor_position = [1, 6]
+cursor_position = [1, 8]
 
 [scenarios.target]
 file_content = """fn main() {
@@ -185,7 +185,7 @@ cursor_position = [1, 4]
 
 [scenarios.solution]
 commands = ["<"]
-description = "Press '<' to dedent the line (removes 2 spaces)"
+description = "Press '<' to dedent the line (removes 4 spaces)"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -275,25 +275,27 @@ estimated_time_seconds = 10
 
 [[scenarios]]
 id = "switch_case_alt_001"
-name = "Switch case with backtick"
-description = "Use '`' to toggle case (alternative to '~')"
+name = "Lowercase with backtick"
+description = "Use '`' to convert the selected text to lowercase"
 
 hints = [
-    "'`' is an alternative to '~' for case toggling",
-    "Both commands work the same way",
+    "'`' converts the selected text to lowercase",
+    "First select the text you want to convert",
 ]
 
 [scenarios.setup]
 file_content = """const MAX = 100;"""
 cursor_position = [0, 6]
+selection = [0, 6, 0, 9]
 
 [scenarios.target]
-file_content = """const mAX = 100;"""
-cursor_position = [0, 6]
+file_content = """const max = 100;"""
+cursor_position = [0, 9]
+selection = [0, 6, 0, 9]
 
 [scenarios.solution]
 commands = ["`"]
-description = "Press '`' to toggle the first character's case"
+description = "Press '`' to lowercase the selected text"
 
 [scenarios.scoring]
 optimal_count = 1
@@ -303,7 +305,7 @@ tolerance = 0
 [scenarios.metadata]
 category = "editing"
 difficulty = "beginner"
-tags = ["case", "toggle", "editing"]
+tags = ["case", "lowercase", "editing", "selection"]
 commands_taught = ["`"]
 estimated_time_seconds = 10
 

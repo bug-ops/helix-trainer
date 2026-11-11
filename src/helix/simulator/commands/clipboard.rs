@@ -3,6 +3,8 @@
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use helix_core::{Range, Selection, Transaction, line_ending::get_line_ending_of_str};
+use std::iter::{Chain, Repeat};
+use std::slice::Iter;
 
 /// Yank (copy) the active selection to the unnamed register
 ///
@@ -82,7 +84,8 @@ pub fn paste_after_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
 ) -> Result<(), UserError> {
-    paste_from_register(sim, register, PastePlacement::After)
+    paste_from_register(sim, register, PastePlacement::After);
+    Ok(())
 }
 
 /// Paste the unnamed register's content before the selection
@@ -102,22 +105,31 @@ pub fn paste_before_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
 ) -> Result<(), UserError> {
-    paste_from_register(sim, register, PastePlacement::Before)
+    paste_from_register(sim, register, PastePlacement::Before);
+    Ok(())
+}
+
+/// Yields value `i` for range `i`, repeating the last value for extra ranges.
+pub(super) fn values_by_range<'a>(
+    values: &'a [String],
+    last_value: &'a String,
+) -> Chain<Iter<'a, String>, Repeat<&'a String>> {
+    values.iter().chain(std::iter::repeat(last_value))
 }
 
 fn paste_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
     placement: PastePlacement,
-) -> Result<(), UserError> {
+) {
     let Some(values) = sim.registers.get_values(register) else {
-        return Ok(());
+        return;
     };
     let Some(last_value) = values.last() else {
-        return Ok(());
+        return;
     };
     let linewise = values.iter().any(|v| get_line_ending_of_str(v).is_some());
-    let mut value_iter = values.iter().chain(std::iter::repeat(last_value));
+    let mut value_iter = values_by_range(values, last_value);
 
     let doc = &sim.doc;
     let len_chars = doc.len_chars();
@@ -164,7 +176,6 @@ fn paste_from_register<M: EditorMode>(
     let primary = sim.selection.primary_index();
     sim.apply_transaction(transaction);
     sim.selection = Selection::new(pasted.into(), primary);
-    Ok(())
 }
 
 /// The selection a pasted value of `len` chars leaves in a range, keeping

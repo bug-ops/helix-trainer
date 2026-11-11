@@ -13,7 +13,9 @@ use std::assert_matches;
 use std::time::{Duration, Instant};
 
 use super::common::{create_test_app_state, create_test_scenario};
-use crate::ui::state::{Message, ReviewSessionState, TypedScreen, update};
+use crate::testing::review_session;
+use crate::testing::update_executing_effects as update;
+use crate::ui::state::{Message, ReviewData, ReviewSessionState, TypedScreen};
 
 #[test]
 fn test_review_session_with_no_due_reviews() {
@@ -30,7 +32,7 @@ fn test_review_session_with_no_due_reviews() {
 
     // May or may not have reviews due - depends on FSRS algorithm
     // If no reviews due, should stay on menu
-    if state.game.review_session.is_none() {
+    if review_session(&state).is_none() {
         assert_matches!(state.screen, TypedScreen::Menu(_));
     } else {
         assert_matches!(state.screen, TypedScreen::Review(_));
@@ -62,12 +64,11 @@ fn test_review_session_no_due_reviews_stays_on_menu() {
 
     // Should stay on ModeSelection when no reviews are due
     assert_matches!(state.screen, TypedScreen::ModeSelection(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 fn review_session_with_commands(due_commands: Vec<String>) -> ReviewSessionState {
     ReviewSessionState {
-        current_command: due_commands.first().cloned(),
         due_commands,
         current_index: 0,
         session_started_at: Instant::now(),
@@ -90,15 +91,21 @@ fn test_complete_review_command_persists_fsrs_data_mid_session() {
     state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
     // Two due commands so completing the first one does not end the session.
-    state.game.review_session = Some(review_session_with_commands(vec![
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
         "x".to_string(),
         "d".to_string(),
-    ]));
+    ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Session should still be active (only 1 of 2 commands completed).
-    assert!(state.game.review_session.is_some());
+    assert!(review_session(&state).is_some());
 
     let persisted = ProfileStorage::with_path(state.progress.storage.path())
         .load()
@@ -125,12 +132,20 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
     let initial_xp = state.progress.profile.total_xp;
 
     // Single due command: completing it ends the session immediately.
-    state.game.review_session = Some(review_session_with_commands(vec!["x".to_string()]));
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
+        "x".to_string(),
+    ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Session should be cleared and XP awarded (1 completed * 10 + 100% success * 20).
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
     assert_eq!(state.progress.profile.total_xp, initial_xp + 30);
     assert_matches!(state.screen, TypedScreen::Menu(_));
 
@@ -160,9 +175,17 @@ fn test_review_session_completion_persists_level_up() {
     state.progress.profile.total_xp = xp_for_level_2 - 10;
     state.progress.profile.level = 1;
 
-    state.game.review_session = Some(review_session_with_commands(vec!["x".to_string()]));
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
+        "x".to_string(),
+    ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     assert_eq!(state.progress.profile.level, 2);
 
@@ -187,9 +210,17 @@ fn test_review_session_completion_notifies_on_level_up() {
     state.progress.profile.total_xp = xp_for_level_2 - 10;
     state.progress.profile.level = 1;
 
-    state.game.review_session = Some(review_session_with_commands(vec!["x".to_string()]));
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
+        "x".to_string(),
+    ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     assert_eq!(state.progress.profile.level, 2);
     assert!(
@@ -210,9 +241,17 @@ fn test_review_session_completion_no_level_up_notification_without_level_up() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    state.game.review_session = Some(review_session_with_commands(vec!["x".to_string()]));
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
+        "x".to_string(),
+    ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     assert!(
         !state
@@ -243,13 +282,19 @@ fn test_abandon_review_session_persists_partial_progress() {
     state.progress.mark_saved();
 
     // Two due commands so completing the first one does not end the session.
-    state.game.review_session = Some(review_session_with_commands(vec![
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
         "x".to_string(),
         "d".to_string(),
-    ]));
+    ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
-    assert!(state.game.review_session.is_some(), "session still active");
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
+    assert!(review_session(&state).is_some(), "session still active");
 
     // Nothing persisted yet: the debounce window is still open.
     let profile_path = temp_dir.path().join("profile.json");
@@ -260,7 +305,7 @@ fn test_abandon_review_session_persists_partial_progress() {
 
     update(&mut state, Message::AbandonReviewSession).unwrap();
 
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
     assert_matches!(state.screen, TypedScreen::Menu(_));
 
     let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();

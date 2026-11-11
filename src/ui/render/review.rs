@@ -2,7 +2,7 @@
 
 use crate::helix::commands::CMD_ESCAPE;
 use crate::helix::registry::normal_registry;
-use crate::ui::state::{AppState, ReviewSessionState};
+use crate::ui::state::{AppState, ReviewData, ReviewSessionState};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -20,10 +20,8 @@ fn get_command_description(command: &str) -> &'static str {
 }
 
 /// Render the review session screen
-pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState) {
-    let Some(session) = &state.game.review_session else {
-        return;
-    };
+pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState, data: &ReviewData) {
+    let session = &data.session;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -73,7 +71,7 @@ fn render_review_content(
     state: &AppState,
     session: &ReviewSessionState,
 ) {
-    let Some(command) = &session.current_command else {
+    let Some(command) = session.current_command() else {
         return;
     };
 
@@ -106,7 +104,7 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
     let description = get_command_description(command);
 
     let mastery_text = if let Some(p) = perf {
-        format!("Mastery: {:?} ⭐", p.mastery_level)
+        format!("Mastery: {:?} ⭐", p.mastery_level())
     } else {
         "Mastery: New".to_string()
     };
@@ -115,7 +113,7 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
         // `state: &AppState` is in scope here, so use the injected clock rather than
         // the wall clock directly.
         let now = state.progress.now();
-        let days = (p.due - now).num_days();
+        let days = (p.due() - now).num_days();
         if days > 0 {
             format!("Next: in {} days", days)
         } else {

@@ -1,7 +1,6 @@
 //! Tests for UI state substates
 
 use super::common::create_test_app_state;
-use crate::config::SortMode;
 
 #[test]
 fn test_game_state_debug_impl() {
@@ -17,18 +16,6 @@ fn test_progress_state_debug_impl() {
     let debug_str = format!("{:?}", state.progress);
     assert!(debug_str.contains("ProgressState"));
     assert!(debug_str.contains("profile"));
-}
-
-#[test]
-fn test_game_state_is_reviewing_false() {
-    let state = create_test_app_state(vec![]);
-    assert!(!state.game.is_reviewing());
-}
-
-#[test]
-fn test_game_state_is_playing_minigame_false() {
-    let state = create_test_app_state(vec![]);
-    assert!(!state.game.is_playing_minigame());
 }
 
 #[test]
@@ -53,14 +40,6 @@ fn test_progress_state_mark_saved_prevents_immediate_resave() {
 }
 
 #[test]
-fn test_config_state_default() {
-    let state = create_test_app_state(vec![]);
-    assert_eq!(state.config.sort_mode, SortMode::ByName);
-    assert!(state.config.category_filters.is_empty());
-    assert!(state.config.difficulty_filters.is_empty());
-}
-
-#[test]
 fn test_ui_state_initial() {
     let state = create_test_app_state(vec![]);
     assert!(state.ui.running);
@@ -70,7 +49,5 @@ fn test_ui_state_initial() {
 fn test_game_state_default() {
     let state = crate::ui::state::GameState::default();
     assert_eq!(state.scenario_collection.count(), 0);
-    assert!(state.review_session.is_none());
     assert!(state.pending_completed_session.is_none());
-    assert!(state.minigame_session.is_none());
 }

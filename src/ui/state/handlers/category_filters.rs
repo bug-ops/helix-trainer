@@ -3,29 +3,13 @@
 //! Handles navigation and toggle operations for the category filters screen
 
 use crate::security::UserError;
-use crate::ui::state::{
-    CategoryFiltersData, HandlerContext, HandlerOutcome, ReturnDestination, TypedScreen,
-};
-
-/// Determine return destination based on current context
-///
-/// If coming from a paused mini-game, return there; otherwise return to menu.
-fn determine_return_destination(ctx: &HandlerContext<'_>) -> ReturnDestination {
-    if let Some(session) = &ctx.game.minigame_session
-        && session.state().is_paused()
-    {
-        return ReturnDestination::PausedMiniGame;
-    }
-    ReturnDestination::Menu
-}
+use crate::ui::state::{CategoryFiltersData, HandlerContext, HandlerOutcome, TypedScreen};
 
 /// Handle ShowCategoryFilters message
 ///
 /// Navigates to the category filters screen, tracking where to return
-pub fn handle_show_category_filters(
-    ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
-    let return_to = determine_return_destination(ctx);
+pub fn handle_show_category_filters(screen: &mut TypedScreen) -> Result<HandlerOutcome, UserError> {
+    let return_to = screen.detour_return_destination();
     Ok(HandlerOutcome::Transition(Box::new(
         TypedScreen::CategoryFilters(CategoryFiltersData {
             selected_index: 0,
@@ -150,10 +134,12 @@ mod tests {
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
-    use crate::ui::state::handlers::minigame::handle_start_minigame;
+    use crate::ui::state::ReturnDestination;
+    use crate::ui::state::handlers::mode_selection::handle_select_arcade_mode;
     use crate::ui::state::{
         AppState, ConfigState, GameState, MenuData, ModeSelectionData, ProgressState, UIState,
     };
+    use std::assert_matches;
 
     fn create_test_scenario_with_category(id: &str, category: ScenarioCategory) -> Scenario {
         ScenarioBuilder::new()
@@ -209,7 +195,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_start_minigame(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
         crate::ui::state::apply_outcome(state, outcome);
     }
 
@@ -218,18 +204,12 @@ mod tests {
         let mut state = create_test_state_with_categories();
         state.screen = TypedScreen::Menu(MenuData::default());
 
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-        let outcome = handle_show_category_filters(&mut ctx).unwrap();
+        let outcome = handle_show_category_filters(&mut state.screen).unwrap();
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
             if let TypedScreen::CategoryFilters(data) = *boxed {
-                assert_eq!(data.return_to, ReturnDestination::Menu);
+                assert_matches!(data.return_to, ReturnDestination::Menu);
                 assert_eq!(data.selected_index, 0);
             } else {
                 panic!("Expected CategoryFilters screen");
@@ -243,25 +223,19 @@ mod tests {
 
         start_minigame(&mut state);
 
-        if let Some(ref mut session) = state.game.minigame_session {
+        if let Some(session) = state.minigame_session_mut() {
             session.tick_countdown();
             session.tick_countdown();
             session.tick_countdown();
             session.pause();
         }
 
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-        let outcome = handle_show_category_filters(&mut ctx).unwrap();
+        let outcome = handle_show_category_filters(&mut state.screen).unwrap();
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
             if let TypedScreen::CategoryFilters(data) = *boxed {
-                assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
+                assert_matches!(data.return_to, ReturnDestination::PausedMiniGame(_));
             } else {
                 panic!("Expected CategoryFilters screen");
             }
@@ -612,17 +586,17 @@ mod tests {
 
         // Set up a difficulty filter first
         {
-            let mut ctx = HandlerContext::new(
+            let ctx = HandlerContext::new(
                 &mut state.ui,
                 &mut state.game,
                 &mut state.progress,
                 &state.config,
             );
-            crate::ui::state::handlers::handle_toggle_difficulty_filter(
-                &mut ctx,
-                Difficulty::Beginner,
-            )
-            .unwrap();
+            let mut filter = ctx.game.scenario_collection.active_filter().clone();
+            filter.difficulties = Some(std::iter::once(Difficulty::Beginner).collect());
+            ctx.game
+                .scenario_collection
+                .apply_filter(&filter, Some(&ctx.progress.profile));
         }
 
         // Enable a category filter

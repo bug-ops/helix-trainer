@@ -4,6 +4,7 @@ pub mod clipboard;
 pub mod editing;
 pub mod movement;
 pub mod search;
+pub mod select_mode;
 pub mod selection;
 pub mod view;
 
@@ -434,12 +435,30 @@ pub(super) fn execute_normal_mode_command_internal(
     {
         return selection::split_selection(sim, pattern);
     }
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_KEEP_MATCHING)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return selection::keep_selections_regex(sim, pattern);
+    }
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_REMOVE_MATCHING)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return selection::remove_selections_regex(sim, pattern);
+    }
     // Search-prompt invocation ("/ <pattern>"); bare "/" stays in the registry.
     if let Some(pattern) = cmd
         .strip_prefix(CMD_SEARCH_FORWARD)
         .and_then(|rest| rest.strip_prefix(' '))
     {
         return search::search_pattern_forward(sim, pattern);
+    }
+    if let Some(pattern) = cmd
+        .strip_prefix(CMD_SEARCH_BACKWARD)
+        .and_then(|rest| rest.strip_prefix(' '))
+    {
+        return search::search_pattern_backward(sim, pattern);
     }
 
     registry.execute(sim, cmd)?;
@@ -523,7 +542,7 @@ pub(super) fn execute_command_any_mode(
             let is_insert_cmd = is_insert_command(cmd);
             let should_start_recording = !normal_sim.is_repeating && is_insert_cmd;
 
-            let result = execute_normal_mode_command_internal(&mut normal_sim, cmd);
+            let result = select_mode::execute(&mut normal_sim, cmd);
 
             if result.is_ok() {
                 let entry_cmd = if should_start_recording {

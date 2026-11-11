@@ -19,18 +19,15 @@
 //!
 //! # Usage
 //!
-//! ```ignore
-//! use helix_trainer::helix::registry::{NORMAL_REGISTRY, KeyMatch};
+//! ```
+//! use helix_trainer::helix::registry::{Category, normal_registry};
 //!
-//! // Get command metadata
-//! if let Some(meta) = NORMAL_REGISTRY.metadata("h") {
-//!     println!("{}: {}", meta.name, meta.description);
-//! }
+//! let registry = normal_registry();
 //!
-//! // List all movement commands
-//! for key in NORMAL_REGISTRY.commands_in_category(Category::Movement) {
-//!     println!("  {}", key);
-//! }
+//! let meta = registry.metadata("h").expect("`h` is registered");
+//! assert_eq!(meta.name, "move_char_left");
+//!
+//! assert!(registry.commands_in_category(Category::Movement).contains(&"h"));
 //! ```
 
 pub mod command_registry;

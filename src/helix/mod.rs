@@ -6,18 +6,19 @@
 //!
 //! # Examples
 //!
-//! ```ignore
-//! use helix_trainer::helix::HelixSimulator;
+//! ```
+//! use helix_trainer::helix::AnyModeSimulator;
 //!
-//! let mut sim = HelixSimulator::new("hello world".to_string());
+//! let mut sim = AnyModeSimulator::new("hello world".to_string());
 //! sim.execute_command("w")?;  // Move to next word
 //! let state = sim.state()?;
-//! assert_eq!(state.cursor_position().col, 6);
+//! assert_eq!(state.cursor_position(), (0, 6));
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
 pub mod commands;
 pub mod executor;
+pub mod indent;
 pub mod macro_recorder;
 pub mod registry;
 pub mod repeat;
@@ -25,10 +26,13 @@ pub mod simulator;
 
 pub use commands::*;
 pub use executor::CommandExecutor;
-pub use repeat::{Movement, RepeatBuffer, RepeatableAction, is_repeatable_command};
+pub use indent::IndentUnit;
+pub use repeat::{
+    InsertAction, InsertKey, Movement, RepeatBuffer, RepeatableAction, is_repeatable_command,
+};
 pub use simulator::{
     AnyModeSimulator, EditorDisplay, EditorMode, EditorSnapshot, HelixSimulator, InsertMode, Mode,
-    NormalMode, SelectionBounds, SerializableRange,
+    ModeKind, NormalMode, SelectionBounds, SerializableRange,
 };
 
 /// Get the open/close pair for a bracket or quote character

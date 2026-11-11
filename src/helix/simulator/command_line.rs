@@ -70,7 +70,10 @@ impl CommandLine {
     /// Execute this command against the simulator.
     pub fn execute<M: EditorMode>(&self, sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
         match self {
-            Self::Goto(n) => execute_goto(sim, *n),
+            Self::Goto(n) => {
+                execute_goto(sim, *n);
+                Ok(())
+            }
         }
     }
 }
@@ -80,11 +83,10 @@ impl CommandLine {
 /// trailing empty line produced by a final newline), and moves the cursor to
 /// line *start* (not first non-blank). `:goto 0` is a silent no-op, matching
 /// Helix wrapping the argument in `NonZeroUsize::new`.
-fn execute_goto<M: EditorMode>(sim: &mut HelixSimulator<M>, n: usize) -> Result<(), UserError> {
+fn execute_goto<M: EditorMode>(sim: &mut HelixSimulator<M>, n: usize) {
     if let Some(count) = std::num::NonZeroUsize::new(n) {
         super::commands::movement::goto_line(sim, count);
     }
-    Ok(())
 }
 
 /// Bound and sanitize text before embedding it in a user-facing error.

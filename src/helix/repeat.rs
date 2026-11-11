@@ -26,6 +26,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
 // Re-export Mode from simulator to avoid duplication
+use super::commands::{CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP};
 use super::simulator::InsertCommand;
 pub use super::simulator::Mode;
 
@@ -51,16 +52,38 @@ pub enum Movement {
     Down,
 }
 
-/// A deleting Insert-mode key recorded between typed characters
+/// A non-text Insert-mode key
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InsertAction {
+    /// An arrow key
+    Move(Movement),
+    /// An Insert-mode editing key (`Ctrl-w`, `Ctrl-u`, `Tab`, ...)
+    Edit(InsertCommand),
+}
+
+impl InsertAction {
+    /// The canonical command string that replays this key
+    pub fn command(self) -> &'static str {
+        match self {
+            Self::Move(Movement::Left) => CMD_ARROW_LEFT,
+            Self::Move(Movement::Right) => CMD_ARROW_RIGHT,
+            Self::Move(Movement::Up) => CMD_ARROW_UP,
+            Self::Move(Movement::Down) => CMD_ARROW_DOWN,
+            Self::Edit(command) => command.as_str(),
+        }
+    }
+}
+
+/// A non-text Insert-mode key recorded between typed characters
 ///
 /// `after_chars` is the number of typed characters that preceded the key, so
 /// replay can interleave it with the recorded text in its original order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InsertEdit {
+pub struct InsertKey {
     /// Count of typed characters recorded before this key
     pub after_chars: usize,
     /// The key that was pressed
-    pub command: InsertCommand,
+    pub action: InsertAction,
 }
 
 /// Represents a repeatable action that can be replayed
@@ -73,23 +96,26 @@ pub enum RepeatableAction {
     /// - `keys`: The key sequence that was pressed
     /// - `expected_mode`: The mode the editor should be in before replay
     Command {
+        /// Key sequence replayed on repeat.
         keys: Vec<KeyEvent>,
+        /// Mode the editor must be in for the replay to be valid.
         expected_mode: Mode,
     },
 
-    /// Insert mode sequence (text + optional movements)
+    /// Insert mode sequence (text + non-text keys)
     ///
     /// # Fields
     ///
     /// - `entry_command`: The command used to enter insert mode (`i`, `a`, `A`, `I`, `o`, `O`, `c`, `Alt-c`, `"<reg>c`)
     /// - `text`: The text that was typed
-    /// - `movements`: Arrow key movements made during insert
-    /// - `edits`: Deleting keys (`Ctrl-w`, `Ctrl-u`, ...) interleaved with `text`
+    /// - `keys`: Arrow movements and editing keys (`Ctrl-w`, `Ctrl-u`, `Tab`, ...) in press order, interleaved with `text`
     InsertSequence {
+        /// Command that entered Insert mode, if it was not a bare mode switch.
         entry_command: Option<String>,
+        /// Literal text typed during the session.
         text: String,
-        movements: Vec<Movement>,
-        edits: Vec<InsertEdit>,
+        /// Non-text keys pressed during the session, in press order.
+        keys: Vec<InsertKey>,
     },
 }
 
@@ -251,8 +277,7 @@ pub struct InsertModeRecorder {
     is_recording: bool,
     entry_command: Option<String>,
     text: String,
-    movements: Vec<Movement>,
-    edits: Vec<InsertEdit>,
+    keys: Vec<InsertKey>,
 }
 
 impl InsertModeRecorder {
@@ -262,8 +287,7 @@ impl InsertModeRecorder {
             is_recording: false,
             entry_command: None,
             text: String::new(),
-            movements: Vec::new(),
-            edits: Vec::new(),
+            keys: Vec::new(),
         }
     }
 
@@ -283,8 +307,7 @@ impl InsertModeRecorder {
         self.is_recording = true;
         self.entry_command = entry_command;
         self.text.clear();
-        self.movements.clear();
-        self.edits.clear();
+        self.keys.clear();
     }
 
     /// Record a character typed in insert mode
@@ -301,32 +324,30 @@ impl InsertModeRecorder {
         }
     }
 
-    /// Record an arrow key movement in insert mode
+    /// Record an arrow key movement at the current text position
     ///
-    /// Movements are tracked separately from text so they can be replayed.
+    /// Keys share one ordered list with editing keys so replay keeps their
+    /// original order relative to the text. The list is limited to 100 keys.
     pub fn record_movement(&mut self, movement: Movement) {
-        if !self.is_recording {
-            return;
-        }
-
-        // Security: limit movement count
-        if self.movements.len() < MAX_INSERT_MOVEMENTS {
-            self.movements.push(movement);
-        }
+        self.record_key(InsertAction::Move(movement));
     }
 
-    /// Record a deleting Insert-mode key at the current text position
+    /// Record an Insert-mode editing key at the current text position
     ///
-    /// Bounded by the same limit as movements.
+    /// Bounded like [`Self::record_movement`].
     pub fn record_edit(&mut self, command: InsertCommand) {
+        self.record_key(InsertAction::Edit(command));
+    }
+
+    fn record_key(&mut self, action: InsertAction) {
         if !self.is_recording {
             return;
         }
 
-        if self.edits.len() < MAX_INSERT_MOVEMENTS {
-            self.edits.push(InsertEdit {
+        if self.keys.len() < MAX_INSERT_MOVEMENTS {
+            self.keys.push(InsertKey {
                 after_chars: self.text.chars().count(),
-                command,
+                action,
             });
         }
     }
@@ -334,7 +355,7 @@ impl InsertModeRecorder {
     /// Finish recording and return the recorded action
     ///
     /// Stops recording and returns a `RepeatableAction::InsertSequence`
-    /// containing all recorded text, movements, and the entry command. Resets the recorder
+    /// containing all recorded text, keys, and the entry command. Resets the recorder
     /// to empty state.
     pub fn finish(&mut self) -> RepeatableAction {
         self.is_recording = false;
@@ -342,15 +363,13 @@ impl InsertModeRecorder {
         let action = RepeatableAction::InsertSequence {
             entry_command: self.entry_command.clone(),
             text: self.text.clone(),
-            movements: self.movements.clone(),
-            edits: self.edits.clone(),
+            keys: self.keys.clone(),
         };
 
         // Reset state
         self.entry_command = None;
         self.text.clear();
-        self.movements.clear();
-        self.edits.clear();
+        self.keys.clear();
 
         action
     }
@@ -456,9 +475,6 @@ pub fn is_repeatable_command(key: &KeyEvent) -> bool {
             'p' | 'P' => true, // paste
             '>' | '<' => true, // indent/dedent
 
-            // Hint key alternative
-            '?' => false,
-
             // All other printable characters are repeatable
             // (they can be used as arguments to 'r' command, or in insert mode)
             _ if ch.is_ascii_graphic() || ch == ' ' => true,
@@ -526,12 +542,12 @@ mod tests {
             RepeatableAction::InsertSequence {
                 entry_command,
                 text,
-                movements,
+                keys,
                 ..
             } => {
                 assert_eq!(entry_command, Some("i".to_string()));
                 assert_eq!(text, "hello");
-                assert!(movements.is_empty());
+                assert!(keys.is_empty());
             }
             _ => panic!("Expected InsertSequence"),
         }
@@ -554,14 +570,25 @@ mod tests {
             RepeatableAction::InsertSequence {
                 entry_command,
                 text,
-                movements,
+                keys,
                 ..
             } => {
                 assert_eq!(entry_command, Some("a".to_string()));
                 assert_eq!(text, "hi!");
-                assert_eq!(movements.len(), 2);
-                assert_eq!(movements[0], Movement::Left);
-                assert_eq!(movements[1], Movement::Left);
+                let left = InsertAction::Move(Movement::Left);
+                assert_eq!(
+                    keys,
+                    vec![
+                        InsertKey {
+                            after_chars: 2,
+                            action: left
+                        },
+                        InsertKey {
+                            after_chars: 2,
+                            action: left
+                        },
+                    ]
+                );
             }
             _ => panic!("Expected InsertSequence"),
         }
@@ -578,12 +605,12 @@ mod tests {
             RepeatableAction::InsertSequence {
                 entry_command,
                 text,
-                movements,
+                keys,
                 ..
             } => {
                 assert_eq!(entry_command, None);
                 assert!(text.is_empty());
-                assert!(movements.is_empty());
+                assert!(keys.is_empty());
             }
             _ => panic!("Expected InsertSequence"),
         }
@@ -603,12 +630,12 @@ mod tests {
             RepeatableAction::InsertSequence {
                 entry_command,
                 text,
-                movements,
+                keys,
                 ..
             } => {
                 assert_eq!(entry_command, None);
                 assert!(text.is_empty());
-                assert!(movements.is_empty());
+                assert!(keys.is_empty());
             }
             _ => panic!("Expected InsertSequence"),
         }
@@ -648,9 +675,9 @@ mod tests {
         let action = recorder.finish();
 
         match action {
-            RepeatableAction::InsertSequence { movements, .. } => {
+            RepeatableAction::InsertSequence { keys, .. } => {
                 // Should be limited to MAX_INSERT_MOVEMENTS
-                assert_eq!(movements.len(), MAX_INSERT_MOVEMENTS);
+                assert_eq!(keys.len(), MAX_INSERT_MOVEMENTS);
             }
             _ => panic!("Expected InsertSequence"),
         }
@@ -731,8 +758,6 @@ mod tests {
         // Hint keys
         let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         assert!(!is_repeatable_command(&f1)); // hint (F1)
-        let question = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
-        assert!(!is_repeatable_command(&question)); // hint (?)
 
         // Esc key
         let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);

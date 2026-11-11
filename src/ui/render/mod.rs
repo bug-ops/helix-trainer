@@ -63,19 +63,23 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         }
         crate::ui::state::TypedScreen::CategoryFilters(filters_data) => {
             // Render background screen first based on return destination
-            match filters_data.return_to {
+            match &filters_data.return_to {
                 crate::ui::state::ReturnDestination::Menu => {
                     menu::render_main_menu_background(frame, state);
                 }
-                crate::ui::state::ReturnDestination::PausedMiniGame => {
-                    minigame::render_minigame(frame, state);
+                crate::ui::state::ReturnDestination::PausedMiniGame(minigame_data) => {
+                    minigame::render_minigame(frame, state, minigame_data);
                 }
             }
             // Render category filters popup on top
             category_filters::render_category_filters(frame, state)
         }
-        crate::ui::state::TypedScreen::Review(_) => review::render_review_screen(frame, state),
-        crate::ui::state::TypedScreen::MiniGame(_) => minigame::render_minigame(frame, state),
+        crate::ui::state::TypedScreen::Review(data) => {
+            review::render_review_screen(frame, state, data)
+        }
+        crate::ui::state::TypedScreen::MiniGame(data) => {
+            minigame::render_minigame(frame, state, data)
+        }
         crate::ui::state::TypedScreen::EndGameSummary(data) => {
             end_game::render_end_game_summary(frame, data)
         }

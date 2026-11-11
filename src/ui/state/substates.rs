@@ -4,12 +4,12 @@
 //! from AppState, improving code organization and maintainability.
 
 use crate::async_state::SaveRequest;
-use crate::config::{AppConfig, Difficulty, ScenarioCategory, ScenarioCollection, SortMode};
+use crate::config::{AppConfig, ScenarioCollection};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
-use crate::gamification::{ProfileStorage, QuarantineOutcome, UserProfile};
+use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile};
 use crate::input::keymap::KeymapOverlay;
-use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
+use crate::learning::{PerformanceTracker, Scheduler};
 use crate::sound::{SoundConfig, SoundManager};
 use crate::time::Clock;
 use std::collections::HashSet;
@@ -17,7 +17,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 
-use super::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 use crate::ui::notification::NotificationQueue;
 
 /// UI rendering and display state
@@ -38,29 +37,11 @@ pub struct UIState {
     /// Feedback storage for transition to results screen
     pub last_feedback: Option<crate::game::Feedback>,
 
-    /// XP breakdown for results display
-    pub xp_breakdown: Option<XPBreakdown>,
-
-    /// Quest progress changes for results display
-    pub quest_progress_changes: Vec<QuestProgressChange>,
-
-    /// Quest XP bonuses awarded by the most recent `award_quest_completion_xp` call
-    /// (description, xp), for results display. Sourced directly from the function that
-    /// actually applies the XP to the profile, so this can never diverge from
-    /// `profile.total_xp` the way a separately re-derived "newly completed" detector can.
-    pub quest_xp_bonuses: Vec<(String, u64)>,
-
-    /// Whether the most recent `award_quest_completion_xp` call, on its own, crossed an
-    /// account level-up threshold. Callers that also add other XP in the same operation
-    /// (e.g. scenario completion) must OR this into their own `add_xp` level-up check,
-    /// since quest XP and scenario XP are applied via separate `add_xp` calls.
-    pub quest_leveled_up: bool,
-
-    /// Scenario mastery info for results display
-    pub scenario_mastery: Option<(ScenarioMastery, f64)>,
-
     /// Notification queue for transient messages (level-up, achievements, etc.)
     pub notifications: NotificationQueue,
+
+    /// Side effects queued during one `update`; drained into its `effects` sink at the end
+    pub(crate) effects: Vec<super::Effect>,
 
     /// Last selected scenario index in menu (session-only, for position persistence)
     pub last_menu_selected: usize,
@@ -77,12 +58,8 @@ impl UIState {
             show_key_history: true,
             completion_time: None,
             last_feedback: None,
-            xp_breakdown: None,
-            quest_progress_changes: Vec::new(),
-            quest_xp_bonuses: Vec::new(),
-            quest_leveled_up: false,
-            scenario_mastery: None,
             notifications: NotificationQueue::new(),
+            effects: Vec::new(),
             last_menu_selected: 0,
             last_menu_scroll: 0,
         }
@@ -91,11 +68,6 @@ impl UIState {
     /// Clear results data after transitioning away from results screen
     pub fn clear_temp_results(&mut self) {
         self.last_feedback = None;
-        self.xp_breakdown = None;
-        self.quest_progress_changes.clear();
-        self.quest_xp_bonuses.clear();
-        self.quest_leveled_up = false;
-        self.scenario_mastery = None;
     }
 }
 
@@ -110,14 +82,8 @@ pub struct GameState {
     /// All available scenarios with filtering and sorting
     pub scenario_collection: ScenarioCollection,
 
-    /// Active review session (Some if reviewing)
-    pub review_session: Option<ReviewSessionState>,
-
     /// Completed session pending transition to results screen
     pub pending_completed_session: Option<GameSession<crate::game::session::Completed>>,
-
-    /// Active mini-game session (Arcade Mode)
-    pub minigame_session: Option<crate::minigame::MiniGameSession>,
 }
 
 impl GameState {
@@ -125,20 +91,8 @@ impl GameState {
     pub fn new(scenarios: Vec<crate::config::Scenario>) -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(scenarios),
-            review_session: None,
             pending_completed_session: None,
-            minigame_session: None,
         }
-    }
-
-    /// Check if in review session
-    pub fn is_reviewing(&self) -> bool {
-        self.review_session.is_some()
-    }
-
-    /// Check if playing mini-game
-    pub fn is_playing_minigame(&self) -> bool {
-        self.minigame_session.is_some()
     }
 }
 
@@ -146,9 +100,7 @@ impl Default for GameState {
     fn default() -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(vec![]),
-            review_session: None,
             pending_completed_session: None,
-            minigame_session: None,
         }
     }
 }
@@ -157,12 +109,10 @@ impl std::fmt::Debug for GameState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GameState")
             .field("scenario_count", &self.scenario_collection.count())
-            .field("review_session", &self.review_session.is_some())
             .field(
                 "pending_completed_session",
                 &self.pending_completed_session.is_some(),
             )
-            .field("minigame_session", &self.minigame_session.is_some())
             .finish()
     }
 }
@@ -204,6 +154,9 @@ pub struct ProgressState {
 
     /// Profile storage handler
     pub storage: ProfileStorage,
+
+    /// Daily-quest template registry and its load state
+    pub quest_registry: QuestRegistrySlot,
 
     /// Scenarios completed today
     pub scenarios_completed_today: usize,
@@ -282,6 +235,7 @@ impl ProgressState {
             performance_tracker,
             scheduler: Scheduler::with_clock(clock.clone()),
             storage,
+            quest_registry: QuestRegistrySlot::default(),
             scenarios_completed_today: 0,
             commands_used_today: HashSet::new(),
             session_start_time: Instant::now(),
@@ -560,26 +514,11 @@ impl std::fmt::Debug for ProgressState {
     }
 }
 
-/// Application configuration (filters, settings)
+/// Application configuration (persistent settings and the resolved keymap)
 #[derive(Debug, Clone)]
 pub struct ConfigState {
-    /// Current sort mode for scenarios
-    pub sort_mode: SortMode,
-
-    /// Active category filters
-    pub category_filters: HashSet<ScenarioCategory>,
-
-    /// Active difficulty filters
-    pub difficulty_filters: HashSet<Difficulty>,
-
-    /// Whether to show completed scenarios
-    pub show_completed: bool,
-
     /// Persistent configuration (loaded from/saved to disk)
     pub persistent: AppConfig,
-
-    /// Whether persistent config was modified during this session
-    pub config_modified: bool,
 
     /// Resolved keymap overlay for gameplay key translation.
     ///
@@ -601,33 +540,9 @@ impl Default for ConfigState {
     fn default() -> Self {
         Self {
             persistent: AppConfig::default(),
-            sort_mode: SortMode::ByName,
-            category_filters: HashSet::new(),
-            difficulty_filters: HashSet::new(),
-            show_completed: true,
-            config_modified: false,
             keymap_report: crate::config::keymap::KeymapReport::default(),
             keymap: KeymapOverlay::identity(),
         }
-    }
-}
-
-impl ConfigState {
-    /// Reset all filters to default
-    pub fn reset(&mut self) {
-        *self = Self::default();
-    }
-
-    /// Check if any filters are active
-    pub fn has_active_filters(&self) -> bool {
-        !self.category_filters.is_empty()
-            || !self.difficulty_filters.is_empty()
-            || !self.show_completed
-    }
-
-    /// Mark that persistent config was modified
-    pub fn mark_config_modified(&mut self) {
-        self.config_modified = true;
     }
 }
 
@@ -755,54 +670,14 @@ mod tests {
     #[test]
     fn test_config_state_default() {
         let config = ConfigState::default();
-        assert_eq!(config.sort_mode, SortMode::ByName);
-        assert!(config.category_filters.is_empty());
-        assert!(config.show_completed);
-        assert!(!config.config_modified);
         assert!(!config.persistent.enable_arrow_keys_in_normal_mode);
-    }
-
-    #[test]
-    fn test_config_state_reset() {
-        let mut config = ConfigState {
-            sort_mode: SortMode::ByDifficulty,
-            category_filters: {
-                let mut set = std::collections::HashSet::new();
-                set.insert(ScenarioCategory::Movement);
-                set
-            },
-            ..Default::default()
-        };
-
-        config.reset();
-
-        assert_eq!(config.sort_mode, SortMode::ByName);
-        assert!(config.category_filters.is_empty());
-    }
-
-    #[test]
-    fn test_config_state_has_active_filters() {
-        let mut config = ConfigState::default();
-        assert!(!config.has_active_filters());
-
-        config.category_filters.insert(ScenarioCategory::Movement);
-        assert!(config.has_active_filters());
     }
 
     #[test]
     fn test_game_state_default() {
         let game = GameState::default();
         assert_eq!(game.scenario_collection.count(), 0);
-        assert!(game.review_session.is_none());
         assert!(game.pending_completed_session.is_none());
-        assert!(game.minigame_session.is_none());
-    }
-
-    #[test]
-    fn test_game_state_is_reviewing() {
-        let game = GameState::default();
-        assert!(!game.is_reviewing());
-        // Note: Testing with actual review session requires ReviewSessionState setup
     }
 
     #[test]
@@ -870,7 +745,7 @@ mod tests {
         // If the tracker still used SystemClock, `last_review` would be wall-clock "now",
         // not the fake clock's fixed instant.
         let perf = progress.performance_tracker.performance("x").unwrap();
-        assert_eq!(perf.last_review, clock.now());
+        assert_eq!(perf.last_review(), clock.now());
 
         // The scheduler must observe the same fake "now" the tracker recorded against, so
         // a command recorded at the fake clock's current time is immediately due.
@@ -904,16 +779,16 @@ mod tests {
     /// syncing. `CommandPerformance` has no `PartialEq` impl, so this checks the subset
     /// of fields that prove the persisted copy reflects the tracker's state.
     fn stats_match(
-        a: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
-        b: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
+        a: &crate::learning::PerformanceData,
+        b: &crate::learning::PerformanceData,
     ) -> bool {
         a.len() == b.len()
             && a.iter().all(|(k, v)| {
                 b.get(k).is_some_and(|other| {
-                    other.attempts == v.attempts
-                        && other.successes == v.successes
-                        && other.reps == v.reps
-                        && other.command == v.command
+                    other.attempts() == v.attempts()
+                        && other.successes() == v.successes()
+                        && other.reps() == v.reps()
+                        && other.command() == v.command()
                 })
             })
     }

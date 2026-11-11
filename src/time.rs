@@ -6,6 +6,90 @@
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use std::sync::Mutex;
+use std::time::{Duration as StdDuration, Instant};
+
+/// Source of monotonic time for elapsed and timeout logic.
+///
+/// Unlike [`Clock`] (wall-clock, for day boundaries) this never goes backwards, so
+/// sessions measure durations with it; tests inject [`FakeMonotonicClock`] instead of sleeping.
+///
+/// Implementors must guarantee `now()` is non-decreasing and safe to call from any thread.
+pub trait MonotonicClock: Send + Sync {
+    /// Returns the current monotonic instant.
+    fn now(&self) -> Instant;
+}
+
+/// [`MonotonicClock`] backed by [`Instant::now`].
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::time::{MonotonicClock, SystemMonotonicClock};
+///
+/// let clock = SystemMonotonicClock;
+/// assert!(clock.now() <= clock.now());
+/// ```
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SystemMonotonicClock;
+
+impl MonotonicClock for SystemMonotonicClock {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+}
+
+/// [`MonotonicClock`] that only moves when told to, for deterministic timer tests.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::time::{FakeMonotonicClock, MonotonicClock};
+/// use std::time::Duration;
+///
+/// let clock = FakeMonotonicClock::new();
+/// let start = clock.now();
+/// clock.advance(Duration::from_secs(5));
+/// assert_eq!(clock.now() - start, Duration::from_secs(5));
+/// ```
+#[derive(Debug)]
+pub struct FakeMonotonicClock {
+    origin: Instant,
+    offset: Mutex<StdDuration>,
+}
+
+impl FakeMonotonicClock {
+    /// Creates a fake clock anchored at the current real instant.
+    pub fn new() -> Self {
+        Self {
+            origin: Instant::now(),
+            offset: Mutex::new(StdDuration::ZERO),
+        }
+    }
+
+    /// Moves the clock forward by `duration`.
+    pub fn advance(&self, duration: StdDuration) {
+        *self
+            .offset
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) += duration;
+    }
+}
+
+impl Default for FakeMonotonicClock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MonotonicClock for FakeMonotonicClock {
+    fn now(&self) -> Instant {
+        self.origin
+            + *self
+                .offset
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
 
 /// Source of the current time for application logic.
 ///

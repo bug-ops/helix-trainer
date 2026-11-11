@@ -5,7 +5,7 @@
 //!
 //! # Examples
 //!
-//! ```ignore
+//! ```
 //! use helix_trainer::game::Scorer;
 //! use helix_trainer::config::ScoringConfig;
 //!
@@ -190,6 +190,10 @@ impl Scorer {
     /// assert_eq!(Scorer::rating(75, 100), PerformanceRating::Good);
     /// assert_eq!(Scorer::rating(30, 100), PerformanceRating::Poor);
     /// ```
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "percentage is truncated toward zero to select the rating band"
+    )]
     pub fn rating(score: u32, max_points: u32) -> PerformanceRating {
         if max_points == 0 {
             return PerformanceRating::Poor;
@@ -258,7 +262,7 @@ impl Scorer {
         }
 
         let total = Self::calculate_total_score(scores)?;
-        Ok(total / scores.len() as u32)
+        Ok(total / u32::try_from(scores.len()).unwrap_or(u32::MAX))
     }
 }
 

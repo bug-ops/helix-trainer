@@ -127,3 +127,19 @@ fn single_char_matches_are_duplicated_in_place() {
         "fn add(a: i32, b: i32) -> i32 {\n    let sumum = a + b;\n    sumum\n}\n"
     );
 }
+
+#[test]
+fn replace_with_yanked_distributes_one_value_per_range() {
+    let sim = run(
+        "ab cd ef",
+        &[
+            CMD_SELECT_ALL,
+            "s [a-z]+",
+            CMD_YANK,
+            CMD_SELECT_ALL,
+            "s  ",
+            CMD_REPLACE_WITH_YANKED,
+        ],
+    );
+    assert_eq!(content(&sim), "ababcdcdef");
+}

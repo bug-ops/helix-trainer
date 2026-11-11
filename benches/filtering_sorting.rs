@@ -63,6 +63,7 @@ fn create_scenario(
             tags: vec![],
             estimated_time_seconds: Some(30),
             locale: Some("en".to_string()),
+            ..Default::default()
         }),
     }
 }

@@ -73,11 +73,11 @@ fn test_complete_learning_workflow() {
 
     // Verify initial state
     let x_perf = tracker.performance("x").unwrap();
-    assert_eq!(x_perf.attempts, 3);
-    assert_eq!(x_perf.successes, 3);
+    assert_eq!(x_perf.attempts(), 3);
+    assert_eq!(x_perf.successes(), 3);
     // Mastery level is calculated by FSRS, don't assert specific level
     assert_matches!(
-        x_perf.mastery_level,
+        x_perf.mastery_level(),
         MasteryLevel::Beginner
             | MasteryLevel::Intermediate
             | MasteryLevel::Advanced
@@ -85,12 +85,12 @@ fn test_complete_learning_workflow() {
     );
 
     let yy_perf = tracker.performance("yy").unwrap();
-    assert_eq!(yy_perf.attempts, 3);
-    assert_eq!(yy_perf.successes, 2);
+    assert_eq!(yy_perf.attempts(), 3);
+    assert_eq!(yy_perf.successes(), 2);
 
     let w_perf = tracker.performance("w").unwrap();
-    assert_eq!(w_perf.attempts, 5);
-    assert_eq!(w_perf.successes, 5);
+    assert_eq!(w_perf.attempts(), 5);
+    assert_eq!(w_perf.successes(), 5);
 
     // 3. Get due reviews from scheduler
     let scheduler = Scheduler::new();
@@ -137,17 +137,17 @@ fn test_mastery_progression() {
 
     // With 20 successful attempts, should have valid mastery level
     assert_matches!(
-        perf.mastery_level,
+        perf.mastery_level(),
         MasteryLevel::Beginner
             | MasteryLevel::Intermediate
             | MasteryLevel::Advanced
             | MasteryLevel::Master
     );
-    assert_eq!(perf.attempts, 20);
-    assert_eq!(perf.successes, 20);
+    assert_eq!(perf.attempts(), 20);
+    assert_eq!(perf.successes(), 20);
 
     // Stability should increase with successful reviews
-    assert!(perf.stability > 1.0);
+    assert!(perf.stability() > 1.0);
 }
 
 #[test]

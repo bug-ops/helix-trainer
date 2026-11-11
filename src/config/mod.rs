@@ -4,6 +4,8 @@
 //! as well as application configuration.
 
 pub mod app_config;
+pub mod data_dir;
+pub mod json_store;
 pub mod keymap;
 mod loader;
 pub mod quests;
@@ -19,6 +21,7 @@ pub use scenario_collection::{
     CompletionFilter, CurriculumStats, ScenarioCollection, ScenarioFilter, SortMode,
 };
 pub use scenarios::{
-    AlternativeSolution, CursorSpec, DEFAULT_LANGUAGE, Difficulty, Scenario, ScenarioCategory,
-    ScenarioLoader, ScenarioMetadata, ScenariosFile, ScoringConfig, Setup, Solution, TargetState,
+    AlternativeSolution, CompletionRule, CursorSpec, DEFAULT_LANGUAGE, Difficulty, LastAction,
+    Scenario, ScenarioCategory, ScenarioLoader, ScenarioMetadata, ScenariosFile, ScoringConfig,
+    Setup, Solution, TargetState,
 };

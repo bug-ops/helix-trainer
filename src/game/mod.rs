@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use crate::helix::SelectionBounds;
+use crate::helix::{ModeKind, SelectionBounds};
 
 pub mod command_context;
 pub mod editor_state;
@@ -14,10 +14,7 @@ pub mod scorer;
 pub mod services;
 pub mod session;
 
-pub use command_context::{
-    CommandBuffer, CommandContext, CommandExecutor, CommandInputResult, ParsedCommand,
-    format_key_for_display, parse_command_buffer, process_command_input,
-};
+pub use command_context::{CommandExecutor, format_key_for_display};
 pub use editor_state::EditorState;
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};
@@ -37,7 +34,7 @@ pub use session::{
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::game::PlayableScenario;
 ///
 /// fn render_editor<S: PlayableScenario>(session: &S) {
@@ -84,14 +81,8 @@ pub trait PlayableScenario {
         crate::config::DEFAULT_LANGUAGE
     }
 
-    /// Get current editor mode as string for UI display
-    fn mode_name(&self) -> &'static str {
-        if self.is_insert_mode() {
-            "INSERT"
-        } else {
-            "NORMAL"
-        }
-    }
+    /// Get the current editor mode for UI display
+    fn mode_kind(&self) -> ModeKind;
 
     /// Get all cursor positions for multi-cursor scenarios.
     ///

@@ -3,6 +3,7 @@
 use super::editor::{PreviewHighlight, PreviewType, render_editor_pair};
 use super::popups::{render_hint_popup, render_key_history_popup, render_success_popup};
 use crate::game::PlayableScenario;
+use crate::helix::ModeKind;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
@@ -126,7 +127,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         let optimal = scenario.scoring.optimal_count.get();
         let actions = playable.action_count();
         let elapsed = playable.elapsed();
-        let mode = playable.mode_name();
+        let mode = playable.mode_kind();
         let progress = if is_completed {
             100u8 // Completed = 100%
         } else {
@@ -135,10 +136,9 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         let elapsed_secs = elapsed.as_secs_f32();
 
         // Color code mode: green for Normal, yellow for Insert
-        let mode_color = if mode == "NORMAL" {
-            Color::Green
-        } else {
-            Color::Yellow
+        let mode_color = match mode {
+            ModeKind::Normal => Color::Green,
+            ModeKind::Insert | ModeKind::Select => Color::Yellow,
         };
 
         // Color code progress: green if 100%, yellow if >50%, red otherwise
@@ -151,10 +151,10 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         };
 
         // Translate mode name for display
-        let mode_display = if mode == "NORMAL" {
-            t!("task.mode_normal")
-        } else {
-            t!("task.mode_insert")
+        let mode_display = match mode {
+            ModeKind::Normal => t!("task.mode_normal"),
+            ModeKind::Insert => t!("task.mode_insert"),
+            ModeKind::Select => t!("task.mode_select"),
         };
 
         // Create colored mode indicator
@@ -200,10 +200,10 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         frame.render_widget(stats, chunks[3]);
 
         // Instructions with hint indicator and last command
-        let hint_indicator = if task_data.show_hint_panel && task_data.current_hint.is_some() {
-            " [?: Next Hint] "
+        let hint_indicator = if task_data.hint.is_shown() {
+            " [F1: Next Hint] "
         } else {
-            " [?: Hint | F1] "
+            " [F1: Hint] "
         };
 
         let last_cmd_text = if let Some(cmd) = &task_data.last_command {
@@ -242,7 +242,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         }
 
         // Render hint panel if visible
-        if task_data.show_hint_panel {
+        if task_data.hint.is_shown() {
             render_hint_popup(frame, state);
         }
 

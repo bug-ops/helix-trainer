@@ -2,6 +2,7 @@
 //!
 //! Handles starting, completing, retrying, and abandoning scenarios
 
+use super::apply_quest_progress;
 use crate::config::Difficulty;
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
@@ -9,10 +10,12 @@ use crate::gamification::UserProfile;
 use crate::learning::Analytics;
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
+use crate::ui::state::Effect;
 use crate::ui::state::{
-    AppState, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData, Message, NextStep,
-    ResultsData, TaskData, TypedScreen, XPBreakdown, update,
+    AppState, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData, NextStep, ResultsData,
+    TaskData, TypedScreen, XPBreakdown,
 };
+use crate::ui::state::{CategoryProgress, MasteryInfo};
 use rust_i18n::t;
 
 /// Handle StartScenario message
@@ -54,14 +57,15 @@ fn record_scenario_completion(
     ctx: &mut HandlerContext<'_>,
     feedback: &crate::game::Feedback,
     total_xp: u64,
+    quest_leveled_up: bool,
     difficulty: Option<Difficulty>,
-) -> Result<(), UserError> {
+) {
     let is_perfect = feedback.score == feedback.max_points;
 
     // `total_xp` here is scenario XP only (quest XP was already applied separately by
     // `award_quest_completion_xp`, see the call site below); OR in whether *that* call
     // crossed a level threshold, since each `add_xp` call only reports its own crossing.
-    let leveled_up = ctx.progress.profile.add_xp(total_xp) || ctx.ui.quest_leveled_up;
+    let leveled_up = ctx.progress.profile.add_xp(total_xp) || quest_leveled_up;
     ScenarioCompletionService::update_profile_counters(&mut ctx.progress.profile, is_perfect);
 
     // Speed achievements (SpeedDemon/Speedrunner/Flash) previously only fired from
@@ -80,7 +84,7 @@ fn record_scenario_completion(
         .progress
         .profile
         .commands_executed
-        .saturating_add(feedback.user_actions.len() as u32);
+        .saturating_add(u32::try_from(feedback.user_actions.len()).unwrap_or(u32::MAX));
     let commands = ScenarioCompletionService::extract_commands(feedback);
     let mastery_changes = ScenarioCompletionService::record_fsrs_data_with_mastery(
         &mut ctx.progress.scheduler,
@@ -94,9 +98,7 @@ fn record_scenario_completion(
     // scenario's review history, not the state before it.
     // (non-fatal error - log but continue, matches handle_minigame_game_over's policy)
     if leveled_up {
-        if let Err(e) = ctx.progress.save_immediate() {
-            tracing::error!("Failed to save profile after scenario completion: {:?}", e);
-        }
+        ctx.ui.effects.push(Effect::SaveProfile);
     } else if let Err(e) = ctx.progress.save_debounced() {
         tracing::error!("Failed to save profile after scenario completion: {:?}", e);
     }
@@ -124,9 +126,7 @@ fn record_scenario_completion(
         // Persist through the shared save path (non-fatal, matches the policy
         // above) instead of a raw `storage.save`, which would skip the FSRS
         // sync and leave `profile.performance_data` stale.
-        if let Err(e) = ctx.progress.save_immediate() {
-            tracing::error!("Failed to save profile after achievement unlock: {:?}", e);
-        }
+        ctx.ui.effects.push(Effect::SaveProfile);
     }
 
     // Generate a notification for an account-level level up (distinct from the
@@ -138,8 +138,6 @@ fn record_scenario_completion(
     {
         ctx.ui.notifications.push(notification);
     }
-
-    Ok(())
 }
 
 /// Handle CompleteScenario message
@@ -164,14 +162,13 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         let results_data = if let Some(session) = state.game.pending_completed_session.take() {
             let feedback = session.feedback().map_err(UserError::from)?;
             ResultsData::from_completed(session, feedback, scenario_index)
-                .map_err(UserError::from)?
         } else {
             // No session either, just go to menu with restored position
             return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
                 MenuData {
                     selected_item: state.ui.last_menu_selected,
                     scroll_offset: state.ui.last_menu_scroll,
-                    command_buffer: String::new(),
+                    ..MenuData::default()
                 },
             ))));
         };
@@ -185,15 +182,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     let duration = feedback.duration;
 
     // Update quest progress
-    update(
-        state,
-        Message::UpdateQuestProgress {
-            command: None,
-            scenario_completed: true,
-            scenario_id: Some(scenario_id.clone()),
-            duration,
-        },
-    )?;
+    let quest_update = apply_quest_progress(state, None, true, Some(scenario_id.clone()), duration);
 
     // Create context for helper functions
     let mut ctx = HandlerContext::new(
@@ -216,17 +205,20 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     );
 
     // Store mastery info for results display
-    ctx.ui.scenario_mastery = Some((xp_scaling.mastery_level, xp_scaling.applied_multiplier));
+    let mastery = MasteryInfo {
+        mastery: xp_scaling.mastery_level,
+        xp_multiplier: xp_scaling.applied_multiplier,
+    };
 
     // Quest bonuses were already computed and applied to `profile.xp` by
     // `award_quest_completion_xp` during the `UpdateQuestProgress` dispatch above; reuse
     // that authoritative breakdown instead of re-deriving "newly completed" independently,
-    // so this can never diverge from what was actually awarded (see `UIState::quest_xp_bonuses`).
-    let quest_bonuses = ctx.ui.quest_xp_bonuses.clone();
-    let quest_xp = quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
+    // so this can never diverge from what was actually awarded (see `QuestUpdate::award`).
+    let quest_bonuses = quest_update.award.bonuses;
+    let quest_xp = quest_bonuses.iter().map(|bonus| bonus.xp).sum::<u64>();
     let total_xp = xp_scaling.actual_xp + quest_xp;
 
-    ctx.ui.xp_breakdown = Some(XPBreakdown {
+    let xp_breakdown = XPBreakdown {
         base_xp: xp.base_xp,
         perfect_bonus: xp.perfect_bonus,
         first_today_bonus: xp.first_today_bonus,
@@ -235,7 +227,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         repeat_penalty: xp_scaling.applied_repeat_penalty,
         quest_bonuses,
         total_xp,
-    });
+    };
 
     // Record completion and award XP
     // `quest_xp` was already applied to `profile.xp` inside `award_quest_completion_xp`
@@ -250,8 +242,9 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         &mut ctx,
         &feedback,
         xp_scaling.actual_xp,
+        quest_update.award.leveled_up,
         scenario_difficulty,
-    )?;
+    );
 
     // Create ResultsData with completed session and transition to Results screen
     let Some(session) = completed_session else {
@@ -264,17 +257,16 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
             MenuData {
                 selected_item: selected,
                 scroll_offset: scroll,
-                command_buffer: String::new(),
+                ..MenuData::default()
             },
         ))));
     };
 
-    let mut results_data = ResultsData::from_completed(session, feedback.clone(), scenario_index)
-        .map_err(UserError::from)?;
+    let mut results_data = ResultsData::from_completed(session, feedback.clone(), scenario_index);
     // Populate with XP breakdown and quest changes
-    results_data.xp_breakdown = ctx.ui.xp_breakdown.clone();
-    results_data.quest_changes = ctx.ui.quest_progress_changes.clone();
-    results_data.scenario_mastery = ctx.ui.scenario_mastery;
+    results_data.xp_breakdown = Some(xp_breakdown);
+    results_data.quest_changes = quest_update.changes;
+    results_data.scenario_mastery = Some(mastery);
 
     ctx.ui.clear_temp_results();
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Results(
@@ -329,20 +321,6 @@ pub fn handle_retry_scenario(
     Ok(TypedScreen::Task(task_data))
 }
 
-/// Handle NextScenario message
-///
-/// Completes the current scenario flow and returns to menu
-/// Restores the previous menu position for consistent navigation experience
-pub fn handle_next_scenario(ctx: &mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError> {
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-        MenuData {
-            selected_item: ctx.ui.last_menu_selected,
-            scroll_offset: ctx.ui.last_menu_scroll,
-            command_buffer: String::new(),
-        },
-    ))))
-}
-
 /// Handle NextLesson message
 ///
 /// Navigates to the next scenario in the filtered list.
@@ -359,7 +337,7 @@ pub fn handle_next_lesson(
             MenuData {
                 selected_item: ctx.ui.last_menu_selected,
                 scroll_offset: ctx.ui.last_menu_scroll,
-                command_buffer: String::new(),
+                ..MenuData::default()
             },
         ))));
     };
@@ -401,20 +379,28 @@ fn build_end_game_summary(ctx: &HandlerContext<'_>) -> EndGameSummaryData {
         .scenario_collection
         .curriculum_stats(&ctx.progress.profile);
     let imperfect = stats.total.saturating_sub(stats.perfected);
+    let category_breakdown = stats
+        .per_category
+        .into_iter()
+        .map(|(category, perfected, total)| CategoryProgress {
+            category,
+            perfected,
+            total,
+        })
+        .collect();
     let profile = &ctx.progress.profile;
     let tracker = &ctx.progress.performance_tracker;
 
     EndGameSummaryData {
         scenarios_total: stats.total,
         perfected: stats.perfected,
-        imperfect,
         total_completions: profile.scenarios_completed,
         total_xp: profile.total_xp,
         level: profile.level,
         command_success_rate: Analytics::avg_success_rate(tracker),
         journey_days: journey_days(profile),
         commands_mastered: Analytics::get_mastery_summary(tracker).master,
-        category_breakdown: stats.per_category,
+        category_breakdown,
         next_steps: next_steps(ctx, imperfect),
     }
 }
@@ -508,7 +494,7 @@ pub fn handle_go_to_scenario_list(
         MenuData {
             selected_item: selected,
             scroll_offset: ctx.ui.last_menu_scroll,
-            command_buffer: String::new(),
+            ..MenuData::default()
         },
     ))))
 }
@@ -631,7 +617,7 @@ mod tests {
         };
 
         let feedback = completed.feedback().unwrap();
-        let results_data = ResultsData::from_completed(completed, feedback, None).unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, None);
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,
@@ -667,24 +653,6 @@ mod tests {
         let screen = handle_retry_scenario(results_data, &mut ctx).unwrap();
 
         assert_matches!(screen, TypedScreen::Task(_));
-    }
-
-    #[test]
-    fn test_handle_next_scenario() {
-        let mut state = create_test_state();
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-
-        let outcome = handle_next_scenario(&mut ctx).unwrap();
-
-        assert_matches!(
-            outcome,
-            HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Menu(_))
-        );
     }
 
     /// Regression test for #292 finding F2 (impl-critic): `xp_breakdown.quest_bonuses`
@@ -736,7 +704,7 @@ mod tests {
         };
         let bonuses = &results_data.xp_breakdown.unwrap().quest_bonuses;
         assert_eq!(bonuses.len(), 1);
-        assert_eq!(bonuses[0].1, 100);
+        assert_eq!(bonuses[0].xp, 100);
     }
 
     /// Regression test for #292 finding F2 (impl-critic): a quest that was already
@@ -1068,16 +1036,16 @@ mod tests {
     /// Compares the fields that `save_immediate`/`save_debounced` sync from the
     /// tracker. `CommandPerformance` has no `PartialEq` impl.
     fn stats_match(
-        a: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
-        b: &std::collections::HashMap<String, crate::learning::CommandPerformance>,
+        a: &crate::learning::PerformanceData,
+        b: &crate::learning::PerformanceData,
     ) -> bool {
         a.len() == b.len()
             && a.iter().all(|(k, v)| {
                 b.get(k).is_some_and(|other| {
-                    other.attempts == v.attempts
-                        && other.successes == v.successes
-                        && other.reps == v.reps
-                        && other.command == v.command
+                    other.attempts() == v.attempts()
+                        && other.successes() == v.successes()
+                        && other.reps() == v.reps()
+                        && other.command() == v.command()
                 })
             })
     }
@@ -1125,7 +1093,8 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        record_scenario_completion(&mut ctx, &feedback, 1, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, false, None);
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert_eq!(ctx.progress.profile.commands_executed, before + 5);
         let mut cards = ctx.progress.performance_tracker.all_commands();
@@ -1160,7 +1129,8 @@ mod tests {
 
         // Small XP amount that should not trigger a level-up, exercising the
         // save_debounced branch.
-        record_scenario_completion(&mut ctx, &feedback, 1, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, false, None);
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(
@@ -1205,7 +1175,8 @@ mod tests {
 
         // Small XP amount that should not trigger a level-up, exercising the
         // skipped save_debounced branch alongside the achievement-unlock save.
-        record_scenario_completion(&mut ctx, &feedback, 1, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, false, None);
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert!(
             ctx.progress
@@ -1249,7 +1220,9 @@ mod tests {
             &state.config,
         );
 
-        record_scenario_completion(&mut ctx, &feedback, 100, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 100, false, None);
+
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
@@ -1315,7 +1288,9 @@ mod tests {
             &state.config,
         );
 
-        record_scenario_completion(&mut ctx, &feedback, 100, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 100, false, None);
+
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
 
         assert!(
@@ -1342,7 +1317,8 @@ mod tests {
         );
 
         // Small XP amount that should not trigger a level-up.
-        record_scenario_completion(&mut ctx, &feedback, 1, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, false, None);
+        crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert!(
             !ctx.ui.notifications.visible().iter().any(|n| matches!(
@@ -1496,25 +1472,6 @@ mod tests {
             );
         } else {
             panic!("Expected Results screen");
-        }
-    }
-
-    #[test]
-    fn test_handle_next_scenario_returns_to_menu() {
-        let mut state = create_test_state();
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-
-        let outcome = handle_next_scenario(&mut ctx).unwrap();
-
-        if let HandlerOutcome::Transition(screen) = outcome {
-            assert_matches!(*screen, TypedScreen::Menu(_));
-        } else {
-            panic!("Expected Transition outcome");
         }
     }
 
@@ -1790,41 +1747,6 @@ mod tests {
     }
 
     #[test]
-    fn test_menu_position_restored_on_return() {
-        let mut state = create_multi_scenario_state();
-
-        // Set saved menu position
-        state.ui.last_menu_selected = 2;
-        state.ui.last_menu_scroll = 1;
-
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-
-        let outcome = handle_next_scenario(&mut ctx).unwrap();
-
-        if let HandlerOutcome::Transition(screen) = outcome {
-            if let TypedScreen::Menu(menu_data) = *screen {
-                assert_eq!(
-                    menu_data.selected_item, 2,
-                    "Menu should restore selected_item"
-                );
-                assert_eq!(
-                    menu_data.scroll_offset, 1,
-                    "Menu should restore scroll_offset"
-                );
-            } else {
-                panic!("Expected Menu screen");
-            }
-        } else {
-            panic!("Expected Transition outcome");
-        }
-    }
-
-    #[test]
     fn test_auto_advance_after_completion() {
         use crate::game::SessionAfterAction;
 
@@ -1848,7 +1770,7 @@ mod tests {
         };
 
         let feedback = completed.feedback().unwrap();
-        let results_data = ResultsData::from_completed(completed, feedback, Some(0)).unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, Some(0));
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,
@@ -1933,7 +1855,7 @@ mod tests {
         };
 
         let feedback = completed.feedback().unwrap();
-        let results_data = ResultsData::from_completed(completed, feedback, Some(2)).unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, Some(2));
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,
@@ -2020,7 +1942,7 @@ mod tests {
             if let TypedScreen::EndGameSummary(data) = *screen {
                 assert_eq!(data.scenarios_total, 3);
                 assert_eq!(data.perfected, 3);
-                assert_eq!(data.imperfect, 0);
+                assert_eq!(data.imperfect(), 0);
             } else {
                 panic!("Expected EndGameSummary screen");
             }

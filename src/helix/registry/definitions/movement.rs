@@ -6,7 +6,7 @@ use crate::helix::commands::*;
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
 use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior};
 use crate::helix::simulator::NormalMode;
-use crate::helix::simulator::commands::movement;
+use crate::helix::simulator::commands::{movement, select_mode};
 
 /// Register all movement commands
 pub fn register(registry: &mut CommandRegistry<NormalMode>) {
@@ -245,19 +245,19 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         movement::flip_selections,
     ));
 
-    // Select mode (no-op, visual indicator)
+    // Select mode
     registry.register(Command::new(
         CommandMetadata::new(
             "select_mode",
             CMD_SELECT_MODE,
             "Enter select mode",
-            "Toggle selection extension mode (visual enhancement).",
+            "Toggle select mode, where motions extend the selection.",
             Category::Movement,
             false,
             None,
         )
         .with_count_behavior(CountBehavior::Ignore),
-        |_sim| Ok(()), // No-op
+        select_mode::toggle,
     ));
 }
 

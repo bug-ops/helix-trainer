@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::testing::ScenarioBuilder;
+use crate::time::FakeMonotonicClock;
 use std::assert_matches;
 
 fn create_test_scenario() -> Scenario {
@@ -273,12 +274,12 @@ fn test_reset_session() {
 #[test]
 fn test_elapsed_time() {
     let scenario = create_test_scenario();
-    let session = GameSession::new(scenario).unwrap();
+    let clock = Arc::new(FakeMonotonicClock::new());
+    let session = GameSession::with_clock(scenario, clock.clone()).unwrap();
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    clock.advance(Duration::from_millis(10));
 
-    let elapsed = session.elapsed();
-    assert!(elapsed.as_millis() >= 10);
+    assert_eq!(session.elapsed(), Duration::from_millis(10));
 }
 
 #[test]
@@ -305,7 +306,8 @@ fn test_feedback_summary() {
 #[test]
 fn test_timer_fixed_on_completion() {
     let scenario = create_test_scenario();
-    let session = GameSession::new(scenario).unwrap();
+    let clock = Arc::new(FakeMonotonicClock::new());
+    let session = GameSession::with_clock(scenario, clock.clone()).unwrap();
 
     // Complete with x + d commands
     let result = session.record_action("x".to_string()).unwrap();
@@ -321,17 +323,11 @@ fn test_timer_fixed_on_completion() {
             let feedback1 = completed.feedback().unwrap();
             let duration1 = feedback1.duration;
 
-            // Wait a bit
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            clock.advance(Duration::from_millis(50));
 
-            // Get feedback again - duration should be the same (fixed)
             let feedback2 = completed.feedback().unwrap();
-            let duration2 = feedback2.duration;
-
-            // Durations should be equal (or very close)
-            let diff = duration2.abs_diff(duration1);
-            assert!(
-                diff.as_millis() < 5,
+            assert_eq!(
+                feedback2.duration, duration1,
                 "Timer should be fixed after completion"
             );
         }
@@ -349,7 +345,8 @@ fn test_playable_scenario_elapsed_fixed_after_completion() {
     use crate::game::PlayableScenario;
 
     let scenario = create_test_scenario();
-    let session = GameSession::new(scenario).unwrap();
+    let clock = Arc::new(FakeMonotonicClock::new());
+    let session = GameSession::with_clock(scenario, clock.clone()).unwrap();
 
     let result = session.record_action("x".to_string()).unwrap();
     let session = match result {
@@ -362,7 +359,7 @@ fn test_playable_scenario_elapsed_fixed_after_completion() {
         SessionAfterAction::Completed(completed) => {
             let elapsed1 = PlayableScenario::elapsed(&completed);
 
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            clock.advance(Duration::from_millis(50));
 
             let elapsed2 = PlayableScenario::elapsed(&completed);
             assert_eq!(
@@ -516,4 +513,72 @@ fn test_no_bundled_scenario_starts_complete() {
         started_complete.is_empty(),
         "scenarios starting at 100%: {started_complete:?}"
     );
+}
+
+fn undo_redo_scenario() -> Scenario {
+    crate::config::ScenarioLoader::new()
+        .load_from_embedded("en")
+        .unwrap()
+        .into_iter()
+        .find(|s| s.id == "undo_redo_001")
+        .unwrap()
+}
+
+/// Returns the action count at which `commands` complete the scenario, if ever.
+fn completion_step(commands: &[&str]) -> Option<usize> {
+    let mut session = GameSession::new(undo_redo_scenario()).unwrap();
+    for (i, cmd) in commands.iter().enumerate() {
+        match session.record_action((*cmd).to_string()).unwrap() {
+            SessionAfterAction::Completed(_) => return Some(i + 1),
+            SessionAfterAction::StillActive(s) => session = s,
+        }
+    }
+    None
+}
+
+#[test]
+fn test_undo_redo_completes_only_at_last_taught_command() {
+    assert_eq!(completion_step(&["x", "d", "u", "U"]), Some(4));
+}
+
+#[test]
+fn test_undo_redo_not_completed_when_target_reached_by_untaught_command() {
+    assert_eq!(completion_step(&["u", "U", "x", "d"]), None);
+}
+
+#[test]
+fn test_undo_redo_counted_taught_command_completes() {
+    assert_eq!(completion_step(&["x", "d", "2u", "U"]), Some(4));
+}
+
+/// Regression test for #500: a retry must rebuild the simulator with the scenario's language,
+/// so a markdown scenario keeps its 2-space indent unit instead of the default 4.
+#[test]
+fn test_reset_keeps_language_indent_unit() {
+    use crate::game::PlayableScenario;
+    use crate::helix::commands::CMD_INDENT;
+
+    let scenario = ScenarioBuilder::new()
+        .id("md_indent")
+        .setup_language("md")
+        .setup_content("item\n")
+        .setup_cursor(0, 0)
+        .target_content("  item\n")
+        .target_cursor(0, 0)
+        .build();
+    let mut session = GameSession::new(scenario).unwrap();
+
+    session.apply_action(CMD_INDENT.to_string()).unwrap();
+    let first = session.current_content();
+    session.reset().unwrap();
+    session.apply_action(CMD_INDENT.to_string()).unwrap();
+
+    assert!(first.starts_with("  item"), "unexpected indent: {first:?}");
+    assert_eq!(session.current_content(), first);
+}
+
+#[test]
+fn test_undo_redo_not_completed_by_noop_redo() {
+    assert_eq!(completion_step(&["x", "d", "U"]), None);
+    assert_eq!(completion_step(&["x", "d", "U", "u", "U"]), Some(5));
 }

@@ -283,9 +283,9 @@ fn test_indent_line() {
     sim.execute_command(CMD_INDENT).unwrap();
 
     let state = sim.state().unwrap();
-    assert_eq!(state.content(), "  hello\nworld");
-    // Cursor should move forward by 2
-    assert_eq!(state.cursor_position().1, 2);
+    assert_eq!(state.content(), "    hello\nworld");
+    // The cursor stays on its character
+    assert_eq!(state.cursor_position().1, 4);
 }
 
 #[test]
@@ -332,8 +332,8 @@ fn test_multiple_indent() {
     sim.execute_command(CMD_INDENT).unwrap();
 
     let state = sim.state().unwrap();
-    assert_eq!(state.content(), "    code");
-    assert_eq!(state.cursor_position().1, 4);
+    assert_eq!(state.content(), "        code");
+    assert_eq!(state.cursor_position().1, 8);
 }
 
 // ============================================================================
@@ -910,6 +910,22 @@ fn test_collapse_selection_after_select_line_lands_on_newline() {
         run_then_delete(&[CMD_SELECT_LINE, CMD_COLLAPSE_SELECTION]),
         "fn add(a: i32, b: i32) -> i32 {    let sum = a + b;\n    sum\n}"
     );
+}
+
+#[test]
+fn test_backtick_lowercases_selection_instead_of_toggling() {
+    let mut sim = AnyModeSimulator::new("Hello WORLD".to_string());
+    sim.execute_command(CMD_SELECT_ALL).unwrap();
+    sim.execute_command(CMD_SWITCH_CASE_ALT).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "hello world");
+}
+
+#[test]
+fn test_alt_backtick_uppercases_selection_without_toggling() {
+    let mut sim = AnyModeSimulator::new("Hello world".to_string());
+    sim.execute_command(CMD_SELECT_ALL).unwrap();
+    sim.execute_command(CMD_SWITCH_TO_UPPERCASE).unwrap();
+    assert_eq!(sim.state().unwrap().content(), "HELLO WORLD");
 }
 
 #[test]

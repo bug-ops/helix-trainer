@@ -94,20 +94,35 @@ impl TypestateHandler<BaseState> {
 /// This allows runtime dispatch while maintaining type safety.
 #[derive(Debug, Clone)]
 pub enum TypestateHandlerState {
+    /// No key sequence in progress.
     Base(TypestateHandler<BaseState>),
+    /// After `g`.
     GotoPending(TypestateHandler<GotoPending>),
+    /// After `z`.
     ViewPending(TypestateHandler<ViewPending>),
+    /// After `m`.
     MatchPending(TypestateHandler<MatchPending>),
+    /// After `ms`, waiting for the surround character.
     SurroundAddPending(TypestateHandler<SurroundAddPending>),
+    /// After `md`, waiting for the surround character.
     SurroundDeletePending(TypestateHandler<SurroundDeletePending>),
+    /// After `mr`, waiting for the character to replace.
     SurroundReplaceFromPending(TypestateHandler<SurroundReplaceFromPending>),
+    /// After `mr{char}`, waiting for the replacement; carries the replaced character.
     SurroundReplaceToPending(TypestateHandler<SurroundReplaceToPending>, char),
+    /// After `ma`, waiting for the text object.
     TextObjectAroundPending(TypestateHandler<TextObjectAroundPending>),
+    /// After `mi`, waiting for the text object.
     TextObjectInsidePending(TypestateHandler<TextObjectInsidePending>),
+    /// After `f`/`F`/`t`/`T`, waiting for the target character.
     FindCharPending(TypestateHandler<FindCharPending>, FindType),
+    /// After `r`, waiting for the replacement character.
     ReplaceCharPending(TypestateHandler<ReplaceCharPending>),
+    /// Accumulating a count prefix; carries the count so far.
     CountPending(TypestateHandler<CountPending>, NonZeroUsize),
+    /// After `[`.
     UnmatchedPrevPending(TypestateHandler<UnmatchedPrevPending>),
+    /// After `]`.
     UnmatchedNextPending(TypestateHandler<UnmatchedNextPending>),
 }
 

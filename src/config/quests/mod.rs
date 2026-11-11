@@ -18,7 +18,9 @@ use std::path::{Path, PathBuf};
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct QuestsFile {
+    /// File-level metadata.
     pub metadata: QuestsMetadata,
+    /// Quest definitions in file order.
     pub quests: Vec<QuestTemplate>,
 }
 
@@ -26,8 +28,10 @@ pub struct QuestsFile {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct QuestsMetadata {
+    /// Schema version of the quest file; validated for length and emptiness.
     #[serde(deserialize_with = "validate_version_field")]
     pub version: String,
+    /// Locale the templates are written for, when the file declares one.
     #[serde(default, deserialize_with = "validate_locale_field")]
     pub locale: Option<String>,
 }
@@ -36,19 +40,26 @@ pub struct QuestsMetadata {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct QuestTemplate {
+    /// Unique identifier, validated as a safe id.
     #[serde(deserialize_with = "validate_id_field")]
     pub id: String,
+    /// Display name shown on the quest card.
     pub name: String,
+    /// One-line goal description shown to the player.
     pub description: String,
 
+    /// Difficulty tier, which selects the default XP reward.
     pub difficulty: QuestDifficulty,
 
+    /// Quest type with its type-specific parameters.
     #[serde(flatten)]
     pub spec: QuestSpec,
 
+    /// Optional override of the difficulty-based XP reward.
     #[serde(default)]
     pub xp: Option<XpConfig>,
 
+    /// Conditions that gate when the quest may be offered.
     #[serde(default)]
     pub conditions: QuestConditions,
 }
@@ -57,8 +68,11 @@ pub struct QuestTemplate {
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum QuestDifficulty {
+    /// Short quests suited to new players.
     Easy,
+    /// Mid-length quests.
     Medium,
+    /// Long or demanding quests.
     Hard,
 }
 
@@ -71,21 +85,33 @@ pub enum QuestDifficulty {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(tag = "type", content = "params", rename_all = "snake_case")]
 pub enum QuestSpec {
+    /// Execute one command a number of times.
     CommandPractice {
+        /// Command whose executions are counted.
         command: String,
+        /// Number of executions required.
         target: u32,
     },
+    /// Complete a number of scenarios.
     ScenarioCompletion {
+        /// Number of completions required.
         target: u32,
     },
+    /// Finish one specific scenario within a time limit.
     SpeedRun {
+        /// Scenario that must be completed.
         scenario_id: String,
+        /// Time limit in seconds.
         time_limit_seconds: u64,
     },
+    /// Spend a total amount of time practicing.
     TimeInvested {
+        /// Practice time required, in minutes.
         target_minutes: u32,
     },
+    /// Use a number of distinct commands.
     Exploration {
+        /// Number of distinct commands required.
         target_commands: u32,
     },
 }
@@ -94,6 +120,7 @@ pub enum QuestSpec {
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct XpConfig {
+    /// Base XP reward replacing the difficulty default.
     #[serde(default)]
     pub base_reward: Option<u32>,
 }
@@ -105,12 +132,16 @@ pub struct XpConfig {
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct QuestConditions {
+    /// Lowest player level at which the quest is offered.
     #[serde(default)]
     pub min_level: Option<u32>,
+    /// Highest player level at which the quest is offered.
     #[serde(default)]
     pub max_level: Option<u32>,
+    /// Commands the player must already have practiced.
     #[serde(default)]
     pub requires_commands: Vec<String>,
+    /// Scenarios the player must already have completed.
     #[serde(default)]
     pub requires_scenarios: Vec<String>,
 }
@@ -277,10 +308,13 @@ impl QuestLoader {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::quests::QuestLoader;
+    ///
     /// let loader = QuestLoader::new();
     /// let templates = loader.load_from_embedded("en")?;
     /// assert!(!templates.is_empty());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<QuestTemplate>, UserError> {
         let content = embedded::get_embedded_quests(locale).ok_or_else(|| {
@@ -426,9 +460,15 @@ impl QuestTemplate {
     /// Convert template to runtime quest instance
     ///
     /// # Examples
-    /// ```ignore
-    /// let template = QuestTemplate { /* ... */ };
-    /// let quest = template.to_quest();
+    ///
+    /// ```
+    /// use helix_trainer::config::quests::QuestLoader;
+    ///
+    /// let templates = QuestLoader::new().load_from_embedded("en")?;
+    /// let quest = templates[0].to_quest();
+    /// assert_eq!(quest.id, templates[0].id);
+    /// assert!(!quest.completed);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn to_quest(&self) -> crate::gamification::Quest {
         use crate::gamification::Quest;

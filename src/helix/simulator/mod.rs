@@ -26,6 +26,7 @@ mod tests;
 
 use crate::game::EditorState;
 use crate::game::editor_state::{CursorPosition, Selection as GameSelection};
+use crate::helix::indent::IndentUnit;
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
 use crate::security::UserError;
@@ -33,7 +34,7 @@ use helix_core::{Rope, Selection, Transaction};
 use std::marker::PhantomData;
 
 // Re-export mode typestate markers
-pub use mode::{EditorMode, InsertMode, NormalMode};
+pub use mode::{EditorMode, InsertMode, ModeKind, NormalMode};
 
 // Re-export state types
 pub use command_line::CommandLine;
@@ -113,6 +114,15 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Insert mode with the cursor still there strips that indentation, as
     /// Helix does.
     pub(super) auto_indent_end: Option<usize>,
+
+    /// Select (extend) mode: motions extend the selection instead of moving it
+    ///
+    /// Only meaningful in Normal mode (`v` toggles it, Esc and the editing
+    /// commands of `exits_select_mode` clear it) and always false in Insert mode.
+    pub(super) select_mode: bool,
+
+    /// Indent unit of the document language, used by `>`, `<` and Insert `Tab`
+    pub(super) indent_unit: IndentUnit,
 
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
@@ -311,6 +321,8 @@ impl HelixSimulator<NormalMode> {
             redo_stack: Vec::new(),
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
+            select_mode: false,
+            indent_unit: IndentUnit::DEFAULT,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -355,6 +367,8 @@ impl HelixSimulator<NormalMode> {
             redo_stack: Vec::new(),
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
+            select_mode: false,
+            indent_unit: IndentUnit::DEFAULT,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -426,6 +440,8 @@ impl HelixSimulator<NormalMode> {
             redo_stack: Vec::new(),
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
+            select_mode: false,
+            indent_unit: IndentUnit::DEFAULT,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -464,6 +480,8 @@ impl HelixSimulator<NormalMode> {
             redo_stack: self.redo_stack,
             registers: self.registers,
             repeat_buffer: self.repeat_buffer,
+            select_mode: false,
+            indent_unit: self.indent_unit,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -508,6 +526,8 @@ impl HelixSimulator<InsertMode> {
             redo_stack: self.redo_stack,
             registers: self.registers,
             repeat_buffer: self.repeat_buffer,
+            select_mode: false,
+            indent_unit: self.indent_unit,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -573,9 +593,33 @@ impl AnyModeSimulator {
         }
     }
 
+    /// Get the current mode as a [`ModeKind`] for exhaustive matching
+    pub fn mode_kind(&self) -> ModeKind {
+        match self {
+            Self::Normal(sim) if sim.select_mode => ModeKind::Select,
+            Self::Normal(_) => ModeKind::Normal,
+            Self::Insert(_) => ModeKind::Insert,
+        }
+    }
+
+    /// Declare the content language of the edited document
+    ///
+    /// The language selects the indent unit used by `>`, `<` and Insert-mode
+    /// `Tab`; a language without a table entry keeps [`IndentUnit::DEFAULT`].
+    #[must_use]
+    pub fn with_language(mut self, language: &str) -> Self {
+        let unit = IndentUnit::for_language(language).unwrap_or_default();
+        match &mut self {
+            Self::Normal(sim) => sim.indent_unit = unit,
+            Self::Insert(sim) => sim.indent_unit = unit,
+        }
+        self
+    }
+
     /// Get current mode name
     pub fn mode_name(&self) -> &'static str {
         match self {
+            Self::Normal(sim) if sim.select_mode => "SELECT",
             Self::Normal(_) => NormalMode::name(),
             Self::Insert(_) => InsertMode::name(),
         }
@@ -733,8 +777,7 @@ impl AnyModeSimulator {
             crate::helix::repeat::RepeatableAction::InsertSequence {
                 entry_command,
                 text,
-                movements,
-                edits,
+                keys,
             } => {
                 // Execute insert sequence through wrapper
                 use crate::helix::commands::*;
@@ -743,28 +786,17 @@ impl AnyModeSimulator {
                 let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
                 commands::execute_command_any_mode(self, insert_cmd)?;
 
-                // Insert text character by character, replaying deleting
-                // keys at the position they were originally pressed
-                let mut pending_edits = edits.iter().peekable();
+                // Insert text character by character, replaying non-text keys
+                // at the position they were originally pressed
+                let mut pending_keys = keys.iter().peekable();
                 for (typed, ch) in text.chars().enumerate() {
-                    while let Some(edit) = pending_edits.next_if(|e| e.after_chars <= typed) {
-                        commands::execute_command_any_mode(self, edit.command.as_str())?;
+                    while let Some(key) = pending_keys.next_if(|k| k.after_chars <= typed) {
+                        commands::execute_command_any_mode(self, key.action.command())?;
                     }
                     commands::execute_command_any_mode(self, &ch.to_string())?;
                 }
-                for edit in pending_edits {
-                    commands::execute_command_any_mode(self, edit.command.as_str())?;
-                }
-
-                // Apply movements
-                for movement in movements {
-                    let cmd = match movement {
-                        crate::helix::repeat::Movement::Left => CMD_ARROW_LEFT,
-                        crate::helix::repeat::Movement::Right => CMD_ARROW_RIGHT,
-                        crate::helix::repeat::Movement::Up => CMD_ARROW_UP,
-                        crate::helix::repeat::Movement::Down => CMD_ARROW_DOWN,
-                    };
-                    commands::execute_command_any_mode(self, cmd)?;
+                for key in pending_keys {
+                    commands::execute_command_any_mode(self, key.action.command())?;
                 }
 
                 // Exit insert mode

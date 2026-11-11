@@ -4,93 +4,120 @@
 //! error definitions, validation utilities, and security helpers.
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 use thiserror::Error;
 
-/// Security-specific errors
+/// Security-specific errors raised while validating untrusted input.
+///
+/// These carry internal detail for logs; they are converted to the sanitized
+/// [`UserError`] before reaching the UI.
 #[derive(Error, Debug)]
 pub enum SecurityError {
+    /// A path resolved outside the allowed base directory.
     #[error("Access denied: path outside allowed directory")]
     PathTraversal,
 
+    /// A path could not be interpreted (empty, unresolvable, malformed).
     #[error("Invalid file path")]
     InvalidPath,
 
+    /// A path contains a pattern that is rejected on sight (e.g. `..` segments).
     #[error("Suspicious path pattern detected")]
     SuspiciousPath,
 
+    /// A scenario file exceeds the size limit.
     #[error("Scenario file too large (max {max} bytes, got {actual} bytes)")]
-    FileTooLarge { max: u64, actual: u64 },
+    FileTooLarge {
+        /// Maximum allowed size in bytes.
+        max: u64,
+        /// Observed size in bytes.
+        actual: u64,
+    },
 
+    /// TOML parsing failed; carries the parser message for logs only.
     #[error("Invalid TOML format: {0}")]
     InvalidToml(String),
 
+    /// A scenario file holds more scenarios than allowed.
     #[error("Too many scenarios in file (max {max}, got {actual})")]
-    TooManyScenarios { max: usize, actual: usize },
+    TooManyScenarios {
+        /// Maximum allowed scenario count.
+        max: usize,
+        /// Observed scenario count.
+        actual: usize,
+    },
 
-    #[error("Invalid scenario ID: must be alphanumeric with underscores")]
-    InvalidScenarioId,
-
+    /// Editor content exceeds the size limit.
     #[error("Content too large (max {max} bytes, got {actual} bytes)")]
-    ContentTooLarge { max: usize, actual: usize },
+    ContentTooLarge {
+        /// Maximum allowed size in bytes.
+        max: usize,
+        /// Observed size in bytes.
+        actual: usize,
+    },
 
+    /// A cursor position lies outside the document.
     #[error("Invalid cursor position")]
     InvalidCursorPosition,
 
+    /// A scenario declares more hints than allowed.
     #[error("Too many hints (max {max})")]
-    TooManyHints { max: usize },
+    TooManyHints {
+        /// Maximum allowed hint count.
+        max: usize,
+    },
 
+    /// A scenario declares more alternative solutions than allowed.
     #[error("Too many alternatives (max {max})")]
-    TooManyAlternatives { max: usize },
+    TooManyAlternatives {
+        /// Maximum allowed alternative count.
+        max: usize,
+    },
 
-    #[error("Process spawn failed: {0}")]
-    ProcessSpawnFailed(String),
-
-    #[error("Session timeout (max duration: {0:?})")]
-    SessionTimeout(Duration),
-
+    /// A session recorded more actions than the cap.
     #[error("Too many actions (max: 1000000)")]
     TooManyActions,
 
+    /// A score computation overflowed its integer type.
     #[error("Score calculation overflow")]
     ScoreOverflow,
 
-    #[error("Invalid duration")]
-    InvalidDuration,
-
+    /// A command sequence exceeds the length cap.
     #[error("Command sequence too long (max {max})")]
-    CommandSequenceTooLong { max: usize },
+    CommandSequenceTooLong {
+        /// Maximum allowed command count.
+        max: usize,
+    },
 
-    #[error("Invalid command")]
-    InvalidCommand,
-
-    #[error("Too many active sessions (max {max})")]
-    TooManySessions { max: usize },
-
-    #[error("Too many temporary files (max {max})")]
-    TooManyTempFiles { max: usize },
-
-    #[error("Rate limit exceeded, retry after {0:?}")]
-    RateLimitExceeded(Duration),
-
+    /// Content contains null bytes or otherwise unusable encoding.
     #[error("Invalid content: contains null bytes or invalid encoding")]
     InvalidContent,
 
+    /// Bytes are not valid UTF-8.
     #[error("Invalid UTF-8 encoding")]
     InvalidEncoding,
 
+    /// An input value failed validation; the message is for logs only.
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
+    /// The application reached a state that violates an invariant.
     #[error("Invalid state: {0}")]
     InvalidState(String),
 
+    /// A keymap file defines more bindings than allowed.
     #[error("Too many keymap bindings (max {max}, got {actual})")]
-    TooManyKeymapBindings { max: usize, actual: usize },
+    TooManyKeymapBindings {
+        /// Maximum allowed binding count.
+        max: usize,
+        /// Observed binding count.
+        actual: usize,
+    },
 
+    /// The path exists but is not a regular file (directory, device, ...).
     #[error("Not a regular file")]
     NotRegularFile,
 
+    /// Reading a file failed; carries the I/O message for logs only.
     #[error("Failed to read file: {0}")]
     ReadFailed(String),
 }
@@ -98,31 +125,37 @@ pub enum SecurityError {
 /// User-facing error messages (sanitized)
 #[derive(Error, Debug)]
 pub enum UserError {
+    /// An internal invariant was violated; the message is for logs, the
+    /// displayed text is generic.
     #[error("Invalid application state. Please restart the application.")]
-    InvalidState { message: String },
+    InvalidState {
+        /// Diagnostic detail that is never shown to the user.
+        message: String,
+    },
 
     /// A message arrived for a screen other than the current one (e.g. a stale
     /// timer message racing a key-driven transition). Not a user-visible fault.
     #[error("That action is not available on the current screen.")]
     WrongScreen,
 
+    /// A scenario file could not be loaded or parsed.
     #[error("Failed to load scenario file. Please check the file path and format.")]
     ScenarioLoadError,
 
+    /// A scenario file breaches a size or count limit.
     #[error("The scenario file is too large or complex. Please use a smaller file.")]
     ScenarioTooComplex,
 
-    #[error("Failed to start editor. Please ensure Helix is installed.")]
-    EditorStartFailed,
-
+    /// A generic failure with no actionable detail for the user.
     #[error("Operation failed. Please try again.")]
     OperationFailed,
 
+    /// A Helix command failed to execute in the simulator.
     #[error("Command execution failed: {context}")]
-    CommandFailed { context: String },
-
-    #[error("Session has expired. Please start a new session.")]
-    SessionExpired,
+    CommandFailed {
+        /// What was being executed, for debugging.
+        context: String,
+    },
 }
 
 impl UserError {
@@ -157,13 +190,18 @@ impl From<SecurityError> for UserError {
             | SecurityError::TooManyHints { .. }
             | SecurityError::TooManyAlternatives { .. } => UserError::ScenarioTooComplex,
 
-            SecurityError::ProcessSpawnFailed(_) => UserError::EditorStartFailed,
-
-            SecurityError::SessionTimeout(_) => UserError::SessionExpired,
-
             SecurityError::InvalidState(msg) => UserError::InvalidState { message: msg },
 
-            _ => UserError::OperationFailed,
+            SecurityError::InvalidCursorPosition
+            | SecurityError::TooManyActions
+            | SecurityError::ScoreOverflow
+            | SecurityError::CommandSequenceTooLong { .. }
+            | SecurityError::InvalidContent
+            | SecurityError::InvalidEncoding
+            | SecurityError::InvalidInput(_)
+            | SecurityError::TooManyKeymapBindings { .. }
+            | SecurityError::NotRegularFile
+            | SecurityError::ReadFailed(_) => UserError::OperationFailed,
         }
     }
 }
@@ -191,9 +229,12 @@ impl From<crate::learning::LearningError> for UserError {
         tracing::error!("Learning error occurred: {:?}", err);
 
         match err {
-            LearningError::InvalidStability(_) | LearningError::InvalidDifficulty(_) => {
+            LearningError::InvalidStability(_)
+            | LearningError::InvalidDifficulty(_)
+            | LearningError::InvalidCounters { .. } => {
                 UserError::invalid_state("Invalid learning parameters")
             }
+            LearningError::SessionComplete => UserError::OperationFailed,
             LearningError::CommandNotFound(_) => {
                 UserError::command_failed("Command not found in registry")
             }
@@ -204,8 +245,6 @@ impl From<crate::learning::LearningError> for UserError {
 
 /// Security configuration constants
 pub mod limits {
-    use std::time::Duration;
-
     /// Maximum size of a scenario TOML file (10 MB)
     pub const MAX_SCENARIO_FILE_SIZE: u64 = 10 * 1024 * 1024;
 
@@ -250,21 +289,6 @@ pub mod limits {
     /// `regex-cursor` is finite-automaton based, so catastrophic backtracking
     /// is not a concern here.
     pub const MAX_REGEX_SELECTION_MATCHES: usize = 10_000;
-
-    /// Command timeout
-    pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
-
-    /// Maximum active sessions
-    pub const MAX_ACTIVE_SESSIONS: usize = 10;
-
-    /// Maximum temporary files
-    pub const MAX_TEMP_FILES: usize = 100;
-
-    /// Session timeout (1 hour)
-    pub const SESSION_TIMEOUT: Duration = Duration::from_secs(3600);
-
-    /// Minimum interval between scenario loads
-    pub const MIN_LOAD_INTERVAL: Duration = Duration::from_millis(100);
 
     /// Maximum number of quest templates per file
     pub const MAX_QUEST_TEMPLATES_PER_FILE: usize = 100;
@@ -321,6 +345,9 @@ pub mod limits {
     /// leaves about 14x headroom for curriculum growth before it needs
     /// revisiting.
     pub const MAX_PROFILE_FILE_SIZE: u64 = 1024 * 1024;
+
+    /// Maximum size of the `profile.json.lock` file: a decimal process id.
+    pub const MAX_LOCK_FILE_SIZE: u64 = 64;
 
     /// Maximum size of `config.json` (1 MB). `AppConfig` today is a
     /// handful of booleans (well under 1 KB serialized), so this leaves
@@ -441,8 +468,7 @@ pub mod path_validator {
 
 /// Creation of user-private files and directories for persisted data.
 ///
-/// On Unix directories are created `0700` and files `0600` (an existing file
-/// reopened through `create_file` is tightened to `0600`); other platforms
+/// On Unix directories are created `0700` and files `0600`; other platforms
 /// use the process defaults.
 pub mod private_fs {
     use std::fs;
@@ -462,21 +488,6 @@ pub mod private_fs {
         #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
         builder.create(path)
-    }
-
-    /// Creates or truncates `path` for writing, owner-only (`0600`) on Unix.
-    ///
-    /// # Errors
-    ///
-    /// Returns the underlying I/O error if the file cannot be opened or its
-    /// permissions cannot be tightened.
-    pub fn create_file(path: &Path) -> io::Result<fs::File> {
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true);
-        let file = private_options(&mut options).open(path)?;
-        #[cfg(unix)]
-        file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
-        Ok(file)
     }
 
     /// Creates `path` for writing, failing if it already exists, owner-only
@@ -620,9 +631,12 @@ pub mod arithmetic {
     /// Returns `ScoreOverflow` if the calculation would overflow
     ///
     /// # Examples
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::security::arithmetic::checked_score_calculation;
+    ///
     /// let score = checked_score_calculation(5, 10, 100)?;
     /// assert_eq!(score, 50);
+    /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
     pub fn checked_score_calculation(
         optimal_count: usize,
@@ -644,9 +658,7 @@ pub mod arithmetic {
             .ok_or(SecurityError::ScoreOverflow)?;
 
         // Ensure result fits in u32 and doesn't exceed max_points
-        let final_score = result.min(max_points as u64) as u32;
-
-        Ok(final_score)
+        u32::try_from(result.min(u64::from(max_points))).map_err(|_| SecurityError::ScoreOverflow)
     }
 
     /// Safely adds two scores with overflow prevention
@@ -667,14 +679,19 @@ pub mod arithmetic {
             return Err(SecurityError::ScoreOverflow);
         }
 
-        let result = (score as f64 * multiplier as f64) as u64;
+        let result = f64::from(score) * f64::from(multiplier);
 
-        // Check if result fits in u32
-        if result > u32::MAX as u64 {
+        if result > f64::from(u32::MAX) {
             return Err(SecurityError::ScoreOverflow);
         }
 
-        Ok(result as u32)
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "0.0 <= result <= u32::MAX is checked above"
+        )]
+        let scaled = result as u32;
+        Ok(scaled)
     }
 
     /// Validates that action counts are within reasonable bounds
@@ -905,26 +922,6 @@ mod tests {
     }
 
     #[test]
-    fn test_error_conversion_process_spawn_failed() {
-        let err = SecurityError::ProcessSpawnFailed("spawn error".to_string());
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to start editor. Please ensure Helix is installed."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_session_timeout() {
-        let err = SecurityError::SessionTimeout(Duration::from_secs(3600));
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Session has expired. Please start a new session."
-        );
-    }
-
-    #[test]
     fn test_error_conversion_invalid_state() {
         let err = SecurityError::InvalidState("bad state".to_string());
         let user_err = UserError::from(err);
@@ -1106,11 +1103,6 @@ mod tests {
             .contains("scenarios")
         );
         assert!(
-            SecurityError::InvalidScenarioId
-                .to_string()
-                .contains("scenario ID")
-        );
-        assert!(
             SecurityError::ContentTooLarge {
                 max: 100,
                 actual: 200
@@ -1134,16 +1126,6 @@ mod tests {
                 .contains("alternatives")
         );
         assert!(
-            SecurityError::ProcessSpawnFailed("err".to_string())
-                .to_string()
-                .contains("spawn")
-        );
-        assert!(
-            SecurityError::SessionTimeout(Duration::from_secs(60))
-                .to_string()
-                .contains("timeout")
-        );
-        assert!(
             SecurityError::TooManyActions
                 .to_string()
                 .contains("actions")
@@ -1154,34 +1136,9 @@ mod tests {
                 .contains("overflow")
         );
         assert!(
-            SecurityError::InvalidDuration
-                .to_string()
-                .contains("duration")
-        );
-        assert!(
             SecurityError::CommandSequenceTooLong { max: 100 }
                 .to_string()
                 .contains("sequence")
-        );
-        assert!(
-            SecurityError::InvalidCommand
-                .to_string()
-                .contains("command")
-        );
-        assert!(
-            SecurityError::TooManySessions { max: 10 }
-                .to_string()
-                .contains("sessions")
-        );
-        assert!(
-            SecurityError::TooManyTempFiles { max: 100 }
-                .to_string()
-                .contains("files")
-        );
-        assert!(
-            SecurityError::RateLimitExceeded(Duration::from_secs(30))
-                .to_string()
-                .contains("Rate limit")
         );
         assert!(
             SecurityError::InvalidContent
@@ -1221,7 +1178,6 @@ mod tests {
                 .to_string()
                 .contains("too large")
         );
-        assert!(UserError::EditorStartFailed.to_string().contains("editor"));
         assert!(
             UserError::OperationFailed
                 .to_string()
@@ -1234,7 +1190,6 @@ mod tests {
             .to_string()
             .contains("Command")
         );
-        assert!(UserError::SessionExpired.to_string().contains("expired"));
     }
 
     mod read_capped {

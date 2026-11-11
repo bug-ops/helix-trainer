@@ -2019,3 +2019,75 @@ tolerance = 0
     let result = loader.load(temp_file.path());
     assert!(result.is_ok(), "Should accept empty selections array");
 }
+
+mod completion_rule {
+    use super::*;
+
+    fn taught(commands: &[&str]) -> Vec<String> {
+        commands.iter().map(ToString::to_string).collect()
+    }
+
+    fn last(command: &str, target_held_before: bool) -> LastAction<'_> {
+        LastAction {
+            command,
+            target_held_before,
+        }
+    }
+
+    #[test]
+    fn test_is_satisfied_table() {
+        let undo_redo = taught(&["u", "U"]);
+        let after = CompletionRule::AfterTaughtCommands;
+        let target = CompletionRule::TargetState;
+        let cases = [
+            (
+                "target not reached",
+                after,
+                false,
+                Some(("u", false)),
+                false,
+            ),
+            ("no last action", after, true, None, false),
+            (
+                "unparsable command",
+                after,
+                true,
+                Some(("???", false)),
+                false,
+            ),
+            ("untaught command", after, true, Some(("d", false)), false),
+            ("taught u", after, true, Some(("u", false)), true),
+            ("taught U", after, true, Some(("U", false)), true),
+            ("counted taught", after, true, Some(("2u", false)), true),
+            (
+                "no-op U (target held before)",
+                after,
+                true,
+                Some(("U", true)),
+                false,
+            ),
+            ("TargetState ignores last action", target, true, None, true),
+            (
+                "TargetState needs target",
+                target,
+                false,
+                Some(("u", false)),
+                false,
+            ),
+        ];
+        for (name, rule, reached, action, expected) in cases {
+            let action = action.map(|(command, held)| last(command, held));
+            assert_eq!(
+                rule.is_satisfied(reached, &undo_redo, action),
+                expected,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_u_does_not_match_taught_redo_only() {
+        let rule = CompletionRule::AfterTaughtCommands;
+        assert!(!rule.is_satisfied(true, &taught(&["U"]), Some(last("u", false))));
+    }
+}

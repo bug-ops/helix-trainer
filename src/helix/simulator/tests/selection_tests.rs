@@ -196,3 +196,106 @@ fn test_compound_action_overwritten_by_simple_command() {
 
     // Repeat should do x+d again
 }
+
+// Expected buffers in the tests below were recorded from `hx` 25.07.1 on the
+// same keys (`&`, `K`, `Alt-K`, #510).
+
+fn run_commands(text: &str, commands: &[&str]) -> AnyModeSimulator {
+    let mut sim = AnyModeSimulator::new(text.to_string());
+    for command in commands {
+        sim.execute_command(command).unwrap();
+    }
+    sim
+}
+
+fn content_of(sim: &AnyModeSimulator) -> String {
+    sim.state().unwrap().content().to_string()
+}
+
+#[test]
+fn test_align_selections_pads_columns_to_common_end() {
+    let sim = run_commands(
+        "a b c\nxx yy zz",
+        &[CMD_SELECT_ALL, "s \\w+", CMD_ALIGN_SELECTIONS],
+    );
+    assert_eq!(content_of(&sim), " a  b  c\nxx yy zz");
+}
+
+#[test]
+fn test_align_selections_keeps_ranges_on_their_text() {
+    let sim = run_commands(
+        "a b c\nxx yy zz",
+        &[
+            CMD_SELECT_ALL,
+            "s \\w+",
+            CMD_ALIGN_SELECTIONS,
+            CMD_DELETE_SELECTION,
+        ],
+    );
+    assert_eq!(content_of(&sim), "     \n  ");
+}
+
+#[test]
+fn test_align_selections_aligns_equals_signs() {
+    let sim = run_commands(
+        "a = 1\nbbb = 22\ncc = 3",
+        &[CMD_SELECT_ALL, "s =", CMD_ALIGN_SELECTIONS],
+    );
+    assert_eq!(content_of(&sim), "a   = 1\nbbb = 22\ncc  = 3");
+}
+
+#[test]
+fn test_align_selections_accounts_for_padding_inserted_in_earlier_columns() {
+    let sim = run_commands(
+        "a = 1\nbbb = 22\ncc = 3",
+        &[CMD_SELECT_ALL, "s \\w+", CMD_ALIGN_SELECTIONS],
+    );
+    assert_eq!(content_of(&sim), "  a =  1\nbbb = 22\n cc =  3");
+}
+
+#[test]
+fn test_align_selections_rejects_multi_line_selection() {
+    let mut sim = AnyModeSimulator::new("a\nb".to_string());
+    sim.execute_command(CMD_SELECT_ALL).unwrap();
+    assert!(sim.execute_command(CMD_ALIGN_SELECTIONS).is_err());
+    assert_eq!(content_of(&sim), "a\nb");
+}
+
+#[test]
+fn test_keep_selections_keeps_only_matching_ranges() {
+    let sim = run_commands(
+        "banana apple cherry",
+        &[CMD_SELECT_ALL, "s \\w+", "K an", CMD_DELETE_SELECTION],
+    );
+    assert_eq!(content_of(&sim), " apple cherry");
+}
+
+#[test]
+fn test_remove_selections_drops_matching_ranges() {
+    let sim = run_commands(
+        "banana apple cherry",
+        &[CMD_SELECT_ALL, "s \\w+", "Alt-K an", CMD_DELETE_SELECTION],
+    );
+    assert_eq!(content_of(&sim), "banana  ");
+}
+
+#[test]
+fn test_keep_selections_without_remaining_range_errs_and_keeps_selection() {
+    let mut sim = run_commands("banana apple cherry", &[CMD_SELECT_ALL, "s \\w+"]);
+    assert!(sim.execute_command("K zzz").is_err());
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    assert_eq!(content_of(&sim), "  ");
+}
+
+#[test]
+fn test_remove_selections_with_invalid_regex_errs() {
+    let mut sim = run_commands("banana apple", &[CMD_SELECT_ALL, "s \\w+"]);
+    assert!(sim.execute_command("Alt-K (").is_err());
+}
+
+#[test]
+fn test_bare_keep_selections_is_an_error_not_a_silent_noop() {
+    let mut sim = AnyModeSimulator::new("abc".to_string());
+    assert!(sim.execute_command(CMD_KEEP_MATCHING).is_err());
+    assert!(sim.execute_command(CMD_REMOVE_MATCHING).is_err());
+}

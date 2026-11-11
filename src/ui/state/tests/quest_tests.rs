@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use super::common::{create_test_app_state, create_test_scenario};
 use crate::gamification::{Quest, QuestDifficulty, QuestType, StreakManager};
+use crate::testing::update_executing_effects as update;
 use crate::ui::notification::NotificationType;
-use crate::ui::state::{Message, update};
+use crate::ui::state::Message;
 
 #[test]
 fn test_quest_progress_command_practice() {
@@ -98,7 +99,7 @@ fn test_quest_progress_scenario_completion() {
     }
 
     // Start and "complete" a scenario
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Simulate scenario completion
     update(
@@ -326,20 +327,17 @@ fn test_quest_progress_changes_tracking() {
     }
 
     // Execute command to trigger progress
-    update(
+    let quest_update = crate::ui::state::handlers::apply_quest_progress(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
-    )
-    .unwrap();
+        Some("x".to_string()),
+        false,
+        None,
+        Duration::from_secs(0),
+    );
 
-    // Check that progress changes were recorded
-    assert_eq!(state.ui.quest_progress_changes.len(), 1);
-    let change = &state.ui.quest_progress_changes[0];
+    // Check that progress changes were returned
+    assert_eq!(quest_update.changes.len(), 1);
+    let change = &quest_update.changes[0];
     assert_eq!(change.old_progress, 0);
     assert_eq!(change.new_progress, 1);
     assert!(change.quest_description.contains("x"));

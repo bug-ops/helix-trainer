@@ -5,10 +5,10 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::config::quests::{QuestLoader, QuestTemplate};
-use crate::learning::PerformanceTracker;
 use crate::security::UserError;
 
 use super::{UserProfile, XPCalculator};
@@ -16,8 +16,11 @@ use super::{UserProfile, XPCalculator};
 /// Quest difficulty level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QuestDifficulty {
+    /// Short quests suited to new players.
     Easy,
+    /// Mid-length quests.
     Medium,
+    /// Long or demanding quests.
     Hard,
 }
 
@@ -56,30 +59,44 @@ impl crate::learning::ProgressionTier for QuestDifficulty {
 pub enum QuestType {
     /// Practice a specific command N times
     CommandPractice {
+        /// Command whose executions are counted.
         command: String,
+        /// Executions required.
         target: u32,
+        /// Executions recorded so far.
         current: u32,
     },
 
     /// Complete N scenarios
-    ScenarioCompletion { target: u32, current: u32 },
+    ScenarioCompletion {
+        /// Completions required.
+        target: u32,
+        /// Completions recorded so far.
+        current: u32,
+    },
 
     /// Complete scenario within time limit
     SpeedRun {
+        /// Scenario that must be completed.
         scenario_id: String,
+        /// Time limit for the run, persisted as whole seconds.
         #[serde(with = "duration_serde")]
         time_limit: Duration,
     },
 
     /// Practice for N minutes
     TimeInvested {
+        /// Practice minutes required.
         target_minutes: u32,
+        /// Practice minutes recorded so far.
         current_minutes: u32,
     },
 
     /// Use N different commands
     Exploration {
+        /// Distinct commands required.
         target_commands: u32,
+        /// Distinct commands seen so far.
         commands_used: HashSet<String>,
     },
 }
@@ -168,11 +185,17 @@ impl crate::learning::ProgressTracker for QuestType {
 /// A daily quest
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quest {
+    /// Unique quest identifier, stable across the day.
     pub id: String,
+    /// Quest type with its progress.
     pub quest_type: QuestType,
+    /// Text shown to the player.
     pub description: String,
+    /// Difficulty tier.
     pub difficulty: QuestDifficulty,
+    /// XP granted on completion.
     pub xp_reward: u32,
+    /// Whether the reward has been earned.
     pub completed: bool,
 }
 
@@ -280,33 +303,46 @@ impl QuestDistribution {
     fn generate_quests(
         &self,
         rng: &mut StdRng,
-        tracker: &PerformanceTracker,
         registry: &QuestTemplateRegistry,
-    ) -> Vec<Quest> {
+    ) -> QuestGeneration {
         let mut quests = Vec::new();
+        let mut unfilled_slots = 0;
+        let mut fill = |quest: Option<Quest>| match quest {
+            Some(quest) => quests.push(quest),
+            None => unfilled_slots += 1,
+        };
 
-        for i in 0..self.easy {
-            quests.push(QuestGenerator::generate_easy_quest(
-                rng, i, tracker, registry,
-            ));
+        for _ in 0..self.easy {
+            fill(QuestGenerator::generate_easy_quest(rng, registry));
+        }
+        for _ in 0..self.medium {
+            fill(QuestGenerator::generate_medium_quest(rng, registry));
+        }
+        for _ in 0..self.hard {
+            fill(QuestGenerator::generate_hard_quest(rng, registry));
+        }
+        for _ in 0..self.exploration {
+            fill(QuestGenerator::generate_exploration_quest(rng, registry));
         }
 
-        for i in 0..self.medium {
-            quests.push(QuestGenerator::generate_medium_quest(
-                rng, i, tracker, registry,
-            ));
+        QuestGeneration {
+            quests,
+            unfilled_slots,
         }
-
-        for i in 0..self.hard {
-            quests.push(QuestGenerator::generate_hard_quest(rng, i, registry));
-        }
-
-        for i in 0..self.exploration {
-            quests.push(QuestGenerator::generate_exploration_quest(rng, i, registry));
-        }
-
-        quests
     }
+}
+
+/// Result of [`QuestGenerator::generate_quests`]: the quests that could be
+/// generated and how many of the level's quest slots had no matching template.
+#[derive(Debug, Clone)]
+#[must_use]
+pub struct QuestGeneration {
+    /// Quests generated from the registry's templates.
+    pub quests: Vec<Quest>,
+
+    /// Slots left empty because the registry had no template for them
+    /// (an unavailable or empty registry leaves every slot unfilled).
+    pub unfilled_slots: usize,
 }
 
 /// Registry for quest templates loaded from TOML files
@@ -318,6 +354,45 @@ pub struct QuestTemplateRegistry {
     templates: Vec<QuestTemplate>,
 }
 
+/// Load state of the shared [`QuestTemplateRegistry`] held by the application.
+///
+/// Makes "not loaded yet" and "failed to load" distinct states instead of
+/// collapsing both into an empty registry, so quest generation can tell a missing
+/// registry from one that legitimately has no templates.
+#[derive(Debug, Clone, Default)]
+pub enum QuestRegistrySlot {
+    /// The background load has not reported back yet.
+    #[default]
+    Pending,
+    /// Templates loaded successfully and are shared by quest generation.
+    Ready(Arc<QuestTemplateRegistry>),
+    /// Loading failed; quest generation must not assume any templates exist.
+    Unavailable,
+}
+
+impl QuestRegistrySlot {
+    /// The registry to generate quests from, or `None` while loading is pending.
+    ///
+    /// An unavailable registry resolves to an empty one, so quest generation
+    /// fills no slot instead of assuming templates exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::QuestRegistrySlot;
+    ///
+    /// assert!(QuestRegistrySlot::Pending.resolved().is_none());
+    /// assert!(QuestRegistrySlot::Unavailable.resolved().unwrap().is_empty());
+    /// ```
+    pub fn resolved(&self) -> Option<Arc<QuestTemplateRegistry>> {
+        match self {
+            Self::Pending => None,
+            Self::Ready(registry) => Some(Arc::clone(registry)),
+            Self::Unavailable => Some(Arc::new(QuestTemplateRegistry::new())),
+        }
+    }
+}
+
 impl QuestTemplateRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
@@ -326,19 +401,25 @@ impl QuestTemplateRegistry {
         }
     }
 
-    /// Load quest templates from embedded data for a given locale
+    /// Parse and validate the quest templates embedded for `locale`
     ///
-    /// This method loads quests from compile-time embedded content,
-    /// eliminating filesystem access for consistent behavior.
+    /// Reads compile-time embedded content, so there is no filesystem access.
     ///
     /// # Errors
-    /// Returns UserError if loading fails
+    ///
+    /// Returns `UserError` if no templates are embedded for `locale` or they
+    /// fail validation.
     ///
     /// # Examples
-    /// ```ignore
-    /// let registry = QuestTemplateRegistry::load_from_default_path("en")?;
+    ///
     /// ```
-    pub fn load_from_default_path(locale: &str) -> Result<Self, UserError> {
+    /// use helix_trainer::gamification::QuestTemplateRegistry;
+    ///
+    /// let registry = QuestTemplateRegistry::from_embedded("en").unwrap();
+    /// assert!(!registry.is_empty());
+    /// assert!(QuestTemplateRegistry::from_embedded("zz").is_err());
+    /// ```
+    pub fn from_embedded(locale: &str) -> Result<Self, UserError> {
         let loader = QuestLoader::new();
         let templates = loader.load_from_embedded(locale)?;
 
@@ -454,107 +535,82 @@ impl QuestGenerator {
     /// - Level 6-15: 1 easy + 2 medium + 1 hard
     /// - Level 16+: 1 medium + 2 hard + 1 exploration
     ///
+    /// A slot with no matching template in `registry` is left unfilled and
+    /// counted in [`QuestGeneration::unfilled_slots`]; an empty registry
+    /// therefore yields no quests rather than a panic.
+    ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use chrono::Utc;
     /// use helix_trainer::gamification::{QuestGenerator, QuestTemplateRegistry, UserProfile};
-    /// use helix_trainer::learning::PerformanceTracker;
     ///
     /// let profile = UserProfile::new(); // Level 1
-    /// let tracker = PerformanceTracker::new();
-    /// let registry = QuestTemplateRegistry::load_from_default_path("en")?;
-    /// let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry, Utc::now().date_naive());
+    /// let registry = QuestTemplateRegistry::from_embedded("en").unwrap();
+    /// let generation = QuestGenerator::generate_quests(&profile, &registry, Utc::now().date_naive());
+    /// assert_eq!(generation.quests.len(), 3); // Beginners get 3 quests
+    /// assert_eq!(generation.unfilled_slots, 0);
     ///
-    /// assert_eq!(quests.len(), 3); // Beginners get 3 quests
+    /// let empty = QuestGenerator::generate_quests(
+    ///     &profile,
+    ///     &QuestTemplateRegistry::new(),
+    ///     Utc::now().date_naive(),
+    /// );
+    /// assert!(empty.quests.is_empty());
+    /// assert_eq!(empty.unfilled_slots, 3);
     /// ```
     pub fn generate_quests(
         profile: &UserProfile,
-        tracker: &PerformanceTracker,
         registry: &QuestTemplateRegistry,
         today: NaiveDate,
-    ) -> Vec<Quest> {
+    ) -> QuestGeneration {
         let mut rng = Self::create_rng(today);
-        let distribution = QuestDistribution::for_level(profile.level);
-        distribution.generate_quests(&mut rng, tracker, registry)
+        QuestDistribution::for_level(profile.level).generate_quests(&mut rng, registry)
     }
 
     fn create_rng(today: NaiveDate) -> StdRng {
         // Seed with current date for consistency within a day
-        let seed = today.num_days_from_ce() as u64;
+        let seed = u64::from(today.num_days_from_ce().cast_unsigned());
         StdRng::seed_from_u64(seed)
     }
 
-    fn generate_easy_quest(
-        rng: &mut StdRng,
-        _index: usize,
-        _tracker: &PerformanceTracker,
-        registry: &QuestTemplateRegistry,
-    ) -> Quest {
+    fn pick_quest(rng: &mut StdRng, templates: &[&QuestTemplate], kind: &str) -> Option<Quest> {
+        if templates.is_empty() {
+            tracing::warn!(kind, "No quest templates available");
+            return None;
+        }
+        let template = templates[rng.random_range(0..templates.len())];
+        tracing::debug!(id = %template.id, kind, "Selected quest template");
+        Some(template.to_quest())
+    }
+
+    fn generate_easy_quest(rng: &mut StdRng, registry: &QuestTemplateRegistry) -> Option<Quest> {
         let templates = registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Easy);
-        assert!(!templates.is_empty(), "No easy quest templates available");
-
-        let choice = rng.random_range(0..templates.len());
-        let template = templates[choice];
-        tracing::debug!(id = %template.id, "Selected easy quest template");
-        template.to_quest()
+        Self::pick_quest(rng, &templates, "easy")
     }
 
-    fn generate_medium_quest(
-        rng: &mut StdRng,
-        _index: usize,
-        _tracker: &PerformanceTracker,
-        registry: &QuestTemplateRegistry,
-    ) -> Quest {
+    fn generate_medium_quest(rng: &mut StdRng, registry: &QuestTemplateRegistry) -> Option<Quest> {
         let templates = registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Medium);
-        assert!(!templates.is_empty(), "No medium quest templates available");
-
-        let choice = rng.random_range(0..templates.len());
-        let template = templates[choice];
-        tracing::debug!(id = %template.id, "Selected medium quest template");
-        template.to_quest()
+        Self::pick_quest(rng, &templates, "medium")
     }
 
-    fn generate_hard_quest(
-        rng: &mut StdRng,
-        _index: usize,
-        registry: &QuestTemplateRegistry,
-    ) -> Quest {
+    fn generate_hard_quest(rng: &mut StdRng, registry: &QuestTemplateRegistry) -> Option<Quest> {
         let templates = registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Hard);
-        assert!(!templates.is_empty(), "No hard quest templates available");
-
-        let choice = rng.random_range(0..templates.len());
-        let template = templates[choice];
-        tracing::debug!(id = %template.id, "Selected hard quest template");
-        template.to_quest()
+        Self::pick_quest(rng, &templates, "hard")
     }
 
     fn generate_exploration_quest(
         rng: &mut StdRng,
-        _index: usize,
         registry: &QuestTemplateRegistry,
-    ) -> Quest {
+    ) -> Option<Quest> {
         // Exploration quests can be either Medium or Hard difficulty
         let mut templates =
             registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Hard);
         templates
             .extend(registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Medium));
-
-        // Filter to only exploration type quests
-        let exploration_templates: Vec<_> = templates
-            .into_iter()
-            .filter(|t| matches!(t.spec, crate::config::quests::QuestSpec::Exploration { .. }))
-            .collect();
-
-        assert!(
-            !exploration_templates.is_empty(),
-            "No exploration quest templates available"
-        );
-
-        let choice = rng.random_range(0..exploration_templates.len());
-        let template = exploration_templates[choice];
-        tracing::debug!(id = %template.id, "Selected exploration quest template");
-        template.to_quest()
+        templates
+            .retain(|t| matches!(t.spec, crate::config::quests::QuestSpec::Exploration { .. }));
+        Self::pick_quest(rng, &templates, "exploration")
     }
 }
 
@@ -656,7 +712,7 @@ mod tests {
 
     /// Helper to create a registry for tests
     fn test_registry() -> QuestTemplateRegistry {
-        QuestTemplateRegistry::load_from_default_path("en")
+        QuestTemplateRegistry::from_embedded("en")
             .expect("Failed to load quest templates for tests")
     }
 
@@ -707,7 +763,6 @@ mod tests {
 
     #[test]
     fn test_quest_generator_level_based() {
-        let tracker = PerformanceTracker::new();
         let registry = test_registry();
 
         let today = chrono::Utc::now().date_naive();
@@ -715,18 +770,53 @@ mod tests {
         // Level 1 - should get 3 quests (2 easy + 1 medium)
         let mut profile = UserProfile::new();
         profile.level = 1;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry, today);
+        let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
         assert_eq!(quests.len(), 3);
 
         // Level 10 - should get 4 quests (1 easy + 2 medium + 1 hard)
         profile.level = 10;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry, today);
+        let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
         assert_eq!(quests.len(), 4);
 
         // Level 20 - should get 4 quests (1 medium + 2 hard + 1 exploration)
         profile.level = 20;
-        let quests = QuestGenerator::generate_quests(&profile, &tracker, &registry, today);
+        let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
         assert_eq!(quests.len(), 4);
+    }
+
+    #[test]
+    fn test_generate_quests_with_empty_registry_leaves_every_slot_unfilled() {
+        let today = chrono::Utc::now().date_naive();
+        for (level, slots) in [(1, 3), (10, 4), (20, 4)] {
+            let mut profile = UserProfile::new();
+            profile.level = level;
+
+            let generation =
+                QuestGenerator::generate_quests(&profile, &QuestTemplateRegistry::new(), today);
+
+            assert!(generation.quests.is_empty());
+            assert_eq!(generation.unfilled_slots, slots, "level {level}");
+        }
+    }
+
+    #[test]
+    fn test_generate_quests_with_a_difficulty_missing_fills_only_the_rest() {
+        let today = chrono::Utc::now().date_naive();
+        let mut profile = UserProfile::new();
+        profile.level = 10;
+        let full = test_registry();
+        let mut partial = QuestTemplateRegistry::new();
+        partial.templates = full
+            .templates
+            .iter()
+            .filter(|t| t.difficulty != crate::config::quests::QuestDifficulty::Hard)
+            .cloned()
+            .collect();
+
+        let generation = QuestGenerator::generate_quests(&profile, &partial, today);
+
+        assert_eq!(generation.quests.len(), 3);
+        assert_eq!(generation.unfilled_slots, 1);
     }
 
     #[test]

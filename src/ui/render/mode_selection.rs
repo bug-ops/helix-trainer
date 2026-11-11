@@ -1,6 +1,6 @@
 //! Mode selection screen rendering
 
-use crate::ui::state::{AppState, MiniGameModeSelection, TypedScreen};
+use crate::ui::state::{AppState, MiniGameModeKind, MiniGameModeSelection, TypedScreen};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -60,7 +60,7 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
         Rect::new(inner.x, inner.y + 1, inner.width, 2),
         "Training Mode",
         "Manual scenario selection with detailed feedback",
-        mode_data.selected_mode == 0,
+        mode_data.selected_mode == crate::ui::state::TopMode::Training,
         "📚",
     );
 
@@ -69,7 +69,8 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
         Rect::new(inner.x, inner.y + 4, inner.width, 2),
         "Arcade Mode",
         "Fast-paced mini-games with time pressure",
-        mode_data.selected_mode == 1 && mode_data.minigame_mode_selection.is_none(),
+        mode_data.selected_mode == crate::ui::state::TopMode::Arcade
+            && mode_data.minigame_mode_selection.is_none(),
         "🎮",
     );
 
@@ -149,7 +150,10 @@ fn render_minigame_mode_submenu(
     // Exact inner height needed for MODE_COUNT entries at ENTRY_STRIDE spacing,
     // plus 2 for the top/bottom border. Derived from MODE_COUNT so an added mode
     // grows the submenu instead of silently clipping (see #385).
-    let submenu_height = (MiniGameModeSelection::MODE_COUNT as u16 - 1) * ENTRY_STRIDE + 1 + 2;
+    let submenu_height = (u16::try_from(MiniGameModeSelection::MODE_COUNT).unwrap_or(u16::MAX) - 1)
+        * ENTRY_STRIDE
+        + 1
+        + 2;
     let submenu_x = parent_area.x + 20;
     let submenu_y = parent_area.y + 3;
 
@@ -181,9 +185,14 @@ fn render_minigame_mode_submenu(
     const ICONS: [&str; MiniGameModeSelection::MODE_COUNT] = ["🎮", "💀", "📅"];
     let modes = MiniGameModeSelection::all_modes(today);
 
-    for (idx, (mode, icon)) in modes.iter().zip(ICONS.iter()).enumerate() {
-        let is_selected = idx == selection.selected_index;
-        let y_offset = idx as u16 * ENTRY_STRIDE;
+    for (idx, ((mode, kind), icon)) in modes
+        .iter()
+        .zip(MiniGameModeKind::ALL)
+        .zip(ICONS.iter())
+        .enumerate()
+    {
+        let is_selected = kind == selection.selected;
+        let y_offset = u16::try_from(idx).unwrap_or(u16::MAX) * ENTRY_STRIDE;
 
         if inner.y + y_offset >= inner.bottom() {
             break;

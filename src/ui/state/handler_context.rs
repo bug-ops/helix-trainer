@@ -15,27 +15,23 @@ use crate::ui::state::{ConfigState, GameState, ProgressState, TypedScreen, UISta
 ///
 /// Simple handlers that only modify screen data don't need HandlerContext:
 ///
-/// ```ignore
-/// pub fn handle_menu_up(data: &mut MenuData) -> Result<HandlerOutcome, UserError> {
-///     if data.selected_item > 0 {
-///         data.selected_item -= 1;
-///     }
+/// ```
+/// use helix_trainer::security::UserError;
+/// use helix_trainer::ui::state::{HandlerOutcome, MenuData};
+///
+/// fn handle_menu_up(data: &mut MenuData) -> Result<HandlerOutcome, UserError> {
+///     data.selected_item = data.selected_item.saturating_sub(1);
 ///     Ok(HandlerOutcome::Stay)
 /// }
+///
+/// let mut data = MenuData { selected_item: 1, ..MenuData::default() };
+/// assert!(handle_menu_up(&mut data)?.is_stay());
+/// assert_eq!(data.selected_item, 0);
+/// # Ok::<(), UserError>(())
 /// ```
 ///
-/// Complex handlers that need transitions or shared state use HandlerContext:
-///
-/// ```ignore
-/// pub fn handle_start_scenario(
-///     index: usize,
-///     ctx: &mut HandlerContext,
-/// ) -> Result<HandlerOutcome, UserError> {
-///     let scenario = ctx.game.scenario_collection.get_filtered_by_index(index).cloned();
-///     // ... create session and transition to Task screen
-///     Ok(HandlerOutcome::Transition(TypedScreen::Task(task_data)))
-/// }
-/// ```
+/// Complex handlers that need transitions or shared state take a `HandlerContext`
+/// and may return [`HandlerOutcome::Transition`] with the next screen.
 pub struct HandlerContext<'a> {
     /// Global UI rendering and display state
     pub ui: &'a mut UIState,
@@ -54,13 +50,21 @@ impl<'a> HandlerContext<'a> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// let ctx = HandlerContext {
-    ///     ui: &mut state.ui,
-    ///     game: &mut state.game,
-    ///     progress: &mut state.progress,
-    ///     config: &state.config,
-    /// };
+    /// ```
+    /// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+    /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::ui::AppState;
+    /// use helix_trainer::ui::state::HandlerContext;
+    ///
+    /// let storage = ProfileStorage::with_path(std::env::temp_dir().join("doc-profile.json"));
+    /// let mut state = AppState::new(vec![], UserProfile::new(), storage, PerformanceTracker::new());
+    /// let ctx = HandlerContext::new(
+    ///     &mut state.ui,
+    ///     &mut state.game,
+    ///     &mut state.progress,
+    ///     &state.config,
+    /// );
+    /// assert!(ctx.ui.running);
     /// ```
     pub fn new(
         ui: &'a mut UIState,
@@ -87,23 +91,14 @@ impl<'a> HandlerContext<'a> {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// // Handler that stays on current screen
-/// pub fn handle_menu_up(data: &mut MenuData) -> Result<HandlerOutcome, UserError> {
-///     if data.selected_item > 0 {
-///         data.selected_item -= 1;
-///     }
-///     Ok(HandlerOutcome::Stay)
-/// }
+/// ```
+/// use helix_trainer::ui::state::{HandlerOutcome, MenuData, TypedScreen};
 ///
-/// // Handler that transitions to a new screen
-/// pub fn handle_menu_select(data: &MenuData, ctx: &mut HandlerContext) -> Result<HandlerOutcome, UserError> {
-///     match data.selected_item {
-///         0 => Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Task(task_data)))),
-///         1 => Ok(HandlerOutcome::Stay),
-///         _ => Ok(HandlerOutcome::Stay),
-///     }
-/// }
+/// let stay = HandlerOutcome::Stay;
+/// assert!(stay.is_stay());
+///
+/// let go = HandlerOutcome::Transition(Box::new(TypedScreen::Menu(MenuData::default())));
+/// assert!(go.is_transition());
 /// ```
 #[derive(Debug, Default)]
 pub enum HandlerOutcome {
@@ -119,7 +114,9 @@ impl HandlerOutcome {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::ui::state::HandlerOutcome;
+    ///
     /// let outcome = HandlerOutcome::Stay;
     /// assert!(outcome.is_stay());
     /// ```
@@ -131,8 +128,10 @@ impl HandlerOutcome {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// let outcome = HandlerOutcome::Transition(TypedScreen::Menu(MenuData::default()));
+    /// ```
+    /// use helix_trainer::ui::state::{HandlerOutcome, MenuData, TypedScreen};
+    ///
+    /// let outcome = HandlerOutcome::Transition(Box::new(TypedScreen::Menu(MenuData::default())));
     /// assert!(outcome.is_transition());
     /// ```
     pub fn is_transition(&self) -> bool {

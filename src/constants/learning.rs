@@ -11,7 +11,7 @@
 /// Weight for overdue commands in scenario scoring (40%)
 ///
 /// Higher values increase priority for commands past their scheduled review date.
-/// Commands overdue by `FSRS_MAX_OVERDUE_DAYS` receive full weight.
+/// Commands overdue by one full scheduled interval or more receive full weight.
 pub const FSRS_OVERDUE_WEIGHT: f64 = 0.4;
 
 /// Weight for weak commands (low success rate) in scenario scoring (40%)
@@ -33,9 +33,3 @@ pub const FSRS_NOVELTY_WEIGHT: f64 = 0.2;
 /// Added to every scenario's FSRS score to prevent mastered scenarios
 /// from having zero selection probability. Ensures variety in practice.
 pub const FSRS_BASE_WEIGHT: f64 = 0.1;
-
-/// Days overdue for maximum urgency score (7 days)
-///
-/// Commands overdue by this many days or more receive the maximum
-/// overdue factor of 1.0. Earlier overdue commands are scaled linearly.
-pub const FSRS_MAX_OVERDUE_DAYS: f64 = 7.0;

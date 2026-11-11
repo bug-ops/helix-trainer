@@ -3,18 +3,20 @@
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
-use crate::ui::state::{Message, Screen, TypedScreen, update};
+use crate::testing::review_session;
+use crate::testing::update_executing_effects as update;
+use crate::ui::state::{Message, NavTarget, TypedScreen};
 
 #[test]
 fn test_new_state() {
     let state = create_test_app_state(vec![]);
     if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        assert_eq!(mode_data.selected_mode, 0);
+        assert_eq!(mode_data.selected_mode, crate::ui::state::TopMode::Training);
     } else {
         panic!("Should be on ModeSelection screen");
     }
     assert!(state.ui.running);
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
     assert!(state.game.pending_completed_session.is_none());
 }
 
@@ -35,10 +37,10 @@ fn test_quit_app_awards_minigame_game_over() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartMiniGame).unwrap();
-    assert!(state.game.minigame_session.is_some());
+    update(&mut state, Message::SelectArcadeMode).unwrap();
+    assert!(state.minigame_session().is_some());
 
-    if let Some(ref mut session) = state.game.minigame_session {
+    if let Some(session) = state.minigame_session_mut() {
         session.stats.score = 5000;
     }
     let initial_xp = state.progress.profile.total_xp;
@@ -63,11 +65,11 @@ fn test_quit_app_after_timeout_game_over_does_not_double_award() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartMiniGame).unwrap();
+    update(&mut state, Message::SelectArcadeMode).unwrap();
     for _ in 0..3 {
         update(&mut state, Message::MiniGameTick).unwrap();
     }
-    if let Some(ref mut session) = state.game.minigame_session {
+    if let Some(session) = state.minigame_session_mut() {
         session.stats.score = 5000;
     }
 
@@ -78,9 +80,7 @@ fn test_quit_app_after_timeout_game_over_does_not_double_award() {
     }
     assert!(
         state
-            .game
-            .minigame_session
-            .as_ref()
+            .minigame_session()
             .map(|s| s.state().is_game_over())
             .unwrap_or(false)
     );
@@ -109,8 +109,8 @@ fn test_quit_app_zero_score_session_awards_cleanly() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartMiniGame).unwrap();
-    assert!(state.game.minigame_session.is_some());
+    update(&mut state, Message::SelectArcadeMode).unwrap();
+    assert!(state.minigame_session().is_some());
 
     let initial_games_played = state.progress.profile.minigame_games_played;
 
@@ -143,7 +143,7 @@ fn test_quit_app_persists_fsrs_data() {
     let mut state = create_test_app_state(vec![scenario]);
     state.progress.storage = ProfileStorage::with_path(&profile_path);
 
-    update(&mut state, Message::StartMiniGame).unwrap();
+    update(&mut state, Message::SelectArcadeMode).unwrap();
 
     // Seed tracker state as if reviews happened earlier in the session.
     state.progress.performance_tracker.record_attempt(
@@ -184,8 +184,8 @@ fn test_quit_app_persists_fsrs_data_from_live_action() {
     let mut state = create_test_app_state(vec![scenario]);
     state.progress.storage = ProfileStorage::with_path(&profile_path);
 
-    update(&mut state, Message::StartMiniGame).unwrap();
-    if let Some(ref mut session) = state.game.minigame_session {
+    update(&mut state, Message::SelectArcadeMode).unwrap();
+    if let Some(session) = state.minigame_session_mut() {
         session.tick_countdown();
         session.tick_countdown();
         session.tick_countdown();
@@ -194,9 +194,7 @@ fn test_quit_app_persists_fsrs_data_from_live_action() {
     }
     assert_eq!(
         state
-            .game
-            .minigame_session
-            .as_ref()
+            .minigame_session()
             .and_then(|s| s.current_scenario())
             .map(|s| s.action_count()),
         Some(1),
@@ -220,16 +218,16 @@ fn test_navigate_to_screen() {
 
     // After TypedScreen refactoring, only screens with standalone data can be navigated to
     // Task and Results require active sessions, so only test Profile/Statistics/Menu/ModeSelection
-    update(&mut state, Message::NavigateTo(Screen::Profile)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::Profile)).unwrap();
     assert_matches!(state.screen, TypedScreen::Profile(_));
 
-    update(&mut state, Message::NavigateTo(Screen::Statistics)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::Statistics)).unwrap();
     assert_matches!(state.screen, TypedScreen::Statistics(_));
 
-    update(&mut state, Message::NavigateTo(Screen::MainMenu)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::MainMenu)).unwrap();
     assert_matches!(state.screen, TypedScreen::Menu(_));
 
-    update(&mut state, Message::NavigateTo(Screen::ModeSelection)).unwrap();
+    update(&mut state, Message::NavigateTo(NavTarget::ModeSelection)).unwrap();
     assert_matches!(state.screen, TypedScreen::ModeSelection(_));
 }
 
@@ -238,7 +236,7 @@ fn test_back_to_menu_clears_session() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
     // After TypedScreen refactoring, verify we're on Task screen
     assert_matches!(state.screen, TypedScreen::Task(_));
 

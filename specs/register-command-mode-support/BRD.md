@@ -158,7 +158,7 @@ See [[NFR]] for NFR-001..007, most satisfied; NFR-002 (command-line as an
 ## Constraints & Assumptions
 
 ### Technical Constraints
-`#![forbid(unsafe_code)]` preserved (verified — no `unsafe` in any file
+`unsafe_code = "forbid"` (Cargo lint) preserved (verified — no `unsafe` in any file
 touched). Multi-byte/non-ASCII register-character input required explicit
 hardening (`chars()` vs `len()`/`.nth()`) to avoid panics — a correctness
 class the original draft's NFRs did not anticipate.

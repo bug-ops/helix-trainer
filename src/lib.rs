@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 //! Helix Keybindings Trainer
 //!
 //! An interactive terminal user interface (TUI) application for learning Helix editor keybindings.
@@ -12,7 +10,7 @@
 //!
 //! - `config`: Configuration and scenario loading
 //! - `game`: Game engine and session management
-//! - `helix`: Helix editor integration and PTY control
+//! - `helix`: Helix editor simulation built on `helix-core`
 //! - `ui`: Terminal user interface components built with ratatui
 //! - `security`: Security utilities, validation, and error handling
 //! - `learning`: Spaced repetition learning system with FSRS algorithm
@@ -32,6 +30,7 @@ pub mod helix;
 pub mod input;
 pub mod learning;
 pub mod minigame;
+mod numeric;
 pub mod security;
 pub mod sound;
 pub mod time;

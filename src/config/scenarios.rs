@@ -2,6 +2,7 @@
 //!
 //! This module handles loading TOML scenario files with security validations.
 
+use crate::learning::ReviewableCommand;
 use crate::security::limits::{
     MAX_ALTERNATIVES, MAX_COMMAND_SEQUENCE_LENGTH, MAX_CURSORS_PER_SCENARIO,
     MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE, MAX_SCENARIOS_PER_FILE,
@@ -18,12 +19,96 @@ use std::path::{Path, PathBuf};
 /// Wrapper for scenarios array in TOML file
 #[derive(Deserialize, Debug, Clone)]
 pub struct ScenariosFile {
+    /// Scenarios in file order.
     pub scenarios: Vec<Scenario>,
+}
+
+/// How a scenario decides it is finished.
+///
+/// Set in the TOML as `completion = "after_taught_commands"` under
+/// `[scenarios.metadata]`; an unknown value is a scenario load error.
+#[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CompletionRule {
+    /// Complete as soon as the editor state equals the target.
+    #[default]
+    TargetState,
+    /// Complete when the editor state equals the target AND the last action is
+    /// one of the scenario's `commands_taught` AND that action caused the
+    /// transition (the target did not already hold), so history navigation
+    /// (`u`/`U`) cannot be satisfied by revisiting a state or by a no-op.
+    AfterTaughtCommands,
+}
+
+/// The just-executed action as seen by [`CompletionRule::is_satisfied`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LastAction<'a> {
+    /// The command string as typed (may carry a count prefix).
+    pub command: &'a str,
+    /// Whether the editor already matched the target before this action ran.
+    pub target_held_before: bool,
+}
+
+impl CompletionRule {
+    /// The single completion predicate shared by training and arcade.
+    ///
+    /// `target_reached` is the editor-versus-target comparison and
+    /// `last_action` the just-executed action. Commands are compared as review
+    /// card ids, so a count prefix is ignored (`2u` matches `u`). An action
+    /// that found the target already satisfied (a no-op such as `U` on an empty
+    /// redo stack) never completes an [`CompletionRule::AfterTaughtCommands`]
+    /// scenario.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::config::{CompletionRule, LastAction};
+    ///
+    /// let taught = ["u".to_string()];
+    /// let rule = CompletionRule::AfterTaughtCommands;
+    /// let action = |command, target_held_before| {
+    ///     Some(LastAction { command, target_held_before })
+    /// };
+    /// assert!(rule.is_satisfied(true, &taught, action("2u", false)));
+    /// assert!(!rule.is_satisfied(true, &taught, action("2u", true)));
+    /// assert!(!rule.is_satisfied(true, &taught, action("d", false)));
+    /// assert!(CompletionRule::TargetState.is_satisfied(true, &taught, action("d", true)));
+    /// ```
+    #[must_use]
+    pub fn is_satisfied(
+        self,
+        target_reached: bool,
+        commands_taught: &[String],
+        last_action: Option<LastAction<'_>>,
+    ) -> bool {
+        if !target_reached {
+            return false;
+        }
+        match self {
+            Self::TargetState => true,
+            Self::AfterTaughtCommands => {
+                let Some(last_action) = last_action.filter(|a| !a.target_held_before) else {
+                    return false;
+                };
+                let Some(last) = ReviewableCommand::parse(last_action.command) else {
+                    return false;
+                };
+                commands_taught
+                    .iter()
+                    .filter_map(|taught| ReviewableCommand::parse(taught))
+                    .any(|taught| taught == last)
+            }
+        }
+    }
 }
 
 /// Scenario metadata for filtering, sorting, and quest generation
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct ScenarioMetadata {
+    /// Completion rule (defaults to [`CompletionRule::TargetState`])
+    #[serde(default)]
+    pub completion: CompletionRule,
+
     /// Scenario category (e.g., movement, editing, clipboard)
     #[serde(default)]
     pub category: Option<ScenarioCategory>,
@@ -57,16 +142,27 @@ pub struct ScenarioMetadata {
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum ScenarioCategory {
+    /// Cursor motions and navigation.
     Movement,
+    /// Deleting, changing and inserting text.
     Editing,
+    /// Yank, paste and registers used as a clipboard.
     Clipboard,
+    /// Search and match navigation.
     Search,
+    /// Selection manipulation.
     Selection,
+    /// Text object selections (`mi`/`ma`).
     TextObjects,
+    /// Less common commands that build on the basics.
     Advanced,
+    /// Named register usage.
     Registers,
+    /// Writing-oriented tasks such as prose and lists.
     Writing,
+    /// Scenarios that span several categories.
     Multi, // Multiple categories
+    /// Anything that fits no other category.
     Other,
 }
 
@@ -74,8 +170,11 @@ pub enum ScenarioCategory {
 #[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Difficulty {
+    /// Introductory scenarios.
     Beginner,
+    /// Scenarios that combine several basic commands.
     Intermediate,
+    /// Scenarios that need multi-step planning.
     Advanced,
 }
 
@@ -93,26 +192,57 @@ impl Difficulty {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
+    /// Unique identifier, validated as a safe id.
     #[serde(deserialize_with = "validate_id_field")]
     pub id: String,
 
+    /// Display name.
     pub name: String,
+    /// What the player is asked to accomplish.
     pub description: String,
+    /// Initial editor state.
     pub setup: Setup,
+    /// Editor state that completes the scenario.
     pub target: TargetState,
+    /// Canonical shortest solution.
     pub solution: Solution,
 
+    /// Other accepted solutions with their score multipliers.
     #[serde(default)]
     pub alternatives: Vec<AlternativeSolution>,
 
+    /// Progressive hints revealed on request.
     #[serde(default)]
     pub hints: Vec<String>,
 
+    /// Parameters of the scoring formula.
     pub scoring: ScoringConfig,
 
     /// Metadata for filtering, sorting, and quest generation (optional for backward compatibility)
     #[serde(default)]
     pub metadata: Option<ScenarioMetadata>,
+}
+
+impl Scenario {
+    /// Whether the scenario is finished, given the editor-versus-target
+    /// comparison and the just-executed action.
+    ///
+    /// Both training and arcade completion go through this, so they cannot
+    /// diverge. See [`CompletionRule`].
+    #[must_use]
+    pub fn is_completed_by(
+        &self,
+        target_reached: bool,
+        last_action: Option<LastAction<'_>>,
+    ) -> bool {
+        let (rule, taught) = self
+            .metadata
+            .as_ref()
+            .map_or((CompletionRule::default(), &[][..]), |m| {
+                (m.completion, m.commands_taught.as_slice())
+            });
+        rule.is_satisfied(target_reached, taught, last_action)
+    }
 }
 
 /// Cursor and selection configuration shared by [`Setup`] and [`TargetState`]
@@ -153,6 +283,7 @@ pub const DEFAULT_LANGUAGE: &str = "rs";
 /// Initial editor setup
 #[derive(Deserialize, Debug, Clone)]
 pub struct Setup {
+    /// Initial document text.
     pub file_content: String,
 
     /// Content's language as a file-extension-style token (e.g. `"rs"`, `"md"`, `"py"`),
@@ -162,6 +293,7 @@ pub struct Setup {
     #[serde(default, deserialize_with = "validate_language_field")]
     pub language: Option<String>,
 
+    /// Cursor and selection placement at the start.
     #[serde(flatten)]
     pub cursor: CursorSpec,
 }
@@ -169,8 +301,10 @@ pub struct Setup {
 /// Target state to achieve
 #[derive(Deserialize, Debug, Clone)]
 pub struct TargetState {
+    /// Document text the player must reach.
     pub file_content: String,
 
+    /// Cursor and selection placement required at the end.
     #[serde(flatten)]
     pub cursor: CursorSpec,
 }
@@ -178,23 +312,31 @@ pub struct TargetState {
 /// Optimal solution
 #[derive(Deserialize, Debug, Clone)]
 pub struct Solution {
+    /// Key sequence of the optimal solution, one command per entry.
     pub commands: Vec<String>,
+    /// Explanation of why this solution is optimal.
     pub description: String,
 }
 
 /// Alternative solution
 #[derive(Deserialize, Debug, Clone)]
 pub struct AlternativeSolution {
+    /// Key sequence of the alternative, one command per entry.
     pub commands: Vec<String>,
+    /// Score multiplier applied when this alternative is used.
     pub points_multiplier: f32,
+    /// Explanation of how this alternative differs.
     pub description: String,
 }
 
 /// Scoring configuration
 #[derive(Deserialize, Debug, Clone)]
 pub struct ScoringConfig {
+    /// Command count of the optimal solution; the baseline for scoring.
     pub optimal_count: NonZeroUsize,
+    /// Points awarded for an optimal run.
     pub max_points: u32,
+    /// Extra commands allowed beyond the optimum before the score drops.
     pub tolerance: usize,
 }
 
@@ -506,10 +648,13 @@ impl ScenarioLoader {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    ///
     /// let loader = ScenarioLoader::new();
     /// let scenarios = loader.load_from_embedded("en")?;
     /// assert!(!scenarios.is_empty());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<Scenario>, UserError> {
         let embedded_contents = embedded::get_embedded_scenarios(locale);

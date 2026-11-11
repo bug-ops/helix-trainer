@@ -339,7 +339,65 @@ THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0
 | SC-009 | Property test over arbitrary `(level, total_xp)` for `xp_progress` and the render computation | Never panics, result in range |
 | SC-010 | Regression tests for the two reproduction profiles in #450 | Pass |
 
-## 9. See Also
+## 9. Bug-Fix Batch: Quest Registry, Quest Panic Paths, Session Ownership (#468, #469, #461)
+
+> [!info] Added 2026-11-11 (spec-first update for the P2-P3 bug batch)
+> FR numbers continue after FR-012. `QuestBonus.quest` stays a `String`; the typed `QuestId` belongs to #463, which is outside this batch (#483 narrows other fields only; `MiniGameModeSelection.selected` is now the typed `MiniGameModeKind`, the index-based `mode_name`/`mode_description` were removed).
+
+### 9.1 Requirements
+
+| ID | Requirement | Issue | Priority |
+|----|------------|-------|----------|
+| FR-013 | THE QUEST TEMPLATE REGISTRY SHALL be loaded once, asynchronously, for the active locale (`rust_i18n::locale()`, not a hard-coded `"en"`), and owned by `ProgressState` as a typed slot with the states `Pending`, `Ready(Arc<QuestTemplateRegistry>)` and `Unavailable`; the event loop SHALL NOT parse quest templates on the UI thread, and the registry is not re-parsed on each refresh | #468 | must |
+| FR-014 | THE DEAD async plumbing (`QuestRegistryReady`/`QuestRegistryError` handled but never sent, the unused async loader) SHALL be wired to the single loader or removed; the loader constructor is named for what it reads (embedded data, `from_embedded(locale)`) | #468 | must |
+| FR-015 | `QuestGenerator::generate_quests` SHALL take only the inputs that affect its result (profile, registry, date); the unused `PerformanceTracker` and per-quest index parameters are dropped until a spec requires performance-aware quests | #468 | must |
+| FR-016 | WHEN the registry slot is `Pending` at profile-ready time THE SYSTEM SHALL defer quest generation until it is `Ready`; WHEN it is `Unavailable` or has no template for a difficulty THE SYSTEM SHALL generate no quest for that slot and raise one warning notification, and SHALL NOT panic (`assert!` on an empty template list is removed) | #469 | must |
+| FR-017 | THE MINIGAME and review sessions SHALL be owned by their screen data (`MiniGameData` owns the arcade session, `ReviewData` is the single owner of the review session read by the renderer), so a MiniGame screen cannot exist without a session; `GameState.minigame_session` and `GameState.review_session` are removed; a paused arcade run travels via `ReturnDestination::PausedMiniGame` | #461 | must |
+| FR-018 | WHEN starting an arcade session finds no scenarios THE SYSTEM SHALL stay on the current screen and raise a notification instead of navigating to an inert MiniGame screen; this applies to `StartMiniGame`, arcade mode selection and `NavigateTo(MiniGame)` | #461 | must |
+
+> [!danger] Explicitly deferred (out of scope of this batch)
+> The following parts of the session-ownership refactor are not implemented here; follow-up issues will be filed for them.
+> - #461: removal of the `pending_completed_session` / `UIState.last_feedback` / completion-time mailbox (the `TaskSession` active/completed enum).
+> - #482: the rest of the mailbox removal beyond what #461 delivered.
+> - #480: only the `update()` dispatch dedupe is done.
+> - #481: `update` takes an effects sink; render still clamps the selection.
+> - #483: only `Feedback.success`/`is_optimal` stay as they are, because `is_optimal` depends on the tolerance; `MiniGameModeSelection.selected` is typed (`MiniGameModeKind`) in this batch.
+
+### 9.2 Acceptance Criteria
+
+```
+GIVEN the embedded quest registry fails validation
+WHEN  the profile loads with empty daily_quests
+THEN  the app does not panic, no quests are generated for the affected slots, and one warning notification is shown
+```
+```
+GIVEN the active locale is not "en" and a localized registry exists
+WHEN  quests are generated
+THEN  templates come from the active locale, parsed once at startup off the UI thread
+```
+```
+GIVEN no scenarios are available
+WHEN  the user selects an arcade mode
+THEN  the user stays on the selection screen and sees a notification
+```
+
+### 9.3 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Profile arrives before the registry finishes loading | Quest refresh deferred until `Ready`; the profile is usable meanwhile |
+| Locale without quest templates | Falls back to `en` (the i18n fallback), else `Unavailable` with the warning of FR-016 |
+| Review screen state mutated by handlers | Mutates the session inside the screen value; render reads the same value (no second copy) |
+
+### 9.4 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-011 | Tests: empty/failed registry produces no panic and one warning; `Pending` defers generation | Pass |
+| SC-012 | Handler tests: empty scenario set for each of the three arcade entry points keeps the screen | Pass |
+| SC-013 | `GameState` no longer holds the minigame and review session `Option` fields (compile-time guarantee) | Pass |
+
+## 10. See Also
 
 - [[constitution]] — project principles
 - [[../end-game-summary-screen/spec|End-Game Summary Screen]] — sibling

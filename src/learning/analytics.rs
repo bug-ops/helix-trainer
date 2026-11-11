@@ -4,12 +4,19 @@ use chrono::{DateTime, Utc};
 /// Summary of mastery distribution across all commands
 #[derive(Debug, Clone)]
 pub struct MasterySummary {
+    /// Number of tracked commands.
     pub total_commands: usize,
+    /// Commands at [`MasteryLevel::Master`].
     pub master: usize,
+    /// Commands at [`MasteryLevel::Advanced`].
     pub advanced: usize,
+    /// Commands at [`MasteryLevel::Intermediate`].
     pub intermediate: usize,
+    /// Commands at [`MasteryLevel::Beginner`].
     pub beginner: usize,
+    /// Mean FSRS stability across tracked commands.
     pub avg_stability: f32,
+    /// Mean FSRS difficulty across tracked commands.
     pub avg_difficulty: f32,
 }
 
@@ -48,14 +55,14 @@ impl Analytics {
         for command in &all_commands {
             if let Some(perf) = tracker.performance(command) {
                 use super::ProgressionTier;
-                match perf.mastery_level.tier_level() {
+                match perf.mastery_level().tier_level() {
                     3 => master += 1,
                     2 => advanced += 1,
                     1 => intermediate += 1,
                     _ => beginner += 1,
                 }
-                total_stability += perf.stability;
-                total_difficulty += perf.difficulty;
+                total_stability += perf.stability();
+                total_difficulty += perf.difficulty();
             }
         }
 
@@ -84,7 +91,7 @@ impl Analytics {
             .iter()
             .filter_map(|&cmd| {
                 tracker.performance(cmd).and_then(|perf| {
-                    if perf.mastery_level == level {
+                    if perf.mastery_level() == level {
                         Some(cmd.to_string())
                     } else {
                         None
@@ -144,11 +151,11 @@ impl Analytics {
             .iter()
             .filter_map(|&cmd| {
                 tracker.performance(cmd).and_then(|perf| {
-                    let expected_stability = perf.attempts as f32 / 2.0;
+                    let expected_stability = perf.attempts() as f32 / 2.0;
 
-                    if perf.attempts >= MIN_ATTEMPTS
-                        && perf.stability < expected_stability
-                        && perf.mastery_level != MasteryLevel::Master
+                    if perf.attempts() >= MIN_ATTEMPTS
+                        && perf.stability() < expected_stability
+                        && perf.mastery_level() != MasteryLevel::Master
                     {
                         Some(cmd.to_string())
                     } else {

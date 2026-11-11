@@ -8,11 +8,24 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq)]
 pub enum MultiplierChange {
     /// Multiplier increased
-    Increased { from: f64, to: f64 },
+    Increased {
+        /// Multiplier before the change.
+        from: f64,
+        /// Multiplier after the change.
+        to: f64,
+    },
     /// Multiplier decreased (after grace consumed)
-    Decreased { from: f64, to: f64 },
+    Decreased {
+        /// Multiplier before the change.
+        from: f64,
+        /// Multiplier after the change.
+        to: f64,
+    },
     /// Reached a milestone streak (10, 25, 50)
-    MilestoneReached { multiplier: f64 },
+    MilestoneReached {
+        /// Multiplier value at the milestone.
+        multiplier: f64,
+    },
     /// Grace period used instead of reset
     GraceUsed,
 }
@@ -209,7 +222,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let stats = MiniGameStats::new();
@@ -229,7 +242,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let stats = MiniGameStats::new_with_lives(1);
@@ -284,7 +297,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -294,6 +307,10 @@ impl MiniGameStats {
     /// stats.add_score(100);
     /// assert_eq!(stats.score, 200);
     /// ```
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the multiplied score truncates toward zero by design"
+    )]
     pub fn add_score(&mut self, points: u64) {
         let multiplied = (points as f64 * self.multiplier_state.current()) as u64;
         self.score = self.score.saturating_add(multiplied);
@@ -305,7 +322,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -326,7 +343,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -343,7 +360,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -362,7 +379,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -382,7 +399,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -400,7 +417,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -419,7 +436,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();

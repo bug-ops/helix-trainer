@@ -5,8 +5,14 @@
 use crate::config::Scenario;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
+use crate::minigame::MiniGameSession;
+use crate::security::UserError;
+use crate::testing::default_test_scenario;
 use crate::time::Clock;
-use crate::ui::state::{AppState, ConfigState};
+use crate::ui::state::{
+    AppState, ConfigState, MenuData, Message, MiniGameData, ProgressState, ReturnDestination,
+    ReviewSessionState, TypedScreen, UIState, update,
+};
 use std::sync::Arc;
 
 /// Create a test AppState with no scenarios
@@ -110,6 +116,70 @@ impl TestAppStateBuilder {
         state.progress.mark_profile_loaded();
         state
     }
+}
+
+/// Start the scenario at `index` the way the UI does: by selecting it in the scenario list.
+///
+/// Puts the state on the Menu screen with `index` selected and dispatches
+/// [`Message::MenuSelect`]. An out-of-range `index` selects one of the fixed trailing
+/// menu entries (or nothing), exactly as it would for a user.
+///
+/// # Errors
+///
+/// Propagates the [`UserError`] returned by [`update`].
+pub fn start_scenario_from_menu(state: &mut AppState, index: usize) -> Result<(), UserError> {
+    state.screen = TypedScreen::Menu(MenuData {
+        selected_item: index,
+        ..MenuData::default()
+    });
+    update_executing_effects(state, Message::MenuSelect)
+}
+
+/// Execute the effects handlers queued on `ui`, for tests that call a handler directly.
+pub fn run_queued_effects(ui: &mut UIState, progress: &mut ProgressState) {
+    for effect in ui.effects.drain(..) {
+        drop(effect.execute(progress));
+    }
+}
+
+/// Run [`update`] and execute the effects it requests against the in-memory state, so tests see
+/// sounds and saves happen as they do in the event loop.
+///
+/// # Errors
+///
+/// Propagates the [`UserError`] returned by [`update`]; effects are executed either way.
+pub fn update_executing_effects(state: &mut AppState, msg: Message) -> Result<(), UserError> {
+    let mut effects = Vec::new();
+    let result = update(state, msg, &mut effects);
+    for effect in effects {
+        drop(effect.execute(&mut state.progress));
+    }
+    result
+}
+
+/// The review session currently on screen, if the state is on the review screen.
+pub fn review_session(state: &AppState) -> Option<&ReviewSessionState> {
+    match &state.screen {
+        TypedScreen::Review(data) => Some(&data.session),
+        _ => None,
+    }
+}
+
+/// A mini-game screen payload around a freshly started session over the default test scenario.
+pub fn started_minigame_data() -> MiniGameData {
+    let mut session = MiniGameSession::new(Arc::new(vec![default_test_scenario()]), None);
+    session.start();
+    MiniGameData::new(session)
+}
+
+/// Return destination of a detour screen opened from a paused arcade run.
+pub fn paused_minigame_return() -> ReturnDestination {
+    let mut data = started_minigame_data();
+    for _ in 0..3 {
+        data.session.tick_countdown();
+    }
+    data.session.pause();
+    ReturnDestination::PausedMiniGame(Box::new(data))
 }
 
 #[cfg(test)]

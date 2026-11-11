@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 //! Main entry point for the Helix Keybindings Trainer
 //!
 //! This is the application's entry point. It initializes the terminal UI,
@@ -87,7 +85,6 @@ async fn main() -> Result<()> {
         persistent: app_config,
         keymap,
         keymap_report,
-        ..ui::state::ConfigState::default()
     };
 
     let mut app_state = AppState::with_config(
@@ -123,7 +120,7 @@ async fn main() -> Result<()> {
     app_state.progress.begin_profile_load();
 
     // Spawn background data loaders
-    spawn_data_loaders(data_tx);
+    spawn_data_loaders(data_tx.clone());
 
     // Force full redraw on first render by clearing the terminal
     // This ensures the UI is visible immediately on startup
@@ -133,19 +130,10 @@ async fn main() -> Result<()> {
     io::Write::flush(terminal.backend_mut())?;
 
     // Run the async event loop
-    let result = run_async_event_loop(&mut terminal, &mut app_state, &mut data_rx).await;
+    let result = run_async_event_loop(&mut terminal, &mut app_state, &mut data_rx, &data_tx).await;
 
     // Snapshot the exit-time save before anything else touches `progress`.
     let final_save_request = app_state.prepare_final_save_request();
-
-    // Save configuration before exit (only if modified)
-    if app_state.config.config_modified {
-        if let Err(e) = config_storage.save(&app_state.config.persistent) {
-            tracing::error!("Failed to save config on exit: {:?}", e);
-        } else {
-            tracing::info!("Config saved successfully");
-        }
-    }
 
     // Enqueue the exit save as the very last item, then drop every sender
     // clone and wait for the writer to fully drain before the runtime

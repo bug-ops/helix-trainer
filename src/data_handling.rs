@@ -2,8 +2,8 @@
 //!
 //! Processes messages from background data loaders and updates app state.
 
-use anyhow::Result;
 use chrono::{DateTime, Utc};
+use std::sync::Arc;
 use std::time::Duration;
 
 use helix_trainer::{
@@ -11,7 +11,7 @@ use helix_trainer::{
     config::{ScenarioCollection, keymap::keymap_fingerprint_mismatch_message},
     gamification::{
         Achievement, AchievementEngine, LockStatus, QuarantineOutcome, QuestGenerator,
-        QuestTemplateRegistry, StreakChange, StreakManager, UserProfile,
+        QuestRegistrySlot, StreakChange, StreakManager, UserProfile,
     },
     learning::PerformanceTracker,
     ui::{AppState, Notification, NotificationType},
@@ -38,11 +38,63 @@ fn profile_load_failure_message(backup: &QuarantineOutcome) -> String {
     .to_string()
 }
 
+/// Warning shown when a profile save fails; the next save retries.
+fn save_failed_notification(error: &impl std::fmt::Display) -> Notification {
+    Notification::with_duration(
+        NotificationType::Info {
+            message: format!("Failed to save progress: {error}. Will retry automatically."),
+        },
+        WARNING_NOTIFICATION_DURATION,
+    )
+}
+
 /// Check if daily quests should be refreshed
 ///
 /// Returns true if the current date differs from the last quest refresh date.
 pub fn should_refresh_quests(profile: &UserProfile, now: DateTime<Utc>) -> bool {
     now.date_naive() != profile.last_quest_refresh.date_naive()
+}
+
+/// Regenerate the daily quests when a new day began or none exist.
+///
+/// Waits (does nothing) while the profile is not saveable or the quest
+/// registry is still loading; whichever of the profile and the registry
+/// arrives last triggers the refresh. A registry that is unavailable or lacks
+/// templates leaves quest slots empty and raises one warning, never a panic.
+fn refresh_daily_quests_if_due(state: &mut AppState) {
+    if !state.progress.persistence().is_writable() {
+        return;
+    }
+    let now = state.progress.now();
+    if !should_refresh_quests(&state.progress.profile, now)
+        && !state.progress.profile.daily_quests.is_empty()
+    {
+        return;
+    }
+    let Some(registry) = state.progress.quest_registry.resolved() else {
+        tracing::debug!("Daily quest refresh deferred until the quest registry loads");
+        return;
+    };
+
+    tracing::info!("Refreshing daily quests for new day");
+    state.progress.profile.reset_daily_quests(now);
+    let generation =
+        QuestGenerator::generate_quests(&state.progress.profile, &registry, now.date_naive());
+    state.progress.profile.daily_quests = generation.quests;
+    if generation.unfilled_slots > 0 {
+        tracing::warn!(
+            unfilled = generation.unfilled_slots,
+            "Quest templates missing; daily quests incomplete"
+        );
+        state.ui.notifications.push(Notification::with_duration(
+            NotificationType::Info {
+                message:
+                    "Daily quests could not be fully generated: quest templates are unavailable."
+                        .to_string(),
+            },
+            WARNING_NOTIFICATION_DURATION,
+        ));
+    }
 }
 
 /// Warn the user if another live instance already appears to be using this
@@ -110,7 +162,7 @@ fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
 ///
 /// Processes async loading results and updates app state accordingly.
 /// Handles scenarios, profiles, quest registry, and save confirmations.
-pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result<()> {
+pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
     match msg {
         DataLoadMessage::ScenariosReady(scenarios) => {
             let count = scenarios.len();
@@ -155,38 +207,14 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                 _ => {}
             }
 
-            // Check if we need to refresh daily quests
-            if should_refresh_quests(&updated_profile, now)
-                || updated_profile.daily_quests.is_empty()
-            {
-                tracing::info!("Refreshing daily quests for new day");
-                let tracker = PerformanceTracker::new();
-                updated_profile.reset_daily_quests(now);
-
-                // Load quest registry synchronously
-                let quest_registry = QuestTemplateRegistry::load_from_default_path("en")
-                    .unwrap_or_else(|e| {
-                        tracing::warn!(
-                            "Failed to load quest templates: {}, using empty registry",
-                            e
-                        );
-                        QuestTemplateRegistry::new()
-                    });
-
-                updated_profile.daily_quests = QuestGenerator::generate_quests(
-                    &updated_profile,
-                    &tracker,
-                    &quest_registry,
-                    now.date_naive(),
-                );
-            }
-
             state.progress.performance_tracker = PerformanceTracker::from_stats_with_clock(
                 updated_profile.performance_data.clone(),
                 state.progress.clock(),
             );
             state.progress.profile = updated_profile;
             state.progress.mark_profile_loaded();
+
+            refresh_daily_quests_if_due(state);
 
             warn_keymap_fingerprint_mismatch(state);
 
@@ -209,19 +237,9 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                             description: achievement.description,
                         }));
                 }
-                match state.progress.storage.save(&state.progress.profile) {
-                    Ok(()) => state.progress.mark_saved(),
-                    Err(e) => {
-                        tracing::error!("Failed to save profile after startup unlocks: {}", e);
-                        state.ui.notifications.push(Notification::with_duration(
-                            NotificationType::Info {
-                                message: format!(
-                                    "Failed to save progress: {e}. Will retry automatically."
-                                ),
-                            },
-                            WARNING_NOTIFICATION_DURATION,
-                        ));
-                    }
+                if let Err(e) = state.progress.save_immediate() {
+                    tracing::error!("Failed to save profile after startup unlocks: {}", e);
+                    state.ui.notifications.push(save_failed_notification(&e));
                 }
             }
 
@@ -245,12 +263,16 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
             warn_if_other_instance_running(state);
         }
 
-        DataLoadMessage::QuestRegistryReady(_registry) => {
-            tracing::debug!("Quest registry loaded");
+        DataLoadMessage::QuestRegistryReady(registry) => {
+            tracing::debug!(templates = registry.len(), "Quest registry loaded");
+            state.progress.quest_registry = QuestRegistrySlot::Ready(Arc::new(registry));
+            refresh_daily_quests_if_due(state);
         }
 
         DataLoadMessage::QuestRegistryError(err) => {
             tracing::error!("Failed to load quest registry: {}", err);
+            state.progress.quest_registry = QuestRegistrySlot::Unavailable;
+            refresh_daily_quests_if_due(state);
         }
 
         DataLoadMessage::ProfileSaved => {
@@ -265,16 +287,9 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
             // immediate save retries, instead of the debounce gate
             // treating this failure as a successful save indefinitely.
             state.progress.mark_unsaved();
-            state.ui.notifications.push(Notification::with_duration(
-                NotificationType::Info {
-                    message: format!("Failed to save progress: {err}. Will retry automatically."),
-                },
-                WARNING_NOTIFICATION_DURATION,
-            ));
+            state.ui.notifications.push(save_failed_notification(&err));
         }
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -283,7 +298,7 @@ mod tests {
     use helix_trainer::{
         config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState},
         constants::STREAK_FREEZE_MAX_GAP_DAYS,
-        gamification::ProfileStorage,
+        gamification::{ProfileStorage, QuestTemplateRegistry},
     };
 
     // Binary crate tests cannot access the library's #[cfg(test)]-gated
@@ -352,9 +367,8 @@ mod tests {
         let mut state = empty_test_app_state();
         let scenarios = vec![default_test_scenario()];
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ScenariosReady(scenarios));
+        handle_data_message(&mut state, DataLoadMessage::ScenariosReady(scenarios));
 
-        assert!(result.is_ok());
         assert_eq!(state.game.scenario_collection.count(), 1);
     }
 
@@ -362,9 +376,8 @@ mod tests {
     fn test_handle_scenarios_ready_empty() {
         let mut state = empty_test_app_state();
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ScenariosReady(vec![]));
+        handle_data_message(&mut state, DataLoadMessage::ScenariosReady(vec![]));
 
-        assert!(result.is_ok());
         assert_eq!(state.game.scenario_collection.count(), 0);
     }
 
@@ -372,13 +385,12 @@ mod tests {
     fn test_handle_scenarios_error() {
         let mut state = empty_test_app_state();
 
-        let result = handle_data_message(
+        handle_data_message(
             &mut state,
             DataLoadMessage::ScenariosError("File not found".to_string()),
         );
 
         // Should not panic, just log error
-        assert!(result.is_ok());
         // Scenarios should remain empty
         assert_eq!(state.game.scenario_collection.count(), 0);
     }
@@ -390,9 +402,8 @@ mod tests {
         profile.total_xp = 500;
         profile.level = 3;
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(result.is_ok());
         let loaded_profile = &state.progress.profile;
         assert_eq!(loaded_profile.total_xp, 500);
         assert_eq!(loaded_profile.level, 3);
@@ -435,7 +446,7 @@ mod tests {
         let mut profile = UserProfile::new();
         profile.keymap_fingerprint = Some(current_fingerprint.wrapping_add(1));
 
-        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
             state
@@ -465,7 +476,7 @@ mod tests {
         let mut profile = UserProfile::new();
         profile.keymap_fingerprint = Some(current_fingerprint);
 
-        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
             !state
@@ -491,7 +502,7 @@ mod tests {
         let mut profile = UserProfile::new();
         profile.keymap_fingerprint = None;
 
-        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
             !state
@@ -519,7 +530,7 @@ mod tests {
         let mut profile = UserProfile::new();
         profile.keymap_fingerprint = None;
 
-        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
             !state
@@ -556,8 +567,7 @@ mod tests {
                 keymap_fingerprint: Some(custom_fingerprint),
                 ..UserProfile::new()
             }),
-        )
-        .unwrap();
+        );
 
         assert!(
             state
@@ -596,8 +606,7 @@ mod tests {
                 keymap_fingerprint: Some(custom_fingerprint),
                 ..UserProfile::new()
             }),
-        )
-        .unwrap();
+        );
         assert!(
             disabled_state
                 .ui
@@ -621,8 +630,7 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::ProfileReady(carried_over_profile),
-        )
-        .unwrap();
+        );
 
         assert!(
             state
@@ -664,16 +672,14 @@ mod tests {
                 keymap_fingerprint: Some(fingerprint_a),
                 ..UserProfile::new()
             }),
-        )
-        .unwrap();
+        );
         let carried_over_profile = disabled_state.progress.profile;
 
         // Re-enable a *different* custom keymap B.
         handle_data_message(
             &mut state_b,
             DataLoadMessage::ProfileReady(carried_over_profile),
-        )
-        .unwrap();
+        );
 
         assert!(
             state_b
@@ -718,9 +724,8 @@ mod tests {
         profile.completed_quests_today.insert("quest_0".to_string());
         clock.advance_days(1);
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(result.is_ok());
         // Streak should have incremented from 6 to 7, crossing the Streak7Days threshold
         assert_eq!(state.progress.profile.current_streak, 7);
         assert!(
@@ -761,7 +766,7 @@ mod tests {
             PerformanceTracker::new(),
         );
 
-        let result = handle_data_message(
+        handle_data_message(
             &mut state,
             DataLoadMessage::ProfileReady(UserProfile::new()),
         );
@@ -769,7 +774,6 @@ mod tests {
         let _ = child.kill();
         let _ = child.wait();
 
-        assert!(result.is_ok());
         assert!(
             state.ui.notifications.visible().iter().any(|n| matches!(
                 &n.notification_type,
@@ -792,9 +796,8 @@ mod tests {
         // Missed more than one day, so `update_streak` takes the "missed day(s)" branch.
         profile.last_activity = Utc::now() - chrono::Duration::days(2);
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(result.is_ok());
         assert!(!state.progress.profile.streak_freeze_available);
         assert_eq!(state.progress.profile.current_streak, 5);
         assert!(
@@ -818,9 +821,8 @@ mod tests {
         // the streak instead of protecting it.
         profile.last_activity = Utc::now() - chrono::Duration::days(2);
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(result.is_ok());
         assert_eq!(state.progress.profile.current_streak, 0);
         assert!(
             state
@@ -851,9 +853,8 @@ mod tests {
         // Gap exceeds the freeze coverage cap, so the freeze can't protect it.
         profile.last_activity = Utc::now() - chrono::Duration::days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(result.is_ok());
         assert_eq!(state.progress.profile.current_streak, 0);
         assert!(
             state.progress.profile.streak_freeze_available,
@@ -881,9 +882,8 @@ mod tests {
         // current_streak is already 0 - nothing to lose, so breaking it should stay silent.
         profile.last_activity = Utc::now() - chrono::Duration::days(2);
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(result.is_ok());
         assert_eq!(state.progress.profile.current_streak, 0);
         assert!(
             !state
@@ -907,9 +907,8 @@ mod tests {
         // current_streak is already 0 - nothing to protect.
         profile.last_activity = Utc::now() - chrono::Duration::days(2);
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(result.is_ok());
         assert_eq!(state.progress.profile.current_streak, 0);
         assert!(
             state.progress.profile.streak_freeze_available,
@@ -932,7 +931,7 @@ mod tests {
         let mut fallback = UserProfile::new();
         fallback.total_xp = 100; // Mark fallback with some XP
 
-        let result = handle_data_message(
+        handle_data_message(
             &mut state,
             DataLoadMessage::ProfileError {
                 error: "Corrupted file".to_string(),
@@ -941,7 +940,6 @@ mod tests {
             },
         );
 
-        assert!(result.is_ok());
         let loaded_profile = &state.progress.profile;
         assert_eq!(loaded_profile.total_xp, 100); // Fallback was used
     }
@@ -969,8 +967,7 @@ mod tests {
                 fallback: UserProfile::new(),
                 backup: backup.clone(),
             },
-        )
-        .unwrap();
+        );
 
         assert!(state.progress.prepare_final_save_request().is_none());
         state.progress.save_immediate().unwrap();
@@ -1002,8 +999,7 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::ProfileReady(UserProfile::new()),
-        )
-        .unwrap();
+        );
         assert!(state.progress.prepare_final_save_request().is_some());
     }
 
@@ -1016,7 +1012,7 @@ mod tests {
         profile.sound_config.enabled = false;
         profile.sound_config.volume = 12.0;
 
-        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         let config = state.progress.sound_manager.config();
         assert!(!config.enabled);
@@ -1043,9 +1039,8 @@ mod tests {
         profile.longest_streak = 400;
         profile.last_activity = state.progress.now();
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(result.is_ok());
         assert!(
             state.ui.notifications.visible().iter().any(|n| matches!(
                 &n.notification_type,
@@ -1053,6 +1048,32 @@ mod tests {
             )),
             "the failed startup save must be surfaced"
         );
+    }
+
+    /// Regression test for #467: load-time achievement saves go through the
+    /// serialized save writer, not a direct `ProfileStorage::save` call.
+    #[test]
+    fn test_profile_ready_startup_save_uses_serialized_writer() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.json");
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            ProfileStorage::with_path(&path),
+            PerformanceTracker::new(),
+        );
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        state.set_save_channel(tx);
+        let mut profile = UserProfile::new();
+        profile.current_streak = 400;
+        profile.longest_streak = 400;
+        profile.last_activity = state.progress.now();
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        let request = rx.try_recv().expect("save must be queued on the writer");
+        assert_eq!(request.storage.path(), path);
+        assert!(!path.exists(), "no synchronous write on the event loop");
     }
 
     /// Regression test for a non-blocking finding in the #298 critique: the
@@ -1083,7 +1104,7 @@ mod tests {
             PerformanceTracker::new(),
         );
 
-        let result = handle_data_message(
+        handle_data_message(
             &mut state,
             DataLoadMessage::ProfileError {
                 error: "Corrupted file".to_string(),
@@ -1095,7 +1116,6 @@ mod tests {
         let _ = child.kill();
         let _ = child.wait();
 
-        assert!(result.is_ok());
         assert!(
             state.ui.notifications.visible().iter().any(|n| matches!(
                 &n.notification_type,
@@ -1109,9 +1129,7 @@ mod tests {
     fn test_handle_profile_saved() {
         let mut state = empty_test_app_state();
 
-        let result = handle_data_message(&mut state, DataLoadMessage::ProfileSaved);
-
-        assert!(result.is_ok());
+        handle_data_message(&mut state, DataLoadMessage::ProfileSaved);
     }
 
     /// Regression test for critique finding B2: a failed async save must
@@ -1126,12 +1144,11 @@ mod tests {
         state.progress.mark_saved();
         assert!(!state.progress.should_save());
 
-        let result = handle_data_message(
+        handle_data_message(
             &mut state,
             DataLoadMessage::ProfileSaveError("Disk full".to_string()),
         );
 
-        assert!(result.is_ok());
         assert!(
             state.progress.should_save(),
             "a failed save must re-dirty the profile so the next save retries"
@@ -1145,26 +1162,167 @@ mod tests {
         );
     }
 
+    fn embedded_quest_registry() -> QuestTemplateRegistry {
+        QuestTemplateRegistry::from_embedded("en").unwrap()
+    }
+
+    fn quest_warning_count(state: &AppState) -> usize {
+        state
+            .ui
+            .notifications
+            .visible()
+            .iter()
+            .filter(|n| {
+                matches!(&n.notification_type, NotificationType::Info { message }
+                if message.contains("Daily quests could not be fully generated"))
+            })
+            .count()
+    }
+
     #[test]
     fn test_handle_quest_registry_ready() {
         let mut state = empty_test_app_state();
-        let registry = QuestTemplateRegistry::new();
 
-        let result = handle_data_message(&mut state, DataLoadMessage::QuestRegistryReady(registry));
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
+        );
 
-        assert!(result.is_ok());
+        assert!(matches!(
+            state.progress.quest_registry,
+            QuestRegistrySlot::Ready(_)
+        ));
+    }
+
+    #[test]
+    fn test_quests_are_generated_when_registry_arrives_before_profile() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
+        );
+        assert!(state.progress.profile.daily_quests.is_empty());
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        );
+
+        assert_eq!(state.progress.profile.daily_quests.len(), 3);
+        assert_eq!(quest_warning_count(&state), 0);
+    }
+
+    #[test]
+    fn test_quest_refresh_is_deferred_until_registry_arrives_after_profile() {
+        let mut state = empty_test_app_state();
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        );
+        assert!(matches!(
+            state.progress.quest_registry,
+            QuestRegistrySlot::Pending
+        ));
+        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(quest_warning_count(&state), 0);
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
+        );
+
+        assert_eq!(state.progress.profile.daily_quests.len(), 3);
+        assert_eq!(quest_warning_count(&state), 0);
+    }
+
+    /// Regression test for #469: a registry that failed to load leaves quests
+    /// empty with one warning instead of aborting the process.
+    #[test]
+    fn test_unavailable_registry_after_profile_warns_once_without_panicking() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        );
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+        );
+
+        assert!(matches!(
+            state.progress.quest_registry,
+            QuestRegistrySlot::Unavailable
+        ));
+        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(quest_warning_count(&state), 1);
+    }
+
+    #[test]
+    fn test_unavailable_registry_before_profile_warns_once_without_panicking() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+        );
+        assert_eq!(quest_warning_count(&state), 0);
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        );
+
+        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(quest_warning_count(&state), 1);
+    }
+
+    #[test]
+    fn test_empty_ready_registry_warns_without_panicking() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(QuestTemplateRegistry::new()),
+        );
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileReady(UserProfile::new()),
+        );
+
+        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(quest_warning_count(&state), 1);
+    }
+
+    #[test]
+    fn test_quarantined_profile_does_not_generate_quests() {
+        let mut state = empty_test_app_state();
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
+        );
+
+        handle_data_message(
+            &mut state,
+            DataLoadMessage::ProfileError {
+                error: "bad".to_string(),
+                fallback: UserProfile::new(),
+                backup: QuarantineOutcome::Failed("x".to_string()),
+            },
+        );
+
+        assert!(state.progress.profile.daily_quests.is_empty());
     }
 
     #[test]
     fn test_handle_quest_registry_error() {
         let mut state = empty_test_app_state();
 
-        let result = handle_data_message(
+        handle_data_message(
             &mut state,
             DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
         );
 
         // Should not panic, just log error
-        assert!(result.is_ok());
     }
 }

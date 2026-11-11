@@ -13,7 +13,8 @@ instructions_with_numbers = "j/k: Navigate | gg/G: First/Last | 15G: Go to 15 | 
 title = "Task"
 mode_normal = "NORMAL"
 mode_insert = "INSERT"
-hint_key = "Press ? or F1 for hint"
+mode_select = "SELECT"
+hint_key = "Press F1 for hint"
 abandon_key = "Press Esc to abandon"
 actions = "Actions"
 optimal = "optimal"
@@ -98,3 +99,7 @@ fingerprint_mismatch = "Review history was recorded under a different keymap"
 
 [minigame]
 challenge_no_attempts_left = "Daily Challenge: no attempts remaining today. Come back tomorrow!"
+no_scenarios_available = "No scenarios match the current filters. Adjust the filters and try again."
+
+[profile]
+start_fresh_action = "Press Ctrl-N to start a fresh profile (the backup is kept)."

@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `?` backward search, `K`/`Alt-K` regex prompts, real Select mode, per-language indent unit, Insert-mode Tab and indent/dedent (#526)
+- Start fresh action (Ctrl-N) on the corrupt-profile banner; identical corrupt backups are no longer duplicated (#526)
+- Opt-in `completion = "after_taught_commands"` scenario rule so undo and redo goals can be expressed (#526)
+
 ### Changed
+
+- **Breaking**: F1 is the only hint key and `?` is no longer reserved; typed `?` reaches Insert mode and prompts (#526)
+- **Breaking**: macOS data and config move to `~/.config/helix-trainer` with a per-file copy migration; older versions keep using the old directory and diverge on downgrade (#526)
+- **Breaking**: profiles omit derived card fields (`retrievability`, `avg_time`, `mastery_level`, `command`) and invalid or non-reviewable cards are dropped on load; versions up to 0.6.2 cannot read them (#526)
+- **Breaking**: review and arcade priority come from one `learning::Urgency`; the arcade overdue term is the scheduled-relative ratio capped at 1; `FSRS_MAX_OVERDUE_DAYS` and `update_mastery_level` are removed and `CommandPerformance` fields are private (#526)
+- **Breaking**: `Screen` navigation uses `NavTarget`; `update()` takes an effects sink; sessions are owned by their screens; `MiniGameModeSelection.selected_index` is `selected: MiniGameModeKind`; `CompletionRule::is_satisfied` takes `Option<LastAction>`; `minigame::scorer` is `minigame::prioritizer` (#526)
+- **Breaking**: remove `AsyncState`, config filter state, `parse_command_buffer`, `ParsedCommand`, `CommandBufferAccess`, 12 unused `Message` variants, PTY-era `SecurityError` and `UserError` variants and `private_fs::create_file` (#526)
+- `ProfileStorage` and `ConfigStorage` share one `JsonStore`; `config.json` saves are atomic and temp files are created exclusively (#526)
+- Quest registry loads asynchronously and quest generation no longer panics; XP formulas live in `XPCalculator` (#526)
+- CI builds without the audio feature and runs the rustdoc gate; `cross` is pinned to 0.2.5; the release workflow uses least-privilege permissions (#526)
+- Centralized `[lints]` table with `missing_docs` and a pedantic subset; all public items are documented and doc examples run (#526)
+- Results screen percentages use integer flooring (#526)
 
 - **Breaking**: `ChallengeProgress::last_challenge_date` is now `Option<NaiveDate>` instead of `Option<String>`; the stored `YYYY-MM-DD` format is unchanged (#435)
 - **Breaking**: `prepare_final_save_request` returns `Option`, `DataLoadMessage::ProfileError` carries a `backup` path, and `load_profile_async` is replaced by `load_profile_message` (#508)
@@ -19,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Menu count prefixes no longer leak into other keys; the Task footer shows the real hint key (#526)
+- Backtick toggles case like Helix, `R`, Insert-mode `.` replay, `J`, `&` and indent follow Helix, and retrying a scenario keeps its language indent unit (#526)
+- Completing a scenario no longer leaves a placeholder session when scoring fails; `x d U` no longer completes `undo_redo_001` early (#526)
+- Persisted junk review cards are removed from existing profiles; load-time achievement saves go through the serialized writer (#526)
 - A malformed `last_challenge_date` in `profile.json` now loads as `None` instead of failing the whole profile load (#435)
 - An unreadable `profile.json` is copied to `profile.json.corrupt-<timestamp>` and never overwritten; a banner shows the backup path (#508)
 - A recoverable error no longer ends the session or drops the active scenario (#508)

@@ -9,6 +9,7 @@ use crate::config::ScenarioCategory;
 use crate::game::{Abandoned, Active, Completed, Feedback, GameSession};
 use crate::input::typestate::InputStateMachine;
 use crate::learning::ScenarioMastery;
+use crate::minigame::MiniGameSession;
 use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 
 /// Maximum number of keys to keep in history
@@ -121,20 +122,70 @@ impl TypedScreen {
         }
     }
 
-    /// Get the corresponding Screen enum value (for backward compatibility)
-    pub fn to_screen_enum(&self) -> super::Screen {
+    /// The arcade run this screen owns: the mini-game screen itself, or the detour screen
+    /// (profile, statistics, achievements, category filters) opened from a paused run.
+    pub fn minigame_data(&self) -> Option<&MiniGameData> {
         match self {
-            Self::ModeSelection(_) => super::Screen::ModeSelection,
-            Self::Menu(_) => super::Screen::MainMenu,
-            Self::Task(_) => super::Screen::Task,
-            Self::Results(_) => super::Screen::Results,
-            Self::Profile(_) => super::Screen::Profile,
-            Self::Statistics(_) => super::Screen::Statistics,
-            Self::Achievements(_) => super::Screen::Achievements,
-            Self::CategoryFilters(_) => super::Screen::CategoryFilters,
-            Self::Review(_) => super::Screen::Review,
-            Self::MiniGame(_) => super::Screen::MiniGame,
-            Self::EndGameSummary(_) => super::Screen::EndGameSummary,
+            Self::MiniGame(data) => Some(data),
+            Self::Profile(ProfileData { return_to })
+            | Self::Statistics(StatisticsData { return_to })
+            | Self::Achievements(AchievementsData { return_to, .. })
+            | Self::CategoryFilters(CategoryFiltersData { return_to, .. }) => match return_to {
+                ReturnDestination::PausedMiniGame(data) => Some(data),
+                ReturnDestination::Menu => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Return destination for a detour screen opened from the current one.
+    ///
+    /// A paused arcade run is detached from the mini-game screen, or handed on from another
+    /// detour screen, so the new detour screen owns it until the user returns; from any other
+    /// screen the destination is the menu. The caller must replace `self` with the detour screen
+    /// right after.
+    pub fn detour_return_destination(&mut self) -> ReturnDestination {
+        if let Some(destination) = self.take_return_destination() {
+            return destination;
+        }
+        match std::mem::replace(self, Self::Menu(MenuData::default())) {
+            Self::MiniGame(data) if data.session.state().is_paused() => {
+                ReturnDestination::PausedMiniGame(Box::new(data))
+            }
+            other => {
+                *self = other;
+                ReturnDestination::Menu
+            }
+        }
+    }
+
+    /// Take the return destination out of a detour screen, leaving the menu in its place.
+    ///
+    /// `None` when the current screen is not a detour screen.
+    pub fn take_return_destination(&mut self) -> Option<ReturnDestination> {
+        match self {
+            Self::Profile(ProfileData { return_to })
+            | Self::Statistics(StatisticsData { return_to })
+            | Self::Achievements(AchievementsData { return_to, .. })
+            | Self::CategoryFilters(CategoryFiltersData { return_to, .. }) => {
+                Some(std::mem::take(return_to))
+            }
+            _ => None,
+        }
+    }
+
+    /// Mutable counterpart of [`TypedScreen::minigame_data`].
+    pub fn minigame_data_mut(&mut self) -> Option<&mut MiniGameData> {
+        match self {
+            Self::MiniGame(data) => Some(data),
+            Self::Profile(ProfileData { return_to })
+            | Self::Statistics(StatisticsData { return_to })
+            | Self::Achievements(AchievementsData { return_to, .. })
+            | Self::CategoryFilters(CategoryFiltersData { return_to, .. }) => match return_to {
+                ReturnDestination::PausedMiniGame(data) => Some(data),
+                ReturnDestination::Menu => None,
+            },
+            _ => None,
         }
     }
 }
@@ -148,17 +199,32 @@ pub struct MenuData {
     /// Scroll offset for menu list (top visible item index)
     pub scroll_offset: usize,
 
-    /// Command buffer for multi-key navigation (e.g., "g" waiting for "g", count prefix "12")
-    pub command_buffer: String,
+    /// Multi-key navigation state (count prefix, `g` leader), the same machine gameplay uses
+    pub input_state: InputStateMachine,
 }
 
-impl CommandBufferAccess for MenuData {
-    fn command_buffer(&self) -> &str {
-        &self.command_buffer
+/// Whether the hint panel is open, and the hint it shows
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum HintPanel {
+    /// No hint panel
+    #[default]
+    Hidden,
+    /// Panel open with this hint text
+    Shown(String),
+}
+
+impl HintPanel {
+    /// The hint text while the panel is open
+    pub fn text(&self) -> Option<&str> {
+        match self {
+            Self::Hidden => None,
+            Self::Shown(text) => Some(text),
+        }
     }
 
-    fn command_buffer_mut(&mut self) -> &mut String {
-        &mut self.command_buffer
+    /// Whether the panel is open
+    pub fn is_shown(&self) -> bool {
+        matches!(self, Self::Shown(_))
     }
 }
 
@@ -177,11 +243,8 @@ pub struct TaskData {
     /// History of recent keypresses (shared KeyHistory struct)
     pub key_history: KeyHistory,
 
-    /// Current hint being displayed
-    pub current_hint: Option<String>,
-
-    /// Whether to show hint panel
-    pub show_hint_panel: bool,
+    /// Hint panel state
+    pub hint: HintPanel,
 
     /// Last command executed (for display)
     pub last_command: Option<String>,
@@ -201,8 +264,7 @@ impl TaskData {
             session,
             input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
-            current_hint: None,
-            show_hint_panel: false,
+            hint: HintPanel::Hidden,
             last_command: None,
             scenario_index: None,
         }
@@ -218,8 +280,7 @@ impl TaskData {
             session,
             input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
-            current_hint: None,
-            show_hint_panel: false,
+            hint: HintPanel::Hidden,
             last_command: None,
             scenario_index: Some(index),
         }
@@ -252,7 +313,7 @@ pub struct ResultsData {
     pub quest_changes: Vec<QuestProgressChange>,
 
     /// Scenario mastery info (mastery level, multiplier)
-    pub scenario_mastery: Option<(ScenarioMastery, f64)>,
+    pub scenario_mastery: Option<MasteryInfo>,
 
     /// Index of current scenario in filtered list (for next/prev navigation)
     /// None if scenario was started from outside the normal list flow
@@ -270,15 +331,15 @@ impl ResultsData {
         session: GameSession<Completed>,
         feedback: Feedback,
         scenario_index: Option<usize>,
-    ) -> Result<Self, crate::security::SecurityError> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             session: CompletedOrAbandoned::Completed(session),
             feedback,
             xp_breakdown: None,
             quest_changes: Vec::new(),
             scenario_mastery: None,
             scenario_index,
-        })
+        }
     }
 
     /// Create new ResultsData from an abandoned session
@@ -334,31 +395,38 @@ impl CompletedOrAbandoned {
 }
 
 /// Return destination when navigating back from profile/statistics screens
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Default)]
 pub enum ReturnDestination {
     /// Return to main menu (default)
     #[default]
     Menu,
-    /// Return to paused mini-game
-    PausedMiniGame,
+    /// Return to the paused mini-game, which stays owned here while the detour screen is shown
+    PausedMiniGame(Box<MiniGameData>),
+}
+
+impl ReturnDestination {
+    /// Whether this detour was entered from a paused mini-game
+    pub fn is_paused_minigame(&self) -> bool {
+        matches!(self, Self::PausedMiniGame(_))
+    }
 }
 
 /// Data required for profile screen
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct ProfileData {
     /// Where to return when pressing Esc/back
     pub return_to: ReturnDestination,
 }
 
 /// Data required for statistics screen
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct StatisticsData {
     /// Where to return when pressing Esc/back
     pub return_to: ReturnDestination,
 }
 
 /// Data required for achievements screen
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct AchievementsData {
     /// Where to return when pressing Esc/back
     pub return_to: ReturnDestination,
@@ -369,7 +437,7 @@ pub struct AchievementsData {
 }
 
 /// Data required for category filters screen
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct CategoryFiltersData {
     /// Index of currently selected category (0-indexed)
     pub selected_index: usize,
@@ -402,8 +470,6 @@ pub struct EndGameSummaryData {
     pub scenarios_total: usize,
     /// Unique scenarios with at least one 100% completion.
     pub perfected: usize,
-    /// `scenarios_total - perfected`. Reaches 0 at full mastery.
-    pub imperfect: usize,
     /// Lifetime completion events, replays included. Must be labelled as such
     /// in copy — it is not the same axis as `scenarios_total`.
     pub total_completions: u32,
@@ -418,11 +484,17 @@ pub struct EndGameSummaryData {
     pub journey_days: i64,
     /// Number of commands at `MasteryLevel::Master`.
     pub commands_mastered: usize,
-    /// `(category, perfected_in_category, total_in_category)`, sorted by
-    /// category enum order (matches the filter screen and menu).
-    pub category_breakdown: Vec<(ScenarioCategory, usize, usize)>,
+    /// Per-category progress, sorted by category enum order (matches the filter screen and menu).
+    pub category_breakdown: Vec<CategoryProgress>,
     /// Suggested next actions, in display order.
     pub next_steps: Vec<NextStep>,
+}
+
+impl EndGameSummaryData {
+    /// Scenarios not yet perfected. Reaches 0 at full mastery.
+    pub fn imperfect(&self) -> usize {
+        self.scenarios_total.saturating_sub(self.perfected)
+    }
 }
 
 /// A suggested next action offered on the end-game summary screen.
@@ -438,14 +510,82 @@ pub enum NextStep {
     ArcadeMode,
 }
 
+/// Top-level mode choice on the mode selection screen
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TopMode {
+    /// Manual scenario selection
+    #[default]
+    Training,
+    /// Arcade mini-games
+    Arcade,
+}
+
+impl TopMode {
+    /// The mode above this one, or itself at the top
+    pub fn previous(self) -> Self {
+        Self::Training
+    }
+
+    /// The mode below this one, or itself at the bottom
+    pub fn next(self) -> Self {
+        Self::Arcade
+    }
+}
+
 /// Data required for mode selection screen
 #[derive(Debug, Clone, Default)]
 pub struct ModeSelectionData {
     /// Index of selected mode (0 = Training, 1 = Arcade)
-    pub selected_mode: usize,
+    pub selected_mode: TopMode,
 
     /// Mini-game mode selection state (when arcade is chosen)
     pub minigame_mode_selection: Option<MiniGameModeSelection>,
+}
+
+/// A mini-game mode offered in the mode submenu, in menu order
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MiniGameModeKind {
+    /// Timed arcade run
+    #[default]
+    Arcade,
+    /// Lives-based survival run
+    Survival,
+    /// Daily challenge
+    Challenge,
+}
+
+impl MiniGameModeKind {
+    /// Every mode, in menu order
+    pub const ALL: [Self; 3] = [Self::Arcade, Self::Survival, Self::Challenge];
+
+    /// The mode above this one, wrapping from the first to the last
+    pub fn previous(self) -> Self {
+        match self {
+            Self::Arcade => Self::Challenge,
+            Self::Survival => Self::Arcade,
+            Self::Challenge => Self::Survival,
+        }
+    }
+
+    /// The mode below this one, wrapping from the last to the first
+    pub fn next(self) -> Self {
+        match self {
+            Self::Arcade => Self::Survival,
+            Self::Survival => Self::Challenge,
+            Self::Challenge => Self::Arcade,
+        }
+    }
+
+    /// The default configuration of this mode; the challenge is seeded from `today`
+    pub fn mode(self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
+        use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
+
+        match self {
+            Self::Arcade => MiniGameMode::Arcade(ArcadeConfig::default()),
+            Self::Survival => MiniGameMode::Survival(SurvivalConfig::default()),
+            Self::Challenge => MiniGameMode::Challenge(ChallengeConfig::for_date(today)),
+        }
+    }
 }
 
 /// Selection state for mini-game mode menu
@@ -458,82 +598,73 @@ pub struct ModeSelectionData {
 /// - `None` = menu is hidden
 #[derive(Debug, Clone, Default)]
 pub struct MiniGameModeSelection {
-    /// Currently highlighted mode (0 = Arcade, 1 = Survival, 2 = Challenge)
-    pub selected_index: usize,
+    /// Currently highlighted mode
+    pub selected: MiniGameModeKind,
 }
 
 impl MiniGameModeSelection {
     /// Available mode count
-    pub const MODE_COUNT: usize = 3;
+    pub const MODE_COUNT: usize = MiniGameModeKind::ALL.len();
 
-    /// Create a new mode selection starting at Arcade (index 0)
+    /// Create a new mode selection starting at Arcade
     pub fn new() -> Self {
-        Self { selected_index: 0 }
+        Self::default()
     }
 
     /// Move selection up (wraps around)
     pub fn select_previous(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-        } else {
-            self.selected_index = Self::MODE_COUNT - 1;
-        }
+        self.selected = self.selected.previous();
     }
 
     /// Move selection down (wraps around)
     pub fn select_next(&mut self) {
-        self.selected_index = (self.selected_index + 1) % Self::MODE_COUNT;
+        self.selected = self.selected.next();
     }
 
     /// All selectable modes, in menu order.
     ///
-    /// Single source of truth for index <-> mode mapping, shared by
-    /// `selected_mode`, `mode_name`, `mode_description`, and the mode-selection
-    /// submenu renderer so none of them can drift out of sync with each other.
-    /// Name/description text itself comes from `MiniGameMode`'s own exhaustive
-    /// match, so a new mode variant only needs adding here to appear correctly
-    /// everywhere.
+    /// Single source of truth for the mode list, shared by `selected_mode`
+    /// and the mode-selection submenu renderer so they cannot drift out of
+    /// sync. Name/description text comes from `MiniGameMode`'s own exhaustive
+    /// match.
     pub(crate) fn all_modes(
         today: chrono::NaiveDate,
     ) -> [crate::minigame::MiniGameMode; Self::MODE_COUNT] {
-        use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
-
-        [
-            MiniGameMode::Arcade(ArcadeConfig::default()),
-            MiniGameMode::Survival(SurvivalConfig::default()),
-            MiniGameMode::Challenge(ChallengeConfig::for_date(today)),
-        ]
+        MiniGameModeKind::ALL.map(|kind| kind.mode(today))
     }
 
     /// Get the selected mode configuration
     pub fn selected_mode(&self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
-        Self::all_modes(today)
-            .get(self.selected_index)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get the name for each mode by index
-    pub fn mode_name(index: usize) -> &'static str {
-        // Name text does not depend on the date, so any placeholder date works.
-        Self::all_modes(chrono::NaiveDate::default())
-            .get(index)
-            .map(crate::minigame::MiniGameMode::name)
-            .unwrap_or("Unknown")
-    }
-
-    /// Get the description for each mode by index
-    pub fn mode_description(index: usize) -> &'static str {
-        Self::all_modes(chrono::NaiveDate::default())
-            .get(index)
-            .map(crate::minigame::MiniGameMode::description)
-            .unwrap_or("")
+        self.selected.mode(today)
     }
 }
 
+/// Mastery level reached for a scenario and the XP multiplier it applied
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MasteryInfo {
+    /// Mastery level of the completed scenario
+    pub mastery: ScenarioMastery,
+    /// Combined XP scaling applied to the completion
+    pub xp_multiplier: f64,
+}
+
+/// Perfected scenarios within one category
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CategoryProgress {
+    /// The category
+    pub category: ScenarioCategory,
+    /// Scenarios in the category completed perfectly
+    pub perfected: usize,
+    /// All scenarios in the category
+    pub total: usize,
+}
+
 /// Data required for mini-game screen
-#[derive(Debug, Clone, Default)]
+///
+/// Owns the arcade session, so the mini-game screen cannot exist without one.
 pub struct MiniGameData {
+    /// The running arcade session (boxed to keep `TypedScreen` variants small)
+    pub session: Box<MiniGameSession>,
     /// Typestate-based input state machine for multi-key commands
     ///
     /// Replaces the old `command_buffer: String` with a compile-time safe
@@ -543,11 +674,28 @@ pub struct MiniGameData {
     pub last_xp_earned: Option<u64>,
     /// History of recent keypresses (shared KeyHistory struct)
     pub key_history: KeyHistory,
-    /// Current game mode (for display purposes)
-    pub mode: Option<crate::minigame::MiniGameMode>,
+}
+
+impl std::fmt::Debug for MiniGameData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MiniGameData")
+            .field("input_state", &self.input_state)
+            .field("last_xp_earned", &self.last_xp_earned)
+            .finish_non_exhaustive()
+    }
 }
 
 impl MiniGameData {
+    /// Wrap a freshly created session with empty input and key history
+    pub fn new(session: MiniGameSession) -> Self {
+        Self {
+            session: Box::new(session),
+            input_state: InputStateMachine::new(),
+            last_xp_earned: None,
+            key_history: KeyHistory::new(),
+        }
+    }
+
     /// Add a key to the history (keeps last 5)
     pub fn add_key_to_history(&mut self, key: String) {
         self.key_history.push(key);
@@ -559,28 +707,6 @@ impl MiniGameData {
     }
 }
 
-/// Trait for types that manage a command buffer for multi-key commands
-///
-/// Used by MenuData for menu navigation commands like `gg`, `5j`, `G`.
-/// For gameplay screens (TaskData, MiniGameData), use [`InputStateAccess`] instead.
-pub trait CommandBufferAccess {
-    /// Get reference to the command buffer
-    fn command_buffer(&self) -> &str;
-
-    /// Get mutable reference to the command buffer
-    fn command_buffer_mut(&mut self) -> &mut String;
-
-    /// Push a command string to the buffer
-    fn push_command(&mut self, cmd: &str) {
-        self.command_buffer_mut().push_str(cmd);
-    }
-
-    /// Clear the command buffer
-    fn clear_buffer(&mut self) {
-        self.command_buffer_mut().clear();
-    }
-}
-
 /// Trait for types that use typestate-based input state machine
 ///
 /// TaskData and MiniGameData use `InputStateMachine` for handling multi-key
@@ -589,12 +715,26 @@ pub trait CommandBufferAccess {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// use helix_trainer::input::typestate::InputStateMachine;
 /// use helix_trainer::ui::state::InputStateAccess;
 ///
-/// fn check_waiting_for_char<T: InputStateAccess>(data: &T) -> bool {
-///     data.input_state().is_waiting_for_char()
+/// #[derive(Default)]
+/// struct Panel {
+///     input: InputStateMachine,
 /// }
+///
+/// impl InputStateAccess for Panel {
+///     fn input_state(&self) -> &InputStateMachine {
+///         &self.input
+///     }
+///
+///     fn input_state_mut(&mut self) -> &mut InputStateMachine {
+///         &mut self.input
+///     }
+/// }
+///
+/// assert!(!Panel::default().is_waiting_for_char());
 /// ```
 pub trait InputStateAccess {
     /// Get reference to the input state machine
@@ -639,22 +779,6 @@ impl InputStateAccess for MiniGameData {
     }
 }
 
-// Implement game::CommandBuffer for MenuData only
-// (TaskData and MiniGameData now use InputStateMachine)
-impl crate::game::CommandBuffer for MenuData {
-    fn buffer(&self) -> &str {
-        self.command_buffer()
-    }
-
-    fn push(&mut self, input: &str) {
-        self.push_command(input);
-    }
-
-    fn clear(&mut self) {
-        self.clear_buffer();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -673,15 +797,6 @@ mod tests {
 
         let profile = TypedScreen::Profile(ProfileData::default());
         assert_eq!(profile.screen_type(), "Profile");
-    }
-
-    #[test]
-    fn test_typed_screen_to_screen_enum() {
-        let menu = TypedScreen::Menu(MenuData::default());
-        assert_eq!(menu.to_screen_enum(), super::super::Screen::MainMenu);
-
-        let stats = TypedScreen::Statistics(StatisticsData::default());
-        assert_eq!(stats.to_screen_enum(), super::super::Screen::Statistics);
     }
 
     #[test]
@@ -846,81 +961,51 @@ mod tests {
         assert_eq!(coa.scenario_id(), "test_123");
     }
 
-    // CR-007: Test MiniGameModeSelection invalid index handling
     #[test]
-    fn test_mode_name_invalid_index() {
-        assert_eq!(MiniGameModeSelection::mode_name(3), "Unknown");
-        assert_eq!(MiniGameModeSelection::mode_name(100), "Unknown");
-        assert_eq!(MiniGameModeSelection::mode_name(usize::MAX), "Unknown");
-    }
-
-    #[test]
-    fn test_mode_description_invalid_index() {
-        assert_eq!(MiniGameModeSelection::mode_description(3), "");
-        assert_eq!(MiniGameModeSelection::mode_description(100), "");
-        assert_eq!(MiniGameModeSelection::mode_description(usize::MAX), "");
-    }
-
-    #[test]
-    fn test_selected_mode_invalid_index() {
+    fn test_mode_selection_cycles_through_every_mode_and_wraps() {
         let mut selection = MiniGameModeSelection::new();
-        selection.selected_index = 99;
-        let mode = selection.selected_mode(chrono::Utc::now().date_naive());
-        // Should fall back to default Arcade mode
-        assert!(mode.is_arcade());
+        let mut seen = vec![selection.selected];
+        for _ in 1..MiniGameModeSelection::MODE_COUNT {
+            selection.select_next();
+            seen.push(selection.selected);
+        }
+        assert_eq!(seen, MiniGameModeKind::ALL);
+
+        selection.select_next();
+        assert_eq!(selection.selected, MiniGameModeKind::Arcade);
+        selection.select_previous();
+        assert_eq!(selection.selected, MiniGameModeKind::Challenge);
     }
 
     #[test]
-    fn test_minigame_mode_selection_valid_indices() {
-        // Test valid mode names
-        assert_eq!(MiniGameModeSelection::mode_name(0), "Arcade");
-        assert_eq!(MiniGameModeSelection::mode_name(1), "Survival");
-        assert_eq!(MiniGameModeSelection::mode_name(2), "Daily Challenge");
-
-        // Test valid mode descriptions
-        assert!(!MiniGameModeSelection::mode_description(0).is_empty());
-        assert!(!MiniGameModeSelection::mode_description(1).is_empty());
-        assert!(!MiniGameModeSelection::mode_description(2).is_empty());
-
-        // Test valid selected modes
+    fn test_minigame_mode_selection_valid_modes() {
         let today = chrono::Utc::now().date_naive();
         let mut selection = MiniGameModeSelection::new();
-        selection.selected_index = 0;
         assert!(selection.selected_mode(today).is_arcade());
 
-        selection.selected_index = 1;
+        selection.selected = MiniGameModeKind::Survival;
         assert!(selection.selected_mode(today).is_survival());
 
-        selection.selected_index = 2;
+        selection.selected = MiniGameModeKind::Challenge;
         assert!(selection.selected_mode(today).is_challenge());
     }
 
-    /// Regression test for #328: `selected_mode`, `mode_name`, and
-    /// `mode_description` must never disagree with each other, since all
-    /// three are now derived from the single `all_modes` array. If a future
-    /// mode variant is added to `all_modes` this loop automatically covers
-    /// it too.
+    /// `all_modes` must stay in lockstep with `MiniGameModeKind::ALL`, and each
+    /// mode must have a name and description.
     #[test]
-    fn test_mode_selection_helpers_agree_with_each_other() {
+    fn test_all_modes_follow_the_kind_order() {
         let today = chrono::Utc::now().date_naive();
-        let mut selection = MiniGameModeSelection::new();
+        let modes = MiniGameModeSelection::all_modes(today);
 
-        for index in 0..MiniGameModeSelection::MODE_COUNT {
-            selection.selected_index = index;
-            let mode = selection.selected_mode(today);
-
-            assert_eq!(MiniGameModeSelection::mode_name(index), mode.name());
-            assert_eq!(
-                MiniGameModeSelection::mode_description(index),
-                mode.description()
-            );
+        for (kind, mode) in MiniGameModeKind::ALL.into_iter().zip(&modes) {
+            assert_eq!(kind.mode(today).name(), mode.name());
+            assert!(!mode.name().is_empty());
+            assert!(!mode.description().is_empty());
         }
     }
 
     /// Structural backstop for #328: every currently-defined `MiniGameMode`
-    /// variant must appear exactly once in `all_modes`. This does not force a
-    /// compile error if a future variant is forgotten, but it does fail this
-    /// test rather than silently leaving the new mode unselectable.
+    /// variant must appear exactly once in `all_modes`.
     #[test]
     fn test_all_modes_covers_every_known_variant_exactly_once() {
         let today = chrono::Utc::now().date_naive();
@@ -941,17 +1026,17 @@ mod tests {
     fn test_category_filters_data_default() {
         let data = CategoryFiltersData::default();
         assert_eq!(data.selected_index, 0);
-        assert_eq!(data.return_to, ReturnDestination::Menu);
+        assert!(matches!(data.return_to, ReturnDestination::Menu));
     }
 
     #[test]
     fn test_category_filters_data_with_values() {
         let data = CategoryFiltersData {
             selected_index: 5,
-            return_to: ReturnDestination::PausedMiniGame,
+            return_to: crate::testing::paused_minigame_return(),
         };
         assert_eq!(data.selected_index, 5);
-        assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
+        assert!(data.return_to.is_paused_minigame());
     }
 
     #[test]
@@ -959,7 +1044,6 @@ mod tests {
         let data = EndGameSummaryData {
             scenarios_total: 1,
             perfected: 1,
-            imperfect: 0,
             total_completions: 1,
             total_xp: 0,
             level: 1,
@@ -971,19 +1055,11 @@ mod tests {
         };
         let screen = TypedScreen::EndGameSummary(data);
         assert_eq!(screen.screen_type(), "EndGameSummary");
-        assert_eq!(
-            screen.to_screen_enum(),
-            super::super::Screen::EndGameSummary
-        );
     }
 
     #[test]
     fn test_typed_screen_category_filters() {
         let screen = TypedScreen::CategoryFilters(CategoryFiltersData::default());
         assert_eq!(screen.screen_type(), "CategoryFilters");
-        assert_eq!(
-            screen.to_screen_enum(),
-            super::super::Screen::CategoryFilters
-        );
     }
 }

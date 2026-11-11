@@ -6,4 +6,4 @@
 
 mod scenario_completion;
 
-pub use scenario_completion::{CompletionResult, ScenarioCompletionService, XPComponents};
+pub use scenario_completion::{CompletionResult, ScenarioCompletionService};

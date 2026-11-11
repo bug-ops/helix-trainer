@@ -13,6 +13,16 @@ pub const MAX_PLAYER_LEVEL: u32 = 100;
 // Scenario XP rewards
 /// Base XP per 100 points for regular scenarios
 pub const SCENARIO_BASE_XP_PER_100_POINTS: u64 = 50;
+/// Divisor of the base XP that yields the perfect-score bonus (`base / 5`)
+pub const SCENARIO_PERFECT_BONUS_DIVISOR: u64 = 5;
+/// Flat bonus XP for the first scenario completed in a day
+pub const SCENARIO_FIRST_TODAY_BONUS_XP: u64 = 10;
+
+// Review session XP rewards
+/// XP per command completed in a review session
+pub const REVIEW_XP_PER_COMMAND: u64 = 10;
+/// XP a review session earns at a 100% success rate
+pub const REVIEW_SUCCESS_BONUS_MAX_XP: f64 = 20.0;
 
 // Mini-game XP rewards
 /// Base XP per 100 points in mini-game

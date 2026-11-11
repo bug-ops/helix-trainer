@@ -54,6 +54,7 @@ fn create_scenario(
             prerequisites: vec![],
             estimated_time_seconds: None,
             locale: None,
+            ..Default::default()
         }),
     }
 }
@@ -711,7 +712,7 @@ fn test_scenarios_without_metadata() {
         ..Default::default()
     };
 
-    let mut filtered_collection = collection.clone();
+    let mut filtered_collection = collection;
     filtered_collection.apply_filter(&filter, None);
 
     assert_eq!(filtered_collection.count(), 1);

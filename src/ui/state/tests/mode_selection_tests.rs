@@ -3,7 +3,8 @@
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
-use crate::ui::state::{Message, TypedScreen, update};
+use crate::testing::update_executing_effects as update;
+use crate::ui::state::{Message, TypedScreen};
 
 #[test]
 fn test_mode_selection_up() {
@@ -13,19 +14,19 @@ fn test_mode_selection_up() {
 
     // Set selected mode to 1
     if let TypedScreen::ModeSelection(mode_data) = &mut state.screen {
-        mode_data.selected_mode = 1;
+        mode_data.selected_mode = crate::ui::state::TopMode::Arcade;
     }
 
     update(&mut state, Message::ModeSelectionUp).unwrap();
 
     if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        assert_eq!(mode_data.selected_mode, 0);
+        assert_eq!(mode_data.selected_mode, crate::ui::state::TopMode::Training);
     }
 
     // Can't go below 0
     update(&mut state, Message::ModeSelectionUp).unwrap();
     if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        assert_eq!(mode_data.selected_mode, 0);
+        assert_eq!(mode_data.selected_mode, crate::ui::state::TopMode::Training);
     }
 }
 
@@ -35,20 +36,19 @@ fn test_mode_selection_down() {
 
     // Start at 0
     if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        assert_eq!(mode_data.selected_mode, 0);
+        assert_eq!(mode_data.selected_mode, crate::ui::state::TopMode::Training);
     }
 
     update(&mut state, Message::ModeSelectionDown).unwrap();
 
     if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        assert_eq!(mode_data.selected_mode, 1);
+        assert_eq!(mode_data.selected_mode, crate::ui::state::TopMode::Arcade);
     }
 
     // Continue down
     update(&mut state, Message::ModeSelectionDown).unwrap();
     if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        // Should wrap or clamp depending on implementation
-        assert!(mode_data.selected_mode <= 2); // Adjust based on actual mode count
+        assert_eq!(mode_data.selected_mode, crate::ui::state::TopMode::Arcade);
     }
 }
 
@@ -59,7 +59,7 @@ fn test_mode_selection_select_training() {
 
     // Ensure we're on ModeSelection at index 0 (Training Mode)
     if let TypedScreen::ModeSelection(mode_data) = &mut state.screen {
-        mode_data.selected_mode = 0;
+        mode_data.selected_mode = crate::ui::state::TopMode::Training;
     }
 
     update(&mut state, Message::ModeSelectionSelect).unwrap();
@@ -92,7 +92,7 @@ fn test_select_training_mode() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
 
     // Should navigate to Menu screen
     assert_matches!(state.screen, TypedScreen::Menu(_));
@@ -115,7 +115,7 @@ fn test_navigate_back_from_menu_to_mode_selection() {
     let mut state = create_test_app_state(vec![scenario]);
 
     // Go to Training Mode
-    update(&mut state, Message::SelectTrainingMode).unwrap();
+    update(&mut state, Message::ModeSelectionSelect).unwrap();
     assert_matches!(state.screen, TypedScreen::Menu(_));
 
     // Go back
@@ -151,7 +151,7 @@ fn test_mode_selection_initial_state() {
     let state = create_test_app_state(vec![]);
 
     if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        assert_eq!(mode_data.selected_mode, 0);
+        assert_eq!(mode_data.selected_mode, crate::ui::state::TopMode::Training);
         assert!(mode_data.minigame_mode_selection.is_none());
     } else {
         panic!("Should start on ModeSelection screen");

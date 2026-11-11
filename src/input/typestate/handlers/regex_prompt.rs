@@ -1,18 +1,18 @@
 //! RegexPromptPending handler
 //!
-//! Accumulates the pattern buffer for the `s`/`S` regex-selection prompts and
-//! the `/` search prompt.
+//! Accumulates the pattern buffer for the `s`/`S`/`K`/`Alt-K` regex-selection
+//! prompts and the `/`/`?` search prompts.
 //! Cloned from `handlers/command_line.rs`: the simulator never enters a
 //! dedicated "regex prompt mode" — this handler only collects text; the
-//! assembled `"s <pattern>"` / `"S <pattern>"` / `"/ <pattern>"` string is
-//! executed atomically once, on Enter.
+//! assembled `"<command id> <pattern>"` string (e.g. `"s foo"`, `"? sum"`,
+//! `"Alt-K a"`) is executed atomically once, on Enter.
 //!
 //! Enter compiles the pattern via `helix_stdx::rope::Regex::new` before
 //! emitting `Execute`, mirroring `CommandLinePending`'s validate-before-Execute
 //! pattern. Without this, an invalid pattern would propagate as an `Err` all
 //! the way up through `execute_command_any_mode`, which has no recovery path
 //! for it (see `command_line.rs`'s module docs for the same argument). The `/`
-//! search prompt is the exception: it forwards an invalid pattern so the
+//! and `?` search prompts are the exception: it forwards an invalid pattern so the
 //! simulator's `UserError` is shown to the user.
 
 use std::borrow::Cow;
@@ -21,9 +21,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{
-    handler_result::HandlerResult,
-    input_state::{InputState, RegexPromptKind},
-    state_types::RegexPromptPending,
+    handler_result::HandlerResult, input_state::InputState, state_types::RegexPromptPending,
 };
 use crate::security::limits::MAX_COMMAND_LINE_LEN;
 
@@ -48,17 +46,18 @@ impl InputHandler<RegexPromptPending> for KeyHandler {
             KeyCode::Enter => {
                 if state.buffer.is_empty() {
                     HandlerResult::Cancel
-                } else if state.kind != RegexPromptKind::Search
+                } else if !state.kind.forwards_invalid_pattern()
                     && helix_stdx::rope::Regex::new(&state.buffer).is_err()
                 {
-                    // Invalid `s`/`S` pattern: cancel rather than handing an
-                    // `Err` to the executor. `/` deliberately forwards it so
-                    // the simulator's `UserError` reaches the user (FR-204).
+                    // Invalid `s`/`S`/`K`/`Alt-K` pattern: cancel rather than
+                    // handing an `Err` to the executor. The search prompts
+                    // deliberately forward it so the simulator's `UserError`
+                    // reaches the user (FR-204).
                     HandlerResult::Cancel
                 } else {
                     HandlerResult::Execute(Cow::Owned(format!(
                         "{} {}",
-                        state.kind.prefix(),
+                        state.kind.command_id(),
                         state.buffer
                     )))
                 }
@@ -88,6 +87,7 @@ impl InputHandler<RegexPromptPending> for KeyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::typestate::input_state::RegexPromptKind;
 
     fn state(kind: RegexPromptKind, buffer: &str) -> RegexPromptPending {
         RegexPromptPending {
@@ -171,6 +171,61 @@ mod tests {
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         );
         assert_eq!(result, HandlerResult::Execute(Cow::Borrowed("/ sum")));
+    }
+
+    fn enter() -> KeyEvent {
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn enter_assembles_the_command_id_for_every_new_kind() {
+        for (kind, expected) in [
+            (RegexPromptKind::SearchBackward, "? sum"),
+            (RegexPromptKind::KeepSelections, "K sum"),
+            (RegexPromptKind::RemoveSelections, "Alt-K sum"),
+        ] {
+            assert_eq!(
+                KeyHandler::handle_key(&state(kind, "sum"), enter()),
+                HandlerResult::Execute(Cow::Borrowed(expected))
+            );
+        }
+    }
+
+    #[test]
+    fn backward_search_forwards_invalid_regex_but_keep_remove_cancel() {
+        assert_eq!(
+            KeyHandler::handle_key(&state(RegexPromptKind::SearchBackward, "a("), enter()),
+            HandlerResult::Execute(Cow::Borrowed("? a("))
+        );
+        for kind in [
+            RegexPromptKind::KeepSelections,
+            RegexPromptKind::RemoveSelections,
+        ] {
+            assert_eq!(
+                KeyHandler::handle_key(&state(kind, "a("), enter()),
+                HandlerResult::Cancel
+            );
+        }
+    }
+
+    #[test]
+    fn question_mark_is_buffered_as_text_in_every_prompt() {
+        for kind in [
+            RegexPromptKind::SelectRegex,
+            RegexPromptKind::SplitSelection,
+            RegexPromptKind::Search,
+            RegexPromptKind::SearchBackward,
+            RegexPromptKind::KeepSelections,
+            RegexPromptKind::RemoveSelections,
+        ] {
+            assert_eq!(
+                KeyHandler::handle_key(&state(kind, "a"), char_key('?')),
+                HandlerResult::Transition(InputState::RegexPromptPending {
+                    kind,
+                    buffer: "a?".to_string()
+                })
+            );
+        }
     }
 
     #[test]

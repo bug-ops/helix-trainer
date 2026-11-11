@@ -13,7 +13,10 @@ pub enum MiniGameState {
     ///
     /// The countdown displays before gameplay begins.
     /// Remaining value counts down from 3 to 1.
-    Countdown { remaining: u8 },
+    Countdown {
+        /// Seconds left, counting down from 3 to 1.
+        remaining: u8,
+    },
 
     /// Active gameplay
     ///
@@ -25,7 +28,10 @@ pub enum MiniGameState {
     /// Short transition period after completing/failing one scenario
     /// before the next one appears. The `success` flag indicates
     /// whether the scenario was completed successfully or timed out.
-    Transition { success: bool },
+    Transition {
+        /// Whether the scenario just ended was solved (`true`) or timed out (`false`).
+        success: bool,
+    },
 
     /// Game paused by user
     ///
@@ -44,7 +50,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Playing;
@@ -61,7 +67,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Paused;
@@ -75,7 +81,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::GameOver;
@@ -89,7 +95,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Countdown { remaining: 3 };
@@ -103,7 +109,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Transition { success: true };
@@ -129,7 +135,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Countdown { remaining: 2 };

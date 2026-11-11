@@ -3,7 +3,7 @@
 //! Provides shared functionality for initializing scenario states,
 //! reducing code duplication between training and arcade modes.
 
-use crate::config::Scenario;
+use crate::config::{DEFAULT_LANGUAGE, Scenario};
 use crate::helix::{AnyModeSimulator, EditorSnapshot};
 use crate::security::UserError;
 
@@ -34,11 +34,14 @@ impl ScenarioState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::ScenarioState;
     ///
-    /// let state = ScenarioState::from_scenario(&scenario)?;
+    /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
+    /// let state = ScenarioState::from_scenario(&scenarios[0])?;
     /// assert!(!state.is_completed());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn from_scenario(scenario: &Scenario) -> Result<Self, UserError> {
         // Create initial snapshot from scenario setup
@@ -60,7 +63,13 @@ impl ScenarioState {
         );
 
         // Initialize Helix simulator from initial snapshot
-        let simulator = AnyModeSimulator::from_snapshot(&initial_snapshot);
+        let simulator = AnyModeSimulator::from_snapshot(&initial_snapshot).with_language(
+            scenario
+                .setup
+                .language
+                .as_deref()
+                .unwrap_or(DEFAULT_LANGUAGE),
+        );
 
         Ok(Self {
             simulator,

@@ -48,7 +48,7 @@ fn test_render_task_screen_with_session() {
     let mut state = create_test_app_state(vec![scenario]);
 
     // Create a session
-    crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
     terminal
         .draw(|f| {
@@ -330,8 +330,8 @@ mod editor_tests {
 mod screen_render_tests {
     use super::*;
     use crate::ui::state::{
-        AchievementsData, MenuData, MiniGameData, ModeSelectionData, ProfileData,
-        ReturnDestination, StatisticsData, TypedScreen,
+        AchievementsData, MenuData, ModeSelectionData, ProfileData, ReturnDestination,
+        StatisticsData, TypedScreen,
     };
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -377,14 +377,17 @@ mod screen_render_tests {
         state.screen = TypedScreen::EndGameSummary(EndGameSummaryData {
             scenarios_total: 1,
             perfected: 1,
-            imperfect: 0,
             total_completions: 1,
             total_xp: 50,
             level: 1,
             command_success_rate: 1.0,
             journey_days: 0,
             commands_mastered: 0,
-            category_breakdown: vec![(ScenarioCategory::Movement, 1, 1)],
+            category_breakdown: vec![crate::ui::state::CategoryProgress {
+                category: ScenarioCategory::Movement,
+                perfected: 1,
+                total: 1,
+            }],
             next_steps: vec![NextStep::ArcadeMode],
         });
 
@@ -514,7 +517,7 @@ mod screen_render_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Start a scenario to get a Task screen with active session
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         terminal
             .draw(|f| {
@@ -531,7 +534,7 @@ mod screen_render_tests {
     fn test_render_minigame_screen() {
         let mut terminal = create_terminal();
         let mut state = create_test_app_state(vec![create_test_scenario()]);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(crate::testing::started_minigame_data());
 
         terminal
             .draw(|f| {
@@ -624,7 +627,7 @@ mod screen_render_tests {
         let mut terminal = create_terminal();
         let mut state = create_test_app_state(vec![create_test_scenario()]);
         state.screen = TypedScreen::Profile(ProfileData {
-            return_to: ReturnDestination::PausedMiniGame,
+            return_to: crate::testing::paused_minigame_return(),
         });
 
         terminal
@@ -709,7 +712,6 @@ mod review_tests {
         ReviewSessionState {
             due_commands: commands.into_iter().map(String::from).collect(),
             current_index: 0,
-            current_command: Some("h".to_string()),
             session_started_at: Instant::now(),
             completed_reviews: vec![],
         }
@@ -721,7 +723,6 @@ mod review_tests {
         let mut state = create_test_app_state(vec![create_test_scenario()]);
 
         let session = create_review_session(vec!["h", "j", "k", "l"]);
-        state.game.review_session = Some(session.clone());
         state.screen = TypedScreen::Review(ReviewData { session });
 
         terminal
@@ -737,7 +738,6 @@ mod review_tests {
         let mut state = create_test_app_state(vec![create_test_scenario()]);
 
         let session = create_review_session(vec!["w"]);
-        state.game.review_session = Some(session.clone());
         state.screen = TypedScreen::Review(ReviewData { session });
 
         terminal
@@ -754,8 +754,7 @@ mod review_tests {
 
         let mut session = create_review_session(vec!["h", "j", "k", "l"]);
         session.current_index = 2; // Midway through
-        session.current_command = Some("k".to_string());
-        state.game.review_session = Some(session.clone());
+        session.current_index = 2;
         state.screen = TypedScreen::Review(ReviewData { session });
 
         terminal
@@ -786,11 +785,11 @@ mod popup_tests {
     fn test_render_hint_popup() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         // Start scenario and show hint
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
-        crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
+        crate::testing::update_executing_effects(&mut state, crate::ui::Message::ShowHint).unwrap();
 
         terminal
             .draw(|f| {
@@ -805,7 +804,7 @@ mod popup_tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         // Key history should be empty initially
         terminal
@@ -821,7 +820,7 @@ mod popup_tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         // Add some key history (simulate key presses)
         if let TypedScreen::Task(ref mut task_data) = state.screen {
@@ -1074,6 +1073,11 @@ mod results_tests {
         mastery_factor: f64,
         repeat_penalty: f64,
     ) -> XPBreakdown {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "mirrors the production XP formula with non-negative inputs"
+        )]
         let total =
             ((base + perfect_bonus + first_today) as f64 * mastery_factor * repeat_penalty) as u64;
         XPBreakdown {
@@ -1234,7 +1238,10 @@ mod results_tests {
 
         let mut results_data = create_abandoned_results_data(scenario);
         results_data.xp_breakdown = Some(create_xp_breakdown(50, 0, 0, 0.5, 1.0));
-        results_data.scenario_mastery = Some((ScenarioMastery::Proficient, 0.5));
+        results_data.scenario_mastery = Some(crate::ui::state::MasteryInfo {
+            mastery: ScenarioMastery::Proficient,
+            xp_multiplier: 0.5,
+        });
         state.screen = TypedScreen::Results(results_data);
 
         terminal
@@ -1270,8 +1277,14 @@ mod results_tests {
         let mut results_data = create_abandoned_results_data(scenario);
         let mut xp = create_xp_breakdown(50, 25, 0, 1.0, 1.0);
         xp.quest_bonuses = vec![
-            ("Complete 5 scenarios".to_string(), 100),
-            ("Use movement commands".to_string(), 50),
+            crate::ui::state::QuestBonus {
+                quest: "Complete 5 scenarios".to_string(),
+                xp: 100,
+            },
+            crate::ui::state::QuestBonus {
+                quest: "Use movement commands".to_string(),
+                xp: 50,
+            },
         ];
         xp.total_xp += 150;
         results_data.xp_breakdown = Some(xp);
@@ -1401,7 +1414,10 @@ mod results_tests {
         let mut state = create_test_app_state(vec![scenario.clone()]);
 
         let mut results_data = create_abandoned_results_data(scenario);
-        results_data.scenario_mastery = Some((ScenarioMastery::Mastered, 0.25));
+        results_data.scenario_mastery = Some(crate::ui::state::MasteryInfo {
+            mastery: ScenarioMastery::Mastered,
+            xp_multiplier: 0.25,
+        });
         results_data.xp_breakdown = Some(create_xp_breakdown(50, 25, 0, 0.25, 1.0));
         state.screen = TypedScreen::Results(results_data);
 
@@ -1431,12 +1447,18 @@ mod results_tests {
             mastery_multiplier: 0.5 * 0.8,
             mastery_factor: 0.5,
             repeat_penalty: 0.8,
-            quest_bonuses: vec![("Quest bonus".to_string(), 30)],
+            quest_bonuses: vec![crate::ui::state::QuestBonus {
+                quest: "Quest bonus".to_string(),
+                xp: 30,
+            }],
             total_xp: 46, // (50+25+10) * 0.5 * 0.8 + 30
         };
 
         let mut results_data = create_abandoned_results_data(scenario);
-        results_data.scenario_mastery = Some((ScenarioMastery::Mastered, 0.5));
+        results_data.scenario_mastery = Some(crate::ui::state::MasteryInfo {
+            mastery: ScenarioMastery::Mastered,
+            xp_multiplier: 0.5,
+        });
         results_data.quest_changes = vec![QuestProgressChange {
             quest_description: "Daily quest".to_string(),
             old_progress: 4,
@@ -1685,7 +1707,7 @@ mod statistics_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::Statistics(StatisticsData {
-            return_to: ReturnDestination::PausedMiniGame,
+            return_to: crate::testing::paused_minigame_return(),
         });
 
         terminal
@@ -1778,7 +1800,9 @@ mod statistics_tests {
 
 mod mode_selection_extended_tests {
     use super::*;
-    use crate::ui::state::{MiniGameModeSelection, ModeSelectionData, TypedScreen};
+    use crate::ui::state::{
+        MiniGameModeKind, MiniGameModeSelection, ModeSelectionData, TypedScreen,
+    };
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -1794,7 +1818,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 0,
+            selected_mode: crate::ui::state::TopMode::Training,
             minigame_mode_selection: None,
         });
 
@@ -1812,7 +1836,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: None,
         });
 
@@ -1830,8 +1854,10 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 0 }),
+            selected_mode: crate::ui::state::TopMode::Arcade,
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Arcade,
+            }),
         });
 
         terminal
@@ -1848,8 +1874,10 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 1 }),
+            selected_mode: crate::ui::state::TopMode::Arcade,
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Survival,
+            }),
         });
 
         terminal
@@ -1866,8 +1894,10 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
+            selected_mode: crate::ui::state::TopMode::Arcade,
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Challenge,
+            }),
         });
 
         terminal
@@ -1891,8 +1921,10 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
+            selected_mode: crate::ui::state::TopMode::Arcade,
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Challenge,
+            }),
         });
 
         terminal
@@ -1903,8 +1935,8 @@ mod mode_selection_extended_tests {
 
         let buffer: Buffer = terminal.backend().buffer().clone();
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        for index in 0..MiniGameModeSelection::MODE_COUNT {
-            let mode_name = MiniGameModeSelection::mode_name(index);
+        for mode in MiniGameModeSelection::all_modes(chrono::Utc::now().date_naive()) {
+            let mode_name = mode.name();
             assert!(
                 text.contains(mode_name),
                 "submenu entry '{mode_name}' must be visible at 80x24, got buffer text: {text}"
@@ -1932,8 +1964,10 @@ mod mode_selection_extended_tests {
             .start_attempt(today);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
+            selected_mode: crate::ui::state::TopMode::Arcade,
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Challenge,
+            }),
         });
 
         terminal
@@ -1959,8 +1993,10 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 0 }),
+            selected_mode: crate::ui::state::TopMode::Arcade,
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Arcade,
+            }),
         });
 
         terminal
@@ -1979,7 +2015,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 0,
+            selected_mode: crate::ui::state::TopMode::Training,
             minigame_mode_selection: None,
         });
 
@@ -2026,7 +2062,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_playing_state() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2036,8 +2072,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2050,7 +2085,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_paused_state() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2060,8 +2095,7 @@ mod minigame_screen_tests {
         }
         session.pause();
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2074,7 +2108,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_countdown_state() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2082,8 +2116,7 @@ mod minigame_screen_tests {
         // Only tick once - still in countdown
         session.tick_countdown();
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2096,7 +2129,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_with_queue() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![
             create_minigame_scenario("s1", Difficulty::Beginner),
@@ -2110,8 +2143,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2124,7 +2156,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_with_key_history() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2133,8 +2165,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        let mut minigame_data = MiniGameData::default();
+        let mut minigame_data = MiniGameData::new(session);
         minigame_data.key_history.push("h".to_string());
         minigame_data.key_history.push("j".to_string());
         minigame_data.key_history.push("k".to_string());
@@ -2151,7 +2182,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_with_xp_earned() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2160,11 +2191,8 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        let minigame_data = MiniGameData {
-            last_xp_earned: Some(75),
-            ..Default::default()
-        };
+        let mut minigame_data = MiniGameData::new(session);
+        minigame_data.last_xp_earned = Some(75);
         state.screen = TypedScreen::MiniGame(minigame_data);
 
         terminal
@@ -2178,7 +2206,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_intermediate_difficulty() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario(
             "s1",
@@ -2190,8 +2218,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2204,7 +2231,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_advanced_difficulty() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Advanced)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2213,8 +2240,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2227,7 +2253,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_empty_queue() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         // Single scenario - queue will be empty after first
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
@@ -2237,8 +2263,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2253,7 +2278,7 @@ mod minigame_screen_tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2262,8 +2287,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2278,7 +2302,7 @@ mod minigame_screen_tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2287,8 +2311,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2329,7 +2352,7 @@ mod popup_additional_tests {
             let mut terminal = create_terminal();
             let scenario = create_test_scenario();
             let mut state = create_test_app_state(vec![scenario]);
-            crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+            crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
             if wide_history {
                 if let TypedScreen::Task(ref mut task_data) = state.screen {
@@ -2400,7 +2423,7 @@ mod popup_additional_tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         // Add maximum keys
         if let TypedScreen::Task(ref mut task_data) = state.screen {
@@ -2422,7 +2445,7 @@ mod popup_additional_tests {
         let scenario = create_test_scenario();
         let mut state = create_test_app_state(vec![scenario]);
 
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
 
         // Add special multi-character keys
         if let TypedScreen::Task(ref mut task_data) = state.screen {
@@ -2453,8 +2476,8 @@ mod popup_additional_tests {
             .build();
 
         let mut state = create_test_app_state(vec![scenario]);
-        crate::ui::update(&mut state, crate::ui::Message::StartScenario(0)).unwrap();
-        crate::ui::update(&mut state, crate::ui::Message::ShowHint).unwrap();
+        crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
+        crate::testing::update_executing_effects(&mut state, crate::ui::Message::ShowHint).unwrap();
 
         terminal
             .draw(|f| {

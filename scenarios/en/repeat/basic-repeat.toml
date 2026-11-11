@@ -130,10 +130,10 @@ cursor_position = [1, 0]
 
 [scenarios.target]
 file_content = """fn main() {
-  println!("a");
-  println!("b");
+    println!("a");
+    println!("b");
 }"""
-cursor_position = [2, 4]
+cursor_position = [2, 8]
 
 [scenarios.solution]
 commands = [">", "j", "."]

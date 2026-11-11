@@ -205,7 +205,7 @@ the user-facing rollout communication for the goto-only narrowing.
 | Principle | Status | Notes |
 |-----------|--------|-------|
 | I. Architecture — input routed through `HelixSimulator`/`AnyModeSimulator`, typestate pattern for pending states | Compliant for registers; partially compliant for command-line (typestate used, but `EditorMode` itself not extended) | See [[NFR#NFR-002]] |
-| IV. Code Style — `#![forbid(unsafe_code)]` preserved | Compliant | Verified via grep |
+| IV. Code Style — `unsafe_code = "forbid"` (Cargo lint) preserved | Compliant | Verified via grep |
 | IV. Code Style — doc comments on new `pub` items | Compliant | rustdoc CI gate would have blocked merge otherwise |
 | V. Security — input validation via `UserError`/`SecurityError` | Compliant | `CommandLine::parse`, register-name validation |
 | VII. Simplicity — extend existing subsystem rather than introduce a parallel one | Compliant | `RegisterFile` replaces/generalizes `clipboard`, not duplicates it |

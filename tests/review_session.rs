@@ -9,10 +9,28 @@
 
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::learning::PerformanceTracker;
-use helix_trainer::ui::state::{AppState, Message, TypedScreen};
-use helix_trainer::ui::update;
+use helix_trainer::ui::state::{AppState, Message, ReviewSessionState, TypedScreen};
+
 use std::assert_matches;
 use std::time::Duration;
+
+/// Run `update` and execute the effects it requests, as the event loop does
+fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
+    let mut effects = Vec::new();
+    let result = helix_trainer::ui::update(state, msg, &mut effects);
+    for effect in effects {
+        drop(effect.execute(&mut state.progress));
+    }
+    result
+}
+
+/// The review session currently on screen, if any
+fn review_session(state: &AppState) -> Option<&ReviewSessionState> {
+    match &state.screen {
+        TypedScreen::Review(data) => Some(&data.session),
+        _ => None,
+    }
+}
 
 /// Helper: Create test app state with optional due reviews
 fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
@@ -46,19 +64,19 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
 fn test_start_review_session_with_due_reviews() {
     let mut state = create_test_app_state_with_reviews(5);
     assert_matches!(state.screen, TypedScreen::ModeSelection(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 
     // Start review session
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Should transition to Review screen and create session state
     assert_matches!(state.screen, TypedScreen::Review(_));
-    assert!(state.game.review_session.is_some());
+    assert!(review_session(&state).is_some());
 
-    let session = state.game.review_session.as_ref().unwrap();
+    let session = review_session(&state).unwrap();
     assert_eq!(session.due_commands.len(), 5);
     assert_eq!(session.current_index, 0);
-    assert!(session.current_command.is_some());
+    assert!(session.current_command().is_some());
     assert_eq!(session.completed_reviews.len(), 0);
 }
 
@@ -72,7 +90,7 @@ fn test_start_review_session_with_zero_due_reviews() {
 
     // Should stay on ModeSelection (no reviews available)
     assert_matches!(state.screen, TypedScreen::ModeSelection(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 #[test]
@@ -82,7 +100,7 @@ fn test_start_review_session_with_one_review_boundary() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     assert_matches!(state.screen, TypedScreen::Review(_));
-    let session = state.game.review_session.as_ref().unwrap();
+    let session = review_session(&state).unwrap();
     assert_eq!(session.due_commands.len(), 1);
     assert_eq!(session.current_index, 0);
 }
@@ -94,7 +112,7 @@ fn test_start_review_session_with_many_reviews_stress_test() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     assert_matches!(state.screen, TypedScreen::Review(_));
-    let session = state.game.review_session.as_ref().unwrap();
+    let session = review_session(&state).unwrap();
     assert_eq!(session.due_commands.len(), 100);
     assert_eq!(session.current_index, 0);
 }
@@ -108,10 +126,22 @@ fn test_abandon_review_session_mid_way() {
     assert_matches!(state.screen, TypedScreen::Review(_));
 
     // Complete 2 reviews
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
-    let session = state.game.review_session.as_ref().unwrap();
+    let session = review_session(&state).unwrap();
     assert_eq!(session.completed_reviews.len(), 2);
     assert_eq!(session.current_index, 2);
 
@@ -120,7 +150,7 @@ fn test_abandon_review_session_mid_way() {
 
     // Should return to menu and clear session
     assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 #[test]
@@ -136,12 +166,18 @@ fn test_complete_all_reviews_successfully() {
 
     // Complete all 3 reviews successfully
     for _ in 0..3 {
-        update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+        update(
+            &mut state,
+            Message::CompleteReviewCommand {
+                outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+            },
+        )
+        .unwrap();
     }
 
     // Should return to menu and award XP
     assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 
     // Verify XP was awarded
     let final_xp = {
@@ -158,19 +194,31 @@ fn test_complete_review_idempotency() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Complete first review
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
-    let session = state.game.review_session.as_ref().unwrap();
+    let session = review_session(&state).unwrap();
     assert_eq!(session.completed_reviews.len(), 1);
     assert_eq!(session.current_index, 1);
 
     // Try to complete again (should safely handle if called twice)
-    let _current_command = session.current_command.clone();
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    let _current_command = session.current_command().map(str::to_owned);
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Should have advanced to next or completed session
     // (Either at end of session or at next command)
-    let session_state = state.game.review_session.as_ref();
+    let session_state = review_session(&state);
     if let Some(session) = session_state {
         assert_eq!(session.completed_reviews.len(), 2);
     }
@@ -186,19 +234,25 @@ fn test_complete_review_command_success() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    let session_before = state.game.review_session.as_ref().unwrap();
-    let command = session_before.current_command.clone().unwrap();
+    let session_before = review_session(&state).unwrap();
+    let command = session_before.current_command().map(str::to_owned).unwrap();
 
     // Complete review as success
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
-    let session_after = state.game.review_session.as_ref().unwrap();
+    let session_after = review_session(&state).unwrap();
 
     // Should have recorded result
     assert_eq!(session_after.completed_reviews.len(), 1);
     let result = &session_after.completed_reviews[0];
     assert_eq!(result.command, command);
-    assert!(result.success);
+    assert!(result.outcome.is_recalled());
 
     // Should have advanced to next command
     assert_eq!(session_after.current_index, 1);
@@ -210,42 +264,28 @@ fn test_complete_review_command_failure() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    let session_before = state.game.review_session.as_ref().unwrap();
-    let command = session_before.current_command.clone().unwrap();
+    let session_before = review_session(&state).unwrap();
+    let command = session_before.current_command().map(str::to_owned).unwrap();
 
     // Complete review as failure
     update(
         &mut state,
-        Message::CompleteReviewCommand { success: false },
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Forgot,
+        },
     )
     .unwrap();
 
-    let session_after = state.game.review_session.as_ref().unwrap();
+    let session_after = review_session(&state).unwrap();
 
     // Should have recorded result
     assert_eq!(session_after.completed_reviews.len(), 1);
     let result = &session_after.completed_reviews[0];
     assert_eq!(result.command, command);
-    assert!(!result.success);
+    assert!(!result.outcome.is_recalled());
 
     // Should still advance to next command
     assert_eq!(session_after.current_index, 1);
-}
-
-#[test]
-fn test_next_review_command_advances() {
-    let mut state = create_test_app_state_with_reviews(3);
-
-    update(&mut state, Message::StartReviewSession).unwrap();
-
-    // Manually trigger NextReviewCommand (normally called by CompleteReviewCommand)
-    let session = state.game.review_session.as_ref().unwrap();
-    assert_eq!(session.current_index, 0);
-
-    update(&mut state, Message::NextReviewCommand).unwrap();
-
-    let session = state.game.review_session.as_ref().unwrap();
-    assert_eq!(session.current_index, 1);
 }
 
 #[test]
@@ -255,11 +295,17 @@ fn test_next_review_command_ends_session() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Complete the only review
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Session should end and return to menu
     assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 #[test]
@@ -269,26 +315,32 @@ fn test_performance_tracker_updated() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     let command = {
-        let session = state.game.review_session.as_ref().unwrap();
-        session.current_command.clone().unwrap()
+        let session = review_session(&state).unwrap();
+        session.current_command().map(str::to_owned).unwrap()
     };
 
     let attempts_before = state
         .progress
         .performance_tracker
         .performance(&command)
-        .map(|p| p.attempts)
+        .map(|p| p.attempts())
         .unwrap_or(0);
 
     // Complete review
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Performance tracker should have recorded the attempt
     let attempts_after = state
         .progress
         .performance_tracker
         .performance(&command)
-        .map(|p| p.attempts)
+        .map(|p| p.attempts())
         .unwrap_or(0);
 
     assert!(
@@ -310,11 +362,23 @@ fn test_state_transition_review_to_next_to_review() {
     assert_matches!(state.screen, TypedScreen::Review(_));
 
     // Review → Next → Still Review
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
     assert_matches!(state.screen, TypedScreen::Review(_));
 
     // Review → Complete → MainMenu
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
     assert_matches!(state.screen, TypedScreen::Menu(_));
 }
 
@@ -354,7 +418,13 @@ fn test_xp_calculation_base_only() {
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     let final_xp = {
         let profile = &state.progress.profile;
@@ -382,7 +452,13 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
 
     // Complete all 5 reviews successfully
     for _ in 0..5 {
-        update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+        update(
+            &mut state,
+            Message::CompleteReviewCommand {
+                outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+            },
+        )
+        .unwrap();
     }
 
     let final_xp = {
@@ -413,7 +489,9 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
     for _ in 0..5 {
         update(
             &mut state,
-            Message::CompleteReviewCommand { success: false },
+            Message::CompleteReviewCommand {
+                outcome: helix_trainer::ui::state::ReviewOutcome::Forgot,
+            },
         )
         .unwrap();
     }
@@ -443,16 +521,32 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // 2 successes, 2 failures (50% success rate)
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
     update(
         &mut state,
-        Message::CompleteReviewCommand { success: false },
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
     )
     .unwrap();
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
     update(
         &mut state,
-        Message::CompleteReviewCommand { success: false },
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Forgot,
+        },
+    )
+    .unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Forgot,
+        },
     )
     .unwrap();
 
@@ -481,7 +575,9 @@ fn test_xp_calculation_always_positive() {
     update(&mut state, Message::StartReviewSession).unwrap();
     update(
         &mut state,
-        Message::CompleteReviewCommand { success: false },
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Forgot,
+        },
     )
     .unwrap();
 
@@ -515,16 +611,22 @@ fn test_complete_flow_all_successful() {
 
     // Complete all 5 reviews successfully
     for i in 0..5 {
-        let session = state.game.review_session.as_ref().unwrap();
+        let session = review_session(&state).unwrap();
         assert_eq!(session.current_index, i);
-        assert!(session.current_command.is_some());
+        assert!(session.current_command().is_some());
 
-        update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+        update(
+            &mut state,
+            Message::CompleteReviewCommand {
+                outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+            },
+        )
+        .unwrap();
     }
 
     // Session should end
     assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 
     // XP should be awarded
     let final_xp = {
@@ -549,14 +651,16 @@ fn test_complete_flow_all_failed() {
     for _ in 0..3 {
         update(
             &mut state,
-            Message::CompleteReviewCommand { success: false },
+            Message::CompleteReviewCommand {
+                outcome: helix_trainer::ui::state::ReviewOutcome::Forgot,
+            },
         )
         .unwrap();
     }
 
     // Session should still end and award base XP
     assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 
     let final_xp = {
         let profile = &state.progress.profile;
@@ -577,15 +681,27 @@ fn test_complete_flow_abandoned_after_partial() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Complete 2 reviews
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Abandon session
     update(&mut state, Message::AbandonReviewSession).unwrap();
 
     // Should return to menu without awarding XP (session incomplete)
     assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 
     let final_xp = {
         let profile = &state.progress.profile;
@@ -605,7 +721,7 @@ fn test_complete_flow_zero_reviews() {
 
     // Should stay on ModeSelection (initial screen)
     assert_matches!(state.screen, TypedScreen::ModeSelection(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 // ============================================================================
@@ -618,16 +734,22 @@ fn test_boundary_single_review() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    let session = state.game.review_session.as_ref().unwrap();
+    let session = review_session(&state).unwrap();
     assert_eq!(session.due_commands.len(), 1);
     assert_eq!(session.current_index, 0);
 
     // Complete the only review
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Should immediately end session
     assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 #[test]
@@ -636,17 +758,23 @@ fn test_boundary_large_review_count() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    let session = state.game.review_session.as_ref().unwrap();
+    let session = review_session(&state).unwrap();
     assert_eq!(session.due_commands.len(), 100);
 
     // Complete all 100 reviews
     for _ in 0..100 {
-        update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+        update(
+            &mut state,
+            Message::CompleteReviewCommand {
+                outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+            },
+        )
+        .unwrap();
     }
 
     // Should handle large count gracefully
     assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 // ============================================================================
@@ -659,10 +787,13 @@ fn test_review_result_records_duration() {
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
-    // Wait a tiny bit (simulated)
-    std::thread::sleep(Duration::from_millis(10));
-
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Session is complete, so we can't check duration directly
     // But the review should have recorded a non-zero duration
@@ -676,28 +807,42 @@ fn test_review_results_accumulate() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     // Complete reviews with mixed results
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
     {
-        let session = state.game.review_session.as_ref().unwrap();
+        let session = review_session(&state).unwrap();
         assert_eq!(session.completed_reviews.len(), 1);
-        assert!(session.completed_reviews[0].success);
+        assert!(session.completed_reviews[0].outcome.is_recalled());
     }
 
     update(
         &mut state,
-        Message::CompleteReviewCommand { success: false },
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Forgot,
+        },
     )
     .unwrap();
     {
-        let session = state.game.review_session.as_ref().unwrap();
+        let session = review_session(&state).unwrap();
         assert_eq!(session.completed_reviews.len(), 2);
-        assert!(!session.completed_reviews[1].success);
+        assert!(!session.completed_reviews[1].outcome.is_recalled());
     }
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Session complete after 3 reviews
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 // ============================================================================
@@ -711,15 +856,21 @@ fn test_session_progress_increments_correctly() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     for i in 0..5 {
-        let session = state.game.review_session.as_ref().unwrap();
+        let session = review_session(&state).unwrap();
         assert_eq!(session.current_index, i);
         assert_eq!(session.completed_reviews.len(), i);
 
-        update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+        update(
+            &mut state,
+            Message::CompleteReviewCommand {
+                outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+            },
+        )
+        .unwrap();
     }
 
     // Session complete
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }
 
 #[test]
@@ -729,9 +880,15 @@ fn test_session_progress_never_exceeds_due_count() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     for _ in 0..3 {
-        update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+        update(
+            &mut state,
+            Message::CompleteReviewCommand {
+                outcome: helix_trainer::ui::state::ReviewOutcome::Recalled,
+            },
+        )
+        .unwrap();
     }
 
     // Session should end exactly at due_count
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
 }

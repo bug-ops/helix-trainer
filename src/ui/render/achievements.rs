@@ -126,7 +126,7 @@ fn render_achievements_content(
     let list = Paragraph::new(lines)
         .alignment(Alignment::Left)
         .style(Style::default().fg(Color::White))
-        .scroll((scroll_offset as u16, 0));
+        .scroll((u16::try_from(scroll_offset).unwrap_or(u16::MAX), 0));
     frame.render_widget(list, inner_area);
 
     if total > visible_height {

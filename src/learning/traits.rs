@@ -12,12 +12,15 @@
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use helix_trainer::learning::ProgressionTier;
+/// ```
+/// use helix_trainer::learning::{MasteryLevel, ProgressionTier};
 ///
-/// fn display_mastery<T: ProgressionTier>(tier: &T) {
-///     println!("{} {}", tier.emoji(), tier.name());
+/// fn label<T: ProgressionTier>(tier: &T) -> String {
+///     format!("{} {}", tier.emoji(), tier.name())
 /// }
+///
+/// assert!(label(&MasteryLevel::Master).ends_with("Master"));
+/// assert!(MasteryLevel::Master.is_max_tier());
 /// ```
 pub trait ProgressionTier: Copy + Eq {
     /// Get display name (e.g., "Learning", "Beginner")
@@ -45,13 +48,13 @@ pub trait ProgressionTier: Copy + Eq {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// use helix_trainer::gamification::QuestType;
 /// use helix_trainer::learning::ProgressTracker;
 ///
-/// fn render_progress_bar<T: ProgressTracker>(tracker: &T) {
-///     let pct = (tracker.progress() * 100.0) as u32;
-///     println!("[{:>3}%] {}", pct, if tracker.is_complete() { "✓" } else { "" });
-/// }
+/// let quest = QuestType::ScenarioCompletion { target: 4, current: 1 };
+/// assert_eq!(quest.progress_percent(), 25);
+/// assert!(!ProgressTracker::is_complete(&quest));
 /// ```
 pub trait ProgressTracker {
     /// Get current progress as fraction (0.0 to 1.0)
@@ -72,7 +75,7 @@ pub trait ProgressTracker {
 
     /// Get progress as percentage (0 to 100)
     fn progress_percent(&self) -> u32 {
-        (self.progress() * 100.0).min(100.0) as u32
+        crate::numeric::floor_percent(self.progress())
     }
 }
 
@@ -82,18 +85,30 @@ pub trait ProgressTracker {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::learning::Modifier;
 ///
-/// fn apply_all_modifiers(base: u64, modifiers: &[&dyn Modifier]) -> u64 {
-///     modifiers.iter().fold(base, |acc, m| m.apply(acc))
+/// struct Double;
+///
+/// impl Modifier for Double {
+///     fn factor(&self) -> f64 {
+///         2.0
+///     }
 /// }
+///
+/// assert_eq!(Double.apply(50), 100);
+/// assert!(Double.is_beneficial());
 /// ```
 pub trait Modifier {
     /// Get modification factor (1.0 = no change, 2.0 = double, 0.5 = half)
     fn factor(&self) -> f64;
 
     /// Apply modification to a value
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a modifier factor is non-negative and the scaled value stays far below u64::MAX"
+    )]
     fn apply(&self, value: u64) -> u64 {
         (value as f64 * self.factor()).round() as u64
     }
@@ -114,11 +129,9 @@ mod tests {
     use super::*;
 
     // Test implementation for ProgressionTier
-    #[allow(dead_code)]
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum TestTier {
         Low,
-        Mid,
         High,
     }
 
@@ -126,7 +139,6 @@ mod tests {
         fn name(&self) -> &'static str {
             match self {
                 TestTier::Low => "Low",
-                TestTier::Mid => "Mid",
                 TestTier::High => "High",
             }
         }
@@ -134,7 +146,6 @@ mod tests {
         fn emoji(&self) -> &'static str {
             match self {
                 TestTier::Low => "🔰",
-                TestTier::Mid => "⭐",
                 TestTier::High => "🏆",
             }
         }
@@ -142,7 +153,6 @@ mod tests {
         fn tier_level(&self) -> u32 {
             match self {
                 TestTier::Low => 0,
-                TestTier::Mid => 1,
                 TestTier::High => 2,
             }
         }

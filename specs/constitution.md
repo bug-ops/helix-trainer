@@ -97,8 +97,9 @@ status: permanent
   check `src/minigame/`, `src/game/`, `src/input/typestate/` for the
   established idiom (typestate, sealed traits, exhaustive `match`) before
   adding a parallel mechanism.
-- `#![forbid(unsafe_code)]` is set in both `main.rs` and `lib.rs` and MUST
-  remain forbidden project-wide — no exceptions, no `#[allow(unsafe_code)]`
+- `[lints.rust] unsafe_code = "forbid"` in `Cargo.toml` (replacing the former
+  `#![forbid(unsafe_code)]` crate attributes in `main.rs` and `lib.rs`) MUST
+  remain in force project-wide — no exceptions, no `#[allow(unsafe_code)]`
   overrides.
 - Every `pub` type, trait, function, and method must have a `///` doc
   comment explaining *what* and *why*, not merely restating the name;

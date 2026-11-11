@@ -1,17 +1,20 @@
 //! Application configuration storage and persistence
 //!
 //! Handles loading and saving application configuration to disk.
-//! Configuration is stored in `helix-trainer/config.json` under the OS config
-//! directory (`dirs::config_dir()`: `~/.config` on Linux,
-//! `~/Library/Application Support` on macOS, `%AppData%` on Windows).
+//! Configuration is stored in `config.json` in the data directory
+//! ([`DataDir`]): `~/.config/helix-trainer` on Linux and macOS (honoring
+//! `$XDG_CONFIG_HOME` on macOS), `%AppData%\helix-trainer` on Windows.
 
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::security::{limits::MAX_CONFIG_FILE_SIZE, path_validator, private_fs};
+use super::data_dir::DataDir;
+use super::json_store::JsonStore;
+use crate::security::limits::MAX_CONFIG_FILE_SIZE;
+
+const CONFIG_FILE_NAME: &str = "config.json";
 
 /// Application configuration
 ///
@@ -58,14 +61,15 @@ struct ConfigData {
 }
 
 /// Handles configuration persistence to disk
+#[derive(Debug, Clone)]
 pub struct ConfigStorage {
-    file_path: PathBuf,
+    store: JsonStore<ConfigData>,
 }
 
 impl ConfigStorage {
     /// Create a new storage handler
     ///
-    /// Default path: `helix-trainer/config.json` in the OS config directory
+    /// Default path: `config.json` in the data directory ([`DataDir::resolve`])
     ///
     /// # Examples
     ///
@@ -75,27 +79,27 @@ impl ConfigStorage {
     /// let storage = ConfigStorage::new();
     /// ```
     pub fn new() -> Self {
-        let default_path = Self::default_path();
+        Self::in_data_dir(&DataDir::resolve())
+    }
+
+    /// Create storage for `config.json` in `data_dir`, copying it from the
+    /// previous data directory on first load when the location moved (macOS).
+    pub fn in_data_dir(data_dir: &DataDir) -> Self {
         Self {
-            file_path: default_path,
+            store: JsonStore::new(
+                data_dir.file(CONFIG_FILE_NAME),
+                "config",
+                MAX_CONFIG_FILE_SIZE,
+            )
+            .migrating_from(data_dir.legacy_file(CONFIG_FILE_NAME)),
         }
     }
 
     /// Create storage with custom path
     pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            file_path: path.as_ref().to_path_buf(),
+            store: JsonStore::new(path.as_ref(), "config", MAX_CONFIG_FILE_SIZE),
         }
-    }
-
-    /// Get default storage path
-    ///
-    /// Returns `helix-trainer/config.json` in the OS config directory
-    fn default_path() -> PathBuf {
-        let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-        path.push("helix-trainer");
-        path.push("config.json");
-        path
     }
 
     /// Load configuration from disk
@@ -115,22 +119,17 @@ impl ConfigStorage {
     /// let config = storage.load().unwrap();
     /// ```
     pub fn load(&self) -> Result<AppConfig> {
-        if !self.file_path.exists() {
-            return Ok(AppConfig::default());
-        }
-
-        let contents = path_validator::read_capped(&self.file_path, MAX_CONFIG_FILE_SIZE)
-            .map_err(|e| anyhow::anyhow!("Failed to read config file: {e}"))?;
-
-        let data: ConfigData =
-            serde_json::from_str(&contents).context("Failed to parse config JSON")?;
-
-        Ok(data.config)
+        Ok(self
+            .store
+            .load()?
+            .map(|data| data.config)
+            .unwrap_or_default())
     }
 
     /// Save configuration to disk
     ///
-    /// Creates parent directory if needed
+    /// Atomically replaces the file (temporary file, `fsync`, rename) and
+    /// creates the parent directory if needed.
     ///
     /// # Errors
     ///
@@ -146,32 +145,19 @@ impl ConfigStorage {
     /// storage.save(&config).unwrap();
     /// ```
     pub fn save(&self, config: &AppConfig) -> Result<()> {
-        // Create parent directory if needed
-        if let Some(parent) = self.file_path.parent() {
-            private_fs::create_dir_all(parent).context("Failed to create config directory")?;
-        }
-
-        let data = ConfigData {
+        Ok(self.store.save(&ConfigData {
             config: config.clone(),
-        };
-
-        let json = serde_json::to_string_pretty(&data).context("Failed to serialize config")?;
-
-        private_fs::create_file(&self.file_path)
-            .and_then(|mut file| file.write_all(json.as_bytes()))
-            .context("Failed to write config file")?;
-
-        Ok(())
+        })?)
     }
 
     /// Check if config file exists
     pub fn exists(&self) -> bool {
-        self.file_path.exists()
+        self.store.exists()
     }
 
     /// Get file path
     pub fn path(&self) -> &Path {
-        &self.file_path
+        self.store.path()
     }
 }
 
@@ -212,6 +198,45 @@ mod tests {
     }
 
     #[test]
+    fn test_in_data_dir_migrates_legacy_config() {
+        let root = TempDir::new().unwrap();
+        let data_dir = DataDir::resolve_for(
+            true,
+            Some(root.path().join("xdg")),
+            Some(root.path().join("os")),
+        );
+        let legacy = ConfigStorage::with_path(root.path().join("os/helix-trainer/config.json"));
+        legacy
+            .save(&AppConfig {
+                use_helix_keymap: true,
+                ..AppConfig::default()
+            })
+            .unwrap();
+
+        let storage = ConfigStorage::in_data_dir(&data_dir);
+
+        assert!(storage.load().unwrap().use_helix_keymap);
+        assert_eq!(storage.path(), data_dir.file("config.json"));
+        assert!(legacy.exists());
+    }
+
+    #[test]
+    fn test_in_data_dir_failed_migration_is_an_error_and_creates_nothing() {
+        let root = TempDir::new().unwrap();
+        let data_dir = DataDir::resolve_for(
+            true,
+            Some(root.path().join("xdg")),
+            Some(root.path().join("os")),
+        );
+        fs::create_dir_all(root.path().join("os/helix-trainer/config.json")).unwrap();
+
+        let storage = ConfigStorage::in_data_dir(&data_dir);
+
+        assert!(storage.load().is_err());
+        assert!(!storage.exists());
+    }
+
+    #[test]
     fn test_load_oversized_file_rejected() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("config.json");
@@ -227,7 +252,9 @@ mod tests {
             config: AppConfig::default(),
         })
         .unwrap();
-        value["padding"] = serde_json::Value::String("a".repeat(MAX_CONFIG_FILE_SIZE as usize + 1));
+        value["padding"] = serde_json::Value::String(
+            "a".repeat(usize::try_from(MAX_CONFIG_FILE_SIZE).expect("fits in usize") + 1),
+        );
         let oversized = serde_json::to_string(&value).unwrap();
         assert!(oversized.len() as u64 > MAX_CONFIG_FILE_SIZE);
         fs::write(&file_path, &oversized).unwrap();

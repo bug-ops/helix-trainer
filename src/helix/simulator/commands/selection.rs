@@ -3,11 +3,35 @@
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::security::UserError;
 use crate::security::limits::MAX_REGEX_SELECTION_MATCHES;
-use helix_core::Range;
-use helix_core::Selection;
 use helix_core::comment::toggle_line_comments;
-use helix_core::selection::{select_on_matches, split_on_matches, split_on_newline};
+use helix_core::ropey::RopeSlice;
+use helix_core::selection::{
+    keep_or_remove_matches, select_on_matches, split_on_matches, split_on_newline,
+};
+use helix_core::{Range, Selection, Transaction};
 use helix_stdx::rope::Regex;
+
+/// Tab width `hx` assumes for `&` when the language does not set one
+const ALIGN_TAB_WIDTH: usize = 4;
+
+/// `(row, visual column)` of `pos`, expanding tabs to `ALIGN_TAB_WIDTH` stops
+///
+/// Every other character counts as one column; `hx` uses grapheme widths,
+/// which only differ for wide or combining characters.
+fn visual_position(slice: RopeSlice, pos: usize) -> (usize, usize) {
+    let row = slice.char_to_line(pos);
+    let col = slice
+        .slice(slice.line_to_char(row)..pos)
+        .chars()
+        .fold(0, |col, ch| {
+            if ch == '\t' {
+                col + ALIGN_TAB_WIDTH - col % ALIGN_TAB_WIDTH
+            } else {
+                col + 1
+            }
+        });
+    (row, col)
+}
 
 /// Trim whitespace from selections (_ command)
 pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
@@ -158,8 +182,65 @@ pub fn split_selection_newlines<M: EditorMode>(
     Ok(())
 }
 
-/// Align selections to columns (& command)
-pub fn align_selections<M: EditorMode>(_sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+/// Align selections to columns (`&` command)
+///
+/// Selections on one line form columns by their order on that line; each
+/// column is padded with spaces before its ranges so the ranges end at the
+/// same visual column. Mirrors `hx` 25.07.1, including the per-column row
+/// bookkeeping of already inserted padding.
+///
+/// # Errors
+///
+/// Returns a `UserError` when a range spans several lines; nothing changes.
+pub fn align_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    let slice = sim.doc.slice(..);
+    let mut columns: Vec<Vec<(usize, usize)>> = Vec::new();
+    let mut last_row = slice.len_lines() + 1;
+    let mut column = 0;
+
+    for range in sim.selection.iter() {
+        let head = visual_position(slice, range.head);
+        let anchor = visual_position(slice, range.anchor);
+        if head.0 != anchor.0 {
+            return Err(UserError::command_failed(
+                "align cannot work with multi line selections",
+            ));
+        }
+
+        column = if head.0 == last_row { column + 1 } else { 0 };
+        if column >= columns.len() {
+            columns.push(Vec::new());
+        }
+        columns[column].push((range.from(), head.1));
+        last_row = head.0;
+    }
+
+    let mut changes = Vec::with_capacity(sim.selection.len());
+    let mut inserted = vec![0; columns.first().map_or(0, Vec::len)];
+
+    for entries in columns {
+        let target = entries
+            .iter()
+            .enumerate()
+            .map(|(row, (_, col))| col + inserted[row])
+            .max()
+            .unwrap_or(0);
+
+        for (row, (pos, col)) in entries.into_iter().enumerate() {
+            let padding = target - (col + inserted[row]);
+            if padding == 0 {
+                continue;
+            }
+            inserted[row] += padding;
+            changes.push((pos, pos, Some(" ".repeat(padding).into())));
+        }
+    }
+
+    changes.sort_unstable_by_key(|(from, _, _)| *from);
+    let transaction = Transaction::change(&sim.doc, changes.into_iter());
+    let mapped = sim.selection.clone().map(transaction.changes());
+    sim.apply_transaction(transaction);
+    sim.selection = mapped;
     Ok(())
 }
 
@@ -217,17 +298,59 @@ pub fn split_selection<M: EditorMode>(
     Ok(())
 }
 
-/// Keep selections matching pattern (K command)
+/// Bare `K`: the pattern arrives through the `K <pattern>` prompt form
+/// ([`keep_selections_regex`]), so reaching the registry handler is a caller bug
 pub fn keep_selections_matching<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    Ok(())
+    Err(UserError::command_failed(
+        "keep_selections needs a pattern from its prompt",
+    ))
 }
 
-/// Remove selections matching pattern (Alt-K command)
+/// Bare `Alt-K`: see [`keep_selections_matching`]
 pub fn remove_selections_matching<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
+    Err(UserError::command_failed(
+        "remove_selections needs a pattern from its prompt",
+    ))
+}
+
+/// Keep the ranges whose text matches `pattern` (`K <pattern>` prompt form)
+///
+/// # Errors
+///
+/// Returns a `UserError` for an invalid regex, or when no range would remain
+/// (Helix reports "no selections remaining"); the selection is left unchanged.
+pub fn keep_selections_regex<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    pattern: &str,
+) -> Result<(), UserError> {
+    filter_selections_by_regex(sim, pattern, false)
+}
+
+/// Remove the ranges whose text matches `pattern` (`Alt-K <pattern>` prompt form)
+///
+/// See [`keep_selections_regex`] for the error contract.
+pub fn remove_selections_regex<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    pattern: &str,
+) -> Result<(), UserError> {
+    filter_selections_by_regex(sim, pattern, true)
+}
+
+fn filter_selections_by_regex<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    pattern: &str,
+    remove: bool,
+) -> Result<(), UserError> {
+    let regex = Regex::new(pattern)
+        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+    let slice = sim.doc.slice(..);
+    let kept = keep_or_remove_matches(slice, &sim.selection, &regex, remove)
+        .ok_or_else(|| UserError::command_failed("no selections remaining"))?;
+    sim.selection = kept;
     Ok(())
 }
 

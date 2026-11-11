@@ -6,37 +6,38 @@
 //!
 //! # Examples
 //!
-//! ```ignore
-//! use helix_trainer::game::GameSession;
-//! use helix_trainer::config::Scenario;
+//! ```
+//! use helix_trainer::config::ScenarioLoader;
+//! use helix_trainer::game::{GameSession, SessionAfterAction};
 //!
-//! // Create a new session for a scenario
-//! let scenario = /* load from file */;
+//! let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+//! let commands = scenario.solution.commands.clone();
 //! let mut session = GameSession::new(scenario)?;
 //!
-//! // User performs actions
-//! session.record_action("d".to_string())?;
-//! session.record_action("d".to_string())?;
-//!
-//! // Update editor state
-//! let new_state = /* get from editor */;
-//! session.update_state(new_state)?;
-//!
-//! // Check if scenario is complete
-//! if session.is_completed() {
-//!     let feedback = session.get_feedback()?;
-//!     println!("{}", feedback.summary());
+//! // Each action consumes the session and returns its next state
+//! for command in commands {
+//!     match session.record_action(command)? {
+//!         SessionAfterAction::StillActive(next) => session = next,
+//!         SessionAfterAction::Completed(done) => {
+//!             let feedback = done.feedback()?;
+//!             assert!(feedback.success);
+//!             println!("{}", feedback.summary());
+//!             break;
+//!         }
+//!     }
 //! }
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
-use crate::config::Scenario;
+use crate::config::{LastAction, Scenario};
 use crate::game::{CommandExecutor, PerformanceRating, Scorer};
 use crate::helix::{AnyModeSimulator, EditorSnapshot, Mode};
 use crate::security::{self, SecurityError, UserError};
+use crate::time::{MonotonicClock, SystemMonotonicClock};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub use typestate::{Abandoned, Active, Completed, SessionState};
@@ -76,7 +77,7 @@ impl UserAction {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::game::UserAction;
     /// use std::time::Duration;
     ///
@@ -129,7 +130,7 @@ impl Feedback {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::game::{Feedback, PerformanceRating};
     /// use std::time::Duration;
     ///
@@ -143,6 +144,8 @@ impl Feedback {
     ///     duration: Duration::from_secs(5),
     ///     hint: None,
     ///     is_optimal: true,
+    ///     scenario_id: "delete-line".to_string(),
+    ///     user_actions: Vec::new(),
     /// };
     /// let summary = feedback.summary();
     /// assert!(summary.contains("100/100"));
@@ -215,12 +218,16 @@ pub struct GameSession<State: SessionState = Active> {
     started_at: Instant,
     /// When the session completed (None if still active/abandoned)
     completed_at: Option<Instant>,
+    /// Source of `started_at`/`completed_at` instants
+    clock: Arc<dyn MonotonicClock>,
     /// Number of hints shown to user
     hints_shown: usize,
     /// Cached completion progress percentage (0-100)
     cached_progress: Cell<Option<u8>>,
     /// Flag indicating if progress cache needs update
     progress_needs_update: Cell<bool>,
+    /// Whether the editor already matched the target before the last action ran
+    target_held_before_last: bool,
     /// Phantom data for typestate pattern
     _state: PhantomData<State>,
 }
@@ -232,7 +239,7 @@ impl<State: SessionState> std::fmt::Debug for GameSession<State> {
             .field("scenario_id", &self.scenario.id)
             .field("action_count", &self.user_actions.len())
             .field("hints_shown", &self.hints_shown)
-            .field("elapsed", &self.started_at.elapsed())
+            .field("elapsed", &self.elapsed())
             .field("state", &std::any::type_name::<State>())
             .finish()
     }
@@ -244,10 +251,11 @@ impl<S: SessionState> GameSession<S> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
-    /// let scenario = /* scenario */;
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario.clone())?;
     /// assert_eq!(session.scenario().id, scenario.id);
     /// # Ok::<(), helix_trainer::security::UserError>(())
@@ -263,7 +271,7 @@ impl<S: SessionState> GameSession<S> {
 
     /// Get elapsed time since session start
     pub fn elapsed(&self) -> Duration {
-        self.started_at.elapsed()
+        self.clock.now().saturating_duration_since(self.started_at)
     }
 
     /// Get current editor mode
@@ -292,12 +300,13 @@ impl<S: SessionState> GameSession<S> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
-    /// let actions = session.actions();
-    /// println!("Total actions: {}", actions.len());
+    /// assert!(session.actions().is_empty());
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn actions(&self) -> &[UserAction] {
@@ -355,11 +364,8 @@ impl<S: SessionState> GameSession<S> {
         // target while still in Insert mode (e.g. right after `o`), but the
         // scenario isn't actually complete until Escape returns to Normal
         // mode, so don't report 100% until then.
-        if self.mode() != Mode::Normal {
-            percentage.min(99) as u8
-        } else {
-            percentage.min(100) as u8
-        }
+        let cap = if self.mode() != Mode::Normal { 99 } else { 100 };
+        u8::try_from(percentage.min(cap)).unwrap_or(100)
     }
 
     /// Progress once the text is on target: 100 only when cursor/selection
@@ -430,14 +436,31 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
-    /// let scenario = /* load from file */;
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
+    /// assert_eq!(session.action_count(), 0);
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn new(scenario: Scenario) -> Result<Self, UserError> {
+        Self::with_clock(scenario, Arc::new(SystemMonotonicClock))
+    }
+
+    /// Create a session that reads time from `clock` instead of the system clock.
+    ///
+    /// Tests inject a [`FakeMonotonicClock`](crate::time::FakeMonotonicClock) to
+    /// drive elapsed time without sleeping.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`GameSession::new`].
+    pub fn with_clock(
+        scenario: Scenario,
+        clock: Arc<dyn MonotonicClock>,
+    ) -> Result<Self, UserError> {
         // Use unified ScenarioState helper for initialization
         let state = crate::game::ScenarioState::from_scenario(&scenario)?;
 
@@ -446,11 +469,13 @@ impl GameSession<Active> {
             simulator: state.simulator,
             target_snapshot: state.target_snapshot,
             user_actions: Vec::new(),
-            started_at: Instant::now(),
+            started_at: clock.now(),
             completed_at: None,
+            clock,
             hints_shown: 0,
             cached_progress: Cell::new(None),
             progress_needs_update: Cell::new(true),
+            target_held_before_last: false,
             _state: PhantomData,
         })
     }
@@ -471,22 +496,28 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::{GameSession, SessionAfterAction};
-    /// use helix_trainer::helix::commands::{CMD_SELECT_LINE, CMD_DELETE_SELECTION};
     ///
-    /// let session = GameSession::new(scenario)?;
-    /// // Use x+d (select line + delete) - the Helix way
-    /// let session = session.record_action(CMD_SELECT_LINE.to_string())?;
-    /// match session.record_action(CMD_DELETE_SELECTION.to_string())? {
-    ///     SessionAfterAction::StillActive(session) => {
-    ///         // Continue playing
-    ///     }
-    ///     SessionAfterAction::Completed(session) => {
-    ///         // Session complete, get feedback
-    ///         let feedback = session.feedback()?;
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// let commands = scenario.solution.commands.clone();
+    /// let mut session = GameSession::new(scenario)?;
+    ///
+    /// // Every command but the last leaves the session active
+    /// let (last, rest) = commands.split_last().expect("solutions are never empty");
+    /// for command in rest {
+    ///     match session.record_action(command.clone())? {
+    ///         SessionAfterAction::StillActive(next) => session = next,
+    ///         SessionAfterAction::Completed(_) => unreachable!("completes only on the last command"),
     ///     }
     /// }
+    ///
+    /// // The last command completes the scenario
+    /// let SessionAfterAction::Completed(done) = session.record_action(last.clone())? else {
+    ///     panic!("the solution completes the scenario");
+    /// };
+    /// assert!(done.feedback()?.success);
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn record_action(mut self, command: String) -> Result<SessionAfterAction, UserError> {
@@ -537,10 +568,12 @@ impl GameSession<Active> {
             target_snapshot: self.target_snapshot,
             user_actions: self.user_actions,
             started_at: self.started_at,
-            completed_at: Some(Instant::now()),
+            completed_at: Some(self.clock.now()),
+            clock: self.clock,
             hints_shown: self.hints_shown,
             cached_progress: self.cached_progress,
             progress_needs_update: self.progress_needs_update,
+            target_held_before_last: self.target_held_before_last,
             _state: PhantomData,
         }
     }
@@ -552,15 +585,23 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
-    /// let mut session = GameSession::new(scenario)?;
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// let session = GameSession::new(scenario)?;
     /// assert!(!session.check_completion());
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn check_completion(&self) -> bool {
-        self.simulator.matches_snapshot(&self.target_snapshot)
+        self.scenario.is_completed_by(
+            self.simulator.matches_snapshot(&self.target_snapshot),
+            self.user_actions.last().map(|a| LastAction {
+                command: a.command.as_str(),
+                target_held_before: self.target_held_before_last,
+            }),
+        )
     }
 
     /// Check if content matches target (ignoring cursor position)
@@ -570,13 +611,14 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
-    /// if session.check_content_matches() {
-    ///     println!("Content is correct!");
-    /// }
+    /// // The setup text differs from the target until the player edits it
+    /// assert!(!session.check_content_matches());
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn check_content_matches(&self) -> bool {
@@ -592,12 +634,15 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let mut session = GameSession::new(scenario)?;
     /// if let Some(hint) = session.hint() {
-    ///     println!("Hint: {}", hint);
+    ///     assert_eq!(session.hints_shown(), 1);
+    ///     println!("Hint: {hint}");
     /// }
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
@@ -618,9 +663,11 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
     /// let abandoned = session.abandon();
     /// let feedback = abandoned.feedback();
@@ -635,9 +682,11 @@ impl GameSession<Active> {
             user_actions: self.user_actions,
             started_at: self.started_at,
             completed_at: None,
+            clock: self.clock,
             hints_shown: self.hints_shown,
             cached_progress: self.cached_progress,
             progress_needs_update: self.progress_needs_update,
+            target_held_before_last: self.target_held_before_last,
             _state: PhantomData,
         }
     }
@@ -654,27 +703,24 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let mut session = GameSession::new(scenario)?;
-    /// // ... play some ...
+    /// session.hint();
     /// session.reset()?;
-    /// assert_eq!(session.action_count(), 0);
+    /// assert_eq!(session.hints_shown(), 0);
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn reset(&mut self) -> Result<(), SecurityError> {
-        // Recreate initial snapshot from scenario config and reset simulator
-        let initial_snapshot = EditorSnapshot::from_scenario_config(
-            self.scenario.setup.file_content.clone(),
-            self.scenario.setup.cursor.cursor_position,
-            self.scenario.setup.cursor.selection,
-            self.scenario.setup.cursor.cursors.as_deref(),
-            self.scenario.setup.cursor.selections.as_deref(),
-        );
-        self.simulator = AnyModeSimulator::from_snapshot(&initial_snapshot);
+        // Same construction path as `new`, so the scenario's language (indent unit) survives
+        self.simulator = crate::game::ScenarioState::from_scenario(&self.scenario)
+            .map_err(|e| SecurityError::InvalidState(e.to_string()))?
+            .simulator;
         self.user_actions.clear();
-        self.started_at = Instant::now();
+        self.started_at = self.clock.now();
         self.completed_at = None;
         self.hints_shown = 0;
         // Reset progress cache
@@ -687,8 +733,9 @@ impl GameSession<Active> {
 // Implement CommandExecutor trait for unified count prefix handling
 impl CommandExecutor for GameSession<Active> {
     fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
-        // Execute command through simulator
+        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
         self.simulator.execute_command(command)?;
+        self.target_held_before_last = held_before;
 
         // Invalidate progress cache since state changed
         self.progress_needs_update.set(true);
@@ -697,7 +744,7 @@ impl CommandExecutor for GameSession<Active> {
     }
 
     fn check_completion(&self) -> bool {
-        self.simulator.matches_snapshot(&self.target_snapshot)
+        GameSession::check_completion(self)
     }
 }
 
@@ -714,13 +761,26 @@ impl GameSession<Completed> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::GameSession;
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use helix_trainer::game::{GameSession, SessionAfterAction};
     ///
-    /// // session is GameSession<Completed>
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// # let mut active = GameSession::new(scenario.clone())?;
+    /// # let mut completed = None;
+    /// # for command in &scenario.solution.commands {
+    /// #     match active.record_action(command.clone())? {
+    /// #         SessionAfterAction::StillActive(next) => active = next,
+    /// #         SessionAfterAction::Completed(done) => {
+    /// #             completed = Some(done);
+    /// #             break;
+    /// #         }
+    /// #     }
+    /// # }
+    /// # let session = completed.expect("the canonical solution completes the scenario");
     /// let score = session.score()?;
-    /// println!("Score: {}", score);
-    /// # Ok::<(), helix_trainer::security::SecurityError>(())
+    /// assert!(score > 0);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn score(&self) -> Result<u32, SecurityError> {
         Scorer::score_with_config(&self.scenario.scoring, self.user_actions.len())
@@ -737,13 +797,27 @@ impl GameSession<Completed> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::GameSession;
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use helix_trainer::game::{GameSession, SessionAfterAction};
     ///
-    /// // session is GameSession<Completed>
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// # let mut active = GameSession::new(scenario.clone())?;
+    /// # let mut completed = None;
+    /// # for command in &scenario.solution.commands {
+    /// #     match active.record_action(command.clone())? {
+    /// #         SessionAfterAction::StillActive(next) => active = next,
+    /// #         SessionAfterAction::Completed(done) => {
+    /// #             completed = Some(done);
+    /// #             break;
+    /// #         }
+    /// #     }
+    /// # }
+    /// # let session = completed.expect("the canonical solution completes the scenario");
     /// let feedback = session.feedback()?;
+    /// assert!(feedback.success);
     /// println!("{}", feedback.summary());
-    /// # Ok::<(), helix_trainer::security::SecurityError>(())
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn feedback(&self) -> Result<Feedback, SecurityError> {
         let actions_taken = self.user_actions.len();
@@ -796,10 +870,12 @@ impl GameSession<Abandoned> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
-    /// // session is GameSession<Abandoned>
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// let session = GameSession::new(scenario)?.abandon();
     /// let feedback = session.feedback();
     /// assert_eq!(feedback.score, 0);
     /// assert!(!feedback.success);
@@ -814,7 +890,7 @@ impl GameSession<Abandoned> {
             rating: PerformanceRating::Poor,
             actions_taken: self.user_actions.len(),
             optimal_actions: self.scenario.scoring.optimal_count.get(),
-            duration: self.started_at.elapsed(),
+            duration: self.elapsed(),
             hint: Some(format!(
                 "Solution: {}. {}",
                 self.scenario.solution.commands.join(", "),
@@ -865,8 +941,12 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
         self.is_insert_mode()
     }
 
+    fn mode_kind(&self) -> crate::helix::ModeKind {
+        self.simulator.mode_kind()
+    }
+
     fn elapsed(&self) -> Duration {
-        S::session_elapsed(self.started_at, self.completed_at)
+        S::session_elapsed(self.started_at, self.completed_at, self.clock.now())
     }
 
     fn language(&self) -> &str {

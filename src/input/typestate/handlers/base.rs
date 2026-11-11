@@ -41,10 +41,11 @@ fn ctrl_key(code: KeyCode) -> HandlerResult {
     }
 }
 
-/// Alt chords never open a pending state: they run the Alt-bound command or
-/// are ignored (#487).
+/// Alt chords never open a plain-key pending state: they run the Alt-bound
+/// command or are ignored (#487). `Alt-K` is the one chord that opens a prompt.
 fn alt_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
     match code {
+        KeyCode::Char('K') => regex_prompt(RegexPromptKind::RemoveSelections),
         KeyCode::Char(c) => {
             map_single_key_command(c, modifiers).map_or(HandlerResult::Stay, execute)
         }
@@ -78,6 +79,8 @@ fn plain_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
         KeyCode::Char('s') => regex_prompt(RegexPromptKind::SelectRegex),
         KeyCode::Char('S') => regex_prompt(RegexPromptKind::SplitSelection),
         KeyCode::Char('/') => regex_prompt(RegexPromptKind::Search),
+        KeyCode::Char('?') => regex_prompt(RegexPromptKind::SearchBackward),
+        KeyCode::Char('K') => regex_prompt(RegexPromptKind::KeepSelections),
 
         // Macro recording ('q') and replay ('Q'). This handler only runs
         // in Normal mode (Insert mode input bypasses the state machine

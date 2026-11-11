@@ -21,8 +21,11 @@ fn test_quest_loader_with_custom_paths() {
 fn test_validate_id_field_valid() {
     use serde::Deserialize;
 
+    #[expect(
+        dead_code,
+        reason = "the field exists only to run its deserialize validator"
+    )]
     #[derive(Deserialize)]
-    #[allow(dead_code)]
     struct Test {
         #[serde(deserialize_with = "validate_id_field")]
         id: String,
@@ -37,8 +40,11 @@ fn test_validate_id_field_valid() {
 fn test_validate_id_field_invalid_too_long() {
     use serde::Deserialize;
 
+    #[expect(
+        dead_code,
+        reason = "the field exists only to run its deserialize validator"
+    )]
     #[derive(Deserialize)]
-    #[allow(dead_code)]
     struct Test {
         #[serde(deserialize_with = "validate_id_field")]
         id: String,
@@ -53,8 +59,11 @@ fn test_validate_id_field_invalid_too_long() {
 fn test_validate_id_field_invalid_characters() {
     use serde::Deserialize;
 
+    #[expect(
+        dead_code,
+        reason = "the field exists only to run its deserialize validator"
+    )]
     #[derive(Deserialize)]
-    #[allow(dead_code)]
     struct Test {
         #[serde(deserialize_with = "validate_id_field")]
         id: String,
@@ -271,8 +280,11 @@ fn test_quest_template_to_quest_conversion() {
 fn test_validate_id_field_empty() {
     use serde::Deserialize;
 
+    #[expect(
+        dead_code,
+        reason = "the field exists only to run its deserialize validator"
+    )]
     #[derive(Deserialize)]
-    #[allow(dead_code)]
     struct Test {
         #[serde(deserialize_with = "validate_id_field")]
         id: String,
@@ -334,8 +346,11 @@ requires_scenarios = ["basic_001"]
 fn test_metadata_version_validation() {
     use serde::Deserialize;
 
+    #[expect(
+        dead_code,
+        reason = "the field exists only to run its deserialize validator"
+    )]
     #[derive(Deserialize)]
-    #[allow(dead_code)]
     struct Test {
         #[serde(deserialize_with = "validate_version_field")]
         version: String,
@@ -361,8 +376,11 @@ fn test_metadata_version_validation() {
 fn test_metadata_locale_validation() {
     use serde::Deserialize;
 
+    #[expect(
+        dead_code,
+        reason = "the field exists only to run its deserialize validator"
+    )]
     #[derive(Deserialize)]
-    #[allow(dead_code)]
     struct Test {
         #[serde(default, deserialize_with = "validate_locale_field")]
         locale: Option<String>,

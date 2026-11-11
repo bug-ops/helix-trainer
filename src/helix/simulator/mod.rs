@@ -125,7 +125,7 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Indent unit of the document, used by `>`, `<`, `Tab` and new lines
     pub(super) indent_unit: IndentUnit,
 
-    /// Language rules for `J` comment tokens and new-line block openers
+    /// Language rules for `J` comment tokens and the `o`/`O`/Enter indent rule
     pub(super) language: &'static LanguageRules,
 
     /// Flag to prevent recording during repeat execution
@@ -631,9 +631,9 @@ impl AnyModeSimulator {
     ///
     /// The indent unit is auto-detected from the current text (as `hx` does)
     /// and falls back to the language table. The language also selects the
-    /// comment tokens `J` strips and the lines that open a block for
-    /// `o`/`O`/Enter; a language without a table entry gets the default unit,
-    /// no comment tokens and plain indent copying.
+    /// comment tokens `J` strips and the bracket/comment rule `o`/`O`/Enter
+    /// use for the new line's indent; a language without a table entry gets
+    /// the default unit, no comment tokens and plain indent copying.
     #[must_use]
     pub fn with_language(mut self, language: &str) -> Self {
         let rules = LanguageRules::for_language(language).unwrap_or(&LanguageRules::UNLISTED);

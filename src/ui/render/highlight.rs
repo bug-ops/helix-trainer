@@ -12,7 +12,7 @@ use ratatui::{
 use syntect::{
     easy::HighlightLines,
     highlighting::{FontStyle, ThemeSet},
-    parsing::SyntaxSet,
+    parsing::{SyntaxReference, SyntaxSet},
 };
 
 /// Global syntax set (loaded once)
@@ -20,6 +20,45 @@ static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_
 
 /// Global theme set (loaded once)
 static THEME_SET: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
+
+/// Short sample per bundled language that scenarios use (extension tokens).
+const PREWARM_SAMPLES: [(&str, &str); 3] = [
+    ("rs", "fn main() { let x = 1; }"),
+    (
+        "md",
+        "# Title\n\nSome *emphasis* and `code`.\n\n- item\n\n```rs\nfn f() {}\n```",
+    ),
+    ("py", "def f(x):\n    return x"),
+];
+
+fn prewarm() {
+    for (language, sample) in PREWARM_SAMPLES {
+        drop(highlight_code_with_multi_cursor(sample, &[], &[], language));
+    }
+}
+
+/// Spawns a background thread that highlights a short sample of `rs`, `md` and `py`.
+///
+/// Forces the shared syntax/theme sets and per-language regex compilation off the render
+/// thread, so the first scenario view of each language does not hitch. Call it right after
+/// the first frame is drawn.
+///
+/// # Errors
+///
+/// Returns the OS error when the thread cannot be spawned; the caller may ignore it, as it
+/// only costs the warm-up.
+pub fn spawn_prewarm() -> std::io::Result<std::thread::JoinHandle<()>> {
+    std::thread::Builder::new()
+        .name("syntect-prewarm".into())
+        .spawn(prewarm)
+}
+
+fn resolve_syntax(language: &str) -> &'static SyntaxReference {
+    SYNTAX_SET
+        .find_syntax_by_extension(language)
+        .or_else(|| SYNTAX_SET.find_syntax_by_token(language))
+        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text())
+}
 
 /// Convert syntect color to ratatui color
 fn syntect_to_ratatui_color(color: syntect::highlighting::Color) -> Color {
@@ -68,10 +107,7 @@ pub fn highlight_code_with_multi_cursor(
     selections: &[SelectionBounds],
     language: &str,
 ) -> Vec<Line<'static>> {
-    let syntax = SYNTAX_SET
-        .find_syntax_by_extension(language)
-        .or_else(|| SYNTAX_SET.find_syntax_by_token(language))
-        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+    let syntax = resolve_syntax(language);
 
     let theme = &THEME_SET.themes["base16-eighties.dark"];
     let mut highlighter = HighlightLines::new(syntax, theme);
@@ -177,6 +213,32 @@ pub fn highlight_code_with_multi_cursor(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prewarm_samples_resolve_to_real_syntaxes() {
+        let plain = SYNTAX_SET.find_syntax_plain_text().name.clone();
+        for (language, _) in PREWARM_SAMPLES {
+            assert_ne!(resolve_syntax(language).name, plain, "{language}");
+        }
+    }
+
+    #[test]
+    fn prewarm_samples_produce_several_styles() {
+        for (language, sample) in PREWARM_SAMPLES {
+            let lines = highlight_code_with_multi_cursor(sample, &[], &[], language);
+            let styles: HashSet<Style> = lines
+                .iter()
+                .flat_map(|l| l.spans.iter().map(|s| s.style))
+                .collect();
+            assert!(styles.len() > 1, "{language}");
+        }
+    }
+
+    #[test]
+    fn spawn_prewarm_thread_completes_without_panic() {
+        let handle = spawn_prewarm().expect("thread spawns");
+        handle.join().expect("pre-warm thread must not panic");
+    }
 
     #[test]
     fn test_syntax_set_loads() {

@@ -20,6 +20,7 @@ pub mod commands;
 pub mod indent;
 pub mod language;
 pub mod macro_recorder;
+mod newline_indent;
 pub mod registry;
 pub mod repeat;
 pub mod simulator;

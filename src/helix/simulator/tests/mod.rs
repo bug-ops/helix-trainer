@@ -22,6 +22,7 @@ mod macro_tests;
 mod mode_tests;
 mod movement_tests;
 mod multi_cursor_tests;
+mod newline_indent_rule_tests;
 mod newline_indent_tests;
 mod paste_tests;
 mod repeat_execution_tests;

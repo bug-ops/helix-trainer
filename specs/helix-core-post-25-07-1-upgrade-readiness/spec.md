@@ -210,8 +210,8 @@ Known keymap changes on master relevant here:
 | FR-036 | WHILE in Select mode (`v`) THE SIMULATOR SHALL, for `/`, `?`, `n` and `N`, push a new range for the found match as `hx` 25.07.1 does (the existing ranges stay), and SHALL extend the current ranges for `Ctrl-d`, `Ctrl-u`, `]p`, `[p` and `mm` as `hx` does | #534 | must |
 | FR-037 | THE INDENT UNIT of a document SHALL first be auto-detected from the initial text with `helix_core::indent::auto_detect_indent_style` (consistent indentation wins, so a scenario indented with 8 spaces uses 8), and fall back to the per-language table of FR-028 when detection yields nothing. `align_selections` (`&`) SHALL pad by display width (grapheme display columns, as hx), not by character count | #535 | must |
 | FR-038 | WHEN `J` joins lines THE SIMULATOR SHALL remove the leading comment token of the joined line as `hx` `join_selections_impl` does, using one per-language comment-token table (`rs`: `///`, `//!`, `//`; `py`: `#`; `md`: none) that lives in the same module as the indent table of FR-028 (one language table, not two) | #521 | must |
-| FR-039 | WHEN `o`, `O` or Enter creates a new line THE SIMULATOR SHALL derive its indent with a per-language rule, with no new dependency and no syntax tree: for `rs`, the current line's indent plus one indent unit when the line (ignoring trailing whitespace) ends in `{`, `(` or `[`; for `py`, plus one unit when it ends in `:`; otherwise copy the current line's indent (FR-026); for languages without a rule (`md`) copy. For `O` the rule is the indent `o` would give below the PREVIOUS line (this matches the recorded goldens); on the first line, and for languages without openers, `O` copies the current line. The rule applies to every input; correctness is claimed only for the recorded golden cases of FR-040 | #516 | must |
-| FR-040 | THE GOLDEN TRACES for FR-039 SHALL be recorded from a local `hx` 25.07.1 started with an empty configuration (`hx -c <empty file>`, no user `languages.toml`, so `indent-heuristic` and other overrides cannot change the result) for every bundled scenario that uses `o`, `O` or Enter, plus canonical cases per language. Any recorded case where the rule differs from `hx` is listed in 3.8.4 and tracked by the follow-up defect issue | #516 | must |
+| FR-039 | WHEN `o`, `O` or Enter creates a new line THE SIMULATOR SHALL derive its indent with a per-language rule, with no new dependency and no syntax tree: the current line's indent plus one indent unit when the code before the cursor (trailing comment ignored) ends in an unclosed `{`, `(` or `[` (approximates the closing bracket hx auto-pair inserts while typing), or when a bracket opened elsewhere on the line is closed later in the document (strings and comments skipped; `let a = foo(1,` without a closer stays at 0), or, for `py`, when the line ends in `:` (also before a trailing comment); a line that closes a bracket opened above is indented relative to the opener's line; blank lines walk up to the nearest non-blank line; for `py`, a line starting with `return`, `pass`, `break`, `continue` or `raise` (whole word, no bracket left open) dedents the next line by one unit (floor 0); on a comment line (`rs`: `///`, `//!`, `//`; `py`: `#`; longest token) `o`, `O` and Enter continue the comment at the comment line's indent without applying the opener rule, and a trailing comment after code is not a continuation; the comment continuation is checked BEFORE the auto-pair split (`// foo(` / `// y)`); Enter between an auto-pair (`()[]{}` and double quote and backtick everywhere, single quote for `py` and `md` only, `<>` never) splits it onto three lines (mismatched halves such as `x(]` give `x(` / `    y]`); a count prefix (`3o`, `2O`) opens one line (FR-025: the repeat stops once Insert starts); only the primary range is handled (multi-cursor is a known gap); otherwise copy the current line's indent (FR-026); for languages without a rule (`md`) copy. For `O` the rule is the indent `o` would give below the PREVIOUS line (this matches the recorded goldens); on the first line, and for languages without openers, `O` copies the current line. The rule applies to every input; correctness is claimed only for the recorded golden cases of FR-040 | #516 | must |
+| FR-040 | THE GOLDEN TRACES for FR-039 SHALL be recorded from a local `hx` 25.07.1 started with an empty configuration (`hx -c <empty file>`, no user `languages.toml`, so `indent-heuristic` and other overrides cannot change the result) that only turns `auto-format` off (otherwise rustfmt rewrites valid Rust on `:w` and contaminates the result) for every bundled scenario that uses `o`, `O` or Enter, plus canonical cases per language. Any recorded case where the rule differs from `hx` is listed in 3.8.4 and tracked by the follow-up defect issue | #516 | must |
 
 ### 3.8.1 Acceptance Criteria
 
@@ -260,7 +260,7 @@ WHEN  a scenario is indented with 8 spaces and the user presses >
 | `J` on the last line | No-op, no error |
 | `r` with a newline target or on a range containing line endings | Follows hx; verify against `helix-term` 25.07.1 [NEEDS CLARIFICATION: newline handling] |
 | `u` with no history | No-op, selection unchanged |
-| `o`/`O`/Enter after a line ending in `{`, `(` or `[` (`rs`) or `:` (`py`) | One extra indent unit by the rule of FR-039; constructs the rule does not see (multi-line expressions, closing-bracket dedent, other languages) follow the recorded divergences in 3.8.4 |
+| `o`/`O`/Enter after a line that ends in an unclosed `{`, `(` or `[`, opens a bracket closed later (`rs`, `py`) or ends in `:` (`py`) | One extra indent unit by the rule of FR-039; constructs the rule does not see (`lambda:`, block comments, multi-line strings, partially parsed code) follow the remaining divergences in 3.8.4 |
 | `>` on an empty line | The line is left unchanged (hx skips empty lines) |
 | `<` on a line with less leading whitespace than one unit | Removes only what exists, no error |
 | `J` where the next line has no comment token, or the language has no comment tokens (`md`) | Whitespace-only join as before |
@@ -283,14 +283,23 @@ WHEN  a scenario is indented with 8 spaces and the user presses >
 
 | Case | hx 25.07.1 result | Simulator result | Status |
 |------|-------------------|------------------|--------|
-| `rs`: `let a = foo(1,` then `o` | 4 spaces (argument continuation) | 0 | open |
-| `rs`: blank line inside a block, `o` on the blank line | 4 | 0 | open |
-| `rs`: unclosed block (`fn f() -> u8 {`, no `}`), Enter at line end | 0 (parse error) | 4 | open |
-| `rs`: `// foo (` then `o` (any comment line; `py`: `# note:`) | continues the comment (`// y`, `# y`) | rule fires inside the comment (4 spaces) | open |
-| `rs`: Enter between `{}` (`fn f() {}`) | `}` on its own line (`{` / `    y` / `}`) | `{` / `    y}` | open |
-| `py`: `return` or `pass` line then `o` | dedents to 0 | copies 4 | open |
-| `py`: `x = {`, `x = [`, `x = foo(` then `o` | +1 unit | 0 (the `py` rule is `:` only; adding `{ ( [` to the `py` openers would fix this class) | open |
+| `rs`: `let a = foo(1,` then `o` (bracket closed later) | 4 spaces (argument continuation) | 4 | matches |
+| `rs`: blank line inside a block, `o`/`O` on the blank line | 4 | 4 | matches |
+| `rs`/`py`: loaded, syntactically broken text with an unclosed trailing opener (`fn f() -> u8 {`, no `}`), Enter at line end | 0 (parse error) | 4 (typed input matches hx, because hx auto-inserts the closer) | open |
+| `rs`/`py`: `let a = foo(1,` with no closer, `o` | 0 | 0 | matches |
+| `rs`: `// foo (` then `o` (any comment line; `py`: `# note:`) | continues the comment (`// y`, `# y`) | continues the comment; `Escape` keeps `// ` | matches |
+| `rs`/`py`/`md`: Enter between an auto-pair (`fn f() {}`) | `}` on its own line (`{` / `    y` / `}`) | same | matches |
+| `py`: `return`, `pass`, `break`, `continue`, `raise` line then `o` | dedents to 0 | dedents one unit (floor 0) | matches |
+| `py`: `x = {`, `x = [`, `x = foo(` (closed later) then `o` | +1 unit | +1 unit | matches |
+| `py`: `f = lambda:` then `o` | 0 | +1 unit (a `:` inside a dict, slice or multi-line `return` is also approximated) | open (needs tree-sitter node kinds) |
+| `rs`/`py`: brackets inside block comments, raw strings, triple-quoted or multi-line strings | not counted | not lexed, may mis-open or mis-close | open |
+| Mismatched or partially parsed code (unclosed inner bracket with a closed outer one, `if x:` unclosed, `'` pairing for other languages) | tree-sitter error recovery | approximated by bracket matching | open |
+| Multi-cursor `o`/`O`/Enter | the rule applies to every range | only the primary range | open |
+| `O` right after the closing line of a multi-line statement | not exhaustively probed | `o` rule below the previous non-blank line | open (not probed) |
+| `rs`/`py`: Enter between mismatched halves (`x(]`) | `x(` / `    y]` | same | matches |
 | `md`: `- a`, `1. a`, `> q` then `o` | copies indent | copies indent | matches |
+
+All `open` rows above for newline indent are tracked by one follow-up issue, #546.
 
 Also not matched (separate follow-ups, P4): `Ctrl-d`/`Ctrl-u`/`Ctrl-f`/`Ctrl-b` move a fixed number of lines while hx moves by view height, so Select-mode extension by these keys (FR-036) cannot be golden-compared; tab width is fixed at 4 while hx uses the language `tab-width` (2 for `md`).
 

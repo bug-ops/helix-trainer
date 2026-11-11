@@ -1,8 +1,8 @@
 //! Per-language rules the simulator applies: indent unit, comment tokens and
-//! the lines that open an indented block.
+//! the new-line indent rule.
 //!
 //! One table serves `>`, `<`, Insert-mode `Tab` (unit), `J` (comment tokens)
-//! and `o`/`O`/Enter (block openers), so a language is declared exactly once.
+//! and `o`/`O`/Enter (new-line rule), so a language is declared exactly once.
 
 use super::indent::{FOUR_SPACES, IndentUnit, TWO_SPACES};
 
@@ -23,36 +23,80 @@ pub struct LanguageRules {
     pub indent_unit: IndentUnit,
     /// Line-comment tokens, longest first so `///` wins over `//`
     pub comment_tokens: &'static [&'static str],
-    /// A line ending in one of these characters (ignoring trailing blanks)
-    /// opens a block, so a new line below it gains one indent unit
-    pub block_openers: &'static [char],
+    /// Opener and closer pairs that Enter between them splits onto three lines
+    pub auto_pairs: &'static [(char, char)],
+    /// How `o`/`O`/Enter derive the indent of the new line, or `None` to copy
+    /// the current line's indent
+    pub newline: Option<NewlineRules>,
 }
+
+/// Language-specific inputs of the new-line indent rule
+///
+/// Brackets `( ) [ ] { }` open an indented block in every language that has
+/// these rules; the fields carry what differs between languages.
+#[derive(Debug, PartialEq, Eq)]
+pub struct NewlineRules {
+    /// A line whose code ends in one of these characters opens a block
+    pub trailing_openers: &'static [char],
+    /// A line starting with one of these words dedents the next line by one unit
+    pub dedent_words: &'static [&'static str],
+    /// Characters that delimit a single-line string literal
+    pub string_quotes: &'static [char],
+    /// Whether `'x'` is a character literal and a lone `'` a lifetime
+    pub char_literals: bool,
+}
+
+const DEFAULT_PAIRS: &[(char, char)] =
+    &[('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('`', '`')];
+
+const PAIRS_WITH_SINGLE_QUOTE: &[(char, char)] = &[
+    ('(', ')'),
+    ('[', ']'),
+    ('{', '}'),
+    ('"', '"'),
+    ('\'', '\''),
+    ('`', '`'),
+];
 
 impl LanguageRules {
     /// Rules for scenarios naming no language or one outside the table: the
-    /// default unit, no comment tokens and no block openers
+    /// default unit, no comment tokens and no new-line rule
     pub const UNLISTED: Self = Self {
         indent_unit: IndentUnit::DEFAULT,
         comment_tokens: &[],
-        block_openers: &[],
+        auto_pairs: DEFAULT_PAIRS,
+        newline: None,
     };
 
     const RUST: Self = Self {
         indent_unit: FOUR_SPACES,
         comment_tokens: &["///", "//!", "//"],
-        block_openers: &['{', '(', '['],
+        auto_pairs: DEFAULT_PAIRS,
+        newline: Some(NewlineRules {
+            trailing_openers: &[],
+            dedent_words: &[],
+            string_quotes: &['"'],
+            char_literals: true,
+        }),
     };
 
     const MARKDOWN: Self = Self {
         indent_unit: TWO_SPACES,
         comment_tokens: &[],
-        block_openers: &[],
+        auto_pairs: PAIRS_WITH_SINGLE_QUOTE,
+        newline: None,
     };
 
     const PYTHON: Self = Self {
         indent_unit: FOUR_SPACES,
         comment_tokens: &["#"],
-        block_openers: &[':'],
+        auto_pairs: PAIRS_WITH_SINGLE_QUOTE,
+        newline: Some(NewlineRules {
+            trailing_openers: &[':'],
+            dedent_words: &["return", "pass", "break", "continue", "raise"],
+            string_quotes: &['"', '\''],
+            char_literals: false,
+        }),
     };
 
     /// Rules for `language` (a file-extension token), or `None` when it has
@@ -69,12 +113,44 @@ impl LanguageRules {
         }
     }
 
-    /// Whether `line` ends in a block-opening character of this language
-    pub fn opens_block(&self, line: &str) -> bool {
-        line.trim_end_matches([' ', '\t', '\r', '\n'])
-            .chars()
-            .next_back()
-            .is_some_and(|last| self.block_openers.contains(&last))
+    /// The comment token `text` starts with after leading blanks (the
+    /// longest one), if any
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::LanguageRules;
+    ///
+    /// let rust = LanguageRules::for_language("rs").unwrap();
+    /// assert_eq!(rust.leading_comment_token("  /// doc"), Some("///"));
+    /// assert_eq!(rust.leading_comment_token("a // b"), None);
+    /// ```
+    pub fn leading_comment_token(&self, text: &str) -> Option<&'static str> {
+        self.comment_token_at(&text.trim_start_matches([' ', '\t']).chars())
+    }
+
+    /// The comment token (the longest one) that `rest` starts with, if any
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::LanguageRules;
+    ///
+    /// let rust = LanguageRules::for_language("rs").unwrap();
+    /// assert_eq!(rust.comment_token_at(&"//! a".chars()), Some("//!"));
+    /// assert_eq!(rust.comment_token_at(&"a //".chars()), None);
+    /// ```
+    pub fn comment_token_at(
+        &self,
+        rest: &(impl Iterator<Item = char> + Clone),
+    ) -> Option<&'static str> {
+        self.comment_tokens
+            .iter()
+            .find(|token| {
+                let mut rest = rest.clone();
+                token.chars().all(|expected| rest.next() == Some(expected))
+            })
+            .copied()
     }
 }
 
@@ -111,17 +187,10 @@ mod tests {
     }
 
     #[test]
-    fn opens_block_ignores_trailing_blanks() {
+    fn leading_comment_token_picks_the_longest_after_blanks() {
         let rust = LanguageRules::for_language("rs").unwrap();
-        assert!(rust.opens_block("fn f() {  \t"));
-        assert!(rust.opens_block("let a = ["));
-        assert!(!rust.opens_block("let a = 1;"));
-        assert!(!rust.opens_block(""));
-        assert!(
-            LanguageRules::for_language("py")
-                .unwrap()
-                .opens_block("if x:\n")
-        );
-        assert!(!LanguageRules::UNLISTED.opens_block("{"));
+        assert_eq!(rust.leading_comment_token("\t//! a"), Some("//!"));
+        assert_eq!(rust.leading_comment_token("//// a"), Some("///"));
+        assert_eq!(LanguageRules::UNLISTED.leading_comment_token("// a"), None);
     }
 }

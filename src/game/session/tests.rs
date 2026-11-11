@@ -576,3 +576,9 @@ fn test_reset_keeps_language_indent_unit() {
     assert!(first.starts_with("  item"), "unexpected indent: {first:?}");
     assert_eq!(session.current_content(), first);
 }
+
+#[test]
+fn test_undo_redo_not_completed_by_noop_redo() {
+    assert_eq!(completion_step(&["x", "d", "U"]), None);
+    assert_eq!(completion_step(&["x", "d", "U", "u", "U"]), Some(5));
+}

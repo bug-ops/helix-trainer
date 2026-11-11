@@ -3,7 +3,7 @@
 //! Manages the complete mini-game session including scenario queue,
 //! active scenario, timing, and score calculation.
 
-use crate::config::{Difficulty, Scenario};
+use crate::config::{Difficulty, LastAction, Scenario};
 use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
 use crate::game::CommandExecutor;
 use crate::helix::{AnyModeSimulator, EditorSnapshot};
@@ -134,6 +134,9 @@ pub struct ActiveMiniScenario {
 
     /// Actions taken so far
     actions: Vec<String>,
+
+    /// Whether the editor already matched the target before the last action ran
+    target_held_before_last: bool,
 }
 
 impl ActiveMiniScenario {
@@ -158,6 +161,7 @@ impl ActiveMiniScenario {
             clock,
             time_limit,
             actions: Vec::new(),
+            target_held_before_last: false,
         })
     }
 
@@ -165,7 +169,10 @@ impl ActiveMiniScenario {
     fn is_completed(&self) -> bool {
         self.scenario.is_completed_by(
             self.simulator.matches_snapshot(&self.target_snapshot),
-            self.actions.last().map(String::as_str),
+            self.actions.last().map(|command| LastAction {
+                command: command.as_str(),
+                target_held_before: self.target_held_before_last,
+            }),
         )
     }
 
@@ -304,7 +311,9 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
 // Implement CommandExecutor trait for unified command handling with count prefix
 impl CommandExecutor for ActiveMiniScenario {
     fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
+        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
         self.simulator.execute_command(command)?;
+        self.target_held_before_last = held_before;
         self.actions.push(command.to_string());
         Ok(())
     }

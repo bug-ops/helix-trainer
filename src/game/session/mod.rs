@@ -29,7 +29,7 @@
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
-use crate::config::Scenario;
+use crate::config::{LastAction, Scenario};
 use crate::game::{CommandExecutor, PerformanceRating, Scorer};
 use crate::helix::{AnyModeSimulator, EditorSnapshot, Mode};
 use crate::security::{self, SecurityError, UserError};
@@ -226,6 +226,8 @@ pub struct GameSession<State: SessionState = Active> {
     cached_progress: Cell<Option<u8>>,
     /// Flag indicating if progress cache needs update
     progress_needs_update: Cell<bool>,
+    /// Whether the editor already matched the target before the last action ran
+    target_held_before_last: bool,
     /// Phantom data for typestate pattern
     _state: PhantomData<State>,
 }
@@ -473,6 +475,7 @@ impl GameSession<Active> {
             hints_shown: 0,
             cached_progress: Cell::new(None),
             progress_needs_update: Cell::new(true),
+            target_held_before_last: false,
             _state: PhantomData,
         })
     }
@@ -570,6 +573,7 @@ impl GameSession<Active> {
             hints_shown: self.hints_shown,
             cached_progress: self.cached_progress,
             progress_needs_update: self.progress_needs_update,
+            target_held_before_last: self.target_held_before_last,
             _state: PhantomData,
         }
     }
@@ -593,7 +597,10 @@ impl GameSession<Active> {
     pub fn check_completion(&self) -> bool {
         self.scenario.is_completed_by(
             self.simulator.matches_snapshot(&self.target_snapshot),
-            self.user_actions.last().map(|a| a.command.as_str()),
+            self.user_actions.last().map(|a| LastAction {
+                command: a.command.as_str(),
+                target_held_before: self.target_held_before_last,
+            }),
         )
     }
 
@@ -679,6 +686,7 @@ impl GameSession<Active> {
             hints_shown: self.hints_shown,
             cached_progress: self.cached_progress,
             progress_needs_update: self.progress_needs_update,
+            target_held_before_last: self.target_held_before_last,
             _state: PhantomData,
         }
     }
@@ -725,8 +733,9 @@ impl GameSession<Active> {
 // Implement CommandExecutor trait for unified count prefix handling
 impl CommandExecutor for GameSession<Active> {
     fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
-        // Execute command through simulator
+        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
         self.simulator.execute_command(command)?;
+        self.target_held_before_last = held_before;
 
         // Invalidate progress cache since state changed
         self.progress_needs_update.set(true);

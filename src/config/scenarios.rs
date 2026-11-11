@@ -33,36 +33,53 @@ pub enum CompletionRule {
     /// Complete as soon as the editor state equals the target.
     #[default]
     TargetState,
-    /// Complete when the editor state equals the target AND the action that
-    /// produced it is one of the scenario's `commands_taught`, so history
-    /// navigation (`u`/`U`) cannot be satisfied by revisiting a state.
+    /// Complete when the editor state equals the target AND the last action is
+    /// one of the scenario's `commands_taught` AND that action caused the
+    /// transition (the target did not already hold), so history navigation
+    /// (`u`/`U`) cannot be satisfied by revisiting a state or by a no-op.
     AfterTaughtCommands,
+}
+
+/// The just-executed action as seen by [`CompletionRule::is_satisfied`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LastAction<'a> {
+    /// The command string as typed (may carry a count prefix).
+    pub command: &'a str,
+    /// Whether the editor already matched the target before this action ran.
+    pub target_held_before: bool,
 }
 
 impl CompletionRule {
     /// The single completion predicate shared by training and arcade.
     ///
     /// `target_reached` is the editor-versus-target comparison and
-    /// `last_command` the just-executed action. Commands are compared as review
-    /// card ids, so a count prefix is ignored (`2u` matches `u`).
+    /// `last_action` the just-executed action. Commands are compared as review
+    /// card ids, so a count prefix is ignored (`2u` matches `u`). An action
+    /// that found the target already satisfied (a no-op such as `U` on an empty
+    /// redo stack) never completes an [`CompletionRule::AfterTaughtCommands`]
+    /// scenario.
     ///
     /// # Examples
     ///
     /// ```
-    /// use helix_trainer::config::CompletionRule;
+    /// use helix_trainer::config::{CompletionRule, LastAction};
     ///
     /// let taught = ["u".to_string()];
     /// let rule = CompletionRule::AfterTaughtCommands;
-    /// assert!(rule.is_satisfied(true, &taught, Some("2u")));
-    /// assert!(!rule.is_satisfied(true, &taught, Some("d")));
-    /// assert!(CompletionRule::TargetState.is_satisfied(true, &taught, Some("d")));
+    /// let action = |command, target_held_before| {
+    ///     Some(LastAction { command, target_held_before })
+    /// };
+    /// assert!(rule.is_satisfied(true, &taught, action("2u", false)));
+    /// assert!(!rule.is_satisfied(true, &taught, action("2u", true)));
+    /// assert!(!rule.is_satisfied(true, &taught, action("d", false)));
+    /// assert!(CompletionRule::TargetState.is_satisfied(true, &taught, action("d", true)));
     /// ```
     #[must_use]
     pub fn is_satisfied(
         self,
         target_reached: bool,
         commands_taught: &[String],
-        last_command: Option<&str>,
+        last_action: Option<LastAction<'_>>,
     ) -> bool {
         if !target_reached {
             return false;
@@ -70,7 +87,10 @@ impl CompletionRule {
         match self {
             Self::TargetState => true,
             Self::AfterTaughtCommands => {
-                let Some(last) = last_command.and_then(ReviewableCommand::parse) else {
+                let Some(last_action) = last_action.filter(|a| !a.target_held_before) else {
+                    return false;
+                };
+                let Some(last) = ReviewableCommand::parse(last_action.command) else {
                     return false;
                 };
                 commands_taught
@@ -205,19 +225,23 @@ pub struct Scenario {
 
 impl Scenario {
     /// Whether the scenario is finished, given the editor-versus-target
-    /// comparison and the just-executed command.
+    /// comparison and the just-executed action.
     ///
     /// Both training and arcade completion go through this, so they cannot
     /// diverge. See [`CompletionRule`].
     #[must_use]
-    pub fn is_completed_by(&self, target_reached: bool, last_command: Option<&str>) -> bool {
+    pub fn is_completed_by(
+        &self,
+        target_reached: bool,
+        last_action: Option<LastAction<'_>>,
+    ) -> bool {
         let (rule, taught) = self
             .metadata
             .as_ref()
             .map_or((CompletionRule::default(), &[][..]), |m| {
                 (m.completion, m.commands_taught.as_slice())
             });
-        rule.is_satisfied(target_reached, taught, last_command)
+        rule.is_satisfied(target_reached, taught, last_action)
     }
 }
 

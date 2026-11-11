@@ -399,3 +399,9 @@ fn test_arcade_undo_redo_not_completed_when_target_reached_by_untaught_command()
 fn test_arcade_undo_redo_counted_taught_command_completes() {
     assert_eq!(arcade_completion_step(&["x", "d", "2u", "U"]), Some(4));
 }
+
+#[test]
+fn test_arcade_undo_redo_not_completed_by_noop_redo() {
+    assert_eq!(arcade_completion_step(&["x", "d", "U"]), None);
+    assert_eq!(arcade_completion_step(&["x", "d", "U", "u", "U"]), Some(5));
+}

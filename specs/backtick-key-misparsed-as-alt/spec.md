@@ -38,9 +38,9 @@ app's own key-canonicalization layer — it is not merely a downstream keymap-ma
 quirk.
 
 The Helix simulator binds a bare backtick to `switch_case`'s alternative form
-(`pub const CMD_SWITCH_CASE_ALT: &str = "`";`, `src/helix/commands.rs:45`), and a
+(`pub const CMD_SWITCH_CASE_ALT: &str = "`";`, `src/helix/commands.rs:45`, now `src/grammar/commands.rs` after #558), and a
 genuine `Alt-`` ` `` chord is separately bound to `switch_to_uppercase`
-(`pub const CMD_SWITCH_TO_UPPERCASE: &str = "Alt-`";`, `src/helix/commands.rs:46`,
+(`pub const CMD_SWITCH_TO_UPPERCASE: &str = "Alt-`";`, `src/helix/commands.rs:46`, now `src/grammar/commands.rs`,
 mapped in `src/input/typestate/key_mapping.rs:287`). Because a plain backtick keypress
 is being reported as if `Alt` were held, it never reaches the `CMD_SWITCH_CASE_ALT`
 binding (`src/input/typestate/key_mapping.rs:331`) — it is silently swallowed instead
@@ -191,7 +191,7 @@ Measurable metrics that prove the feature works:
 - Reproduce the bug first (per repo triage protocol) before implementing a fix — ideally re-confirm via the tmux method documented in the project's local testing playbook
 - Add/extend unit tests in `src/input/typestate/tests/key_mapping_tests.rs` (or the layer where the actual fix lands) covering bare backtick vs genuine Alt-backtick
 - Run `cargo +nightly fmt --check`, `cargo clippy --all-targets --all-features --workspace -- -D warnings`, `cargo nextest run --workspace --all-features --lib --bins`, and `cargo nextest run scenario` before considering the fix complete
-- Follow existing patterns in `src/input/typestate/key_mapping.rs` and the crossterm event-handling code in `src/input/handlers.rs`
+- Follow existing patterns in `src/input/typestate/key_mapping.rs` and the crossterm event-handling code in `src/ui/key_dispatch/handlers.rs` (moved from `src/input/handlers.rs` by #558)
 - Update `CHANGELOG.md` under `[Unreleased]` once the fix lands
 
 ### Ask First
@@ -222,7 +222,7 @@ Merged in PR #380 (issue #377, commit `45bbd1f`); recorded in `CHANGELOG.md`.
 ## 11. See Also
 
 - [[MOC-specs]] — all specifications
-- `src/helix/commands.rs` — `CMD_SWITCH_CASE_ALT`, `CMD_SWITCH_TO_UPPERCASE` constants
+- `src/grammar/commands.rs` (moved from `src/helix/commands.rs` by #558) — `CMD_SWITCH_CASE_ALT`, `CMD_SWITCH_TO_UPPERCASE` constants
 - `src/input/typestate/key_mapping.rs` — `map_macos_composed_char` (root cause) and the canonical-key-to-command mapping
 - `scenarios/en/editing/advanced-editing.toml` — `switch_case_alt_001` scenario
 - `scenarios/en/writing/code-fence.toml` — `writing_code_fence_001` scenario

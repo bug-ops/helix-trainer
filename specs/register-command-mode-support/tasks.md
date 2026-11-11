@@ -123,7 +123,7 @@ scenario completion model.
 - [x] Escape discards input, no document mutation
 - [x] Malformed input converts to `Cancel` via intercepted `UserError`,
       not a propagated panic-risking error
-- [x] `security::limits::MAX_COMMAND_LINE_LEN = 256` bounds buffer growth
+- [x] `limits::MAX_COMMAND_LINE_LEN = 256` (`src/limits.rs`, originally `security::limits`; moved by #558) bounds buffer growth
 **Dependencies**: none (parallel to T001-T003)
 **Files**: `src/helix/simulator/command_line.rs`, `src/input/typestate/handlers/command_line.rs`, `src/security.rs`
 **Complexity**: medium
@@ -157,7 +157,7 @@ collapse to stable, trackable FSRS/quest command IDs rather than one ID
 per raw string permutation.
 **Spec reference**: [[spec#FR-010]]
 **Acceptance criteria**:
-- [x] `normalize_command_id()` added to `src/helix/commands.rs`,
+- [x] `normalize_command_id()` added to `src/helix/commands.rs` (now `src/grammar/commands.rs`, #558),
       canonicalizing e.g. `"ay` → `"y`, `:g 3` → `:goto`
 - [x] Wired at 3 call sites: `scenario_completion.rs:163`,
       `minigame/session.rs:848`, `ui/state/handlers/quests.rs:21`

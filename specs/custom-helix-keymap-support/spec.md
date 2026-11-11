@@ -40,7 +40,7 @@ day — the trainer's drilled muscle memory would not transfer to their real
 editor configuration.
 
 A prerequisite surfaced during investigation: `CommandMetadata.name`
-(`src/helix/commands.rs`) held ~35-40 values that did not match real Helix
+(`src/helix/commands.rs`, moved to `src/grammar/commands.rs` by #558) held ~35-40 values that did not match real Helix
 25.07.1 command identifiers, with no production consumer to catch the
 drift. This had to be corrected first (mechanical, behavior-preserving) so
 that `CommandMetadata.name` could become the authoritative key a user's
@@ -147,6 +147,7 @@ Use EARS notation. Prefix with FR-NNN.
 | `PhysicalKey` (`src/input/keymap/keys.rs`) | Normalized newtype identifying a physical keystroke; sole lookup key for remap resolution |
 | `KeymapOverlay` (`src/input/keymap/overlay.rs`) | `HashMap`-backed `(context, PhysicalKey) -> canonical key(s)` resolution built from parsed config entries |
 | `KeymapWarningReason` (`src/config/keymap/parse.rs`) | `UnknownCommand`, `UnparsableKey`, `UnsupportedBindingForm`, `UnsupportedMinorMode`, `UnsupportedRelocation`, `Shadowed`, plus a resolve-time replay-mismatch variant — every unsupported binding is one of these, never silently dropped |
+| `KeymapFingerprint` types (`src/config/keymap/fingerprint.rs`, moved from `gamification` by #558 so that `gamification` no longer imports `input`; importers `input/keymap/{mod,overlay}.rs`, `data_handling.rs`, `gamification/profile.rs` use the new path, no re-export) | Fingerprint value types (`Fnv1a64V1`) computed from the active mapping; keymap TOML resolution lives in `src/input/keymap/` (moved from `config` by #558, layer order in [[constitution]]) |
 | `UserProfile.keymap_fingerprint` | Optional tagged value (`Fnv1a64V1` plus the 64-bit hash, FR-008) that detects when review history spans more than one binding mapping, including transitions to/from the stock keymap; a legacy untagged `u64` is read as a legacy value that never raises the mismatch notification |
 
 No changes to `Scenario`/`Setup`/`TargetState` — this feature only affects

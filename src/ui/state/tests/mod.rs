@@ -2,6 +2,7 @@
 
 mod app_state_tests;
 mod common;
+mod effects_tests;
 mod menu_tests;
 mod mode_selection_tests;
 mod navigation_tests;

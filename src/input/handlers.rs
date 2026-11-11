@@ -16,8 +16,8 @@
 //!          -> InputStateMachine::process_key() -> execute
 //! ```
 //!
-//! For menu navigation, a separate command buffer pattern is used
-//! (see `MenuData::command_buffer`).
+//! Menu navigation uses the same machine through `Message::MenuKey`
+//! (see `MenuData::input_state`).
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
@@ -80,104 +80,11 @@ pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Mess
     }
 }
 
-/// Get menu command buffer from state
-fn get_menu_buffer(state: &AppState) -> &str {
-    match &state.screen {
-        TypedScreen::Menu(data) => &data.command_buffer,
-        _ => "",
-    }
-}
-
-/// Parse menu command buffer and return appropriate message
-///
-/// Handles:
-/// - Count prefixes (3j, 10k)
-/// - Jump commands (gg, G, 15G, 15gg)
-/// - Simple navigation (j, k)
-fn parse_menu_command(buffer: &str) -> Option<Message> {
-    if buffer.is_empty() {
-        return None;
-    }
-
-    // Check for gg (goto first)
-    if buffer == "gg" {
-        return Some(Message::MenuJumpToFirst);
-    }
-
-    // Check for G (goto last) or {n}G (goto line n)
-    if buffer == "G" {
-        return Some(Message::MenuJumpToLast);
-    }
-
-    // Check for {n}G pattern
-    if let Some(num_str) = buffer.strip_suffix('G')
-        && let Ok(n) = num_str.parse::<usize>()
-    {
-        return Some(Message::MenuJumpTo(n));
-    }
-
-    // Check for {n}gg pattern
-    if let Some(num_str) = buffer.strip_suffix("gg")
-        && !num_str.is_empty()
-        && let Ok(n) = num_str.parse::<usize>()
-    {
-        return Some(Message::MenuJumpTo(n));
-    }
-
-    // Check for count + j/k pattern
-    if buffer.ends_with('j') || buffer.ends_with('k') {
-        let direction = buffer.chars().last().unwrap();
-        let count_str = &buffer[..buffer.len() - 1];
-
-        if count_str.is_empty() {
-            // Simple j or k
-            return match direction {
-                'j' => Some(Message::MenuDown),
-                'k' => Some(Message::MenuUp),
-                _ => None,
-            };
-        }
-
-        if let Ok(count) = count_str.parse::<usize>() {
-            return match direction {
-                'j' => Some(Message::MenuDownBy(count)),
-                'k' => Some(Message::MenuUpBy(count)),
-                _ => None,
-            };
-        }
-    }
-
-    None
-}
-
-/// Check if menu buffer is in a partial state (waiting for more input)
-fn is_menu_buffer_partial(buffer: &str) -> bool {
-    if buffer.is_empty() {
-        return false;
-    }
-
-    // "g" alone is partial (waiting for second g)
-    if buffer == "g" {
-        return true;
-    }
-
-    // Digits alone are partial (waiting for j/k/g/G)
-    if buffer.chars().all(|c| c.is_ascii_digit()) {
-        return true;
-    }
-
-    // Digits followed by "g" is partial (waiting for second g)
-    if buffer.ends_with('g') && buffer.len() > 1 {
-        let prefix = &buffer[..buffer.len() - 1];
-        if prefix.chars().all(|c| c.is_ascii_digit()) {
-            return true;
-        }
-    }
-
-    false
-}
-
 /// Handle keyboard events on the main menu screen
+///
+/// Read-only: counts, `g` leader sequences and `j`/`k`/`G` go to the menu's
+/// `InputStateMachine` through [`Message::MenuKey`], which `update()` drives. Action keys
+/// (`q`, `m`, `r`, `p`, `s`, `a`, `f`, `M`) only apply while no multi-key sequence is pending.
 ///
 /// Supports Helix-style navigation:
 /// - j/k: move down/up
@@ -185,96 +92,36 @@ fn is_menu_buffer_partial(buffer: &str) -> bool {
 /// - gg: jump to first item
 /// - G: jump to last item
 /// - 15G/15gg: jump to item 15
-pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> {
+pub fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Ctrl-Q exits application from anywhere
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::QuitApp);
     }
 
-    // Get current buffer
-    let buffer = get_menu_buffer(state);
+    let pending =
+        matches!(&state.screen, TypedScreen::Menu(data) if !data.input_state.state().is_base());
 
-    // Handle Escape - clear buffer or go back to mode selection
-    if key.code == KeyCode::Esc {
-        if let TypedScreen::Menu(ref mut data) = state.screen
-            && !data.command_buffer.is_empty()
-        {
-            data.command_buffer.clear();
-            return None; // Consumed the escape
-        }
-        // Buffer is empty - go back to mode selection
-        return Some(Message::NavigateTo(NavTarget::ModeSelection));
+    match key.code {
+        // A pending sequence swallows Esc; otherwise go back to mode selection
+        KeyCode::Esc if pending => Some(Message::MenuKey(key)),
+        KeyCode::Esc => Some(Message::NavigateTo(NavTarget::ModeSelection)),
+        KeyCode::Enter => Some(Message::MenuSelect),
+        KeyCode::Up => Some(Message::MenuUp),
+        KeyCode::Down => Some(Message::MenuDown),
+        KeyCode::Char(_) if pending => Some(Message::MenuKey(key)),
+        KeyCode::Char('q') => Some(Message::QuitApp),
+        KeyCode::Char('m') => Some(Message::NavigateTo(NavTarget::ModeSelection)),
+        KeyCode::Char('r') => Some(Message::StartReviewSession),
+        KeyCode::Char('p') => Some(Message::ShowProfile),
+        KeyCode::Char('s') => Some(Message::ShowStatistics),
+        KeyCode::Char('a') => Some(Message::ShowAchievements),
+        KeyCode::Char('f') => Some(Message::ShowCategoryFilters),
+        KeyCode::Char('M') => Some(Message::ToggleSound),
+        // A bare `G` binds nothing in the machine's base state, so it is not a sequence
+        KeyCode::Char('G') => Some(Message::MenuJumpToLast),
+        KeyCode::Char('j' | 'k' | 'g' | '0'..='9') => Some(Message::MenuKey(key)),
+        _ => None,
     }
-
-    // Handle Enter - always select
-    if key.code == KeyCode::Enter {
-        // Clear buffer first
-        if let TypedScreen::Menu(ref mut data) = state.screen {
-            data.command_buffer.clear();
-        }
-        return Some(Message::MenuSelect);
-    }
-
-    // Arrow keys bypass command buffer
-    if key.code == KeyCode::Up {
-        if let TypedScreen::Menu(ref mut data) = state.screen {
-            data.command_buffer.clear();
-        }
-        return Some(Message::MenuUp);
-    }
-    if key.code == KeyCode::Down {
-        if let TypedScreen::Menu(ref mut data) = state.screen {
-            data.command_buffer.clear();
-        }
-        return Some(Message::MenuDown);
-    }
-
-    // Handle character input
-    if let KeyCode::Char(c) = key.code {
-        // Special single-key commands (when buffer is empty)
-        if buffer.is_empty() {
-            match c {
-                'q' => return Some(Message::QuitApp),
-                'm' => return Some(Message::NavigateTo(NavTarget::ModeSelection)),
-                'r' => return Some(Message::StartReviewSession),
-                'p' => return Some(Message::ShowProfile),
-                's' => return Some(Message::ShowStatistics),
-                'a' => return Some(Message::ShowAchievements),
-                'f' => return Some(Message::ShowCategoryFilters),
-                'G' => return Some(Message::MenuJumpToLast),
-                'M' => return Some(Message::ToggleSound),
-                _ => {}
-            }
-        }
-
-        // Build new buffer
-        let new_buffer = format!("{}{}", buffer, c);
-
-        // Check if it's a complete command
-        if let Some(msg) = parse_menu_command(&new_buffer) {
-            // Clear buffer and return message
-            if let TypedScreen::Menu(ref mut data) = state.screen {
-                data.command_buffer.clear();
-            }
-            return Some(msg);
-        }
-
-        // Check if it's a valid partial state
-        if is_menu_buffer_partial(&new_buffer) {
-            // Update buffer and wait for more input
-            if let TypedScreen::Menu(ref mut data) = state.screen {
-                data.command_buffer = new_buffer;
-            }
-            return None;
-        }
-
-        // Invalid sequence - clear buffer
-        if let TypedScreen::Menu(ref mut data) = state.screen {
-            data.command_buffer.clear();
-        }
-    }
-
-    None
 }
 
 /// Handle special UI keys on task screen (F1, Ctrl+Q)
@@ -736,26 +583,26 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::QuitApp));
     }
 
     #[test]
-    fn test_menu_key_j_moves_down() {
+    fn test_menu_key_j_goes_to_the_menu_parser() {
         let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
-        assert_eq!(msg, Some(Message::MenuDown));
+        let msg = handle_menu_keys(key, &state);
+        assert_eq!(msg, Some(Message::MenuKey(key)));
     }
 
     #[test]
-    fn test_menu_key_k_moves_up() {
+    fn test_menu_key_k_goes_to_the_menu_parser() {
         let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
-        assert_eq!(msg, Some(Message::MenuUp));
+        let msg = handle_menu_keys(key, &state);
+        assert_eq!(msg, Some(Message::MenuKey(key)));
     }
 
     #[test]
@@ -763,7 +610,7 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::MenuSelect));
     }
 
@@ -868,7 +715,7 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::QuitApp));
     }
 
@@ -951,7 +798,7 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::ShowAchievements));
     }
 
@@ -960,147 +807,143 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, None);
     }
 
-    // Tests for Helix-style menu navigation
+    // Tests for Helix-style menu navigation, driven through the same path as the app:
+    // key -> handle_menu_keys() -> Message -> update()
     mod menu_navigation_tests {
         use super::*;
+        use crate::testing::update_executing_effects as update;
+        use crate::testing::{ScenarioBuilder, test_app_state_with_scenarios};
+
+        fn menu_state() -> AppState {
+            let scenarios = (0..20)
+                .map(|i| ScenarioBuilder::new().id(format!("s{i}")).build())
+                .collect();
+            let mut state = test_app_state_with_scenarios(scenarios);
+            state.screen = TypedScreen::Menu(MenuData::default());
+            state
+        }
+
+        fn press_key(state: &mut AppState, key: KeyEvent) -> Option<Message> {
+            let msg = handle_menu_keys(key, state)?;
+            update(state, msg.clone()).unwrap();
+            Some(msg)
+        }
+
+        fn press(state: &mut AppState, keys: &str) {
+            for c in keys.chars() {
+                press_key(state, KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+            }
+        }
+
+        fn selected(state: &AppState) -> usize {
+            match &state.screen {
+                TypedScreen::Menu(data) => data.selected_item,
+                other => panic!("expected the menu, got {other:?}"),
+            }
+        }
+
+        fn is_idle(state: &AppState) -> bool {
+            matches!(&state.screen, TypedScreen::Menu(data) if data.input_state.state().is_base())
+        }
+
+        #[test]
+        fn test_menu_j_and_k_move_one_item() {
+            let mut state = menu_state();
+            press(&mut state, "jj");
+            assert_eq!(selected(&state), 2);
+            press(&mut state, "k");
+            assert_eq!(selected(&state), 1);
+        }
 
         #[test]
         fn test_menu_gg_jumps_to_first() {
-            let mut state = create_test_app_state();
-            state.screen = TypedScreen::Menu(MenuData::default());
-
-            // Press 'g' - partial, no message yet
-            let key_g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_g, &mut state);
-            assert_eq!(msg, None);
-
-            // Press second 'g' - complete command
-            let msg = handle_menu_keys(key_g, &mut state);
-            assert_eq!(msg, Some(Message::MenuJumpToFirst));
+            let mut state = menu_state();
+            press(&mut state, "5j");
+            press(&mut state, "g");
+            assert!(!is_idle(&state), "a lone g waits for the second g");
+            press(&mut state, "g");
+            assert_eq!(selected(&state), 0);
+            assert!(is_idle(&state));
         }
 
         #[test]
         fn test_menu_shift_g_jumps_to_last() {
-            let mut state = create_test_app_state();
-            state.screen = TypedScreen::Menu(MenuData::default());
-
-            let key = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key, &mut state);
-            assert_eq!(msg, Some(Message::MenuJumpToLast));
+            let mut state = menu_state();
+            press(&mut state, "G");
+            // 20 scenarios plus the 4 fixed entries
+            assert_eq!(selected(&state), 23);
         }
 
         #[test]
-        fn test_menu_5j_moves_down_5() {
-            let mut state = create_test_app_state();
-            state.screen = TypedScreen::Menu(MenuData::default());
-
-            // Press '5' - partial
-            let key_5 = KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_5, &mut state);
-            assert_eq!(msg, None);
-
-            // Press 'j' - complete
-            let key_j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_j, &mut state);
-            assert_eq!(msg, Some(Message::MenuDownBy(5)));
+        fn test_menu_counted_moves() {
+            let mut state = menu_state();
+            press(&mut state, "5j");
+            assert_eq!(selected(&state), 5);
+            press(&mut state, "10k");
+            assert_eq!(selected(&state), 0);
         }
 
         #[test]
-        fn test_menu_10k_moves_up_10() {
-            let mut state = create_test_app_state();
-            state.screen = TypedScreen::Menu(MenuData::default());
-
-            // Press '1' - partial
-            let key_1 = KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_1, &mut state);
-            assert_eq!(msg, None);
-
-            // Press '0' - partial
-            let key_0 = KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_0, &mut state);
-            assert_eq!(msg, None);
-
-            // Press 'k' - complete
-            let key_k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_k, &mut state);
-            assert_eq!(msg, Some(Message::MenuUpBy(10)));
+        fn test_menu_counted_goto_jumps_to_line() {
+            let mut state = menu_state();
+            press(&mut state, "12G");
+            assert_eq!(selected(&state), 11);
+            press(&mut state, "3gg");
+            assert_eq!(selected(&state), 2);
+            assert!(is_idle(&state));
         }
 
         #[test]
-        fn test_menu_15_shift_g_jumps_to_15() {
-            let mut state = create_test_app_state();
-            state.screen = TypedScreen::Menu(MenuData::default());
-
-            // Press '1' - partial
-            let key_1 = KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_1, &mut state);
-            assert_eq!(msg, None);
-
-            // Press '5' - partial
-            let key_5 = KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_5, &mut state);
-            assert_eq!(msg, None);
-
-            // Press 'G' - complete
-            let key_shift_g = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_shift_g, &mut state);
-            assert_eq!(msg, Some(Message::MenuJumpTo(15)));
+        fn test_menu_count_then_find_resets_and_drops_the_key() {
+            for keys in ["5f", "5i", "5/", "5m"] {
+                let mut state = menu_state();
+                press(&mut state, keys);
+                assert!(is_idle(&state), "{keys} must leave the parser idle");
+                assert_eq!(selected(&state), 0, "{keys} must not navigate");
+                // The dropped key is not an action: still on the menu, and `j` is a plain move
+                press(&mut state, "j");
+                assert_eq!(selected(&state), 1, "{keys} must not poison the next key");
+            }
         }
 
         #[test]
-        fn test_menu_15gg_jumps_to_15() {
-            let mut state = create_test_app_state();
-            state.screen = TypedScreen::Menu(MenuData::default());
-
-            // Press "15gg"
-            let key_1 = KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE);
-            handle_menu_keys(key_1, &mut state);
-
-            let key_5 = KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE);
-            handle_menu_keys(key_5, &mut state);
-
-            let key_g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
-            handle_menu_keys(key_g, &mut state);
-
-            let msg = handle_menu_keys(key_g, &mut state);
-            assert_eq!(msg, Some(Message::MenuJumpTo(15)));
+        fn test_menu_action_keys_are_ignored_while_a_count_is_pending() {
+            let mut state = menu_state();
+            press(&mut state, "5m");
+            assert_matches!(state.screen, TypedScreen::Menu(_));
         }
 
         #[test]
-        fn test_menu_escape_clears_buffer() {
-            let mut state = create_test_app_state();
-            state.screen = TypedScreen::Menu(MenuData::default());
+        fn test_menu_escape_after_a_count_cancels_the_count_first() {
+            let mut state = menu_state();
+            press(&mut state, "5");
+            assert!(!is_idle(&state));
 
-            // Start building "5j"
-            let key_5 = KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE);
-            handle_menu_keys(key_5, &mut state);
+            let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+            press_key(&mut state, esc);
+            assert!(is_idle(&state));
+            assert_matches!(state.screen, TypedScreen::Menu(_));
 
-            // Press Escape - should clear buffer
-            let key_esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-            handle_menu_keys(key_esc, &mut state);
-
-            // Now press 'j' - should be simple down, not 5j
-            let key_j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_j, &mut state);
-            assert_eq!(msg, Some(Message::MenuDown));
+            // The next Esc leaves the menu
+            assert_eq!(
+                handle_menu_keys(esc, &state),
+                Some(Message::NavigateTo(NavTarget::ModeSelection))
+            );
         }
 
         #[test]
         fn test_menu_arrow_keys_still_work() {
-            let mut state = create_test_app_state();
-            state.screen = TypedScreen::Menu(MenuData::default());
+            let state = menu_state();
 
             let key_up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_up, &mut state);
-            assert_eq!(msg, Some(Message::MenuUp));
+            assert_eq!(handle_menu_keys(key_up, &state), Some(Message::MenuUp));
 
             let key_down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
-            let msg = handle_menu_keys(key_down, &mut state);
-            assert_eq!(msg, Some(Message::MenuDown));
+            assert_eq!(handle_menu_keys(key_down, &state), Some(Message::MenuDown));
         }
     }
 
@@ -1297,7 +1140,7 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::NONE);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::ToggleSound));
     }
 
@@ -1307,7 +1150,7 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE);
         let mut state = create_test_app_state();
         state.screen = TypedScreen::Menu(MenuData::default());
-        let msg = handle_menu_keys(key, &mut state);
+        let msg = handle_menu_keys(key, &state);
         assert_eq!(msg, Some(Message::ShowCategoryFilters));
     }
 

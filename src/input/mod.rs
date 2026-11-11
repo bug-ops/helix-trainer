@@ -34,7 +34,7 @@ use handlers::*;
 ///
 /// Note: Some handlers (like menu) need mutable access to state
 /// for command buffer management.
-pub fn handle_key_event(key: KeyEvent, state: &mut AppState) -> Option<Message> {
+pub fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
     use crate::ui::state::TypedScreen;
     use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -81,7 +81,7 @@ mod tests {
     fn test_ctrl_n_starts_a_fresh_profile_only_after_a_backup() {
         let mut state = crate::testing::empty_test_app_state();
         assert_ne!(
-            handle_key_event(ctrl_n(), &mut state),
+            handle_key_event(ctrl_n(), &state),
             Some(Message::StartFreshProfile)
         );
 
@@ -89,7 +89,7 @@ mod tests {
             .progress
             .quarantine_profile(QuarantineOutcome::Failed("x".to_string()));
         assert_ne!(
-            handle_key_event(ctrl_n(), &mut state),
+            handle_key_event(ctrl_n(), &state),
             Some(Message::StartFreshProfile)
         );
 
@@ -97,7 +97,7 @@ mod tests {
             .progress
             .quarantine_profile(QuarantineOutcome::BackedUp("backup".into()));
         assert_eq!(
-            handle_key_event(ctrl_n(), &mut state),
+            handle_key_event(ctrl_n(), &state),
             Some(Message::StartFreshProfile)
         );
     }

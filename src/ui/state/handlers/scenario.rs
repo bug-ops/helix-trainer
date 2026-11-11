@@ -170,7 +170,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
                 MenuData {
                     selected_item: state.ui.last_menu_selected,
                     scroll_offset: state.ui.last_menu_scroll,
-                    command_buffer: String::new(),
+                    ..MenuData::default()
                 },
             ))));
         };
@@ -259,7 +259,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
             MenuData {
                 selected_item: selected,
                 scroll_offset: scroll,
-                command_buffer: String::new(),
+                ..MenuData::default()
             },
         ))));
     };
@@ -339,7 +339,7 @@ pub fn handle_next_lesson(
             MenuData {
                 selected_item: ctx.ui.last_menu_selected,
                 scroll_offset: ctx.ui.last_menu_scroll,
-                command_buffer: String::new(),
+                ..MenuData::default()
             },
         ))));
     };
@@ -496,7 +496,7 @@ pub fn handle_go_to_scenario_list(
         MenuData {
             selected_item: selected,
             scroll_offset: ctx.ui.last_menu_scroll,
-            command_buffer: String::new(),
+            ..MenuData::default()
         },
     ))))
 }

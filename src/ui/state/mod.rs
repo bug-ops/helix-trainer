@@ -211,6 +211,9 @@ pub enum Message {
     /// Menu navigation: move selection down
     MenuDown,
 
+    /// Menu navigation: a key for the multi-key parser (counts, `gg`, `G`, `j`, `k`)
+    MenuKey(crossterm::event::KeyEvent),
+
     /// Menu navigation: move up by N items
     MenuUpBy(usize),
 
@@ -711,24 +714,14 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
         Message::MenuJumpTo(line) => {
             extract_screen!(state, Menu, mut data, ctx => handlers::menu::handle_menu_jump_to(data, &ctx, line))
         }
+        Message::MenuKey(key) => {
+            extract_screen!(state, Menu, mut data, ctx => handlers::menu::handle_menu_key(data, &ctx, key))
+        }
         Message::MenuSelect => {
-            let (selected_item, scroll_offset, command_buffer) =
-                if let TypedScreen::Menu(ref data) = state.screen {
-                    (
-                        data.selected_item,
-                        data.scroll_offset,
-                        data.command_buffer.clone(),
-                    )
-                } else {
-                    return Err(UserError::WrongScreen);
-                };
-
-            let menu_data = MenuData {
-                selected_item,
-                scroll_offset,
-                command_buffer,
+            let TypedScreen::Menu(ref data) = state.screen else {
+                return Err(UserError::WrongScreen);
             };
-            let outcome = handlers::menu::handle_menu_select(&menu_data, state)?;
+            let outcome = handlers::menu::handle_menu_select(data.selected_item, state)?;
             apply_outcome(state, outcome);
             Ok(())
         }

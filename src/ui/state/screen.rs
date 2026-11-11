@@ -199,8 +199,8 @@ pub struct MenuData {
     /// Scroll offset for menu list (top visible item index)
     pub scroll_offset: usize,
 
-    /// Command buffer for multi-key navigation (e.g., "g" waiting for "g", count prefix "12")
-    pub command_buffer: String,
+    /// Multi-key navigation state (count prefix, `g` leader), the same machine gameplay uses
+    pub input_state: InputStateMachine,
 }
 
 /// Whether the hint panel is open, and the hint it shows

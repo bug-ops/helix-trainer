@@ -16,10 +16,15 @@ use std::time::Duration;
 /// Result of completing a scenario
 #[derive(Debug, Clone)]
 pub struct CompletionResult {
+    /// Itemised XP breakdown (base, bonuses) before mastery scaling.
     pub xp_components: XPComponents,
+    /// XP actually awarded after mastery scaling.
     pub actual_xp: u64,
+    /// Mastery tier of the scenario after this completion was recorded.
     pub mastery_level: ScenarioMastery,
+    /// Multiplier the mastery tier applied to the base XP.
     pub mastery_multiplier: f64,
+    /// Whether the awarded XP raised the player's level.
     pub leveled_up: bool,
 }
 

@@ -93,35 +93,57 @@ pub enum InputState {
     /// After 'mr' - waiting for surround replace from character
     SurroundReplaceFromPending,
     /// After 'mr{char}' - waiting for surround replace to character
-    SurroundReplaceToPending { from_char: char },
+    SurroundReplaceToPending {
+        /// Character being replaced.
+        from_char: char,
+    },
     /// After 'ma' - waiting for text object (around)
     TextObjectAroundPending,
     /// After 'mi' - waiting for text object (inside)
     TextObjectInsidePending,
     /// After 'f'/'F'/'t'/'T' - waiting for character
-    FindCharPending { find_type: FindType },
+    FindCharPending {
+        /// Which of `f`/`F`/`t`/`T` started the sequence.
+        find_type: FindType,
+    },
     /// After `{n}f`/`{n}F`/`{n}t`/`{n}T` - waiting for character
     CountedFindCharPending {
+        /// Which of `f`/`F`/`t`/`T` started the sequence.
         find_type: FindType,
+        /// Repeat count typed before the command.
         count: NonZeroUsize,
     },
     /// After `{n}g` - waiting for the second 'g'
-    CountedGotoPending { count: NonZeroUsize },
+    CountedGotoPending {
+        /// Repeat count typed before `g`.
+        count: NonZeroUsize,
+    },
     /// After 'r' - waiting for replacement character
     ReplaceCharPending,
     /// After '"' - waiting for register character
     RegisterPending,
     /// After '"{register}' - waiting for operator character (y/p/P/R/d/c)
-    RegisterOpPending { register: char },
+    RegisterOpPending {
+        /// Register chosen after `"`.
+        register: char,
+    },
     /// After ':' - accumulating a command-line buffer
-    CommandLinePending { buffer: String },
+    CommandLinePending {
+        /// Text typed after `:` so far.
+        buffer: String,
+    },
     /// After a regex-prompt key - accumulating the pattern buffer
     RegexPromptPending {
+        /// Which regex-taking command opened the prompt.
         kind: RegexPromptKind,
+        /// Pattern typed so far.
         buffer: String,
     },
     /// After digit 1-9 - building count prefix
-    CountPending { count: NonZeroUsize },
+    CountPending {
+        /// Count accumulated from the digits typed so far.
+        count: NonZeroUsize,
+    },
     /// After '[' - waiting for unmatched previous command second key
     UnmatchedPrevPending,
     /// After ']' - waiting for unmatched next command second key

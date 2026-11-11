@@ -96,7 +96,9 @@ pub enum RepeatableAction {
     /// - `keys`: The key sequence that was pressed
     /// - `expected_mode`: The mode the editor should be in before replay
     Command {
+        /// Key sequence replayed on repeat.
         keys: Vec<KeyEvent>,
+        /// Mode the editor must be in for the replay to be valid.
         expected_mode: Mode,
     },
 
@@ -108,8 +110,11 @@ pub enum RepeatableAction {
     /// - `text`: The text that was typed
     /// - `keys`: Arrow movements and editing keys (`Ctrl-w`, `Ctrl-u`, `Tab`, ...) in press order, interleaved with `text`
     InsertSequence {
+        /// Command that entered Insert mode, if it was not a bare mode switch.
         entry_command: Option<String>,
+        /// Literal text typed during the session.
         text: String,
+        /// Non-text keys pressed during the session, in press order.
         keys: Vec<InsertKey>,
     },
 }

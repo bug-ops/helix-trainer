@@ -90,6 +90,10 @@ async fn main() -> Result<()> {
         keymap_report,
     };
 
+    // The loader shares the app's handle (clones share the last known-valid profile text), so the
+    // first save after startup keeps the profile that just loaded as `profile.json.prev`.
+    let loader_storage = profile_storage.clone();
+
     let mut app_state = AppState::with_config(
         vec![],
         helix_trainer::gamification::UserProfile::new(),
@@ -123,7 +127,7 @@ async fn main() -> Result<()> {
     app_state.progress.begin_profile_load();
 
     // Spawn background data loaders
-    spawn_data_loaders(data_tx.clone());
+    spawn_data_loaders(data_tx.clone(), loader_storage);
 
     // Force full redraw on first render by clearing the terminal
     // This ensures the UI is visible immediately on startup

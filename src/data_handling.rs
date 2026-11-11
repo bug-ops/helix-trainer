@@ -15,7 +15,7 @@ use helix_trainer::{
     },
     learning::PerformanceTracker,
     security::error_chain,
-    ui::{AppState, Notification, NotificationType},
+    ui::{AppState, Notification, NotificationType, state::Quarantine},
 };
 
 /// How long a data-loss-risk warning notification stays visible.
@@ -256,6 +256,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
             error,
             fallback,
             backup,
+            previous,
         } => {
             state.progress.profile = fallback;
             tracing::error!(
@@ -269,7 +270,9 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
                 },
                 WARNING_NOTIFICATION_DURATION,
             ));
-            state.progress.quarantine_profile(backup);
+            state
+                .progress
+                .quarantine_profile(Quarantine { backup, previous });
             warn_if_other_instance_running(state);
         }
 
@@ -307,7 +310,7 @@ mod tests {
     use super::*;
     use helix_trainer::async_state::{LoaderError, SaveFailure};
     use helix_trainer::config::json_store::{Document, StorageError};
-    use helix_trainer::gamification::QuarantineError;
+    use helix_trainer::gamification::{PreviousCopy, QuarantineError};
     use helix_trainer::ids::{QuestId, ScenarioId};
     use helix_trainer::security::UserError;
     use helix_trainer::{
@@ -966,6 +969,7 @@ mod tests {
                 error: corrupt_profile_error(),
                 fallback,
                 backup: no_backup(),
+                previous: PreviousCopy::Unavailable,
             },
         );
 
@@ -995,6 +999,7 @@ mod tests {
                 error: corrupt_profile_error(),
                 fallback: UserProfile::new(),
                 backup: backup.clone(),
+                previous: PreviousCopy::Unavailable,
             },
         );
 
@@ -1139,6 +1144,7 @@ mod tests {
                 error: corrupt_profile_error(),
                 fallback: UserProfile::new(),
                 backup: no_backup(),
+                previous: PreviousCopy::Unavailable,
             },
         );
 
@@ -1347,6 +1353,7 @@ mod tests {
                 error: corrupt_profile_error(),
                 fallback: UserProfile::new(),
                 backup: no_backup(),
+                previous: PreviousCopy::Unavailable,
             },
         );
 
@@ -1379,6 +1386,7 @@ mod tests {
                     error: corrupt_profile_error(),
                     fallback: UserProfile::new(),
                     backup: no_backup(),
+                    previous: PreviousCopy::Unavailable,
                 },
             );
             handle_data_message(

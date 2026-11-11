@@ -14,7 +14,7 @@ pub use quests::{
     Quest, QuestDifficulty, QuestGeneration, QuestGenerator, QuestRegistrySlot,
     QuestTemplateRegistry, QuestTracker, QuestType,
 };
-pub use storage::{LockStatus, ProfileStorage, QuarantineError, QuarantineOutcome};
+pub use storage::{LockStatus, PreviousCopy, ProfileStorage, QuarantineError, QuarantineOutcome};
 pub use streak::{StreakChange, StreakManager};
 
 use thiserror::Error;

@@ -35,8 +35,18 @@ pub use scenario::{
     ScenarioBuilder, default_test_scenario, test_scenario_with_difficulty, test_scenario_with_id,
 };
 
-use crate::gamification::{QuarantineError, QuarantineOutcome};
+use crate::gamification::{PreviousCopy, QuarantineError, QuarantineOutcome};
 use crate::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
+use crate::ui::state::Quarantine;
+
+/// A quarantined profile with `backup` and no restorable previous copy.
+#[must_use]
+pub fn quarantine(backup: QuarantineOutcome) -> Quarantine {
+    Quarantine {
+        backup,
+        previous: PreviousCopy::Unavailable,
+    }
+}
 
 /// A quarantine outcome for a profile whose backup could not be made.
 #[must_use]

@@ -13,7 +13,8 @@ use crate::config::json_store::{Document, StorageError};
 use crate::config::{Scenario, ScenarioLoader};
 use crate::constants::PROFILE_SAVE_QUEUE_CAPACITY;
 use crate::gamification::{
-    ProfileStorage, QuarantineError, QuarantineOutcome, QuestTemplateRegistry, UserProfile,
+    PreviousCopy, ProfileStorage, QuarantineError, QuarantineOutcome, QuestTemplateRegistry,
+    UserProfile,
 };
 use crate::security::CappedReadError;
 use std::sync::Arc;
@@ -28,17 +29,21 @@ use tokio::task::{JoinError, JoinHandle};
 /// # Arguments
 ///
 /// * `tx` - Channel sender for communicating loading results
+/// * `storage` - Profile storage to load from. Pass a clone of the application's own handle:
+///   clones share the last known-valid profile text, so the first save after startup can keep
+///   the profile that just loaded as `profile.json.prev`
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use tokio::sync::mpsc;
 /// use helix_trainer::data_loader::spawn_data_loaders;
+/// use helix_trainer::gamification::ProfileStorage;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let (tx, mut rx) = mpsc::channel(32);
-///     spawn_data_loaders(tx);
+///     spawn_data_loaders(tx, ProfileStorage::with_path("/tmp/example-profile.json"));
 ///
 ///     // Handle messages from loaders
 ///     while let Some(msg) = rx.recv().await {
@@ -46,7 +51,7 @@ use tokio::task::{JoinError, JoinHandle};
 ///     }
 /// }
 /// ```
-pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
+pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>, storage: ProfileStorage) {
     let tx_scenarios = tx.clone();
     let tx_quests = tx.clone();
     let tx_profile = tx;
@@ -77,7 +82,6 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
 
     // Spawn profile loader (runs in parallel)
     tokio::spawn(async move {
-        let storage = ProfileStorage::new();
         let msg = match load_profile_message(storage.clone()).await {
             Ok(msg) => msg,
             Err(e) => profile_task_failed(&storage, e),
@@ -211,13 +215,21 @@ pub async fn load_scenarios_async() -> Result<Vec<Scenario>, LoaderError> {
 pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage, JoinError> {
     tokio::task::spawn_blocking(move || match storage.load() {
         Ok(profile) => DataLoadMessage::ProfileReady(profile),
-        Err(error) => DataLoadMessage::ProfileError {
-            error,
-            fallback: UserProfile::new(),
-            backup: storage.quarantine(),
-        },
+        Err(error) => profile_refused(&storage, error),
     })
     .await
+}
+
+/// The [`DataLoadMessage::ProfileError`] for a profile that could not be loaded or replaced:
+/// a throwaway fallback, the backup state of the unreadable file and whether its previous
+/// copy can be restored.
+fn profile_refused(storage: &ProfileStorage, error: StorageError) -> DataLoadMessage {
+    DataLoadMessage::ProfileError {
+        error,
+        fallback: UserProfile::new(),
+        backup: storage.quarantine(),
+        previous: storage.previous_copy(),
+    }
 }
 
 /// The refusal reported when a profile task panicked or was cancelled before it produced a
@@ -233,6 +245,7 @@ fn profile_task_failed(storage: &ProfileStorage, error: JoinError) -> DataLoadMe
         backup: QuarantineOutcome::Failed(Arc::new(QuarantineError::Copy {
             source: std::io::Error::other("the profile task failed"),
         })),
+        previous: PreviousCopy::Unavailable,
     }
 }
 
@@ -273,11 +286,50 @@ pub async fn start_fresh_profile_message(
 ) -> Result<DataLoadMessage, JoinError> {
     tokio::task::spawn_blocking(move || match storage.start_fresh() {
         Ok(profile) => DataLoadMessage::ProfileReady(profile),
-        Err(error) => DataLoadMessage::ProfileError {
-            error,
-            fallback: UserProfile::new(),
-            backup: storage.quarantine(),
-        },
+        Err(error) => profile_refused(&storage, error),
+    })
+    .await
+}
+
+/// Async "Restore previous" for a quarantined profile.
+///
+/// Runs [`ProfileStorage::restore_previous`] on tokio's blocking task pool: the previous
+/// copy is re-validated, written over the unreadable profile and reported as
+/// [`DataLoadMessage::ProfileReady`], which the usual profile-loaded handling adopts and
+/// re-enables saving with. A refusal (no backup, previous copy gone or invalid, write error)
+/// is reported as [`DataLoadMessage::ProfileError`] and every file is untouched.
+///
+/// # Errors
+///
+/// Returns an error only if the blocking task itself panics or is cancelled.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::async_state::DataLoadMessage;
+/// use helix_trainer::data_loader::restore_previous_profile_message;
+/// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() {
+/// let dir = tempfile::tempdir().unwrap();
+/// let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+/// let mut profile = UserProfile::new();
+/// profile.add_xp(500);
+/// storage.save(&profile).unwrap();
+/// storage.save(&UserProfile::new()).unwrap();
+/// std::fs::write(storage.path(), "{broken").unwrap();
+///
+/// let msg = restore_previous_profile_message(storage).await.unwrap();
+/// assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500));
+/// # }
+/// ```
+pub async fn restore_previous_profile_message(
+    storage: ProfileStorage,
+) -> Result<DataLoadMessage, JoinError> {
+    tokio::task::spawn_blocking(move || match storage.restore_previous() {
+        Ok(profile) => DataLoadMessage::ProfileReady(profile),
+        Err(error) => profile_refused(&storage, error),
     })
     .await
 }
@@ -447,7 +499,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     async fn test_spawn_data_loaders_sends_quest_registry() {
         let (tx, mut rx) = mpsc::channel(32);
-        spawn_data_loaders(tx);
+        spawn_data_loaders(tx, ProfileStorage::for_test());
 
         let mut quest_registry_received = false;
         for _ in 0..3 {
@@ -466,7 +518,7 @@ mod tests {
     async fn test_spawn_data_loaders() {
         let (tx, mut rx) = mpsc::channel(32);
 
-        spawn_data_loaders(tx);
+        spawn_data_loaders(tx, ProfileStorage::for_test());
 
         // Collect messages (scenarios, quest registry and profile)
         let mut scenarios_received = false;
@@ -496,6 +548,72 @@ mod tests {
         assert!(
             profile_received,
             "Should receive profile message (ready or error)"
+        );
+    }
+
+    /// S1 / FR-103, SC-011: the loader shares the application's storage handle, so the first
+    /// save after startup keeps the profile that just loaded as `.prev`.
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_first_save_after_spawn_data_loaders_keeps_the_loaded_profile_as_prev() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        let mut original = UserProfile::new();
+        original.add_xp(700);
+        storage.save(&original).unwrap();
+        let loaded_bytes = std::fs::read(storage.path()).unwrap();
+
+        // A fresh handle, as `main` builds it, so nothing is held before the loader runs.
+        let app_storage = ProfileStorage::with_path(storage.path());
+        let (tx, mut rx) = mpsc::channel(32);
+        spawn_data_loaders(tx, app_storage.clone());
+        let mut profile = loop {
+            match tokio::time::timeout(DATA_LOADING_TIMEOUT, rx.recv()).await {
+                Ok(Some(DataLoadMessage::ProfileReady(profile))) => break profile,
+                Ok(Some(_)) => {}
+                other => panic!("no profile message: {:?}", other.map(|m| m.is_some())),
+            }
+        };
+        assert_eq!(profile.total_xp, 700);
+
+        profile.add_xp(50);
+        app_storage.save(&profile).unwrap();
+
+        let prev = dir.path().join("profile.json.prev");
+        assert_eq!(std::fs::read(prev).unwrap(), loaded_bytes);
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_restore_previous_profile_message_restores_or_refuses() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        let mut profile = UserProfile::new();
+        profile.add_xp(500);
+        storage.save(&profile).unwrap();
+        storage.save(&UserProfile::new()).unwrap();
+        std::fs::write(storage.path(), "{broken").unwrap();
+
+        let message = restore_previous_profile_message(storage.clone())
+            .await
+            .unwrap();
+        assert!(matches!(message, DataLoadMessage::ProfileReady(p) if p.total_xp == 500));
+
+        std::fs::write(storage.path(), "{broken again").unwrap();
+        std::fs::write(storage.path().with_added_extension("prev"), "{also broken").unwrap();
+        let message = restore_previous_profile_message(storage.clone())
+            .await
+            .unwrap();
+        assert!(matches!(
+            message,
+            DataLoadMessage::ProfileError {
+                previous: PreviousCopy::Unavailable,
+                ..
+            }
+        ));
+        assert_eq!(
+            std::fs::read_to_string(storage.path()).unwrap(),
+            "{broken again"
         );
     }
 }

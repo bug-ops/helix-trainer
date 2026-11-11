@@ -8,7 +8,9 @@ use tokio::task::JoinError;
 
 use crate::config::Scenario;
 use crate::config::json_store::StorageError;
-use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile};
+use crate::gamification::{
+    PreviousCopy, ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile,
+};
 use crate::security::UserError;
 
 /// Failure of a background content loader.
@@ -65,6 +67,8 @@ pub enum DataLoadMessage {
         fallback: UserProfile,
         /// Whether the unreadable file was preserved as a backup copy.
         backup: QuarantineOutcome,
+        /// Whether the previous profile copy can be restored.
+        previous: PreviousCopy,
     },
 
     /// Quest template registry parsed for the active locale

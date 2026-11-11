@@ -43,7 +43,9 @@ pub use handler_context::{HandlerContext, HandlerOutcome};
 
 // Sub-structures for organizing AppState
 mod substates;
-pub use substates::{ConfigState, GameState, ProfilePersistence, ProgressState, UIState};
+pub use substates::{
+    ConfigState, GameState, ProfilePersistence, ProgressState, Quarantine, UIState,
+};
 
 // Type-safe screen variants with required data
 pub mod screen;
@@ -954,7 +956,10 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
         Message::StartFreshProfile => {
             if matches!(
                 state.progress.persistence(),
-                ProfilePersistence::Quarantined(QuarantineOutcome::BackedUp(_))
+                ProfilePersistence::Quarantined(Quarantine {
+                    backup: QuarantineOutcome::BackedUp(_),
+                    ..
+                })
             ) {
                 // Leaves `Quarantined` until the result arrives, so a repeated request
                 // cannot queue a second start-fresh over the profile just written

@@ -51,7 +51,7 @@ fn test_start_fresh_profile_requires_a_backed_up_quarantine() {
 
     state
         .progress
-        .quarantine_profile(crate::testing::failed_backup());
+        .quarantine_profile(crate::testing::quarantine(crate::testing::failed_backup()));
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
     assert!(
         effects.is_empty(),
@@ -60,7 +60,9 @@ fn test_start_fresh_profile_requires_a_backed_up_quarantine() {
 
     state
         .progress
-        .quarantine_profile(QuarantineOutcome::BackedUp("backup".into()));
+        .quarantine_profile(crate::testing::quarantine(QuarantineOutcome::BackedUp(
+            "backup".into(),
+        )));
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
     assert_eq!(effects, vec![Effect::StartFreshProfile]);
 }
@@ -75,7 +77,9 @@ fn test_second_start_fresh_request_is_ignored_while_the_first_is_in_flight() {
     let mut state = create_test_app_state(vec![]);
     state
         .progress
-        .quarantine_profile(QuarantineOutcome::BackedUp("backup".into()));
+        .quarantine_profile(crate::testing::quarantine(QuarantineOutcome::BackedUp(
+            "backup".into(),
+        )));
     let mut effects = Vec::new();
 
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();

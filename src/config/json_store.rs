@@ -347,6 +347,18 @@ impl<T: DeserializeOwned> JsonStore<T> {
     /// unreadable, exceeds the size cap, or does not parse, or when copying from the declared
     /// previous location fails.
     pub fn load(&self) -> Result<Option<T>, StorageError> {
+        Ok(self.load_with_source()?.map(|(document, _)| document))
+    }
+
+    /// Like [`JsonStore::load`], also returning the exact text the document was parsed from.
+    ///
+    /// The text is known to parse, so callers that must keep a last known-valid copy hold it
+    /// instead of re-reading the file later.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`JsonStore::load`].
+    pub fn load_with_source(&self) -> Result<Option<(T, String)>, StorageError> {
         self.migrate_legacy()?;
         let contents = match path_validator::read_capped(&self.path, self.max_size) {
             Ok(contents) => contents,
@@ -354,13 +366,14 @@ impl<T: DeserializeOwned> JsonStore<T> {
             Err(e) => return Err(StorageError::read(self.doc, &self.path, e)),
         };
 
-        serde_json::from_str(&contents)
-            .map(Some)
-            .map_err(|source| StorageError::Corrupt {
+        match serde_json::from_str(&contents) {
+            Ok(document) => Ok(Some((document, contents))),
+            Err(source) => Err(StorageError::Corrupt {
                 doc: self.doc,
                 path: self.path.clone(),
                 source,
-            })
+            }),
+        }
     }
 }
 
@@ -411,11 +424,28 @@ impl<T: Serialize> JsonStore<T> {
     /// Returns [`StorageError`] if serialization or any write step fails;
     /// the previous file is left intact.
     pub fn save(&self, document: &T) -> Result<(), StorageError> {
-        let json =
-            serde_json::to_string_pretty(document).map_err(|source| StorageError::Serialize {
-                doc: self.doc,
-                source,
-            })?;
+        self.write(&self.serialize(document)?)
+    }
+
+    /// Serializes `document` exactly as [`JsonStore::save`] would write it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Serialize`] if the document cannot be serialized.
+    pub fn serialize(&self, document: &T) -> Result<String, StorageError> {
+        serde_json::to_string_pretty(document).map_err(|source| StorageError::Serialize {
+            doc: self.doc,
+            source,
+        })
+    }
+
+    /// Atomically writes already-serialized `json` to the document file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Write`] if any write step fails; the previous file is left
+    /// intact.
+    pub fn write(&self, json: &str) -> Result<(), StorageError> {
         write_atomic(&self.path, json.as_bytes()).map_err(|source| StorageError::Write {
             doc: self.doc,
             path: self.path.clone(),

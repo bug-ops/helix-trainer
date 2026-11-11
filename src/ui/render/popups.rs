@@ -249,9 +249,10 @@ pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
 /// it never covers the bottom-row footer (key hints, `/`, `:` and `s`
 /// prompts), and wraps so the backup path stays readable on narrow terminals.
 pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
-    let ProfilePersistence::Quarantined(backup) = state.progress.persistence() else {
+    let ProfilePersistence::Quarantined(quarantine) = state.progress.persistence() else {
         return;
     };
+    let backup = &quarantine.backup;
     let area = frame.area();
     if area.width == 0 || area.height == 0 {
         return;
@@ -323,7 +324,9 @@ mod tests {
         let mut state = crate::testing::app_state::empty_test_app_state();
         state
             .progress
-            .quarantine_profile(QuarantineOutcome::BackedUp(path.into()));
+            .quarantine_profile(crate::testing::quarantine(QuarantineOutcome::BackedUp(
+                path.into(),
+            )));
         state
     }
 

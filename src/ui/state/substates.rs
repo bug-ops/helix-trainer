@@ -7,7 +7,9 @@ use crate::async_state::SaveRequest;
 use crate::config::{AppConfig, ScenarioCollection};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
-use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile};
+use crate::gamification::{
+    PreviousCopy, ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile,
+};
 use crate::ids::NormalizedCommand;
 use crate::input::keymap::KeymapOverlay;
 use crate::learning::{PerformanceTracker, Scheduler};
@@ -118,6 +120,17 @@ impl std::fmt::Debug for GameState {
     }
 }
 
+/// What is known about a profile that failed to load: whether its file was preserved and
+/// whether a previous copy can be restored.
+#[derive(Debug, Clone)]
+pub struct Quarantine {
+    /// Whether the unreadable file was preserved as a backup copy.
+    pub backup: QuarantineOutcome,
+
+    /// Whether `profile.json.prev` can be restored.
+    pub previous: PreviousCopy,
+}
+
 /// Whether the in-memory profile may be written to disk.
 ///
 /// Every save path consults this, so a placeholder or fallback profile can
@@ -132,7 +145,7 @@ pub enum ProfilePersistence {
 
     /// Loading failed; the in-memory profile is a throwaway fallback and
     /// saving is disabled for the rest of the session.
-    Quarantined(QuarantineOutcome),
+    Quarantined(Quarantine),
 }
 
 impl ProfilePersistence {
@@ -284,8 +297,8 @@ impl ProgressState {
 
     /// Declare `profile` a throwaway fallback after a failed load: saving is
     /// disabled for the rest of the session.
-    pub fn quarantine_profile(&mut self, backup: QuarantineOutcome) {
-        self.persistence = ProfilePersistence::Quarantined(backup);
+    pub fn quarantine_profile(&mut self, quarantine: Quarantine) {
+        self.persistence = ProfilePersistence::Quarantined(quarantine);
     }
 
     /// Toggle sound and, when the profile is saveable, record the new state
@@ -568,12 +581,14 @@ mod tests {
     fn test_non_writable_profile_refuses_every_save_path() {
         for state in [
             ProfilePersistence::Loading,
-            ProfilePersistence::Quarantined(crate::testing::failed_backup()),
+            ProfilePersistence::Quarantined(crate::testing::quarantine(
+                crate::testing::failed_backup(),
+            )),
         ] {
             let mut progress = writable_progress();
             match &state {
                 ProfilePersistence::Loading => progress.begin_profile_load(),
-                ProfilePersistence::Quarantined(b) => progress.quarantine_profile(b.clone()),
+                ProfilePersistence::Quarantined(q) => progress.quarantine_profile(q.clone()),
                 ProfilePersistence::Writable => unreachable!(),
             }
 
@@ -652,7 +667,7 @@ mod tests {
     #[test]
     fn test_toggle_sound_does_not_touch_quarantined_profile() {
         let mut progress = writable_progress();
-        progress.quarantine_profile(crate::testing::failed_backup());
+        progress.quarantine_profile(crate::testing::quarantine(crate::testing::failed_backup()));
 
         progress.toggle_sound();
 

@@ -43,9 +43,10 @@ pub fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
         && key.modifiers == KeyModifiers::CONTROL
         && matches!(
             state.progress.persistence(),
-            crate::ui::state::ProfilePersistence::Quarantined(
-                crate::gamification::QuarantineOutcome::BackedUp(_)
-            )
+            crate::ui::state::ProfilePersistence::Quarantined(crate::ui::state::Quarantine {
+                backup: crate::gamification::QuarantineOutcome::BackedUp(_),
+                ..
+            })
         )
     {
         return Some(Message::StartFreshProfile);
@@ -87,7 +88,7 @@ mod tests {
 
         state
             .progress
-            .quarantine_profile(crate::testing::failed_backup());
+            .quarantine_profile(crate::testing::quarantine(crate::testing::failed_backup()));
         assert_ne!(
             handle_key_event(ctrl_n(), &state),
             Some(Message::StartFreshProfile)
@@ -95,7 +96,9 @@ mod tests {
 
         state
             .progress
-            .quarantine_profile(QuarantineOutcome::BackedUp("backup".into()));
+            .quarantine_profile(crate::testing::quarantine(QuarantineOutcome::BackedUp(
+                "backup".into(),
+            )));
         assert_eq!(
             handle_key_event(ctrl_n(), &state),
             Some(Message::StartFreshProfile)

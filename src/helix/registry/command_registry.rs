@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use crate::helix::error::{SimulatorError, bound};
-use crate::helix::simulator::{EditorMode, HelixSimulator};
+use crate::helix::normal_command::RegisteredCommand;
+use crate::helix::simulator::{EditorMode, HelixSimulator, NormalMode};
 
 use super::keytrie::KeyTrie;
 use super::metadata::{Binding, Category, CommandMetadata, CountBehavior, ModeTransition, Repeat};
@@ -176,29 +177,6 @@ impl<M: EditorMode> CommandRegistry<M> {
             .is_some_and(|c| c.metadata.repeat() == Repeat::Repeatable)
     }
 
-    /// How a count prefix applies to the registered command `key`.
-    ///
-    /// The command's metadata decides; a key that names no command repeats.
-    /// Commands that carry their own argument or count (`G`, `f<c>`, `"<r>d`,
-    /// `q`) are typed [`NormalCommand`](crate::helix::normal_command::NormalCommand)
-    /// variants that take the count themselves, not registry entries.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::helix::registry::{CountBehavior, normal_registry};
-    ///
-    /// let registry = normal_registry();
-    /// assert_eq!(registry.count_behavior("x"), CountBehavior::Repeat);
-    /// assert_eq!(registry.count_behavior("J"), CountBehavior::Ignore);
-    /// assert_eq!(registry.count_behavior("d"), CountBehavior::Ignore);
-    /// ```
-    pub fn count_behavior(&self, key: &str) -> CountBehavior {
-        self.commands
-            .get(key)
-            .map_or(CountBehavior::Repeat, |cmd| cmd.metadata.count_behavior())
-    }
-
     /// Get the `KeyTrie` for multi-key resolution
     pub fn key_trie(&self) -> &KeyTrie {
         &self.key_trie
@@ -212,6 +190,32 @@ impl<M: EditorMode> CommandRegistry<M> {
     /// Check if registry is empty
     pub fn is_empty(&self) -> bool {
         self.commands.is_empty()
+    }
+}
+
+impl CommandRegistry<NormalMode> {
+    /// How a count prefix applies to `command`.
+    ///
+    /// The command's metadata decides. Commands that carry their own argument
+    /// or count (`G`, `f<c>`, `"<r>d`, `q`) are typed
+    /// [`NormalCommand`](crate::helix::normal_command::NormalCommand) variants
+    /// that take the count themselves, not registry entries.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::normal_command::RegisteredCommand;
+    /// use helix_trainer::helix::registry::{CountBehavior, normal_registry};
+    ///
+    /// let registry = normal_registry();
+    /// let behavior = |key| registry.count_behavior(RegisteredCommand::lookup(key).unwrap());
+    /// assert_eq!(behavior("x"), CountBehavior::Repeat);
+    /// assert_eq!(behavior("J"), CountBehavior::Ignore);
+    /// assert_eq!(behavior("d"), CountBehavior::Ignore);
+    /// ```
+    pub fn count_behavior(&self, command: RegisteredCommand) -> CountBehavior {
+        // A `RegisteredCommand` is only minted for keys of this registry.
+        self.commands[command.key()].metadata.count_behavior()
     }
 }
 

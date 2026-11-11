@@ -58,6 +58,14 @@ pub fn normal_registry() -> &'static CommandRegistry<NormalMode> {
     })
 }
 
+/// The count behavior of the registered command `key`, for tests.
+#[cfg(test)]
+pub(crate) fn count_behavior_of(key: &str) -> CountBehavior {
+    let command = crate::helix::normal_command::RegisteredCommand::lookup(key)
+        .unwrap_or_else(|| panic!("`{key}` is not a registered command"));
+    normal_registry().count_behavior(command)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,19 +164,17 @@ mod tests {
     /// #577: the count of `y v i a I A` is ignored, `C` repeats
     #[test]
     fn counted_yank_select_and_insert_entries_follow_helix() {
-        let registry = normal_registry();
         for key in ["y", "v", "i", "a", "I", "A"] {
-            assert_eq!(registry.count_behavior(key), CountBehavior::Ignore, "{key}");
+            assert_eq!(count_behavior_of(key), CountBehavior::Ignore, "{key}");
         }
-        assert_eq!(registry.count_behavior("C"), CountBehavior::Repeat);
+        assert_eq!(count_behavior_of("C"), CountBehavior::Repeat);
     }
 
     /// #596: `o` and `O` take their count natively (N lines, N cursors)
     #[test]
     fn counted_open_line_entries_take_the_count_natively() {
-        let registry = normal_registry();
         for key in ["o", "O"] {
-            assert_eq!(registry.count_behavior(key), CountBehavior::Native, "{key}");
+            assert_eq!(count_behavior_of(key), CountBehavior::Native, "{key}");
         }
     }
 

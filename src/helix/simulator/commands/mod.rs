@@ -200,6 +200,29 @@ pub(super) fn record_insert_entry(sim: &mut HelixSimulator<NormalMode>, entry: I
     }
 }
 
+/// Hand the simulator to `run` by value, so a command can change its mode.
+///
+/// The placeholder only lives while `run` does; `begin_insert` and
+/// `exit_insert_mode` consume the simulator, which a `&mut` cannot give up.
+fn transition<R>(
+    sim: &mut AnyModeSimulator,
+    run: impl FnOnce(AnyModeSimulator) -> (R, AnyModeSimulator),
+) -> R {
+    let placeholder = AnyModeSimulator::Normal(HelixSimulator::new(String::new()));
+    let (result, next) = run(std::mem::replace(sim, placeholder));
+    *sim = next;
+    result
+}
+
+/// Run `run` on a Normal-mode simulator wrapped as an [`AnyModeSimulator`].
+fn on_any_mode(
+    normal_sim: HelixSimulator<NormalMode>,
+    run: impl FnOnce(&mut AnyModeSimulator) -> Result<(), SimulatorError>,
+) -> (Result<(), SimulatorError>, AnyModeSimulator) {
+    let mut sim = AnyModeSimulator::Normal(normal_sim);
+    (run(&mut sim), sim)
+}
+
 /// Run a command string: parsed in Normal mode, typed text in Insert mode.
 pub(super) fn execute_command_any_mode(
     sim: &mut AnyModeSimulator,
@@ -209,13 +232,13 @@ pub(super) fn execute_command_any_mode(
     if cmd == CMD_REPEAT {
         return sim.execute_repeat();
     }
-    match sim {
-        AnyModeSimulator::Normal(_) => {
-            let command = NormalCommand::parse(cmd)?;
-            execute_normal_any_mode(sim, &command)
-        }
-        AnyModeSimulator::Insert(_) => execute_insert_text(sim, cmd),
-    }
+    transition(sim, |sim| match sim {
+        AnyModeSimulator::Normal(normal_sim) => match NormalCommand::parse(cmd) {
+            Ok(command) => run_normal(normal_sim, &command),
+            Err(error) => (Err(error), AnyModeSimulator::Normal(normal_sim)),
+        },
+        AnyModeSimulator::Insert(insert_sim) => run_insert_text(insert_sim, cmd),
+    })
 }
 
 /// Run a parsed Normal-mode command, handling counts, `.`, macros and the
@@ -227,17 +250,21 @@ pub(super) fn execute_normal_any_mode(
     sim: &mut AnyModeSimulator,
     command: &NormalCommand,
 ) -> Result<(), SimulatorError> {
-    if !matches!(sim, AnyModeSimulator::Normal(_)) {
-        return execute_insert_text(sim, &command.to_string());
-    }
+    transition(sim, |sim| match sim {
+        AnyModeSimulator::Normal(normal_sim) => run_normal(normal_sim, command),
+        AnyModeSimulator::Insert(insert_sim) => run_insert_text(insert_sim, &command.to_string()),
+    })
+}
 
+fn run_normal(
+    mut normal_sim: HelixSimulator<NormalMode>,
+    command: &NormalCommand,
+) -> (Result<(), SimulatorError>, AnyModeSimulator) {
     match command {
-        NormalCommand::Repeat => return sim.execute_repeat(),
+        NormalCommand::Repeat => return on_any_mode(normal_sim, AnyModeSimulator::execute_repeat),
         NormalCommand::Macro(MacroOp::ToggleRecording) => {
-            if let AnyModeSimulator::Normal(normal_sim) = sim {
-                normal_sim.toggle_macro_recording();
-            }
-            return Ok(());
+            normal_sim.toggle_macro_recording();
+            return (Ok(()), AnyModeSimulator::Normal(normal_sim));
         }
         NormalCommand::Macro(MacroOp::Replay) => {
             // `Q` while recording is a no-op, not a replay: the recording tap
@@ -247,40 +274,39 @@ pub(super) fn execute_normal_any_mode(
             // recorded - a training tool producing a macro that doesn't match
             // what the user watched happen on screen. See `macro_recorder.rs`
             // module docs.
-            if sim.is_recording_macro() {
-                return Ok(());
-            }
-            return sim.execute_macro_replay();
+            return on_any_mode(normal_sim, |sim| {
+                if sim.is_recording_macro() {
+                    return Ok(());
+                }
+                sim.execute_macro_replay()
+            });
         }
         NormalCommand::Registered {
             command: registered,
             count: Some(count),
         } => {
             let uncounted = command.uncounted();
-            return match normal_registry().count_behavior(registered.key()) {
-                CountBehavior::Repeat => {
-                    for _ in 0..count.get() {
-                        execute_normal_any_mode(sim, &uncounted)?;
-                        // A command that entered Insert mode must not run again as typed text.
-                        if matches!(sim, AnyModeSimulator::Insert(_)) {
-                            break;
+            return on_any_mode(normal_sim, |sim| {
+                match normal_registry().count_behavior(*registered) {
+                    CountBehavior::Repeat => {
+                        for _ in 0..count.get() {
+                            execute_normal_any_mode(sim, &uncounted)?;
+                            // A command that entered Insert mode must not run again as typed text.
+                            if matches!(sim, AnyModeSimulator::Insert(_)) {
+                                break;
+                            }
                         }
+                        Ok(())
                     }
-                    Ok(())
+                    CountBehavior::Ignore => execute_normal_any_mode(sim, &uncounted),
+                    CountBehavior::Native => Err(SimulatorError::CountNotAccepted),
                 }
-                CountBehavior::Ignore => execute_normal_any_mode(sim, &uncounted),
-                CountBehavior::Native => Err(SimulatorError::CountNotAccepted),
-            };
+            });
         }
         _ => {}
     }
 
-    let placeholder = AnyModeSimulator::Normal(HelixSimulator::new(String::new()));
-    let AnyModeSimulator::Normal(mut normal_sim) = std::mem::replace(sim, placeholder) else {
-        unreachable!("checked to be in Normal mode above")
-    };
-
-    let (result, new_sim) = if let NormalCommand::InsertEntry(entry) = command {
+    let (result, mut new_sim) = if let NormalCommand::InsertEntry(entry) = command {
         match normal_sim.begin_insert(*entry) {
             Ok(insert_sim) => (Ok(()), AnyModeSimulator::Insert(insert_sim)),
             Err(failed) => {
@@ -295,26 +321,23 @@ pub(super) fn execute_normal_any_mode(
         }
         (result, AnyModeSimulator::Normal(normal_sim))
     };
-    *sim = new_sim;
 
     // Only successful commands are recorded - a macro is a record of what
     // actually happened, and replaying a command that failed would reproduce
     // the failure at best. `record_macro_command` is itself a no-op unless
     // recording is active and this isn't itself part of a replay.
     if result.is_ok() {
-        sim.record_macro_command(&command.to_string());
+        new_sim.record_macro_command(&command.to_string());
     }
-    result
+    (result, new_sim)
 }
 
 /// Run `cmd` as typed text or an Insert-mode key in an Insert-mode simulator.
-fn execute_insert_text(sim: &mut AnyModeSimulator, cmd: &str) -> Result<(), SimulatorError> {
-    let placeholder = AnyModeSimulator::Normal(HelixSimulator::new(String::new()));
-    let AnyModeSimulator::Insert(mut insert_sim) = std::mem::replace(sim, placeholder) else {
-        unreachable!("checked to be in Insert mode by the caller")
-    };
-
-    let (result, new_sim) = if cmd.len() > 1 && cmd.starts_with(CMD_COMMAND_LINE) {
+fn run_insert_text(
+    mut insert_sim: HelixSimulator<InsertMode>,
+    cmd: &str,
+) -> (Result<(), SimulatorError>, AnyModeSimulator) {
+    let (result, mut new_sim) = if cmd.len() > 1 && cmd.starts_with(CMD_COMMAND_LINE) {
         // Command-line strings are assembled by `CommandLinePending` in
         // Normal mode only; guarded here too so an *assembled* `:`-prefixed
         // string (e.g. ":goto 3") can never be inserted as literal text.
@@ -338,12 +361,11 @@ fn execute_insert_text(sim: &mut AnyModeSimulator, cmd: &str) -> Result<(), Simu
             (result, AnyModeSimulator::Insert(insert_sim))
         }
     };
-    *sim = new_sim;
 
     if result.is_ok() {
-        sim.record_macro_command(cmd);
+        new_sim.record_macro_command(cmd);
     }
-    result
+    (result, new_sim)
 }
 
 #[cfg(test)]

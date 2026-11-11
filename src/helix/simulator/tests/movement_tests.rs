@@ -324,16 +324,15 @@ fn test_execute_counted_matches_prefixed_string() {
 
 #[test]
 fn test_count_behavior_metadata() {
-    use crate::helix::registry::{CountBehavior, normal_registry};
-    let reg = normal_registry();
-    assert_eq!(reg.count_behavior("x"), CountBehavior::Repeat);
-    assert_eq!(reg.count_behavior(CMD_JOIN_LINES), CountBehavior::Ignore);
+    use crate::helix::registry::{CountBehavior, count_behavior_of};
+    assert_eq!(count_behavior_of("x"), CountBehavior::Repeat);
+    assert_eq!(count_behavior_of(CMD_JOIN_LINES), CountBehavior::Ignore);
     assert_eq!(
-        reg.count_behavior(CMD_JOIN_SELECTIONS_SPACE),
+        count_behavior_of(CMD_JOIN_SELECTIONS_SPACE),
         CountBehavior::Ignore
     );
     assert_eq!(
-        reg.count_behavior(CMD_GOTO_FILE_START),
+        count_behavior_of(CMD_GOTO_FILE_START),
         CountBehavior::Native
     );
     // `G`, `f<c>` and `"<r>d` take their count as typed `NormalCommand` fields
@@ -546,8 +545,7 @@ fn test_counted_open_line_enters_insert_mode_once_with_every_line_opened() {
 
 #[test]
 fn test_count_behavior_ignore_set() {
-    use crate::helix::registry::{CountBehavior, normal_registry};
-    let reg = normal_registry();
+    use crate::helix::registry::{CountBehavior, count_behavior_of};
     for cmd in [
         CMD_DELETE_SELECTION,
         CMD_DELETE_SELECTION_NOYANK,
@@ -567,7 +565,7 @@ fn test_count_behavior_ignore_set() {
         CMD_JOIN_LINES,
         CMD_JOIN_SELECTIONS_SPACE,
     ] {
-        assert_eq!(reg.count_behavior(cmd), CountBehavior::Ignore, "{cmd}");
+        assert_eq!(count_behavior_of(cmd), CountBehavior::Ignore, "{cmd}");
     }
 }
 

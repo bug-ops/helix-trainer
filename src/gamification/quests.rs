@@ -16,8 +16,11 @@ use super::{UserProfile, XPCalculator};
 /// Quest difficulty level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QuestDifficulty {
+    /// Short quests suited to new players.
     Easy,
+    /// Mid-length quests.
     Medium,
+    /// Long or demanding quests.
     Hard,
 }
 
@@ -56,30 +59,44 @@ impl crate::learning::ProgressionTier for QuestDifficulty {
 pub enum QuestType {
     /// Practice a specific command N times
     CommandPractice {
+        /// Command whose executions are counted.
         command: String,
+        /// Executions required.
         target: u32,
+        /// Executions recorded so far.
         current: u32,
     },
 
     /// Complete N scenarios
-    ScenarioCompletion { target: u32, current: u32 },
+    ScenarioCompletion {
+        /// Completions required.
+        target: u32,
+        /// Completions recorded so far.
+        current: u32,
+    },
 
     /// Complete scenario within time limit
     SpeedRun {
+        /// Scenario that must be completed.
         scenario_id: String,
+        /// Time limit for the run, persisted as whole seconds.
         #[serde(with = "duration_serde")]
         time_limit: Duration,
     },
 
     /// Practice for N minutes
     TimeInvested {
+        /// Practice minutes required.
         target_minutes: u32,
+        /// Practice minutes recorded so far.
         current_minutes: u32,
     },
 
     /// Use N different commands
     Exploration {
+        /// Distinct commands required.
         target_commands: u32,
+        /// Distinct commands seen so far.
         commands_used: HashSet<String>,
     },
 }
@@ -168,11 +185,17 @@ impl crate::learning::ProgressTracker for QuestType {
 /// A daily quest
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quest {
+    /// Unique quest identifier, stable across the day.
     pub id: String,
+    /// Quest type with its progress.
     pub quest_type: QuestType,
+    /// Text shown to the player.
     pub description: String,
+    /// Difficulty tier.
     pub difficulty: QuestDifficulty,
+    /// XP granted on completion.
     pub xp_reward: u32,
+    /// Whether the reward has been earned.
     pub completed: bool,
 }
 

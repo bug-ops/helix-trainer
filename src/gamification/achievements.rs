@@ -41,40 +41,62 @@ pub fn speed_time_ratio(elapsed: Duration, difficulty: Option<Difficulty>) -> f6
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AchievementId {
     // Streak achievements
+    /// Seven consecutive practice days.
     Streak7Days,
+    /// Thirty consecutive practice days.
     Streak30Days,
+    /// Ninety consecutive practice days.
     Streak90Days,
+    /// A full year of consecutive practice days.
     Streak365Days,
 
     // Mastery achievements
+    /// First scenario completed with a perfect rating.
     FirstPerfect,
+    /// Ten perfect completions.
     Perfect10,
+    /// One hundred perfect completions.
     Perfect100,
+    /// One command reaches mastery.
     MasterOneCommand,
+    /// Ten commands reach mastery.
     MasterTenCommands,
 
     // Speed achievements
-    SpeedDemon,  // Complete scenario in < 50% optimal time
-    Speedrunner, // Complete 10 speed runs
-    Flash,       // Complete scenario in < 25% optimal time
+    /// A scenario finished in under half of its time budget.
+    SpeedDemon,
+    /// Ten speed runs completed.
+    Speedrunner,
+    /// A scenario finished in under a quarter of its time budget.
+    Flash,
 
     // Exploration achievements
-    JackOfAllTrades, // Use 20 different commands
-    Specialist,      // Master a single command
-    Polyglot,        // Complete scenarios in all difficulties
+    /// Twenty distinct commands used.
+    JackOfAllTrades,
+    /// A single command mastered.
+    Specialist,
+    /// Scenarios completed in every difficulty.
+    Polyglot,
 
     // Milestone achievements
-    Centurion, // Complete 100 scenarios
-    Veteran,   // Complete 500 scenarios
-    Legend,    // Complete 1000 scenarios
+    /// One hundred scenarios completed.
+    Centurion,
+    /// Five hundred scenarios completed.
+    Veteran,
+    /// One thousand scenarios completed.
+    Legend,
 }
 
 /// Achievement metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Achievement {
+    /// Stable identifier of the achievement.
     pub id: AchievementId,
+    /// Display name.
     pub name: String,
+    /// How to earn the achievement.
     pub description: String,
+    /// When it was unlocked; `None` while locked.
     pub unlocked_at: Option<DateTime<Utc>>,
 }
 

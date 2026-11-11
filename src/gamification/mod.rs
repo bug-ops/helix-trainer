@@ -19,31 +19,41 @@ pub use streak::{StreakChange, StreakManager};
 
 use thiserror::Error;
 
+/// Errors raised by gamification state changes and storage.
 #[derive(Error, Debug)]
 pub enum GamificationError {
+    /// No quest matches the requested id.
     #[error("Quest not found: {0}")]
     QuestNotFound(String),
 
+    /// Reading or writing persisted data failed.
     #[error("Storage error: {0}")]
     StorageError(String),
 
+    /// A level outside the valid range was requested.
     #[error("Invalid level: {0}")]
     InvalidLevel(u32),
 
+    /// A freeze was requested but none is held.
     #[error("Streak freeze not available")]
     StreakFreezeUnavailable,
 
+    /// A freeze was requested while there is no streak to protect.
     #[error("No active streak to protect with a freeze")]
     StreakFreezeNothingToProtect,
 
+    /// The inactivity gap is outside what a freeze can cover.
     #[error(
         "Streak freeze cannot cover a gap of {days_since_active} days (coverable range is 2..={max_gap_days})"
     )]
     StreakFreezeGapOutOfRange {
+        /// Days since the last practice day.
         days_since_active: i64,
+        /// Largest gap a freeze can cover.
         max_gap_days: i64,
     },
 
+    /// The achievement was unlocked earlier and cannot be unlocked twice.
     #[error("Achievement already unlocked: {0:?}")]
     AchievementAlreadyUnlocked(AchievementId),
 }
@@ -54,4 +64,5 @@ impl From<crate::config::json_store::JsonStoreError> for GamificationError {
     }
 }
 
+/// Result alias with [`GamificationError`] as the error type.
 pub type Result<T> = std::result::Result<T, GamificationError>;

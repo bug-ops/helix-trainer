@@ -8,20 +8,30 @@ use std::time::Duration;
 /// Result of a single review attempt
 #[derive(Debug, Clone)]
 pub struct ReviewResult {
+    /// Reviewed command.
     pub command: String,
+    /// Time the attempt took.
     pub duration: Duration,
+    /// Whether the attempt succeeded.
     pub success: bool,
+    /// Mastery level before the attempt.
     pub old_mastery: MasteryLevel,
+    /// Mastery level after the attempt.
     pub new_mastery: MasteryLevel,
 }
 
 /// Summary of completed review session
 #[derive(Debug, Clone)]
 pub struct SessionSummary {
+    /// Number of reviews performed.
     pub total_reviews: usize,
+    /// Reviews that succeeded.
     pub successful: usize,
+    /// Reviews that failed.
     pub failed: usize,
+    /// Mean time per review.
     pub avg_time: Duration,
+    /// Commands whose mastery level changed, with the old and new level.
     pub mastery_changes: Vec<(String, MasteryLevel, MasteryLevel)>,
 }
 

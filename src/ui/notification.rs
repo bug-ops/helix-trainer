@@ -17,16 +17,32 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NotificationType {
     /// User leveled up
-    LevelUp { new_level: u32 },
+    LevelUp {
+        /// Level reached.
+        new_level: u32,
+    },
 
     /// Achievement unlocked
-    Achievement { name: String, description: String },
+    Achievement {
+        /// Achievement name.
+        name: String,
+        /// How it was earned.
+        description: String,
+    },
 
     /// Quest completed
-    QuestComplete { description: String, xp_reward: u32 },
+    QuestComplete {
+        /// Quest text.
+        description: String,
+        /// XP granted.
+        xp_reward: u32,
+    },
 
     /// Streak milestone reached
-    StreakMilestone { streak: u32 },
+    StreakMilestone {
+        /// Streak length that was reached.
+        streak: u32,
+    },
 
     /// Streak freeze earned (protects the streak across a brief absence)
     StreakFreezeGranted,
@@ -43,22 +59,35 @@ pub enum NotificationType {
     /// `was_streak > 0` - this notification is only ever raised for an
     /// actual streak at stake.
     StreakBroken {
+        /// Streak length before it was reset.
         was_streak: u32,
+        /// Whether a held freeze was too short for the gap.
         freeze_could_not_cover_gap: bool,
     },
 
     /// Informational message
-    Info { message: String },
+    Info {
+        /// Text to show.
+        message: String,
+    },
 
     /// Review session completed
     ReviewSessionComplete {
+        /// Reviews completed in the session.
         completed: usize,
+        /// Reviews that succeeded.
         success_count: usize,
+        /// XP earned during the session.
         xp_earned: u64,
     },
 
     /// Command mastery level increased
-    MasteryLevelUp { command: String, new_level: String },
+    MasteryLevelUp {
+        /// Command that advanced.
+        command: String,
+        /// Display name of the new level.
+        new_level: String,
+    },
 }
 
 /// A notification to display in the UI

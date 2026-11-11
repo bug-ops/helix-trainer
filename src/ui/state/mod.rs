@@ -56,13 +56,21 @@ pub use screen::{
 /// Breakdown of XP earned from a scenario
 #[derive(Debug, Clone)]
 pub struct XPBreakdown {
+    /// XP before any bonus or scaling.
     pub base_xp: u64,
+    /// Bonus for a perfect score.
     pub perfect_bonus: u64,
+    /// Bonus for the first completion of the day.
     pub first_today_bonus: u64,
-    pub mastery_multiplier: f64, // Combined XP scaling (mastery * repeat)
-    pub mastery_factor: f64,     // Just mastery level factor
-    pub repeat_penalty: f64,     // Just session repeat penalty
+    /// Combined XP scaling (mastery factor times repeat penalty).
+    pub mastery_multiplier: f64,
+    /// Scaling from the scenario's mastery level.
+    pub mastery_factor: f64,
+    /// Scaling from repeated attempts within the session.
+    pub repeat_penalty: f64,
+    /// XP bonuses granted by quests completed by this run.
     pub quest_bonuses: Vec<QuestBonus>,
+    /// Total XP awarded after all bonuses and scaling.
     pub total_xp: u64,
 }
 
@@ -78,17 +86,24 @@ pub struct QuestBonus {
 /// Quest progress change (before → after)
 #[derive(Debug, Clone)]
 pub struct QuestProgressChange {
+    /// Description of the affected quest.
     pub quest_description: String,
+    /// Progress before the run.
     pub old_progress: u32,
+    /// Progress after the run.
     pub new_progress: u32,
 }
 
 /// State for review session
 #[derive(Debug, Clone)]
 pub struct ReviewSessionState {
+    /// Commands due for review, in review order.
     pub due_commands: Vec<String>,
+    /// Index of the command being reviewed.
     pub current_index: usize,
+    /// When the session started.
     pub session_started_at: Instant,
+    /// Results recorded so far.
     pub completed_reviews: Vec<ReviewResult>,
 }
 
@@ -120,8 +135,11 @@ impl ReviewOutcome {
 /// Result of a single review
 #[derive(Debug, Clone)]
 pub struct ReviewResult {
+    /// Reviewed command.
     pub command: String,
+    /// How the review ended.
     pub outcome: ReviewOutcome,
+    /// Time the review took.
     pub duration: Duration,
 }
 
@@ -189,7 +207,9 @@ pub enum Message {
     /// `KeyHistory` display. Equal on every keystroke when the overlay is
     /// disabled or misses.
     MiniGameCommand {
+        /// Canonical command to dispatch.
         keys: crate::input::keymap::CanonicalKeys,
+        /// Physically pressed key, for key-history display.
         typed: std::borrow::Cow<'static, str>,
     },
 
@@ -248,7 +268,9 @@ pub enum Message {
     /// `KeyHistory` display. Equal on every keystroke when the overlay is
     /// disabled or misses.
     ExecuteCommand {
+        /// Canonical command to dispatch.
         keys: crate::input::keymap::CanonicalKeys,
+        /// Physically pressed key, for key-history display.
         typed: std::borrow::Cow<'static, str>,
     },
 
@@ -278,9 +300,13 @@ pub enum Message {
 
     /// Update quest progress based on gameplay
     UpdateQuestProgress {
+        /// Command executed, when the progress update follows one.
         command: Option<String>,
+        /// Whether the run completed its scenario.
         scenario_completed: bool,
+        /// Scenario the update refers to.
         scenario_id: Option<String>,
+        /// Time the run took.
         duration: Duration,
     },
 
@@ -303,7 +329,10 @@ pub enum Message {
     StartReviewSession,
 
     /// Complete current review command (mark as success or failure)
-    CompleteReviewCommand { outcome: ReviewOutcome },
+    CompleteReviewCommand {
+        /// Whether the player succeeded or failed.
+        outcome: ReviewOutcome,
+    },
 
     /// Abandon the review session
     AbandonReviewSession,

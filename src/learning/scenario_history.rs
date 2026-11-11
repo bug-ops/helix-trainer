@@ -111,23 +111,33 @@ impl super::traits::ProgressionTier for ScenarioMastery {
 /// Historical data for a single scenario
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScenarioCompletion {
+    /// Scenario this record belongs to.
     pub scenario_id: String,
 
     // Performance tracking
+    /// Total attempts.
     pub attempts: u32,
+    /// Highest score reached.
     pub best_score: u32,
-    pub perfect_count: u32, // Number of 100% completions
+    /// Number of 100% completions.
+    pub perfect_count: u32,
+    /// XP awarded across all attempts.
     pub total_xp_earned: u64,
 
     // Timestamps
+    /// When the scenario was first attempted.
     pub first_attempt: DateTime<Utc>,
+    /// When the scenario was last attempted.
     pub last_attempt: DateTime<Utc>,
 
     // Derived state
+    /// Mastery tier derived from the completion history.
     pub mastery_level: ScenarioMastery,
 
     // Today's session tracking (reset at midnight)
+    /// Attempts made on `last_attempt_date`; resets on a new day.
     pub attempts_today: u32,
+    /// Date of the last attempt, used to detect the day change.
     pub last_attempt_date: NaiveDate,
 }
 
@@ -396,8 +406,11 @@ impl ScenarioHistory {
 /// Statistics about scenario mastery levels
 #[derive(Debug, Clone, Default)]
 pub struct MasteryStats {
+    /// Scenarios still being learned.
     pub learning: u32,
+    /// Scenarios completed often enough to earn reduced XP.
     pub proficient: u32,
+    /// Scenarios mastered, with the strongest XP reduction.
     pub mastered: u32,
 }
 

@@ -24,7 +24,9 @@ pub enum DataLoadMessage {
     /// The fallback is for display only: the application must not write it
     /// over the unreadable file (see `ProfilePersistence::Quarantined`).
     ProfileError {
+        /// Human-readable load failure.
         error: String,
+        /// Fresh profile shown while saves stay disabled.
         fallback: UserProfile,
         /// Whether the unreadable file was preserved as a backup copy.
         backup: QuarantineOutcome,

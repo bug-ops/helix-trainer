@@ -8,8 +8,11 @@ use std::sync::Arc;
 /// Review item with priority information
 #[derive(Debug, Clone)]
 pub struct ReviewItem {
+    /// Command id.
     pub id: String,
+    /// When the review becomes due.
     pub due: DateTime<Utc>,
+    /// Urgency score; higher is reviewed first.
     pub priority: f64,
 }
 

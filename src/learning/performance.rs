@@ -32,9 +32,13 @@ fn default_fsrs() -> FSRS {
 /// Card state tracked by the application (FSRS doesn't track this)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CardState {
+    /// Never reviewed.
     New,
+    /// Being learned for the first time.
     Learning,
+    /// Graduated to spaced review.
     Review,
+    /// Forgotten after graduating and being learned again.
     Relearning,
 }
 
@@ -231,11 +235,16 @@ impl Serialize for CommandPerformance {
     }
 }
 
+/// Coarse mastery tier derived from a command's FSRS state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MasteryLevel {
+    /// New or still being learned.
     Beginner,
+    /// In review with short stability.
     Intermediate,
+    /// In review with stability above a week.
     Advanced,
+    /// Stable for over a month with low difficulty.
     Master,
 }
 
@@ -273,6 +282,7 @@ impl super::traits::ProgressionTier for MasteryLevel {
 }
 
 impl CommandPerformance {
+    /// Creates a record for a command seen for the first time at `now`.
     pub fn new(command: String, now: DateTime<Utc>) -> Self {
         Self {
             command,
@@ -438,6 +448,7 @@ impl CommandPerformance {
         self.due = due;
     }
 
+    /// Fraction of attempts that succeeded; `0.0` before any attempt.
     pub fn success_rate(&self) -> f64 {
         if self.attempts == 0 {
             0.0
@@ -553,10 +564,12 @@ pub struct PerformanceTracker {
 }
 
 impl PerformanceTracker {
+    /// Creates an empty tracker that reads time from the system clock.
     pub fn new() -> Self {
         Self::with_clock(Arc::new(SystemClock))
     }
 
+    /// Creates an empty tracker that reads time from `clock`, so tests can control it.
     pub fn with_clock(clock: Arc<dyn Clock>) -> Self {
         Self {
             stats: HashMap::new(),
@@ -681,14 +694,17 @@ impl PerformanceTracker {
         }
     }
 
+    /// Clones the tracked data for persistence.
     pub fn stats_clone(&self) -> PerformanceData {
         PerformanceData(self.stats.clone())
     }
 
+    /// Restores a tracker from persisted data using the system clock.
     pub fn from_stats(stats: PerformanceData) -> Self {
         Self::from_stats_with_clock(stats, Arc::new(SystemClock))
     }
 
+    /// Restores a tracker from persisted data using `clock`.
     pub fn from_stats_with_clock(stats: PerformanceData, clock: Arc<dyn Clock>) -> Self {
         Self {
             stats: stats.into(),
@@ -697,6 +713,7 @@ impl PerformanceTracker {
         }
     }
 
+    /// Looks up the record of a command, if it was ever attempted.
     pub fn performance(&self, command: &str) -> Option<&CommandPerformance> {
         self.stats.get(command)
     }
@@ -732,6 +749,7 @@ impl PerformanceTracker {
         }
     }
 
+    /// Commands that are hard, unreliable, still at beginner level or have many lapses.
     pub fn weak_commands(&self) -> Vec<String> {
         self.stats
             .iter()
@@ -745,6 +763,7 @@ impl PerformanceTracker {
             .collect()
     }
 
+    /// Every command that has a record, in unspecified order.
     pub fn all_commands(&self) -> Vec<&str> {
         self.stats.keys().map(String::as_str).collect()
     }

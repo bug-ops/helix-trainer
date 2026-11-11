@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 /// Wrapper for scenarios array in TOML file
 #[derive(Deserialize, Debug, Clone)]
 pub struct ScenariosFile {
+    /// Scenarios in file order.
     pub scenarios: Vec<Scenario>,
 }
 
@@ -121,16 +122,27 @@ pub struct ScenarioMetadata {
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum ScenarioCategory {
+    /// Cursor motions and navigation.
     Movement,
+    /// Deleting, changing and inserting text.
     Editing,
+    /// Yank, paste and registers used as a clipboard.
     Clipboard,
+    /// Search and match navigation.
     Search,
+    /// Selection manipulation.
     Selection,
+    /// Text object selections (`mi`/`ma`).
     TextObjects,
+    /// Less common commands that build on the basics.
     Advanced,
+    /// Named register usage.
     Registers,
+    /// Writing-oriented tasks such as prose and lists.
     Writing,
+    /// Scenarios that span several categories.
     Multi, // Multiple categories
+    /// Anything that fits no other category.
     Other,
 }
 
@@ -138,8 +150,11 @@ pub enum ScenarioCategory {
 #[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Difficulty {
+    /// Introductory scenarios.
     Beginner,
+    /// Scenarios that combine several basic commands.
     Intermediate,
+    /// Scenarios that need multi-step planning.
     Advanced,
 }
 
@@ -157,21 +172,30 @@ impl Difficulty {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
+    /// Unique identifier, validated as a safe id.
     #[serde(deserialize_with = "validate_id_field")]
     pub id: String,
 
+    /// Display name.
     pub name: String,
+    /// What the player is asked to accomplish.
     pub description: String,
+    /// Initial editor state.
     pub setup: Setup,
+    /// Editor state that completes the scenario.
     pub target: TargetState,
+    /// Canonical shortest solution.
     pub solution: Solution,
 
+    /// Other accepted solutions with their score multipliers.
     #[serde(default)]
     pub alternatives: Vec<AlternativeSolution>,
 
+    /// Progressive hints revealed on request.
     #[serde(default)]
     pub hints: Vec<String>,
 
+    /// Parameters of the scoring formula.
     pub scoring: ScoringConfig,
 
     /// Metadata for filtering, sorting, and quest generation (optional for backward compatibility)
@@ -235,6 +259,7 @@ pub const DEFAULT_LANGUAGE: &str = "rs";
 /// Initial editor setup
 #[derive(Deserialize, Debug, Clone)]
 pub struct Setup {
+    /// Initial document text.
     pub file_content: String,
 
     /// Content's language as a file-extension-style token (e.g. `"rs"`, `"md"`, `"py"`),
@@ -244,6 +269,7 @@ pub struct Setup {
     #[serde(default, deserialize_with = "validate_language_field")]
     pub language: Option<String>,
 
+    /// Cursor and selection placement at the start.
     #[serde(flatten)]
     pub cursor: CursorSpec,
 }
@@ -251,8 +277,10 @@ pub struct Setup {
 /// Target state to achieve
 #[derive(Deserialize, Debug, Clone)]
 pub struct TargetState {
+    /// Document text the player must reach.
     pub file_content: String,
 
+    /// Cursor and selection placement required at the end.
     #[serde(flatten)]
     pub cursor: CursorSpec,
 }
@@ -260,23 +288,31 @@ pub struct TargetState {
 /// Optimal solution
 #[derive(Deserialize, Debug, Clone)]
 pub struct Solution {
+    /// Key sequence of the optimal solution, one command per entry.
     pub commands: Vec<String>,
+    /// Explanation of why this solution is optimal.
     pub description: String,
 }
 
 /// Alternative solution
 #[derive(Deserialize, Debug, Clone)]
 pub struct AlternativeSolution {
+    /// Key sequence of the alternative, one command per entry.
     pub commands: Vec<String>,
+    /// Score multiplier applied when this alternative is used.
     pub points_multiplier: f32,
+    /// Explanation of how this alternative differs.
     pub description: String,
 }
 
 /// Scoring configuration
 #[derive(Deserialize, Debug, Clone)]
 pub struct ScoringConfig {
+    /// Command count of the optimal solution; the baseline for scoring.
     pub optimal_count: NonZeroUsize,
+    /// Points awarded for an optimal run.
     pub max_points: u32,
+    /// Extra commands allowed beyond the optimum before the score drops.
     pub tolerance: usize,
 }
 

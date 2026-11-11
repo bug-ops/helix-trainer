@@ -4,12 +4,19 @@ use chrono::{DateTime, Utc};
 /// Summary of mastery distribution across all commands
 #[derive(Debug, Clone)]
 pub struct MasterySummary {
+    /// Number of tracked commands.
     pub total_commands: usize,
+    /// Commands at [`MasteryLevel::Master`].
     pub master: usize,
+    /// Commands at [`MasteryLevel::Advanced`].
     pub advanced: usize,
+    /// Commands at [`MasteryLevel::Intermediate`].
     pub intermediate: usize,
+    /// Commands at [`MasteryLevel::Beginner`].
     pub beginner: usize,
+    /// Mean FSRS stability across tracked commands.
     pub avg_stability: f32,
+    /// Mean FSRS difficulty across tracked commands.
     pub avg_difficulty: f32,
 }
 

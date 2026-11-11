@@ -6,66 +6,118 @@
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-/// Security-specific errors
+/// Security-specific errors raised while validating untrusted input.
+///
+/// These carry internal detail for logs; they are converted to the sanitized
+/// [`UserError`] before reaching the UI.
 #[derive(Error, Debug)]
 pub enum SecurityError {
+    /// A path resolved outside the allowed base directory.
     #[error("Access denied: path outside allowed directory")]
     PathTraversal,
 
+    /// A path could not be interpreted (empty, unresolvable, malformed).
     #[error("Invalid file path")]
     InvalidPath,
 
+    /// A path contains a pattern that is rejected on sight (e.g. `..` segments).
     #[error("Suspicious path pattern detected")]
     SuspiciousPath,
 
+    /// A scenario file exceeds the size limit.
     #[error("Scenario file too large (max {max} bytes, got {actual} bytes)")]
-    FileTooLarge { max: u64, actual: u64 },
+    FileTooLarge {
+        /// Maximum allowed size in bytes.
+        max: u64,
+        /// Observed size in bytes.
+        actual: u64,
+    },
 
+    /// TOML parsing failed; carries the parser message for logs only.
     #[error("Invalid TOML format: {0}")]
     InvalidToml(String),
 
+    /// A scenario file holds more scenarios than allowed.
     #[error("Too many scenarios in file (max {max}, got {actual})")]
-    TooManyScenarios { max: usize, actual: usize },
+    TooManyScenarios {
+        /// Maximum allowed scenario count.
+        max: usize,
+        /// Observed scenario count.
+        actual: usize,
+    },
 
+    /// Editor content exceeds the size limit.
     #[error("Content too large (max {max} bytes, got {actual} bytes)")]
-    ContentTooLarge { max: usize, actual: usize },
+    ContentTooLarge {
+        /// Maximum allowed size in bytes.
+        max: usize,
+        /// Observed size in bytes.
+        actual: usize,
+    },
 
+    /// A cursor position lies outside the document.
     #[error("Invalid cursor position")]
     InvalidCursorPosition,
 
+    /// A scenario declares more hints than allowed.
     #[error("Too many hints (max {max})")]
-    TooManyHints { max: usize },
+    TooManyHints {
+        /// Maximum allowed hint count.
+        max: usize,
+    },
 
+    /// A scenario declares more alternative solutions than allowed.
     #[error("Too many alternatives (max {max})")]
-    TooManyAlternatives { max: usize },
+    TooManyAlternatives {
+        /// Maximum allowed alternative count.
+        max: usize,
+    },
 
+    /// A session recorded more actions than the cap.
     #[error("Too many actions (max: 1000000)")]
     TooManyActions,
 
+    /// A score computation overflowed its integer type.
     #[error("Score calculation overflow")]
     ScoreOverflow,
 
+    /// A command sequence exceeds the length cap.
     #[error("Command sequence too long (max {max})")]
-    CommandSequenceTooLong { max: usize },
+    CommandSequenceTooLong {
+        /// Maximum allowed command count.
+        max: usize,
+    },
 
+    /// Content contains null bytes or otherwise unusable encoding.
     #[error("Invalid content: contains null bytes or invalid encoding")]
     InvalidContent,
 
+    /// Bytes are not valid UTF-8.
     #[error("Invalid UTF-8 encoding")]
     InvalidEncoding,
 
+    /// An input value failed validation; the message is for logs only.
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
+    /// The application reached a state that violates an invariant.
     #[error("Invalid state: {0}")]
     InvalidState(String),
 
+    /// A keymap file defines more bindings than allowed.
     #[error("Too many keymap bindings (max {max}, got {actual})")]
-    TooManyKeymapBindings { max: usize, actual: usize },
+    TooManyKeymapBindings {
+        /// Maximum allowed binding count.
+        max: usize,
+        /// Observed binding count.
+        actual: usize,
+    },
 
+    /// The path exists but is not a regular file (directory, device, ...).
     #[error("Not a regular file")]
     NotRegularFile,
 
+    /// Reading a file failed; carries the I/O message for logs only.
     #[error("Failed to read file: {0}")]
     ReadFailed(String),
 }
@@ -73,25 +125,37 @@ pub enum SecurityError {
 /// User-facing error messages (sanitized)
 #[derive(Error, Debug)]
 pub enum UserError {
+    /// An internal invariant was violated; the message is for logs, the
+    /// displayed text is generic.
     #[error("Invalid application state. Please restart the application.")]
-    InvalidState { message: String },
+    InvalidState {
+        /// Diagnostic detail that is never shown to the user.
+        message: String,
+    },
 
     /// A message arrived for a screen other than the current one (e.g. a stale
     /// timer message racing a key-driven transition). Not a user-visible fault.
     #[error("That action is not available on the current screen.")]
     WrongScreen,
 
+    /// A scenario file could not be loaded or parsed.
     #[error("Failed to load scenario file. Please check the file path and format.")]
     ScenarioLoadError,
 
+    /// A scenario file breaches a size or count limit.
     #[error("The scenario file is too large or complex. Please use a smaller file.")]
     ScenarioTooComplex,
 
+    /// A generic failure with no actionable detail for the user.
     #[error("Operation failed. Please try again.")]
     OperationFailed,
 
+    /// A Helix command failed to execute in the simulator.
     #[error("Command execution failed: {context}")]
-    CommandFailed { context: String },
+    CommandFailed {
+        /// What was being executed, for debugging.
+        context: String,
+    },
 }
 
 impl UserError {

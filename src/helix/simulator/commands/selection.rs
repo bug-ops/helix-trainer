@@ -215,7 +215,9 @@ pub fn split_selection_newlines<M: EditorMode>(
 /// # Errors
 ///
 /// Returns a [`SimulatorError`] when a range spans several lines; nothing changes.
-pub fn align_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+pub(crate) fn align_selections<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let mut columns: Vec<Vec<(usize, usize)>> = Vec::new();
     let mut last_row = slice.len_lines() + 1;
@@ -307,7 +309,7 @@ fn compile_regex(pattern: &str) -> Result<Regex, SimulatorError> {
 /// # Errors
 ///
 /// Returns a [`SimulatorError`] if `pattern` is not a valid regex.
-pub fn select_regex<M: EditorMode>(
+pub(crate) fn select_regex<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
 ) -> Result<(), SimulatorError> {
@@ -327,7 +329,7 @@ pub fn select_regex<M: EditorMode>(
 /// # Errors
 ///
 /// Returns a [`SimulatorError`] if `pattern` is not a valid regex.
-pub fn split_selection<M: EditorMode>(
+pub(crate) fn split_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
 ) -> Result<(), SimulatorError> {
@@ -344,7 +346,7 @@ pub fn split_selection<M: EditorMode>(
 /// # Errors
 ///
 /// Always returns a [`SimulatorError`]: the bare command needs a pattern from its prompt.
-pub fn keep_selections_matching<M: EditorMode>(
+pub(crate) fn keep_selections_matching<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     Err(SimulatorError::PatternRequired)
@@ -355,7 +357,7 @@ pub fn keep_selections_matching<M: EditorMode>(
 /// # Errors
 ///
 /// Always returns a [`SimulatorError`]: the bare command needs a pattern from its prompt.
-pub fn remove_selections_matching<M: EditorMode>(
+pub(crate) fn remove_selections_matching<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     Err(SimulatorError::PatternRequired)
@@ -367,7 +369,7 @@ pub fn remove_selections_matching<M: EditorMode>(
 ///
 /// Returns a [`SimulatorError`] for an invalid regex, or when no range would remain
 /// (Helix reports "no selections remaining"); the selection is left unchanged.
-pub fn keep_selections_regex<M: EditorMode>(
+pub(crate) fn keep_selections_regex<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
 ) -> Result<(), SimulatorError> {
@@ -382,7 +384,7 @@ pub fn keep_selections_regex<M: EditorMode>(
 ///
 /// Returns a [`SimulatorError`] for an invalid regex, or when no range would remain; see
 /// [`keep_selections_regex`].
-pub fn remove_selections_regex<M: EditorMode>(
+pub(crate) fn remove_selections_regex<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
 ) -> Result<(), SimulatorError> {

@@ -13,7 +13,7 @@ use crate::helix::registry::command_registry::CommandRegistry;
 use crate::helix::simulator::NormalMode;
 
 /// Register all normal mode commands
-pub fn register_all(registry: &mut CommandRegistry<NormalMode>) {
+pub(crate) fn register_all(registry: &mut CommandRegistry<NormalMode>) {
     movement::register(registry);
     movement::register_parametric_metadata(registry);
     editing::register(registry);

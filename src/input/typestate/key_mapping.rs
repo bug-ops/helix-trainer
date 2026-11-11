@@ -346,7 +346,7 @@ impl Chord {
 
 /// The command a `Ctrl`-modified character runs on a gameplay screen.
 ///
-/// The one table behind both [`map_single_key_command`] and the Base-state
+/// The one table behind both `map_single_key_command` and the Base-state
 /// handler, so a Ctrl key cannot be bound in one and dropped in the other.
 ///
 /// # Examples
@@ -373,7 +373,7 @@ pub fn ctrl_command(c: char) -> Option<&'static str> {
 ///
 /// Returns None for invalid commands or prefix commands.
 /// Handles SHIFT and ALT modifiers for proper command dispatch.
-pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'static str> {
+pub(crate) fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'static str> {
     // Ctrl commands are checked first and return early: unlike Alt, CONTROL
     // is not otherwise reflected in the (char, is_shift, is_alt) match below,
     // so a Ctrl-modified char would otherwise silently fall into the bare-key
@@ -489,7 +489,7 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
 ///
 /// `r` is not listed: a counted `r` opens `ReplaceCharPending` with the count dropped.
 /// A counted `o`/`O` opens one line and swallows the count.
-pub fn is_count_compatible_command(c: char, modifiers: KeyModifiers) -> bool {
+pub(crate) fn is_count_compatible_command(c: char, modifiers: KeyModifiers) -> bool {
     let is_shift = modifiers.contains(KeyModifiers::SHIFT);
 
     matches!(

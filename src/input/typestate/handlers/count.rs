@@ -27,7 +27,7 @@ use crate::input::typestate::{
 /// Maximum count value to prevent overflow attacks and unreasonable values.
 /// Equal to the largest count prefix the simulator accepts, so the input layer
 /// can never emit a counted command the simulator rejects.
-pub const MAX_COUNT: usize = crate::helix::registry::MAX_COUNT_PREFIX;
+pub(crate) const MAX_COUNT: usize = crate::helix::registry::MAX_COUNT_PREFIX;
 
 /// The count started by digit key `c`; `None` for `0` and non-digits, since a
 /// count can never begin with `0`.

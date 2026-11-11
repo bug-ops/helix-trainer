@@ -27,7 +27,7 @@
 //!
 //! `Q` pressed while recording is, by contrast, a deliberate no-op rather
 //! than a nested replay: replayed commands run with `is_replaying == true`,
-//! which is exactly what makes [`MacroRecorder::record`] skip them, so a
+//! which is exactly what makes `MacroRecorder::record` skip them, so a
 //! `Q`-triggered replay's effects would apply to the document while not
 //! being captured into the macro currently being recorded - the resulting
 //! macro would silently not match what the user watched happen on screen.
@@ -67,7 +67,7 @@ const MAX_MACRO_DEPTH: usize = 10;
 
 /// Records and replays a single unnamed `q`/`Q` macro
 #[derive(Debug, Default)]
-pub struct MacroRecorder {
+pub(crate) struct MacroRecorder {
     /// `Some` while recording; accumulates command strings as they execute
     recording: Option<Vec<String>>,
     /// The last macro stopped-and-stored by `q`, ready for `Q` to replay
@@ -81,17 +81,18 @@ pub struct MacroRecorder {
 
 impl MacroRecorder {
     /// Create a new, empty recorder (nothing recorded, nothing stored)
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Whether a macro is currently being recorded
-    pub fn is_recording(&self) -> bool {
+    pub(crate) fn is_recording(&self) -> bool {
         self.recording.is_some()
     }
 
     /// Whether a macro replay (`Q`) is currently in progress
-    pub fn is_replaying(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_replaying(&self) -> bool {
         self.is_replaying
     }
 
@@ -102,7 +103,7 @@ impl MacroRecorder {
     /// with the empty recording, discarding any previously-stored macro.
     /// This matches real Helix's `q`/`Q` parity - there is no separate
     /// "cancel recording without saving" gesture.
-    pub fn toggle(&mut self) {
+    pub(crate) fn toggle(&mut self) {
         match self.recording.take() {
             Some(commands) => self.stored = commands,
             None => self.recording = Some(Vec::new()),
@@ -115,7 +116,7 @@ impl MacroRecorder {
     /// Silently stops accepting further commands once `MAX_MACRO_LENGTH` is
     /// reached, keeping what was already captured rather than failing or
     /// panicking.
-    pub fn record(&mut self, cmd: &str) {
+    pub(crate) fn record(&mut self, cmd: &str) {
         if self.is_replaying {
             return;
         }
@@ -127,7 +128,7 @@ impl MacroRecorder {
     }
 
     /// The commands stored by the last completed recording
-    pub fn stored(&self) -> &[String] {
+    pub(crate) fn stored(&self) -> &[String] {
         &self.stored
     }
 
@@ -136,7 +137,7 @@ impl MacroRecorder {
     /// Returns `false` (and changes nothing) if there is nothing stored, a
     /// replay is already in progress, or the depth budget is exhausted.
     /// Callers must pair a successful `begin_replay` with [`Self::end_replay`].
-    pub fn begin_replay(&mut self) -> bool {
+    pub(crate) fn begin_replay(&mut self) -> bool {
         if self.is_replaying || self.stored.is_empty() || self.replay_depth >= MAX_MACRO_DEPTH {
             return false;
         }
@@ -146,7 +147,7 @@ impl MacroRecorder {
     }
 
     /// End a replay started by a successful [`Self::begin_replay`]
-    pub fn end_replay(&mut self) {
+    pub(crate) fn end_replay(&mut self) {
         self.is_replaying = false;
         self.replay_depth = self.replay_depth.saturating_sub(1);
     }

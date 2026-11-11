@@ -234,7 +234,7 @@ impl ProfileStorage {
     /// # Errors
     ///
     /// Returns error if the path exists but cannot be read (not a regular
-    /// file, over [`MAX_PROFILE_FILE_SIZE`], I/O failure) or parsed
+    /// file, over `MAX_PROFILE_FILE_SIZE`, I/O failure) or parsed
     ///
     /// # Examples
     ///

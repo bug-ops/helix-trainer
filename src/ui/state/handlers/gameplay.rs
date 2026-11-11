@@ -17,7 +17,7 @@ use crate::ui::state::{
 /// Toggles hint panel visibility and fetches next hint
 ///
 /// Note: This handler operates on `TaskData` screen, so it uses `AppState` to access the screen
-pub fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
+pub(crate) fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
     // Only handle if we're on Task screen
     let TypedScreen::Task(task_data) = &mut state.screen else {
         return HandlerOutcome::Stay; // Not on task screen
@@ -54,7 +54,7 @@ pub fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
 ///
 /// Note: This handler operates on `TaskData` screen and calls `update()` for quest progress,
 /// so it requires full `AppState` access
-pub fn handle_execute_command(
+pub(crate) fn handle_execute_command(
     state: &mut AppState,
     keys: &crate::input::keymap::CanonicalKeys,
     typed: &str,

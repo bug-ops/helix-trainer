@@ -44,7 +44,7 @@ pub fn xdg_config_base(xdg_config_home: Option<&OsStr>, home: Option<&Path>) -> 
 }
 
 /// [`xdg_config_base`] resolved from `$XDG_CONFIG_HOME` and the home directory.
-pub fn xdg_config_base_from_env() -> Option<PathBuf> {
+pub(crate) fn xdg_config_base_from_env() -> Option<PathBuf> {
     xdg_config_base(
         std::env::var_os("XDG_CONFIG_HOME").as_deref(),
         dirs::home_dir().as_deref(),

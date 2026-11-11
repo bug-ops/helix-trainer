@@ -240,7 +240,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 ///
 /// These commands require a target character and are handled specially
 /// by the dispatcher. This function registers metadata only.
-pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) {
+pub(crate) fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) {
     // Find char commands - metadata only, handlers are in dispatcher
     registry.register(Command::new(
         CommandMetadata::new(

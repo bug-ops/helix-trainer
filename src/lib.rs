@@ -16,6 +16,8 @@
 //! - `learning`: Spaced repetition learning system with FSRS algorithm
 //! - `gamification`: Daily quests, XP, streaks, and achievements
 
+#![warn(unreachable_pub)]
+
 // Initialize rust-i18n with compile-time codegen
 // Translations are loaded from locales/ directory at compile time
 rust_i18n::i18n!("locales", fallback = "en");

@@ -34,7 +34,7 @@ impl NormalizedCommand {
     /// # Errors
     ///
     /// Returns [`IdError::Empty`] for an empty command and [`IdError::TooLong`] above
-    /// [`MAX_COMMAND_LINE_LEN`] bytes.
+    /// `MAX_COMMAND_LINE_LEN` bytes.
     pub fn from_raw(raw: &str) -> Result<Self, IdError> {
         let normalized = normalize_command_id(raw);
         if normalized.is_empty() {

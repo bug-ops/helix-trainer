@@ -305,18 +305,6 @@ pub fn move_document_start<M: EditorMode>(
     Ok(())
 }
 
-/// Move to end of document
-///
-/// # Errors
-///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
-pub fn move_document_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
-    let end = sim.doc.len_chars();
-    sim.selection = Selection::point(end);
-    Ok(())
-}
-
 /// Port of helix-term 25.07.1 `find_next_char_impl` / `find_prev_char_impl`
 /// (`find_char_impl`'s `search_fn`): the head position for the new range.
 fn find_target(
@@ -445,7 +433,7 @@ pub fn till_prev_char<M: EditorMode>(
 /// A trailing empty line produced by a final newline is not a target, matching
 /// helix-term 25.07.1 `goto_line_without_jumplist`. Bare `G`/`gg` without a
 /// count never reach this function.
-pub fn goto_line<M: EditorMode>(sim: &mut HelixSimulator<M>, count: NonZeroUsize) {
+pub(crate) fn goto_line<M: EditorMode>(sim: &mut HelixSimulator<M>, count: NonZeroUsize) {
     let text = sim.doc.slice(..);
     let len_lines = text.len_lines();
     let max_line = if text.line(len_lines - 1).len_chars() == 0 {

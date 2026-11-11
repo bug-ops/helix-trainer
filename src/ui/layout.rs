@@ -74,13 +74,13 @@ pub(crate) fn achievement_chunks(area: Rect) -> [Rect; 3] {
 
 /// Rows of the menu list that fit inside its border at `viewport`
 #[must_use]
-pub fn menu_list_rows(viewport: Viewport) -> usize {
+pub(crate) fn menu_list_rows(viewport: Viewport) -> usize {
     usize::from(menu_chunks(viewport.area())[2].height.saturating_sub(2))
 }
 
 /// Rows of the achievements list that fit inside its border at `viewport`
 #[must_use]
-pub fn achievement_list_rows(viewport: Viewport) -> usize {
+pub(crate) fn achievement_list_rows(viewport: Viewport) -> usize {
     usize::from(
         achievement_chunks(viewport.area())[1]
             .height
@@ -153,7 +153,7 @@ pub(crate) fn calculate_menu_scroll(
 /// A filter change or resize may have shrunk the list or the window since the values were
 /// last set; the selection stays on a real item and the offset keeps it visible.
 #[must_use]
-pub fn clamp_menu_view(
+pub(crate) fn clamp_menu_view(
     selected_item: usize,
     scroll_offset: usize,
     scenario_count: usize,
@@ -173,7 +173,11 @@ pub fn clamp_menu_view(
 
 /// Clamp the achievements scroll offset so the last row stays at the bottom of the list
 #[must_use]
-pub fn clamp_achievement_scroll(scroll_offset: usize, total: usize, visible_rows: usize) -> usize {
+pub(crate) fn clamp_achievement_scroll(
+    scroll_offset: usize,
+    total: usize,
+    visible_rows: usize,
+) -> usize {
     scroll_offset.min(total.saturating_sub(visible_rows))
 }
 

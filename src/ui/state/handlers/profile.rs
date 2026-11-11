@@ -9,7 +9,7 @@ use crate::ui::state::{
 /// Handle `ShowProfile` message
 ///
 /// Navigates to the profile screen, tracking where to return
-pub fn handle_show_profile(screen: &mut TypedScreen) -> HandlerOutcome {
+pub(crate) fn handle_show_profile(screen: &mut TypedScreen) -> HandlerOutcome {
     let return_to = screen.detour_return_destination();
     HandlerOutcome::Transition(Box::new(TypedScreen::Profile(ProfileData { return_to })))
 }
@@ -17,7 +17,7 @@ pub fn handle_show_profile(screen: &mut TypedScreen) -> HandlerOutcome {
 /// Handle `ShowStatistics` message
 ///
 /// Navigates to the statistics screen, tracking where to return
-pub fn handle_show_statistics(screen: &mut TypedScreen) -> HandlerOutcome {
+pub(crate) fn handle_show_statistics(screen: &mut TypedScreen) -> HandlerOutcome {
     let return_to = screen.detour_return_destination();
     HandlerOutcome::Transition(Box::new(TypedScreen::Statistics(StatisticsData {
         return_to,
@@ -27,7 +27,7 @@ pub fn handle_show_statistics(screen: &mut TypedScreen) -> HandlerOutcome {
 /// Handle `ShowAchievements` message
 ///
 /// Navigates to the achievements screen, tracking where to return
-pub fn handle_show_achievements(screen: &mut TypedScreen) -> HandlerOutcome {
+pub(crate) fn handle_show_achievements(screen: &mut TypedScreen) -> HandlerOutcome {
     let return_to = screen.detour_return_destination();
     HandlerOutcome::Transition(Box::new(TypedScreen::Achievements(AchievementsData {
         return_to,
@@ -40,7 +40,10 @@ pub fn handle_show_achievements(screen: &mut TypedScreen) -> HandlerOutcome {
 /// Adjusts the achievement list scroll offset by `delta` rows (negative scrolls up).
 /// Only clamped to zero here; the upper bound depends on the rendered viewport height
 /// and content length, so it's clamped in `render_achievements_screen` instead.
-pub fn handle_scroll_achievements(data: &mut AchievementsData, delta: i32) -> HandlerOutcome {
+pub(crate) fn handle_scroll_achievements(
+    data: &mut AchievementsData,
+    delta: i32,
+) -> HandlerOutcome {
     data.scroll_offset = data.scroll_offset.saturating_add_signed(delta as isize);
     HandlerOutcome::Stay
 }

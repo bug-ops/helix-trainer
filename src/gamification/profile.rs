@@ -135,14 +135,14 @@ pub struct UserProfile {
     pub performance_data: PerformanceData,
 
     /// Count of scenario completions finished in under
-    /// [`SPEED_DEMON_TIME_RATIO`](crate::constants::SPEED_DEMON_TIME_RATIO) of a
+    /// `SPEED_DEMON_TIME_RATIO` of a
     /// scenario's time budget, in either Training or arcade mode. Powers
     /// `SpeedDemon`/`Speedrunner`.
     #[serde(default)]
     pub speed_run_count: u32,
 
     /// Count of scenario completions finished in under
-    /// [`FLASH_TIME_RATIO`](crate::constants::FLASH_TIME_RATIO) of a scenario's
+    /// `FLASH_TIME_RATIO` of a scenario's
     /// time budget, in either Training or arcade mode. Powers `Flash`.
     #[serde(default)]
     pub flash_run_count: u32,

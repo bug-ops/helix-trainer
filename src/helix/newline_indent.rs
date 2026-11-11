@@ -41,7 +41,7 @@ impl NewLineStart {
 
     /// Text the new line starts with: the indent, then `token ` when the line
     /// continues a comment
-    pub fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         match self.comment_token {
             Some(token) => format!("{}{token} ", self.indent),
             None => self.indent.clone(),
@@ -120,7 +120,7 @@ impl NewlineIndent<'_> {
 
     /// Start of the line `o` opens below `line`; `text_end` is the char index
     /// where the line's text ends for this purpose (the cursor for Enter)
-    pub fn below(&self, line: usize, text_end: usize) -> NewLineStart {
+    pub(crate) fn below(&self, line: usize, text_end: usize) -> NewLineStart {
         let text = self.line_text(line);
         let own_indent = self.leading_whitespace(line);
         let cut = text_end.saturating_sub(self.doc.line_to_char(line));
@@ -274,7 +274,7 @@ impl NewlineIndent<'_> {
     /// comment; otherwise the new line takes what `o` would give below the
     /// previous line (the line's own indent for the first line and for
     /// languages without a rule).
-    pub fn above(&self, line: usize, comments: CommentContinuation) -> NewLineStart {
+    pub(crate) fn above(&self, line: usize, comments: CommentContinuation) -> NewLineStart {
         let own_indent = self.leading_whitespace(line);
         if comments == CommentContinuation::Continue
             && let Some(token) = self.language.leading_comment_token(&self.line_text(line))

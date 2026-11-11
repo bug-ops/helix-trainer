@@ -101,7 +101,7 @@ fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
 /// matching a scenario author writing the language's name instead of its extension). A
 /// value matching neither falls back to plain, unhighlighted text rather than reusing
 /// another language's highlighting.
-pub fn highlight_code_with_multi_cursor(
+pub(crate) fn highlight_code_with_multi_cursor(
     content: &str,
     cursors: &[CursorInfo],
     selections: &[SelectionBounds],

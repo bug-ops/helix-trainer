@@ -6,16 +6,14 @@
 pub mod difficulty;
 pub mod gameplay;
 pub mod learning;
-pub mod sound;
 pub mod timing;
 pub mod ui;
 pub mod xp;
 
 // Re-export commonly used constants
-pub use difficulty::*;
+pub(crate) use difficulty::*;
 pub use gameplay::*;
 pub use learning::*;
-pub use sound::*;
 pub use timing::*;
-pub use ui::*;
-pub use xp::*;
+pub(crate) use ui::*;
+pub(crate) use xp::*;

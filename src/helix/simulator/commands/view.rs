@@ -105,35 +105,6 @@ pub fn scroll_up<M: crate::helix::simulator::EditorMode>(
     Ok(())
 }
 
-/// Scroll viewport down by count lines
-///
-/// # Errors
-///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
-pub fn scroll_down_count<M: crate::helix::simulator::EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    count: usize,
-) -> Result<(), SimulatorError> {
-    let total_lines = sim.doc.len_lines();
-    sim.view_state.scroll_down(count, total_lines);
-    Ok(())
-}
-
-/// Scroll viewport up by count lines
-///
-/// # Errors
-///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
-pub fn scroll_up_count<M: crate::helix::simulator::EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    count: usize,
-) -> Result<(), SimulatorError> {
-    sim.view_state.scroll_up(count);
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,27 +195,6 @@ mod tests {
 
         scroll_up(&mut sim).unwrap();
         assert_eq!(sim.view_state.top_line(), 8);
-    }
-
-    #[test]
-    fn test_scroll_down_count() {
-        let mut sim = create_multiline_sim(100);
-        sim.view_state.set_size(20, 80);
-
-        scroll_down_count(&mut sim, 5).unwrap();
-        assert_eq!(sim.view_state.top_line(), 5);
-    }
-
-    #[test]
-    fn test_scroll_up_count() {
-        let mut sim = create_multiline_sim(100);
-        sim.view_state.set_size(20, 80);
-
-        // Start at line 10
-        sim.view_state.scroll_down(10, 100);
-
-        scroll_up_count(&mut sim, 5).unwrap();
-        assert_eq!(sim.view_state.top_line(), 5);
     }
 
     #[test]

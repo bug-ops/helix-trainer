@@ -149,7 +149,7 @@ pub fn search_prev_match<M: crate::helix::simulator::EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn search_forward<M: crate::helix::simulator::EditorMode>(
+pub(crate) fn search_forward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     sim.search_state.set_current_match(None);
@@ -166,7 +166,7 @@ pub fn search_forward<M: crate::helix::simulator::EditorMode>(
 ///
 /// Returns a [`SimulatorError`] if `pattern` is not a valid regex or exceeds the
 /// maximum pattern length; the selection is left unchanged.
-pub fn search_pattern_forward<M: crate::helix::simulator::EditorMode>(
+pub(crate) fn search_pattern_forward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
 ) -> Result<(), SimulatorError> {
@@ -188,7 +188,7 @@ pub fn search_pattern_forward<M: crate::helix::simulator::EditorMode>(
 ///
 /// Returns a [`SimulatorError`] if `pattern` is not a valid regex or exceeds the
 /// maximum pattern length; the selection is left unchanged.
-pub fn search_pattern_backward<M: crate::helix::simulator::EditorMode>(
+pub(crate) fn search_pattern_backward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
 ) -> Result<(), SimulatorError> {
@@ -206,7 +206,7 @@ pub fn search_pattern_backward<M: crate::helix::simulator::EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn search_backward<M: crate::helix::simulator::EditorMode>(
+pub(crate) fn search_backward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     sim.search_state.set_current_match(None);
@@ -219,7 +219,7 @@ pub fn search_backward<M: crate::helix::simulator::EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn goto_next_match<M: crate::helix::simulator::EditorMode>(
+pub(crate) fn goto_next_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     if !sim.search_state.has_pattern() {
@@ -235,7 +235,7 @@ pub fn goto_next_match<M: crate::helix::simulator::EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn goto_prev_match<M: crate::helix::simulator::EditorMode>(
+pub(crate) fn goto_prev_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     if !sim.search_state.has_pattern() {
@@ -298,7 +298,7 @@ fn boundary_pattern(doc: &Rope, selection: &Selection) -> String {
 ///
 /// Returns a [`SimulatorError`] if the pattern exceeds the maximum pattern
 /// length; the previous pattern is kept.
-pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
+pub(crate) fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     let pattern = boundary_pattern(&sim.doc, &sim.selection);

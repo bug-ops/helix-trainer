@@ -19,7 +19,7 @@ use crate::ui::state::{
 /// [`super::minigame::handle_minigame_game_over`] - idempotent per session,
 /// so calling it here is safe even if bookkeeping already ran for this
 /// session through another path (e.g. an in-game timeout).
-pub fn handle_quit_app(state: &mut AppState) -> HandlerOutcome {
+pub(crate) fn handle_quit_app(state: &mut AppState) -> HandlerOutcome {
     if state.minigame_session().is_some() {
         super::minigame::handle_minigame_game_over(state);
     }
@@ -31,7 +31,7 @@ pub fn handle_quit_app(state: &mut AppState) -> HandlerOutcome {
 ///
 /// Changes the current screen to the target screen.
 /// Returns a Transition outcome with the new screen.
-pub fn handle_navigate_to(target: NavTarget) -> HandlerOutcome {
+pub(crate) fn handle_navigate_to(target: NavTarget) -> HandlerOutcome {
     let new_screen = match target {
         NavTarget::ModeSelection => TypedScreen::ModeSelection(ModeSelectionData::default()),
         NavTarget::MainMenu => TypedScreen::Menu(MenuData::default()),
@@ -50,7 +50,7 @@ pub fn handle_navigate_to(target: NavTarget) -> HandlerOutcome {
 ///   returns to that paused mini-game
 /// - From `CategoryFilters` opened from the menu: returns to Menu (scenario list)
 /// - Otherwise: returns to mode selection screen (the main menu)
-pub fn handle_back_to_menu(
+pub(crate) fn handle_back_to_menu(
     current_screen: &mut TypedScreen,
     _ctx: &mut HandlerContext<'_>,
 ) -> HandlerOutcome {

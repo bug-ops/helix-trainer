@@ -31,7 +31,7 @@ use crate::input::typestate::{
 };
 
 /// Handle keyboard events on profile and statistics screens
-pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+pub(crate) fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Ctrl-Q returns to menu (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::BackToMenu);
@@ -92,7 +92,7 @@ pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Mess
 /// - gg: jump to first item
 /// - G: jump to last item
 /// - 15G/15gg: jump to item 15
-pub fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+pub(crate) fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Ctrl-Q exits application from anywhere
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::QuitApp);
@@ -310,7 +310,7 @@ fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
 }
 
 /// Handle keyboard events on the task screen
-pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+pub(crate) fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Check special UI keys first
     if let Some(msg) = handle_task_special_keys(key) {
         return Some(msg);
@@ -344,7 +344,7 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
 /// - `p` - Show profile
 /// - `q` - Quit application
 /// - `Ctrl-Q` - Return to mode selection
-pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_results_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q returns to menu (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::BackToMenu);
@@ -375,7 +375,7 @@ pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
 /// No `p` (profile) key: this screen is reached only via the Results `(n)`
 /// key and has no `ReturnDestination` variant to return to, so a Profile
 /// detour would strand the user - see `ReturnDestination` in `ui::state::screen`.
-pub fn handle_end_game_summary_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_end_game_summary_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q returns to menu (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::BackToMenu);
@@ -393,7 +393,7 @@ pub fn handle_end_game_summary_keys(key: KeyEvent) -> Option<Message> {
 }
 
 /// Handle keyboard events on the review session screen
-pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_review_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q abandons review session (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::AbandonReviewSession);
@@ -421,7 +421,7 @@ pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
 /// - `a` - Select all (clear filters) (`CategoryFilterSelectAll`)
 /// - `Esc` or `q` - Return to previous screen (`BackToMenu`)
 /// - `Ctrl-Q` - Return to previous screen (`BackToMenu`)
-pub fn handle_category_filters_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_category_filters_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q returns to previous screen (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::BackToMenu);
@@ -438,7 +438,7 @@ pub fn handle_category_filters_keys(key: KeyEvent) -> Option<Message> {
 }
 
 /// Handle keyboard events on mode selection screen
-pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q exits application (unified exit key - mode selection is root screen)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::QuitApp);
@@ -460,7 +460,7 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
 }
 
 /// Handle keyboard events on mini-game screen
-pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+pub(crate) fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Check if game over or paused
     let session = state.minigame_session()?;
 

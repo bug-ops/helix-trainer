@@ -392,7 +392,7 @@ impl Default for InsertModeRecorder {
 /// - `%` - Select all
 ///
 /// Note: `;` (collapse selection) is NOT included as it doesn't expand selection
-pub fn is_selection_command(key: &KeyEvent) -> bool {
+pub(crate) fn is_selection_command(key: &KeyEvent) -> bool {
     if let KeyCode::Char(ch) = key.code {
         matches!(ch, 'x' | 'X' | '%')
     } else {
@@ -411,7 +411,7 @@ pub fn is_selection_command(key: &KeyEvent) -> bool {
 /// - `y` - Yank (copy) selection
 /// - `>` - Indent selection
 /// - `<` - Dedent selection
-pub fn is_operator_command(key: &KeyEvent) -> bool {
+pub(crate) fn is_operator_command(key: &KeyEvent) -> bool {
     if let KeyCode::Char(ch) = key.code {
         matches!(ch, 'd' | 'c' | 'y' | '>' | '<')
     } else {

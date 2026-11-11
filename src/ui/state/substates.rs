@@ -395,7 +395,7 @@ impl ProgressState {
     /// (`DataLoadMessage::ProfileSaveError`): the optimistic
     /// [`ProgressState::mark_saved`] call made at dispatch time was wrong,
     /// so the debounce gate must be reset — otherwise the next attempt
-    /// would be skipped for up to [`PROFILE_SAVE_DEBOUNCE`] as if the
+    /// would be skipped for up to `PROFILE_SAVE_DEBOUNCE` as if the
     /// failed write had actually succeeded.
     pub fn mark_unsaved(&mut self) {
         self.last_save_time = None;

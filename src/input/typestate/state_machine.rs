@@ -16,6 +16,7 @@ use super::state_types::{
     SurroundReplaceFromPending, SurroundReplaceToPending, TextObjectAroundPending,
     TextObjectInsidePending, UnmatchedNextPending, UnmatchedPrevPending, ViewPending,
 };
+use crate::helix::normal_command::NormalCommand;
 
 /// State machine for input handling
 ///
@@ -72,15 +73,12 @@ impl InputStateMachine {
             InputState::TextObjectInsidePending => {
                 KeyHandler::handle_key(&TextObjectInsidePending, key)
             }
-            InputState::FindCharPending { find_type } => KeyHandler::handle_key(
-                &FindCharPending {
-                    find_type: *find_type,
-                },
-                key,
-            ),
-            InputState::CountedFindCharPending { find_type, count } => KeyHandler::handle_key(
+            InputState::FindCharPending { motion } => {
+                KeyHandler::handle_key(&FindCharPending { motion: *motion }, key)
+            }
+            InputState::CountedFindCharPending { motion, count } => KeyHandler::handle_key(
                 &CountedFindCharPending {
-                    find_type: *find_type,
+                    motion: *motion,
                     count: *count,
                 },
                 key,
@@ -214,7 +212,7 @@ impl InputStateMachine {
     /// keymap overlay only ever produces a multi-token expansion for a
     /// `Base`-context lookup (see the design decision record), so this
     /// would catch a caller wiring bug, not user input.
-    pub fn apply_canonical_expansion(&mut self, tokens: &[&str]) -> Option<String> {
+    pub fn apply_canonical_expansion(&mut self, tokens: &[&str]) -> Option<NormalCommand> {
         debug_assert!(
             self.state.is_base(),
             "multi-token keymap expansion applied outside Base context"
@@ -227,10 +225,9 @@ impl InputStateMachine {
         for (i, token) in tokens.iter().enumerate() {
             let key_event = parse_helix_key_string(token)?;
             match clone.process_key(key_event) {
-                HandlerResult::Execute(cmd) if i == last => {
-                    let resolved = cmd.to_string();
+                HandlerResult::Execute(command) if i == last => {
                     *self = clone;
-                    return Some(resolved);
+                    return Some(command);
                 }
                 HandlerResult::Transition(_) if i != last => {}
                 _ => return None,
@@ -243,7 +240,7 @@ impl InputStateMachine {
     ///
     /// Returns the command kind and the pattern typed so far (not including
     /// the leading 's'/'S'/'/'), for rendering a live prompt line.
-    pub fn pending_regex_prompt(&self) -> Option<(super::input_state::RegexPromptKind, &str)> {
+    pub fn pending_regex_prompt(&self) -> Option<(crate::helix::normal_command::PromptKind, &str)> {
         match &self.state {
             InputState::RegexPromptPending { kind, buffer } => Some((*kind, buffer.as_str())),
             _ => None,

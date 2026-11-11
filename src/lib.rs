@@ -26,6 +26,7 @@ pub mod constants;
 pub mod data_loader;
 pub mod game;
 pub mod gamification;
+pub mod grammar;
 pub mod helix;
 pub mod ids;
 pub mod input;

@@ -15,11 +15,10 @@
 //! and `?` search prompts are the exception: it forwards an invalid pattern so the
 //! simulator's `UserError` is shown to the user.
 
-use std::borrow::Cow;
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{InputHandler, KeyHandler};
+use crate::helix::normal_command::NormalCommand;
 use crate::input::typestate::{
     handler_result::HandlerResult, input_state::InputState, state_types::RegexPromptPending,
 };
@@ -55,11 +54,10 @@ impl InputHandler<RegexPromptPending> for KeyHandler {
                     // reaches the user (FR-204).
                     HandlerResult::Cancel
                 } else {
-                    HandlerResult::Execute(Cow::Owned(format!(
-                        "{} {}",
-                        state.kind.command_id(),
-                        state.buffer
-                    )))
+                    HandlerResult::Execute(NormalCommand::Prompt {
+                        kind: state.kind,
+                        pattern: state.buffer.clone(),
+                    })
                 }
             }
 
@@ -87,9 +85,10 @@ impl InputHandler<RegexPromptPending> for KeyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::typestate::input_state::RegexPromptKind;
+    use crate::helix::normal_command::PromptKind;
+    use crate::testing::normal;
 
-    fn state(kind: RegexPromptKind, buffer: &str) -> RegexPromptPending {
+    fn state(kind: PromptKind, buffer: &str) -> RegexPromptPending {
         RegexPromptPending {
             kind,
             buffer: buffer.to_string(),
@@ -102,12 +101,11 @@ mod tests {
 
     #[test]
     fn appends_printable_chars() {
-        let result =
-            KeyHandler::handle_key(&state(RegexPromptKind::SelectRegex, "fo"), char_key('o'));
+        let result = KeyHandler::handle_key(&state(PromptKind::SelectRegex, "fo"), char_key('o'));
         assert_eq!(
             result,
             HandlerResult::Transition(InputState::RegexPromptPending {
-                kind: RegexPromptKind::SelectRegex,
+                kind: PromptKind::SelectRegex,
                 buffer: "foo".to_string()
             })
         );
@@ -116,13 +114,13 @@ mod tests {
     #[test]
     fn backspace_pops_last_char() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::SelectRegex, "foo"),
+            &state(PromptKind::SelectRegex, "foo"),
             KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
         );
         assert_eq!(
             result,
             HandlerResult::Transition(InputState::RegexPromptPending {
-                kind: RegexPromptKind::SelectRegex,
+                kind: PromptKind::SelectRegex,
                 buffer: "fo".to_string()
             })
         );
@@ -131,7 +129,7 @@ mod tests {
     #[test]
     fn backspace_on_empty_buffer_cancels() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::SelectRegex, ""),
+            &state(PromptKind::SelectRegex, ""),
             KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
         );
         assert_eq!(result, HandlerResult::Cancel);
@@ -140,7 +138,7 @@ mod tests {
     #[test]
     fn enter_on_empty_buffer_cancels() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::SelectRegex, ""),
+            &state(PromptKind::SelectRegex, ""),
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         );
         assert_eq!(result, HandlerResult::Cancel);
@@ -149,28 +147,28 @@ mod tests {
     #[test]
     fn enter_on_valid_pattern_executes_with_select_regex_prefix() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::SelectRegex, "foo"),
+            &state(PromptKind::SelectRegex, "foo"),
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         );
-        assert_eq!(result, HandlerResult::Execute(Cow::Borrowed("s foo")));
+        assert_eq!(result, HandlerResult::Execute(normal("s foo")));
     }
 
     #[test]
     fn enter_on_valid_pattern_executes_with_split_selection_prefix() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::SplitSelection, ","),
+            &state(PromptKind::SplitSelection, ","),
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         );
-        assert_eq!(result, HandlerResult::Execute(Cow::Borrowed("S ,")));
+        assert_eq!(result, HandlerResult::Execute(normal("S ,")));
     }
 
     #[test]
     fn enter_on_valid_pattern_executes_search_with_slash_prefix() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::Search, "sum"),
+            &state(PromptKind::Search, "sum"),
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         );
-        assert_eq!(result, HandlerResult::Execute(Cow::Borrowed("/ sum")));
+        assert_eq!(result, HandlerResult::Execute(normal("/ sum")));
     }
 
     fn enter() -> KeyEvent {
@@ -180,13 +178,13 @@ mod tests {
     #[test]
     fn enter_assembles_the_command_id_for_every_new_kind() {
         for (kind, expected) in [
-            (RegexPromptKind::SearchBackward, "? sum"),
-            (RegexPromptKind::KeepSelections, "K sum"),
-            (RegexPromptKind::RemoveSelections, "Alt-K sum"),
+            (PromptKind::SearchBackward, "? sum"),
+            (PromptKind::KeepSelections, "K sum"),
+            (PromptKind::RemoveSelections, "Alt-K sum"),
         ] {
             assert_eq!(
                 KeyHandler::handle_key(&state(kind, "sum"), enter()),
-                HandlerResult::Execute(Cow::Borrowed(expected))
+                HandlerResult::Execute(normal(expected))
             );
         }
     }
@@ -194,13 +192,10 @@ mod tests {
     #[test]
     fn backward_search_forwards_invalid_regex_but_keep_remove_cancel() {
         assert_eq!(
-            KeyHandler::handle_key(&state(RegexPromptKind::SearchBackward, "a("), enter()),
-            HandlerResult::Execute(Cow::Borrowed("? a("))
+            KeyHandler::handle_key(&state(PromptKind::SearchBackward, "a("), enter()),
+            HandlerResult::Execute(normal("? a("))
         );
-        for kind in [
-            RegexPromptKind::KeepSelections,
-            RegexPromptKind::RemoveSelections,
-        ] {
+        for kind in [PromptKind::KeepSelections, PromptKind::RemoveSelections] {
             assert_eq!(
                 KeyHandler::handle_key(&state(kind, "a("), enter()),
                 HandlerResult::Cancel
@@ -211,12 +206,12 @@ mod tests {
     #[test]
     fn question_mark_is_buffered_as_text_in_every_prompt() {
         for kind in [
-            RegexPromptKind::SelectRegex,
-            RegexPromptKind::SplitSelection,
-            RegexPromptKind::Search,
-            RegexPromptKind::SearchBackward,
-            RegexPromptKind::KeepSelections,
-            RegexPromptKind::RemoveSelections,
+            PromptKind::SelectRegex,
+            PromptKind::SplitSelection,
+            PromptKind::Search,
+            PromptKind::SearchBackward,
+            PromptKind::KeepSelections,
+            PromptKind::RemoveSelections,
         ] {
             assert_eq!(
                 KeyHandler::handle_key(&state(kind, "a"), char_key('?')),
@@ -230,11 +225,11 @@ mod tests {
 
     #[test]
     fn search_prompt_typed_chars_are_buffered_not_executed() {
-        let result = KeyHandler::handle_key(&state(RegexPromptKind::Search, "su"), char_key('d'));
+        let result = KeyHandler::handle_key(&state(PromptKind::Search, "su"), char_key('d'));
         assert_eq!(
             result,
             HandlerResult::Transition(InputState::RegexPromptPending {
-                kind: RegexPromptKind::Search,
+                kind: PromptKind::Search,
                 buffer: "sud".to_string()
             })
         );
@@ -244,8 +239,8 @@ mod tests {
     fn search_prompt_forwards_invalid_regex_so_the_simulator_reports_it() {
         let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         assert_eq!(
-            KeyHandler::handle_key(&state(RegexPromptKind::Search, "a("), enter),
-            HandlerResult::Execute(Cow::Borrowed("/ a("))
+            KeyHandler::handle_key(&state(PromptKind::Search, "a("), enter),
+            HandlerResult::Execute(normal("/ a("))
         );
     }
 
@@ -253,12 +248,12 @@ mod tests {
     fn search_prompt_empty_enter_and_escape_cancel() {
         let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         assert_eq!(
-            KeyHandler::handle_key(&state(RegexPromptKind::Search, ""), enter),
+            KeyHandler::handle_key(&state(PromptKind::Search, ""), enter),
             HandlerResult::Cancel
         );
         assert_eq!(
             KeyHandler::handle_key(
-                &state(RegexPromptKind::Search, "sum"),
+                &state(PromptKind::Search, "sum"),
                 KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)
             ),
             HandlerResult::Cancel
@@ -268,14 +263,14 @@ mod tests {
     #[test]
     fn search_prompt_buffer_length_is_capped() {
         let full = "x".repeat(MAX_COMMAND_LINE_LEN);
-        let result = KeyHandler::handle_key(&state(RegexPromptKind::Search, &full), char_key('y'));
+        let result = KeyHandler::handle_key(&state(PromptKind::Search, &full), char_key('y'));
         assert_eq!(result, HandlerResult::Stay);
     }
 
     #[test]
     fn enter_on_invalid_regex_cancels_instead_of_executing() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::SelectRegex, "("),
+            &state(PromptKind::SelectRegex, "("),
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         );
         assert_eq!(result, HandlerResult::Cancel);
@@ -284,7 +279,7 @@ mod tests {
     #[test]
     fn escape_cancels() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::SelectRegex, "foo"),
+            &state(PromptKind::SelectRegex, "foo"),
             KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
         );
         assert_eq!(result, HandlerResult::Cancel);
@@ -294,28 +289,27 @@ mod tests {
     fn alt_and_ctrl_chars_are_ignored_not_cancelled() {
         let alt_key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT);
         assert_eq!(
-            KeyHandler::handle_key(&state(RegexPromptKind::SelectRegex, "fo"), alt_key),
+            KeyHandler::handle_key(&state(PromptKind::SelectRegex, "fo"), alt_key),
             HandlerResult::Stay
         );
 
         let ctrl_key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
         assert_eq!(
-            KeyHandler::handle_key(&state(RegexPromptKind::SelectRegex, "fo"), ctrl_key),
+            KeyHandler::handle_key(&state(PromptKind::SelectRegex, "fo"), ctrl_key),
             HandlerResult::Stay
         );
     }
 
     #[test]
     fn non_ascii_char_is_ignored_not_cancelled() {
-        let result =
-            KeyHandler::handle_key(&state(RegexPromptKind::SelectRegex, "fo"), char_key('é'));
+        let result = KeyHandler::handle_key(&state(PromptKind::SelectRegex, "fo"), char_key('é'));
         assert_eq!(result, HandlerResult::Stay);
     }
 
     #[test]
     fn arrow_key_is_ignored_not_cancelled() {
         let result = KeyHandler::handle_key(
-            &state(RegexPromptKind::SelectRegex, "fo"),
+            &state(PromptKind::SelectRegex, "fo"),
             KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
         );
         assert_eq!(result, HandlerResult::Stay);
@@ -324,8 +318,7 @@ mod tests {
     #[test]
     fn buffer_length_is_capped() {
         let full = "x".repeat(MAX_COMMAND_LINE_LEN);
-        let result =
-            KeyHandler::handle_key(&state(RegexPromptKind::SelectRegex, &full), char_key('y'));
+        let result = KeyHandler::handle_key(&state(PromptKind::SelectRegex, &full), char_key('y'));
         assert_eq!(result, HandlerResult::Stay);
     }
 }

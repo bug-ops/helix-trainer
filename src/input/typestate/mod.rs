@@ -58,15 +58,15 @@ mod tests;
 // Re-export public API
 pub use handler_result::HandlerResult;
 pub use handlers::{InputHandler, KeyHandler};
-pub use input_state::{InputState, RegexPromptKind};
+pub use input_state::InputState;
 pub use key_mapping::{
-    Chord, command_to_key_event, ctrl_command, handle_insert_mode_input, map_key_to_helix_command,
-    normalize_key_event, parse_helix_key_string,
+    Chord, ctrl_command, handle_insert_mode_input, map_key_to_helix_command, normalize_key_event,
+    parse_helix_key_string,
 };
 pub use state_machine::{InputStateMachine, RegisterPreview, SurroundPreview};
 pub use state_types::{
     BaseState, CommandLinePending, CountPending, CountedFindCharPending, CountedGotoPending,
-    FindCharPending, FindType, GotoPending, HandlerState, MatchPending, RegexPromptPending,
+    FindCharPending, GotoPending, HandlerState, MatchPending, RegexPromptPending,
     RegisterOpPending, RegisterPending, ReplaceCharPending, SurroundAddPending,
     SurroundDeletePending, SurroundReplaceFromPending, SurroundReplaceToPending,
     TextObjectAroundPending, TextObjectInsidePending, UnmatchedNextPending, UnmatchedPrevPending,

@@ -42,7 +42,7 @@ pub use mode::{EditorMode, InsertMode, ModeKind, NormalMode};
 
 // Re-export state types
 pub use command_line::CommandLine;
-pub use find_state::{FindDirection, FindState, FindType};
+pub use find_state::FindState;
 pub use insert_mode::InsertCommand;
 pub use insert_session::{InsertEntryCommand, InsertSession};
 pub use register_file::RegisterFile;
@@ -542,6 +542,21 @@ impl AnyModeSimulator {
         commands::execute_command_any_mode(self, cmd)
     }
 
+    /// Execute a parsed Normal-mode command, handling mode transitions.
+    ///
+    /// The typed counterpart of [`AnyModeSimulator::execute_command`]: a
+    /// simulator that is in Insert mode takes the command as typed text.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SimulatorError`] if the command fails.
+    pub(crate) fn execute_normal(
+        &mut self,
+        command: &crate::helix::normal_command::NormalCommand,
+    ) -> Result<(), SimulatorError> {
+        commands::execute_normal_any_mode(self, command)
+    }
+
     /// Execute `base` with a count prefix, as `{count}{base}` would.
     ///
     /// The single counted-execution mechanism: the command's
@@ -557,7 +572,7 @@ impl AnyModeSimulator {
         base: &str,
         count: std::num::NonZeroUsize,
     ) -> Result<(), SimulatorError> {
-        commands::execute_counted_any_mode(self, base, count)
+        commands::execute_command_any_mode(self, &format!("{count}{base}"))
     }
 
     /// Get reference to repeat buffer

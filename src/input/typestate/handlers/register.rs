@@ -15,13 +15,13 @@
 //! ([`crate::helix::simulator::register_file::BLACKHOLE_REGISTER`]) is
 //! reached, since it can't be addressed as the default register.
 
-use std::borrow::Cow;
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::CMD_TOGGLE_COMMENTS;
 
-use super::{InputHandler, KeyHandler};
+use super::{InputHandler, KeyHandler, execute_registered};
+use crate::helix::normal_command::{NormalCommand, RegisterOp};
+use crate::helix::simulator::InsertEntryCommand;
 use crate::input::typestate::{
     handler_result::HandlerResult,
     input_state::InputState,
@@ -56,12 +56,19 @@ impl InputHandler<RegisterOpPending> for KeyHandler {
         match key.code {
             // Helix runs `toggle_comments` and drops the pending register
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                HandlerResult::Execute(Cow::Borrowed(CMD_TOGGLE_COMMENTS))
+                execute_registered(CMD_TOGGLE_COMMENTS)
             }
             // Only y/p/P/R/d/c are register-scoped in this trainer
-            KeyCode::Char(op @ ('y' | 'p' | 'P' | 'R' | 'd' | 'c')) => {
-                let cmd = format!("\"{}{}", state.register, op);
-                HandlerResult::Execute(Cow::Owned(cmd))
+            KeyCode::Char('c') => {
+                HandlerResult::Execute(NormalCommand::InsertEntry(InsertEntryCommand::Change {
+                    register: Some(state.register),
+                }))
+            }
+            KeyCode::Char(op) if let Some(op) = RegisterOp::from_key(op) => {
+                HandlerResult::Execute(NormalCommand::Register {
+                    register: state.register,
+                    op,
+                })
             }
             // Any other key - cancel (including Escape)
             _ => HandlerResult::Cancel,
@@ -72,6 +79,7 @@ impl InputHandler<RegisterOpPending> for KeyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::normal;
 
     fn key(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
@@ -99,7 +107,7 @@ mod tests {
     fn register_op_pending_accepts_yank() {
         let state = RegisterOpPending { register: 'a' };
         let result = KeyHandler::handle_key(&state, key('y'));
-        assert_eq!(result, HandlerResult::Execute(Cow::Borrowed("\"ay")));
+        assert_eq!(result, HandlerResult::Execute(normal("\"ay")));
     }
 
     #[test]
@@ -107,15 +115,15 @@ mod tests {
         let state = RegisterOpPending { register: 'b' };
         assert_eq!(
             KeyHandler::handle_key(&state, key('p')),
-            HandlerResult::Execute(Cow::Borrowed("\"bp"))
+            HandlerResult::Execute(normal("\"bp"))
         );
         assert_eq!(
             KeyHandler::handle_key(&state, key('P')),
-            HandlerResult::Execute(Cow::Borrowed("\"bP"))
+            HandlerResult::Execute(normal("\"bP"))
         );
         assert_eq!(
             KeyHandler::handle_key(&state, key('R')),
-            HandlerResult::Execute(Cow::Borrowed("\"bR"))
+            HandlerResult::Execute(normal("\"bR"))
         );
     }
 
@@ -124,11 +132,11 @@ mod tests {
         let state = RegisterOpPending { register: 'a' };
         assert_eq!(
             KeyHandler::handle_key(&state, key('d')),
-            HandlerResult::Execute(Cow::Borrowed("\"ad"))
+            HandlerResult::Execute(normal("\"ad"))
         );
         assert_eq!(
             KeyHandler::handle_key(&state, key('c')),
-            HandlerResult::Execute(Cow::Borrowed("\"ac"))
+            HandlerResult::Execute(normal("\"ac"))
         );
     }
 
@@ -137,11 +145,11 @@ mod tests {
         let state = RegisterOpPending { register: '_' };
         assert_eq!(
             KeyHandler::handle_key(&state, key('d')),
-            HandlerResult::Execute(Cow::Borrowed("\"_d"))
+            HandlerResult::Execute(normal("\"_d"))
         );
         assert_eq!(
             KeyHandler::handle_key(&state, key('c')),
-            HandlerResult::Execute(Cow::Borrowed("\"_c"))
+            HandlerResult::Execute(normal("\"_c"))
         );
     }
 

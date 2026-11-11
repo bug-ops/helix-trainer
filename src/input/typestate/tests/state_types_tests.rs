@@ -1,8 +1,9 @@
 //! Tests for state type marker types
 
 use super::nz;
+use crate::grammar::find::FindMotion;
 use crate::input::typestate::{
-    BaseState, CountPending, FindCharPending, FindType, GotoPending, HandlerState, MatchPending,
+    BaseState, CountPending, FindCharPending, GotoPending, HandlerState, MatchPending,
     ReplaceCharPending, SurroundAddPending, SurroundDeletePending, SurroundReplaceFromPending,
     SurroundReplaceToPending, TextObjectAroundPending, TextObjectInsidePending,
     UnmatchedNextPending, UnmatchedPrevPending, ViewPending,
@@ -103,38 +104,6 @@ fn test_unmatched_next_pending_state_name() {
 }
 
 // ============================================================================
-// FindType tests
-// ============================================================================
-
-#[test]
-fn test_find_type_prefix() {
-    assert_eq!(FindType::FindForward.prefix(), "f");
-    assert_eq!(FindType::FindBackward.prefix(), "F");
-    assert_eq!(FindType::TillForward.prefix(), "t");
-    assert_eq!(FindType::TillBackward.prefix(), "T");
-}
-
-#[test]
-fn test_find_type_equality() {
-    assert_eq!(FindType::FindForward, FindType::FindForward);
-    assert_ne!(FindType::FindForward, FindType::FindBackward);
-    assert_ne!(FindType::TillForward, FindType::TillBackward);
-}
-
-#[test]
-fn test_find_type_clone() {
-    let find_type = FindType::FindForward;
-    let cloned = find_type;
-    assert_eq!(find_type, cloned);
-}
-
-#[test]
-fn test_find_type_debug() {
-    let find_type = FindType::FindForward;
-    assert!(format!("{find_type:?}").contains("FindForward"));
-}
-
-// ============================================================================
 // State type trait derivations tests
 // ============================================================================
 
@@ -172,13 +141,13 @@ fn test_surround_replace_to_pending_equality() {
 #[test]
 fn test_find_char_pending_equality() {
     let a = FindCharPending {
-        find_type: FindType::FindForward,
+        motion: FindMotion::FIND_FORWARD,
     };
     let b = FindCharPending {
-        find_type: FindType::FindForward,
+        motion: FindMotion::FIND_FORWARD,
     };
     let c = FindCharPending {
-        find_type: FindType::FindBackward,
+        motion: FindMotion::FIND_BACKWARD,
     };
     assert_eq!(a, b);
     assert_ne!(a, c);
@@ -201,7 +170,7 @@ fn test_all_state_types_debug() {
         !format!(
             "{:?}",
             FindCharPending {
-                find_type: FindType::FindForward
+                motion: FindMotion::FIND_FORWARD
             }
         )
         .is_empty()

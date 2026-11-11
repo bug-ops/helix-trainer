@@ -5,11 +5,13 @@
 //! Type-safe handlers that receive `MenuData` directly instead of
 //! performing runtime checks on `AppState`.
 
+use crate::helix::normal_command::NormalCommand;
 use crate::input::typestate::{HandlerResult, InputState};
 use crate::security::UserError;
 use crate::ui::layout::FIXED_MENU_ITEMS;
 use crate::ui::state::{AppState, HandlerContext, HandlerOutcome, MenuData};
 use crossterm::event::KeyEvent;
+use std::num::NonZeroUsize;
 
 /// Total number of menu items for a given filtered scenario count: scenarios plus the fixed trailing entries.
 pub(crate) fn total_menu_items_for_count(scenario_count: usize) -> usize {
@@ -63,19 +65,21 @@ pub fn handle_menu_key(
 fn apply_menu_command(
     data: &mut MenuData,
     ctx: &HandlerContext<'_>,
-    command: &str,
+    command: &NormalCommand,
 ) -> HandlerOutcome {
-    let digits = command.chars().take_while(char::is_ascii_digit).count();
-    let (count, action) = command.split_at(digits);
-    let count = count.parse::<usize>().ok();
-    match (count, action) {
-        (None, "j") => handle_menu_down(data, ctx),
-        (None, "k") => handle_menu_up(data),
-        (None, "gg") => handle_menu_jump_to_first(data),
-        (None, "G") => handle_menu_jump_to_last(data, ctx),
-        (Some(n), "j") => handle_menu_down_by(data, ctx, n),
-        (Some(n), "k") => handle_menu_up_by(data, n),
-        (Some(n), "G" | "gg") => handle_menu_jump_to(data, ctx, n),
+    match command {
+        NormalCommand::Registered { command, count } => {
+            match (command.key(), count.map(NonZeroUsize::get)) {
+                ("j", None) => handle_menu_down(data, ctx),
+                ("k", None) => handle_menu_up(data),
+                ("gg", None) => handle_menu_jump_to_first(data),
+                ("j", Some(n)) => handle_menu_down_by(data, ctx, n),
+                ("k", Some(n)) => handle_menu_up_by(data, n),
+                _ => HandlerOutcome::Stay,
+            }
+        }
+        NormalCommand::GotoLine { count: None } => handle_menu_jump_to_last(data, ctx),
+        NormalCommand::GotoLine { count: Some(n) } => handle_menu_jump_to(data, ctx, n.get()),
         _ => HandlerOutcome::Stay,
     }
 }

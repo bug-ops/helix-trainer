@@ -1,7 +1,7 @@
 //! Select (extend) mode: `v` toggles it, motions extend the selection and
 //! the editing commands of Helix leave it.
 
-use super::execute_normal_mode_command_internal;
+use super::execute_normal_mode_command;
 use crate::helix::commands::{
     CMD_ALIGN_SELECTIONS, CMD_DEDENT, CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK,
     CMD_ESCAPE, CMD_GOTO_FILE_START, CMD_GOTO_FIRST_NONWHITESPACE, CMD_GOTO_LAST_LINE,
@@ -13,7 +13,7 @@ use crate::helix::commands::{
     CMD_SWITCH_TO_UPPERCASE, CMD_TOGGLE_COMMENTS, CMD_YANK,
 };
 use crate::helix::error::SimulatorError;
-use crate::helix::registry::parse_counted_command;
+use crate::helix::normal_command::NormalCommand;
 use crate::helix::simulator::{EditorMode, HelixSimulator, NormalMode};
 use helix_core::{Selection, ropey::RopeSlice};
 
@@ -35,19 +35,19 @@ pub fn toggle<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Simulato
 /// over). Commands that call `exit_select_mode` in `hx` return to Normal mode.
 pub(super) fn execute(
     sim: &mut HelixSimulator<NormalMode>,
-    cmd: &str,
+    command: &NormalCommand,
 ) -> Result<(), SimulatorError> {
     if !sim.select_mode {
-        return execute_normal_mode_command_internal(sim, cmd);
+        return execute_normal_mode_command(sim, command);
     }
 
-    let base = parse_counted_command(cmd).map_or(cmd, |(_, base)| base);
-    let before = is_extending_motion(base).then(|| sim.selection.clone());
-    let result = execute_normal_mode_command_internal(sim, cmd);
+    let base = command.uncounted().to_string();
+    let before = is_extending_motion(&base).then(|| sim.selection.clone());
+    let result = execute_normal_mode_command(sim, command);
     if result.is_ok() {
         if let Some(before) = before {
             extend_from(sim, &before);
-        } else if leaves_select_mode(base) {
+        } else if leaves_select_mode(&base) {
             sim.select_mode = false;
         }
     }

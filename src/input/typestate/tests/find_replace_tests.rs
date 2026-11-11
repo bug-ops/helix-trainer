@@ -1,12 +1,13 @@
 //! Tests for `FindCharPending` and `ReplaceCharPending` handlers
 
+use crate::grammar::find::FindMotion;
 use std::assert_matches;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
 use crate::input::typestate::{
-    FindCharPending, FindType, HandlerResult, InputHandler, KeyHandler, ReplaceCharPending,
+    FindCharPending, HandlerResult, InputHandler, KeyHandler, ReplaceCharPending,
     UnmatchedNextPending, UnmatchedPrevPending,
 };
 
@@ -17,43 +18,43 @@ use crate::input::typestate::{
 #[test]
 fn test_find_char_pending_accept_char() {
     let state = FindCharPending {
-        find_type: FindType::FindForward,
+        motion: FindMotion::FIND_FORWARD,
     };
     let result = KeyHandler::handle_key(
         &state,
         KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "fa");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "fa");
 }
 
 #[test]
 fn test_find_char_pending_backward() {
     let state = FindCharPending {
-        find_type: FindType::FindBackward,
+        motion: FindMotion::FIND_BACKWARD,
     };
     let result = KeyHandler::handle_key(
         &state,
         KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "Fx");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "Fx");
 }
 
 #[test]
 fn test_till_char_pending() {
     let state = FindCharPending {
-        find_type: FindType::TillForward,
+        motion: FindMotion::TILL_FORWARD,
     };
     let result = KeyHandler::handle_key(
         &state,
         KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "te");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "te");
 }
 
 #[test]
 fn test_find_char_escape_cancels() {
     let state = FindCharPending {
-        find_type: FindType::FindForward,
+        motion: FindMotion::FIND_FORWARD,
     };
     let result = KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert_matches!(result, HandlerResult::Cancel);
@@ -69,7 +70,7 @@ fn test_replace_char_pending_accept_char() {
         &ReplaceCharPending,
         KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ra");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "ra");
 }
 
 #[test]
@@ -78,7 +79,7 @@ fn test_replace_char_pending_enter_newline() {
         &ReplaceCharPending,
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "r\n");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "r\n");
 }
 
 #[test]
@@ -100,7 +101,7 @@ fn test_unmatched_prev_pending_p_produces_goto_prev_paragraph() {
         &UnmatchedPrevPending,
         KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_PREV_PARAGRAPH);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_PREV_PARAGRAPH);
 }
 
 #[test]
@@ -140,7 +141,7 @@ fn test_unmatched_next_pending_p_produces_goto_next_paragraph() {
         &UnmatchedNextPending,
         KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_NEXT_PARAGRAPH);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_NEXT_PARAGRAPH);
 }
 
 #[test]

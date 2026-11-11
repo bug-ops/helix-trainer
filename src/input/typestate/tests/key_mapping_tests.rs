@@ -4,8 +4,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::helix::commands::*;
 use crate::input::typestate::key_mapping::{
-    command_to_key_event, handle_insert_mode_input, is_count_compatible_command,
-    map_key_to_helix_command, map_single_key_command, normalize_key_event, parse_helix_key_string,
+    handle_insert_mode_input, is_count_compatible_command, map_key_to_helix_command,
+    map_single_key_command, normalize_key_event, parse_helix_key_string,
 };
 
 // ============================================================================
@@ -396,7 +396,7 @@ fn test_comma_after_select_regex_keeps_only_the_primary_range() {
         else {
             panic!("`{c}` must execute");
         };
-        sim.execute_command(&cmd).unwrap();
+        sim.execute_command(&cmd.to_string()).unwrap();
     }
     assert_eq!(
         sim.to_snapshot().content,
@@ -657,59 +657,59 @@ fn test_insert_mode_altgr_chars_are_typed() {
 }
 
 // ============================================================================
-// command_to_key_event tests
+// parse_helix_key_string tests
 // ============================================================================
 
 #[test]
 fn test_command_to_key_single_lowercase() {
-    let key = command_to_key_event("h").unwrap();
+    let key = parse_helix_key_string("h").unwrap();
     assert_eq!(key.code, KeyCode::Char('h'));
     assert_eq!(key.modifiers, KeyModifiers::NONE);
 }
 
 #[test]
 fn test_command_to_key_single_uppercase() {
-    let key = command_to_key_event("W").unwrap();
+    let key = parse_helix_key_string("W").unwrap();
     assert_eq!(key.code, KeyCode::Char('W'));
     assert_eq!(key.modifiers, KeyModifiers::SHIFT);
 }
 
 #[test]
 fn test_command_to_key_escape() {
-    let key = command_to_key_event("Escape").unwrap();
+    let key = parse_helix_key_string("Escape").unwrap();
     assert_eq!(key.code, KeyCode::Esc);
     assert_eq!(key.modifiers, KeyModifiers::NONE);
 }
 
 #[test]
 fn test_command_to_key_arrows() {
-    let key = command_to_key_event("Left").unwrap();
+    let key = parse_helix_key_string("Left").unwrap();
     assert_eq!(key.code, KeyCode::Left);
 
-    let key = command_to_key_event("Right").unwrap();
+    let key = parse_helix_key_string("Right").unwrap();
     assert_eq!(key.code, KeyCode::Right);
 
-    let key = command_to_key_event("Up").unwrap();
+    let key = parse_helix_key_string("Up").unwrap();
     assert_eq!(key.code, KeyCode::Up);
 
-    let key = command_to_key_event("Down").unwrap();
+    let key = parse_helix_key_string("Down").unwrap();
     assert_eq!(key.code, KeyCode::Down);
 }
 
 #[test]
 fn test_command_to_key_backspace() {
-    let key = command_to_key_event("Backspace").unwrap();
+    let key = parse_helix_key_string("Backspace").unwrap();
     assert_eq!(key.code, KeyCode::Backspace);
 }
 
 #[test]
 fn test_command_to_key_unknown_multichar() {
-    assert_eq!(command_to_key_event("unknown"), None);
+    assert_eq!(parse_helix_key_string("unknown"), None);
 }
 
 #[test]
 fn test_command_to_key_empty() {
-    assert_eq!(command_to_key_event(""), None);
+    assert_eq!(parse_helix_key_string(""), None);
 }
 
 // ============================================================================

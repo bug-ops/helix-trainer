@@ -155,11 +155,11 @@ fn execute_on_task(
             Ok(None)
         }
         Resolution::Execute { command, .. } => {
-            let command = command.into_owned();
             // The simulator applies any count prefix; records as ONE action
-            apply_to_session(task_data, command.clone())?;
+            apply_typed_to_session(task_data, &command)?;
 
             // Store last command for display only once the simulator accepted it
+            let command = command.to_string();
             task_data.last_command = Some(command.clone());
 
             Ok(Some(ExecutedCommand { command }))
@@ -178,6 +178,14 @@ fn ensure_scorable(
         .map_err(UserError::from)
 }
 
+/// Apply the parsed `command` to the Task screen's active session.
+fn apply_typed_to_session(
+    task_data: &mut crate::ui::state::TaskData,
+    command: &crate::helix::normal_command::NormalCommand,
+) -> Result<(), UserError> {
+    apply_with(task_data, |session| session.apply_command(command))
+}
+
 /// Apply `cmd` to the Task screen's active session.
 ///
 /// The failing step (`apply_action`) borrows the session, so an error leaves it in place.
@@ -185,10 +193,17 @@ fn apply_to_session(
     task_data: &mut crate::ui::state::TaskData,
     cmd: String,
 ) -> Result<(), UserError> {
+    apply_with(task_data, |session| session.apply_action(cmd))
+}
+
+fn apply_with(
+    task_data: &mut crate::ui::state::TaskData,
+    apply: impl FnOnce(&mut crate::game::GameSession<crate::game::Active>) -> Result<(), UserError>,
+) -> Result<(), UserError> {
     let Some(session) = task_data.session.active_mut() else {
         return Ok(());
     };
-    session.apply_action(cmd)?;
+    apply(session)?;
 
     // Everything that can fail when finishing a scenario (the score, hence the feedback) is
     // checked while the session is still in place, so the transition to Completed cannot fail

@@ -293,7 +293,7 @@ impl HelixSimulator<NormalMode> {
             .entry_changes
             .take()
             .unwrap_or_else(|| ChangeSet::new(self.doc.slice(..)));
-        commands::record_insert_entry(&mut self, &entry.uncounted().command());
+        commands::record_insert_entry(&mut self, entry.uncounted());
 
         let cursors = self.collapse_to_points();
         let change = match self.history.drain(history_len..).next() {

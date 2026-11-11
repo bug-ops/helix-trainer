@@ -762,7 +762,7 @@ fn test_delete_selection_noyank_does_not_populate_register() {
 fn test_repeat_blackhole_delete() {
     // Regression: `.` must replay the exact blackhole-delete, not a stale
     // prior action - `"_d`'s key events were previously dropped entirely by
-    // `cmd_to_key_events`, so nothing got recorded for it.
+    // `NormalCommand::keys`, so nothing got recorded for it.
     let mut sim = AnyModeSimulator::new("abcabc".to_string());
 
     sim.execute_command("\"_d").unwrap(); // delete 'a' at index 0, discard it

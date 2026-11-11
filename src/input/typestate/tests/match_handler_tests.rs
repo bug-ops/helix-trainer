@@ -20,7 +20,7 @@ fn test_match_pending_mm() {
         &MatchPending,
         KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_MATCH_BRACKETS);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_MATCH_BRACKETS);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn test_surround_add_pending_accept_char() {
         &SurroundAddPending,
         KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ms(");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "ms(");
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn test_surround_add_pending_accept_bracket() {
         &SurroundAddPending,
         KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ms[");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "ms[");
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn test_surround_add_pending_accept_quote() {
         &SurroundAddPending,
         KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ms\"");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "ms\"");
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn test_surround_delete_pending_accept_char() {
         &SurroundDeletePending,
         KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "md(");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "md(");
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn test_surround_delete_pending_accept_bracket() {
         &SurroundDeletePending,
         KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "md{");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "md{");
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn test_surround_replace_to_completes() {
         &state,
         KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mr([");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "mr([");
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn test_surround_replace_to_quotes() {
         &state,
         KeyEvent::new(KeyCode::Char('\''), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mr\"'");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "mr\"'");
 }
 
 #[test]

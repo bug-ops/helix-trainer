@@ -591,17 +591,55 @@ impl GameSession<Active> {
     /// Returns an error if the action limit is exceeded or the simulator
     /// rejects the command.
     pub fn apply_action(&mut self, command: String) -> Result<(), UserError> {
+        self.apply(command, Self::execute_single)
+    }
+
+    /// Execute and record one parsed Normal-mode command, as
+    /// [`GameSession::apply_action`] does for its string form: the recorded
+    /// action is the command's canonical string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action limit is exceeded or the simulator
+    /// rejects the command.
+    pub(crate) fn apply_command(
+        &mut self,
+        command: &crate::helix::normal_command::NormalCommand,
+    ) -> Result<(), UserError> {
+        self.apply(command.to_string(), |session, _| {
+            session.execute_typed(command)
+        })
+    }
+
+    fn apply(
+        &mut self,
+        recorded: String,
+        execute: impl FnOnce(&mut Self, &str) -> Result<(), UserError>,
+    ) -> Result<(), UserError> {
         // Validate action count doesn't exceed limits
         security::arithmetic::validate_action_count(self.user_actions.len() + 1)
             .map_err(UserError::from)?;
 
-        // Execute command using CommandExecutor trait
-        self.execute_single(&command)?;
+        execute(self, &recorded)?;
 
         // Record action in history
         let elapsed = self.elapsed();
-        let action = UserAction::new(command, elapsed);
+        let action = UserAction::new(recorded, elapsed);
         self.user_actions.push(action);
+        Ok(())
+    }
+
+    fn execute_typed(
+        &mut self,
+        command: &crate::helix::normal_command::NormalCommand,
+    ) -> Result<(), UserError> {
+        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
+        self.simulator.execute_normal(command)?;
+        self.target_held_before_last = held_before;
+
+        // Invalidate progress cache since state changed
+        self.progress_needs_update.set(true);
+
         Ok(())
     }
 

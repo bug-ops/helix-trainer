@@ -312,6 +312,19 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
     }
 }
 
+impl ActiveMiniScenario {
+    fn apply_command(
+        &mut self,
+        command: &crate::helix::normal_command::NormalCommand,
+    ) -> Result<(), UserError> {
+        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
+        self.simulator.execute_normal(command)?;
+        self.target_held_before_last = held_before;
+        self.actions.push(command.to_string());
+        Ok(())
+    }
+}
+
 // Implement CommandExecutor trait for unified command handling with count prefix
 impl CommandExecutor for ActiveMiniScenario {
     fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
@@ -629,6 +642,24 @@ impl<R: Rng> MiniGameSession<R> {
         current.execute_single(command)?;
 
         Ok(())
+    }
+
+    /// Run one parsed Normal-mode command, as [`MiniGameSession::handle_command`]
+    /// does for its string form; the recorded action is the canonical string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is no current scenario or the simulator rejects the command.
+    pub(crate) fn apply_command(
+        &mut self,
+        command: &crate::helix::normal_command::NormalCommand,
+    ) -> Result<(), UserError> {
+        if !self.state().is_playing() {
+            return Ok(()); // Ignore commands in non-playing states
+        }
+
+        let current = self.current.as_mut().ok_or(UserError::operation_failed())?;
+        current.apply_command(command)
     }
 
     /// Check if current scenario is complete

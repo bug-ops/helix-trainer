@@ -7,6 +7,7 @@
 //! (quests, minigame scorer) is unchanged; see [`super::NormalizedCommand`] for that form.
 
 use super::IdError;
+use crate::grammar::find::takes_char_argument;
 use crate::security::limits::MAX_ID_LENGTH;
 use serde::{Deserialize, Serialize, Serializer};
 use std::borrow::Borrow;
@@ -28,8 +29,6 @@ const INSERT_ENTRY_COMMANDS: [&str; 8] = [
     CMD_CHANGE,
     CMD_CHANGE_SELECTION_NOYANK,
 ];
-
-const CHAR_ARGUMENT_COMMANDS: [char; 5] = ['f', 'F', 't', 'T', 'r'];
 
 /// Single non-alphanumeric characters that are Helix normal-mode commands.
 const PUNCTUATION_COMMANDS: &str = "$^%;,.<>~`&_*/?()=";
@@ -95,7 +94,7 @@ impl CommandId {
         }
         let mut chars = rest.chars();
         let first = chars.next()?;
-        match (chars.next(), CHAR_ARGUMENT_COMMANDS.contains(&first)) {
+        match (chars.next(), takes_char_argument(first)) {
             (Some(_), true) => Some(Self(first.to_string())),
             (None, _) if !first.is_alphanumeric() && !PUNCTUATION_COMMANDS.contains(first) => None,
             _ => Some(Self(normalize_command_id(rest).into_owned())),
@@ -291,5 +290,83 @@ mod tests {
     #[test]
     fn multibyte_argument_does_not_panic() {
         assert_eq!(ids(&["fé", "ж"]), ["f", "ж"]);
+    }
+
+    /// The derivation as it was before the shared grammar replaced its own
+    /// list of argument-taking keys; card ids are persisted, so the new one
+    /// must agree with it on every input.
+    fn legacy_from_action(raw: &str) -> Option<String> {
+        const CHAR_ARGUMENT_COMMANDS: [char; 5] = ['f', 'F', 't', 'T', 'r'];
+        let rest = if raw.starts_with(|c: char| ('1'..='9').contains(&c)) {
+            raw.trim_start_matches(|c: char| c.is_ascii_digit())
+        } else {
+            raw
+        };
+        if rest.trim().is_empty() || rest == CMD_ESCAPE {
+            return None;
+        }
+        let minted = if let Some(search) = search_command(rest) {
+            search.to_string()
+        } else {
+            let mut chars = rest.chars();
+            let first = chars.next()?;
+            match (chars.next(), CHAR_ARGUMENT_COMMANDS.contains(&first)) {
+                (Some(_), true) => first.to_string(),
+                (None, _) if !first.is_alphanumeric() && !PUNCTUATION_COMMANDS.contains(first) => {
+                    return None;
+                }
+                _ => normalize_command_id(rest).into_owned(),
+            }
+        };
+        (minted.len() <= MAX_ID_LENGTH).then_some(minted)
+    }
+
+    fn corpus() -> Vec<String> {
+        let alphabet: Vec<char> = "fFtTrgGdwxsSmaiAoOc0123456789\"/?:.,;<>=*&_~`$^%() \u{e9}"
+            .chars()
+            .collect();
+        let mut corpus: Vec<String> = alphabet.iter().map(char::to_string).collect();
+        for &a in &alphabet {
+            for &b in &alphabet {
+                corpus.push(format!("{a}{b}"));
+                corpus.push(format!("3{a}{b}"));
+            }
+        }
+        corpus.extend(
+            [
+                "Escape", "Alt-d", "Ctrl-r", ":goto 3", "s foo", "/ a b", "\"ay", "\"ac", "3\"ad",
+            ]
+            .map(String::from),
+        );
+        corpus
+    }
+
+    #[test]
+    fn card_ids_agree_with_the_derivation_before_the_shared_grammar() {
+        for raw in corpus() {
+            assert_eq!(
+                CommandId::from_action(&raw).map(CommandId::into_string),
+                legacy_from_action(&raw),
+                "{raw:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn card_ids_agree_on_every_bundled_scenario_solution() {
+        let scenarios = crate::config::ScenarioLoader::new()
+            .load_from_embedded("en")
+            .expect("embedded scenarios load");
+        assert!(!scenarios.is_empty());
+        for scenario in &scenarios {
+            for raw in &scenario.solution.commands {
+                assert_eq!(
+                    CommandId::from_action(raw).map(CommandId::into_string),
+                    legacy_from_action(raw),
+                    "{}: {raw:?}",
+                    scenario.id
+                );
+            }
+        }
     }
 }

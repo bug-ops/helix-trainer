@@ -8,19 +8,20 @@
 //! `r` opens [`ReplaceCharPending`](crate::input::typestate::ReplaceCharPending)
 //! and drops the count, which Helix's `replace` ignores (#577).
 
-use std::borrow::Cow;
 use std::num::NonZeroUsize;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{InputHandler, KeyHandler};
+use crate::grammar::find::FindMotion;
+use crate::helix::normal_command::NormalCommand;
 use crate::input::typestate::{
     handler_result::HandlerResult,
     input_state::InputState,
     key_mapping::{
         Chord, is_count_compatible_command, map_single_key_command, normalize_key_event,
     },
-    state_types::{CountPending, FindType},
+    state_types::CountPending,
 };
 
 /// Maximum count value to prevent overflow attacks and unreasonable values.
@@ -35,17 +36,13 @@ pub(crate) fn count_from_digit(c: char) -> Option<NonZeroUsize> {
         .and_then(|digit| NonZeroUsize::new(digit as usize))
 }
 
-/// Canonical command string for `{count}G` / `{count}gg`.
-pub(crate) fn goto_line_command(count: NonZeroUsize) -> String {
-    format!("{count}G")
-}
-
 fn counted_command(count: NonZeroUsize, c: char, modifiers: KeyModifiers) -> HandlerResult {
     if !is_count_compatible_command(c, modifiers) {
         return HandlerResult::Cancel;
     }
     map_single_key_command(c, modifiers).map_or(HandlerResult::Cancel, |cmd| {
-        HandlerResult::Execute(Cow::Owned(format!("{count}{cmd}")))
+        NormalCommand::parse(&format!("{count}{cmd}"))
+            .map_or(HandlerResult::Cancel, HandlerResult::Execute)
     })
 }
 
@@ -70,13 +67,13 @@ impl InputHandler<CountPending> for KeyHandler {
                 let count = state.count;
                 match c {
                     'g' => HandlerResult::Transition(InputState::CountedGotoPending { count }),
-                    'G' => HandlerResult::Execute(Cow::Owned(goto_line_command(count))),
+                    'G' => HandlerResult::Execute(NormalCommand::GotoLine { count: Some(count) }),
                     'r' => HandlerResult::Transition(InputState::ReplaceCharPending),
-                    _ => FindType::from_key(c).map_or_else(
+                    _ => FindMotion::from_key(c).map_or_else(
                         || counted_command(count, c, key.modifiers),
-                        |find_type| {
+                        |motion| {
                             HandlerResult::Transition(InputState::CountedFindCharPending {
-                                find_type,
+                                motion,
                                 count,
                             })
                         },

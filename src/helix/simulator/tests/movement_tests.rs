@@ -336,9 +336,25 @@ fn test_count_behavior_metadata() {
         reg.count_behavior(CMD_GOTO_FILE_START),
         CountBehavior::Native
     );
-    assert_eq!(reg.count_behavior(CMD_GOTO_LINE), CountBehavior::Native);
-    assert_eq!(reg.count_behavior("fa"), CountBehavior::Native);
-    assert_eq!(reg.count_behavior("Tz"), CountBehavior::Native);
+    // `G`, `f<c>` and `"<r>d` take their count as typed `NormalCommand` fields
+    for cmd in ["3G", "3gg", "3fa", "2Tz"] {
+        assert!(
+            crate::helix::normal_command::NormalCommand::parse(cmd)
+                .unwrap()
+                .count()
+                .is_some(),
+            "{cmd}"
+        );
+    }
+    for cmd in ["3q", "3\"ad"] {
+        assert_eq!(
+            crate::helix::normal_command::NormalCommand::parse(cmd)
+                .unwrap()
+                .count(),
+            None,
+            "{cmd}"
+        );
+    }
 }
 
 #[test]
@@ -529,7 +545,6 @@ fn test_count_behavior_ignore_set() {
         CMD_FLIP_SELECTIONS,
         CMD_SELECT_MODE,
         CMD_REPEAT,
-        CMD_TOGGLE_MACRO_RECORDING,
         CMD_JOIN_LINES,
         CMD_JOIN_SELECTIONS_SPACE,
     ] {

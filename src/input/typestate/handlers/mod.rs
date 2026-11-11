@@ -20,6 +20,25 @@ use crossterm::event::KeyEvent;
 
 use super::handler_result::HandlerResult;
 use super::state_types::HandlerState;
+use crate::helix::normal_command::{NormalCommand, RegisteredCommand};
+
+/// Run the registered command `key`; a key no command is registered under
+/// cancels (a test checks that every command constant the handlers name is
+/// registered).
+fn execute_registered(key: &'static str) -> HandlerResult {
+    RegisteredCommand::lookup(key).map_or(HandlerResult::Cancel, |command| {
+        HandlerResult::Execute(NormalCommand::Registered {
+            command,
+            count: None,
+        })
+    })
+}
+
+/// Run the command a canonical key string names (a single key's command: a
+/// registered command, an Insert entry or `Escape`).
+fn execute_key(key: &'static str) -> HandlerResult {
+    NormalCommand::parse(key).map_or(HandlerResult::Cancel, HandlerResult::Execute)
+}
 
 /// Trait for handling input in a specific state
 ///

@@ -1,5 +1,6 @@
 //! Tests for `InputStateMachine`
 
+use crate::testing::normal;
 use std::assert_matches;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -25,7 +26,7 @@ fn test_state_machine_goto_sequence() {
     // Press 'g' again - execute "gg"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
     assert!(result.is_execute());
-    assert_eq!(result.command(), Some(CMD_GOTO_FILE_START));
+    assert_eq!(result.command(), Some(&normal(CMD_GOTO_FILE_START)));
     assert!(sm.state().is_base());
 }
 
@@ -41,7 +42,7 @@ fn test_state_machine_find_sequence() {
     // Press 'a' - execute "fa"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
     assert!(result.is_execute());
-    assert_eq!(result.command(), Some("fa"));
+    assert_eq!(result.command(), Some(&normal("fa")));
     assert!(sm.state().is_base());
 }
 
@@ -63,7 +64,7 @@ fn test_state_machine_count_sequence() {
     // Press 'j' - execute "12j"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
     assert!(result.is_execute());
-    assert_eq!(result.command(), Some("12j"));
+    assert_eq!(result.command(), Some(&normal("12j")));
     assert!(sm.state().is_base());
 }
 
@@ -143,7 +144,7 @@ fn test_state_machine_surround_add_sequence() {
     // Press '(' - execute "ms("
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
     assert!(result.is_execute());
-    assert_eq!(result.command(), Some("ms("));
+    assert_eq!(result.command(), Some(&normal("ms(")));
     assert!(sm.state().is_base());
 }
 
@@ -163,7 +164,7 @@ fn test_state_machine_surround_delete_sequence() {
     // Press '{' - execute "md{"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE));
     assert!(result.is_execute());
-    assert_eq!(result.command(), Some("md{"));
+    assert_eq!(result.command(), Some(&normal("md{")));
     assert!(sm.state().is_base());
 }
 
@@ -191,7 +192,7 @@ fn test_state_machine_surround_replace_sequence() {
     // Press '[' - execute "mr(["
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
     assert!(result.is_execute());
-    assert_eq!(result.command(), Some("mr(["));
+    assert_eq!(result.command(), Some(&normal("mr([")));
     assert!(sm.state().is_base());
 }
 
@@ -237,7 +238,7 @@ fn test_state_machine_text_object_around_sequence() {
     // Press 'w' - execute "maw"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE));
     assert!(result.is_execute());
-    assert_eq!(result.command(), Some("maw"));
+    assert_eq!(result.command(), Some(&normal("maw")));
     assert!(sm.state().is_base());
 }
 
@@ -257,7 +258,7 @@ fn test_state_machine_text_object_inside_sequence() {
     // Press '(' - execute "mi("
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
     assert!(result.is_execute());
-    assert_eq!(result.command(), Some("mi("));
+    assert_eq!(result.command(), Some(&normal("mi(")));
     assert!(sm.state().is_base());
 }
 
@@ -375,7 +376,7 @@ fn test_pending_surround_replace_char_various_brackets() {
 fn test_apply_canonical_expansion_multi_token_commits_and_resolves() {
     let mut sm = InputStateMachine::new();
     let resolved = sm.apply_canonical_expansion(&["g", "e"]);
-    assert_eq!(resolved, Some(CMD_GOTO_LAST_LINE.to_string()));
+    assert_eq!(resolved, Some(normal(CMD_GOTO_LAST_LINE)));
     assert!(sm.state().is_base());
 }
 

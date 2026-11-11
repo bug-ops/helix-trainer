@@ -10,8 +10,9 @@
 use std::borrow::Cow;
 
 use super::keymap::CanonicalKeys;
-use super::typestate::{HandlerResult, InputStateMachine, command_to_key_event};
+use super::typestate::{HandlerResult, InputStateMachine, parse_helix_key_string};
 use crate::helix::ModeKind;
+use crate::helix::normal_command::NormalCommand;
 
 /// Where a resolved command came from, which screens use to pick what the key
 /// history shows.
@@ -31,10 +32,10 @@ pub(crate) enum Resolution {
     /// Insert mode: the key is typed text or an Insert-mode key, never
     /// translated and never seen by the state machine.
     Insert(Cow<'static, str>),
-    /// A command to run, with a count prefix still attached.
+    /// A command to run, with its count prefix still attached.
     Execute {
-        /// The canonical command.
-        command: Cow<'static, str>,
+        /// The typed command.
+        command: NormalCommand,
         /// How the command was reached.
         from: ResolvedFrom,
     },
@@ -63,7 +64,7 @@ pub(crate) fn resolve_keys(
     }
 
     if keys.is_single_token() {
-        let Some(key_event) = command_to_key_event(keys.as_str()) else {
+        let Some(key_event) = parse_helix_key_string(keys.as_str()) else {
             tracing::warn!(keys = keys.as_str(), "unparsable key token; dropping");
             return Resolution::Discarded;
         };
@@ -82,7 +83,7 @@ pub(crate) fn resolve_keys(
     let tokens = keys.tokens();
     if let Some(command) = input.apply_canonical_expansion(&tokens) {
         return Resolution::Execute {
-            command: Cow::Owned(command),
+            command,
             from: ResolvedFrom::Base,
         };
     }
@@ -103,7 +104,7 @@ mod tests {
 
     fn execute(command: &'static str, from: ResolvedFrom) -> Resolution {
         Resolution::Execute {
-            command: Cow::Borrowed(command),
+            command: crate::testing::normal(command),
             from,
         }
     }

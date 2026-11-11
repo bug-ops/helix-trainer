@@ -1,14 +1,15 @@
 //! Tests for `CountPending` handler
 
+use crate::grammar::find::FindMotion;
+use crate::testing::normal;
 use std::assert_matches;
-use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::nz;
 use crate::input::typestate::{
-    CountPending, CountedFindCharPending, CountedGotoPending, FindType, HandlerResult,
-    InputHandler, InputState, InputStateMachine, KeyHandler, handlers::count::MAX_COUNT,
+    CountPending, CountedFindCharPending, CountedGotoPending, HandlerResult, InputHandler,
+    InputState, InputStateMachine, KeyHandler, handlers::count::MAX_COUNT,
 };
 
 fn key(c: char) -> KeyEvent {
@@ -36,7 +37,7 @@ fn test_count_pending_more_digits() {
 fn test_count_pending_command() {
     let state = CountPending { count: nz(3) };
     let result = KeyHandler::handle_key(&state, key('j'));
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "3j");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "3j");
 }
 
 #[test]
@@ -98,7 +99,7 @@ fn test_count_then_capital_g_executes_goto_line() {
         &state,
         KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),
     );
-    assert_eq!(result, HandlerResult::Execute(Cow::Owned("2G".to_string())));
+    assert_eq!(result, HandlerResult::Execute(normal("2G")));
 }
 
 #[test]
@@ -116,7 +117,7 @@ fn test_counted_goto_second_g_executes_goto_line() {
     let state = CountedGotoPending { count: nz(12) };
     assert_eq!(
         KeyHandler::handle_key(&state, key('g')),
-        HandlerResult::Execute(Cow::Owned("12G".to_string()))
+        HandlerResult::Execute(normal("12G"))
     );
     assert_eq!(
         KeyHandler::handle_key(&state, key('h')),
@@ -131,17 +132,17 @@ fn test_counted_goto_second_g_executes_goto_line() {
 #[test]
 fn test_count_then_find_keys_carry_count() {
     let state = CountPending { count: nz(3) };
-    for (c, mods, find_type) in [
-        ('f', KeyModifiers::NONE, FindType::FindForward),
-        ('F', KeyModifiers::SHIFT, FindType::FindBackward),
-        ('t', KeyModifiers::NONE, FindType::TillForward),
-        ('T', KeyModifiers::SHIFT, FindType::TillBackward),
+    for (c, mods, motion) in [
+        ('f', KeyModifiers::NONE, FindMotion::FIND_FORWARD),
+        ('F', KeyModifiers::SHIFT, FindMotion::FIND_BACKWARD),
+        ('t', KeyModifiers::NONE, FindMotion::TILL_FORWARD),
+        ('T', KeyModifiers::SHIFT, FindMotion::TILL_BACKWARD),
     ] {
         let result = KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Char(c), mods));
         assert_eq!(
             result,
             HandlerResult::Transition(InputState::CountedFindCharPending {
-                find_type,
+                motion,
                 count: nz(3)
             }),
             "key {c}"
@@ -152,16 +153,16 @@ fn test_count_then_find_keys_carry_count() {
 #[test]
 fn test_counted_find_executes_with_count_and_target() {
     let state = CountedFindCharPending {
-        find_type: FindType::FindForward,
+        motion: FindMotion::FIND_FORWARD,
         count: nz(3),
     };
     assert_eq!(
         KeyHandler::handle_key(&state, key('a')),
-        HandlerResult::Execute(Cow::Owned("3fa".to_string()))
+        HandlerResult::Execute(normal("3fa"))
     );
     assert_eq!(
         KeyHandler::handle_key(&state, key('5')),
-        HandlerResult::Execute(Cow::Owned("3f5".to_string()))
+        HandlerResult::Execute(normal("3f5"))
     );
     assert_eq!(
         KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
@@ -182,27 +183,18 @@ fn test_alt_g_and_alt_f_under_count_never_open_pending_state() {
 #[test]
 fn test_machine_counted_goto_and_find_sequences() {
     let mut sm = InputStateMachine::new();
-    assert_eq!(
-        press(&mut sm, "2G"),
-        HandlerResult::Execute(Cow::Owned("2G".to_string()))
-    );
+    assert_eq!(press(&mut sm, "2G"), HandlerResult::Execute(normal("2G")));
     assert!(sm.state().is_base());
 
-    assert_eq!(
-        press(&mut sm, "2gg"),
-        HandlerResult::Execute(Cow::Owned("2G".to_string()))
-    );
+    assert_eq!(press(&mut sm, "2gg"), HandlerResult::Execute(normal("2G")));
     assert!(sm.state().is_base());
 
-    assert_eq!(
-        press(&mut sm, "3fa"),
-        HandlerResult::Execute(Cow::Owned("3fa".to_string()))
-    );
+    assert_eq!(press(&mut sm, "3fa"), HandlerResult::Execute(normal("3fa")));
     assert!(sm.state().is_base());
 
     assert_eq!(
         press(&mut sm, "12ta"),
-        HandlerResult::Execute(Cow::Owned("12ta".to_string()))
+        HandlerResult::Execute(normal("12ta"))
     );
 }
 
@@ -228,7 +220,8 @@ fn run_keys(text: &str, keys: &str) -> crate::helix::EditorSnapshot {
             };
             sim.execute_command(&cmd).expect("insert key");
         } else if let HandlerResult::Execute(cmd) = sm.process_key(key(c)) {
-            sim.execute_command(&cmd).expect("normal command");
+            sim.execute_command(&cmd.to_string())
+                .expect("normal command");
         }
     }
     sim.to_snapshot()
@@ -260,14 +253,14 @@ fn test_count_then_o_and_big_o_execute_with_the_count_swallowed_by_the_simulator
     let state = CountPending { count: nz(2) };
     assert_eq!(
         KeyHandler::handle_key(&state, key('o')),
-        HandlerResult::Execute("2o".into())
+        HandlerResult::Execute(normal("2o"))
     );
     assert_eq!(
         KeyHandler::handle_key(
             &state,
             KeyEvent::new(KeyCode::Char('O'), KeyModifiers::SHIFT)
         ),
-        HandlerResult::Execute("2O".into())
+        HandlerResult::Execute(normal("2O"))
     );
 }
 

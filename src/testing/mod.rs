@@ -67,6 +67,16 @@ fn pos(row: usize, col: usize) -> Pos {
     Pos::try_from([row, col]).expect("valid position fixture")
 }
 
+/// Parse a canonical Normal-mode command string, panicking on a bad fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a command.
+#[must_use]
+pub fn normal(raw: &str) -> crate::helix::normal_command::NormalCommand {
+    crate::helix::normal_command::NormalCommand::parse(raw).expect("valid command fixture")
+}
+
 /// A quarantined profile with `backup` and no restorable previous copy.
 #[must_use]
 pub fn quarantine(backup: QuarantineOutcome) -> Quarantine {

@@ -10,9 +10,7 @@ use crate::helix::error::{SimulatorError, bound};
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 
 use super::keytrie::KeyTrie;
-use super::metadata::{
-    Binding, Category, CommandMetadata, CountBehavior, ModeTransition, NativeCounted, Repeat,
-};
+use super::metadata::{Binding, Category, CommandMetadata, CountBehavior, ModeTransition, Repeat};
 
 /// Check if a key string represents a modifier key command (Alt-*, Ctrl-*)
 fn is_modifier_key(key: &str) -> bool {
@@ -144,6 +142,11 @@ impl<M: EditorMode> CommandRegistry<M> {
         }
     }
 
+    /// The registry's own copy of `key`, if a command is registered under it.
+    pub fn canonical_key(&self, key: &str) -> Option<&'static str> {
+        self.commands.get_key_value(key).map(|(key, _)| *key)
+    }
+
     /// Check if a command exists
     pub fn contains(&self, key: &str) -> bool {
         self.commands.contains_key(key)
@@ -173,13 +176,12 @@ impl<M: EditorMode> CommandRegistry<M> {
             .is_some_and(|c| c.metadata.repeat() == Repeat::Repeatable)
     }
 
-    /// How a count prefix applies to `base` (a command string without count).
+    /// How a count prefix applies to the registered command `key`.
     ///
-    /// Registered commands use their metadata. Commands dispatched outside
-    /// the registry because they carry an argument (`G`, `f<c>`, `t<c>`,
-    /// `F<c>`, `T<c>`) are `Native`; register-scoped delete/change
-    /// (`"<r>d`, `"<r>c`) ignore the count like their plain forms; everything
-    /// else repeats.
+    /// The command's metadata decides; a key that names no command repeats.
+    /// Commands that carry their own argument or count (`G`, `f<c>`, `"<r>d`,
+    /// `q`) are typed [`NormalCommand`](crate::helix::normal_command::NormalCommand)
+    /// variants that take the count themselves, not registry entries.
     ///
     /// # Examples
     ///
@@ -189,25 +191,12 @@ impl<M: EditorMode> CommandRegistry<M> {
     /// let registry = normal_registry();
     /// assert_eq!(registry.count_behavior("x"), CountBehavior::Repeat);
     /// assert_eq!(registry.count_behavior("J"), CountBehavior::Ignore);
-    /// assert_eq!(registry.count_behavior("gg"), CountBehavior::Native);
-    /// assert_eq!(registry.count_behavior("fa"), CountBehavior::Native);
-    /// assert_eq!(registry.count_behavior("G"), CountBehavior::Native);
     /// assert_eq!(registry.count_behavior("d"), CountBehavior::Ignore);
-    /// assert_eq!(registry.count_behavior("\"ad"), CountBehavior::Ignore);
     /// ```
-    pub fn count_behavior(&self, base: &str) -> CountBehavior {
-        if let Some(cmd) = self.commands.get(base) {
-            return cmd.metadata.count_behavior();
-        }
-        if NativeCounted::parse(base).is_some() {
-            return CountBehavior::Native;
-        }
-        let mut chars = base.chars();
-        match (chars.next(), chars.next(), chars.next(), chars.next()) {
-            (Some('"'), Some(_), Some('d' | 'c'), None) => CountBehavior::Ignore,
-            (Some('q'), None, ..) => CountBehavior::Ignore,
-            _ => CountBehavior::Repeat,
-        }
+    pub fn count_behavior(&self, key: &str) -> CountBehavior {
+        self.commands
+            .get(key)
+            .map_or(CountBehavior::Repeat, |cmd| cmd.metadata.count_behavior())
     }
 
     /// Get the `KeyTrie` for multi-key resolution

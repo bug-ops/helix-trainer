@@ -3,26 +3,22 @@
 //! This is the default state handler that processes single-key commands and
 //! transitions to pending states for multi-key sequences.
 
-use std::borrow::Cow;
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::{CMD_ESCAPE, CMD_REPLAY_MACRO, CMD_TOGGLE_MACRO_RECORDING};
+use crate::helix::commands::CMD_ESCAPE;
+use crate::helix::normal_command::{MacroOp, NormalCommand, PromptKind};
 
 use super::count::count_from_digit;
-use super::{InputHandler, KeyHandler};
+use super::{InputHandler, KeyHandler, execute_key};
+use crate::grammar::find::FindMotion;
 use crate::input::typestate::{
     handler_result::HandlerResult,
-    input_state::{InputState, RegexPromptKind},
+    input_state::InputState,
     key_mapping::{Chord, ctrl_command, map_single_key_command, normalize_key_event},
-    state_types::{BaseState, FindType},
+    state_types::BaseState,
 };
 
-fn execute(cmd: &'static str) -> HandlerResult {
-    HandlerResult::Execute(Cow::Borrowed(cmd))
-}
-
-fn regex_prompt(kind: RegexPromptKind) -> HandlerResult {
+fn regex_prompt(kind: PromptKind) -> HandlerResult {
     HandlerResult::Transition(InputState::RegexPromptPending {
         kind,
         buffer: String::new(),
@@ -31,7 +27,7 @@ fn regex_prompt(kind: RegexPromptKind) -> HandlerResult {
 
 fn ctrl_key(code: KeyCode) -> HandlerResult {
     match code {
-        KeyCode::Char(c) => ctrl_command(c).map_or(HandlerResult::Stay, execute),
+        KeyCode::Char(c) => ctrl_command(c).map_or(HandlerResult::Stay, execute_key),
         _ => HandlerResult::Stay,
     }
 }
@@ -40,11 +36,11 @@ fn ctrl_key(code: KeyCode) -> HandlerResult {
 /// command or are ignored (#487). `Alt-K` is the one chord that opens a prompt.
 fn alt_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
     match code {
-        KeyCode::Char('K') => regex_prompt(RegexPromptKind::RemoveSelections),
+        KeyCode::Char('K') => regex_prompt(PromptKind::RemoveSelections),
         KeyCode::Char(c) => {
-            map_single_key_command(c, modifiers).map_or(HandlerResult::Stay, execute)
+            map_single_key_command(c, modifiers).map_or(HandlerResult::Stay, execute_key)
         }
-        KeyCode::Esc => execute(CMD_ESCAPE),
+        KeyCode::Esc => execute_key(CMD_ESCAPE),
         _ => HandlerResult::Stay,
     }
 }
@@ -59,8 +55,8 @@ fn plain_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
         KeyCode::Char(']') => HandlerResult::Transition(InputState::UnmatchedNextPending),
 
         // Find/till commands - transition to find char pending
-        KeyCode::Char(c) if let Some(find_type) = FindType::from_key(c) => {
-            HandlerResult::Transition(InputState::FindCharPending { find_type })
+        KeyCode::Char(c) if let Some(motion) = FindMotion::from_key(c) => {
+            HandlerResult::Transition(InputState::FindCharPending { motion })
         }
 
         KeyCode::Char('r') => HandlerResult::Transition(InputState::ReplaceCharPending),
@@ -71,19 +67,21 @@ fn plain_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
         }),
 
         // Regex prompts: `s`/`S` select/split, `/` search
-        KeyCode::Char('s') => regex_prompt(RegexPromptKind::SelectRegex),
-        KeyCode::Char('S') => regex_prompt(RegexPromptKind::SplitSelection),
-        KeyCode::Char('/') => regex_prompt(RegexPromptKind::Search),
-        KeyCode::Char('?') => regex_prompt(RegexPromptKind::SearchBackward),
-        KeyCode::Char('K') => regex_prompt(RegexPromptKind::KeepSelections),
+        KeyCode::Char('s') => regex_prompt(PromptKind::SelectRegex),
+        KeyCode::Char('S') => regex_prompt(PromptKind::SplitSelection),
+        KeyCode::Char('/') => regex_prompt(PromptKind::Search),
+        KeyCode::Char('?') => regex_prompt(PromptKind::SearchBackward),
+        KeyCode::Char('K') => regex_prompt(PromptKind::KeepSelections),
 
         // Macro recording ('q') and replay ('Q'). This handler only runs
         // in Normal mode (Insert mode input bypasses the state machine
         // entirely - see `handle_insert_mode_input`), so these always
         // mean "toggle recording" / "replay macro" here; dispatched as
         // plain commands so `execute_command_any_mode` does the work.
-        KeyCode::Char('q') => execute(CMD_TOGGLE_MACRO_RECORDING),
-        KeyCode::Char('Q') => execute(CMD_REPLAY_MACRO),
+        KeyCode::Char('q') => {
+            HandlerResult::Execute(NormalCommand::Macro(MacroOp::ToggleRecording))
+        }
+        KeyCode::Char('Q') => HandlerResult::Execute(NormalCommand::Macro(MacroOp::Replay)),
 
         // Count prefix - digits 1-9 start a count
         KeyCode::Char(c) if let Some(count) = count_from_digit(c) => {
@@ -92,10 +90,10 @@ fn plain_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
 
         // Single-key commands - execute immediately; unknown keys stay in base
         KeyCode::Char(c) => {
-            map_single_key_command(c, modifiers).map_or(HandlerResult::Stay, execute)
+            map_single_key_command(c, modifiers).map_or(HandlerResult::Stay, execute_key)
         }
 
-        KeyCode::Esc => execute(CMD_ESCAPE),
+        KeyCode::Esc => execute_key(CMD_ESCAPE),
 
         _ => HandlerResult::Stay,
     }

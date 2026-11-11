@@ -42,7 +42,7 @@ The 2026-11-11 batch for #553, #555, #557, #558, #564, #592-#599 (PR for #592) f
 | [[fsrs-review-rating-and-session/spec\|One Review Session Owner and a Deterministic Rating Mapping]] | specify (lightweight bug-fix spec) | proposed — #550, #551 |
 | [[profile-screen-xp-progress-label/spec\|One Definition of Level XP Progress on Every Screen]] | specify (lightweight bug-fix spec) | proposed — #572; Profile label showed XP remaining instead of level span; shared helper (P2); #574 Profile quest total; span-0 label decided |
 | [[scenario-cursor-spec/spec\|Scenario Cursor Spec Is a Closed Enum]] | specify (lightweight spec) | proposed — #553; 66 legacy TOML entries migrated |
-| [[module-layering-and-typed-commands/spec\|Typed Normal Commands, One Key Resolution, Enforced Module Layering]] | specify (lightweight spec) | proposed — #555, #557, #558, #564, #598 |
+| [[module-layering-and-typed-commands/spec\|Typed Normal Commands, One Key Resolution, Enforced Module Layering]] | specify (lightweight spec) | proposed — #555 (the `CanonicalKeys` parse-once step is cut, P4 follow-up), #557, #558, #564, #598 |
 | [[sound-setting-persistence/spec\|Sound Toggle Persists Across Restarts]] | specify (lightweight bug-fix spec) | proposed — #459 |
 | [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444; extended 2026-11-11 with #467, #484, #515, #518, #460, #457, #456, #531, #454, #523, #463 (section 7) |
 

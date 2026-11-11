@@ -14,7 +14,7 @@
 //! character argument, building count prefix, etc.) at the type level.
 //!
 //! See [`typestate`] for the state machine implementation. The Task and Arcade
-//! screens share one interpretation of a key through [`resolve`].
+//! screens share one interpretation of a key through `resolve`.
 
 pub mod keymap;
 pub(crate) mod resolve;

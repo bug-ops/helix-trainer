@@ -3,9 +3,8 @@
 //! Defines the result of handling a key event, which can be staying in the current state,
 //! transitioning to a new state, executing a command, or cancelling.
 
-use std::borrow::Cow;
-
 use super::input_state::InputState;
+use crate::helix::normal_command::NormalCommand;
 
 /// Result of handling a key event
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,9 +15,9 @@ pub enum HandlerResult {
     Transition(InputState),
     /// Execute a command and return to base state
     ///
-    /// Uses `Cow<'static, str>` to avoid allocations for static command strings
-    /// while still supporting dynamic commands (with count prefix or character arguments).
-    Execute(Cow<'static, str>),
+    /// The command is the typed [`NormalCommand`] the state machine resolved the
+    /// keys to; its `Display` is the canonical string form.
+    Execute(NormalCommand),
     /// Cancel current state and return to base
     Cancel,
 }
@@ -45,7 +44,7 @@ impl HandlerResult {
     }
 
     /// Get the command to execute, if any
-    pub fn command(&self) -> Option<&str> {
+    pub fn command(&self) -> Option<&NormalCommand> {
         match self {
             Self::Execute(cmd) => Some(cmd),
             _ => None,

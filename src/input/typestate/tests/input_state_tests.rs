@@ -1,7 +1,8 @@
 //! Tests for `InputState` enum
 
 use super::nz;
-use crate::input::typestate::{FindType, InputState};
+use crate::grammar::find::FindMotion;
+use crate::input::typestate::InputState;
 
 #[test]
 fn test_input_state_default_is_base() {
@@ -17,7 +18,7 @@ fn test_input_state_predicates() {
     assert!(InputState::MatchPending.is_match_pending());
     assert!(
         InputState::FindCharPending {
-            find_type: FindType::FindForward
+            motion: FindMotion::FIND_FORWARD
         }
         .is_find_char_pending()
     );
@@ -31,7 +32,7 @@ fn test_is_waiting_for_char() {
     assert!(!InputState::GotoPending.is_waiting_for_char());
     assert!(
         InputState::FindCharPending {
-            find_type: FindType::FindForward
+            motion: FindMotion::FIND_FORWARD
         }
         .is_waiting_for_char()
     );
@@ -86,29 +87,29 @@ fn test_surround_waiting_for_char() {
 }
 
 #[test]
-fn test_find_type_all_variants() {
-    // Test all FindType variants
+fn test_motion_all_variants() {
+    // Test all FindMotion variants
     assert!(
         InputState::FindCharPending {
-            find_type: FindType::FindForward
+            motion: FindMotion::FIND_FORWARD
         }
         .is_find_char_pending()
     );
     assert!(
         InputState::FindCharPending {
-            find_type: FindType::FindBackward
+            motion: FindMotion::FIND_BACKWARD
         }
         .is_find_char_pending()
     );
     assert!(
         InputState::FindCharPending {
-            find_type: FindType::TillForward
+            motion: FindMotion::TILL_FORWARD
         }
         .is_find_char_pending()
     );
     assert!(
         InputState::FindCharPending {
-            find_type: FindType::TillBackward
+            motion: FindMotion::TILL_BACKWARD
         }
         .is_find_char_pending()
     );
@@ -146,7 +147,7 @@ fn test_name_returns_correct_strings() {
     );
     assert_eq!(
         InputState::FindCharPending {
-            find_type: FindType::FindForward
+            motion: FindMotion::FIND_FORWARD
         }
         .name(),
         "FIND_CHAR_PENDING"

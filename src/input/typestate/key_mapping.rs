@@ -581,32 +581,3 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
         _ => None,
     }
 }
-
-/// Convert a command string to a `KeyEvent` for the input state machine
-///
-/// Bridges command strings from the input layer to the `KeyEvent`-based
-/// state machine via `parse_helix_key_string()`, which supports modifiers
-/// like Alt-C, Ctrl-w, etc. Returns `None` for a token that is not a key, so
-/// callers drop it instead of feeding the machine a different key.
-///
-/// # Examples
-///
-/// ```
-/// use crossterm::event::{KeyCode, KeyModifiers};
-/// use helix_trainer::input::typestate::command_to_key_event;
-///
-/// let key = command_to_key_event("h").unwrap();
-/// assert_eq!(key.code, KeyCode::Char('h'));
-///
-/// let key = command_to_key_event("Escape").unwrap();
-/// assert_eq!(key.code, KeyCode::Esc);
-///
-/// let key = command_to_key_event("Alt-C").unwrap();
-/// assert!(key.modifiers.contains(KeyModifiers::ALT));
-/// assert!(key.modifiers.contains(KeyModifiers::SHIFT));
-///
-/// assert!(command_to_key_event("not-a-key").is_none());
-/// ```
-pub fn command_to_key_event(command: &str) -> Option<KeyEvent> {
-    parse_helix_key_string(command)
-}

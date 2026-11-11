@@ -12,7 +12,7 @@
 //! shapes for real reasons: `.`-repeat stores `KeyEvent`s (needed to
 //! faithfully replay count prefixes and mode-specific insert sequences),
 //! while macros store resolved command *strings*, since the `KeyEvent`
-//! conversion (`cmd_to_key_events`) is lossy for parameterised commands like
+//! conversion (`NormalCommand::keys`) is lossy for parameterised commands like
 //! `:goto 3` or `s <pattern>`. Unifying them is deferred; see the `TODO`
 //! below.
 //!

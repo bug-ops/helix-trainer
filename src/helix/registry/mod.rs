@@ -42,8 +42,7 @@ use crate::helix::simulator::NormalMode;
 pub use command_registry::{Command, CommandHandler, CommandRegistry};
 pub use keytrie::{KeyMatch, KeyTrie, MAX_COUNT_PREFIX, parse_counted_command, split_count_prefix};
 pub use metadata::{
-    Binding, Category, CommandMetadata, CountBehavior, HelixName, ModeTransition, NativeCounted,
-    Repeat,
+    Binding, Category, CommandMetadata, CountBehavior, HelixName, ModeTransition, Repeat,
 };
 
 /// Global normal mode command registry

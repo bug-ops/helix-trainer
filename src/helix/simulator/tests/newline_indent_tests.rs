@@ -2,14 +2,15 @@
 //! #516.
 //!
 //! Every expected buffer is a golden recorded from `hx` 25.07.1 started with
-//! an empty configuration (`hx -c <empty file>`) on the same text and keys.
+//! an empty configuration (`hx -c <file>`, which only turns `auto-format` off
+//! because rustfmt on `:w` would rewrite valid Rust) on the same text and keys.
 //! Cases where the rule differs from `hx` are not asserted here; they are
 //! listed as divergences in the helix-core readiness spec (3.8.4).
 
 use crate::helix::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
-fn run_in(language: &str, text: &str, keys: &[&str]) -> String {
+pub(super) fn run_in(language: &str, text: &str, keys: &[&str]) -> String {
     let mut sim = AnyModeSimulator::new(text.to_string()).with_language(language);
     for key in keys {
         sim.execute_command(key).unwrap();

@@ -173,6 +173,10 @@ async fn main() -> Result<()> {
     // Flush to ensure immediate display
     io::Write::flush(terminal.backend_mut())?;
 
+    if let Err(e) = ui::render::spawn_highlight_prewarm() {
+        tracing::debug!("syntect pre-warm thread not started: {e}");
+    }
+
     // Run the async event loop
     let result = run_async_event_loop(&mut terminal, &mut app_state, &mut data_rx, &data_tx).await;
 

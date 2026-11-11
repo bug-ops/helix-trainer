@@ -8,7 +8,6 @@ use helix_core::movement::skip_while;
 use helix_core::surround::find_nth_pairs_pos;
 use helix_core::textobject::{TextObject, textobject_paragraph, textobject_word};
 use helix_core::{Range, Selection, Tendril, Transaction};
-use helix_stdx::rope::RopeSliceExt;
 
 /// Changes that join the lines of every range, as upstream Helix's
 /// `join_selections_impl`: each line break plus the next line's leading blanks
@@ -21,12 +20,7 @@ fn join_changes<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<(usize, usize, Op
     let slice = sim.doc.slice(..);
     let last_line = sim.doc.len_lines() - 1;
     let blanks = |at: usize| skip_while(slice, at, |ch| matches!(ch, ' ' | '\t')).unwrap_or(at);
-    let token_at = |at: usize| {
-        sim.language
-            .comment_tokens
-            .iter()
-            .find(|token| slice.slice(at..).starts_with(token))
-    };
+    let token_at = |at: usize| sim.language.comment_token_at(&slice.slice(at..).chars());
     let mut changes = Vec::new();
 
     for range in sim.selection.ranges() {

@@ -32,6 +32,8 @@ mod task;
 #[cfg(test)]
 mod tests;
 
+pub use highlight::spawn_prewarm as spawn_highlight_prewarm;
+
 use crate::ui::state::AppState;
 use ratatui::Frame;
 

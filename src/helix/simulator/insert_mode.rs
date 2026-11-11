@@ -7,9 +7,10 @@ use crate::helix::commands::{
     CMD_INSERT_DELETE_TO_LINE_END, CMD_INSERT_DELETE_TO_LINE_START,
     CMD_INSERT_DELETE_WORD_BACKWARD, CMD_INSERT_DELETE_WORD_FORWARD, CMD_INSERT_TAB,
 };
+use crate::helix::newline_indent::{NewLineStart, NewlineIndent, leading_whitespace};
 use crate::security::UserError;
 use helix_core::{
-    Range, Rope, Selection, Transaction, graphemes::next_grapheme_boundary,
+    Range, Selection, Transaction, graphemes::next_grapheme_boundary,
     line_ending::line_end_char_index, movement,
 };
 use helix_stdx::rope::RopeSliceExt;
@@ -79,47 +80,30 @@ impl InsertCommand {
     }
 }
 
-/// The run of spaces and tabs at the start of `line`.
-fn leading_whitespace(doc: &Rope, line: usize) -> String {
-    doc.line(line)
-        .chars()
-        .take_while(|ch| matches!(ch, ' ' | '\t'))
-        .collect()
-}
-
 impl<M: super::EditorMode> HelixSimulator<M> {
-    /// Indent for a new line that follows `line`, considering its text up to
-    /// char index `text_end`: the line's indent, plus one unit when the
-    /// language says that text opens a block
-    fn indent_after(&self, line: usize, text_end: usize) -> String {
-        let line_start = self.doc.line_to_char(line);
-        let mut indent = leading_whitespace(&self.doc, line);
-        if self
-            .language
-            .opens_block(&self.doc.slice(line_start..text_end).to_string())
-        {
-            indent.push_str(&self.indent_unit.to_string());
-        }
-        indent
+    /// Whether the cursor at `head` sits between the two halves of one of
+    /// the language's auto-pairs on its own line
+    fn between_auto_pair(&self, head: usize, line_start: usize) -> bool {
+        head > line_start
+            && head < self.doc.len_chars()
+            && self
+                .language
+                .auto_pairs
+                .contains(&(self.doc.char(head - 1), self.doc.char(head)))
     }
 
-    /// Indent for the line `o` opens below `line`
-    fn indent_below(&self, line: usize) -> String {
-        self.indent_after(line, line_end_char_index(&self.doc.slice(..), line))
+    fn newline_rule(&self) -> NewlineIndent<'_> {
+        NewlineIndent {
+            doc: &self.doc,
+            language: self.language,
+            unit: self.indent_unit,
+        }
     }
 
-    /// Indent for the line `O` opens above `line`
-    ///
-    /// Languages with block openers use what `o` would give below the
-    /// previous line (as `hx` indents it inside the surrounding block); the
-    /// others, and the first line, copy the line's own indent.
-    fn indent_above(&self, line: usize) -> String {
-        match line.checked_sub(1) {
-            Some(previous) if !self.language.block_openers.is_empty() => {
-                self.indent_below(previous)
-            }
-            _ => leading_whitespace(&self.doc, line),
-        }
+    /// Start of the line that follows `line`, considering its text up to char
+    /// index `text_end`
+    fn start_after(&self, line: usize, text_end: usize) -> NewLineStart {
+        self.newline_rule().below(line, text_end)
     }
 }
 
@@ -208,17 +192,18 @@ impl HelixSimulator<NormalMode> {
         };
         let current_line = self.doc.char_to_line(last_char.min(self.doc.len_chars()));
         let line_end = line_end_char_index(&self.doc.slice(..), current_line);
-        let indent = self.indent_below(current_line);
+        let start = self.start_after(current_line, line_end);
+        let text = start.text();
 
         let transaction = Transaction::change(
             &self.doc,
-            [(line_end, line_end, Some(format!("\n{indent}").into()))].into_iter(),
+            [(line_end, line_end, Some(format!("\n{text}").into()))].into_iter(),
         );
         self.apply_transaction(&transaction);
 
-        let cursor = line_end + 1 + indent.chars().count();
+        let cursor = line_end + 1 + text.chars().count();
         self.selection = Selection::point(cursor);
-        self.auto_indent_end = Some(cursor);
+        self.auto_indent_end = start.comment_token.is_none().then_some(cursor);
         Ok(())
     }
 
@@ -234,17 +219,18 @@ impl HelixSimulator<NormalMode> {
         let head = self.selection.primary().from();
         let current_line = self.doc.char_to_line(head.min(self.doc.len_chars()));
         let line_start = self.doc.line_to_char(current_line);
-        let indent = self.indent_above(current_line);
+        let start = self.newline_rule().above(current_line);
+        let text = start.text();
 
         let transaction = Transaction::change(
             &self.doc,
-            [(line_start, line_start, Some(format!("{indent}\n").into()))].into_iter(),
+            [(line_start, line_start, Some(format!("{text}\n").into()))].into_iter(),
         );
         self.apply_transaction(&transaction);
 
-        let cursor = line_start + indent.chars().count();
+        let cursor = line_start + text.chars().count();
         self.selection = Selection::point(cursor);
-        self.auto_indent_end = Some(cursor);
+        self.auto_indent_end = start.comment_token.is_none().then_some(cursor);
         Ok(())
     }
 
@@ -382,25 +368,41 @@ impl HelixSimulator<InsertMode> {
     ///
     /// When the line has text before the cursor, trailing whitespace before
     /// the cursor is dropped and the new line gets the indentation of the
-    /// language rule (the line's indent, plus one unit after a block opener).
-    /// When only whitespace precedes the cursor, the line break goes at the
-    /// line start so the old line, indentation included, moves down intact.
+    /// language rule (see `newline_indent`), continuing a comment when the
+    /// line is one. Between an auto-pair (`{}`) the closer moves to its own
+    /// line and the cursor lands on an indented line between them. When only
+    /// whitespace precedes the cursor, the line break goes at the line start
+    /// so the old line, indentation included, moves down intact.
     fn insert_newline(&mut self) {
         let head = self.selection.primary().head.min(self.doc.len_chars());
         let line = self.doc.char_to_line(head);
         let line_start = self.doc.line_to_char(line);
         let before = self.doc.slice(line_start..head);
 
-        let (from, to, text, cursor, strips_indent) =
+        let start = self.start_after(line, head);
+        let splits_pair = start.comment_token.is_none() && self.between_auto_pair(head, line_start);
+        let (from, to, text, cursor, strips_indent) = if splits_pair {
+            let base = leading_whitespace(&self.doc, line);
+            let inner = format!("{base}{}", self.indent_unit);
+            let cursor = head + 1 + inner.chars().count();
+            (head, head, format!("\n{inner}\n{base}"), cursor, false)
+        } else {
             before.last_non_whitespace_char().map_or_else(
                 || (line_start, line_start, "\n".to_string(), head + 1, false),
                 |idx| {
-                    let indent = self.indent_after(line, head);
+                    let text = start.text();
                     let from = line_start + idx + 1;
-                    let cursor = from + 1 + indent.chars().count();
-                    (from, head, format!("\n{indent}"), cursor, true)
+                    let cursor = from + 1 + text.chars().count();
+                    (
+                        from,
+                        head,
+                        format!("\n{text}"),
+                        cursor,
+                        start.comment_token.is_none(),
+                    )
                 },
-            );
+            )
+        };
 
         let transaction =
             Transaction::change(&self.doc, [(from, to, Some(text.into()))].into_iter());

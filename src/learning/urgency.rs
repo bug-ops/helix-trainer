@@ -158,4 +158,24 @@ mod tests {
 
         assert_eq!(first, second);
     }
+
+    #[test]
+    fn zero_scheduled_days_are_clamped_to_one_when_overdue() {
+        let data: PerformanceData = serde_json::from_str(
+            r#"{"x": {
+                "stability": 0.0, "difficulty": 5.0, "state": "New", "reps": 0,
+                "lapses": 0, "attempts": 4, "successes": 1, "total_time": 4000,
+                "last_review": "2030-01-01T00:00:00Z", "due": "2030-01-01T00:00:00Z",
+                "scheduled_days": 0
+            }}"#,
+        )
+        .unwrap();
+        let perf = data.get("x").unwrap();
+        assert_eq!(perf.scheduled_days(), 0);
+
+        let now = perf.due() + chrono::Duration::days(3);
+        let (ratio, _, _) = practiced(command_urgency(Some(perf), now));
+
+        assert_eq!(ratio, 3.0);
+    }
 }

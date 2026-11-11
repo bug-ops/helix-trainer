@@ -410,6 +410,37 @@ fn test_apply_canonical_expansion_discards_on_cancel() {
     );
 }
 
+/// Feeds `keys` (Helix key strings) and returns the final command, if any.
+fn run_keys(keys: &[&str]) -> Option<String> {
+    let mut sm = InputStateMachine::new();
+    keys.iter().fold(None, |_, key| {
+        match sm.process_key(crate::input::typestate::parse_helix_key_string(key).unwrap()) {
+            crate::input::typestate::HandlerResult::Execute(cmd) => Some(cmd.to_string()),
+            _ => None,
+        }
+    })
+}
+
+#[test]
+fn test_keep_and_remove_prompts_assemble_pattern_commands() {
+    assert_eq!(run_keys(&["K", "a", "Enter"]).as_deref(), Some("K a"));
+    assert_eq!(
+        run_keys(&["Alt-K", "a", "?", "Enter"]).as_deref(),
+        Some("Alt-K a?")
+    );
+    assert_eq!(
+        run_keys(&["?", "s", "u", "m", "Enter"]).as_deref(),
+        Some("? sum")
+    );
+}
+
+#[test]
+fn test_prompts_cancel_on_escape_without_executing() {
+    for opener in ["K", "Alt-K", "?"] {
+        assert_eq!(run_keys(&[opener, "a", "Escape"]), None, "{opener}");
+    }
+}
+
 #[test]
 fn test_apply_canonical_expansion_discards_on_unparsable_token() {
     let mut sm = InputStateMachine::new();

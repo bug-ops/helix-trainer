@@ -7,7 +7,8 @@ use std::num::NonZeroUsize;
 
 use super::state_types::FindType;
 use crate::helix::commands::{
-    CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD, CMD_SELECT_REGEX, CMD_SPLIT_SELECTION,
+    CMD_KEEP_MATCHING, CMD_REMOVE_MATCHING, CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD,
+    CMD_SELECT_REGEX, CMD_SPLIT_SELECTION,
 };
 use crate::input::keymap::KeyContext;
 
@@ -22,6 +23,10 @@ pub enum RegexPromptKind {
     Search,
     /// `?` - select the previous regex match before the cursor
     SearchBackward,
+    /// `K` - keep the selections whose text matches a regex
+    KeepSelections,
+    /// `Alt-K` - remove the selections whose text matches a regex
+    RemoveSelections,
 }
 
 impl RegexPromptKind {
@@ -33,7 +38,7 @@ impl RegexPromptKind {
     /// use helix_trainer::input::typestate::RegexPromptKind;
     ///
     /// assert_eq!(RegexPromptKind::SearchBackward.command_id(), "?");
-    /// assert_eq!(RegexPromptKind::SplitSelection.command_id(), "S");
+    /// assert_eq!(RegexPromptKind::RemoveSelections.command_id(), "Alt-K");
     /// ```
     pub fn command_id(self) -> &'static str {
         match self {
@@ -41,16 +46,21 @@ impl RegexPromptKind {
             Self::SplitSelection => CMD_SPLIT_SELECTION,
             Self::Search => CMD_SEARCH_FORWARD,
             Self::SearchBackward => CMD_SEARCH_BACKWARD,
+            Self::KeepSelections => CMD_KEEP_MATCHING,
+            Self::RemoveSelections => CMD_REMOVE_MATCHING,
         }
     }
 
-    /// The single prompt character shown in the footer.
+    /// The single prompt character shown in the footer; `Alt-K` shows `!`
+    /// (negated keep) to stay distinguishable from `K`.
     pub fn prefix(self) -> char {
         match self {
             Self::SelectRegex => 's',
             Self::SplitSelection => 'S',
             Self::Search => '/',
             Self::SearchBackward => '?',
+            Self::KeepSelections => 'K',
+            Self::RemoveSelections => '!',
         }
     }
 

@@ -240,7 +240,7 @@ fn test_base_state_alt_s_executes_split_selection_on_newline() {
     );
 }
 
-/// #487: no Alt chord may open a plain-key pending state.
+/// #487: no Alt chord except `Alt-K` (the remove prompt) may open a pending state.
 #[test]
 fn test_base_state_alt_chords_never_open_pending_state() {
     for c in "gzm[]ftrFTSQq\":sS123456789/".chars() {
@@ -289,6 +289,24 @@ fn test_base_state_question_mark_opens_backward_search_prompt() {
     assert_eq!(
         base_key('/', KeyModifiers::SHIFT),
         prompt_transition(SearchBackward)
+    );
+}
+
+/// #510: `K` and `Alt-K` open the keep/remove prompts; `&` runs immediately.
+#[test]
+fn test_base_state_keep_remove_prompts_and_align() {
+    use crate::input::typestate::RegexPromptKind::{KeepSelections, RemoveSelections};
+    assert_eq!(
+        base_key('K', KeyModifiers::SHIFT),
+        prompt_transition(KeepSelections)
+    );
+    assert_eq!(
+        base_key('K', KeyModifiers::ALT | KeyModifiers::SHIFT),
+        prompt_transition(RemoveSelections)
+    );
+    assert_eq!(
+        base_key('&', KeyModifiers::SHIFT),
+        HandlerResult::Execute(std::borrow::Cow::Borrowed(CMD_ALIGN_SELECTIONS))
     );
 }
 

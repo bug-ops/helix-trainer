@@ -21,9 +21,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{
-    handler_result::HandlerResult,
-    input_state::{InputState, RegexPromptKind},
-    state_types::RegexPromptPending,
+    handler_result::HandlerResult, input_state::InputState, state_types::RegexPromptPending,
 };
 use crate::security::limits::MAX_COMMAND_LINE_LEN;
 
@@ -89,6 +87,7 @@ impl InputHandler<RegexPromptPending> for KeyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::typestate::input_state::RegexPromptKind;
 
     fn state(kind: RegexPromptKind, buffer: &str) -> RegexPromptPending {
         RegexPromptPending {
@@ -179,19 +178,34 @@ mod tests {
     }
 
     #[test]
-    fn enter_assembles_backward_search_command() {
-        assert_eq!(
-            KeyHandler::handle_key(&state(RegexPromptKind::SearchBackward, "sum"), enter()),
-            HandlerResult::Execute(Cow::Borrowed("? sum"))
-        );
+    fn enter_assembles_the_command_id_for_every_new_kind() {
+        for (kind, expected) in [
+            (RegexPromptKind::SearchBackward, "? sum"),
+            (RegexPromptKind::KeepSelections, "K sum"),
+            (RegexPromptKind::RemoveSelections, "Alt-K sum"),
+        ] {
+            assert_eq!(
+                KeyHandler::handle_key(&state(kind, "sum"), enter()),
+                HandlerResult::Execute(Cow::Borrowed(expected))
+            );
+        }
     }
 
     #[test]
-    fn backward_search_forwards_invalid_regex_so_the_simulator_reports_it() {
+    fn backward_search_forwards_invalid_regex_but_keep_remove_cancel() {
         assert_eq!(
             KeyHandler::handle_key(&state(RegexPromptKind::SearchBackward, "a("), enter()),
             HandlerResult::Execute(Cow::Borrowed("? a("))
         );
+        for kind in [
+            RegexPromptKind::KeepSelections,
+            RegexPromptKind::RemoveSelections,
+        ] {
+            assert_eq!(
+                KeyHandler::handle_key(&state(kind, "a("), enter()),
+                HandlerResult::Cancel
+            );
+        }
     }
 
     #[test]
@@ -201,6 +215,8 @@ mod tests {
             RegexPromptKind::SplitSelection,
             RegexPromptKind::Search,
             RegexPromptKind::SearchBackward,
+            RegexPromptKind::KeepSelections,
+            RegexPromptKind::RemoveSelections,
         ] {
             assert_eq!(
                 KeyHandler::handle_key(&state(kind, "a"), char_key('?')),

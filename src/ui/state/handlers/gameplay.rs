@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use super::SessionInput;
 use crate::game::format_key_for_display;
 use crate::grammar::commands::CMD_ESCAPE;
 use crate::input::resolve::{Resolution, resolve_keys};
@@ -146,7 +147,7 @@ fn execute_on_task(
     match resolve_keys(task_data.input_state_mut(), mode, keys) {
         Resolution::Insert(cmd) => {
             let is_escape = cmd == CMD_ESCAPE;
-            apply_to_session(task_data, cmd.into_owned())?;
+            apply_to_session(task_data, SessionInput::Text(&cmd))?;
 
             // Store last command for display (only for Escape), once it was accepted
             if is_escape {
@@ -156,7 +157,7 @@ fn execute_on_task(
         }
         Resolution::Execute { command, .. } => {
             // The simulator applies any count prefix; records as ONE action
-            apply_typed_to_session(task_data, &command)?;
+            apply_to_session(task_data, SessionInput::Command(&command))?;
 
             // Store last command for display only once the simulator accepted it
             let command = command.to_string();
@@ -178,22 +179,17 @@ fn ensure_scorable(
         .map_err(UserError::from)
 }
 
-/// Apply the parsed `command` to the Task screen's active session.
-fn apply_typed_to_session(
-    task_data: &mut crate::ui::state::TaskData,
-    command: &crate::helix::normal_command::NormalCommand,
-) -> Result<(), UserError> {
-    apply_with(task_data, |session| session.apply_command(command))
-}
-
-/// Apply `cmd` to the Task screen's active session.
+/// Apply `input` to the Task screen's active session.
 ///
-/// The failing step (`apply_action`) borrows the session, so an error leaves it in place.
+/// The failing step borrows the session, so an error leaves it in place.
 fn apply_to_session(
     task_data: &mut crate::ui::state::TaskData,
-    cmd: String,
+    input: SessionInput<'_>,
 ) -> Result<(), UserError> {
-    apply_with(task_data, |session| session.apply_action(cmd))
+    apply_with(task_data, |session| match input {
+        SessionInput::Text(text) => session.apply_action(text.to_owned()),
+        SessionInput::Command(command) => session.apply_command(command),
+    })
 }
 
 fn apply_with(
@@ -240,7 +236,7 @@ mod tests {
             unreachable!()
         };
 
-        let result = apply_to_session(&mut task_data, "not_a_command".to_string());
+        let result = apply_to_session(&mut task_data, SessionInput::Text("not_a_command"));
 
         assert!(result.is_err());
         assert_eq!(task_data.session.playable().action_count(), 0);

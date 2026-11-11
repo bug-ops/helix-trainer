@@ -204,6 +204,30 @@ fn append_on_a_flipped_selection_inserts_after_its_last_character() {
 }
 
 #[test]
+fn append_groups_touching_and_separated_ranges_like_hx() {
+    let cases = [
+        ("abcdef", "ab|cd", "abcdxef", 1),
+        ("abcdef", "ab|cd|ef", "abcdefx", 1),
+        ("abcd", "ab|d", "abxcdx", 2),
+        ("abcd", "[abc]", "abcxd", 1),
+    ];
+    for (text, pattern, expected, ranges) in cases {
+        let sim = run_keys(
+            text,
+            &[
+                CMD_SELECT_ALL,
+                &format!("s {pattern}"),
+                "a",
+                "x",
+                CMD_ESCAPE,
+            ],
+        );
+        assert_eq!(sim.display().content(), expected, "{pattern}");
+        assert_eq!(ranges_of(&sim).len(), ranges, "{pattern}");
+    }
+}
+
+#[test]
 fn append_on_adjacent_ranges_merges_them_like_hx() {
     let sim = run_keys("abc", &[CMD_SELECT_ALL, "s [ab]", "a", "x", CMD_ESCAPE]);
     assert_eq!(sim.display().content(), "abxc");

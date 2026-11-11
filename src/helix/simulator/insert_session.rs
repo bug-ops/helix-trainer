@@ -254,8 +254,7 @@ impl InsertSession {
         else {
             return false;
         };
-        // Helix adds the byte length of the inserted text to a char count, so
-        // the sum is only exact for ASCII whitespace; mirrored as is.
+        // Helix adds a byte length to a char count: exact for ASCII whitespace only; mirrored.
         moved + inserted.len() == cursor && cursor == line_end && line_break_then_blanks(inserted)
     }
 

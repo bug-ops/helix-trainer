@@ -297,8 +297,10 @@ impl HelixSimulator<NormalMode> {
         let saved_redo = std::mem::take(&mut self.redo_stack);
         let history_len = self.history.len();
         let original = self.selection.clone();
-        let appended_from: Vec<usize> = self.selection.ranges().iter().map(Range::from).collect();
-        let append_restore = self.append_selection();
+        let appended = matches!(entry, InsertEntryCommand::Append).then(|| {
+            let anchors: Vec<usize> = self.selection.ranges().iter().map(Range::from).collect();
+            (anchors, self.append_selection())
+        });
         self.entry_changes = Some(ChangeSet::new(self.doc.slice(..)));
 
         if let Err(error) = self.run_entry_edit(entry) {
@@ -312,23 +314,21 @@ impl HelixSimulator<NormalMode> {
             .unwrap_or_else(|| ChangeSet::new(self.doc.slice(..)));
         commands::record_insert_entry(&mut self, entry.uncounted());
 
+        let (append_restore, kind) = match appended {
+            Some((anchors, restore)) => (Some(restore), InsertEntry::Append { anchors }),
+            None => (None, InsertEntry::Other),
+        };
         let cursors = self.collapse_to_points();
         let change = match self.history.drain(history_len..).next() {
             Some(before) => SessionChange::Changed { before },
             None => SessionChange::Pristine(EntrySelection {
                 restore: match entry {
                     InsertEntryCommand::Insert => original,
-                    InsertEntryCommand::Append => append_restore,
+                    InsertEntryCommand::Append => append_restore.unwrap_or_else(|| cursors.clone()),
                     _ => cursors.clone(),
                 },
                 cursor: cursors,
             }),
-        };
-        let kind = match entry {
-            InsertEntryCommand::Append => InsertEntry::Append {
-                anchors: appended_from,
-            },
-            _ => InsertEntry::Other,
         };
         let session = InsertSession::new(history_len, saved_redo, change, kind, entry_changes);
         Ok(self.into_mode(session))
@@ -392,15 +392,12 @@ impl HelixSimulator<NormalMode> {
             .ranges()
             .iter()
             .map(|group| {
-                // Ranges are sorted, so a merged group takes its members in a
-                // row and its cursor sits after the last one.
+                // A merged group's cursor sits after its last member.
                 let mut at = group.from();
                 while let Some(member) = members
                     .next_if(|member| member.from() < group.to() || member.from() == group.from())
                 {
-                    // A point cursor is visually one character wide, so appending
-                    // goes one past it; a range appends after its last character,
-                    // whichever way it points.
+                    // A point is one character wide; a range appends after its last character.
                     at = if member.is_empty() {
                         member.head + 1
                     } else {
@@ -549,9 +546,7 @@ impl HelixSimulator<NormalMode> {
                         .newline_rule()
                         .above(line, CommentContinuation::Continue)
                         .text();
-                    // Helix opens above a line by breaking the line before it
-                    // (the composed edit `Escape` inspects needs that shape);
-                    // only the first line has no line before it.
+                    // Helix breaks the line before it (the shape `Escape` inspects); line 0 has none.
                     if line == 0 {
                         let indent_len = text.chars().count();
                         (0, format!("{text}{}", self.line_ending()), indent_len)
@@ -719,8 +714,7 @@ impl HelixSimulator<InsertMode> {
     /// return whether the hook handled it. Each range ends up as a point
     /// cursor at its head, so several ranges pair independently.
     fn insert_with_auto_pairs(&mut self, ch: char) -> bool {
-        // Helix hands the hook its Insert-mode ranges: one grapheme wide and
-        // backward, the shape `i` leaves, which the hook's cursor math expects.
+        // Helix hands the hook backward one-grapheme ranges, the shape `i` leaves.
         let slice = self.doc.slice(..);
         let hook_selection = self
             .selection

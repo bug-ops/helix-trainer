@@ -60,7 +60,7 @@ pub(crate) fn resolve_keys(
     keys: &CanonicalKeys,
 ) -> Resolution {
     if mode == ModeKind::Insert {
-        return Resolution::Insert(Cow::Owned(keys.as_str().to_owned()));
+        return Resolution::Insert(keys.clone().into_cow());
     }
 
     if keys.is_single_token() {

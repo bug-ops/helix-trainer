@@ -20,6 +20,15 @@ use helix_core::{
 };
 use helix_stdx::rope::RopeSliceExt;
 
+/// Where the cursor goes on a non-empty line when `I` or `A` enters Insert mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IndentFallbackPos {
+    /// The first non-whitespace character of the line (`I`).
+    LineStart,
+    /// The end of the line, before its line break (`A`).
+    LineEnd,
+}
+
 /// An Insert-mode editing key beyond typed characters, `Backspace` and the
 /// arrow keys.
 ///
@@ -294,13 +303,37 @@ impl HelixSimulator<NormalMode> {
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
     pub fn insert_at_line_start(&mut self) -> Result<(), SimulatorError> {
+        self.insert_with_indent(IndentFallbackPos::LineStart);
+        Ok(())
+    }
+
+    /// Append at line end (`A`): move to the end of the line (prepare for
+    /// insert mode)
+    ///
+    /// Shares [`Self::insert_at_line_start`]'s rule for an empty line: it is
+    /// auto-indented, and the line is the one under the block cursor.
+    ///
+    /// # Errors
+    ///
+    /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+    /// with the fallible commands that share the registry's function type.
+    pub fn append_at_line_end(&mut self) -> Result<(), SimulatorError> {
+        self.insert_with_indent(IndentFallbackPos::LineEnd);
+        Ok(())
+    }
+
+    /// Port of Helix's `insert_with_indent` for the primary range: an empty
+    /// line gets the indent `o` would give below it, any other line puts the
+    /// cursor at `fallback`.
+    fn insert_with_indent(&mut self, fallback: IndentFallbackPos) {
         let slice = self.doc.slice(..);
         let line = self
             .doc
             .char_to_line(self.selection.primary().cursor(slice));
         let line_start = self.doc.line_to_char(line);
+        let line_end = line_end_char_index(&slice, line);
 
-        if line_end_char_index(&slice, line) == line_start {
+        if line_end == line_start {
             let indent = self.start_after(line, line_start).indent;
             let cursor = line_start + indent.chars().count();
             let transaction = Transaction::change(
@@ -310,37 +343,15 @@ impl HelixSimulator<NormalMode> {
             .with_selection(Selection::point(cursor));
             self.apply_transaction(&transaction);
         } else {
-            let first_non_blank = slice
-                .line(line)
-                .first_non_whitespace_char()
-                .map_or(line_start, |offset| line_start + offset);
-            self.selection = Selection::point(first_non_blank);
+            let position = match fallback {
+                IndentFallbackPos::LineStart => slice
+                    .line(line)
+                    .first_non_whitespace_char()
+                    .map_or(line_start, |offset| line_start + offset),
+                IndentFallbackPos::LineEnd => line_end,
+            };
+            self.selection = Selection::point(position);
         }
-        Ok(())
-    }
-
-    /// Append at line end: move to end of line (prepare for insert mode)
-    ///
-    /// # Errors
-    ///
-    /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-    /// with the fallible commands that share the registry's function type.
-    pub fn append_at_line_end(&mut self) -> Result<(), SimulatorError> {
-        // Move cursor to end of current line
-        let head = self.selection.primary().head;
-        let current_line = self.doc.char_to_line(head);
-
-        // Find the end of the line (position before newline or end of document)
-        let line_end = if current_line + 1 < self.doc.len_lines() {
-            // Not the last line - go to position before newline
-            self.doc.line_to_char(current_line + 1) - 1
-        } else {
-            // Last line - go to end of document
-            self.doc.len_chars()
-        };
-
-        self.selection = Selection::point(line_end);
-        Ok(())
     }
 
     /// Open below: insert new line below the selection's last line, indented

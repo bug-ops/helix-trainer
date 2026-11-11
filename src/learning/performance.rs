@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use fsrs::{FSRS, MemoryState};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use super::LearningError;
@@ -13,19 +13,14 @@ use crate::time::{Clock, SystemClock};
 const DEFAULT_DIFFICULTY: f32 = 5.0; // Mixle difficulty (0-10 scale)
 const DEFAULT_DESIRED_RETENTION: f32 = 0.9; // 90% target retention
 
-/// FSRS model parameters this tracker's [`FSRS`] instance is constructed with.
-///
-/// Hoisted so the decay value passed to `fsrs::current_retrievability` in
-/// [`CommandPerformance::retrievability`] (`FSRS_PARAMS[20]`) is structurally tied
-/// to whatever parameters actually built the tracker, instead of a same-named
-/// constant that could silently diverge if these parameters ever become
-/// user-configurable. The decay passed there must be the raw positive weight `w[20]`:
-/// `fsrs::current_retrievability` negates it itself, and a pre-negated value drives the
-/// curve's base negative and yields NaN.
-const FSRS_PARAMS: [f32; 21] = fsrs::DEFAULT_PARAMETERS;
+/// FSRS-6 parameter table. The 21-element array type makes an accidental switch to the
+/// 34-element FSRS-7 table a compile error; `fsrs` 7 selects the model by parameter count.
+const FSRS_PARAMS: [f32; 21] = fsrs::FSRS6_DEFAULT_PARAMETERS;
+
+static MODEL: LazyLock<FSRS> = LazyLock::new(default_fsrs);
 
 fn default_fsrs() -> FSRS {
-    // Cannot fail: `FSRS_PARAMS` is the crate's own default parameter set.
+    // Cannot fail: `FSRS_PARAMS` is the crate's own FSRS-6 default parameter set.
     FSRS::new(&FSRS_PARAMS).expect("default FSRS parameters are valid")
 }
 
@@ -427,7 +422,7 @@ impl CommandPerformance {
             return 0.0;
         }
         let elapsed_days = (now - self.last_review).num_days().max(0) as f32;
-        fsrs::current_retrievability(memory, elapsed_days, FSRS_PARAMS[20])
+        MODEL.current_retrievability(memory, elapsed_days)
     }
 
     /// Test-only: overwrite the FSRS difficulty to stage a scheduling scenario.
@@ -465,6 +460,7 @@ impl CommandPerformance {
             Some(MemoryState {
                 stability: self.stability.0,
                 difficulty: self.difficulty.0,
+                stability_fast: self.stability.0,
             })
         }
     }
@@ -966,6 +962,7 @@ mod tests {
         let memory = MemoryState {
             stability: f32::INFINITY,
             difficulty: 5.0,
+            stability_fast: f32::INFINITY,
         };
 
         let result = perf.update_from_next_state(memory, 3.0, 2, now);

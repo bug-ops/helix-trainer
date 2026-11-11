@@ -81,7 +81,7 @@ Requirements:
 2. **Keymap file** — The optional Helix `config.toml` keymap is read from the user's own config directory without an allow-list check (size-capped, regular files only)
 3. **Terminal I/O** — Raw mode requires terminal access
 4. **User Data** — Stored unencrypted in `~/.config/helix-trainer/` on Linux and macOS, and in `helix-trainer/` under `%AppData%` on Windows
-5. **Native dependency** — The `syntect` syntax highlighter is built with the `regex-onig` backend, which links the C Oniguruma library into the binary
+5. **Syntax highlighter** — `syntect` uses the pure-Rust `regex-fancy` backend (`fancy-regex`), so no C regex library is linked; `fancy-regex` is a backtracking engine, but it only matches syntect's bundled syntax definitions against scenario content compiled into the binary and text typed in the trainer's own editor
 
 ## CI Security Checks
 

@@ -49,8 +49,9 @@ pub fn format_key_for_display(command: &str) -> String {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::game::CommandExecutor;
+/// use helix_trainer::security::UserError;
 ///
 /// fn run<E: CommandExecutor>(executor: &mut E) -> Result<(), UserError> {
 ///     // "3d" is one action; the simulator applies the count

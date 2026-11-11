@@ -8,9 +8,9 @@
 //!
 //! # Examples
 //!
-//! ```ignore
+//! ```
 //! use helix_trainer::game::EditorState;
-//! use helix_trainer::game::CursorPosition;
+//! use helix_trainer::game::editor_state::CursorPosition;
 //!
 //! let content = "line 1\nline 2\nline 3\n".to_string();
 //! let cursor = CursorPosition::new(1, 0)?;
@@ -65,8 +65,8 @@ impl CursorPosition {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::CursorPosition;
+    /// ```
+    /// use helix_trainer::game::editor_state::CursorPosition;
     ///
     /// let pos = CursorPosition::new(0, 5)?;
     /// assert_eq!(pos.row, 0);
@@ -88,8 +88,8 @@ impl CursorPosition {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::CursorPosition;
+    /// ```
+    /// use helix_trainer::game::editor_state::CursorPosition;
     ///
     /// let pos = CursorPosition::from_array([1, 3])?;
     /// assert_eq!(pos.to_array(), [1, 3]);
@@ -103,8 +103,8 @@ impl CursorPosition {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::CursorPosition;
+    /// ```
+    /// use helix_trainer::game::editor_state::CursorPosition;
     ///
     /// let pos = CursorPosition::new(1, 5)?;
     /// assert_eq!(pos.to_array(), [1, 5]);
@@ -132,8 +132,8 @@ impl Selection {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{Selection, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{Selection, CursorPosition};
     ///
     /// let start = CursorPosition::new(0, 0)?;
     /// let end = CursorPosition::new(0, 5)?;
@@ -148,8 +148,8 @@ impl Selection {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{Selection, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{Selection, CursorPosition};
     ///
     /// let pos = CursorPosition::new(0, 0)?;
     /// let sel = Selection::new(pos, pos);
@@ -166,8 +166,8 @@ impl Selection {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{Selection, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{Selection, CursorPosition};
     ///
     /// let start = CursorPosition::new(2, 5)?;
     /// let end = CursorPosition::new(1, 3)?;
@@ -204,8 +204,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let state = EditorState::new("line 1\nline 2\n".to_string(), cursor, None)?;
@@ -269,8 +269,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition, Selection};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition, Selection};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let sel1 = Selection::new(
@@ -351,11 +351,11 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::game::EditorState;
     ///
     /// let state = EditorState::from_setup("line 1\nline 2\n", [1, 0], None)?;
-    /// assert_eq!(state.cursor_position().row, 1);
+    /// assert_eq!(state.cursor_position(), (1, 0));
     /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
     pub fn from_setup(
@@ -560,8 +560,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let state = EditorState::new("test\n".to_string(), cursor, None)?;
@@ -576,8 +576,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(1, 3)?;
     /// let state = EditorState::new("line 1\nline 2\n".to_string(), cursor, None)?;
@@ -596,8 +596,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition, Selection};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition, Selection};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let state = EditorState::new("test\n".to_string(), cursor, None)?;
@@ -614,8 +614,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition, Selection};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition, Selection};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let sel1 = Selection::new(
@@ -643,8 +643,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition, Selection};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition, Selection};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let sel = Selection::new(
@@ -670,8 +670,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let state = EditorState::new("line 1\nline 2\nline 3\n".to_string(), cursor, None)?;
@@ -686,8 +686,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let state = EditorState::new("line 1\nline 2\nline 3\n".to_string(), cursor, None)?;
@@ -702,8 +702,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(1, 0)?;
     /// let state = EditorState::new("line 1\nline 2\nline 3\n".to_string(), cursor, None)?;
@@ -726,8 +726,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let mut state = EditorState::new("line 1\n".to_string(), cursor, None)?;
@@ -770,14 +770,14 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let mut state = EditorState::new("line 1\nline 2\n".to_string(), cursor, None)?;
     /// let new_pos = CursorPosition::new(1, 3)?;
     /// state.move_cursor(new_pos)?;
-    /// assert_eq!(state.cursor_position(), new_pos);
+    /// assert_eq!(state.cursor_position(), (1, 3));
     /// # Ok::<(), helix_trainer::security::SecurityError>(())
     /// ```
     pub fn move_cursor(&mut self, new_pos: CursorPosition) -> Result<(), SecurityError> {
@@ -815,8 +815,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition, Selection};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition, Selection};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let mut state = EditorState::new("test\n".to_string(), cursor, None)?;
@@ -846,8 +846,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition, Selection};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition, Selection};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let mut state = EditorState::new("hello world\nfoo bar".to_string(), cursor, None)?;
@@ -898,8 +898,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition, Selection};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition, Selection};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let sel1 = Selection::new(
@@ -930,8 +930,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition, Selection};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition, Selection};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let sel1 = Selection::new(
@@ -978,8 +978,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor = CursorPosition::new(0, 0)?;
     /// let state1 = EditorState::new("test\n".to_string(), cursor, None)?;
@@ -1022,8 +1022,8 @@ impl EditorState {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::{EditorState, CursorPosition};
+    /// ```
+    /// use helix_trainer::game::editor_state::{EditorState, CursorPosition};
     ///
     /// let cursor1 = CursorPosition::new(0, 0)?;
     /// let cursor2 = CursorPosition::new(0, 1)?;

@@ -34,7 +34,7 @@ pub use session::{
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::game::PlayableScenario;
 ///
 /// fn render_editor<S: PlayableScenario>(session: &S) {

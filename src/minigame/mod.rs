@@ -14,12 +14,12 @@
 //!
 //! # Examples
 //!
-//! ```ignore
+//! ```
 //! use helix_trainer::minigame::MiniGameSession;
-//! use helix_trainer::config::ScenarioCollection;
+//! use helix_trainer::config::ScenarioLoader;
 //! use std::sync::Arc;
 //!
-//! let scenarios = Arc::new(ScenarioCollection::load()?);
+//! let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
 //! let mut session = MiniGameSession::new(scenarios, None);
 //!
 //! session.start();

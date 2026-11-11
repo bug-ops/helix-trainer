@@ -24,15 +24,18 @@
 //!
 //! # Examples
 //!
-//! ```ignore
+//! ```
+//! use helix_trainer::config::ScenarioLoader;
 //! use helix_trainer::learning::PerformanceTracker;
 //! use helix_trainer::minigame::ScenarioPrioritizer;
 //!
+//! let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
 //! let tracker = PerformanceTracker::new();
 //! let scorer = ScenarioPrioritizer::new(&tracker);
 //!
-//! let score = scorer.score(&scenario);
-//! assert!(score >= 0.0 && score <= 1.0);
+//! let score = scorer.score(&scenarios[0]);
+//! assert!((0.0..=1.0).contains(&score));
+//! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
 use chrono::{DateTime, Utc};
@@ -123,11 +126,18 @@ impl<'a> ScenarioPrioritizer<'a> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// let score = scorer.score(&scenario);
-    /// if score > 0.5 {
-    ///     println!("This scenario needs practice!");
-    /// }
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::minigame::ScenarioPrioritizer;
+    ///
+    /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
+    /// let tracker = PerformanceTracker::new();
+    /// let scorer = ScenarioPrioritizer::new(&tracker);
+    ///
+    /// // An untracked scenario consists of novel commands and gets the novelty weight.
+    /// assert!(scorer.score(&scenarios[0]) > 0.0);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     #[must_use]
     pub fn score(&self, scenario: &Scenario) -> f64 {

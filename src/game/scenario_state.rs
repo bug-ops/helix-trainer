@@ -34,11 +34,14 @@ impl ScenarioState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::ScenarioState;
     ///
-    /// let state = ScenarioState::from_scenario(&scenario)?;
+    /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
+    /// let state = ScenarioState::from_scenario(&scenarios[0])?;
     /// assert!(!state.is_completed());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn from_scenario(scenario: &Scenario) -> Result<Self, UserError> {
         // Create initial snapshot from scenario setup

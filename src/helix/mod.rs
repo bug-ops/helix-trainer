@@ -6,13 +6,13 @@
 //!
 //! # Examples
 //!
-//! ```ignore
-//! use helix_trainer::helix::HelixSimulator;
+//! ```
+//! use helix_trainer::helix::AnyModeSimulator;
 //!
-//! let mut sim = HelixSimulator::new("hello world".to_string());
+//! let mut sim = AnyModeSimulator::new("hello world".to_string());
 //! sim.execute_command("w")?;  // Move to next word
 //! let state = sim.state()?;
-//! assert_eq!(state.cursor_position().col, 6);
+//! assert_eq!(state.cursor_position(), (0, 6));
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 

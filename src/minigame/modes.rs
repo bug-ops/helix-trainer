@@ -179,7 +179,7 @@ impl SurvivalConfig {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::SurvivalConfig;
     ///
     /// let config = SurvivalConfig::default();

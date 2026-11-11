@@ -15,7 +15,10 @@ pub use super::simulator::Mode;
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// use helix_trainer::helix::CommandExecutor;
+/// use helix_trainer::security::UserError;
+///
 /// fn process_command<E: CommandExecutor>(executor: &mut E, cmd: &str) -> Result<(), UserError> {
 ///     executor.execute_command(cmd)?;
 ///     let state = executor.state()?;

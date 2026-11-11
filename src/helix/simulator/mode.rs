@@ -8,14 +8,23 @@
 //! The typestate pattern ensures that mode-specific commands are only
 //! available in the correct mode:
 //!
-//! ```ignore
-//! // This compiles:
-//! let sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
-//! sim.delete_char();  // OK - delete is only available in Normal mode
+//! ```
+//! use helix_trainer::helix::{HelixSimulator, InsertMode, NormalMode};
 //!
-//! // This does NOT compile:
-//! let sim: HelixSimulator<InsertMode> = sim.enter_insert_mode();
-//! sim.delete_char();  // ERROR - no method `delete_char` for InsertMode
+//! let sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+//! let mut sim: HelixSimulator<InsertMode> = sim.enter_insert_mode();
+//! sim.insert_text("x")?;
+//! let _sim: HelixSimulator<NormalMode> = sim.exit_insert_mode();
+//! # Ok::<(), helix_trainer::security::UserError>(())
+//! ```
+//!
+//! Text insertion is not available in Normal mode:
+//!
+//! ```compile_fail
+//! use helix_trainer::helix::{HelixSimulator, NormalMode};
+//!
+//! let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
+//! sim.insert_text("x");
 //! ```
 
 /// Normal mode marker (zero-sized type)

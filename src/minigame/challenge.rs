@@ -169,13 +169,15 @@ impl ChallengeProgress {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// use helix_trainer::config::ScenarioLoader;
 /// use helix_trainer::minigame::{ChallengeConfig, select_challenge_scenarios};
 ///
-/// let scenarios = load_scenarios();
+/// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
 /// let config = ChallengeConfig::for_date(chrono::Utc::now().date_naive());
 /// let selected = select_challenge_scenarios(&scenarios, &config);
 /// assert_eq!(selected.len(), 10);
+/// # Ok::<(), helix_trainer::security::UserError>(())
 /// ```
 pub fn select_challenge_scenarios(
     scenarios: &[Scenario],

@@ -40,7 +40,7 @@ use std::time::Duration;
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::minigame::PerformancePoint;
 /// use helix_trainer::config::Difficulty;
 ///
@@ -78,7 +78,7 @@ impl PerformancePoint {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::PerformancePoint;
     /// use helix_trainer::config::Difficulty;
     ///
@@ -198,9 +198,10 @@ impl DifficultyLevel {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::minigame::LevelChange;
 ///
+/// let level_change = LevelChange::Increased { from: 1, to: 2 };
 /// match level_change {
 ///     LevelChange::Increased { from, to } => {
 ///         println!("Level up! {} -> {}", from, to);
@@ -262,7 +263,7 @@ impl LevelChange {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
 /// use helix_trainer::minigame::{DifficultyController, PerformancePoint};
 /// use helix_trainer::config::Difficulty;
 ///
@@ -328,7 +329,7 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let controller = DifficultyController::new();
@@ -348,7 +349,7 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let controller = DifficultyController::new();
@@ -372,14 +373,20 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::{Difficulty, ScenarioLoader};
     /// use helix_trainer::minigame::DifficultyController;
-    /// use helix_trainer::config::{Scenario, Difficulty};
+    ///
+    /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
+    /// let beginner = scenarios
+    ///     .iter()
+    ///     .find(|s| s.metadata.as_ref().and_then(|m| m.difficulty) == Some(Difficulty::Beginner))
+    ///     .expect("embedded scenarios include a beginner one");
     ///
     /// let controller = DifficultyController::new();
-    /// let scenario = create_beginner_scenario();
-    /// let limit = controller.time_limit_for(&scenario);
+    /// let limit = controller.time_limit_for(beginner);
     /// assert_eq!(limit.as_secs(), 10); // Beginner at level 1
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn time_limit_for(&self, scenario: &Scenario) -> Duration {
         // Get base time from scenario metadata
@@ -433,12 +440,13 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::minigame::DifficultyController;
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let mut controller = DifficultyController::new();
-    /// let scenarios = load_scenarios();
+    /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
     /// let tracker = PerformanceTracker::new();
     ///
     /// // With FSRS weighting
@@ -450,6 +458,7 @@ impl DifficultyController {
     /// if let Some(scenario) = controller.next_scenario(&scenarios, None, &mut rand::rng()) {
     ///     println!("Selected: {}", scenario.name);
     /// }
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn next_scenario<R: RngExt + ?Sized>(
         &mut self,
@@ -537,7 +546,7 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::DifficultyController;
     /// use helix_trainer::config::Difficulty;
     ///
@@ -573,7 +582,7 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::{DifficultyController, PerformancePoint};
     /// use helix_trainer::config::Difficulty;
     ///
@@ -779,7 +788,7 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let mut controller = DifficultyController::new();
@@ -794,13 +803,14 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let mut controller = DifficultyController::new();
-    /// controller.level = 5;
+    /// controller.increase_difficulty();
+    /// controller.increase_difficulty();
     /// controller.decrease_difficulty();
-    /// assert_eq!(controller.current_level(), 4);
+    /// assert_eq!(controller.current_level(), 2);
     /// ```
     pub fn decrease_difficulty(&mut self) {
         self.decrease_level();
@@ -817,16 +827,16 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::minigame::DifficultyController;
+    /// ```
+    /// use helix_trainer::minigame::{DifficultyController, LevelChange};
     ///
     /// let mut controller = DifficultyController::new();
-    /// // ... simulate level change ...
+    /// controller.increase_difficulty();
     ///
     /// if let Some(change) = controller.take_level_change() {
     ///     match change {
-    ///         LevelChange::Increased { from, to } => println!("Level up!"),
-    ///         LevelChange::Decreased { from, to } => println!("Level down"),
+    ///         LevelChange::Increased { from, to } => assert_eq!((from, to), (1, 2)),
+    ///         LevelChange::Decreased { .. } => unreachable!("difficulty only increased"),
     ///     }
     /// }
     /// // Second call returns None
@@ -841,7 +851,7 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let controller = DifficultyController::new();
@@ -887,7 +897,7 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::{DifficultyController, PerformancePoint};
     /// use helix_trainer::config::Difficulty;
     ///
@@ -913,11 +923,11 @@ impl DifficultyController {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let mut controller = DifficultyController::new();
-    /// controller.level = 5;
+    /// controller.increase_difficulty();
     /// controller.reset();
     /// assert_eq!(controller.current_level(), 1);
     /// ```

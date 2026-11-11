@@ -552,7 +552,8 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// use crossterm::event::{KeyCode, KeyModifiers};
 /// use helix_trainer::input::typestate::command_to_key_event;
 ///
 /// let key = command_to_key_event("h");

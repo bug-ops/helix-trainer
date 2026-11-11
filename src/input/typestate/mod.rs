@@ -28,14 +28,15 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use helix_trainer::input::typestate::{InputState, InputStateMachine};
+//! ```
+//! use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+//! use helix_trainer::input::typestate::{HandlerResult, InputStateMachine};
 //!
 //! let mut state_machine = InputStateMachine::new();
 //! assert!(state_machine.state().is_base());
 //!
 //! // Press 'g' - transition to GotoPending
-//! let result = state_machine.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
+//! state_machine.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
 //! assert!(state_machine.state().is_goto_pending());
 //!
 //! // Press 'g' again - complete "gg" command

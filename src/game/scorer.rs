@@ -5,7 +5,7 @@
 //!
 //! # Examples
 //!
-//! ```ignore
+//! ```
 //! use helix_trainer::game::Scorer;
 //! use helix_trainer::config::ScoringConfig;
 //!

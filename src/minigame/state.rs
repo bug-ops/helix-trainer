@@ -50,7 +50,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Playing;
@@ -67,7 +67,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Paused;
@@ -81,7 +81,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::GameOver;
@@ -95,7 +95,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Countdown { remaining: 3 };
@@ -109,7 +109,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Transition { success: true };
@@ -135,7 +135,7 @@ impl MiniGameState {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameState;
     ///
     /// let state = MiniGameState::Countdown { remaining: 2 };

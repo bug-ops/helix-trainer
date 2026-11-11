@@ -222,7 +222,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let stats = MiniGameStats::new();
@@ -242,7 +242,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let stats = MiniGameStats::new_with_lives(1);
@@ -297,7 +297,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -322,7 +322,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -343,7 +343,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -360,7 +360,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -379,7 +379,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -399,7 +399,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -417,7 +417,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();
@@ -436,7 +436,7 @@ impl MiniGameStats {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameStats;
     ///
     /// let mut stats = MiniGameStats::new();

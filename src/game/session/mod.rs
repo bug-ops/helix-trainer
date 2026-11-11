@@ -6,26 +6,25 @@
 //!
 //! # Examples
 //!
-//! ```ignore
-//! use helix_trainer::game::GameSession;
-//! use helix_trainer::config::Scenario;
+//! ```
+//! use helix_trainer::config::ScenarioLoader;
+//! use helix_trainer::game::{GameSession, SessionAfterAction};
 //!
-//! // Create a new session for a scenario
-//! let scenario = /* load from file */;
+//! let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+//! let commands = scenario.solution.commands.clone();
 //! let mut session = GameSession::new(scenario)?;
 //!
-//! // User performs actions
-//! session.record_action("d".to_string())?;
-//! session.record_action("d".to_string())?;
-//!
-//! // Update editor state
-//! let new_state = /* get from editor */;
-//! session.update_state(new_state)?;
-//!
-//! // Check if scenario is complete
-//! if session.is_completed() {
-//!     let feedback = session.get_feedback()?;
-//!     println!("{}", feedback.summary());
+//! // Each action consumes the session and returns its next state
+//! for command in commands {
+//!     match session.record_action(command)? {
+//!         SessionAfterAction::StillActive(next) => session = next,
+//!         SessionAfterAction::Completed(done) => {
+//!             let feedback = done.feedback()?;
+//!             assert!(feedback.success);
+//!             println!("{}", feedback.summary());
+//!             break;
+//!         }
+//!     }
 //! }
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
@@ -78,7 +77,7 @@ impl UserAction {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::game::UserAction;
     /// use std::time::Duration;
     ///
@@ -131,7 +130,7 @@ impl Feedback {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::game::{Feedback, PerformanceRating};
     /// use std::time::Duration;
     ///
@@ -145,6 +144,8 @@ impl Feedback {
     ///     duration: Duration::from_secs(5),
     ///     hint: None,
     ///     is_optimal: true,
+    ///     scenario_id: "delete-line".to_string(),
+    ///     user_actions: Vec::new(),
     /// };
     /// let summary = feedback.summary();
     /// assert!(summary.contains("100/100"));
@@ -248,10 +249,11 @@ impl<S: SessionState> GameSession<S> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
-    /// let scenario = /* scenario */;
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario.clone())?;
     /// assert_eq!(session.scenario().id, scenario.id);
     /// # Ok::<(), helix_trainer::security::UserError>(())
@@ -296,12 +298,13 @@ impl<S: SessionState> GameSession<S> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
-    /// let actions = session.actions();
-    /// println!("Total actions: {}", actions.len());
+    /// assert!(session.actions().is_empty());
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn actions(&self) -> &[UserAction] {
@@ -431,11 +434,13 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
-    /// let scenario = /* load from file */;
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
+    /// assert_eq!(session.action_count(), 0);
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn new(scenario: Scenario) -> Result<Self, UserError> {
@@ -488,22 +493,28 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::{GameSession, SessionAfterAction};
-    /// use helix_trainer::helix::commands::{CMD_SELECT_LINE, CMD_DELETE_SELECTION};
     ///
-    /// let session = GameSession::new(scenario)?;
-    /// // Use x+d (select line + delete) - the Helix way
-    /// let session = session.record_action(CMD_SELECT_LINE.to_string())?;
-    /// match session.record_action(CMD_DELETE_SELECTION.to_string())? {
-    ///     SessionAfterAction::StillActive(session) => {
-    ///         // Continue playing
-    ///     }
-    ///     SessionAfterAction::Completed(session) => {
-    ///         // Session complete, get feedback
-    ///         let feedback = session.feedback()?;
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// let commands = scenario.solution.commands.clone();
+    /// let mut session = GameSession::new(scenario)?;
+    ///
+    /// // Every command but the last leaves the session active
+    /// let (last, rest) = commands.split_last().expect("solutions are never empty");
+    /// for command in rest {
+    ///     match session.record_action(command.clone())? {
+    ///         SessionAfterAction::StillActive(next) => session = next,
+    ///         SessionAfterAction::Completed(_) => unreachable!("completes only on the last command"),
     ///     }
     /// }
+    ///
+    /// // The last command completes the scenario
+    /// let SessionAfterAction::Completed(done) = session.record_action(last.clone())? else {
+    ///     panic!("the solution completes the scenario");
+    /// };
+    /// assert!(done.feedback()?.success);
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn record_action(mut self, command: String) -> Result<SessionAfterAction, UserError> {
@@ -570,10 +581,12 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
-    /// let mut session = GameSession::new(scenario)?;
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// let session = GameSession::new(scenario)?;
     /// assert!(!session.check_completion());
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
@@ -591,13 +604,14 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
-    /// if session.check_content_matches() {
-    ///     println!("Content is correct!");
-    /// }
+    /// // The setup text differs from the target until the player edits it
+    /// assert!(!session.check_content_matches());
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn check_content_matches(&self) -> bool {
@@ -613,12 +627,15 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let mut session = GameSession::new(scenario)?;
     /// if let Some(hint) = session.hint() {
-    ///     println!("Hint: {}", hint);
+    ///     assert_eq!(session.hints_shown(), 1);
+    ///     println!("Hint: {hint}");
     /// }
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
@@ -639,9 +656,11 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
     /// let abandoned = session.abandon();
     /// let feedback = abandoned.feedback();
@@ -676,13 +695,15 @@ impl GameSession<Active> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let mut session = GameSession::new(scenario)?;
-    /// // ... play some ...
+    /// session.hint();
     /// session.reset()?;
-    /// assert_eq!(session.action_count(), 0);
+    /// assert_eq!(session.hints_shown(), 0);
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn reset(&mut self) -> Result<(), SecurityError> {
@@ -731,13 +752,26 @@ impl GameSession<Completed> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::GameSession;
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use helix_trainer::game::{GameSession, SessionAfterAction};
     ///
-    /// // session is GameSession<Completed>
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// # let mut active = GameSession::new(scenario.clone())?;
+    /// # let mut completed = None;
+    /// # for command in &scenario.solution.commands {
+    /// #     match active.record_action(command.clone())? {
+    /// #         SessionAfterAction::StillActive(next) => active = next,
+    /// #         SessionAfterAction::Completed(done) => {
+    /// #             completed = Some(done);
+    /// #             break;
+    /// #         }
+    /// #     }
+    /// # }
+    /// # let session = completed.expect("the canonical solution completes the scenario");
     /// let score = session.score()?;
-    /// println!("Score: {}", score);
-    /// # Ok::<(), helix_trainer::security::SecurityError>(())
+    /// assert!(score > 0);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn score(&self) -> Result<u32, SecurityError> {
         Scorer::score_with_config(&self.scenario.scoring, self.user_actions.len())
@@ -754,13 +788,27 @@ impl GameSession<Completed> {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::game::GameSession;
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use helix_trainer::game::{GameSession, SessionAfterAction};
     ///
-    /// // session is GameSession<Completed>
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// # let mut active = GameSession::new(scenario.clone())?;
+    /// # let mut completed = None;
+    /// # for command in &scenario.solution.commands {
+    /// #     match active.record_action(command.clone())? {
+    /// #         SessionAfterAction::StillActive(next) => active = next,
+    /// #         SessionAfterAction::Completed(done) => {
+    /// #             completed = Some(done);
+    /// #             break;
+    /// #         }
+    /// #     }
+    /// # }
+    /// # let session = completed.expect("the canonical solution completes the scenario");
     /// let feedback = session.feedback()?;
+    /// assert!(feedback.success);
     /// println!("{}", feedback.summary());
-    /// # Ok::<(), helix_trainer::security::SecurityError>(())
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn feedback(&self) -> Result<Feedback, SecurityError> {
         let actions_taken = self.user_actions.len();
@@ -813,10 +861,12 @@ impl GameSession<Abandoned> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::GameSession;
     ///
-    /// // session is GameSession<Abandoned>
+    /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
+    /// let session = GameSession::new(scenario)?.abandon();
     /// let feedback = session.feedback();
     /// assert_eq!(feedback.score, 0);
     /// assert!(!feedback.success);

@@ -394,19 +394,21 @@ impl MiniGameSession {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::minigame::MiniGameSession;
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::minigame::MiniGameSession;
     /// use std::sync::Arc;
     ///
-    /// let scenarios = Arc::new(vec![/* scenarios */]);
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let tracker = PerformanceTracker::new();
     ///
     /// // With FSRS weighting
-    /// let session = MiniGameSession::new(scenarios.clone(), Some(tracker));
+    /// let weighted = MiniGameSession::new(scenarios.clone(), Some(tracker));
     ///
-    /// // Without FSRS weighting (backward compat)
-    /// let session = MiniGameSession::new(scenarios, None);
+    /// // Without FSRS weighting
+    /// let uniform = MiniGameSession::new(scenarios, None);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn new(scenarios: Arc<Vec<Scenario>>, tracker: Option<PerformanceTracker>) -> Self {
         Self::with_mode(scenarios, tracker, MiniGameMode::default())
@@ -422,16 +424,17 @@ impl MiniGameSession {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use helix_trainer::minigame::{MiniGameSession, MiniGameMode, SurvivalConfig};
+    /// ```
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use helix_trainer::minigame::{MiniGameMode, MiniGameSession, SurvivalConfig};
     /// use std::sync::Arc;
     ///
-    /// let scenarios = Arc::new(vec![/* scenarios */]);
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     ///
-    /// // Create Survival mode session
     /// let mode = MiniGameMode::Survival(SurvivalConfig::default());
     /// let session = MiniGameSession::with_mode(scenarios, None, mode);
     /// assert_eq!(session.stats().lives(), 1); // Survival mode has 1 life
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn with_mode(
         scenarios: Arc<Vec<Scenario>>,
@@ -525,12 +528,16 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.start();
     /// assert!(session.state().is_countdown());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn start(&mut self) {
         self.phase = Phase::Countdown { remaining: 3 };
@@ -543,9 +550,12 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.start();
     ///
@@ -553,6 +563,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// session.tick_countdown();
     /// session.tick_countdown();
     /// assert!(session.state().is_playing());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn tick_countdown(&mut self) {
         if let Phase::Countdown { remaining } = self.phase {
@@ -583,9 +594,12 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.start();
     /// session.handle_command("x")?; // select line
@@ -609,13 +623,17 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// if session.check_completion() {
     ///     session.advance_to_next();
     /// }
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn check_completion(&self) -> bool {
         self.current
@@ -631,11 +649,15 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.advance_to_next();
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn advance_to_next(&mut self) {
         if let Some(ref scenario) = self.current {
@@ -728,11 +750,15 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.handle_timeout();
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn handle_timeout(&mut self) {
         // Update multiplier state (handles grace mechanics) and failure counter
@@ -782,13 +808,17 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let session = MiniGameSession::new(scenarios, None);
     /// if let Some(time) = session.remaining_time() {
     ///     println!("Time left: {:?}", time);
     /// }
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn remaining_time(&self) -> Option<Duration> {
         self.current.as_ref().map(|s| s.remaining_time())
@@ -817,13 +847,17 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
-    /// let session = MiniGameSession::new(scenarios, None);
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
+    /// let mut session = MiniGameSession::new(scenarios, None);
     /// if session.is_session_expired() {
     ///     session.end_session_on_timeout();
     /// }
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn is_session_expired(&self) -> bool {
         self.mode
@@ -845,12 +879,20 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
+    /// session.start();
+    /// for _ in 0..3 {
+    ///     session.tick_countdown();
+    /// }
     /// session.pause();
     /// assert!(session.state().is_paused());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn pause(&mut self) {
         if matches!(self.phase, Phase::Playing) {
@@ -868,13 +910,21 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
+    /// session.start();
+    /// for _ in 0..3 {
+    ///     session.tick_countdown();
+    /// }
     /// session.pause();
     /// session.resume();
     /// assert!(session.state().is_playing());
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn resume(&mut self) {
         if matches!(self.phase, Phase::Paused) {
@@ -918,14 +968,6 @@ impl<R: Rng> MiniGameSession<R> {
     /// inferring "already processed" from [`MiniGameState::GameOver`] - that
     /// state can be reached, or bookkeeping can be requested mid-session,
     /// from more than one call site.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// let mut session = MiniGameSession::new(scenarios, None);
-    /// assert!(session.try_begin_game_over());
-    /// assert!(!session.try_begin_game_over());
-    /// ```
     pub(crate) fn try_begin_game_over(&mut self) -> bool {
         if self.game_over_processed {
             false
@@ -951,18 +993,22 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::{MiniGameSession, LevelChange};
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// // ... gameplay ...
     ///
     /// if let Some(change) = session.take_level_change() {
     ///     match change {
-    ///         LevelChange::Increased { from, to } => println!("Level up!"),
-    ///         LevelChange::Decreased { from, to } => println!("Level down"),
+    ///         LevelChange::Increased { from, to } => println!("Level up: {from} -> {to}"),
+    ///         LevelChange::Decreased { from, to } => println!("Level down: {from} -> {to}"),
     ///     }
     /// }
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn take_level_change(&mut self) -> Option<LevelChange> {
         self.difficulty.take_level_change()
@@ -1046,15 +1092,19 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use helix_trainer::minigame::MiniGameSession;
     /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::config::ScenarioLoader;
+    /// use std::sync::Arc;
     ///
+    /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// let mut tracker = PerformanceTracker::new();
     ///
     /// // After scenario completion
     /// session.record_to_fsrs(&mut tracker, true);
+    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn record_to_fsrs(&self, tracker: &mut crate::learning::PerformanceTracker, success: bool) {
         if let Some(ref scenario) = self.current {

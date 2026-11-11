@@ -4,7 +4,7 @@
 //! from AppState, improving code organization and maintainability.
 
 use crate::async_state::SaveRequest;
-use crate::config::{AppConfig, Difficulty, ScenarioCategory, ScenarioCollection, SortMode};
+use crate::config::{AppConfig, ScenarioCollection};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile};
@@ -542,26 +542,11 @@ impl std::fmt::Debug for ProgressState {
     }
 }
 
-/// Application configuration (filters, settings)
+/// Application configuration (persistent settings and the resolved keymap)
 #[derive(Debug, Clone)]
 pub struct ConfigState {
-    /// Current sort mode for scenarios
-    pub sort_mode: SortMode,
-
-    /// Active category filters
-    pub category_filters: HashSet<ScenarioCategory>,
-
-    /// Active difficulty filters
-    pub difficulty_filters: HashSet<Difficulty>,
-
-    /// Whether to show completed scenarios
-    pub show_completed: bool,
-
     /// Persistent configuration (loaded from/saved to disk)
     pub persistent: AppConfig,
-
-    /// Whether persistent config was modified during this session
-    pub config_modified: bool,
 
     /// Resolved keymap overlay for gameplay key translation.
     ///
@@ -583,33 +568,9 @@ impl Default for ConfigState {
     fn default() -> Self {
         Self {
             persistent: AppConfig::default(),
-            sort_mode: SortMode::ByName,
-            category_filters: HashSet::new(),
-            difficulty_filters: HashSet::new(),
-            show_completed: true,
-            config_modified: false,
             keymap_report: crate::config::keymap::KeymapReport::default(),
             keymap: KeymapOverlay::identity(),
         }
-    }
-}
-
-impl ConfigState {
-    /// Reset all filters to default
-    pub fn reset(&mut self) {
-        *self = Self::default();
-    }
-
-    /// Check if any filters are active
-    pub fn has_active_filters(&self) -> bool {
-        !self.category_filters.is_empty()
-            || !self.difficulty_filters.is_empty()
-            || !self.show_completed
-    }
-
-    /// Mark that persistent config was modified
-    pub fn mark_config_modified(&mut self) {
-        self.config_modified = true;
     }
 }
 
@@ -737,38 +698,7 @@ mod tests {
     #[test]
     fn test_config_state_default() {
         let config = ConfigState::default();
-        assert_eq!(config.sort_mode, SortMode::ByName);
-        assert!(config.category_filters.is_empty());
-        assert!(config.show_completed);
-        assert!(!config.config_modified);
         assert!(!config.persistent.enable_arrow_keys_in_normal_mode);
-    }
-
-    #[test]
-    fn test_config_state_reset() {
-        let mut config = ConfigState {
-            sort_mode: SortMode::ByDifficulty,
-            category_filters: {
-                let mut set = std::collections::HashSet::new();
-                set.insert(ScenarioCategory::Movement);
-                set
-            },
-            ..Default::default()
-        };
-
-        config.reset();
-
-        assert_eq!(config.sort_mode, SortMode::ByName);
-        assert!(config.category_filters.is_empty());
-    }
-
-    #[test]
-    fn test_config_state_has_active_filters() {
-        let mut config = ConfigState::default();
-        assert!(!config.has_active_filters());
-
-        config.category_filters.insert(ScenarioCategory::Movement);
-        assert!(config.has_active_filters());
     }
 
     #[test]

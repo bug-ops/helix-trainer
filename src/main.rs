@@ -87,7 +87,6 @@ async fn main() -> Result<()> {
         persistent: app_config,
         keymap,
         keymap_report,
-        ..ui::state::ConfigState::default()
     };
 
     let mut app_state = AppState::with_config(
@@ -137,15 +136,6 @@ async fn main() -> Result<()> {
 
     // Snapshot the exit-time save before anything else touches `progress`.
     let final_save_request = app_state.prepare_final_save_request();
-
-    // Save configuration before exit (only if modified)
-    if app_state.config.config_modified {
-        if let Err(e) = config_storage.save(&app_state.config.persistent) {
-            tracing::error!("Failed to save config on exit: {:?}", e);
-        } else {
-            tracing::info!("Config saved successfully");
-        }
-    }
 
     // Enqueue the exit save as the very last item, then drop every sender
     // clone and wait for the writer to fully drain before the runtime

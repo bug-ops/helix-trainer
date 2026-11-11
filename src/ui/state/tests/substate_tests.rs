@@ -1,7 +1,6 @@
 //! Tests for UI state substates
 
 use super::common::create_test_app_state;
-use crate::config::SortMode;
 
 #[test]
 fn test_game_state_debug_impl() {
@@ -38,14 +37,6 @@ fn test_progress_state_mark_saved_prevents_immediate_resave() {
 
     // Immediately after saving, should not allow resave (debounce)
     assert!(!state.progress.should_save());
-}
-
-#[test]
-fn test_config_state_default() {
-    let state = create_test_app_state(vec![]);
-    assert_eq!(state.config.sort_mode, SortMode::ByName);
-    assert!(state.config.category_filters.is_empty());
-    assert!(state.config.difficulty_filters.is_empty());
 }
 
 #[test]

@@ -238,15 +238,15 @@ THEN  raw mode is off and the alternate screen is left before the previous hook 
 | ID | Requirement | Priority |
 |----|------------|----------|
 | FR-100 | WHEN no data directory can be resolved (no usable `HOME` or `XDG_CONFIG_HOME`, per FR-080 on macOS and `dirs::config_dir()` elsewhere) THE SYSTEM SHALL NOT fall back to the current working directory for `profile.json` or `config.json` | must |
-| FR-101 | WHEN the data directory cannot be resolved THE SYSTEM SHALL exit with a non-zero status and a message that names `HOME` and `XDG_CONFIG_HOME`, before the terminal is set up (the message is readable in the normal terminal) | must |
+| FR-101 | WHEN the data directory cannot be resolved THE SYSTEM SHALL exit with status 1 and a message that names `HOME` and `XDG_CONFIG_HOME`, before logging and terminal setup (the message is readable in the normal terminal) | must |
 | FR-102 | `--help` and `--version` SHALL keep working without a data directory (command-line parsing precedes resolution, see [[cli-version-and-help-flags/spec]]) | must |
-| FR-103 | THE path-less constructors `ProfileStorage::new()` and `ConfigStorage::new()` (and their `Default` impls) SHALL be removed; storage is built only from a resolved directory or an explicit path. The loader entry point takes the storage instance, and `main` SHALL hand it a clone of the application's `ProfileStorage` so loader and application share the last-valid bytes of FR-121 | must |
+| FR-103 | THE path-less constructors `ProfileStorage::new()` and `ConfigStorage::new()` (and their `Default` impls) SHALL be removed; `DataDir::resolve()` returns an `Option`; storage is built only from a resolved directory or an explicit path. The loader entry point takes the storage instance, and `main` SHALL hand it a clone of the application's `ProfileStorage` so loader and application share the last-valid bytes of FR-121 | must |
 
 ### 13.3 Config parse failure notification (#456)
 
 | ID | Requirement | Priority |
 |----|------------|----------|
-| FR-110 | WHEN `config.json` exists but cannot be read or parsed THE SYSTEM SHALL fall back to defaults AND show a visible startup notification stating that the configuration was not loaded (same mechanism as the Helix keymap startup message), and SHALL log the cause chain | must |
+| FR-110 | WHEN `config.json` exists but cannot be read or parsed THE SYSTEM SHALL fall back to defaults AND show a visible startup notification stating that the configuration was not loaded (same mechanism as the Helix keymap startup message), and SHALL log the cause chain; the notification text is the locale key `config.load_failed` | must |
 | FR-111 | THE atomic save required for `config.json` is delivered by FR-071 (temp file, fsync, rename); no additional save requirement is added here | must |
 
 ### 13.4 Restore from the previous profile copy (#531)
@@ -266,6 +266,7 @@ THEN  raw mode is off and the alternate screen is left before the previous hook 
 |----|------------|----------|
 | FR-130 | THE modules `gamification`, `learning` and `config` SHALL enable `clippy::arithmetic_side_effects`, `clippy::indexing_slicing`, `clippy::unwrap_used` and `clippy::expect_used` as warnings for non-test code (module-level `cfg_attr(not(test), warn(..))`); every hit is fixed or carries a local `expect` with a reason | must |
 | FR-131 | A property test SHALL mutate a valid profile JSON (integer leaves set to 0 and `MAX`, extreme chrono dates, unknown fields), load it from a temporary file, and on every successful load run `record_attempt`, streak update, achievement check, quest generation and the XP progress computation without panicking; case count is bounded for CI | must |
+| FR-132 | WHEN `ScenarioCollection` sorts or filters scenarios THE SYSTEM SHALL NOT panic on arithmetic overflow or a stale index (out-of-range indices are skipped); a card's `due` date SHALL saturate to `DateTime::MAX_UTC` instead of panicking when the computed interval overflows | must |
 
 ### 13.6 Level display overflow (#523)
 

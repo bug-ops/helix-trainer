@@ -846,8 +846,7 @@ mod tests {
     fn test_render_editor_pair_panels_have_equal_width_at_odd_terminal_widths() {
         // ODD widths are the only case that distinguishes the fix from the old
         // Percentage(50)/Percentage(50) split: at EVEN widths both implementations
-        // divide evenly and this assertion would pass either way (see critic finding
-        // S1, .local/handoff/2026-08-09T17-42-20-critic.md) - it is the odd-width
+        // divide evenly and this assertion would pass either way - it is the odd-width
         // case that actually exercises the leftover-column handling.
         for area_width in [41u16, 43, 81, 89, 91, 99, 121, 201] {
             assert!(area_width % 2 == 1, "test bug: {area_width} is not odd");

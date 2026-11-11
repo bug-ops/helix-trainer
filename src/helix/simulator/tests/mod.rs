@@ -14,6 +14,7 @@
 mod auto_pair_tests;
 mod basic_tests;
 mod clipboard_tests;
+mod crlf_insert_tests;
 mod editing_tests;
 mod hx_differential_tests;
 mod indent_tests;

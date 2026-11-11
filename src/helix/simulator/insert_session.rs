@@ -141,6 +141,18 @@ fn counted(count: NonZeroUsize, base: &str) -> String {
     }
 }
 
+/// Whether `text` is one line break (a CRLF is one grapheme) followed only by
+/// whitespace that is not a line break.
+fn line_break_then_blanks(text: &str) -> bool {
+    let rest = text
+        .strip_prefix("\r\n")
+        .or_else(|| text.strip_prefix(['\n', '\r']));
+    rest.is_some_and(|rest| {
+        rest.chars()
+            .all(|c| c.is_whitespace() && c != '\n' && c != '\r')
+    })
+}
+
 /// Selections to restore when the session's first change happens before the
 /// cursor moved: Helix stores the selection at the first change as the
 /// revision's old state, and the simulator collapses every range to a point
@@ -240,13 +252,9 @@ impl InsertSession {
         else {
             return false;
         };
-        let mut chars = inserted.chars();
         // Helix adds the byte length of the inserted text to a char count, so
         // the sum is only exact for ASCII whitespace; mirrored as is.
-        moved + inserted.len() == cursor
-            && cursor == line_end
-            && chars.next().is_some_and(|c| c == '\n' || c == '\r')
-            && chars.all(|c| c.is_whitespace() && c != '\n' && c != '\r')
+        moved + inserted.len() == cursor && cursor == line_end && line_break_then_blanks(inserted)
     }
 
     /// Close the session: record at most one undo entry (none when the

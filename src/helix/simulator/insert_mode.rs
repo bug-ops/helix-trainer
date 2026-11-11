@@ -17,7 +17,7 @@ use crate::helix::newline_indent::{
 use helix_core::{
     Assoc, ChangeSet, Range, Selection, Transaction, auto_pairs,
     graphemes::{next_grapheme_boundary, prev_grapheme_boundary},
-    line_ending::line_end_char_index,
+    line_ending::{LineEnding, auto_detect_line_ending, line_end_char_index},
     movement,
 };
 use helix_stdx::rope::RopeSliceExt;
@@ -197,6 +197,14 @@ impl<M: super::EditorMode> HelixSimulator<M> {
         self.apply_transaction(&transaction.with_selection(Selection::new(cursors, primary)));
     }
 
+    /// The line ending Enter, `o` and `O` insert: the document's own, found as
+    /// Helix does from its first line break, LF when there is none.
+    pub(super) fn line_ending(&self) -> &'static str {
+        auto_detect_line_ending(&self.doc)
+            .unwrap_or(LineEnding::LF)
+            .as_str()
+    }
+
     /// Open a line above the line holding char `at`, indented by the
     /// language rule, and put the cursor on it
     pub(super) fn open_above_at(&mut self, at: usize, comments: CommentContinuation) -> OpenedLine {
@@ -209,7 +217,12 @@ impl<M: super::EditorMode> HelixSimulator<M> {
         let cursor = line_start + indent_len;
         let transaction = Transaction::change(
             &self.doc,
-            [(line_start, line_start, Some(format!("{text}\n").into()))].into_iter(),
+            [(
+                line_start,
+                line_start,
+                Some(format!("{text}{}", self.line_ending()).into()),
+            )]
+            .into_iter(),
         )
         .with_selection(Selection::point(cursor));
         self.apply_transaction(&transaction);
@@ -499,7 +512,11 @@ impl HelixSimulator<NormalMode> {
                     };
                     let line = self.doc.char_to_line(last_char.min(self.doc.len_chars()));
                     let line_end = line_end_char_index(&slice, line);
-                    let unit = format!("\n{}", self.start_after(line, line_end).text());
+                    let unit = format!(
+                        "{}{}",
+                        self.line_ending(),
+                        self.start_after(line, line_end).text()
+                    );
                     let end = unit.chars().count();
                     (line_end, unit, end)
                 }
@@ -516,9 +533,9 @@ impl HelixSimulator<NormalMode> {
                     // only the first line has no line before it.
                     if line == 0 {
                         let indent_len = text.chars().count();
-                        (0, format!("{text}\n"), indent_len)
+                        (0, format!("{text}{}", self.line_ending()), indent_len)
                     } else {
-                        let unit = format!("\n{text}");
+                        let unit = format!("{}{text}", self.line_ending());
                         let end = unit.chars().count();
                         (line_end_char_index(&slice, line - 1), unit, end)
                     }
@@ -734,17 +751,19 @@ impl HelixSimulator<InsertMode> {
                 anchor: head,
                 assoc: Assoc::Before,
                 plus: 1 + inner.chars().count(),
-                text: format!("\n{inner}\n{base}"),
+                text: format!("{le}{inner}{le}{base}", le = self.line_ending()),
             };
         }
         match before.last_non_whitespace_char() {
-            Some(idx) => {
-                CursorEdit::replace(line_start + idx + 1, head, format!("\n{}", start.text()))
-            }
+            Some(idx) => CursorEdit::replace(
+                line_start + idx + 1,
+                head,
+                format!("{}{}", self.line_ending(), start.text()),
+            ),
             None => CursorEdit {
                 anchor: head,
                 assoc: Assoc::After,
-                ..CursorEdit::replace(line_start, line_start, "\n".to_string())
+                ..CursorEdit::replace(line_start, line_start, self.line_ending().to_string())
             },
         }
     }

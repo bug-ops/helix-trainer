@@ -114,6 +114,12 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Helix does.
     pub(super) auto_indent_end: Option<usize>,
 
+    /// Select (extend) mode: motions extend the selection instead of moving it
+    ///
+    /// Only meaningful in Normal mode (`v` toggles it, Esc and the editing
+    /// commands of `exits_select_mode` clear it) and always false in Insert mode.
+    pub(super) select_mode: bool,
+
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
 
@@ -311,6 +317,7 @@ impl HelixSimulator<NormalMode> {
             redo_stack: Vec::new(),
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
+            select_mode: false,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -355,6 +362,7 @@ impl HelixSimulator<NormalMode> {
             redo_stack: Vec::new(),
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
+            select_mode: false,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -426,6 +434,7 @@ impl HelixSimulator<NormalMode> {
             redo_stack: Vec::new(),
             registers: RegisterFile::new(),
             repeat_buffer: RepeatBuffer::new(),
+            select_mode: false,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -464,6 +473,7 @@ impl HelixSimulator<NormalMode> {
             redo_stack: self.redo_stack,
             registers: self.registers,
             repeat_buffer: self.repeat_buffer,
+            select_mode: false,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -508,6 +518,7 @@ impl HelixSimulator<InsertMode> {
             redo_stack: self.redo_stack,
             registers: self.registers,
             repeat_buffer: self.repeat_buffer,
+            select_mode: false,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -576,6 +587,7 @@ impl AnyModeSimulator {
     /// Get the current mode as a [`ModeKind`] for exhaustive matching
     pub fn mode_kind(&self) -> ModeKind {
         match self {
+            Self::Normal(sim) if sim.select_mode => ModeKind::Select,
             Self::Normal(_) => ModeKind::Normal,
             Self::Insert(_) => ModeKind::Insert,
         }
@@ -594,6 +606,7 @@ impl AnyModeSimulator {
     /// Get current mode name
     pub fn mode_name(&self) -> &'static str {
         match self {
+            Self::Normal(sim) if sim.select_mode => "SELECT",
             Self::Normal(_) => NormalMode::name(),
             Self::Insert(_) => InsertMode::name(),
         }

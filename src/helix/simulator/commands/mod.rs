@@ -4,6 +4,7 @@ pub mod clipboard;
 pub mod editing;
 pub mod movement;
 pub mod search;
+pub mod select_mode;
 pub mod selection;
 pub mod view;
 
@@ -541,7 +542,7 @@ pub(super) fn execute_command_any_mode(
             let is_insert_cmd = is_insert_command(cmd);
             let should_start_recording = !normal_sim.is_repeating && is_insert_cmd;
 
-            let result = execute_normal_mode_command_internal(&mut normal_sim, cmd);
+            let result = select_mode::execute(&mut normal_sim, cmd);
 
             if result.is_ok() {
                 let entry_cmd = if should_start_recording {

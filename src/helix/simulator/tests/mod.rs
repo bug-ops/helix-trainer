@@ -23,4 +23,5 @@ mod multi_cursor_tests;
 mod paste_tests;
 mod repeat_execution_tests;
 mod repeat_recording_tests;
+mod select_mode_tests;
 mod selection_tests;

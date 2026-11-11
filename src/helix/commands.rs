@@ -230,6 +230,15 @@ pub fn normalize_command_id(cmd: &str) -> std::borrow::Cow<'_, str> {
     {
         return Cow::Borrowed(CMD_SPLIT_SELECTION);
     }
+    for prompt_command in [CMD_KEEP_MATCHING, CMD_REMOVE_MATCHING] {
+        if cmd
+            .strip_prefix(prompt_command)
+            .and_then(|r| r.strip_prefix(' '))
+            .is_some()
+        {
+            return Cow::Borrowed(prompt_command);
+        }
+    }
 
     Cow::Borrowed(cmd)
 }
@@ -284,6 +293,13 @@ mod normalize_command_id_tests {
         assert_eq!(normalize_command_id("s bar"), "s");
         assert_eq!(normalize_command_id("S ,"), "S");
         assert_eq!(normalize_command_id("S foo bar"), "S"); // pattern with a space
+    }
+
+    #[test]
+    fn keep_and_remove_patterns_normalize_to_bare_command() {
+        assert_eq!(normalize_command_id("K foo"), "K");
+        assert_eq!(normalize_command_id("Alt-K foo bar"), "Alt-K");
+        assert_eq!(normalize_command_id("K"), "K");
     }
 
     /// Bare `s`/`S` (no space, no pattern) is not the prompt-command shape

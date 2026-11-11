@@ -75,44 +75,54 @@ mod stub {
     }
 
     impl SoundManager {
+        /// Creates a manager that only tracks `config`; no audio device is opened.
         pub fn new(config: SoundConfig) -> Self {
             Self { config }
         }
 
+        /// Always succeeds without touching any device.
         pub fn try_init(&mut self) -> Result<(), SoundError> {
             // No-op: audio not available
             Ok(())
         }
 
+        /// Discards the effect.
         pub fn play(&self, _effect: SoundEffect) {
             // No-op: audio not available
         }
 
+        /// Stores the enabled flag so settings round-trip.
         pub fn set_enabled(&mut self, enabled: bool) {
             self.config.enabled = enabled;
         }
 
+        /// Returns the stored enabled flag.
         pub fn is_enabled(&self) -> bool {
             self.config.enabled
         }
 
+        /// Flips the enabled flag and returns the new value.
         pub fn toggle(&mut self) -> bool {
             self.config.enabled = !self.config.enabled;
             self.config.enabled
         }
 
+        /// Stores the volume clamped to `0.0..=1.0`.
         pub fn set_volume(&mut self, volume: f32) {
             self.config.volume = volume.clamp(0.0, 1.0);
         }
 
+        /// Returns the stored volume.
         pub fn volume(&self) -> f32 {
             self.config.volume
         }
 
+        /// Returns the stored configuration.
         pub fn config(&self) -> &SoundConfig {
             &self.config
         }
 
+        /// Always `false`: this build has no audio backend.
         pub fn is_available(&self) -> bool {
             false
         }

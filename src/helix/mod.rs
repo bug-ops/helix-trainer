@@ -11,12 +11,12 @@
 //!
 //! let mut sim = AnyModeSimulator::new("hello world".to_string());
 //! sim.execute_command("w")?;  // Move to next word
-//! let state = sim.state()?;
-//! assert_eq!(state.cursor_position(), (0, 6));
+//! assert_eq!(sim.display().cursor_position(), (0, 6));
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
 pub mod commands;
+pub mod error;
 pub mod indent;
 pub mod language;
 pub mod macro_recorder;

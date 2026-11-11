@@ -637,3 +637,181 @@ fn test_validate_all_quest_templates() {
     );
     println!("\nAll quest templates are valid!");
 }
+
+mod validation {
+    use super::*;
+
+    fn valid_template() -> QuestTemplate {
+        let file: QuestsFile = toml::from_str(
+            r#"
+[metadata]
+version = "1.0"
+
+[[quests]]
+id = "valid"
+name = "Valid"
+description = "Valid"
+type = "command_practice"
+difficulty = "easy"
+
+[quests.params]
+command = "x"
+target = 3
+"#,
+        )
+        .unwrap();
+        file.quests.into_iter().next().unwrap()
+    }
+
+    fn with_spec(spec: QuestSpec) -> QuestTemplate {
+        QuestTemplate {
+            spec,
+            ..valid_template()
+        }
+    }
+
+    fn check(quest: &QuestTemplate) -> Result<(), QuestTemplateError> {
+        QuestLoader::check_quest(quest)
+    }
+
+    #[test]
+    fn a_valid_template_passes() {
+        assert_eq!(check(&valid_template()), Ok(()));
+        assert!(QuestLoader::validate_quest(&valid_template()).is_ok());
+    }
+
+    #[test]
+    fn text_and_xp_limits_have_their_own_variants() {
+        let long_name = QuestTemplate {
+            name: "n".repeat(MAX_QUEST_NAME_LENGTH + 1),
+            ..valid_template()
+        };
+        assert_matches!(
+            check(&long_name),
+            Err(QuestTemplateError::NameTooLong { .. })
+        );
+
+        let long_description = QuestTemplate {
+            description: "d".repeat(MAX_QUEST_DESCRIPTION_LENGTH + 1),
+            ..valid_template()
+        };
+        assert_matches!(
+            check(&long_description),
+            Err(QuestTemplateError::DescriptionTooLong { .. })
+        );
+
+        let rich = QuestTemplate {
+            xp: Some(XpConfig {
+                base_reward: Some(MAX_CUSTOM_XP_REWARD + 1),
+            }),
+            ..valid_template()
+        };
+        assert_matches!(
+            check(&rich),
+            Err(QuestTemplateError::XpRewardTooHigh { .. })
+        );
+    }
+
+    #[test]
+    fn condition_limits_have_their_own_variants() {
+        let commands = QuestTemplate {
+            conditions: QuestConditions {
+                requires_commands: vec![ncmd("x"); MAX_REQUIRED_CONDITIONS + 1],
+                ..QuestConditions::default()
+            },
+            ..valid_template()
+        };
+        assert_matches!(
+            check(&commands),
+            Err(QuestTemplateError::TooManyRequiredCommands { .. })
+        );
+
+        let scenarios = QuestTemplate {
+            conditions: QuestConditions {
+                requires_scenarios: vec![sid("s"); MAX_REQUIRED_CONDITIONS + 1],
+                ..QuestConditions::default()
+            },
+            ..valid_template()
+        };
+        assert_matches!(
+            check(&scenarios),
+            Err(QuestTemplateError::TooManyRequiredScenarios { .. })
+        );
+
+        let inverted = QuestTemplate {
+            conditions: QuestConditions {
+                min_level: Some(5),
+                max_level: Some(2),
+                ..QuestConditions::default()
+            },
+            ..valid_template()
+        };
+        assert_eq!(
+            check(&inverted),
+            Err(QuestTemplateError::LevelRangeInverted { min: 5, max: 2 })
+        );
+    }
+
+    #[test]
+    fn every_spec_variant_rejects_a_zero_and_an_oversized_target() {
+        for target in [0, MAX_QUEST_TARGET + 1] {
+            assert_matches!(
+                check(&with_spec(QuestSpec::CommandPractice {
+                    command: ncmd("x"),
+                    target
+                })),
+                Err(QuestTemplateError::InvalidCommandPracticeTarget { .. })
+            );
+            assert_matches!(
+                check(&with_spec(QuestSpec::ScenarioCompletion { target })),
+                Err(QuestTemplateError::InvalidScenarioCompletionTarget { .. })
+            );
+            assert_matches!(
+                check(&with_spec(QuestSpec::TimeInvested {
+                    target_minutes: target
+                })),
+                Err(QuestTemplateError::InvalidTimeInvestedTarget { .. })
+            );
+            assert_matches!(
+                check(&with_spec(QuestSpec::Exploration {
+                    target_commands: target
+                })),
+                Err(QuestTemplateError::InvalidExplorationTarget { .. })
+            );
+        }
+        for limit in [0, MAX_SPEED_RUN_TIME_SECONDS + 1] {
+            assert_matches!(
+                check(&with_spec(QuestSpec::SpeedRun {
+                    scenario_id: sid("s"),
+                    time_limit_seconds: limit
+                })),
+                Err(QuestTemplateError::InvalidSpeedRunTimeLimit { .. })
+            );
+        }
+    }
+
+    #[test]
+    fn a_long_command_name_is_rejected() {
+        let long = ncmd(&"x".repeat(MAX_QUEST_COMMAND_NAME_LENGTH + 1));
+        assert_matches!(
+            check(&with_spec(QuestSpec::CommandPractice {
+                command: long,
+                target: 1
+            })),
+            Err(QuestTemplateError::CommandNameTooLong { .. })
+        );
+    }
+
+    #[test]
+    fn the_security_error_keeps_the_typed_cause() {
+        let err = QuestLoader::validate_quest(&QuestTemplate {
+            name: "n".repeat(MAX_QUEST_NAME_LENGTH + 1),
+            ..valid_template()
+        })
+        .unwrap_err();
+        assert_matches!(
+            err,
+            SecurityError::QuestTemplate(QuestTemplateError::NameTooLong { .. })
+        );
+    }
+}

@@ -6,7 +6,7 @@
 //!
 //! The persistence regression tests below (`test_complete_review_command_persists_*`,
 //! `test_review_session_completion_*`) bypass FSRS due-scheduling entirely by
-//! constructing `ReviewSessionState` directly, since `StartReviewSession` cannot be
+//! constructing `ReviewSession` directly, since `StartReviewSession` cannot be
 //! relied on to produce a due review deterministically.
 
 use crate::testing::cid;
@@ -14,9 +14,10 @@ use std::assert_matches;
 use std::time::{Duration, Instant};
 
 use super::common::{create_test_app_state, create_test_scenario};
+use crate::learning::ReviewSession;
 use crate::testing::review_session;
 use crate::testing::update_executing_effects as update;
-use crate::ui::state::{Message, ReviewData, ReviewSessionState, TypedScreen};
+use crate::ui::state::{Message, ReviewData, TypedScreen};
 
 #[test]
 fn test_review_session_with_no_due_reviews() {
@@ -73,13 +74,8 @@ fn test_review_session_no_due_reviews_stays_on_menu() {
     assert!(review_session(&state).is_none());
 }
 
-fn review_session_with_commands(due_commands: Vec<crate::ids::CommandId>) -> ReviewSessionState {
-    ReviewSessionState {
-        due_commands,
-        current_index: 0,
-        session_started_at: Instant::now(),
-        completed_reviews: Vec::new(),
-    }
+fn review_session_with_commands(due_commands: Vec<crate::ids::CommandId>) -> ReviewSession {
+    ReviewSession::start(due_commands, Instant::now()).expect("fixture has due commands")
 }
 
 /// Regression test for #258/C1: `handle_complete_review_command`'s per-answer save
@@ -230,7 +226,7 @@ fn test_review_session_completion_notifies_on_level_up() {
 
     assert_eq!(state.progress.profile.level, 2);
     assert!(
-        state.ui.notifications.visible().iter().any(|n| matches!(
+        state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
             NotificationType::LevelUp { new_level } if new_level == 2
         )),
@@ -264,7 +260,6 @@ fn test_review_session_completion_no_level_up_notification_without_level_up() {
             .ui
             .notifications
             .visible()
-            .iter()
             .any(|n| matches!(n.notification_type, NotificationType::LevelUp { .. })),
         "no LevelUp notification should fire without an actual level up"
     );
@@ -319,4 +314,46 @@ fn test_abandon_review_session_persists_partial_progress() {
         persisted.performance_data.contains_key(&cid("x")),
         "abandoning must flush FSRS data recorded before the debounce window elapsed"
     );
+}
+
+/// Regression test for #550: a review answer is timed from when that command was shown, not
+/// from the session start, so every item's duration stays small however long the session runs.
+#[test]
+fn test_review_answer_duration_is_measured_per_command() {
+    use crate::learning::PerformanceTracker;
+    use crate::testing::TestAppStateBuilder;
+    use crate::time::FakeMonotonicClock;
+    use std::sync::Arc;
+
+    let mut tracker = PerformanceTracker::new();
+    for command in ["x", "w", "b", "e"] {
+        tracker.record_attempt(
+            &cid(command),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+    }
+    let clock = Arc::new(FakeMonotonicClock::new());
+    let mut state = TestAppStateBuilder::new()
+        .scenario(create_test_scenario())
+        .tracker(tracker)
+        .with_monotonic_clock(clock.clone())
+        .build();
+
+    update(&mut state, Message::StartReviewSession).unwrap();
+    for _ in 0..3 {
+        clock.advance(Duration::from_secs(2));
+        update(
+            &mut state,
+            Message::CompleteReviewCommand {
+                outcome: crate::ui::state::ReviewOutcome::Recalled,
+            },
+        )
+        .unwrap();
+    }
+
+    let session = review_session(&state).expect("a fourth command is still due");
+    let durations: Vec<_> = session.completed().iter().map(|r| r.duration).collect();
+    assert_eq!(durations, [Duration::from_secs(2); 3]);
 }

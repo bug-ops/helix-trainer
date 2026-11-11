@@ -8,12 +8,11 @@
 //! 5. Check analytics
 
 use helix_trainer::learning::{
-    Analytics, MasteryLevel, PerformanceTracker, ReviewSession, Scheduler,
+    Analytics, MasteryLevel, PerformanceTracker, ReviewOutcome, ReviewSession, ReviewStep,
+    Scheduler,
 };
 use std::assert_matches;
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn cid(raw: &str) -> helix_trainer::ids::CommandId {
     helix_trainer::ids::CommandId::from_card_id(raw).expect("canonical card id fixture")
@@ -229,19 +228,50 @@ fn test_scheduler_prioritization() {
 }
 
 #[test]
-fn test_review_session_empty() {
-    let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+fn test_review_session_requires_due_commands() {
     let scheduler = Scheduler::new();
+    let tracker = PerformanceTracker::new();
 
-    // Create session with no due reviews
-    let session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
+    let due = scheduler.get_due_reviews(&tracker);
 
-    assert!(session.is_complete());
-    assert!(session.current_item().is_none());
+    assert!(ReviewSession::start(due, Instant::now()).is_none());
+}
 
-    let summary = session.summary();
-    assert_eq!(summary.total_reviews, 0);
-    assert_eq!(summary.successful, 0);
+#[test]
+fn test_review_session_runs_over_due_commands() {
+    let mut tracker = PerformanceTracker::new();
+    tracker.record_attempt(
+        &cid("x"),
+        Duration::from_secs(1),
+        true,
+        Duration::from_secs(1),
+    );
+    tracker.record_attempt(
+        &cid("w"),
+        Duration::from_secs(1),
+        true,
+        Duration::from_secs(1),
+    );
+    let due = Scheduler::new().get_due_reviews(&tracker);
+    let t0 = Instant::now();
+
+    let mut session = ReviewSession::start(due, t0).expect("two first reviews are due now");
+    let mut answered = 0_u64;
+    let summary = loop {
+        answered += 1;
+        match session.answer(
+            ReviewOutcome::Recalled,
+            t0 + Duration::from_secs(answered),
+            &mut tracker,
+        ) {
+            ReviewStep::Next(next) => session = next,
+            ReviewStep::Finished(summary) => break summary,
+        }
+    };
+
+    assert_eq!(summary.total_reviews, 2);
+    assert_eq!(summary.successful, 2);
+    assert_eq!(summary.avg_time, Duration::from_secs(1));
 }
 
 #[test]

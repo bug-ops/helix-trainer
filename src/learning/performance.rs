@@ -2,11 +2,13 @@ use chrono::{DateTime, Utc};
 use fsrs::{FSRS, MemoryState};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use super::LearningError;
 use super::traits::ProgressionTier;
+use crate::constants::PER_ACTION_BUDGET;
 use crate::ids::CommandId;
 use crate::time::{Clock, SystemClock};
 
@@ -38,6 +40,101 @@ pub enum CardState {
     Review,
     /// Forgotten after graduating and being learned again.
     Relearning,
+}
+
+/// FSRS rating of one attempt, ordered from worst to best
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::learning::performance::{Rating, ReferenceTime};
+/// use std::time::Duration;
+///
+/// let reference = ReferenceTime::SINGLE_ACTION;
+/// assert_eq!(Rating::for_attempt(true, Duration::from_secs(2), reference), Rating::Easy);
+/// assert_eq!(Rating::for_attempt(true, Duration::from_secs(20), reference), Rating::Hard);
+/// assert_eq!(Rating::for_attempt(false, Duration::ZERO, reference), Rating::Again);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Rating {
+    /// Failed attempt.
+    Again,
+    /// Succeeded slowly (more than 3x the reference time).
+    Hard,
+    /// Succeeded at a normal pace (1.5x to 3x the reference time).
+    Good,
+    /// Succeeded quickly (up to 1.5x the reference time).
+    Easy,
+}
+
+impl Rating {
+    const EASY_MAX_RATIO: f64 = 1.5;
+    const GOOD_MAX_RATIO: f64 = 3.0;
+
+    /// Rates an attempt: a failure is [`Rating::Again`]; a success is never `Again` and gets
+    /// worse as `duration` grows relative to `reference`.
+    pub fn for_attempt(success: bool, duration: Duration, reference: ReferenceTime) -> Self {
+        if !success {
+            return Self::Again;
+        }
+        let ratio = reference.ratio(duration);
+        if ratio <= Self::EASY_MAX_RATIO {
+            Self::Easy
+        } else if ratio <= Self::GOOD_MAX_RATIO {
+            Self::Good
+        } else {
+            Self::Hard
+        }
+    }
+}
+
+/// Expected time for an attempt, the yardstick a duration is rated against
+///
+/// Independent of the measured time, so the rating depends on how quickly the player answered.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::learning::performance::ReferenceTime;
+/// use std::num::NonZeroUsize;
+/// use std::time::Duration;
+///
+/// let three_actions = ReferenceTime::for_optimal_actions(NonZeroUsize::new(3).unwrap());
+/// assert_eq!(three_actions.as_duration(), Duration::from_secs(9));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReferenceTime(Duration);
+
+impl ReferenceTime {
+    /// The reference for a single action, used for review answers.
+    pub const SINGLE_ACTION: Self = Self(PER_ACTION_BUDGET);
+
+    /// Wraps an explicit expected duration.
+    pub const fn new(expected: Duration) -> Self {
+        Self(expected)
+    }
+
+    /// The reference for a scenario solved in `optimal_actions` actions: that many action
+    /// budgets, saturating on overflow.
+    pub fn for_optimal_actions(optimal_actions: NonZeroUsize) -> Self {
+        let count = u32::try_from(optimal_actions.get()).unwrap_or(u32::MAX);
+        Self(PER_ACTION_BUDGET.saturating_mul(count))
+    }
+
+    /// The expected duration.
+    pub const fn as_duration(self) -> Duration {
+        self.0
+    }
+
+    /// `duration` divided by the reference; zero for a zero duration, infinite when only the
+    /// reference is zero.
+    fn ratio(self, duration: Duration) -> f64 {
+        if duration.is_zero() {
+            0.0
+        } else {
+            duration.as_secs_f64() / self.0.as_secs_f64()
+        }
+    }
 }
 
 /// Persisted per-command FSRS data, keyed by review-card id.
@@ -481,16 +578,15 @@ impl CommandPerformance {
         &mut self,
         memory: MemoryState,
         interval: f32,
-        rating_index: usize,
+        rating: Rating,
         now: DateTime<Utc>,
     ) -> Result<(), LearningError> {
         let stability = Stability::new(memory.stability)?;
         let difficulty = Difficulty::new(memory.difficulty)?;
 
         // Determine new state based on rating and current state
-        self.state = match (self.state, rating_index) {
-            // Again (0) - failed
-            (_, 0) => {
+        self.state = match (self.state, rating) {
+            (_, Rating::Again) => {
                 self.lapses = self.lapses.saturating_add(1);
                 if self.reps > 0 {
                     CardState::Relearning
@@ -498,30 +594,25 @@ impl CommandPerformance {
                     CardState::Learning
                 }
             }
-            // Hard (1) - struggled but passed
-            (CardState::New | CardState::Learning, 1) => CardState::Learning,
-            (CardState::Relearning, 1) => CardState::Relearning,
-            (CardState::Review, 1) => CardState::Review,
-            // Good (2) or Easy (3) - succeeded well
-            (CardState::New | CardState::Learning, _) => {
+            (CardState::New | CardState::Learning, Rating::Hard) => CardState::Learning,
+            (CardState::Relearning, Rating::Hard) => CardState::Relearning,
+            (CardState::Review, Rating::Hard) => CardState::Review,
+            (CardState::New | CardState::Learning, Rating::Good | Rating::Easy) => {
                 if interval >= 1.0 {
                     CardState::Review
                 } else {
                     CardState::Learning
                 }
             }
-            (CardState::Relearning, _) => CardState::Review,
-            (CardState::Review, _) => CardState::Review,
+            (CardState::Relearning | CardState::Review, Rating::Good | Rating::Easy) => {
+                CardState::Review
+            }
         };
 
         self.stability = stability;
         self.difficulty = difficulty;
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "FSRS clamps intervals to its maximum interval, a few decades of days, and the value is at least 1"
-        )]
-        let scheduled_days = interval.round().max(1.0) as u32;
+        let scheduled_days =
+            crate::numeric::to_u32(f64::from(interval), crate::numeric::Rounding::Nearest).max(1);
         self.scheduled_days = scheduled_days;
         self.last_review = now;
 
@@ -591,7 +682,7 @@ impl PerformanceTracker {
 
     /// Replace the clock this tracker reads time from.
     ///
-    /// Used by [`crate::ui::state::ProgressState::with_clock`] to keep this tracker and its
+    /// Used by [`crate::ui::state::ProgressState::with_clocks`] to keep this tracker and its
     /// sibling [`super::Scheduler`] reading from the same injected clock instance.
     pub fn set_clock(&mut self, clock: Arc<dyn Clock>) {
         self.clock = clock;
@@ -606,7 +697,8 @@ impl PerformanceTracker {
         &self.clock
     }
 
-    /// Record an attempt, logging an FSRS update failure instead of returning it.
+    /// Record an attempt rated against an expected duration, logging an FSRS update failure
+    /// instead of returning it.
     ///
     /// For call sites with no recovery path: the attempt is still counted and the schedule
     /// stays unchanged. See [`Self::try_record_attempt`] to observe the error.
@@ -617,7 +709,18 @@ impl PerformanceTracker {
         success: bool,
         optimal_time: Duration,
     ) {
-        if let Err(error) = self.try_record_attempt(command, duration, success, optimal_time) {
+        self.record_attempt_against(command, duration, success, ReferenceTime::new(optimal_time));
+    }
+
+    /// Like [`Self::record_attempt`] with a typed [`ReferenceTime`].
+    pub fn record_attempt_against(
+        &mut self,
+        command: &CommandId,
+        duration: Duration,
+        success: bool,
+        reference: ReferenceTime,
+    ) {
+        if let Err(error) = self.try_record_attempt(command, duration, success, reference) {
             tracing::error!(
                 %command,
                 %error,
@@ -638,7 +741,7 @@ impl PerformanceTracker {
         command: &CommandId,
         duration: Duration,
         success: bool,
-        optimal_time: Duration,
+        reference: ReferenceTime,
     ) -> Result<(), LearningError> {
         // One `now` read shared by card creation, the elapsed-days calculation and the
         // persisted last_review timestamp.
@@ -655,30 +758,28 @@ impl PerformanceTracker {
         }
         perf.total_time = perf.total_time.saturating_add(duration);
 
-        // Rating index 0-3 for again/hard/good/easy.
-        let rating_index = Self::calculate_rating_index(duration, success, optimal_time);
+        let rating = Rating::for_attempt(success, duration, reference);
         let elapsed_days = Self::elapsed_days_since_review(perf, now);
         let next_state =
-            Self::next_item_state(&self.fsrs, perf.memory_state(), elapsed_days, rating_index)?;
-        perf.update_from_next_state(next_state.memory, next_state.interval, rating_index, now)
+            Self::next_item_state(&self.fsrs, perf.memory_state(), elapsed_days, rating)?;
+        perf.update_from_next_state(next_state.memory, next_state.interval, rating, now)
     }
 
     fn next_item_state(
         fsrs: &FSRS,
         memory_state: Option<MemoryState>,
         elapsed_days: u32,
-        rating_index: usize,
+        rating: Rating,
     ) -> Result<fsrs::ItemState, LearningError> {
         let next_states = fsrs
             .next_states(memory_state, DEFAULT_DESIRED_RETENTION, elapsed_days)
-            .map_err(|error| LearningError::FsrsError(error.to_string()))?;
+            .map_err(LearningError::FsrsError)?;
 
-        Ok(match rating_index {
-            0 => next_states.again,
-            1 => next_states.hard,
-            2 => next_states.good,
-            3 => next_states.easy,
-            _ => unreachable!("rating_index must be 0-3"),
+        Ok(match rating {
+            Rating::Again => next_states.again,
+            Rating::Hard => next_states.hard,
+            Rating::Good => next_states.good,
+            Rating::Easy => next_states.easy,
         })
     }
 
@@ -692,21 +793,6 @@ impl PerformanceTracker {
                     .max(0),
             )
             .unwrap_or(u32::MAX)
-        }
-    }
-
-    fn calculate_rating_index(duration: Duration, success: bool, optimal_time: Duration) -> usize {
-        if !success {
-            return 0; // Again (complete failure)
-        }
-
-        let ratio = duration.as_secs_f64() / optimal_time.as_secs_f64();
-
-        match ratio {
-            r if r <= 1.5 => 3, // Easy - instant recall (< 1.5x optimal)
-            r if r <= 3.0 => 2, // Good - normal recall (1.5-3x optimal)
-            r if r <= 5.0 => 1, // Hard - struggled (3-5x optimal)
-            _ => 0,             // Again - essentially forgot (> 5x optimal)
         }
     }
 
@@ -742,7 +828,7 @@ impl PerformanceTracker {
         command: &CommandId,
         duration: Duration,
         success: bool,
-        optimal_time: Duration,
+        reference: ReferenceTime,
     ) -> Option<(CommandId, MasteryLevel, MasteryLevel)> {
         // Get old mastery level (Beginner if new command)
         let old_level = self
@@ -751,7 +837,7 @@ impl PerformanceTracker {
             .map_or(MasteryLevel::Beginner, CommandPerformance::mastery_level);
 
         // Record the attempt
-        self.record_attempt(command, duration, success, optimal_time);
+        self.record_attempt_against(command, duration, success, reference);
 
         // Get new mastery level
         let new_level = self
@@ -947,7 +1033,7 @@ mod tests {
             stability_fast: 5.0,
         };
 
-        card.update_from_next_state(memory, 36_500.0, 2, DateTime::<Utc>::MAX_UTC)
+        card.update_from_next_state(memory, 36_500.0, Rating::Good, DateTime::<Utc>::MAX_UTC)
             .unwrap();
 
         assert_eq!(card.due(), DateTime::<Utc>::MAX_UTC);
@@ -1005,10 +1091,15 @@ mod tests {
             &cid("x"),
             Duration::from_secs(1),
             true,
-            Duration::from_secs(1),
+            ReferenceTime::SINGLE_ACTION,
         );
 
         assert_matches!(result, Err(LearningError::FsrsError(_)));
+        let error = result.unwrap_err();
+        assert!(
+            std::error::Error::source(&error).is_some(),
+            "the fsrs error must stay attached as the source"
+        );
         let perf = tracker.performance(&cid("x")).unwrap();
         assert_eq!(perf.attempts(), 1);
         assert_eq!(perf.successes(), 1);
@@ -1026,7 +1117,7 @@ mod tests {
             stability_fast: f32::INFINITY,
         };
 
-        let result = perf.update_from_next_state(memory, 3.0, 2, now);
+        let result = perf.update_from_next_state(memory, 3.0, Rating::Good, now);
 
         assert_matches!(result, Err(LearningError::InvalidStability(_)));
         assert_eq!(perf.reps(), 0);
@@ -1141,44 +1232,72 @@ mod tests {
         assert!(perf.difficulty() <= 10.0);
     }
 
+    fn rate(success: bool, secs: f64) -> Rating {
+        Rating::for_attempt(
+            success,
+            Duration::from_secs_f64(secs),
+            ReferenceTime::new(Duration::from_secs(1)),
+        )
+    }
+
     #[test]
-    fn test_rating_conversion() {
-        // Test performance → FSRS rating conversion
-        assert_eq!(
-            PerformanceTracker::calculate_rating_index(
-                Duration::from_secs(1),
-                true,
-                Duration::from_secs(1)
-            ),
-            3 // Easy
-        );
+    fn test_rating_thresholds_are_inclusive() {
+        assert_eq!(rate(true, 0.0), Rating::Easy);
+        assert_eq!(rate(true, 1.5), Rating::Easy);
+        assert_eq!(rate(true, 1.6), Rating::Good);
+        assert_eq!(rate(true, 3.0), Rating::Good);
+        assert_eq!(rate(true, 3.1), Rating::Hard);
+        assert_eq!(rate(true, 3600.0), Rating::Hard);
+    }
 
-        assert_eq!(
-            PerformanceTracker::calculate_rating_index(
-                Duration::from_secs(2),
-                true,
-                Duration::from_secs(1)
-            ),
-            2 // Good
-        );
+    #[test]
+    fn test_failure_is_always_again() {
+        assert_eq!(rate(false, 0.0), Rating::Again);
+        assert_eq!(rate(false, 1.0), Rating::Again);
+        assert_eq!(rate(false, 1000.0), Rating::Again);
+    }
 
-        assert_eq!(
-            PerformanceTracker::calculate_rating_index(
-                Duration::from_secs(4),
-                true,
-                Duration::from_secs(1)
-            ),
-            1 // Hard
-        );
+    #[test]
+    fn test_slow_success_is_not_again() {
+        // Regression for #550: more than 5x the reference time used to rate a success Again.
+        assert_eq!(rate(true, 6.0), Rating::Hard);
+    }
 
+    #[test]
+    fn test_zero_reference_time_does_not_divide_by_zero() {
+        let zero = ReferenceTime::new(Duration::ZERO);
         assert_eq!(
-            PerformanceTracker::calculate_rating_index(
-                Duration::from_secs(10),
-                false,
-                Duration::from_secs(1)
-            ),
-            0 // Again
+            Rating::for_attempt(true, Duration::ZERO, zero),
+            Rating::Easy
         );
+        assert_eq!(
+            Rating::for_attempt(true, Duration::from_secs(1), zero),
+            Rating::Hard
+        );
+    }
+
+    #[test]
+    fn test_reference_time_scales_with_optimal_actions() {
+        let one = ReferenceTime::for_optimal_actions(NonZeroUsize::MIN);
+        let four = ReferenceTime::for_optimal_actions(NonZeroUsize::new(4).unwrap());
+
+        assert_eq!(one, ReferenceTime::SINGLE_ACTION);
+        assert_eq!(four.as_duration(), PER_ACTION_BUDGET * 4);
+        assert_eq!(
+            ReferenceTime::for_optimal_actions(NonZeroUsize::MAX).as_duration(),
+            PER_ACTION_BUDGET.saturating_mul(u32::MAX)
+        );
+    }
+
+    #[test]
+    fn test_training_rating_depends_on_actual_time() {
+        // Regression for #550: the reference no longer derives from the measured time, so
+        // a slow completion rates worse than a quick one.
+        let reference = ReferenceTime::for_optimal_actions(NonZeroUsize::new(2).unwrap());
+        let quick = Rating::for_attempt(true, Duration::from_secs(6), reference);
+        let slow = Rating::for_attempt(true, Duration::from_secs(60), reference);
+        assert_eq!(quick, Rating::Easy);
+        assert_eq!(slow, Rating::Hard);
     }
 
     #[test]
@@ -1312,6 +1431,36 @@ mod tests {
     }
 
     proptest! {
+        #[test]
+        fn prop_rating_is_monotonic_in_duration(
+            success in any::<bool>(),
+            reference_ms in 0u64..100_000,
+            a_ms in 0u64..10_000_000,
+            b_ms in 0u64..10_000_000,
+        ) {
+            let reference = ReferenceTime::new(Duration::from_millis(reference_ms));
+            let (shorter, longer) = (a_ms.min(b_ms), a_ms.max(b_ms));
+
+            let quick = Rating::for_attempt(success, Duration::from_millis(shorter), reference);
+            let slow = Rating::for_attempt(success, Duration::from_millis(longer), reference);
+
+            prop_assert!(slow <= quick, "{slow:?} after {longer} ms beat {quick:?} after {shorter} ms");
+        }
+
+        #[test]
+        fn prop_success_is_never_again(
+            reference_ms in 0u64..100_000,
+            duration_ms in any::<u64>(),
+        ) {
+            let rating = Rating::for_attempt(
+                true,
+                Duration::from_millis(duration_ms),
+                ReferenceTime::new(Duration::from_millis(reference_ms)),
+            );
+
+            prop_assert_ne!(rating, Rating::Again);
+        }
+
         #[test]
         fn prop_fsrs_state_transition_is_deterministic(
             attempts in prop::collection::vec(attempt_strategy(), 1..12),

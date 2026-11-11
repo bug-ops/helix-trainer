@@ -10,6 +10,12 @@ use crate::security::limits::{
     MAX_SCENARIO_FILE_SIZE, MAX_SPEED_RUN_TIME_SECONDS, MAX_VERSION_LENGTH,
 };
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
+
+mod error;
+pub use error::QuestTemplateError;
+
+/// Longest command name a command-practice quest may target.
+const MAX_QUEST_COMMAND_NAME_LENGTH: usize = 10;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -347,94 +353,106 @@ impl QuestLoader {
 
     /// Validate a single quest template for security and correctness
     fn validate_quest(quest: &QuestTemplate) -> Result<(), SecurityError> {
-        // Validate string lengths
+        Ok(Self::check_quest(quest)?)
+    }
+
+    fn check_quest(quest: &QuestTemplate) -> Result<(), QuestTemplateError> {
         if quest.name.len() > MAX_QUEST_NAME_LENGTH {
-            return Err(SecurityError::InvalidInput("Quest name too long".into()));
+            return Err(QuestTemplateError::NameTooLong {
+                max: MAX_QUEST_NAME_LENGTH,
+                actual: quest.name.len(),
+            });
         }
         if quest.description.len() > MAX_QUEST_DESCRIPTION_LENGTH {
-            return Err(SecurityError::InvalidInput(
-                "Quest description too long".into(),
-            ));
+            return Err(QuestTemplateError::DescriptionTooLong {
+                max: MAX_QUEST_DESCRIPTION_LENGTH,
+                actual: quest.description.len(),
+            });
         }
 
-        // Validate custom XP reward
         if let Some(xp_config) = &quest.xp
             && let Some(reward) = xp_config.base_reward
             && reward > MAX_CUSTOM_XP_REWARD
         {
-            return Err(SecurityError::InvalidInput(
-                "Custom XP reward exceeds maximum".into(),
-            ));
+            return Err(QuestTemplateError::XpRewardTooHigh {
+                max: MAX_CUSTOM_XP_REWARD,
+                actual: reward,
+            });
         }
 
-        // Validate conditions
-        if quest.conditions.requires_commands.len() > MAX_REQUIRED_CONDITIONS {
-            return Err(SecurityError::InvalidInput(
-                "Too many required commands".into(),
-            ));
+        let commands = quest.conditions.requires_commands.len();
+        if commands > MAX_REQUIRED_CONDITIONS {
+            return Err(QuestTemplateError::TooManyRequiredCommands {
+                max: MAX_REQUIRED_CONDITIONS,
+                actual: commands,
+            });
         }
-        if quest.conditions.requires_scenarios.len() > MAX_REQUIRED_CONDITIONS {
-            return Err(SecurityError::InvalidInput(
-                "Too many required scenarios".into(),
-            ));
+        let scenarios = quest.conditions.requires_scenarios.len();
+        if scenarios > MAX_REQUIRED_CONDITIONS {
+            return Err(QuestTemplateError::TooManyRequiredScenarios {
+                max: MAX_REQUIRED_CONDITIONS,
+                actual: scenarios,
+            });
         }
 
-        // Validate min_level <= max_level consistency
         if let (Some(min), Some(max)) = (quest.conditions.min_level, quest.conditions.max_level)
             && min > max
         {
-            return Err(SecurityError::InvalidInput(
-                "min_level cannot be greater than max_level".into(),
-            ));
+            return Err(QuestTemplateError::LevelRangeInverted { min, max });
         }
 
-        // Validate spec parameter bounds
-        Self::validate_spec(quest)?;
-
-        Ok(())
+        Self::check_spec(&quest.spec)
     }
 
     /// Validate quest spec parameters are within bounds
-    fn validate_spec(quest: &QuestTemplate) -> Result<(), SecurityError> {
-        match &quest.spec {
+    fn check_spec(spec: &QuestSpec) -> Result<(), QuestTemplateError> {
+        match spec {
             QuestSpec::CommandPractice { command, target } => {
-                if command.as_str().len() > 10 {
-                    return Err(SecurityError::InvalidInput("Invalid command name".into()));
+                if command.as_str().len() > MAX_QUEST_COMMAND_NAME_LENGTH {
+                    return Err(QuestTemplateError::CommandNameTooLong {
+                        max: MAX_QUEST_COMMAND_NAME_LENGTH,
+                        actual: command.as_str().len(),
+                    });
                 }
-                if *target == 0 || *target > MAX_QUEST_TARGET {
-                    return Err(SecurityError::InvalidInput(
-                        "Invalid command practice target".into(),
-                    ));
+                if !(1..=MAX_QUEST_TARGET).contains(target) {
+                    return Err(QuestTemplateError::InvalidCommandPracticeTarget {
+                        max: MAX_QUEST_TARGET,
+                        actual: *target,
+                    });
                 }
             }
             QuestSpec::ScenarioCompletion { target } => {
-                if *target == 0 || *target > MAX_QUEST_TARGET {
-                    return Err(SecurityError::InvalidInput(
-                        "Invalid scenario completion target".into(),
-                    ));
+                if !(1..=MAX_QUEST_TARGET).contains(target) {
+                    return Err(QuestTemplateError::InvalidScenarioCompletionTarget {
+                        max: MAX_QUEST_TARGET,
+                        actual: *target,
+                    });
                 }
             }
             QuestSpec::SpeedRun {
                 time_limit_seconds, ..
             } => {
-                if *time_limit_seconds == 0 || *time_limit_seconds > MAX_SPEED_RUN_TIME_SECONDS {
-                    return Err(SecurityError::InvalidInput(
-                        "Invalid speed run time limit".into(),
-                    ));
+                if !(1..=MAX_SPEED_RUN_TIME_SECONDS).contains(time_limit_seconds) {
+                    return Err(QuestTemplateError::InvalidSpeedRunTimeLimit {
+                        max: MAX_SPEED_RUN_TIME_SECONDS,
+                        actual: *time_limit_seconds,
+                    });
                 }
             }
             QuestSpec::TimeInvested { target_minutes } => {
-                if *target_minutes == 0 || *target_minutes > MAX_QUEST_TARGET {
-                    return Err(SecurityError::InvalidInput(
-                        "Invalid time invested target".into(),
-                    ));
+                if !(1..=MAX_QUEST_TARGET).contains(target_minutes) {
+                    return Err(QuestTemplateError::InvalidTimeInvestedTarget {
+                        max: MAX_QUEST_TARGET,
+                        actual: *target_minutes,
+                    });
                 }
             }
             QuestSpec::Exploration { target_commands } => {
-                if *target_commands == 0 || *target_commands > MAX_QUEST_TARGET {
-                    return Err(SecurityError::InvalidInput(
-                        "Invalid exploration target".into(),
-                    ));
+                if !(1..=MAX_QUEST_TARGET).contains(target_commands) {
+                    return Err(QuestTemplateError::InvalidExplorationTarget {
+                        max: MAX_QUEST_TARGET,
+                        actual: *target_commands,
+                    });
                 }
             }
         }

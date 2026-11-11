@@ -39,7 +39,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "navigation"]
 commands_taught = ["h", "j", "k", "l"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "combined_move_002"
@@ -79,7 +78,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "navigation"]
 commands_taught = ["h", "k"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "combined_move_003"
@@ -114,7 +112,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "word"]
 commands_taught = ["w"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "combined_move_004"
@@ -154,7 +151,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "multiline"]
 commands_taught = ["j"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "combined_move_005"
@@ -194,7 +190,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "document"]
 commands_taught = ["gg", "w"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "combined_move_006"
@@ -230,7 +225,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "line"]
 commands_taught = ["j", "gh"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "combined_word_001"
@@ -265,7 +259,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "word", "backward"]
 commands_taught = ["b"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "combined_word_002"
@@ -300,4 +293,3 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "word", "forward"]
 commands_taught = ["w"]
-estimated_time_seconds = 10

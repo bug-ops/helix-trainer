@@ -490,7 +490,6 @@ fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
             .ui
             .notifications
             .visible()
-            .iter()
             .any(|n| n.notification_type == NotificationType::StreakFreezeGranted)
     );
 }
@@ -530,7 +529,6 @@ fn test_streak_freeze_not_granted_twice() {
             .ui
             .notifications
             .visible()
-            .iter()
             .any(|n| n.notification_type == NotificationType::StreakFreezeGranted)
     );
 }

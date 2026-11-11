@@ -40,7 +40,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["find", "character", "navigation"]
 commands_taught = ["f"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "find_char_002"
@@ -79,7 +78,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["find", "code", "navigation"]
 commands_taught = ["f"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "find_prev_char_001"
@@ -117,7 +115,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["find", "backward", "navigation"]
 commands_taught = ["F"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "till_char_001"
@@ -154,7 +151,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["till", "character", "navigation"]
 commands_taught = ["t"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "till_prev_char_001"
@@ -192,4 +188,3 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["till", "backward", "navigation"]
 commands_taught = ["T"]
-estimated_time_seconds = 10

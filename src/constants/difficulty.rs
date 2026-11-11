@@ -21,8 +21,6 @@ pub const LEVEL_1_3_TIME_SCALE: f64 = 1.0;
 pub const LEVEL_4_6_TIME_SCALE: f64 = 0.9;
 /// Time scale for levels 7-10 (80%)
 pub const LEVEL_7_10_TIME_SCALE: f64 = 0.8;
-/// Minimum time scale multiplier (50%)
-pub const MIN_TIME_SCALE_MULTIPLIER: f64 = 0.5;
 
 // Difficulty level ranges
 /// Beginner level range minimum
@@ -33,8 +31,6 @@ pub const LEVEL_BEGINNER_MAX: u8 = 3;
 pub const LEVEL_INTERMEDIATE_MIN: u8 = 4;
 /// Intermediate level range maximum
 pub const LEVEL_INTERMEDIATE_MAX: u8 = 6;
-/// Advanced level range minimum
-pub const LEVEL_ADVANCED_MIN: u8 = 7;
 /// Advanced level range maximum
 pub const LEVEL_ADVANCED_MAX: u8 = 10;
 

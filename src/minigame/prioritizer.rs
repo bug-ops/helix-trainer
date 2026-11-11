@@ -213,7 +213,9 @@ impl<'a> ScenarioPrioritizer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
+    use crate::config::{
+        CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+    };
     use crate::testing::{cid, sid};
     use crate::time::{Clock, FakeClock};
     use chrono::Duration;
@@ -249,14 +251,13 @@ mod tests {
                 commands: commands.into_iter().map(String::from).collect(),
                 description: "Test solution".to_string(),
             },
-            alternatives: vec![],
             hints: vec![],
             scoring: ScoringConfig {
                 optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
                 max_points: 100,
                 tolerance: 0,
             },
-            metadata: None,
+            metadata: ScenarioMetadata::default(),
         }
     }
 

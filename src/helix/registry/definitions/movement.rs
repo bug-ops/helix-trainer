@@ -13,7 +13,9 @@ use crate::helix::commands::{
     CMD_TILL_CHAR_REVERSE,
 };
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
-use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior};
+use crate::helix::registry::metadata::{
+    Binding, Category, CommandMetadata, CountBehavior, HelixName,
+};
 use crate::helix::simulator::NormalMode;
 use crate::helix::simulator::commands::{movement, select_mode};
 
@@ -22,133 +24,113 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Basic cursor movement
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_char_left",
+            Binding::Helix(HelixName::new("move_char_left")),
             CMD_MOVE_LEFT,
-            "Move cursor left",
-            "Move the cursor one character to the left. Stops at line start.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move cursor left")
+        .with_help("Move the cursor one character to the left. Stops at line start."),
         |sim| movement::move_left(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_char_right",
+            Binding::Helix(HelixName::new("move_char_right")),
             CMD_MOVE_RIGHT,
-            "Move cursor right",
-            "Move the cursor one character to the right. Stops at line end.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move cursor right")
+        .with_help("Move the cursor one character to the right. Stops at line end."),
         |sim| movement::move_right(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_visual_line_down",
+            Binding::Helix(HelixName::new("move_visual_line_down")),
             CMD_MOVE_DOWN,
-            "Move cursor down",
-            "Move the cursor one line down. Maintains column position.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move cursor down")
+        .with_help("Move the cursor one line down. Maintains column position."),
         |sim| movement::move_down(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_visual_line_up",
+            Binding::Helix(HelixName::new("move_visual_line_up")),
             CMD_MOVE_UP,
-            "Move cursor up",
-            "Move the cursor one line up. Maintains column position.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move cursor up")
+        .with_help("Move the cursor one line up. Maintains column position."),
         |sim| movement::move_up(sim, 1),
     ));
 
     // Word movement
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_next_word_start",
+            Binding::Helix(HelixName::new("move_next_word_start")),
             CMD_MOVE_WORD_FORWARD,
-            "Move to next word start",
-            "Move to the start of the next word. Words are delimited by punctuation.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move to next word start")
+        .with_help("Move to the start of the next word. Words are delimited by punctuation."),
         |sim| movement::move_next_word_start(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_prev_word_start",
+            Binding::Helix(HelixName::new("move_prev_word_start")),
             CMD_MOVE_WORD_BACKWARD,
-            "Move to previous word start",
-            "Move to the start of the previous word.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move to previous word start")
+        .with_help("Move to the start of the previous word."),
         |sim| movement::move_prev_word_start(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_next_word_end",
+            Binding::Helix(HelixName::new("move_next_word_end")),
             CMD_MOVE_WORD_END,
-            "Move to next word end",
-            "Move to the end of the current or next word.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move to next word end")
+        .with_help("Move to the end of the current or next word."),
         |sim| movement::move_next_word_end(sim, 1),
     ));
 
     // WORD movement (whitespace-delimited)
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_next_long_word_start",
+            Binding::Helix(HelixName::new("move_next_long_word_start")),
             CMD_MOVE_LONG_WORD_FORWARD,
-            "Move to next WORD start",
-            "Move to the start of the next WORD (whitespace-delimited).",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move to next WORD start")
+        .with_help("Move to the start of the next WORD (whitespace-delimited)."),
         |sim| movement::move_next_long_word_start(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_prev_long_word_start",
+            Binding::Helix(HelixName::new("move_prev_long_word_start")),
             CMD_MOVE_LONG_WORD_BACKWARD,
-            "Move to previous WORD start",
-            "Move to the start of the previous WORD (whitespace-delimited).",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move to previous WORD start")
+        .with_help("Move to the start of the previous WORD (whitespace-delimited)."),
         |sim| movement::move_prev_long_word_start(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "move_next_long_word_end",
+            Binding::Helix(HelixName::new("move_next_long_word_end")),
             CMD_MOVE_LONG_WORD_END,
-            "Move to next WORD end",
-            "Move to the end of the current or next WORD (whitespace-delimited).",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Move to next WORD end")
+        .with_help("Move to the end of the current or next WORD (whitespace-delimited)."),
         |sim| movement::move_next_long_word_end(sim, 1),
     ));
 
@@ -160,14 +142,12 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Document movement
     registry.register(Command::new(
         CommandMetadata::new(
-            "goto_file_start",
+            Binding::Helix(HelixName::new("goto_file_start")),
             CMD_GOTO_FILE_START,
-            "Go to file start",
-            "Move to the first line of the document.",
             Category::Movement,
-            false,
-            None,
         )
+        .with_summary("Go to file start")
+        .with_help("Move to the first line of the document.")
         .with_count_behavior(CountBehavior::Native),
         movement::move_document_start,
     ));
@@ -175,81 +155,69 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Goto mode commands
     registry.register(Command::new(
         CommandMetadata::new(
-            "goto_line_start",
+            Binding::Helix(HelixName::new("goto_line_start")),
             CMD_GOTO_LINE_START,
-            "Go to line start",
-            "Move to the first character of the current line (goto mode).",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Go to line start")
+        .with_help("Move to the first character of the current line (goto mode)."),
         movement::move_line_start,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "goto_line_end",
+            Binding::Helix(HelixName::new("goto_line_end")),
             CMD_GOTO_LINE_END,
-            "Go to line end",
-            "Move to the last character of the current line (goto mode).",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Go to line end")
+        .with_help("Move to the last character of the current line (goto mode)."),
         movement::move_line_end,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "goto_first_nonwhitespace",
+            Binding::Helix(HelixName::new("goto_first_nonwhitespace")),
             CMD_GOTO_FIRST_NONWHITESPACE,
-            "Go to first non-whitespace",
-            "Move to the first non-whitespace character of the current line.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Go to first non-whitespace")
+        .with_help("Move to the first non-whitespace character of the current line."),
         movement::goto_first_nonwhitespace,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "goto_last_line",
+            Binding::Helix(HelixName::new("goto_last_line")),
             CMD_GOTO_LAST_LINE,
-            "Go to last line",
-            "Move to the last line of the document (goto mode).",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Go to last line")
+        .with_help("Move to the last line of the document (goto mode)."),
         movement::goto_last_line,
     ));
 
     // Match brackets
     registry.register(Command::new(
         CommandMetadata::new(
-            "match_brackets",
+            Binding::Helix(HelixName::new("match_brackets")),
             CMD_MATCH_BRACKETS,
-            "Match brackets",
-            "Jump to the matching bracket, brace, or parenthesis.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Match brackets")
+        .with_help("Jump to the matching bracket, brace, or parenthesis."),
         movement::match_brackets,
     ));
 
     // Flip selections
     registry.register(Command::new(
         CommandMetadata::new(
-            "flip_selections",
+            Binding::Helix(HelixName::new("flip_selections")),
             CMD_FLIP_SELECTIONS,
-            "Flip selection direction",
-            "Swap the anchor and cursor of the selection.",
             Category::Movement,
-            false,
-            None,
         )
+        .with_summary("Flip selection direction")
+        .with_help("Swap the anchor and cursor of the selection.")
         .with_count_behavior(CountBehavior::Ignore),
         movement::flip_selections,
     ));
@@ -257,14 +225,12 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Select mode
     registry.register(Command::new(
         CommandMetadata::new(
-            "select_mode",
+            Binding::Helix(HelixName::new("select_mode")),
             CMD_SELECT_MODE,
-            "Enter select mode",
-            "Toggle select mode, where motions extend the selection.",
             Category::Movement,
-            false,
-            None,
         )
+        .with_summary("Enter select mode")
+        .with_help("Toggle select mode, where motions extend the selection.")
         .with_count_behavior(CountBehavior::Ignore),
         select_mode::toggle,
     ));
@@ -278,163 +244,139 @@ pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) 
     // Find char commands - metadata only, handlers are in dispatcher
     registry.register(Command::new(
         CommandMetadata::new(
-            "find_next_char",
+            Binding::Helix(HelixName::new("find_next_char")),
             CMD_FIND_CHAR,
-            "Find character forward",
-            "Move to the next occurrence of a character on the current line.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Find character forward")
+        .with_help("Move to the next occurrence of a character on the current line."),
         |_sim| Ok(()), // Placeholder - actual execution in dispatcher
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "find_prev_char",
+            Binding::Helix(HelixName::new("find_prev_char")),
             CMD_FIND_CHAR_REVERSE,
-            "Find character backward",
-            "Move to the previous occurrence of a character on the current line.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Find character backward")
+        .with_help("Move to the previous occurrence of a character on the current line."),
         |_sim| Ok(()),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "find_till_char",
+            Binding::Helix(HelixName::new("find_till_char")),
             CMD_TILL_CHAR,
-            "Till character forward",
-            "Move just before the next occurrence of a character.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Till character forward")
+        .with_help("Move just before the next occurrence of a character."),
         |_sim| Ok(()),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "till_prev_char",
+            Binding::Helix(HelixName::new("till_prev_char")),
             CMD_TILL_CHAR_REVERSE,
-            "Till character backward",
-            "Move just after the previous occurrence of a character.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Till character backward")
+        .with_help("Move just after the previous occurrence of a character."),
         |_sim| Ok(()),
     ));
 
     // Paragraph movement
     registry.register(Command::new(
         CommandMetadata::new(
-            "goto_prev_paragraph",
+            Binding::Helix(HelixName::new("goto_prev_paragraph")),
             CMD_GOTO_PREV_PARAGRAPH,
-            "Previous paragraph",
-            "Move to the start of the previous paragraph (blank line boundary).",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Previous paragraph")
+        .with_help("Move to the start of the previous paragraph (blank line boundary)."),
         |sim| movement::goto_prev_paragraph(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "goto_next_paragraph",
+            Binding::Helix(HelixName::new("goto_next_paragraph")),
             CMD_GOTO_NEXT_PARAGRAPH,
-            "Next paragraph",
-            "Move to the start of the next paragraph (blank line boundary).",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Next paragraph")
+        .with_help("Move to the start of the next paragraph (blank line boundary)."),
         |sim| movement::goto_next_paragraph(sim, 1),
     ));
 
     // First non-blank (trainer convenience alias for gs; "^" is not a real
-    // Helix binding, so this is marked alias_only and excluded from the
+    // Helix binding, so this is a `TrainerAlias` and excluded from the
     // helix_name -> CanonicalKeys reverse index).
     registry.register(Command::new(
-        CommandMetadata::new_alias(
-            "goto_first_nonblank",
+        CommandMetadata::new(
+            Binding::TrainerAlias,
             CMD_GOTO_FIRST_NONBLANK,
-            "First non-blank",
-            "Move to the first non-whitespace character on the current line.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("First non-blank")
+        .with_help("Move to the first non-whitespace character on the current line."),
         movement::goto_first_nonwhitespace,
     ));
 
     // Repeat last f/F/t/T motion
     registry.register(Command::new(
         CommandMetadata::new(
-            "repeat_last_motion",
+            Binding::Helix(HelixName::new("repeat_last_motion")),
             CMD_REPEAT_LAST_MOTION,
-            "Repeat last motion",
-            "Repeat the last f/F/t/T motion in the same direction.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Repeat last motion")
+        .with_help("Repeat the last f/F/t/T motion in the same direction."),
         movement::repeat_last_motion,
     ));
 
     // Page movement commands
     registry.register(Command::new(
         CommandMetadata::new(
-            "page_up",
+            Binding::Helix(HelixName::new("page_up")),
             CMD_PAGE_UP,
-            "Page up",
-            "Move the cursor up by a full page.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Page up")
+        .with_help("Move the cursor up by a full page."),
         |sim| movement::page_up(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "page_down",
+            Binding::Helix(HelixName::new("page_down")),
             CMD_PAGE_DOWN,
-            "Page down",
-            "Move the cursor down by a full page.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Page down")
+        .with_help("Move the cursor down by a full page."),
         |sim| movement::page_down(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "page_cursor_half_up",
+            Binding::Helix(HelixName::new("page_cursor_half_up")),
             CMD_HALF_PAGE_UP,
-            "Half page up",
-            "Move the cursor up by half a page.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Half page up")
+        .with_help("Move the cursor up by half a page."),
         |sim| movement::half_page_up(sim, 1),
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "page_cursor_half_down",
+            Binding::Helix(HelixName::new("page_cursor_half_down")),
             CMD_HALF_PAGE_DOWN,
-            "Half page down",
-            "Move the cursor down by half a page.",
             Category::Movement,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Half page down")
+        .with_help("Move the cursor down by half a page."),
         |sim| movement::half_page_down(sim, 1),
     ));
 }

@@ -7,12 +7,15 @@
 //! # Type-Safe Modes
 //!
 //! The simulator uses the typestate pattern to enforce mode-specific operations
-//! at compile time. See the `mode` module for details.
+//! at compile time. See the `mode` module for details. Insert mode carries an
+//! [`InsertSession`]: everything from the command that entered it to `Escape` is
+//! one undo step.
 
 pub mod command_line;
 pub mod commands;
 pub mod find_state;
 mod insert_mode;
+mod insert_session;
 mod mode;
 pub mod register_file;
 use undo::HistoryEntry;
@@ -24,15 +27,14 @@ pub mod view_state;
 #[cfg(test)]
 mod tests;
 
-use crate::game::EditorState;
-use crate::game::editor_state::{CursorPosition, Selection as GameSelection};
+use crate::helix::error::SimulatorError;
 use crate::helix::indent::IndentUnit;
 use crate::helix::language::LanguageRules;
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
-use crate::security::UserError;
-use helix_core::{Rope, Selection, Transaction};
-use std::marker::PhantomData;
+use helix_core::graphemes::next_grapheme_boundary;
+use helix_core::{Range, Rope, Selection, Transaction};
+use mode::Session;
 
 // Re-export mode typestate markers
 pub use mode::{EditorMode, InsertMode, ModeKind, NormalMode};
@@ -41,6 +43,7 @@ pub use mode::{EditorMode, InsertMode, ModeKind, NormalMode};
 pub use command_line::CommandLine;
 pub use find_state::{FindDirection, FindState, FindType};
 pub use insert_mode::InsertCommand;
+pub use insert_session::{InsertEntryCommand, InsertSession};
 pub use register_file::RegisterFile;
 pub use search_state::{SearchDirection, SearchState};
 pub use snapshot::{EditorDisplay, EditorSnapshot, SelectionBounds, SerializableRange};
@@ -110,12 +113,6 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// recording survives an Insert-mode excursion inside a macro.
     pub(super) macro_recorder: MacroRecorder,
 
-    /// Cursor position right after an auto-indented line break (`o`, `O`,
-    /// Enter) that is the only edit of the current insert session. Leaving
-    /// Insert mode with the cursor still there strips that indentation, as
-    /// Helix does.
-    pub(super) auto_indent_end: Option<usize>,
-
     /// Select (extend) mode: motions extend the selection instead of moving it
     ///
     /// Only meaningful in Normal mode (`v` toggles it, Esc and the editing
@@ -143,8 +140,9 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Find state for f/F/t/T and Alt-. commands
     pub(super) find_state: FindState,
 
-    /// Phantom data for typestate mode marker (zero-cost)
-    _mode: PhantomData<M>,
+    /// What the mode carries between commands: nothing in Normal mode, the
+    /// open Insert session in Insert mode
+    pub(super) session: M::Session,
 }
 
 // Methods available in ALL modes
@@ -189,97 +187,6 @@ impl<M: EditorMode> HelixSimulator<M> {
         self_snap.matches(&other_snap)
     }
 
-    /// Get current editor state
-    ///
-    /// Exports ALL selections from `helix_core::Selection` to `EditorState`.
-    /// Point selections (anchor == head) are skipped as they represent cursors without selection.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `UserError` if a selection position cannot be converted into a valid
-    /// editor-state position.
-    pub fn state(&self) -> Result<EditorState, UserError> {
-        let max_pos = self.doc.len_chars();
-
-        // Helper: convert char index to (row, col). The empty line after a
-        // trailing newline is not a row of `EditorState`, so a position there
-        // maps to the end of the last real line.
-        let ends_with_newline = max_pos > 0 && self.doc.char(max_pos - 1) == '\n';
-        let last_row = self.doc.len_lines() - 1 - usize::from(ends_with_newline);
-        let pos_to_row_col = |char_idx: usize| -> (usize, usize) {
-            let clamped = char_idx.min(max_pos);
-            let line = self.doc.char_to_line(clamped);
-            if line > last_row {
-                let row_len = self.doc.line(last_row).len_chars();
-                return (last_row, row_len - 1);
-            }
-            let line_start = self.doc.line_to_char(line);
-            let col = clamped - line_start;
-            (line, col)
-        };
-
-        // Export ALL selections from helix_core::Selection
-        let selections: Vec<GameSelection> = self
-            .selection
-            .ranges()
-            .iter()
-            .filter_map(|range| {
-                let anchor = range.anchor;
-                let head = range.head;
-
-                // Skip point selections (anchor == head) - they're just cursors
-                if anchor == head {
-                    return None;
-                }
-
-                let (anchor_row, anchor_col) = pos_to_row_col(anchor);
-                let (head_row, head_col) = pos_to_row_col(head);
-
-                // Normalize to ensure start <= end for Selection
-                let ((start_row, start_col), (end_row, end_col)) = if anchor < head {
-                    ((anchor_row, anchor_col), (head_row, head_col))
-                } else {
-                    ((head_row, head_col), (anchor_row, anchor_col))
-                };
-
-                Some(GameSelection::new(
-                    CursorPosition {
-                        row: start_row,
-                        col: start_col,
-                    },
-                    CursorPosition {
-                        row: end_row,
-                        col: end_col,
-                    },
-                ))
-            })
-            .collect();
-
-        // Build cursor position from primary range's head
-        let primary = self.selection.primary();
-        let (cursor_row, cursor_col) = pos_to_row_col(primary.head);
-        let cursor = CursorPosition::new(cursor_row, cursor_col).map_err(UserError::from)?;
-
-        // Determine primary selection index
-        let primary_idx = self.selection.primary_index();
-
-        if selections.is_empty() {
-            // No non-point selections - use simple constructor
-            EditorState::new(self.doc.to_string(), cursor, None).map_err(UserError::from)
-        } else {
-            // Use with_selections for multi-selection support
-            // Clamp primary_idx to valid range (may differ if some ranges were skipped)
-            let clamped_primary_idx = primary_idx.min(selections.len().saturating_sub(1));
-            EditorState::with_selections(
-                self.doc.to_string(),
-                cursor,
-                selections,
-                clamped_primary_idx,
-            )
-            .map_err(UserError::from)
-        }
-    }
-
     /// Get a reference to the repeat buffer
     ///
     /// Allows inspection of the last recorded action for debugging or testing.
@@ -304,201 +211,60 @@ impl<M: EditorMode> HelixSimulator<M> {
         self.indent_unit = IndentUnit::detect(&self.doc).unwrap_or(language.indent_unit);
     }
 
-    /// Apply transaction and save history
+    /// Apply a transaction, save history and update the selection
     ///
-    /// No-op transactions (empty change set) are skipped entirely: they
+    /// The selection afterwards is the one the transaction carries
+    /// ([`Transaction::with_selection`]); a transaction that carries none maps
+    /// the current selection through its changes, so no command can leave a
+    /// range past the document end.
+    ///
+    /// No-op transactions (empty change set) record no history entry: they
     /// leave the document unchanged, so recording them would create a
     /// spurious undo step and needlessly discard valid redo history.
     pub(super) fn apply_transaction(&mut self, transaction: &Transaction) {
-        if transaction.changes().is_empty() {
-            return;
+        let selection = transaction
+            .selection()
+            .cloned()
+            .unwrap_or_else(|| self.selection.clone().map(transaction.changes()));
+        if !transaction.changes().is_empty() {
+            self.session.record_change(
+                &mut self.history,
+                &mut self.redo_stack,
+                transaction.changes(),
+                || HistoryEntry {
+                    doc: self.doc.clone(),
+                    selection: self.selection.clone(),
+                },
+            );
+            transaction.apply(&mut self.doc);
         }
+        self.selection = selection;
+        debug_assert!(
+            self.selection_in_bounds(),
+            "selection {:?} exceeds the document length {}",
+            self.selection,
+            self.doc.len_chars()
+        );
+    }
 
-        self.auto_indent_end = None;
-        // Save previous state before applying transaction
-        self.history.push(HistoryEntry {
-            doc: self.doc.clone(),
-            selection: self.selection.clone(),
-        });
-        transaction.apply(&mut self.doc);
-        // A new edit invalidates any previously undone changes
-        self.redo_stack.clear();
+    /// Whether every range of the selection lies inside the document
+    fn selection_in_bounds(&self) -> bool {
+        let len = self.doc.len_chars();
+        self.selection
+            .ranges()
+            .iter()
+            .all(|range| range.anchor <= len && range.head <= len)
     }
 }
 
-// Methods ONLY available in NormalMode
-impl HelixSimulator<NormalMode> {
-    /// Create a new simulator with initial content (starts in Normal mode)
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "public constructor called with owned Strings throughout; the signature is the established API"
-    )]
-    pub fn new(content: String) -> Self {
-        Self {
-            doc: Rope::from(content.as_str()),
-            selection: Selection::point(0),
-            history: Vec::new(),
-            redo_stack: Vec::new(),
-            registers: RegisterFile::new(),
-            repeat_buffer: RepeatBuffer::new(),
-            select_mode: false,
-            indent_unit: IndentUnit::DEFAULT,
-            language: &LanguageRules::UNLISTED,
-            is_repeating: false,
-            repeat_depth: 0,
-            search_state: SearchState::new(),
-            view_state: ViewState::new(),
-            find_state: FindState::new(),
-            macro_recorder: MacroRecorder::new(),
-            auto_indent_end: None,
-            _mode: PhantomData,
-        }
-    }
-
-    /// Create a new simulator from an `EditorSnapshot` (starts in Normal mode)
+impl<M: EditorMode> HelixSimulator<M> {
+    /// Move every field into a simulator of mode `N` carrying `session`.
     ///
-    /// This is the preferred way to initialize from serialized state.
-    /// Unlike `from_editor_state()`, this uses char offsets directly
-    /// without row/col conversion overhead.
-    pub fn from_snapshot(snapshot: &EditorSnapshot) -> Self {
-        let rope = Rope::from(snapshot.content.as_str());
-        let max_pos = rope.len_chars();
-
-        // Convert snapshot selections to helix_core::Selection
-        let selection = if snapshot.selections.is_empty() {
-            Selection::point(0)
-        } else {
-            let ranges: Vec<helix_core::Range> = snapshot
-                .selections
-                .iter()
-                .map(|r| {
-                    let anchor = r.anchor.min(max_pos);
-                    let head = r.head.min(max_pos);
-                    helix_core::Range::new(anchor, head)
-                })
-                .collect();
-            let primary_idx = snapshot.primary_idx.min(ranges.len().saturating_sub(1));
-            Selection::new(ranges.into(), primary_idx)
-        };
-
-        Self {
-            doc: rope,
-            selection,
-            history: Vec::new(),
-            redo_stack: Vec::new(),
-            registers: RegisterFile::new(),
-            repeat_buffer: RepeatBuffer::new(),
-            select_mode: false,
-            indent_unit: IndentUnit::DEFAULT,
-            language: &LanguageRules::UNLISTED,
-            is_repeating: false,
-            repeat_depth: 0,
-            search_state: SearchState::new(),
-            view_state: ViewState::new(),
-            find_state: FindState::new(),
-            macro_recorder: MacroRecorder::new(),
-            auto_indent_end: None,
-            _mode: PhantomData,
-        }
-    }
-
-    /// Create a new simulator from an `EditorState` (starts in Normal mode)
-    ///
-    /// Initializes the simulator with the content, cursor position, and ALL selections
-    /// from the `EditorState`. This enables multi-cursor scenarios.
-    pub fn from_editor_state(state: &EditorState) -> Self {
-        let rope = Rope::from(state.content());
-
-        // Helper to convert (row, col) to absolute char position using Rope API
-        let row_col_to_pos = |row: usize, col: usize| -> usize {
-            let line_count = rope.len_lines();
-            if row >= line_count {
-                return rope.len_chars();
-            }
-            let line_start = rope.line_to_char(row);
-            let line_len = rope.line(row).len_chars();
-            // Clamp column to line length (excluding newline for position calculation)
-            let safe_col = col.min(line_len.saturating_sub(1).max(col.min(line_len)));
-            line_start.saturating_add(safe_col).min(rope.len_chars())
-        };
-
-        // Convert EditorState selections to helix_core::Selection
-        let selections = state.selections();
-        let selection = if selections.is_empty() {
-            // No selections: create single point range from cursor_position
-            let (row, col) = state.cursor_position();
-            let char_idx = row_col_to_pos(row, col);
-            let max_pos = rope.len_chars();
-            let safe_pos = char_idx.min(max_pos);
-            Selection::point(safe_pos)
-        } else {
-            // Convert all selections to helix_core::Range
-            let ranges: Vec<helix_core::Range> = selections
-                .iter()
-                .map(|sel| {
-                    let start_idx = row_col_to_pos(sel.start.row, sel.start.col);
-                    let end_idx = row_col_to_pos(sel.end.row, sel.end.col);
-                    let safe_start = start_idx.min(rope.len_chars());
-                    let safe_end = end_idx.min(rope.len_chars());
-                    // helix_core::Range: anchor is start, head is end
-                    helix_core::Range::new(safe_start, safe_end)
-                })
-                .collect();
-
-            // Get primary index, clamped to valid range
-            let primary_idx = state
-                .primary_selection_idx()
-                .min(ranges.len().saturating_sub(1));
-
-            // Create Selection with all ranges
-            // Note: Selection::new() panics if ranges is empty, but we checked above
-            Selection::new(ranges.into(), primary_idx)
-        };
-
-        Self {
-            doc: rope,
-            selection,
-            history: Vec::new(),
-            redo_stack: Vec::new(),
-            registers: RegisterFile::new(),
-            repeat_buffer: RepeatBuffer::new(),
-            select_mode: false,
-            indent_unit: IndentUnit::DEFAULT,
-            language: &LanguageRules::UNLISTED,
-            is_repeating: false,
-            repeat_depth: 0,
-            search_state: SearchState::new(),
-            view_state: ViewState::new(),
-            find_state: FindState::new(),
-            macro_recorder: MacroRecorder::new(),
-            auto_indent_end: None,
-            _mode: PhantomData,
-        }
-    }
-
-    /// Transition to Insert mode
-    ///
-    /// Collapses the selection to a single cursor at the primary range's
-    /// head, discarding every other range.
-    ///
-    /// Known limitation: real Helix keeps every cursor active through
-    /// Insert mode (typing/backspacing at each one), but this simulator's
-    /// Insert-mode commands (`insert_text`, `backspace`, the arrow-key
-    /// handlers) all read/write only `selection.primary()` and overwrite the
-    /// whole selection with a single point, not just at entry. Preserving
-    /// the full selection here would still leave every secondary cursor
-    /// frozen (or panicking on stale offsets) as soon as the user typed, so
-    /// the collapse happens up front instead. Fixing this for real means
-    /// reworking Insert mode's commands to operate over every range, not
-    /// just entry - out of scope for a single-method change.
-    pub fn enter_insert_mode(self) -> HelixSimulator<InsertMode> {
-        // Collapse selection to cursor position (head of primary range)
-        let cursor_pos = self.selection.primary().head;
-        let collapsed_selection = Selection::single(cursor_pos, cursor_pos);
-
+    /// Select mode never survives a mode change. The old session is dropped.
+    fn into_mode<N: EditorMode>(self, session: N::Session) -> HelixSimulator<N> {
         HelixSimulator {
             doc: self.doc,
-            selection: collapsed_selection,
+            selection: self.selection,
             history: self.history,
             redo_stack: self.redo_stack,
             registers: self.registers,
@@ -512,9 +278,104 @@ impl HelixSimulator<NormalMode> {
             view_state: self.view_state,
             find_state: self.find_state,
             macro_recorder: self.macro_recorder,
-            auto_indent_end: self.auto_indent_end,
-            _mode: PhantomData,
+            session,
         }
+    }
+}
+
+// Methods ONLY available in NormalMode
+impl HelixSimulator<NormalMode> {
+    /// Create a new simulator with initial content (starts in Normal mode)
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "public constructor called with owned Strings throughout; the signature is the established API"
+    )]
+    pub fn new(content: String) -> Self {
+        Self::with_state(Rope::from(content.as_str()), Selection::point(0))
+    }
+
+    /// A Normal-mode simulator over `doc` with `selection` and default everything else
+    fn with_state(doc: Rope, selection: Selection) -> Self {
+        Self {
+            doc,
+            selection,
+            history: Vec::new(),
+            redo_stack: Vec::new(),
+            registers: RegisterFile::new(),
+            repeat_buffer: RepeatBuffer::new(),
+            select_mode: false,
+            indent_unit: IndentUnit::DEFAULT,
+            language: &LanguageRules::UNLISTED,
+            is_repeating: false,
+            repeat_depth: 0,
+            search_state: SearchState::new(),
+            view_state: ViewState::new(),
+            find_state: FindState::new(),
+            macro_recorder: MacroRecorder::new(),
+            session: (),
+        }
+    }
+
+    /// Create a new simulator from an `EditorSnapshot` (starts in Normal mode)
+    ///
+    /// This is the preferred way to initialize from serialized state.
+    /// Uses char offsets directly, without row/col conversion.
+    pub fn from_snapshot(snapshot: &EditorSnapshot) -> Self {
+        let rope = Rope::from(snapshot.content.as_str());
+        let max_pos = rope.len_chars();
+
+        // Convert snapshot selections to helix_core::Selection
+        let selection = if snapshot.selections.is_empty() {
+            Selection::point(0)
+        } else {
+            let ranges: Vec<Range> = snapshot
+                .selections
+                .iter()
+                .map(|r| Range::new(r.anchor.min(max_pos), r.head.min(max_pos)))
+                .collect();
+            let primary_idx = snapshot.primary_idx.min(ranges.len().saturating_sub(1));
+            Selection::new(ranges.into(), primary_idx)
+        };
+
+        Self::with_state(rope, selection)
+    }
+
+    /// Transition to Insert mode without running an entering command
+    ///
+    /// Collapses the selection to a single cursor at the primary range's
+    /// head, discarding every other range, and opens an Insert session (see
+    /// [`InsertSession`]) whose edits form one undo step. Commands that enter
+    /// Insert mode go through [`Self::begin_insert`] instead.
+    ///
+    /// Known limitation: real Helix keeps every cursor active through
+    /// Insert mode (typing/backspacing at each one), but this simulator's
+    /// Insert-mode commands (`insert_text`, `backspace`, the arrow-key
+    /// handlers) all read/write only `selection.primary()` and overwrite the
+    /// whole selection with a single point, not just at entry. Preserving
+    /// the full selection here would still leave every secondary cursor
+    /// frozen (or panicking on stale offsets) as soon as the user typed, so
+    /// the collapse happens up front instead. Fixing this for real means
+    /// reworking Insert mode's commands to operate over every range, not
+    /// just entry - out of scope for a single-method change.
+    pub fn enter_insert_mode(mut self) -> HelixSimulator<InsertMode> {
+        let saved_redo = std::mem::take(&mut self.redo_stack);
+        let session = InsertSession::new(
+            self.history.len(),
+            saved_redo,
+            insert_session::SessionChange::Pristine(insert_session::EntrySelection {
+                cursor: self.collapse_to_cursor(),
+                restore: self.selection.clone(),
+            }),
+            insert_session::InsertEntry::Other,
+            None,
+        );
+        self.into_mode(session)
+    }
+
+    /// Collapse the selection to a point at the primary range's head and return it
+    fn collapse_to_cursor(&mut self) -> Selection {
+        self.selection = Selection::point(self.selection.primary().head);
+        self.selection.clone()
     }
 
     /// Get a reference to the search state
@@ -540,28 +401,32 @@ impl HelixSimulator<NormalMode> {
 
 // Methods ONLY available in InsertMode
 impl HelixSimulator<InsertMode> {
-    /// Transition to Normal mode
+    /// Transition to Normal mode, closing the Insert session
+    ///
+    /// Strips an auto-indent nothing was typed after, then records the whole
+    /// session as one undo step (none when the document is unchanged, which
+    /// leaves the redo history alone). After `a`, the selection runs from
+    /// where the original selection started through the inserted text.
     pub fn exit_insert_mode(mut self) -> HelixSimulator<NormalMode> {
         self.strip_unused_auto_indent();
-        HelixSimulator {
-            doc: self.doc,
-            selection: self.selection,
-            history: self.history,
-            redo_stack: self.redo_stack,
-            registers: self.registers,
-            repeat_buffer: self.repeat_buffer,
-            select_mode: false,
-            indent_unit: self.indent_unit,
-            language: self.language,
-            is_repeating: self.is_repeating,
-            repeat_depth: self.repeat_depth,
-            search_state: self.search_state,
-            view_state: self.view_state,
-            find_state: self.find_state,
-            macro_recorder: self.macro_recorder,
-            auto_indent_end: self.auto_indent_end,
-            _mode: PhantomData,
+        let entry = self
+            .session
+            .close(&self.doc, &mut self.history, &mut self.redo_stack);
+        if let insert_session::InsertEntry::Append { anchor } = entry {
+            self.select_inserted_text(anchor);
         }
+        self.into_mode(())
+    }
+
+    /// Select from `anchor` to the cursor; a single grapheme is a plain cursor
+    fn select_inserted_text(&mut self, anchor: usize) {
+        let head = self.selection.primary().head;
+        let one_wide = head == next_grapheme_boundary(self.doc.slice(..), anchor);
+        self.selection = Selection::from(if one_wide {
+            Range::point(anchor)
+        } else {
+            Range::new(anchor, head)
+        });
     }
 }
 
@@ -581,11 +446,6 @@ impl AnyModeSimulator {
     /// Create a new simulator in Normal mode
     pub fn new(content: String) -> Self {
         Self::Normal(HelixSimulator::new(content))
-    }
-
-    /// Create from an `EditorState` in Normal mode
-    pub fn from_editor_state(state: &EditorState) -> Self {
-        Self::Normal(HelixSimulator::from_editor_state(state))
     }
 
     /// Check if currently in Insert mode
@@ -657,8 +517,8 @@ impl AnyModeSimulator {
     ///
     /// # Errors
     ///
-    /// Returns a `UserError` if the command does not exist or fails.
-    pub fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
+    /// Returns a [`SimulatorError`] if the command does not exist or fails.
+    pub fn execute_command(&mut self, cmd: &str) -> Result<(), SimulatorError> {
         commands::execute_command_any_mode(self, cmd)
     }
 
@@ -670,27 +530,14 @@ impl AnyModeSimulator {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if the command fails or does not exist.
+    /// Returns a [`SimulatorError`] if the command fails or does not exist.
     #[cfg(test)]
     pub(crate) fn execute_counted(
         &mut self,
         base: &str,
         count: std::num::NonZeroUsize,
-    ) -> Result<(), UserError> {
+    ) -> Result<(), SimulatorError> {
         commands::execute_counted_any_mode(self, base, count)
-    }
-
-    /// Get current editor state
-    ///
-    /// # Errors
-    ///
-    /// Returns a `UserError` if a selection position cannot be converted into a valid
-    /// editor-state position.
-    pub fn state(&self) -> Result<EditorState, UserError> {
-        match self {
-            Self::Normal(sim) => sim.state(),
-            Self::Insert(sim) => sim.state(),
-        }
     }
 
     /// Get reference to repeat buffer
@@ -759,12 +606,12 @@ impl AnyModeSimulator {
     ///
     /// Replays the last recorded action. If no action has been recorded,
     /// this is a no-op. The repeat command itself is never recorded.
-    pub(super) fn execute_repeat(&mut self) -> Result<(), UserError> {
+    pub(super) fn execute_repeat(&mut self) -> Result<(), SimulatorError> {
         self.execute_repeat_impl()
     }
 
     /// Execute repeat (internal implementation with depth/state tracking)
-    fn execute_repeat_impl(&mut self) -> Result<(), UserError> {
+    fn execute_repeat_impl(&mut self) -> Result<(), SimulatorError> {
         // Get the last action (if any)
         let action = match self {
             Self::Normal(sim) => {
@@ -869,7 +716,7 @@ impl AnyModeSimulator {
     /// stored, if already inside a replay (prevents runaway recursion), or
     /// if the replay-depth budget is exhausted. Only callable from Normal
     /// mode - callers must check this first.
-    pub(super) fn execute_macro_replay(&mut self) -> Result<(), UserError> {
+    pub(super) fn execute_macro_replay(&mut self) -> Result<(), SimulatorError> {
         let commands = match self {
             Self::Normal(sim) => {
                 if !sim.macro_recorder.begin_replay() {
@@ -907,7 +754,7 @@ impl AnyModeSimulator {
 fn execute_key_sequence(
     sim: &mut AnyModeSimulator,
     keys: &[crossterm::event::KeyEvent],
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     use crate::helix::commands::{
         CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
         CMD_GOTO_FILE_START, CMD_SELECT_REGISTER,

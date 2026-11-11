@@ -38,7 +38,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["join", "lines", "editing"]
 commands_taught = ["J"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "join_lines_002"
@@ -74,7 +73,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["join", "lines", "editing"]
 commands_taught = ["J"]
-estimated_time_seconds = 15
 
 # ============================================================================
 # JOIN WITH SPACE (Alt-J command)
@@ -117,7 +115,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["join", "space", "editing"]
 commands_taught = ["Alt-J"]
-estimated_time_seconds = 10
 
 # ============================================================================
 # INDENT / DEDENT (> and < commands)
@@ -159,7 +156,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["indent", "formatting", "editing"]
 commands_taught = [">"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "dedent_001"
@@ -201,7 +197,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["dedent", "formatting", "editing"]
 commands_taught = ["<"]
-estimated_time_seconds = 10
 
 # ============================================================================
 # SWITCH CASE (~ and ` commands)
@@ -239,7 +234,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["case", "toggle", "editing"]
 commands_taught = ["~"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "switch_case_002"
@@ -275,7 +269,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["case", "toggle", "editing", "selection"]
 commands_taught = ["~"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "switch_case_alt_001"
@@ -311,7 +304,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["case", "lowercase", "editing", "selection"]
 commands_taught = ["`"]
-estimated_time_seconds = 10
 
 # ============================================================================
 # REPLACE WITH YANKED (R command)

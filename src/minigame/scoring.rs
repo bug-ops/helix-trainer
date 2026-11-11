@@ -9,6 +9,7 @@ use crate::constants::{
     DIFFICULTY_MULTIPLIER_INTERMEDIATE, MAX_COMBO_BONUS, MAX_EFFICIENCY_BONUS,
     MAX_TIME_BONUS_MULTIPLIER, OPTIMAL_EFFICIENCY_BONUS,
 };
+use crate::numeric::{Rounding, scale_u64};
 
 /// Detailed score breakdown for UI display
 ///
@@ -144,18 +145,6 @@ impl ScoreCalculator {
     /// # Returns
     ///
     /// Detailed score breakdown with all bonus components.
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "score components truncate toward zero by design"
-    )]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
-    )]
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-    )]
     pub fn calculate(
         &mut self,
         base_points: u64,
@@ -169,13 +158,17 @@ impl ScoreCalculator {
 
         // Time bonus: faster = more points (up to MAX_TIME_BONUS_MULTIPLIER)
         let time_bonus_ratio = (1.0 - time_ratio).max(0.0);
-        let time_bonus = (base_points as f64 * time_bonus_ratio * MAX_TIME_BONUS_MULTIPLIER) as u64;
+        let time_bonus = scale_u64(
+            base_points,
+            time_bonus_ratio * MAX_TIME_BONUS_MULTIPLIER,
+            Rounding::Floor,
+        );
 
         // Efficiency bonus: optimal = 25%, >80% = 12.5%
         let efficiency_bonus = if efficiency >= 1.0 {
-            (base_points as f64 * OPTIMAL_EFFICIENCY_BONUS) as u64
+            scale_u64(base_points, OPTIMAL_EFFICIENCY_BONUS, Rounding::Floor)
         } else if efficiency >= 0.8 {
-            (base_points as f64 * MAX_EFFICIENCY_BONUS) as u64
+            scale_u64(base_points, MAX_EFFICIENCY_BONUS, Rounding::Floor)
         } else {
             0
         };
@@ -183,7 +176,7 @@ impl ScoreCalculator {
         // Combo bonus: 10% per level, max 50%
         let combo_bonus_ratio =
             (f64::from(self.combo_count) * COMBO_BONUS_PER_LEVEL).min(MAX_COMBO_BONUS);
-        let combo_bonus = (base_points as f64 * combo_bonus_ratio) as u64;
+        let combo_bonus = scale_u64(base_points, combo_bonus_ratio, Rounding::Floor);
 
         // Difficulty multiplier
         let difficulty_multiplier = match difficulty {
@@ -194,7 +187,7 @@ impl ScoreCalculator {
 
         // Calculate totals
         let subtotal = base_points + time_bonus + efficiency_bonus + combo_bonus;
-        let total = (subtotal as f64 * difficulty_multiplier) as u64;
+        let total = scale_u64(subtotal, difficulty_multiplier, Rounding::Floor);
 
         ScoreBreakdown {
             base_points,
@@ -473,23 +466,11 @@ mod tests {
         }
 
         #[test]
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "mirrors the production score truncation"
-        )]
-        #[expect(
-            clippy::cast_sign_loss,
-            reason = "a float-to-int `as` saturates, so a negative value maps to 0"
-        )]
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-        )]
         fn test_total_with_difficulty_multiplier() {
             let mut calc = ScoreCalculator::new();
             let breakdown = calc.calculate(100, 0.8, 0.5, Difficulty::Advanced, 1.0);
 
-            let expected_total = (breakdown.subtotal as f64 * 1.5) as u64;
+            let expected_total = scale_u64(breakdown.subtotal, 1.5, Rounding::Floor);
             assert_eq!(breakdown.total, expected_total);
         }
 

@@ -42,4 +42,3 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["goto", "command-line", "navigation"]
 commands_taught = [":goto"]
-estimated_time_seconds = 15

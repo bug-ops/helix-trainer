@@ -18,12 +18,12 @@ use crate::constants::{
     BEGINNER_TIME_LIMIT, DEFAULT_PERFORMANCE_SCORE, DIFFICULTY_DECREASE_SCORE,
     DIFFICULTY_INCREASE_SCORE, FALLBACK_TIME_LIMIT, FSRS_BASE_WEIGHT,
     INTERMEDIATE_DIFFICULTY_WEIGHT, INTERMEDIATE_TIME_LIMIT, LEVEL_1_3_TIME_SCALE,
-    LEVEL_4_6_TIME_SCALE, LEVEL_7_10_TIME_SCALE, LEVEL_ADVANCED_MAX, LEVEL_ADVANCED_MIN,
-    LEVEL_BEGINNER_MAX, LEVEL_BEGINNER_MIN, LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN,
-    MIN_SCENARIOS_FOR_DECREASE, MIN_SCENARIOS_FOR_INCREASE, MIN_TIME_SCALE_MULTIPLIER,
-    PERFORMANCE_EFFICIENCY_WEIGHT, PERFORMANCE_HISTORY_SIZE, PERFORMANCE_SPEED_WEIGHT,
-    PERFORMANCE_SUCCESS_WEIGHT, RECENCY_BASE_WEIGHT, RECENCY_WEIGHT_INCREMENT,
-    RECENT_SUCCESS_RATE_FOR_DECREASE, RECENT_SUCCESS_RATE_FOR_INCREASE, RECENT_TREND_WINDOW,
+    LEVEL_4_6_TIME_SCALE, LEVEL_7_10_TIME_SCALE, LEVEL_ADVANCED_MAX, LEVEL_BEGINNER_MAX,
+    LEVEL_BEGINNER_MIN, LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN, MIN_SCENARIOS_FOR_DECREASE,
+    MIN_SCENARIOS_FOR_INCREASE, PERFORMANCE_EFFICIENCY_WEIGHT, PERFORMANCE_HISTORY_SIZE,
+    PERFORMANCE_SPEED_WEIGHT, PERFORMANCE_SUCCESS_WEIGHT, RECENCY_BASE_WEIGHT,
+    RECENCY_WEIGHT_INCREMENT, RECENT_SUCCESS_RATE_FOR_DECREASE, RECENT_SUCCESS_RATE_FOR_INCREASE,
+    RECENT_TREND_WINDOW,
 };
 use crate::learning::PerformanceTracker;
 use crate::minigame::ScenarioPrioritizer;
@@ -186,6 +186,27 @@ impl DifficultyLevel {
         Self::new(self.0 + 1)
     }
 
+    /// The scenario difficulty tier this level belongs to.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::config::Difficulty;
+    /// use helix_trainer::minigame::DifficultyLevel;
+    ///
+    /// assert_eq!(DifficultyLevel::MIN.tier(), Difficulty::Beginner);
+    /// assert_eq!(DifficultyLevel::new(5).unwrap().tier(), Difficulty::Intermediate);
+    /// assert_eq!(DifficultyLevel::MAX.tier(), Difficulty::Advanced);
+    /// ```
+    #[must_use]
+    pub const fn tier(self) -> Difficulty {
+        match self.0 {
+            ..=LEVEL_BEGINNER_MAX => Difficulty::Beginner,
+            LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => Difficulty::Intermediate,
+            _ => Difficulty::Advanced,
+        }
+    }
+
     /// One level easier, or `None` at [`Self::MIN`].
     #[must_use]
     pub const fn previous(self) -> Option<Self> {
@@ -201,13 +222,18 @@ impl DifficultyLevel {
 /// ```
 /// use helix_trainer::minigame::LevelChange;
 ///
-/// let level_change = LevelChange::Increased { from: 1, to: 2 };
+/// use helix_trainer::minigame::DifficultyLevel;
+///
+/// let level_change = LevelChange::Increased {
+///     from: DifficultyLevel::MIN,
+///     to: DifficultyLevel::MIN.next().unwrap(),
+/// };
 /// match level_change {
 ///     LevelChange::Increased { from, to } => {
-///         println!("Level up! {} -> {}", from, to);
+///         println!("Level up! {} -> {}", from.get(), to.get());
 ///     }
 ///     LevelChange::Decreased { from, to } => {
-///         println!("Level down: {} -> {}", from, to);
+///         println!("Level down: {} -> {}", from.get(), to.get());
 ///     }
 /// }
 /// ```
@@ -216,16 +242,16 @@ pub enum LevelChange {
     /// Difficulty increased due to good performance
     Increased {
         /// Previous level before increase
-        from: u8,
+        from: DifficultyLevel,
         /// New level after increase
-        to: u8,
+        to: DifficultyLevel,
     },
     /// Difficulty decreased due to struggling
     Decreased {
         /// Previous level before decrease
-        from: u8,
+        from: DifficultyLevel,
         /// New level after decrease
-        to: u8,
+        to: DifficultyLevel,
     },
 }
 
@@ -241,7 +267,7 @@ impl LevelChange {
     }
 
     /// Get the from and to levels
-    pub fn levels(&self) -> (u8, u8) {
+    pub fn levels(&self) -> (DifficultyLevel, DifficultyLevel) {
         match *self {
             LevelChange::Increased { from, to } | LevelChange::Decreased { from, to } => (from, to),
         }
@@ -333,7 +359,7 @@ impl DifficultyController {
     /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let controller = DifficultyController::new();
-    /// assert_eq!(controller.current_level(), 1);
+    /// assert_eq!(controller.current_level().get(), 1);
     /// ```
     pub fn new() -> Self {
         Self {
@@ -353,10 +379,10 @@ impl DifficultyController {
     /// use helix_trainer::minigame::DifficultyController;
     ///
     /// let controller = DifficultyController::new();
-    /// assert_eq!(controller.current_level(), 1);
+    /// assert_eq!(controller.current_level().get(), 1);
     /// ```
-    pub fn current_level(&self) -> u8 {
-        self.level.get()
+    pub fn current_level(&self) -> DifficultyLevel {
+        self.level
     }
 
     /// Get time limit for a scenario based on its difficulty and current level
@@ -369,7 +395,7 @@ impl DifficultyController {
     /// Time scaling by controller level:
     /// - Level 1-3: 100% of base time
     /// - Level 4-6: 90% of base time
-    /// - Level 7-10: 80% of base time (minimum 50% of base)
+    /// - Level 7-10: 80% of base time
     ///
     /// # Examples
     ///
@@ -380,7 +406,7 @@ impl DifficultyController {
     /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
     /// let beginner = scenarios
     ///     .iter()
-    ///     .find(|s| s.metadata.as_ref().and_then(|m| m.difficulty) == Some(Difficulty::Beginner))
+    ///     .find(|s| s.metadata.difficulty == Some(Difficulty::Beginner))
     ///     .expect("embedded scenarios include a beginner one");
     ///
     /// let controller = DifficultyController::new();
@@ -392,22 +418,16 @@ impl DifficultyController {
         // Get base time from scenario metadata
         let base = scenario
             .metadata
-            .as_ref()
-            .and_then(|m| m.difficulty)
+            .difficulty
             .map_or(FALLBACK_TIME_LIMIT, base_time_limit_for);
 
-        // Scale by current level (level 10 = 80% time, but not less than 50%)
-        let scale = match self.level.get() {
-            LEVEL_BEGINNER_MIN..=LEVEL_BEGINNER_MAX => LEVEL_1_3_TIME_SCALE,
-            LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => LEVEL_4_6_TIME_SCALE,
-            LEVEL_ADVANCED_MIN..=LEVEL_ADVANCED_MAX => LEVEL_7_10_TIME_SCALE,
-            _ => LEVEL_7_10_TIME_SCALE, // Shouldn't happen, but safe fallback
+        let scale = match self.level.tier() {
+            Difficulty::Beginner => LEVEL_1_3_TIME_SCALE,
+            Difficulty::Intermediate => LEVEL_4_6_TIME_SCALE,
+            Difficulty::Advanced => LEVEL_7_10_TIME_SCALE,
         };
 
-        let scaled_secs = base.as_secs_f64() * scale;
-        let min_secs = base.as_secs_f64() * MIN_TIME_SCALE_MULTIPLIER;
-
-        Duration::from_secs_f64(scaled_secs.max(min_secs))
+        base.mul_f64(scale)
     }
 
     /// Select next scenario from collection with optional FSRS-weighted selection.
@@ -476,9 +496,7 @@ impl DifficultyController {
         let candidates: Vec<_> = scenarios
             .iter()
             .filter(|s| {
-                if let Some(ref metadata) = s.metadata
-                    && let Some(diff) = metadata.difficulty
-                {
+                if let Some(diff) = s.metadata.difficulty {
                     difficulties.contains(&diff)
                 } else {
                     // Include scenarios without metadata at all levels
@@ -552,15 +570,10 @@ impl DifficultyController {
     /// assert!(diffs.contains(&Difficulty::Beginner));
     /// ```
     pub fn available_difficulties(&self) -> Vec<Difficulty> {
-        match self.level.get() {
-            LEVEL_BEGINNER_MIN..=LEVEL_BEGINNER_MAX => vec![Difficulty::Beginner],
-            LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => {
-                vec![Difficulty::Beginner, Difficulty::Intermediate]
-            }
-            LEVEL_ADVANCED_MIN..=LEVEL_ADVANCED_MAX => {
-                vec![Difficulty::Intermediate, Difficulty::Advanced]
-            }
-            _ => vec![Difficulty::Beginner], // Shouldn't happen
+        match self.level.tier() {
+            Difficulty::Beginner => vec![Difficulty::Beginner],
+            Difficulty::Intermediate => vec![Difficulty::Beginner, Difficulty::Intermediate],
+            Difficulty::Advanced => vec![Difficulty::Intermediate, Difficulty::Advanced],
         }
     }
 
@@ -758,8 +771,8 @@ impl DifficultyController {
             self.level = next;
             self.scenarios_at_level = 0;
             self.level_changed = Some(LevelChange::Increased {
-                from: old_level.get(),
-                to: next.get(),
+                from: old_level,
+                to: next,
             });
             tracing::info!(
                 old_level = old_level.get(),
@@ -777,8 +790,8 @@ impl DifficultyController {
             self.level = previous;
             self.scenarios_at_level = 0;
             self.level_changed = Some(LevelChange::Decreased {
-                from: old_level.get(),
-                to: previous.get(),
+                from: old_level,
+                to: previous,
             });
             tracing::info!(
                 old_level = old_level.get(),
@@ -798,7 +811,7 @@ impl DifficultyController {
     ///
     /// let mut controller = DifficultyController::new();
     /// controller.increase_difficulty();
-    /// assert_eq!(controller.current_level(), 2);
+    /// assert_eq!(controller.current_level().get(), 2);
     /// ```
     pub fn increase_difficulty(&mut self) {
         self.increase_level();
@@ -815,7 +828,7 @@ impl DifficultyController {
     /// controller.increase_difficulty();
     /// controller.increase_difficulty();
     /// controller.decrease_difficulty();
-    /// assert_eq!(controller.current_level(), 2);
+    /// assert_eq!(controller.current_level().get(), 2);
     /// ```
     pub fn decrease_difficulty(&mut self) {
         self.decrease_level();
@@ -840,7 +853,7 @@ impl DifficultyController {
     ///
     /// if let Some(change) = controller.take_level_change() {
     ///     match change {
-    ///         LevelChange::Increased { from, to } => assert_eq!((from, to), (1, 2)),
+    ///         LevelChange::Increased { from, to } => assert_eq!((from.get(), to.get()), (1, 2)),
     ///         LevelChange::Decreased { .. } => unreachable!("difficulty only increased"),
     ///     }
     /// }
@@ -938,7 +951,7 @@ impl DifficultyController {
     /// let mut controller = DifficultyController::new();
     /// controller.increase_difficulty();
     /// controller.reset();
-    /// assert_eq!(controller.current_level(), 1);
+    /// assert_eq!(controller.current_level().get(), 1);
     /// ```
     pub fn reset(&mut self) {
         self.level = DifficultyLevel::MIN;
@@ -958,6 +971,10 @@ impl Default for DifficultyController {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn level(n: u8) -> DifficultyLevel {
+        DifficultyLevel::new(n).unwrap()
+    }
     use crate::config::{Difficulty, Scenario};
     use crate::testing::{ScenarioBuilder, cid, sid};
     use rand::{SeedableRng, rngs::StdRng};
@@ -1049,19 +1066,49 @@ mod tests {
     // ========================================
 
     #[test]
+    fn tier_covers_every_level_with_expected_boundaries() {
+        let tiers: Vec<_> = (1..=10).map(|n| level(n).tier()).collect();
+        let expected = [
+            [Difficulty::Beginner; 3].as_slice(),
+            [Difficulty::Intermediate; 3].as_slice(),
+            [Difficulty::Advanced; 4].as_slice(),
+        ]
+        .concat();
+        assert_eq!(tiers, expected);
+    }
+
+    #[test]
+    fn available_difficulties_follow_tier() {
+        let mut controller = DifficultyController::new();
+        for n in 1..=10 {
+            controller.level = level(n);
+            let available = controller.available_difficulties();
+            assert!(available.contains(&controller.level.tier()), "level {n}");
+        }
+    }
+
+    #[test]
     fn test_level_change_increase() {
-        let change = LevelChange::Increased { from: 3, to: 4 };
+        let (three, four) = (level(3), level(4));
+        let change = LevelChange::Increased {
+            from: three,
+            to: four,
+        };
         assert!(change.is_increase());
         assert!(!change.is_decrease());
-        assert_eq!(change.levels(), (3, 4));
+        assert_eq!(change.levels(), (three, four));
     }
 
     #[test]
     fn test_level_change_decrease() {
-        let change = LevelChange::Decreased { from: 5, to: 4 };
+        let (four, five) = (level(4), level(5));
+        let change = LevelChange::Decreased {
+            from: five,
+            to: four,
+        };
         assert!(!change.is_increase());
         assert!(change.is_decrease());
-        assert_eq!(change.levels(), (5, 4));
+        assert_eq!(change.levels(), (five, four));
     }
 
     // ========================================
@@ -1071,7 +1118,7 @@ mod tests {
     #[test]
     fn test_new_controller() {
         let controller = DifficultyController::new();
-        assert_eq!(controller.current_level(), 1);
+        assert_eq!(controller.current_level().get(), 1);
         assert_eq!(controller.success_rate(), None);
         assert!((controller.performance_score() - DEFAULT_PERFORMANCE_SCORE).abs() < 0.001);
         assert_eq!(controller.scenarios_at_level(), 0);
@@ -1171,9 +1218,7 @@ mod tests {
             let selected = controller
                 .next_scenario(&scenarios, None, &mut rand::rng())
                 .unwrap();
-            if let Some(ref metadata) = selected.metadata {
-                assert_eq!(metadata.difficulty, Some(Difficulty::Beginner));
-            }
+            assert_eq!(selected.metadata.difficulty, Some(Difficulty::Beginner));
         }
 
         // Level 7-10: intermediate and advanced
@@ -1185,9 +1230,7 @@ mod tests {
             let selected = controller
                 .next_scenario(&scenarios, None, &mut rand::rng())
                 .unwrap();
-            if let Some(ref metadata) = selected.metadata
-                && let Some(diff) = metadata.difficulty
-            {
+            if let Some(diff) = selected.metadata.difficulty {
                 match diff {
                     Difficulty::Intermediate => found_intermediate = true,
                     Difficulty::Advanced => found_advanced = true,
@@ -1353,7 +1396,7 @@ mod tests {
     #[test]
     fn test_difficulty_increase_requires_consistency() {
         let mut controller = DifficultyController::new();
-        let initial_level = controller.current_level();
+        let initial_level = controller.current_level().get();
 
         // Add fewer scenarios than MIN_SCENARIOS_FOR_INCREASE
         for _ in 0..3 {
@@ -1366,7 +1409,7 @@ mod tests {
         }
 
         // Level should not have increased (need at least 5 scenarios)
-        assert_eq!(controller.current_level(), initial_level);
+        assert_eq!(controller.current_level().get(), initial_level);
 
         // Add more excellent performances to reach minimum
         for _ in 0..10 {
@@ -1379,14 +1422,14 @@ mod tests {
         }
 
         // Now level should have increased
-        assert!(controller.current_level() > initial_level);
+        assert!(controller.current_level().get() > initial_level);
     }
 
     #[test]
     fn test_difficulty_decrease_on_struggling() {
         let mut controller = DifficultyController::new();
         controller.level = DifficultyLevel::new(5).unwrap();
-        let initial_level = controller.current_level();
+        let initial_level = controller.current_level().get();
 
         // Add consistent failures
         for _ in 0..10 {
@@ -1399,7 +1442,7 @@ mod tests {
         }
 
         // Level should have decreased
-        assert!(controller.current_level() < initial_level);
+        assert!(controller.current_level().get() < initial_level);
     }
 
     #[test]
@@ -1482,12 +1525,12 @@ mod tests {
 
         // Can't go below 1
         controller.decrease_difficulty();
-        assert_eq!(controller.current_level(), 1);
+        assert_eq!(controller.current_level().get(), 1);
 
         // Can't go above 10
         controller.level = DifficultyLevel::new(10).unwrap();
         controller.increase_difficulty();
-        assert_eq!(controller.current_level(), 10);
+        assert_eq!(controller.current_level().get(), 10);
     }
 
     #[test]
@@ -1508,7 +1551,7 @@ mod tests {
         ));
 
         controller.reset();
-        assert_eq!(controller.current_level(), 1);
+        assert_eq!(controller.current_level().get(), 1);
         assert_eq!(controller.success_rate(), None);
         assert!((controller.performance_score() - DEFAULT_PERFORMANCE_SCORE).abs() < 0.001);
         assert_eq!(controller.scenarios_at_level(), 0);
@@ -1534,7 +1577,7 @@ mod tests {
         }
 
         // Level should stay at 1
-        assert_eq!(controller.current_level(), 1);
+        assert_eq!(controller.current_level().get(), 1);
     }
 
     #[test]
@@ -1553,7 +1596,7 @@ mod tests {
         }
 
         // Level should stay at 10
-        assert_eq!(controller.current_level(), 10);
+        assert_eq!(controller.current_level().get(), 10);
     }
 
     #[test]
@@ -1571,7 +1614,7 @@ mod tests {
         }
 
         // If level increased, scenarios_at_level should have reset
-        if controller.current_level() > 1 {
+        if controller.current_level().get() > 1 {
             // After level change, counter resets, then we may have added more
             assert!(controller.scenarios_at_level() < 15);
         }

@@ -183,8 +183,7 @@ pub(super) fn render_result_popup(frame: &mut Frame, title: &str, message: &str,
 /// Displays up to 3 notifications stacked vertically. Notifications auto-expire
 /// after their configured duration (default 3 seconds).
 pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
-    let visible = state.ui.notifications.visible();
-    if visible.is_empty() {
+    if state.ui.notifications.is_empty() {
         return;
     }
 
@@ -200,7 +199,7 @@ pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
     let base_y = 2;
 
     // Render each visible notification
-    for (idx, notification) in visible.iter().enumerate() {
+    for (idx, notification) in state.ui.notifications.visible().enumerate() {
         let y_offset =
             base_y + (u16::try_from(idx).unwrap_or(u16::MAX) * (notification_height + spacing));
 

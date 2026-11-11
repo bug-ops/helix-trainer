@@ -20,7 +20,7 @@ fn sim_after(text: &str, keys: &[&str]) -> AnyModeSimulator {
 fn deleted(text: &str, keys: &[&str]) -> String {
     let mut sim = sim_after(text, keys);
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 #[test]

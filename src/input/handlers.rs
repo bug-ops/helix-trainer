@@ -141,7 +141,7 @@ fn handle_task_special_keys(key: KeyEvent) -> Option<Message> {
 /// Check if current gameplay session is in Insert mode
 ///
 /// Works for both training mode (Task screen) and arcade mode (`MiniGame` screen).
-fn is_gameplay_insert_mode(state: &AppState) -> bool {
+pub(super) fn is_gameplay_insert_mode(state: &AppState) -> bool {
     match &state.screen {
         TypedScreen::Task(task_data) => task_data.session.playable().is_insert_mode(),
         TypedScreen::MiniGame(_) => state
@@ -156,7 +156,7 @@ fn is_gameplay_insert_mode(state: &AppState) -> bool {
 /// Works for both training mode (Task screen) and arcade mode (`MiniGame`
 /// screen). Used to check for a pending prefix/command-line state before
 /// routing keys that would otherwise bypass the state machine (Esc, arrows).
-fn gameplay_input_state(state: &AppState) -> Option<&InputStateMachine> {
+pub(super) fn gameplay_input_state(state: &AppState) -> Option<&InputStateMachine> {
     match &state.screen {
         TypedScreen::Task(task_data) => Some(task_data.input_state()),
         TypedScreen::MiniGame(minigame_data) => Some(minigame_data.input_state()),
@@ -247,6 +247,22 @@ where
     // State machine handles multi-key commands in gameplay.rs/minigame.rs
     let stock = key_to_command_string(key)?;
     Some(make_message(stock.clone().into(), stock))
+}
+
+/// Dispatch `key` as gameplay input on the current training or arcade screen.
+///
+/// Skips the screen-level shortcuts (hint dismissal, pause) that
+/// [`handle_task_keys`] and [`handle_minigame_keys`] apply first.
+pub(super) fn handle_gameplay_key(key: KeyEvent, state: &AppState) -> Option<Message> {
+    match &state.screen {
+        TypedScreen::Task(_) => handle_gameplay_input(key, state, |keys, typed| {
+            Message::ExecuteCommand { keys, typed }
+        }),
+        TypedScreen::MiniGame(_) => handle_gameplay_input(key, state, |keys, typed| {
+            Message::MiniGameCommand { keys, typed }
+        }),
+        _ => None,
+    }
 }
 
 /// Convert a key event to a command string for the state machine
@@ -535,7 +551,9 @@ mod tests {
     /// Build an `Active` `GameSession` for a minimal scenario, used to exercise
     /// insert/normal mode transitions in task-screen key handling tests.
     fn make_active_task_session() -> GameSession<crate::game::Active> {
-        use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
+        use crate::config::{
+            CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+        };
 
         let scenario = Scenario {
             id: sid("test"),
@@ -570,8 +588,7 @@ mod tests {
                 tolerance: 0,
             },
             hints: vec![],
-            alternatives: vec![],
-            metadata: None,
+            metadata: ScenarioMetadata::default(),
         };
 
         GameSession::new(scenario).unwrap()
@@ -1029,6 +1046,161 @@ mod tests {
         }
     }
 
+    /// #570: `Ctrl-c` never quits a gameplay screen; each input state follows Helix
+    mod ctrl_c_tests {
+        use super::*;
+        use crate::helix::commands::{CMD_ESCAPE, CMD_INSERT, CMD_TOGGLE_COMMENTS};
+        use crate::input::handle_key_event;
+
+        fn ctrl_c() -> KeyEvent {
+            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
+        }
+
+        fn task_state_after(opening_keys: &[KeyEvent]) -> AppState {
+            let mut state = create_test_app_state();
+            let mut task_data = TaskData::new(make_active_task_session());
+            for key in opening_keys {
+                task_data.input_state_mut().process_key(*key);
+            }
+            state.screen = TypedScreen::Task(task_data);
+            state
+        }
+
+        fn plain(keys: &str) -> Vec<KeyEvent> {
+            keys.chars()
+                .map(|c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE))
+                .collect()
+        }
+
+        fn command(keys: &'static str) -> Message {
+            Message::ExecuteCommand {
+                keys: CanonicalKeys::from_static(keys),
+                typed: Cow::Borrowed(keys),
+            }
+        }
+
+        #[test]
+        fn test_base_and_count_forward_ctrl_c_as_toggle_comments() {
+            for opening in ["", "3"] {
+                let state = task_state_after(&plain(opening));
+                let message = handle_key_event(ctrl_c(), &state);
+                assert!(
+                    matches!(&message, Some(Message::ExecuteCommand { keys, .. }) if keys.as_str() == CMD_TOGGLE_COMMENTS),
+                    "after {opening:?}: {message:?}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_argument_pending_states_take_ctrl_c_as_the_plain_char() {
+            for opening in [
+                "f", "t", "F", "T", "r", "ms", "md", "mr", "mi", "ma", "\"", "3f",
+            ] {
+                let state = task_state_after(&plain(opening));
+                assert_eq!(
+                    handle_key_event(ctrl_c(), &state),
+                    Some(command("c")),
+                    "after {opening:?}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_leader_and_prompt_states_cancel_on_ctrl_c() {
+            for opening in [
+                "g", "z", "m", "[", "]", "2g", "\"a", ":", "/", "?", "s", "S", "K",
+            ] {
+                let state = task_state_after(&plain(opening));
+                assert_eq!(
+                    handle_key_event(ctrl_c(), &state),
+                    Some(command(CMD_ESCAPE)),
+                    "after {opening:?}"
+                );
+            }
+            let alt_k = KeyEvent::new(KeyCode::Char('K'), KeyModifiers::ALT);
+            let state = task_state_after(&[alt_k]);
+            assert_eq!(
+                handle_key_event(ctrl_c(), &state),
+                Some(command(CMD_ESCAPE))
+            );
+        }
+
+        #[test]
+        fn test_insert_mode_ignores_ctrl_c() {
+            let mut state = create_test_app_state();
+            let session = match make_active_task_session()
+                .record_action(CMD_INSERT.to_string())
+                .unwrap()
+            {
+                crate::game::SessionAfterAction::StillActive(session) => session,
+                crate::game::SessionAfterAction::Completed(_) => unreachable!(),
+            };
+            state.screen = TypedScreen::Task(TaskData::new(session));
+            assert_eq!(handle_key_event(ctrl_c(), &state), None);
+        }
+
+        #[test]
+        fn test_minigame_forwards_ctrl_c_only_while_playing() {
+            use crate::minigame::MiniGameSession;
+            use crate::testing::ScenarioBuilder;
+            use crate::ui::state::MiniGameData;
+            use std::sync::Arc;
+
+            type Setup = fn(&mut MiniGameSession);
+            let cases: [(&str, Setup, bool); 4] = [
+                ("countdown", |_| {}, false),
+                (
+                    "playing",
+                    |session| {
+                        for _ in 0..4 {
+                            session.tick_countdown();
+                        }
+                    },
+                    true,
+                ),
+                (
+                    "paused",
+                    |session| {
+                        for _ in 0..4 {
+                            session.tick_countdown();
+                        }
+                        session.pause();
+                    },
+                    false,
+                ),
+                (
+                    "game over",
+                    |session| session.end_session_on_timeout(),
+                    false,
+                ),
+            ];
+            for (name, setup, forwarded) in cases {
+                let scenario = ScenarioBuilder::new().id("s1").build();
+                let mut session = MiniGameSession::new(Arc::new(vec![scenario]), None);
+                session.start();
+                setup(&mut session);
+                let mut state = create_test_app_state();
+                state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
+                let message = handle_key_event(ctrl_c(), &state);
+                if forwarded {
+                    assert!(
+                        matches!(&message, Some(Message::MiniGameCommand { keys, .. }) if keys.as_str() == CMD_TOGGLE_COMMENTS),
+                        "{name}: {message:?}"
+                    );
+                } else {
+                    assert_eq!(message, None, "{name}");
+                }
+            }
+        }
+
+        #[test]
+        fn test_non_gameplay_screens_keep_ctrl_c_as_quit() {
+            let mut state = create_test_app_state();
+            state.screen = TypedScreen::Menu(MenuData::default());
+            assert_eq!(handle_key_event(ctrl_c(), &state), Some(Message::QuitApp));
+        }
+    }
+
     // Regression tests for the hint-panel Escape interaction fixed alongside #283:
     // Escape must exit Insert mode before it dismisses the hint panel.
     mod task_keys_hint_panel_escape_tests {
@@ -1280,7 +1452,9 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_ignored_by_default() {
-            use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
+            use crate::config::{
+                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+            };
             use crate::ui::state::{ConfigState, screen::TaskData};
 
             let mut state = create_test_app_state();
@@ -1320,8 +1494,7 @@ mod tests {
                     tolerance: 0,
                 },
                 hints: vec![],
-                alternatives: vec![],
-                metadata: None,
+                metadata: ScenarioMetadata::default(),
             };
 
             let session = GameSession::new(scenario).unwrap();
@@ -1344,7 +1517,9 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_mapped_when_enabled() {
-            use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
+            use crate::config::{
+                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+            };
             use crate::helix::commands::{
                 CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
             };
@@ -1387,8 +1562,7 @@ mod tests {
                     tolerance: 0,
                 },
                 hints: vec![],
-                alternatives: vec![],
-                metadata: None,
+                metadata: ScenarioMetadata::default(),
             };
 
             let session = GameSession::new(scenario).unwrap();
@@ -1448,7 +1622,9 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_with_modifiers_not_mapped() {
-            use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
+            use crate::config::{
+                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+            };
             use crate::ui::state::screen::TaskData;
 
             let mut state = create_test_app_state();
@@ -1488,8 +1664,7 @@ mod tests {
                     tolerance: 0,
                 },
                 hints: vec![],
-                alternatives: vec![],
-                metadata: None,
+                metadata: ScenarioMetadata::default(),
             };
 
             let session = GameSession::new(scenario).unwrap();

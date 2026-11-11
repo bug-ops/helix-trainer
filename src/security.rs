@@ -65,13 +65,6 @@ pub enum SecurityError {
         max: usize,
     },
 
-    /// A scenario declares more alternative solutions than allowed.
-    #[error("Too many alternatives (max {max})")]
-    TooManyAlternatives {
-        /// Maximum allowed alternative count.
-        max: usize,
-    },
-
     /// A session recorded more actions than the cap.
     #[error("Too many actions (max: 1000000)")]
     TooManyActions,
@@ -95,9 +88,13 @@ pub enum SecurityError {
     #[error("Invalid UTF-8 encoding")]
     InvalidEncoding,
 
-    /// An input value failed validation; the message is for logs only.
-    #[error("Invalid input: {0}")]
-    InvalidInput(String),
+    /// A quest template failed validation.
+    #[error("Invalid quest template: {0}")]
+    QuestTemplate(#[from] crate::config::quests::QuestTemplateError),
+
+    /// A scenario's cursor setup or target failed validation.
+    #[error("Invalid scenario: {0}")]
+    Scenario(#[from] crate::config::scenarios::ScenarioValidationError),
 
     /// The application reached a state that violates an invariant.
     #[error("Invalid state: {0}")]
@@ -223,6 +220,10 @@ pub enum ErrorCause {
     /// Learning (FSRS, scheduling) failure.
     #[error(transparent)]
     Learning(#[from] crate::learning::LearningError),
+
+    /// Helix simulator command failure.
+    #[error(transparent)]
+    Simulator(#[from] crate::helix::error::SimulatorError),
 }
 
 /// User-facing error messages (sanitized)
@@ -336,8 +337,7 @@ impl From<SecurityError> for UserError {
             e @ (SecurityError::FileTooLarge { .. }
             | SecurityError::TooManyScenarios { .. }
             | SecurityError::ContentTooLarge { .. }
-            | SecurityError::TooManyHints { .. }
-            | SecurityError::TooManyAlternatives { .. }) => UserError::ScenarioTooComplex {
+            | SecurityError::TooManyHints { .. }) => UserError::ScenarioTooComplex {
                 cause: Some(e.into()),
             },
 
@@ -352,7 +352,8 @@ impl From<SecurityError> for UserError {
             | SecurityError::CommandSequenceTooLong { .. }
             | SecurityError::InvalidContent
             | SecurityError::InvalidEncoding
-            | SecurityError::InvalidInput(_)
+            | SecurityError::QuestTemplate(_)
+            | SecurityError::Scenario(_)
             | SecurityError::TooManyKeymapBindings { .. }
             | SecurityError::NotRegularFile
             | SecurityError::ReadFailed(_)) => UserError::OperationFailed {
@@ -397,11 +398,9 @@ impl From<crate::learning::LearningError> for UserError {
                 context: "Command not found in registry".to_string(),
                 cause: Some(e.into()),
             },
-            e @ (LearningError::SessionComplete | LearningError::FsrsError(_)) => {
-                UserError::OperationFailed {
-                    cause: Some(e.into()),
-                }
-            }
+            e @ LearningError::FsrsError(_) => UserError::OperationFailed {
+                cause: Some(e.into()),
+            },
         }
     }
 }
@@ -425,9 +424,6 @@ pub mod limits {
 
     /// Maximum number of hints per scenario
     pub const MAX_HINTS: usize = 10;
-
-    /// Maximum number of alternative solutions
-    pub const MAX_ALTERNATIVES: usize = 20;
 
     /// Maximum command sequence length
     pub const MAX_COMMAND_SEQUENCE_LENGTH: usize = 100;
@@ -1071,16 +1067,6 @@ mod tests {
     }
 
     #[test]
-    fn test_error_conversion_too_many_alternatives() {
-        let err = SecurityError::TooManyAlternatives { max: 20 };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
-    }
-
-    #[test]
     fn test_error_conversion_invalid_state() {
         let err = SecurityError::InvalidState("bad state".to_string());
         let user_err = UserError::from(err);
@@ -1280,11 +1266,6 @@ mod tests {
                 .contains("hints")
         );
         assert!(
-            SecurityError::TooManyAlternatives { max: 20 }
-                .to_string()
-                .contains("alternatives")
-        );
-        assert!(
             SecurityError::TooManyActions
                 .to_string()
                 .contains("actions")
@@ -1306,9 +1287,12 @@ mod tests {
         );
         assert!(SecurityError::InvalidEncoding.to_string().contains("UTF-8"));
         assert!(
-            SecurityError::InvalidInput("err".to_string())
-                .to_string()
-                .contains("Invalid input")
+            SecurityError::from(crate::config::quests::QuestTemplateError::NameTooLong {
+                max: 1,
+                actual: 2
+            })
+            .to_string()
+            .contains("Invalid quest template")
         );
         assert!(
             SecurityError::InvalidState("err".to_string())
@@ -1362,9 +1346,6 @@ mod tests {
 
         let user = UserError::from(SecurityError::InvalidState("broken".to_string()));
         assert!(error_chain(&user).contains("Invalid state: broken"));
-
-        let user = UserError::from(crate::learning::LearningError::SessionComplete);
-        assert!(std::error::Error::source(&user).is_some());
 
         let user = UserError::from(crate::gamification::GamificationError::StreakFreezeUnavailable);
         assert!(matches!(

@@ -39,7 +39,6 @@ category = "advanced"
 difficulty = "intermediate"
 tags = ["macro", "delete", "line"]
 commands_taught = ["q", "Q"]
-estimated_time_seconds = 25
 
 [[scenarios]]
 id = "macro_append_lines_001"
@@ -78,4 +77,3 @@ category = "advanced"
 difficulty = "intermediate"
 tags = ["macro", "insert", "append"]
 commands_taught = ["q", "Q"]
-estimated_time_seconds = 35

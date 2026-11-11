@@ -50,7 +50,7 @@ impl Harness {
     }
 
     fn content(&self) -> String {
-        self.sim.state().unwrap().content().to_string()
+        self.sim.display().content()
     }
 }
 

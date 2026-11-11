@@ -302,7 +302,7 @@ mod tests {
 
         assert!(outcome.is_stay());
         assert_eq!(
-            ctx.ui.notifications.visible()[0].message(),
+            ctx.ui.notifications.visible().next().unwrap().message(),
             rust_i18n::t!("minigame.no_scenarios_available").to_string()
         );
     }
@@ -491,11 +491,16 @@ mod tests {
         // localized copy, not just a matching notification variant.
         assert_eq!(ctx.ui.notifications.count(), 1);
         assert_eq!(
-            ctx.ui.notifications.visible()[0].message(),
+            ctx.ui.notifications.visible().next().unwrap().message(),
             rust_i18n::t!("minigame.challenge_no_attempts_left").to_string()
         );
         assert_matches!(
-            ctx.ui.notifications.visible()[0].notification_type,
+            ctx.ui
+                .notifications
+                .visible()
+                .next()
+                .unwrap()
+                .notification_type,
             crate::ui::notification::NotificationType::Info { .. }
         );
     }
@@ -580,11 +585,12 @@ mod tests {
         let config = ConfigState::default();
 
         let day1_clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
-        let mut progress = ProgressState::with_clock(
+        let mut progress = ProgressState::with_clocks(
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::for_test(),
             day1_clock,
+            Arc::new(crate::time::SystemMonotonicClock),
         );
 
         {
@@ -603,11 +609,12 @@ mod tests {
         // Advance to the next calendar day and rebuild the context with the
         // same profile - the cap must have reset.
         let day2_clock = Arc::new(FakeClock::at("2026-01-16T12:00:00Z"));
-        progress = ProgressState::with_clock(
+        progress = ProgressState::with_clocks(
             progress.profile.clone(),
             PerformanceTracker::new(),
             ProfileStorage::for_test(),
             day2_clock,
+            Arc::new(crate::time::SystemMonotonicClock),
         );
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
         let today = ctx.progress.today();

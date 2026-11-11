@@ -96,26 +96,12 @@ pub trait ProgressTracker {
 ///     }
 /// }
 ///
-/// assert_eq!(Double.apply(50), 100);
+/// assert_eq!(Double.factor(), 2.0);
 /// assert!(Double.is_beneficial());
 /// ```
 pub trait Modifier {
     /// Get modification factor (1.0 = no change, 2.0 = double, 0.5 = half)
     fn factor(&self) -> f64;
-
-    /// Apply modification to a value
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "a modifier factor is non-negative and the scaled value stays far below u64::MAX"
-    )]
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-    )]
-    fn apply(&self, value: u64) -> u64 {
-        (value as f64 * self.factor()).round() as u64
-    }
 
     /// Check if this is a beneficial modifier (factor > 1.0)
     fn is_beneficial(&self) -> bool {
@@ -252,17 +238,6 @@ mod tests {
         fn factor(&self) -> f64 {
             self.factor
         }
-    }
-
-    #[test]
-    fn test_modifier_apply() {
-        let double = TestModifier { factor: 2.0 };
-        let half = TestModifier { factor: 0.5 };
-        let neutral = TestModifier { factor: 1.0 };
-
-        assert_eq!(double.apply(100), 200);
-        assert_eq!(half.apply(100), 50);
-        assert_eq!(neutral.apply(100), 100);
     }
 
     #[test]

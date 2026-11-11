@@ -8,6 +8,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
 };
+use rust_i18n::t;
 
 /// Render the mode selection screen
 pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
@@ -31,9 +32,9 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
 
     // Title with welcome message
     let title_text = [
-        "HELIX TRAINER".to_string(),
+        t!("mode_selection.logo").to_string(),
         String::new(),
-        "Choose your training mode:".to_string(),
+        t!("mode_selection.prompt").to_string(),
     ]
     .join("\n");
 
@@ -49,7 +50,7 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
 
     // Render mode selection items using Paragraph for reliable display
     let block = Block::default()
-        .title(" Select Mode ")
+        .title(t!("mode_selection.select_mode_title").to_string())
         .borders(Borders::ALL);
     let inner = block.inner(chunks[1]);
     frame.render_widget(block, chunks[1]);
@@ -58,8 +59,8 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
     render_mode_option(
         frame,
         Rect::new(inner.x, inner.y + 1, inner.width, 2),
-        "Training Mode",
-        "Manual scenario selection with detailed feedback",
+        &t!("mode_selection.training_name"),
+        &t!("mode_selection.training_description"),
         mode_data.selected_mode == crate::ui::state::TopMode::Training,
         "📚",
     );
@@ -67,8 +68,8 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
     render_mode_option(
         frame,
         Rect::new(inner.x, inner.y + 4, inner.width, 2),
-        "Arcade Mode",
-        "Fast-paced mini-games with time pressure",
+        &t!("mode_selection.arcade_name"),
+        &t!("mode_selection.arcade_description"),
         mode_data.selected_mode == crate::ui::state::TopMode::Arcade
             && mode_data.minigame_mode_selection.is_none(),
         "🎮",
@@ -87,11 +88,11 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
 
     // Instructions - different when submenu is open
     let instructions_text = if mode_data.minigame_mode_selection.is_some() {
-        "↑/↓ j/k: Navigate  |  Enter: Start  |  Esc: Back  |  q: Quit"
+        t!("mode_selection.instructions_submenu")
     } else {
-        "↑/↓ j/k: Navigate  |  Enter: Select  |  r: Review  |  p: Profile  |  s: Stats  |  a: Achievements  |  q: Quit"
+        t!("mode_selection.instructions")
     };
-    let instructions = Paragraph::new(instructions_text)
+    let instructions = Paragraph::new(instructions_text.to_string())
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
@@ -131,6 +132,16 @@ fn render_mode_option(
 
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, area);
+}
+
+fn mode_label(mode: &crate::minigame::MiniGameMode) -> String {
+    use crate::minigame::MiniGameMode;
+    match mode {
+        MiniGameMode::Arcade(_) => t!("mode_selection.mode_arcade"),
+        MiniGameMode::Survival(_) => t!("mode_selection.mode_survival"),
+        MiniGameMode::Challenge(_) => t!("mode_selection.mode_challenge"),
+    }
+    .to_string()
 }
 
 /// Render the mini-game mode submenu (Arcade/Survival/Challenge)
@@ -173,7 +184,7 @@ fn render_minigame_mode_submenu(
 
     // Submenu border
     let block = Block::default()
-        .title(" Select Game Mode ")
+        .title(t!("mode_selection.select_game_mode_title").to_string())
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow));
     let inner = block.inner(submenu_area);
@@ -218,12 +229,12 @@ fn render_minigame_mode_submenu(
             format!(
                 "{} {} ({}/{})",
                 icon,
-                mode.name(),
+                mode_label(mode),
                 challenge_progress.attempts_remaining(today),
                 crate::constants::CHALLENGE_MAX_ATTEMPTS
             )
         } else {
-            format!("{} {}", icon, mode.name())
+            format!("{} {}", icon, mode_label(mode))
         };
         let name_line = Line::from(vec![
             Span::styled(prefix, name_style),

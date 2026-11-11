@@ -1,8 +1,10 @@
 //! Editing commands (delete, join, indent, dedent)
 
-use super::clipboard::{values_by_range, yank_to_register};
+use super::clipboard::{select_pasted, values_by_range, yank_to_register};
+use crate::helix::error::SimulatorError;
+use crate::helix::newline_indent::CommentContinuation;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
-use crate::security::UserError;
+use helix_core::graphemes::next_grapheme_boundary;
 use helix_core::line_ending::line_end_char_index;
 use helix_core::movement::skip_while;
 use helix_core::surround::find_nth_pairs_pos;
@@ -60,11 +62,9 @@ fn join_changes<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<(usize, usize, Op
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let transaction = Transaction::change(&sim.doc, join_changes(sim).into_iter());
-    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(&transaction);
-    sim.selection = mapped;
     Ok(())
 }
 
@@ -85,15 +85,13 @@ fn touched_lines<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<usize> {
     lines
 }
 
-/// Apply `changes` and map the selection over them, so ranges stay on their text
-fn apply_changes_mapping_selection<M: EditorMode>(
+/// Apply `changes`; the selection is mapped over them, so ranges stay on their text
+fn apply_changes<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     changes: Vec<(usize, usize, Option<Tendril>)>,
 ) {
     let transaction = Transaction::change(&sim.doc, changes.into_iter());
-    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(&transaction);
-    sim.selection = mapped;
 }
 
 /// Indent every line touched by the selection by one indent unit (Helix '>' command)
@@ -105,7 +103,7 @@ fn apply_changes_mapping_selection<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let unit = sim.indent_unit.to_string();
     let changes = touched_lines(sim)
         .into_iter()
@@ -115,7 +113,7 @@ pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
             (start, start, Some(Tendril::from(unit.as_str())))
         })
         .collect();
-    apply_changes_mapping_selection(sim, changes);
+    apply_changes(sim, changes);
     Ok(())
 }
 
@@ -128,7 +126,7 @@ pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let unit_width = sim.indent_unit.width();
     let changes = touched_lines(sim)
         .into_iter()
@@ -150,12 +148,12 @@ pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
             (removable > 0).then_some((start, start + removable, None))
         })
         .collect();
-    apply_changes_mapping_selection(sim, changes);
+    apply_changes(sim, changes);
     Ok(())
 }
 
 /// Delete every range of the active selection (respecting multi-range
-/// selections) and return the selection mapped through the deletion.
+/// selections), leaving the selection mapped through the deletion.
 ///
 /// Each original range collapses to a point at its post-deletion position;
 /// range count and order are preserved (unlike rebuilding a fresh
@@ -165,7 +163,7 @@ pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 /// multi-range deletion (e.g. from `C`) lands each cursor correctly even
 /// when an earlier range's deletion shifts the document underneath a later
 /// one.
-pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Selection {
+pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = range.to();
@@ -177,9 +175,7 @@ pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>
         (start, end, None)
     });
 
-    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(&transaction);
-    mapped
 }
 
 /// Delete selection (single 'd' - deletes current selection)
@@ -192,7 +188,7 @@ pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     delete_selection_from_register(sim, None)
 }
 
@@ -207,7 +203,7 @@ pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 pub fn delete_selection_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     yank_to_register(sim, register)?;
     delete_selection_impl(sim);
     Ok(())
@@ -224,15 +220,18 @@ pub fn delete_selection_from_register<M: EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn delete_selection_noyank<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     delete_selection_impl(sim);
     Ok(())
 }
 
 fn delete_selection_impl<M: EditorMode>(sim: &mut HelixSimulator<M>) {
-    let mapped = delete_active_selection(sim);
+    delete_active_selection(sim);
     let last_valid_pos = sim.doc.len_chars().saturating_sub(1);
-    sim.selection = mapped.transform(|range| Range::point(range.head.min(last_valid_pos)));
+    sim.selection = sim
+        .selection
+        .clone()
+        .transform(|range| Range::point(range.head.min(last_valid_pos)));
 }
 
 /// True when every range of the active selection spans one or more whole
@@ -258,56 +257,53 @@ pub(crate) fn is_selection_linewise<M: EditorMode>(sim: &HelixSimulator<M>) -> b
     })
 }
 
-/// Replace every range of a linewise selection with a single blank line,
-/// returning the mapped selection with each cursor on its own new blank
-/// line.
+/// Replace every range of a linewise selection with a new line and leave
+/// each cursor on it, indented as `O` would indent a line opened there
 ///
 /// Mirrors upstream Helix's `change_selection` falling back to
-/// `open(Open::Above)` for a whole-line selection (Helix `xc`), simplified
-/// to this simulator's single blank line per range (no indent/comment
-/// continuation). Positions are computed directly rather than via
-/// [`helix_core::Selection::map`]: a point sitting exactly at an
-/// insertion boundary maps *after* the inserted text by default (see
-/// `Range::map`'s `Assoc::AfterSticky` for equal anchor/head), which would
-/// land the cursor one line too far down instead of on the new blank line.
-///
-/// Like [`delete_active_selection`], does *not* assign the result back to
-/// `sim.selection` - the caller must do that. Until it does, `sim.selection`
-/// still holds the pre-call ranges, now stale against the post-transaction
-/// document (`apply_transaction` only touches `sim.doc`).
-pub(crate) fn change_selection_linewise<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Selection {
-    let ranges: Vec<Range> = sim.selection.ranges().to_vec();
-
-    let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
-        (range.from(), range.to(), Some("\n".into()))
-    });
-
-    let mut inserted = 0usize;
-    let mut removed = 0usize;
-    let new_ranges: Vec<Range> = ranges
+/// `open(Open::Above)` for a whole-line selection (Helix `xc`): the lines are
+/// deleted, then a line is opened above what followed them, with the indent
+/// of the language rule but without continuing a comment. The cursor
+/// positions are computed here rather than via [`helix_core::Selection::map`]:
+/// adjacent deleted ranges would map to the same point and merge.
+pub(crate) fn change_selection_linewise<M: EditorMode>(sim: &mut HelixSimulator<M>) {
+    let primary = sim.selection.primary_index();
+    let mut removed = 0;
+    let starts: Vec<usize> = sim
+        .selection
+        .ranges()
         .iter()
         .map(|range| {
-            // Ranges are sorted and disjoint, so `removed <= range.from()` always holds.
-            let pos = range.from() + inserted - removed;
-            inserted += 1;
+            let start = range.from() - removed;
             removed += range.to() - range.from();
-            Range::point(pos)
+            start
         })
         .collect();
 
-    let primary_idx = sim.selection.primary_index();
-    sim.apply_transaction(&transaction);
+    let deletion = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
+        (range.from(), range.to(), None)
+    })
+    .with_selection(Selection::point(starts[primary]));
+    sim.apply_transaction(&deletion);
 
-    Selection::new(new_ranges.into(), primary_idx)
+    let mut shift = 0;
+    let cursors: Vec<Range> = starts
+        .into_iter()
+        .map(|start| {
+            let opened = sim.open_above_at(start + shift, CommentContinuation::Skip);
+            shift += opened.inserted;
+            Range::point(opened.cursor)
+        })
+        .collect();
+    sim.selection = Selection::new(cursors.into(), primary);
 }
 
 /// Apply `transaction` and keep the selection: non-empty ranges are mapped
 /// over the edit, empty ranges stay where they were (mapping would push a
 /// cursor on a replaced character past it).
-fn apply_keeping_selection<M: EditorMode>(sim: &mut HelixSimulator<M>, transaction: &Transaction) {
+fn apply_keeping_selection<M: EditorMode>(sim: &mut HelixSimulator<M>, transaction: Transaction) {
     let mapped = sim.selection.clone().map(transaction.changes());
-    sim.apply_transaction(transaction);
-    sim.selection = if mapped.len() == sim.selection.len() {
+    let kept = if mapped.len() == sim.selection.len() {
         let ranges: Vec<Range> = sim
             .selection
             .ranges()
@@ -319,6 +315,7 @@ fn apply_keeping_selection<M: EditorMode>(sim: &mut HelixSimulator<M>, transacti
     } else {
         mapped
     };
+    sim.apply_transaction(&transaction.with_selection(kept));
 }
 
 /// Switch case of selected text (Helix '~' command)
@@ -330,7 +327,7 @@ fn apply_keeping_selection<M: EditorMode>(sim: &mut HelixSimulator<M>, transacti
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
         let end = range
@@ -360,7 +357,7 @@ pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
         (start, end, Some(text.into()))
     });
 
-    apply_keeping_selection(sim, &transaction);
+    apply_keeping_selection(sim, transaction);
     Ok(())
 }
 
@@ -375,7 +372,7 @@ pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let doc = &sim.doc;
     let slice = doc.slice(..);
     sim.selection = sim.selection.clone().transform(|range| {
@@ -400,7 +397,7 @@ pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let doc = &sim.doc;
     let slice = doc.slice(..);
     sim.selection = sim.selection.clone().transform(|range| {
@@ -418,7 +415,7 @@ pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     sim.selection = Selection::single(0, sim.doc.len_chars());
     Ok(())
 }
@@ -431,7 +428,9 @@ pub fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), User
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn collapse_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn collapse_selection<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     sim.selection = sim.selection.clone().cursors(sim.doc.slice(..));
     Ok(())
 }
@@ -442,7 +441,9 @@ pub fn collapse_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn switch_to_uppercase<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     map_selected_text(sim, str::to_uppercase);
     Ok(())
 }
@@ -453,7 +454,9 @@ pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn switch_to_lowercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn switch_to_lowercase<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     map_selected_text(sim, str::to_lowercase);
     Ok(())
 }
@@ -471,16 +474,21 @@ fn map_selected_text<M: EditorMode>(sim: &mut HelixSimulator<M>, map: fn(&str) -
         (start, end, Some(mapped.into()))
     });
 
-    apply_keeping_selection(sim, &transaction);
+    apply_keeping_selection(sim, transaction);
 }
 
 /// Replace selection with the unnamed register's content (Helix 'R' command)
+///
+/// A point cursor replaces the one grapheme under it; afterwards each range
+/// covers the text that replaced it.
 ///
 /// # Errors
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn replace_with_yanked<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     replace_with_yanked_from_register(sim, None)
 }
 
@@ -495,7 +503,7 @@ pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
 pub fn replace_with_yanked_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let Some(values) = sim.registers.get_values(register).map(<[String]>::to_vec) else {
         return Ok(());
     };
@@ -504,10 +512,38 @@ pub fn replace_with_yanked_from_register<M: EditorMode>(
     };
     let mut value_iter = values_by_range(&values, last_value);
 
+    let slice = sim.doc.slice(..);
+    let mut offset: isize = 0;
+    let mut last_to = 0;
+    let mut replaced: Vec<Range> = Vec::with_capacity(sim.selection.len());
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
+        let (from, to) = if range.anchor == range.head {
+            (range.head, next_grapheme_boundary(slice, range.head))
+        } else {
+            (range.from(), range.to())
+        };
+        // Point cursors inside one grapheme share its end; only the first replaces it.
+        if from < last_to {
+            replaced.push(Range::point(
+                (last_to.cast_signed() + offset).cast_unsigned(),
+            ));
+            return (last_to, last_to, None);
+        }
+        last_to = to;
         let value = value_iter.next().map_or("", String::as_str);
-        (range.from(), range.to(), Some(value.into()))
-    });
+        let value_len = value.chars().count();
+        replaced.push(select_pasted(
+            from.saturating_add_signed(offset),
+            value_len,
+            range,
+        ));
+        offset += value_len.cast_signed() - (to - from).cast_signed();
+        (from, to, Some(value.into()))
+    })
+    .with_selection(Selection::new(
+        replaced.into(),
+        sim.selection.primary_index(),
+    ));
 
     sim.apply_transaction(&transaction);
     Ok(())
@@ -525,7 +561,7 @@ pub fn replace_with_yanked_from_register<M: EditorMode>(
 pub fn surround_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     surround_char: char,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let (open, close) = get_surround_pair(surround_char);
 
     let mut changes = Vec::with_capacity(sim.selection.len() * 2);
@@ -550,9 +586,8 @@ pub fn surround_selection<M: EditorMode>(
     }
 
     let selection = Selection::new(ranges.into(), sim.selection.primary_index());
-    let transaction = Transaction::change(&sim.doc, changes.into_iter());
+    let transaction = Transaction::change(&sim.doc, changes.into_iter()).with_selection(selection);
     sim.apply_transaction(&transaction);
-    sim.selection = selection;
 
     Ok(())
 }
@@ -568,12 +603,10 @@ pub fn surround_selection<M: EditorMode>(
 pub fn delete_surround<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     surround_char: char,
-) -> Result<(), UserError> {
-    let (open, close) = get_surround_pair(surround_char);
+) -> Result<(), SimulatorError> {
+    let (open, _) = get_surround_pair(surround_char);
 
-    let Some((open_pos, close_pos)) =
-        find_surrounding_pair(sim, sim.selection.primary().head, open, close)
-    else {
+    let Some((open_pos, close_pos)) = find_ordered_surrounding_pair(sim, open) else {
         return Ok(());
     };
 
@@ -585,9 +618,7 @@ pub fn delete_surround<M: EditorMode>(
         ]
         .into_iter(),
     );
-    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(&transaction);
-    sim.selection = mapped;
 
     Ok(())
 }
@@ -605,13 +636,11 @@ pub fn replace_surround<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     from_char: char,
     to_char: char,
-) -> Result<(), UserError> {
-    let (from_open, from_close) = get_surround_pair(from_char);
+) -> Result<(), SimulatorError> {
+    let (from_open, _) = get_surround_pair(from_char);
     let (to_open, to_close) = get_surround_pair(to_char);
 
-    let Some((open_pos, close_pos)) =
-        find_surrounding_pair(sim, sim.selection.primary().head, from_open, from_close)
-    else {
+    let Some((open_pos, close_pos)) = find_ordered_surrounding_pair(sim, from_open) else {
         return Ok(());
     };
 
@@ -638,6 +667,19 @@ pub fn replace_surround<M: EditorMode>(
 
 use crate::helix::get_bracket_pair as get_surround_pair;
 
+/// Positions of the pair around the primary range, opener first.
+///
+/// helix-core returns them in the range's direction, so a backward range
+/// yields `(close, open)`, which would make overlapping, unsorted changes.
+fn find_ordered_surrounding_pair<M: EditorMode>(
+    sim: &HelixSimulator<M>,
+    open: char,
+) -> Option<(usize, usize)> {
+    let range = sim.selection.primary();
+    let (first, second) = find_nth_pairs_pos(sim.doc.slice(..), open, range, 1).ok()?;
+    Some((first.min(second), first.max(second)))
+}
+
 fn find_surrounding_pair<M: EditorMode>(
     sim: &HelixSimulator<M>,
     _pos: usize,
@@ -658,7 +700,7 @@ fn find_surrounding_pair<M: EditorMode>(
 pub fn select_around_textobject<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     obj: char,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     match obj {
         'w' => select_around_word(sim, false),
         'W' => select_around_word(sim, true),
@@ -684,7 +726,7 @@ pub fn select_around_textobject<M: EditorMode>(
 pub fn select_inside_textobject<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     obj: char,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     match obj {
         'w' => select_inside_word(sim, false),
         'W' => select_inside_word(sim, true),
@@ -808,7 +850,9 @@ fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) {
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn join_selections_space<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     let changes = join_changes(sim);
     let mut offset = 0;
     let mut spaces = Vec::new();
@@ -822,11 +866,11 @@ pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
         }
     }
 
-    let transaction = Transaction::change(&sim.doc, changes.into_iter());
-    sim.apply_transaction(&transaction);
+    let mut transaction = Transaction::change(&sim.doc, changes.into_iter());
     if !spaces.is_empty() {
-        sim.selection = Selection::new(spaces.into(), 0);
+        transaction = transaction.with_selection(Selection::new(spaces.into(), 0));
     }
+    sim.apply_transaction(&transaction);
     Ok(())
 }
 
@@ -1706,7 +1750,8 @@ mod tests {
             HelixSimulator::new("one\ntwo\nthree".to_string());
         sim.selection = Selection::single(4, 0); // whole first line, as `x` produces
 
-        let mapped = change_selection_linewise(&mut sim);
+        change_selection_linewise(&mut sim);
+        let mapped = sim.selection.clone();
 
         assert_eq!(sim.doc.to_string(), "\ntwo\nthree");
         assert_eq!(mapped.ranges().len(), 1);
@@ -1732,7 +1777,8 @@ mod tests {
         sim.selection = Selection::new(ranges.into(), 0);
 
         assert!(is_selection_linewise(&sim));
-        let mapped = change_selection_linewise(&mut sim);
+        change_selection_linewise(&mut sim);
+        let mapped = sim.selection.clone();
 
         assert_eq!(sim.doc.to_string(), "\n\nthree");
         assert_eq!(mapped.ranges().len(), 2);

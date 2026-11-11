@@ -5,6 +5,8 @@
 //! state ([`CountedGotoPending`](crate::input::typestate::CountedGotoPending),
 //! [`CountedFindCharPending`](crate::input::typestate::CountedFindCharPending))
 //! or emit the counted command directly, so the count is never dropped (#493).
+//! `r` opens [`ReplaceCharPending`](crate::input::typestate::ReplaceCharPending)
+//! and drops the count, which Helix's `replace` ignores (#577).
 
 use std::borrow::Cow;
 use std::num::NonZeroUsize;
@@ -69,6 +71,7 @@ impl InputHandler<CountPending> for KeyHandler {
                 match c {
                     'g' => HandlerResult::Transition(InputState::CountedGotoPending { count }),
                     'G' => HandlerResult::Execute(Cow::Owned(goto_line_command(count))),
+                    'r' => HandlerResult::Transition(InputState::ReplaceCharPending),
                     _ => FindType::from_key(c).map_or_else(
                         || counted_command(count, c, key.modifiers),
                         |find_type| {

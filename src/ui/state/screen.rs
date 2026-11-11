@@ -12,10 +12,10 @@ use crate::game::{
 };
 use crate::ids::ScenarioId;
 use crate::input::typestate::InputStateMachine;
-use crate::learning::ScenarioMastery;
+use crate::learning::{ReviewSession, ScenarioMastery};
 use crate::minigame::MiniGameSession;
 use crate::security::SecurityError;
-use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
+use crate::ui::state::{QuestProgressChange, XPBreakdown};
 use std::collections::VecDeque;
 use std::time::Instant;
 
@@ -260,17 +260,17 @@ pub struct CompletedTask {
 }
 
 impl CompletedTask {
-    /// Derive the feedback of a completed session and stamp the completion time
+    /// Derive the feedback of a completed session and stamp the completion time `now`
     ///
     /// # Errors
     ///
     /// Returns [`SecurityError`] when the scenario's scoring cannot score the run.
-    pub fn new(session: GameSession<Completed>) -> Result<Self, SecurityError> {
+    pub fn new(session: GameSession<Completed>, now: Instant) -> Result<Self, SecurityError> {
         let feedback = session.feedback()?;
         Ok(Self {
             session,
             feedback,
-            completed_at: Instant::now(),
+            completed_at: now,
         })
     }
 }
@@ -330,17 +330,17 @@ impl TaskSession {
     }
 
     /// Resolve the state after an action was applied: an active session whose editor now matches
-    /// the target becomes a completed task, everything else is unchanged
+    /// the target becomes a completed task stamped with `now`, everything else is unchanged
     ///
     /// # Errors
     ///
     /// Returns [`SecurityError`] when the completed run cannot be scored.
-    pub fn finish_action(self) -> Result<Self, SecurityError> {
+    pub fn finish_action(self, now: Instant) -> Result<Self, SecurityError> {
         match self {
             Self::Active(session) => match session.finish_action() {
                 SessionAfterAction::StillActive(session) => Ok(Self::Active(session)),
                 SessionAfterAction::Completed(session) => {
-                    CompletedTask::new(session).map(Self::Completed)
+                    CompletedTask::new(session, now).map(Self::Completed)
                 }
             },
             completed @ Self::Completed(_) => Ok(completed),
@@ -411,9 +411,9 @@ impl TaskData {
     /// # Errors
     ///
     /// Returns [`SecurityError`] when the completed run cannot be scored.
-    pub fn finish_action(self) -> Result<Self, SecurityError> {
+    pub fn finish_action(self, now: Instant) -> Result<Self, SecurityError> {
         Ok(Self {
-            session: self.session.finish_action()?,
+            session: self.session.finish_action(now)?,
             ..self
         })
     }
@@ -581,12 +581,12 @@ pub struct CategoryFiltersData {
 #[derive(Debug)]
 pub struct ReviewData {
     /// The active review session
-    pub session: ReviewSessionState,
+    pub session: ReviewSession,
 }
 
 impl ReviewData {
     /// Create new `ReviewData` with a review session
-    pub fn new(session: ReviewSessionState) -> Self {
+    pub fn new(session: ReviewSession) -> Self {
         Self { session }
     }
 }
@@ -938,7 +938,9 @@ mod tests {
 
     #[test]
     fn test_task_data_key_history() {
-        use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
+        use crate::config::{
+            CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+        };
 
         let scenario = Scenario {
             id: sid("test"),
@@ -967,14 +969,13 @@ mod tests {
                 commands: vec!["x".to_string(), "d".to_string()],
                 description: "Test".to_string(),
             },
-            alternatives: vec![],
             hints: vec![],
             scoring: ScoringConfig {
                 optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
                 max_points: 100,
                 tolerance: 0,
             },
-            metadata: None,
+            metadata: ScenarioMetadata::default(),
         };
 
         let session = GameSession::new(scenario).unwrap();
@@ -996,7 +997,9 @@ mod tests {
 
     #[test]
     fn test_task_data_key_history_max_5() {
-        use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
+        use crate::config::{
+            CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+        };
 
         let scenario = Scenario {
             id: sid("test"),
@@ -1025,14 +1028,13 @@ mod tests {
                 commands: vec!["x".to_string(), "d".to_string()],
                 description: "Test".to_string(),
             },
-            alternatives: vec![],
             hints: vec![],
             scoring: ScoringConfig {
                 optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
                 max_points: 100,
                 tolerance: 0,
             },
-            metadata: None,
+            metadata: ScenarioMetadata::default(),
         };
 
         let session = GameSession::new(scenario).unwrap();
@@ -1050,7 +1052,9 @@ mod tests {
 
     #[test]
     fn test_completed_or_abandoned_helpers() {
-        use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
+        use crate::config::{
+            CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+        };
 
         let scenario = Scenario {
             id: sid("test_123"),
@@ -1079,14 +1083,13 @@ mod tests {
                 commands: vec!["x".to_string(), "d".to_string()],
                 description: "Test".to_string(),
             },
-            alternatives: vec![],
             hints: vec![],
             scoring: ScoringConfig {
                 optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
                 max_points: 100,
                 tolerance: 0,
             },
-            metadata: None,
+            metadata: ScenarioMetadata::default(),
         };
 
         let session = GameSession::new(scenario).unwrap();

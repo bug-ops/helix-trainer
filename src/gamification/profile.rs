@@ -14,8 +14,10 @@ use crate::constants::{
     XP_LEVEL_FORMULA_BASE, XP_LEVEL_FORMULA_EXPONENT,
 };
 use crate::ids::QuestId;
+use crate::input::keymap::StoredKeymapFingerprint;
 use crate::learning::PerformanceData;
 use crate::learning::ScenarioHistory;
+use crate::numeric::{self, Rounding};
 use crate::sound::SoundConfig;
 
 /// An achievement id from disk that may be unknown to this build.
@@ -149,16 +151,17 @@ pub struct UserProfile {
     #[serde(default)]
     pub difficulties_completed: HashSet<Difficulty>,
 
-    /// Hash over the sorted resolved keymap bindings active when review
+    /// Fingerprint of the resolved keymap bindings active when review
     /// history was last recorded, or `None` if no custom keymap has ever
-    /// been active for this profile.
+    /// been active for this profile. A pre-tag bare number loads as
+    /// [`StoredKeymapFingerprint::Legacy`].
     ///
     /// Compared at startup against the currently resolved keymap: a
     /// mismatch means FSRS review history was built under a different key
     /// mapping than the one now active, which callers surface as a
     /// notification rather than silently trusting stale scheduling data.
     #[serde(default)]
-    pub keymap_fingerprint: Option<u64>,
+    pub keymap_fingerprint: Option<StoredKeymapFingerprint>,
 }
 
 impl UserProfile {
@@ -249,12 +252,21 @@ impl UserProfile {
         self.level = XPCalculator::level_from_xp(self.total_xp);
     }
 
-    /// Total-XP thresholds `(start of current level, start of next level)`.
-    fn level_bounds(&self) -> (u64, u64) {
-        (
-            XPCalculator::xp_for_level(self.level),
-            XPCalculator::xp_for_level(self.level.saturating_add(1)),
-        )
+    /// Position of this profile inside its current level.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::UserProfile;
+    ///
+    /// let mut profile = UserProfile::new();
+    /// profile.add_xp(150);
+    /// let progress = profile.level_progress();
+    /// assert_eq!((progress.earned(), progress.span()), (50, 183));
+    /// ```
+    #[must_use]
+    pub fn level_progress(&self) -> LevelProgress {
+        LevelProgress::at(self.level, self.total_xp)
     }
 
     /// XP earned inside the current level, clamped to `[0, level span]`.
@@ -272,10 +284,7 @@ impl UserProfile {
     /// assert_eq!(profile.xp_in_level(), 50);
     /// ```
     pub fn xp_in_level(&self) -> u64 {
-        let (current, next) = self.level_bounds();
-        self.total_xp
-            .saturating_sub(current)
-            .min(next.saturating_sub(current))
+        self.level_progress().earned()
     }
 
     /// Get XP progress to next level (0.0 - 1.0)
@@ -289,25 +298,8 @@ impl UserProfile {
     /// profile.add_xp(50); // 50/100 XP to level 2
     /// assert_eq!(profile.xp_progress(), 0.5);
     /// ```
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-    )]
     pub fn xp_progress(&self) -> f64 {
-        let (current, next) = self.level_bounds();
-        let xp_needed = next.saturating_sub(current);
-
-        if xp_needed == 0 {
-            1.0
-        } else {
-            (self.xp_in_level() as f64) / (xp_needed as f64)
-        }
-    }
-
-    /// XP needed for next level
-    pub fn xp_for_next_level(&self) -> u64 {
-        let (_, next_level_total) = self.level_bounds();
-        next_level_total.saturating_sub(self.total_xp)
+        self.level_progress().ratio()
     }
 
     /// Check if quest is completed today
@@ -343,6 +335,83 @@ impl UserProfile {
 impl Default for UserProfile {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// XP earned inside a level together with the XP the level spans.
+///
+/// Every screen that shows level progress (label, percentage, gauge) derives it from this one
+/// value so they cannot disagree. `earned` never exceeds `span`.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::gamification::LevelProgress;
+///
+/// let progress = LevelProgress::at(22, 9822);
+/// assert_eq!((progress.earned(), progress.span()), (199, 696));
+/// assert_eq!(progress.percent(), 28);
+///
+/// let empty = LevelProgress::new(5, 0);
+/// assert_eq!((empty.earned(), empty.span(), empty.ratio()), (0, 0, 1.0));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LevelProgress {
+    earned: u64,
+    span: u64,
+}
+
+impl LevelProgress {
+    /// Builds a progress value, clamping `earned` to `span`.
+    #[must_use]
+    pub fn new(earned: u64, span: u64) -> Self {
+        Self {
+            earned: earned.min(span),
+            span,
+        }
+    }
+
+    /// Progress of `total_xp` inside `level`.
+    ///
+    /// The next level is `level + 1`, saturating so a profile at the level cap does not
+    /// overflow (#523); a `total_xp` outside the level's range is clamped to `0` or the span.
+    #[must_use]
+    pub fn at(level: u32, total_xp: u64) -> Self {
+        let start = XPCalculator::xp_for_level(level);
+        let end = XPCalculator::xp_for_level(level.saturating_add(1));
+        Self::new(total_xp.saturating_sub(start), end.saturating_sub(start))
+    }
+
+    /// XP earned inside the level.
+    #[must_use]
+    pub fn earned(self) -> u64 {
+        self.earned
+    }
+
+    /// XP the level spans.
+    #[must_use]
+    pub fn span(self) -> u64 {
+        self.span
+    }
+
+    /// Fraction of the level completed in `0.0..=1.0`; a zero-XP span counts as complete.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
+    pub fn ratio(self) -> f64 {
+        if self.span == 0 {
+            1.0
+        } else {
+            self.earned as f64 / self.span as f64
+        }
+    }
+
+    /// Whole percentage of the level completed, rounded down, in `0..=100`.
+    #[must_use]
+    pub fn percent(self) -> u32 {
+        crate::numeric::floor_percent(self.ratio())
     }
 }
 
@@ -382,18 +451,15 @@ impl XPCalculator {
     /// assert_eq!(XPCalculator::xp_for_level(2), 100);    // Level 2 starts at 100
     /// assert_eq!(XPCalculator::xp_for_level(3), 283);    // Level 3 starts at 283 (rounded)
     /// ```
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "XP formula: the result is non-negative and far below u64::MAX"
-    )]
     pub fn xp_for_level(level: u32) -> u64 {
         if level <= 1 {
             0
         } else {
-            (XP_LEVEL_FORMULA_BASE
-                * (f64::from(level.saturating_sub(1))).powf(XP_LEVEL_FORMULA_EXPONENT))
-            .round() as u64
+            numeric::to_u64(
+                XP_LEVEL_FORMULA_BASE
+                    * (f64::from(level.saturating_sub(1))).powf(XP_LEVEL_FORMULA_EXPONENT),
+                Rounding::Nearest,
+            )
         }
     }
 
@@ -484,42 +550,6 @@ impl XPCalculator {
         }
     }
 
-    /// Calculate XP for scenario completion
-    ///
-    /// # Arguments
-    ///
-    /// * `score` - Score (0-100)
-    /// * `multiplier` - Mastery-based XP multiplier (0.0-1.0)
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::gamification::XPCalculator;
-    ///
-    /// // Perfect score with full multiplier
-    /// assert_eq!(XPCalculator::scenario_xp(100, 1.0), 50); // 100 * 50 / 100 = 50
-    ///
-    /// // Normal score
-    /// assert_eq!(XPCalculator::scenario_xp(85, 1.0), 42); // 85 * 50 / 100 = 42
-    ///
-    /// // Mastered scenario (20% XP)
-    /// assert_eq!(XPCalculator::scenario_xp(100, 0.2), 10); // 50 * 0.2 = 10
-    /// ```
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "XP formula: the result is non-negative and far below u64::MAX"
-    )]
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-    )]
-    pub fn scenario_xp(score: u32, multiplier: f64) -> u64 {
-        // Base XP per 100 points scored
-        let base_xp = (u64::from(score) * SCENARIO_BASE_XP_PER_100_POINTS) / 100;
-        (base_xp as f64 * multiplier).round() as u64
-    }
-
     /// XP components for a completed training scenario, before mastery scaling
     ///
     /// # Examples
@@ -589,11 +619,6 @@ impl XPCalculator {
     /// ```
     #[must_use]
     #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "XP formula: the result is non-negative and far below u64::MAX"
-    )]
-    #[expect(
         clippy::cast_precision_loss,
         reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
     )]
@@ -605,7 +630,10 @@ impl XPCalculator {
         };
         (completed as u64)
             .saturating_mul(REVIEW_XP_PER_COMMAND)
-            .saturating_add((success_rate * REVIEW_SUCCESS_BONUS_MAX_XP) as u64)
+            .saturating_add(numeric::to_u64(
+                success_rate * REVIEW_SUCCESS_BONUS_MAX_XP,
+                Rounding::Floor,
+            ))
     }
 
     /// Calculate XP earned from mini-game session
@@ -759,17 +787,6 @@ mod tests {
     }
 
     #[test]
-    fn test_xp_for_next_level() {
-        let mut profile = UserProfile::new();
-        assert_eq!(profile.xp_for_next_level(), 100); // Level 1 → 2
-
-        profile.add_xp(100); // Now level 2
-        let needed = profile.xp_for_next_level();
-        assert!(needed > 0);
-        assert!(needed < 200); // Should be ~183
-    }
-
-    #[test]
     fn test_xp_calculator_level_formula() {
         assert_eq!(XPCalculator::xp_for_level(1), 0);
         assert_eq!(XPCalculator::xp_for_level(2), 100);
@@ -797,29 +814,6 @@ mod tests {
             let calculated_level = XPCalculator::level_from_xp(xp);
             assert_eq!(calculated_level, level);
         }
-    }
-
-    #[test]
-    fn test_scenario_xp_calculation() {
-        // Perfect score, full multiplier
-        let xp = XPCalculator::scenario_xp(100, 1.0);
-        assert_eq!(xp, 50); // 100 * 50 / 100 = 50
-
-        // Normal score
-        let xp = XPCalculator::scenario_xp(85, 1.0);
-        assert_eq!(xp, 42); // 85 * 50 / 100 = 42
-
-        // 50% score
-        let xp = XPCalculator::scenario_xp(50, 1.0);
-        assert_eq!(xp, 25); // 50 * 50 / 100 = 25
-
-        // Mastered scenario (20% multiplier)
-        let xp = XPCalculator::scenario_xp(100, 0.2);
-        assert_eq!(xp, 10); // 50 * 0.2 = 10
-
-        // Zero score
-        let xp = XPCalculator::scenario_xp(0, 1.0);
-        assert_eq!(xp, 0);
     }
 
     #[test]
@@ -1003,7 +997,6 @@ mod tests {
                 (0.0..=1.0).contains(&progress),
                 "({level}, {total_xp}) -> {progress}"
             );
-            let _ = profile.xp_for_next_level();
             let span = XPCalculator::xp_for_level(level.saturating_add(1))
                 .saturating_sub(XPCalculator::xp_for_level(level));
             assert!(profile.xp_in_level() <= span);
@@ -1029,5 +1022,35 @@ mod tests {
         profile.total_xp = 1_000_000;
         profile.recompute_level();
         assert_eq!(profile.level, XPCalculator::level_from_xp(1_000_000));
+    }
+
+    #[test]
+    fn level_progress_matches_every_screen_example() {
+        let at = |level, total_xp| {
+            let progress = LevelProgress::at(level, total_xp);
+            (progress.earned(), progress.span(), progress.percent())
+        };
+        assert_eq!(at(1, 50), (50, 100, 50));
+        assert_eq!(at(22, 9822), (199, 696, 28));
+        assert_eq!(at(2, 100), (0, 183, 0));
+        assert_eq!(at(100, 1_000_000), (1496, 1496, 100));
+    }
+
+    #[test]
+    fn level_progress_span_zero_is_full() {
+        let progress = LevelProgress::new(7, 0);
+        assert_eq!((progress.earned(), progress.span()), (0, 0));
+        assert_eq!(progress.ratio(), 1.0);
+        assert_eq!(progress.percent(), 100);
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn level_progress_stays_within_span(level in proptest::num::u32::ANY, total_xp in proptest::num::u64::ANY) {
+            let progress = LevelProgress::at(level, total_xp);
+            proptest::prop_assert!(progress.earned() <= progress.span());
+            proptest::prop_assert!((0.0..=1.0).contains(&progress.ratio()));
+            proptest::prop_assert!(progress.percent() <= 100);
+        }
     }
 }

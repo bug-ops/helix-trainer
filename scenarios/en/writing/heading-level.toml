@@ -34,7 +34,6 @@ category = "writing"
 difficulty = "beginner"
 tags = ["heading", "markdown"]
 commands_taught = ["i"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "writing_heading_promote_001"
@@ -69,4 +68,3 @@ category = "writing"
 difficulty = "beginner"
 tags = ["heading", "markdown"]
 commands_taught = ["d"]
-estimated_time_seconds = 10

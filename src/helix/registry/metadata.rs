@@ -5,7 +5,12 @@
 
 use crate::helix::simulator::{FindDirection, FindType};
 
-/// Command category for grouping and documentation
+/// Command category for grouping and documentation of registry commands
+///
+/// Independent of [`ScenarioCategory`](crate::config::ScenarioCategory): that
+/// enum classifies scenarios for the menu, this one classifies commands for
+/// the help screen. The names overlap by coincidence and there is no mapping
+/// between the two.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Category {
     /// Movement commands (h, j, k, l, w, b, e, etc.)
@@ -118,60 +123,142 @@ impl NativeCounted {
     }
 }
 
+/// Whether the `.` command replays a command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Repeat {
+    /// `.` replays the command (editing commands such as `d`, `p`, `>`).
+    Repeatable,
+    /// `.` skips the command (movement, selection and mode-exit commands).
+    #[default]
+    NotRepeatable,
+}
+
+/// The name Helix 25.07.1 gives a command in its static command list
+/// (for example `move_char_left` for `h`).
+///
+/// Only upstream names are valid here: the registry resolves a user's Helix
+/// keymap configuration by this name, and a name that does not exist upstream
+/// must never be reachable that way. Trainer-only bindings use
+/// [`Binding::TrainerAlias`] instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HelixName(&'static str);
+
+impl HelixName {
+    /// Wrap an upstream command name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::registry::metadata::HelixName;
+    ///
+    /// assert_eq!(HelixName::new("move_char_left").as_str(), "move_char_left");
+    /// ```
+    pub const fn new(name: &'static str) -> Self {
+        Self(name)
+    }
+
+    /// The upstream command name.
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
+}
+
+/// How a registered key sequence relates to Helix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Binding {
+    /// A real Helix 25.07.1 command, resolvable by its upstream name.
+    Helix(HelixName),
+    /// A trainer-internal convenience binding with no upstream command name
+    /// (for example `^` or `Ctrl-r`). Excluded from the
+    /// `helix_name -> CanonicalKeys` reverse index of
+    /// [`CommandRegistry`](super::command_registry::CommandRegistry).
+    TrainerAlias,
+}
+
 /// Rich metadata for a command
 ///
 /// Contains all documentation and categorization information
 /// for a single command. Used for help screens and hint generation.
+///
+/// Built with [`CommandMetadata::new`] and the `with_*` builders; the summary
+/// and help text default to empty and are expected on every registered
+/// command (a registry test enforces it).
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::helix::registry::metadata::{
+///     Binding, Category, CommandMetadata, HelixName, Repeat,
+/// };
+///
+/// let meta = CommandMetadata::new(
+///     Binding::Helix(HelixName::new("delete_selection")),
+///     "d",
+///     Category::Editing,
+/// )
+/// .with_summary("Delete selection")
+/// .with_help("Delete the current selection.")
+/// .with_repeat(Repeat::Repeatable);
+///
+/// assert_eq!(meta.key(), "d");
+/// assert_eq!(meta.repeat(), Repeat::Repeatable);
+/// ```
 #[derive(Debug, Clone)]
 pub struct CommandMetadata {
-    /// Internal name (e.g., "`move_left`")
-    pub name: &'static str,
-    /// Key sequence that triggers this command (e.g., "h", "gg", "fx")
-    pub key: &'static str,
-    /// Short description for hints (e.g., "Move cursor left")
-    pub description: &'static str,
-    /// Detailed help text for help screen
-    pub help: &'static str,
-    /// Command category
-    pub category: Category,
-    /// Whether this command can be repeated with '.'
-    pub repeatable: bool,
-    /// Mode transition triggered by this command
-    pub mode_change: Option<ModeTransition>,
-    /// Whether `name` is a trainer-internal convenience alias rather than a
-    /// real Helix 25.07.1 command name.
-    ///
-    /// Excluded from the `helix_name -> CanonicalKeys` reverse index built by
-    /// [`CommandRegistry`](super::command_registry::CommandRegistry), since
-    /// resolving a user's Helix keymap config by command name must never
-    /// land on a binding that doesn't actually exist upstream.
-    pub alias_only: bool,
-    /// How a count prefix applies to this command
-    pub count_behavior: CountBehavior,
+    binding: Binding,
+    key: &'static str,
+    summary: &'static str,
+    help: &'static str,
+    category: Category,
+    repeat: Repeat,
+    mode_change: Option<ModeTransition>,
+    count_behavior: CountBehavior,
 }
 
 impl CommandMetadata {
-    /// Create new command metadata for a real Helix 25.07.1 command
-    pub const fn new(
-        name: &'static str,
-        key: &'static str,
-        description: &'static str,
-        help: &'static str,
-        category: Category,
-        repeatable: bool,
-        mode_change: Option<ModeTransition>,
-    ) -> Self {
+    /// Start metadata for `key`, bound as `binding`, in `category`.
+    ///
+    /// Every other property defaults to the most common case: no text,
+    /// [`Repeat::NotRepeatable`], no mode transition, [`CountBehavior::Repeat`].
+    pub const fn new(binding: Binding, key: &'static str, category: Category) -> Self {
         Self {
-            name,
+            binding,
             key,
-            description,
-            help,
+            summary: "",
+            help: "",
             category,
-            repeatable,
-            mode_change,
-            alias_only: false,
+            repeat: Repeat::NotRepeatable,
+            mode_change: None,
             count_behavior: CountBehavior::Repeat,
         }
+    }
+
+    /// Set the short description shown in hints (e.g. "Move cursor left").
+    #[must_use]
+    pub const fn with_summary(mut self, summary: &'static str) -> Self {
+        self.summary = summary;
+        self
+    }
+
+    /// Set the detailed help text for the help screen.
+    #[must_use]
+    pub const fn with_help(mut self, help: &'static str) -> Self {
+        self.help = help;
+        self
+    }
+
+    /// Set whether `.` replays this command.
+    #[must_use]
+    pub const fn with_repeat(mut self, repeat: Repeat) -> Self {
+        self.repeat = repeat;
+        self
+    }
+
+    /// Set the mode transition this command triggers.
+    #[must_use]
+    pub const fn with_mode_change(mut self, mode_change: ModeTransition) -> Self {
+        self.mode_change = Some(mode_change);
+        self
     }
 
     /// Override how a count prefix applies to this command.
@@ -181,31 +268,52 @@ impl CommandMetadata {
         self
     }
 
-    /// Create metadata for a trainer-internal convenience binding that has
-    /// no corresponding upstream Helix command name (e.g. `^` or `Ctrl-r`).
-    ///
-    /// Marks [`alias_only`](Self::alias_only) so the binding is excluded
-    /// from the `helix_name -> CanonicalKeys` reverse index.
-    pub const fn new_alias(
-        name: &'static str,
-        key: &'static str,
-        description: &'static str,
-        help: &'static str,
-        category: Category,
-        repeatable: bool,
-        mode_change: Option<ModeTransition>,
-    ) -> Self {
-        Self {
-            name,
-            key,
-            description,
-            help,
-            category,
-            repeatable,
-            mode_change,
-            alias_only: true,
-            count_behavior: CountBehavior::Repeat,
+    /// How the key relates to Helix.
+    pub const fn binding(&self) -> Binding {
+        self.binding
+    }
+
+    /// The upstream Helix command name, or `None` for a trainer alias.
+    pub const fn name(&self) -> Option<HelixName> {
+        match self.binding {
+            Binding::Helix(name) => Some(name),
+            Binding::TrainerAlias => None,
         }
+    }
+
+    /// Key sequence that triggers this command (e.g. "h", "gg", "fx").
+    pub const fn key(&self) -> &'static str {
+        self.key
+    }
+
+    /// Short description for hints.
+    pub const fn summary(&self) -> &'static str {
+        self.summary
+    }
+
+    /// Detailed help text for the help screen.
+    pub const fn help(&self) -> &'static str {
+        self.help
+    }
+
+    /// Command category.
+    pub const fn category(&self) -> Category {
+        self.category
+    }
+
+    /// Whether `.` replays this command.
+    pub const fn repeat(&self) -> Repeat {
+        self.repeat
+    }
+
+    /// Mode transition triggered by this command.
+    pub const fn mode_change(&self) -> Option<ModeTransition> {
+        self.mode_change
+    }
+
+    /// How a count prefix applies to this command.
+    pub const fn count_behavior(&self) -> CountBehavior {
+        self.count_behavior
     }
 }
 
@@ -226,37 +334,43 @@ mod tests {
     }
 
     #[test]
-    fn test_metadata_creation() {
+    fn test_metadata_defaults() {
         let meta = CommandMetadata::new(
-            "move_left",
+            Binding::Helix(HelixName::new("move_left")),
             "h",
-            "Move cursor left",
-            "Move the cursor one character to the left.",
             Category::Movement,
-            false,
-            None,
-        );
+        )
+        .with_summary("Move cursor left")
+        .with_help("Move the cursor one character to the left.");
 
-        assert_eq!(meta.name, "move_left");
-        assert_eq!(meta.key, "h");
-        assert_eq!(meta.category, Category::Movement);
-        assert!(!meta.repeatable);
-        assert!(meta.mode_change.is_none());
+        assert_eq!(meta.name().map(HelixName::as_str), Some("move_left"));
+        assert_eq!(meta.key(), "h");
+        assert_eq!(meta.summary(), "Move cursor left");
+        assert_eq!(meta.category(), Category::Movement);
+        assert_eq!(meta.repeat(), Repeat::NotRepeatable);
+        assert!(meta.mode_change().is_none());
+        assert_eq!(meta.count_behavior(), CountBehavior::Repeat);
     }
 
     #[test]
     fn test_insert_command_metadata() {
         let meta = CommandMetadata::new(
-            "insert",
+            Binding::Helix(HelixName::new("insert")),
             "i",
-            "Enter insert mode",
-            "Enter insert mode at cursor position.",
             Category::ModeChange,
-            true,
-            Some(ModeTransition::ToInsert),
-        );
+        )
+        .with_repeat(Repeat::Repeatable)
+        .with_mode_change(ModeTransition::ToInsert);
 
-        assert!(meta.repeatable);
-        assert_eq!(meta.mode_change, Some(ModeTransition::ToInsert));
+        assert_eq!(meta.repeat(), Repeat::Repeatable);
+        assert_eq!(meta.mode_change(), Some(ModeTransition::ToInsert));
+    }
+
+    #[test]
+    fn test_trainer_alias_has_no_helix_name() {
+        let meta = CommandMetadata::new(Binding::TrainerAlias, "^", Category::Movement);
+
+        assert_eq!(meta.binding(), Binding::TrainerAlias);
+        assert_eq!(meta.name(), None);
     }
 }

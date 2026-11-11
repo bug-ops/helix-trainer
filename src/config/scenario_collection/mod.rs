@@ -210,7 +210,7 @@ impl ScenarioCollection {
     }
 
     fn metadata_of(scenarios: &[Scenario], idx: usize) -> Option<&ScenarioMetadata> {
-        scenarios.get(idx).and_then(|s| s.metadata.as_ref())
+        scenarios.get(idx).map(|s| &s.metadata)
     }
 
     /// Filtered scenarios (references)
@@ -249,8 +249,7 @@ impl ScenarioCollection {
         let mut categories: Vec<ScenarioCategory> = self
             .scenarios
             .iter()
-            .filter_map(|s| s.metadata.as_ref())
-            .filter_map(|m| m.category)
+            .filter_map(|s| s.metadata.category)
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
@@ -264,8 +263,7 @@ impl ScenarioCollection {
         let mut difficulties: Vec<Difficulty> = self
             .scenarios
             .iter()
-            .filter_map(|s| s.metadata.as_ref())
-            .filter_map(|m| m.difficulty)
+            .filter_map(|s| s.metadata.difficulty)
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
@@ -282,7 +280,7 @@ impl ScenarioCollection {
     ) -> bool {
         // Check category filter
         if let Some(ref categories) = filter.categories {
-            let scenario_category = scenario.metadata.as_ref().and_then(|m| m.category);
+            let scenario_category = scenario.metadata.category;
 
             match scenario_category {
                 Some(cat) if categories.contains(&cat) => {} // Pass
@@ -292,7 +290,7 @@ impl ScenarioCollection {
 
         // Check difficulty filter
         if let Some(ref difficulties) = filter.difficulties {
-            let scenario_difficulty = scenario.metadata.as_ref().and_then(|m| m.difficulty);
+            let scenario_difficulty = scenario.metadata.difficulty;
 
             match scenario_difficulty {
                 Some(diff) if difficulties.contains(&diff) => {} // Pass
@@ -302,10 +300,7 @@ impl ScenarioCollection {
 
         // Check commands filter (scenario must teach at least one of the commands)
         if let Some(ref commands) = filter.commands {
-            let scenario_commands = scenario
-                .metadata
-                .as_ref()
-                .map_or(&[][..], |m| m.commands_taught.as_slice());
+            let scenario_commands = &scenario.metadata.commands_taught;
 
             if !scenario_commands.iter().any(|cmd| commands.contains(cmd)) {
                 return false;
@@ -314,10 +309,7 @@ impl ScenarioCollection {
 
         // Check tags filter (scenario must have at least one matching tag)
         if let Some(ref tags) = filter.tags {
-            let scenario_tags = scenario
-                .metadata
-                .as_ref()
-                .map_or(&[][..], |m| m.tags.as_slice());
+            let scenario_tags = &scenario.metadata.tags;
 
             if !scenario_tags.iter().any(|tag| tags.contains(tag)) {
                 return false;
@@ -340,10 +332,7 @@ impl ScenarioCollection {
 
         // Check prerequisites filter
         if let Some(has_prereqs) = filter.has_prerequisites {
-            let scenario_has_prereqs = scenario
-                .metadata
-                .as_ref()
-                .is_some_and(|m| !m.prerequisites.is_empty());
+            let scenario_has_prereqs = !scenario.metadata.prerequisites.is_empty();
 
             if has_prereqs != scenario_has_prereqs {
                 return false;
@@ -382,7 +371,8 @@ impl ScenarioCollection {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::config::{
-    ///     CursorSpec, Scenario, ScenarioCollection, ScoringConfig, Setup, Solution, TargetState,
+    ///     CursorSpec, Scenario, ScenarioCollection, ScenarioMetadata, ScoringConfig, Setup, Solution,
+    ///     TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::ids::ScenarioId;
@@ -401,14 +391,13 @@ impl ScenarioCollection {
     ///         setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
     ///         target: TargetState { file_content: "test".to_string(), cursor },
     ///         solution: Solution { commands: vec!["x".to_string()], description: "Test".to_string() },
-    ///         alternatives: vec![],
     ///         hints: vec![],
     ///         scoring: ScoringConfig {
     ///             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
     ///             max_points: 100,
     ///             tolerance: 0,
     ///         },
-    ///         metadata: None,
+    ///         metadata: ScenarioMetadata::default(),
     ///     }
     /// }
     ///
@@ -436,7 +425,8 @@ impl ScenarioCollection {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::config::{
-    ///     CursorSpec, Scenario, ScenarioCollection, ScoringConfig, Setup, Solution, TargetState,
+    ///     CursorSpec, Scenario, ScenarioCollection, ScenarioMetadata, ScoringConfig, Setup, Solution,
+    ///     TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::ids::ScenarioId;
@@ -455,14 +445,13 @@ impl ScenarioCollection {
     ///         setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
     ///         target: TargetState { file_content: "test".to_string(), cursor },
     ///         solution: Solution { commands: vec!["x".to_string()], description: "Test".to_string() },
-    ///         alternatives: vec![],
     ///         hints: vec![],
     ///         scoring: ScoringConfig {
     ///             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
     ///             max_points: 100,
     ///             tolerance: 0,
     ///         },
-    ///         metadata: None,
+    ///         metadata: ScenarioMetadata::default(),
     ///     }
     /// }
     ///
@@ -513,17 +502,16 @@ impl ScenarioCollection {
     ///     setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
     ///     target: TargetState { file_content: "test".to_string(), cursor },
     ///     solution: Solution { commands: vec!["x".to_string()], description: "Test".to_string() },
-    ///     alternatives: vec![],
     ///     hints: vec![],
     ///     scoring: ScoringConfig {
     ///         optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
     ///         max_points: 100,
     ///         tolerance: 0,
     ///     },
-    ///     metadata: Some(ScenarioMetadata {
+    ///     metadata: ScenarioMetadata {
     ///         category: Some(ScenarioCategory::Movement),
     ///         ..Default::default()
-    ///     }),
+    ///     },
     /// };
     ///
     /// let collection = ScenarioCollection::new(vec![scenario]);
@@ -556,7 +544,7 @@ impl ScenarioCollection {
                 stats.perfected = stats.perfected.saturating_add(1);
             }
 
-            if let Some(category) = scenario.metadata.as_ref().and_then(|m| m.category) {
+            if let Some(category) = scenario.metadata.category {
                 match per_category.iter_mut().find(|(c, _, _)| *c == category) {
                     Some((_, cat_perfected, cat_total)) => {
                         *cat_total = cat_total.saturating_add(1);

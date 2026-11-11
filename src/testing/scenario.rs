@@ -3,8 +3,8 @@
 //! Provides a fluent builder API for creating `Scenario` instances in tests.
 
 use crate::config::{
-    AlternativeSolution, CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioMetadata,
-    ScoringConfig, Setup, Solution, TargetState,
+    CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioMetadata, ScoringConfig, Setup,
+    Solution, TargetState,
 };
 use std::num::NonZeroUsize;
 
@@ -33,7 +33,6 @@ pub struct ScenarioBuilder {
     target_selection: Option<[usize; 4]>,
     commands: Vec<String>,
     command_description: String,
-    alternatives: Vec<AlternativeSolution>,
     hints: Vec<String>,
     optimal_count: usize,
     max_points: u32,
@@ -65,7 +64,6 @@ impl ScenarioBuilder {
             target_selection: None,
             commands: vec!["x".to_string(), "d".to_string()],
             command_description: "Delete first line".to_string(),
-            alternatives: vec![],
             hints: vec![],
             optimal_count: 2,
             max_points: 100,
@@ -182,27 +180,6 @@ impl ScenarioBuilder {
         self
     }
 
-    /// Add an alternative solution
-    ///
-    /// # Arguments
-    /// * `commands` - The alternative command sequence
-    /// * `points_multiplier` - Score multiplier for this solution (e.g., 0.8 for 80%)
-    /// * `description` - Description of the alternative approach
-    #[must_use]
-    pub fn alternative(
-        mut self,
-        commands: Vec<impl Into<String>>,
-        points_multiplier: f32,
-        description: impl Into<String>,
-    ) -> Self {
-        self.alternatives.push(AlternativeSolution {
-            commands: commands.into_iter().map(Into::into).collect(),
-            points_multiplier,
-            description: description.into(),
-        });
-        self
-    }
-
     /// Set the optimal command count
     ///
     /// # Panics
@@ -259,17 +236,12 @@ impl ScenarioBuilder {
             .name
             .unwrap_or_else(|| format!("Test Scenario {}", self.id));
 
-        let metadata =
-            if self.difficulty.is_some() || self.category.is_some() || !self.tags.is_empty() {
-                Some(ScenarioMetadata {
-                    difficulty: self.difficulty,
-                    category: self.category,
-                    tags: self.tags,
-                    ..Default::default()
-                })
-            } else {
-                None
-            };
+        let metadata = ScenarioMetadata {
+            difficulty: self.difficulty,
+            category: self.category,
+            tags: self.tags,
+            ..Default::default()
+        };
 
         Scenario {
             id: crate::testing::sid(&self.id),
@@ -298,7 +270,6 @@ impl ScenarioBuilder {
                 commands: self.commands,
                 description: self.command_description,
             },
-            alternatives: self.alternatives,
             hints: self.hints,
             scoring: ScoringConfig {
                 optimal_count: NonZeroUsize::new(self.optimal_count)
@@ -341,7 +312,7 @@ mod tests {
         let scenario = default_test_scenario();
         assert_eq!(scenario.id.as_str(), "test_scenario");
         assert_eq!(scenario.name, "Test Scenario test_scenario");
-        assert!(scenario.metadata.is_none());
+        assert_eq!(scenario.metadata.difficulty, None);
     }
 
     #[test]
@@ -355,11 +326,7 @@ mod tests {
     fn test_scenario_with_difficulty_helper() {
         let scenario = test_scenario_with_difficulty("s1", Difficulty::Beginner);
         assert_eq!(scenario.id.as_str(), "s1");
-        assert!(scenario.metadata.is_some());
-        assert_eq!(
-            scenario.metadata.as_ref().unwrap().difficulty,
-            Some(Difficulty::Beginner)
-        );
+        assert_eq!(scenario.metadata.difficulty, Some(Difficulty::Beginner));
     }
 
     #[test]

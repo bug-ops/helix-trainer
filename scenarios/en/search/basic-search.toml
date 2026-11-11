@@ -4,11 +4,12 @@
 [[scenarios]]
 id = "search_word_001"
 name = "Search word forward"
-description = "Use '*' to search for the word under cursor"
+description = "Select a word, use '*' to search for it, then jump to the next match"
 
 hints = [
-    "'*' searches forward for word under cursor",
-    "The search includes word boundaries",
+    "'miw' selects the word under the cursor",
+    "'*' uses the current selection as the search pattern, adding word boundaries where it starts or ends a word",
+    "'n' jumps to the next match",
 ]
 
 [scenarios.setup]
@@ -33,11 +34,11 @@ cursor_position = [3, 8]
 selection = [3, 8, 3, 13]
 
 [scenarios.solution]
-commands = ["*", "n"]
-description = "Press '*' to search for 'count', then 'n' to jump to next occurrence"
+commands = ["miw", "*", "n"]
+description = "Select 'count' with 'miw', press '*' to search for it, then 'n' to jump to the next occurrence"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 3
 max_points = 100
 tolerance = 0
 
@@ -46,15 +47,15 @@ category = "search"
 difficulty = "beginner"
 tags = ["search", "word", "forward"]
 commands_taught = ["*"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "search_word_002"
 name = "Search word multiple times"
-description = "Use '*' and 'n' to navigate through matches"
+description = "Select a word, use '*' and 'n' to navigate through matches"
 
 hints = [
-    "'*' starts the search for word under cursor",
+    "'miw' selects the word under the cursor",
+    "'*' uses the selection as the search pattern; it does not move",
     "'n' jumps to the next match",
 ]
 
@@ -74,8 +75,52 @@ cursor_position = [1, 19]
 selection = [1, 15, 1, 19]
 
 [scenarios.solution]
-commands = ["*", "n", "n"]
-description = "Press '*' to search for 'data', then 'n' twice to reach the third 'data'"
+commands = ["miw", "*", "n", "n"]
+description = "Select 'data' with 'miw', press '*' to search for it, then 'n' twice to reach the third 'data'"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "beginner"
+tags = ["search", "word", "next"]
+commands_taught = ["*", "n"]
+
+[[scenarios]]
+id = "search_next_001"
+name = "Go to next match"
+description = "Select a word, search for it with '*' and jump to its next occurrence"
+
+hints = [
+    "'miw' selects the word under the cursor",
+    "'*' uses the selection as the search pattern, 'n' jumps to the next occurrence",
+]
+
+[scenarios.setup]
+file_content = """fn add(val: i32, b: i32) -> i32 {
+    val + b
+}
+fn sub(val: i32, b: i32) -> i32 {
+    val - b
+}"""
+cursor_position = [0, 7]
+
+[scenarios.target]
+file_content = """fn add(val: i32, b: i32) -> i32 {
+    val + b
+}
+fn sub(val: i32, b: i32) -> i32 {
+    val - b
+}"""
+cursor_position = [1, 7]
+selection = [1, 4, 1, 7]
+
+[scenarios.solution]
+commands = ["miw", "*", "n"]
+description = "Select 'val' with 'miw', press '*' to search for it, then 'n' to find the next match"
 
 [scenarios.scoring]
 optimal_count = 3
@@ -85,63 +130,18 @@ tolerance = 0
 [scenarios.metadata]
 category = "search"
 difficulty = "beginner"
-tags = ["search", "word", "next"]
-commands_taught = ["*", "n"]
-estimated_time_seconds = 15
-
-[[scenarios]]
-id = "search_next_001"
-name = "Go to next match"
-description = "Use '*' to search for word under cursor"
-
-hints = [
-    "'*' searches for the word under cursor",
-    "Jumps to the next occurrence",
-]
-
-[scenarios.setup]
-file_content = """fn add(a: i32, b: i32) -> i32 {
-    a + b
-}
-fn sub(a: i32, b: i32) -> i32 {
-    a - b
-}"""
-cursor_position = [0, 7]
-
-[scenarios.target]
-file_content = """fn add(a: i32, b: i32) -> i32 {
-    a + b
-}
-fn sub(a: i32, b: i32) -> i32 {
-    a - b
-}"""
-cursor_position = [1, 5]
-selection = [1, 4, 1, 5]
-
-[scenarios.solution]
-commands = ["*", "n"]
-description = "Press '*' to search for 'a', then 'n' to find next match"
-
-[scenarios.scoring]
-optimal_count = 2
-max_points = 100
-tolerance = 0
-
-[scenarios.metadata]
-category = "search"
-difficulty = "beginner"
 tags = ["search", "next", "match"]
 commands_taught = ["*"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "search_prev_001"
 name = "Search word backward"
-description = "Use '*' and 'N' to navigate backward through word occurrences"
+description = "Select a word, search for it with '*' and use 'N' to go backward through occurrences"
 
 hints = [
-    "'*' starts forward search for word under cursor",
-    "'N' jumps to the previous match (opposite direction)",
+    "'miw' selects the word under the cursor",
+    "'*' uses the selection as the search pattern",
+    "'N' jumps to the previous match (wrapping to the last one)",
 ]
 
 [scenarios.setup]
@@ -166,11 +166,11 @@ cursor_position = [5, 24]
 selection = [5, 19, 5, 24]
 
 [scenarios.solution]
-commands = ["*", "N"]
-description = "Press '*' to search for 'count', then 'N' to go backward to last occurrence"
+commands = ["miw", "*", "N"]
+description = "Select 'count' with 'miw', press '*' to search for it, then 'N' to go backward to the last occurrence"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 3
 max_points = 100
 tolerance = 0
 
@@ -179,5 +179,4 @@ category = "search"
 difficulty = "beginner"
 tags = ["search", "word", "backward", "prev"]
 commands_taught = ["*", "N"]
-estimated_time_seconds = 15
 

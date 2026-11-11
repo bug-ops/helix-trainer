@@ -89,17 +89,7 @@ tolerance = 0                     # Extra commands allowed before penalty
 | Field | Type | Description |
 |-------|------|-------------|
 | `hints` | array | Help text shown to user (max 10) |
-| `alternatives` | array | Alternative valid solutions (max 20) |
 | `metadata` | table | Category, difficulty, tags |
-
-#### Alternative solutions
-
-```toml
-[[scenarios.alternatives]]
-commands = ["l", "l", "l", "l", "l"]
-points_multiplier = 0.5
-description = "Use 'l' five times (less efficient)"
-```
 
 ### Metadata fields
 
@@ -110,8 +100,6 @@ difficulty = "beginner"            # beginner, intermediate, advanced
 tags = ["word", "motion"]          # Flexible filtering tags
 commands_taught = ["w"]            # Commands this scenario teaches
 prerequisites = ["move_right_001"] # Scenarios to complete first
-estimated_time_seconds = 10        # Expected completion time
-locale = "en"                      # Language code
 ```
 
 ---
@@ -155,7 +143,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "motion", "forward"]
 commands_taught = ["w"]
-estimated_time_seconds = 5
 ```
 
 ### Editing scenario
@@ -195,7 +182,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["join", "lines", "editing"]
 commands_taught = ["J"]
-estimated_time_seconds = 10
 ```
 
 ### Selection scenario
@@ -236,7 +222,6 @@ category = "selection"
 difficulty = "beginner"
 tags = ["select", "line"]
 commands_taught = ["x"]
-estimated_time_seconds = 5
 ```
 
 ### Text object scenario
@@ -278,7 +263,6 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["text-object", "word", "selection"]
 commands_taught = ["miw"]
-estimated_time_seconds = 10
 ```
 
 ### Surround scenario
@@ -318,21 +302,21 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "delete", "parentheses"]
 commands_taught = ["md"]
-estimated_time_seconds = 10
 ```
 
 ### Search scenario
 
-Search for word under cursor using `*` and `n`:
+Select a word with `miw`, use it as the search pattern with `*`, and jump with `n`. `*` searches for the current selection (it does not select the word under the cursor), so the word must be selected first:
 
 ```toml
 [[scenarios]]
 id = "search_word_001"
 name = "Search word forward"
-description = "Use '*' to search for the word under cursor and 'n' to jump to next match"
+description = "Select a word, use '*' to search for it and 'n' to jump to the next match"
 
 hints = [
-    "'*' selects word under cursor and sets search pattern",
+    "'miw' selects the word under the cursor",
+    "'*' uses the current selection as the search pattern; it does not move",
     "'n' jumps to next match",
 ]
 
@@ -346,11 +330,11 @@ cursor_position = [0, 12]
 selection = [0, 12, 0, 17]
 
 [scenarios.solution]
-commands = ["*", "n"]
-description = "Press '*' to select 'hello' and set search pattern, then 'n' to jump to next match"
+commands = ["miw", "*", "n"]
+description = "Select 'hello' with 'miw', press '*' to set it as the search pattern, then 'n' to jump to the next match"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 3
 max_points = 100
 tolerance = 0
 
@@ -359,7 +343,6 @@ category = "search"
 difficulty = "beginner"
 tags = ["search", "word", "forward"]
 commands_taught = ["*", "n"]
-estimated_time_seconds = 10
 ```
 
 ---
@@ -505,7 +488,6 @@ target_commands = 10
 | `MAX_FILE_CONTENT_LENGTH` | 100,000 | Maximum characters in `file_content` |
 | `MAX_COMMAND_SEQUENCE_LENGTH` | 100 | Maximum commands in solution |
 | `MAX_HINTS` | 10 | Maximum hints per scenario |
-| `MAX_ALTERNATIVES` | 20 | Maximum alternative solutions |
 | ID max length | 64 | Characters in `id` field |
 | ID format | alphanumeric + `_` | Valid characters for `id` |
 

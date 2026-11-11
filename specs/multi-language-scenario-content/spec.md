@@ -90,7 +90,7 @@ enum changes.
 - Non-programming-language content tracks (markdown/writing prose) — see
   the sibling proposal [[writing-markup-scenario-track/spec|Writing/Markup Scenario Track]]
 - Localizing scenario *descriptions/hints* into other spoken languages —
-  unrelated to `metadata.locale`; this spec is about the programming
+  unrelated to the scenario locale (taken from the embedded file set, #554); this spec is about the programming
   language of the sample code, not the UI/prose language
 
 ## 2. User Stories
@@ -165,7 +165,7 @@ the prerequisite spec, not this one.
 | Entity | Description | Relevant Fields (existing, unchanged) |
 |--------|-------------|----------------|
 | `Scenario` | A single trainable drill | `id`, `setup`, `target`, `solution`, `metadata` |
-| `ScenarioMetadata` | Filtering/quest metadata | `category` (existing `ScenarioCategory` enum, unchanged), `locale` (spoken-language of prose, unrelated to code language) |
+| `ScenarioMetadata` | Filtering/quest metadata | `category` (existing `ScenarioCategory` enum, unchanged). `ScenarioMetadata` no longer has a `locale` field (#554): the locale comes from the embedded file set (`scenarios/<locale>/`), not from per-scenario metadata |
 | `Setup` / `TargetState` | Initial/goal editor content | `file_content` (will hold Python source for pilot scenarios) |
 
 ## 6. Edge Cases and Error Handling

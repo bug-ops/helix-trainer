@@ -9,22 +9,21 @@ pub mod selection;
 pub mod view;
 
 use super::{
-    AnyModeSimulator, FindDirection, FindType, HelixSimulator, InsertCommand, InsertMode, Mode,
-    NormalMode,
+    AnyModeSimulator, FindDirection, FindType, HelixSimulator, InsertCommand, InsertEntryCommand,
+    InsertMode, Mode, NormalMode,
 };
 use crate::helix::commands::{
-    CMD_APPEND, CMD_APPEND_LINE_END, CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP,
-    CMD_BACKSPACE, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_COMMAND_LINE, CMD_ESCAPE,
-    CMD_FLIP_SELECTIONS, CMD_GOTO_FILE_START, CMD_GOTO_LINE, CMD_INSERT, CMD_INSERT_LINE_START,
-    CMD_KEEP_MATCHING, CMD_MATCH_BRACKETS, CMD_OPEN_ABOVE, CMD_OPEN_BELOW, CMD_REMOVE_MATCHING,
-    CMD_REPEAT, CMD_REPLAY_MACRO, CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD, CMD_SELECT_REGEX,
-    CMD_SELECT_REGISTER, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
+    CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_COMMAND_LINE,
+    CMD_ESCAPE, CMD_FLIP_SELECTIONS, CMD_GOTO_FILE_START, CMD_GOTO_LINE, CMD_KEEP_MATCHING,
+    CMD_MATCH_BRACKETS, CMD_REMOVE_MATCHING, CMD_REPEAT, CMD_REPLAY_MACRO, CMD_SEARCH_BACKWARD,
+    CMD_SEARCH_FORWARD, CMD_SELECT_REGEX, CMD_SELECT_REGISTER, CMD_SPLIT_SELECTION,
+    CMD_TOGGLE_MACRO_RECORDING,
 };
+use crate::helix::error::SimulatorError;
 use crate::helix::registry::{
     CountBehavior, NativeCounted, normal_registry, parse_counted_command,
 };
 use crate::helix::repeat::is_repeatable_command;
-use crate::security::UserError;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::num::NonZeroUsize;
 
@@ -55,140 +54,34 @@ fn cmd_to_key_events(cmd: &str) -> Vec<KeyEvent> {
         return vec![KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)];
     }
 
-    if cmd.starts_with('r') && cmd.len() == 2 {
-        let ch = cmd.chars().nth(1).unwrap();
-        return vec![
-            KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
-        ];
-    }
-
-    if (cmd.starts_with('f')
-        || cmd.starts_with('t')
-        || cmd.starts_with('F')
-        || cmd.starts_with('T'))
-        && cmd.len() == 2
-    {
-        let prefix = cmd.chars().next().unwrap();
-        let ch = cmd.chars().nth(1).unwrap();
-        return vec![
-            KeyEvent::new(KeyCode::Char(prefix), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
-        ];
-    }
-
-    if cmd.starts_with('g') && cmd.len() == 2 {
-        let ch = cmd.chars().nth(1).unwrap();
-        return vec![
-            KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
-        ];
-    }
-
-    if cmd.starts_with("ms") && cmd.len() == 3 {
-        let ch = cmd.chars().nth(2).unwrap();
-        return vec![
-            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
-        ];
-    }
-
-    if cmd.starts_with("md") && cmd.len() == 3 {
-        let ch = cmd.chars().nth(2).unwrap();
-        return vec![
-            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
-        ];
-    }
-
-    if cmd.starts_with("mr") && cmd.len() == 4 {
-        let from_ch = cmd.chars().nth(2).unwrap();
-        let to_ch = cmd.chars().nth(3).unwrap();
-        return vec![
-            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(from_ch), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(to_ch), KeyModifiers::NONE),
-        ];
-    }
+    let chars: Vec<char> = cmd.chars().collect();
+    let plain = |ch: char| KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE);
 
     if cmd == CMD_MATCH_BRACKETS {
-        return vec![
-            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
-        ];
-    }
-
-    if cmd.starts_with("ma") && cmd.len() == 3 {
-        let obj = cmd.chars().nth(2).unwrap();
-        return vec![
-            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(obj), KeyModifiers::NONE),
-        ];
-    }
-
-    if cmd.starts_with("mi") && cmd.len() == 3 {
-        let obj = cmd.chars().nth(2).unwrap();
-        return vec![
-            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char(obj), KeyModifiers::NONE),
-        ];
+        return vec![plain('m'), plain('m')];
     }
 
     if cmd == CMD_FLIP_SELECTIONS {
         return vec![KeyEvent::new(KeyCode::Char(';'), KeyModifiers::ALT)];
     }
 
-    // Named register prefix ("<reg><op>, e.g. `"_d`, `"ay`): uses
-    // `chars().count()`, not the byte-based `len()`, for the same
-    // multi-byte-register-char reason as the dispatch branch in this
-    // module's `execute_normal_mode_command_internal`. Without this arm
-    // these commands fell through to the `len() == 1` case below (always
-    // false for a 3-char string) and recorded as an empty key sequence, so
-    // `.` replayed a stale prior action instead of the register op itself.
-    if cmd.starts_with(CMD_SELECT_REGISTER) && cmd.chars().count() == 3 {
-        return cmd
-            .chars()
-            .map(|ch| KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE))
-            .collect();
+    // Named register prefix ("<reg><op>, e.g. `"_d`, `"ay`) and every other
+    // argument-taking command: matched on chars, never bytes, so non-ASCII
+    // arguments (`fé`, `r😀`) produce key events too.
+    match chars.as_slice() {
+        [prefix @ ('r' | 'f' | 't' | 'F' | 'T' | 'g'), arg] => vec![plain(*prefix), plain(*arg)],
+        ['m', kind @ ('s' | 'd' | 'a' | 'i'), arg] => vec![plain('m'), plain(*kind), plain(*arg)],
+        ['m', 'r', from, to] => vec![plain('m'), plain('r'), plain(*from), plain(*to)],
+        ['"', register, op] => vec![plain('"'), plain(*register), plain(*op)],
+        [ch] => vec![plain(*ch)],
+        _ => Vec::new(),
     }
-
-    if cmd.len() == 1
-        && let Some(ch) = cmd.chars().next()
-    {
-        vec![KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE)]
-    } else {
-        Vec::new()
-    }
-}
-
-fn is_insert_command(cmd: &str) -> bool {
-    cmd == CMD_INSERT
-        || cmd == CMD_APPEND
-        || cmd == CMD_INSERT_LINE_START
-        || cmd == CMD_APPEND_LINE_END
-        || cmd == CMD_OPEN_BELOW
-        || cmd == CMD_OPEN_ABOVE
-        || cmd == CMD_CHANGE
-        || cmd == CMD_CHANGE_SELECTION_NOYANK
-        || is_register_scoped_change(cmd)
-}
-
-/// True for a register-scoped change command (e.g. `"ac`, `"_c`) - the
-/// `"<reg>c` form dispatched by the `CMD_SELECT_REGISTER` branch above,
-/// which also needs to enter Insert mode like bare `c`.
-fn is_register_scoped_change(cmd: &str) -> bool {
-    cmd.starts_with(CMD_SELECT_REGISTER) && cmd.chars().count() == 3 && cmd.ends_with('c')
 }
 
 fn execute_insert_mode_command_internal(
     sim: &mut HelixSimulator<InsertMode>,
     cmd: &str,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     if cmd == CMD_ESCAPE {
         if !sim.is_repeating {
             let action = sim.repeat_buffer.insert_recorder_mut().finish();
@@ -255,7 +148,7 @@ pub(super) fn execute_counted_any_mode(
     sim: &mut AnyModeSimulator,
     base: &str,
     count: NonZeroUsize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     match normal_registry().count_behavior(base) {
         CountBehavior::Repeat => {
             for _ in 0..count.get() {
@@ -277,7 +170,7 @@ fn execute_native_counted(
     sim: &mut HelixSimulator<NormalMode>,
     count: NonZeroUsize,
     base: &str,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     match NativeCounted::parse(base) {
         Some(NativeCounted::GotoLine) => {
             movement::goto_line(sim, count);
@@ -304,14 +197,14 @@ fn execute_native_counted(
                 }
             }
         }
-        None => Err(UserError::command_failed("command does not accept a count")),
+        None => Err(SimulatorError::CountNotAccepted),
     }
 }
 
 pub(super) fn execute_normal_mode_command_internal(
     sim: &mut HelixSimulator<NormalMode>,
     cmd: &str,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let registry = normal_registry();
 
     if let Some((count, base)) = parse_counted_command(cmd) {
@@ -323,64 +216,19 @@ pub(super) fn execute_normal_mode_command_internal(
         return Ok(());
     }
 
-    if cmd.len() == 2 {
-        let first = cmd.chars().next().unwrap();
-        let second = cmd.chars().nth(1).unwrap();
-
-        match first {
-            'r' => {
-                sim.replace_char(second)?;
-                return Ok(());
-            }
-            'f' => {
-                movement::find_next_char(sim, second, 1)?;
-                return Ok(());
-            }
-            'F' => {
-                movement::find_prev_char(sim, second, 1)?;
-                return Ok(());
-            }
-            't' => {
-                movement::till_next_char(sim, second, 1)?;
-                return Ok(());
-            }
-            'T' => {
-                movement::till_prev_char(sim, second, 1)?;
-                return Ok(());
-            }
-            _ => {}
-        }
-    }
-
-    if cmd.len() == 3 && cmd.starts_with("ms") {
-        let surround_char = cmd.chars().nth(2).unwrap();
-        editing::surround_selection(sim, surround_char)?;
-        return Ok(());
-    }
-
-    if cmd.len() == 3 && cmd.starts_with("md") {
-        let surround_char = cmd.chars().nth(2).unwrap();
-        editing::delete_surround(sim, surround_char)?;
-        return Ok(());
-    }
-
-    if cmd.len() == 4 && cmd.starts_with("mr") {
-        let from_char = cmd.chars().nth(2).unwrap();
-        let to_char = cmd.chars().nth(3).unwrap();
-        editing::replace_surround(sim, from_char, to_char)?;
-        return Ok(());
-    }
-
-    if cmd.len() == 3 && cmd.starts_with("ma") {
-        let obj = cmd.chars().nth(2).unwrap();
-        editing::select_around_textobject(sim, obj)?;
-        return Ok(());
-    }
-
-    if cmd.len() == 3 && cmd.starts_with("mi") {
-        let obj = cmd.chars().nth(2).unwrap();
-        editing::select_inside_textobject(sim, obj)?;
-        return Ok(());
+    let chars: Vec<char> = cmd.chars().collect();
+    match chars.as_slice() {
+        ['r', ch] => return sim.replace_char(*ch),
+        ['f', ch] => return movement::find_next_char(sim, *ch, 1),
+        ['F', ch] => return movement::find_prev_char(sim, *ch, 1),
+        ['t', ch] => return movement::till_next_char(sim, *ch, 1),
+        ['T', ch] => return movement::till_prev_char(sim, *ch, 1),
+        ['m', 's', ch] => return editing::surround_selection(sim, *ch),
+        ['m', 'd', ch] => return editing::delete_surround(sim, *ch),
+        ['m', 'r', from, to] => return editing::replace_surround(sim, *from, *to),
+        ['m', 'a', obj] => return editing::select_around_textobject(sim, *obj),
+        ['m', 'i', obj] => return editing::select_inside_textobject(sim, *obj),
+        _ => {}
     }
 
     if cmd.starts_with(CMD_SELECT_REGISTER) {
@@ -403,9 +251,7 @@ pub(super) fn execute_normal_mode_command_internal(
                 // transition happens in `execute_command_any_mode`, gated by
                 // `is_insert_command` recognizing this register-scoped form.
                 'c' => sim.change_selection_from_register(Some(register)),
-                _ => Err(UserError::command_failed(format!(
-                    "unknown register operation '{op}'"
-                ))),
+                _ => Err(SimulatorError::UnknownRegisterOp { op }),
             };
         }
     }
@@ -476,8 +322,6 @@ fn record_command_if_needed_normal(
     sim: &mut HelixSimulator<NormalMode>,
     key_events: &[KeyEvent],
     mode_before: Mode,
-    entering_insert: bool,
-    entry_command: Option<String>,
 ) {
     let should_record =
         !key_events.is_empty() && !sim.is_repeating && key_events.iter().all(is_repeatable_command);
@@ -486,16 +330,24 @@ fn record_command_if_needed_normal(
         sim.repeat_buffer
             .record_command(key_events.to_vec(), mode_before);
     }
+}
 
-    if entering_insert {
-        sim.repeat_buffer.insert_recorder_mut().start(entry_command);
+/// Record a successfully run Insert-entering command for `.`: the command
+/// itself, then the start of the Insert recording that `Escape` finishes.
+/// Nothing is recorded while a `.` replay is running.
+pub(super) fn record_insert_entry(sim: &mut HelixSimulator<NormalMode>, command: &str) {
+    record_command_if_needed_normal(sim, &cmd_to_key_events(command), Mode::Normal);
+    if !sim.is_repeating {
+        sim.repeat_buffer
+            .insert_recorder_mut()
+            .start(Some(command.to_string()));
     }
 }
 
 pub(super) fn execute_command_any_mode(
     sim: &mut AnyModeSimulator,
     cmd: &str,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     if cmd == CMD_REPEAT {
         return sim.execute_repeat();
     }
@@ -544,36 +396,20 @@ pub(super) fn execute_command_any_mode(
 
     let (result, new_sim) = match old_sim {
         AnyModeSimulator::Normal(mut normal_sim) => {
-            let key_events = cmd_to_key_events(cmd);
-            let is_insert_cmd = is_insert_command(cmd);
-            let should_start_recording = !normal_sim.is_repeating && is_insert_cmd;
-
-            let result = select_mode::execute(&mut normal_sim, cmd);
-
-            if result.is_ok() {
-                let entry_cmd = if should_start_recording {
-                    Some(cmd.to_string())
-                } else {
-                    None
-                };
-
-                record_command_if_needed_normal(
-                    &mut normal_sim,
-                    &key_events,
-                    Mode::Normal,
-                    should_start_recording,
-                    entry_cmd,
-                );
-
-                if is_insert_cmd {
-                    (
-                        result,
-                        AnyModeSimulator::Insert(normal_sim.enter_insert_mode()),
-                    )
-                } else {
-                    (result, AnyModeSimulator::Normal(normal_sim))
+            if let Some(entry) = InsertEntryCommand::parse(cmd) {
+                match normal_sim.begin_insert(entry) {
+                    Ok(insert_sim) => (Ok(()), AnyModeSimulator::Insert(insert_sim)),
+                    Err(failed) => {
+                        let (normal_sim, error) = *failed;
+                        (Err(error), AnyModeSimulator::Normal(normal_sim))
+                    }
                 }
             } else {
+                let key_events = cmd_to_key_events(cmd);
+                let result = select_mode::execute(&mut normal_sim, cmd);
+                if result.is_ok() {
+                    record_command_if_needed_normal(&mut normal_sim, &key_events, Mode::Normal);
+                }
                 (result, AnyModeSimulator::Normal(normal_sim))
             }
         }
@@ -587,9 +423,7 @@ pub(super) fn execute_command_any_mode(
             // character as its own one-char command, so without this a
             // literal ':' keystroke (len 1) would hit this arm and be
             // rejected instead of inserted.
-            let result = Err(UserError::command_failed(
-                "command-line is not available in insert mode",
-            ));
+            let result = Err(SimulatorError::CommandLineInInsertMode);
             (result, AnyModeSimulator::Insert(insert_sim))
         }
         AnyModeSimulator::Insert(mut insert_sim) => {
@@ -626,101 +460,16 @@ pub(super) fn execute_command_any_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
-    // Unit tests for is_insert_command()
-    mod is_insert_command_tests {
-        use super::*;
-        use crate::helix::commands::{
-            CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK, CMD_MOVE_DOWN, CMD_MOVE_LEFT,
-            CMD_MOVE_RIGHT, CMD_MOVE_UP, CMD_PASTE_AFTER, CMD_YANK,
-        };
+    #[test]
+    fn counted_command_without_native_count_form_is_rejected() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("abc".to_string());
 
-        #[test]
-        fn test_insert_command_insert() {
-            assert!(is_insert_command(CMD_INSERT));
-        }
-
-        #[test]
-        fn test_insert_command_append() {
-            assert!(is_insert_command(CMD_APPEND));
-        }
-
-        #[test]
-        fn test_insert_command_insert_line_start() {
-            assert!(is_insert_command(CMD_INSERT_LINE_START));
-        }
-
-        #[test]
-        fn test_insert_command_append_line_end() {
-            assert!(is_insert_command(CMD_APPEND_LINE_END));
-        }
-
-        #[test]
-        fn test_insert_command_open_below() {
-            assert!(is_insert_command(CMD_OPEN_BELOW));
-        }
-
-        #[test]
-        fn test_insert_command_open_above() {
-            assert!(is_insert_command(CMD_OPEN_ABOVE));
-        }
-
-        #[test]
-        fn test_insert_command_change() {
-            assert!(is_insert_command(CMD_CHANGE));
-        }
-
-        #[test]
-        fn test_insert_command_change_selection_noyank() {
-            assert!(is_insert_command(CMD_CHANGE_SELECTION_NOYANK));
-        }
-
-        #[test]
-        fn test_insert_command_movement_not_insert() {
-            assert!(!is_insert_command(CMD_MOVE_LEFT));
-            assert!(!is_insert_command(CMD_MOVE_RIGHT));
-            assert!(!is_insert_command(CMD_MOVE_UP));
-            assert!(!is_insert_command(CMD_MOVE_DOWN));
-        }
-
-        #[test]
-        fn test_insert_command_editing_not_insert() {
-            assert!(!is_insert_command(CMD_DELETE_SELECTION));
-            assert!(!is_insert_command(CMD_DELETE_SELECTION_NOYANK));
-            assert!(!is_insert_command(CMD_YANK));
-            assert!(!is_insert_command(CMD_PASTE_AFTER));
-        }
-
-        #[test]
-        fn test_insert_command_escape_not_insert() {
-            assert!(!is_insert_command(CMD_ESCAPE));
-        }
-
-        #[test]
-        fn test_insert_command_random_string() {
-            assert!(!is_insert_command("xyz"));
-            assert!(!is_insert_command(""));
-        }
-
-        #[test]
-        fn test_insert_command_register_scoped_change_is_insert() {
-            assert!(is_insert_command("\"ac"));
-            assert!(is_insert_command("\"_c"));
-        }
-
-        #[test]
-        fn test_insert_command_register_scoped_delete_is_not_insert() {
-            assert!(!is_insert_command("\"ad"));
-            assert!(!is_insert_command("\"_d"));
-        }
-
-        #[test]
-        fn test_insert_command_register_scoped_other_ops_are_not_insert() {
-            assert!(!is_insert_command("\"ay"));
-            assert!(!is_insert_command("\"ap"));
-            assert!(!is_insert_command("\"aP"));
-            assert!(!is_insert_command("\"aR"));
-        }
+        assert_matches!(
+            execute_native_counted(&mut sim, NonZeroUsize::new(2).unwrap(), "h"),
+            Err(SimulatorError::CountNotAccepted)
+        );
     }
 
     // Unit tests for cmd_to_key_events()
@@ -897,6 +646,39 @@ mod tests {
         }
 
         #[test]
+        fn non_ascii_arguments_produce_key_events() {
+            let codes = |cmd: &str| -> Vec<KeyCode> {
+                cmd_to_key_events(cmd).iter().map(|key| key.code).collect()
+            };
+            assert_eq!(
+                codes("f\u{e9}"),
+                [KeyCode::Char('f'), KeyCode::Char('\u{e9}')]
+            );
+            assert_eq!(
+                codes("r\u{1f600}"),
+                [KeyCode::Char('r'), KeyCode::Char('\u{1f600}')]
+            );
+            assert_eq!(
+                codes("ms\u{e9}"),
+                [
+                    KeyCode::Char('m'),
+                    KeyCode::Char('s'),
+                    KeyCode::Char('\u{e9}')
+                ]
+            );
+            assert_eq!(
+                codes("mr\u{e9}\u{1f600}"),
+                [
+                    KeyCode::Char('m'),
+                    KeyCode::Char('r'),
+                    KeyCode::Char('\u{e9}'),
+                    KeyCode::Char('\u{1f600}')
+                ]
+            );
+            assert_eq!(codes("\u{e9}"), [KeyCode::Char('\u{e9}')]);
+        }
+
+        #[test]
         fn test_cmd_to_key_events_text_object_inside_paragraph() {
             let events = cmd_to_key_events("mip");
             assert_eq!(events.len(), 3);
@@ -921,7 +703,7 @@ mod tests {
                 HelixSimulator::<NormalMode>::new(String::new()).enter_insert_mode(),
             );
             sim.execute_command(":").unwrap();
-            assert_eq!(sim.state().unwrap().content(), ":");
+            assert_eq!(sim.display().content(), ":");
         }
 
         #[test]
@@ -929,7 +711,10 @@ mod tests {
             let mut sim = AnyModeSimulator::Insert(
                 HelixSimulator::<NormalMode>::new(String::new()).enter_insert_mode(),
             );
-            assert!(sim.execute_command(":goto 3").is_err());
+            assert_matches!(
+                sim.execute_command(":goto 3"),
+                Err(SimulatorError::CommandLineInInsertMode)
+            );
         }
 
         /// Named-register round-trip for `P` (paste before), not just `y`/`p`.
@@ -974,7 +759,33 @@ mod tests {
             // An unsupported op with the same non-ASCII register is a clean
             // error, not a panic.
             let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
-            assert!(execute_normal_mode_command_internal(&mut sim, "\"éz").is_err());
+            assert_matches!(
+                execute_normal_mode_command_internal(&mut sim, "\"éz"),
+                Err(SimulatorError::UnknownRegisterOp { op: 'z' })
+            );
+        }
+
+        #[test]
+        fn non_ascii_arguments_are_accepted_by_argument_taking_commands() {
+            let run = |text: &str, cmd: &str| -> HelixSimulator<NormalMode> {
+                let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new(text.to_string());
+                execute_normal_mode_command_internal(&mut sim, cmd).unwrap();
+                sim
+            };
+
+            assert_eq!(run("a caf\u{e9} b", "f\u{e9}").selection.primary().head, 6);
+            assert_eq!(run("abc", "r\u{1f600}").doc.to_string(), "\u{1f600}bc");
+            assert_eq!(run("abc", "ms\u{e9}").doc.to_string(), "\u{e9}\u{e9}abc");
+            for cmd in ["md\u{e9}", "mr\u{e9}\u{1f600}", "mi\u{e9}", "ma\u{1f600}"] {
+                run("abc", cmd);
+            }
+        }
+
+        #[test]
+        fn bare_non_ascii_character_is_an_unknown_command_not_a_panic() {
+            let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("abc".to_string());
+            assert!(execute_normal_mode_command_internal(&mut sim, "\u{e9}").is_err());
+            assert!(execute_normal_mode_command_internal(&mut sim, "\u{1f600}").is_err());
         }
 
         #[test]
@@ -1036,7 +847,10 @@ mod tests {
             let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
             sim.selection = Selection::single(0, 5);
 
-            assert!(execute_normal_mode_command_internal(&mut sim, "s (").is_err());
+            assert_matches!(
+                execute_normal_mode_command_internal(&mut sim, "s ("),
+                Err(SimulatorError::InvalidRegex(_))
+            );
         }
 
         /// A bare "s"/"S" (no trailing space - never emitted by

@@ -9,7 +9,7 @@ use crate::game::CommandExecutor;
 use crate::helix::{AnyModeSimulator, EditorSnapshot};
 use crate::learning::PerformanceTracker;
 use crate::minigame::{
-    DifficultyController, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
+    DifficultyController, DifficultyLevel, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
     MultiplierChange, PerformancePoint, Ratio, ScoreBreakdown, ScoreCalculator,
     select_challenge_scenarios,
 };
@@ -141,19 +141,11 @@ pub struct ActiveMiniScenario {
 
 impl ActiveMiniScenario {
     /// Create a new active scenario
-    ///
-    /// # Errors
-    ///
-    /// Returns `UserError` if scenario setup or target state is invalid.
-    fn new(
-        scenario: Scenario,
-        time_limit: Duration,
-        clock: Arc<dyn MonotonicClock>,
-    ) -> Result<Self, UserError> {
+    fn new(scenario: Scenario, time_limit: Duration, clock: Arc<dyn MonotonicClock>) -> Self {
         // Use unified ScenarioState helper for initialization
-        let state = crate::game::ScenarioState::from_scenario(&scenario)?;
+        let state = crate::game::ScenarioState::from_scenario(&scenario);
 
-        Ok(Self {
+        Self {
             scenario,
             simulator: state.simulator,
             target_snapshot: state.target_snapshot,
@@ -162,7 +154,7 @@ impl ActiveMiniScenario {
             time_limit,
             actions: Vec::new(),
             target_held_before_last: false,
-        })
+        }
     }
 
     /// Check if scenario is completed
@@ -476,16 +468,15 @@ impl<R: Rng> MiniGameSession<R> {
     /// Create a session with explicit time and randomness sources.
     ///
     /// [`MiniGameSession::new`] and [`MiniGameSession::with_mode`] use the system
-    /// clock and an OS-seeded RNG; tests inject a
-    /// [`FakeMonotonicClock`](crate::time::FakeMonotonicClock) and a seeded RNG so
-    /// timers and scenario selection are deterministic.
+    /// clock and an OS-seeded RNG; tests inject a `FakeMonotonicClock` (see
+    /// [`crate::time`]) and a seeded RNG so timers and scenario selection are deterministic.
     ///
     /// # Examples
     ///
     /// ```
     /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::minigame::{MiniGameMode, MiniGameSession};
-    /// use helix_trainer::time::FakeMonotonicClock;
+    /// use helix_trainer::time::SystemMonotonicClock;
     /// use rand::SeedableRng;
     /// use rand::rngs::StdRng;
     /// use std::sync::Arc;
@@ -495,7 +486,7 @@ impl<R: Rng> MiniGameSession<R> {
     ///     scenarios,
     ///     None,
     ///     MiniGameMode::default(),
-    ///     Arc::new(FakeMonotonicClock::new()),
+    ///     Arc::new(SystemMonotonicClock),
     ///     StdRng::seed_from_u64(7),
     /// );
     /// assert!(session.state().is_countdown());
@@ -693,8 +684,7 @@ impl<R: Rng> MiniGameSession<R> {
             let scenario_difficulty = scenario
                 .scenario
                 .metadata
-                .as_ref()
-                .and_then(|m| m.difficulty)
+                .difficulty
                 .unwrap_or(Difficulty::Beginner);
 
             // Update completion counter and multiplier state (streak, grace, milestones).
@@ -799,8 +789,7 @@ impl<R: Rng> MiniGameSession<R> {
         let scenario_difficulty = self
             .current
             .as_ref()
-            .and_then(|s| s.scenario.metadata.as_ref())
-            .and_then(|m| m.difficulty)
+            .and_then(|s| s.scenario.metadata.difficulty)
             .unwrap_or(Difficulty::Beginner);
 
         let performance_point = PerformancePoint::new(
@@ -1003,7 +992,7 @@ impl<R: Rng> MiniGameSession<R> {
     }
 
     /// Get difficulty level
-    pub fn difficulty_level(&self) -> u8 {
+    pub fn difficulty_level(&self) -> DifficultyLevel {
         self.difficulty.current_level()
     }
 
@@ -1029,8 +1018,8 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// if let Some(change) = session.take_level_change() {
     ///     match change {
-    ///         LevelChange::Increased { from, to } => println!("Level up: {from} -> {to}"),
-    ///         LevelChange::Decreased { from, to } => println!("Level down: {from} -> {to}"),
+    ///         LevelChange::Increased { from, to } => println!("Level up: {} -> {}", from.get(), to.get()),
+    ///         LevelChange::Decreased { from, to } => println!("Level down: {} -> {}", from.get(), to.get()),
     ///     }
     /// }
     /// # Ok::<(), helix_trainer::security::UserError>(())
@@ -1166,9 +1155,7 @@ impl<R: Rng> MiniGameSession<R> {
 
     /// Get base points for a scenario based on difficulty
     fn base_points_for(scenario: &ActiveMiniScenario) -> u64 {
-        if let Some(ref metadata) = scenario.scenario.metadata
-            && let Some(difficulty) = metadata.difficulty
-        {
+        if let Some(difficulty) = scenario.scenario.metadata.difficulty {
             use crate::config::Difficulty;
             match difficulty {
                 Difficulty::Beginner => 100,
@@ -1176,7 +1163,7 @@ impl<R: Rng> MiniGameSession<R> {
                 Difficulty::Advanced => 350,
             }
         } else {
-            // Fallback if no metadata
+            // Fallback if the scenario has no difficulty
             100
         }
     }
@@ -1201,7 +1188,7 @@ impl<R: Rng> MiniGameSession<R> {
             scenario,
             time_limit,
             Arc::clone(&self.clock),
-        )?);
+        ));
 
         // Refill queue
         self.refill_queue();
@@ -1425,8 +1412,7 @@ mod tests {
             scenario,
             Duration::from_secs(60),
             Arc::new(SystemMonotonicClock),
-        )
-        .unwrap();
+        );
         assert_eq!(active.language(), "rs");
     }
 
@@ -1445,8 +1431,7 @@ mod tests {
             scenario,
             Duration::from_secs(60),
             Arc::new(SystemMonotonicClock),
-        )
-        .unwrap();
+        );
         assert_eq!(active.language(), "py");
     }
 
@@ -1456,8 +1441,7 @@ mod tests {
             create_test_scenario("s1", Difficulty::Beginner),
             Duration::from_secs(60),
             clock.clone(),
-        )
-        .unwrap();
+        );
         (active, clock)
     }
 
@@ -2026,10 +2010,10 @@ mod tests {
         }
 
         // Verify config calculation directly
-        let level1_time = config.time_limit_for_level(1);
+        let level1_time = config.time_limit_for_level(DifficultyLevel::MIN);
         assert_eq!(level1_time, SURVIVAL_BASE_TIME);
 
-        let level5_time = config.time_limit_for_level(5);
+        let level5_time = config.time_limit_for_level(DifficultyLevel::new(5).unwrap());
         // Level 5 should have less time than level 1 (500ms * 4 levels = 2s less)
         let expected_decrease = Duration::from_secs(2);
         assert_eq!(

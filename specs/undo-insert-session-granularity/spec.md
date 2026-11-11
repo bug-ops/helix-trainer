@@ -20,7 +20,7 @@ related:
 # Feature: An Insert Session Is One Undo Step
 
 > [!info] Metadata
-> **Issues**: #571 (P2; labels `bug`, `helix-core`; found by live testing)
+> **Issues**: #571 (P2; labels `bug`, `helix-core`; found by live testing); #589 (selection after `a`, typing and Escape; see [[helix-core-post-25-07-1-upgrade-readiness/spec]] FR-048)
 > **Related**: #501 (selection restore on undo, already specified as FR-022 in [[helix-core-post-25-07-1-upgrade-readiness/spec]])
 > **Status**: Proposed
 > **Depth**: Lightweight bug-fix spec.
@@ -105,21 +105,45 @@ THEN  the first line is `abfn add(...` and the selection equals the one after th
 |----|------------|----------|
 | FR-001 | WHEN Insert mode is left with Escape THE SIMULATOR SHALL have recorded exactly one undo entry for the whole session, covering every transaction applied since the command that entered Insert mode began | must |
 | FR-002 | WHEN the Insert-entering command itself edits the document before Insert mode starts (`c`, `o`, `O`, linewise `xc`) THE SIMULATOR SHALL include that edit in the same single undo entry as the typed text | must |
-| FR-003 | WHEN `u` is executed after an Insert session THE SIMULATOR SHALL restore the document and the selection that existed immediately before the Insert-entering command | must |
+| FR-003 | WHEN `u` is executed after an Insert session THE SIMULATOR SHALL restore the document and the selection that hx stores as the revision's old state, that is the selection at the session's FIRST document change: for `i` it equals the selection before the command, for `c`, `o` and `O` it is the selection before the entering command (the edit happens before the selection is moved), and for `a`, `I` and `A` it is the selection AFTER the entering command has repositioned it (see the table in 3.1) | must |
 | FR-004 | WHEN `U` is executed after undoing an Insert session THE SIMULATOR SHALL restore the document and selection as they were when Insert mode was left | must |
 | FR-005 | WHEN an Insert session leads to no net document change (`i Escape`, `a Escape`, `c` of an empty selection followed by Escape) THE SIMULATOR SHALL record no undo entry and SHALL NOT clear the redo stack | must |
 | FR-006 | WHEN any in-session edit is applied (typed character, newline with auto-indent, `Backspace`, `Ctrl-w`, `Ctrl-u`, indent) THE SIMULATOR SHALL NOT record an undo entry of its own | must |
 | FR-007 | WHEN the unused auto-indent is stripped on Escape THE SIMULATOR SHALL keep folding it into the session's single entry (current behavior preserved) | must |
 | FR-008 | WHILE an Insert session is active THE SIMULATOR SHALL NOT expose a partially recorded session through `u`/`U`; a session that has ended is always fully recorded | must |
-| FR-009 | THE SIMULATOR SHALL represent "inside an Insert session" so that the session boundary cannot be left unclosed when the mode transitions back to Normal (type-level or single-owner invariant per the constitution's typestate principle, not a flag checked at call sites) | must |
+| FR-009 | THE SIMULATOR SHALL represent "inside an Insert session" so that the session boundary cannot be left unclosed when the mode transitions back to Normal: the session is owned by the Insert-mode typestate (`HelixSimulator<InsertMode>`), and a session can only be entered through a closed set of insert-entering commands (a typed enumeration `i`, `a`, `I`, `A`, `o`, `O`, `c`), not through a string predicate or a flag checked at call sites | must |
 | FR-010 | WHEN a session is closed THE SIMULATOR SHALL clear the redo stack exactly once, as any new edit does today | must |
 | FR-011 | THE FIX SHALL NOT change the undo behavior of Normal-mode commands that do not enter Insert mode (`d`, `p`, `r`, `>`, and so on): each remains one entry | must |
-| FR-012 | WHERE Helix 25.07.1 ends a session before Escape (for example cursor-movement keys in Insert mode) THE SIMULATOR SHALL end the undo step at the same points | should |
+| FR-012 | WHERE Helix 25.07.1 ends a session before Escape THE SIMULATOR SHALL end the undo step at the same points; for 25.07.1 there are none (section 3.1: Insert-mode cursor movement does not split a session) | should |
 
-> [!question]
-> - [NEEDS CLARIFICATION: FR-012 / Insert-mode cursor movement: does Helix 25.07.1 commit an undo checkpoint when arrow keys or other movement are used in Insert mode, splitting one `i ... Escape` into several revisions? Verify against the vendored `helix-core`/`helix-term` source and `hx` before implementing; the simulator currently handles arrow keys in Insert mode.]
-> - [NEEDS CLARIFICATION: with a count (`3o`, `3a`) or a dot-repeat (`.`) of an Insert command, does Helix treat the repeated execution as one undo step with the original session? Verify against `hx`.]
-> - [NEEDS CLARIFICATION: macro replay (`Q`/`q`) and `.` run Insert commands with `is_repeating` set; confirm each replayed session is one step.]
+### 3.1 Resolved clarifications (2026-11-11, evidence)
+
+| Question | Resolution | Evidence |
+|----------|-----------|----------|
+| FR-012: does hx split a session on Insert-mode cursor movement? | No split. History is committed after a key only when the mode is not Insert; `commit_undo_checkpoint` (`C-s`) is the only explicit split and the simulator does not simulate it, so arrow keys in Insert mode do NOT split a session and FR-012 has no split points | helix-term `ui/editor.rs` 1449-1453 |
+| Counted or dot-repeated Insert commands | `.` and macro replays (`Q`) each run the recorded Insert sequence including its final Escape, so each replay is exactly one undo step; a counted `3o` opens one line in the simulator (single cursor, see the gap in [[helix-core-post-25-07-1-upgrade-readiness/spec]] FR-025) and is one session | helix-term `ui/editor.rs` 1449-1453; replay ends with Escape |
+| `I`, `A`, `O` and `s`-style changes | `I`, `A` and `O` share the entry path of `i`, `a` and `o`; `c` covers the change case. Note: `C` in hx is `copy_selection_on_next_line` and does not enter Insert | local `hx` 25.07.1 runs below |
+| Bundled scenarios that depend on per-keystroke undo | None: `undo_redo_001` (`x d u U`) has no Insert session and no other bundled solution uses `u` as a command (the `u` in `writing/links.toml` is typed text). No scenario solution changes; `cargo nextest run scenario` confirms | grep of `scenarios/en` |
+
+The macro-replay clarification (`is_repeating`) is closed by the second row: each replayed session ends with Escape and is one step.
+
+**Per entering command (hx 25.07.1, local `hx` started with an empty configuration).** Text `fn add(a: i32, b: i32) -> i32 {` / `    let sum = a + b;` / `    sum` / `}`; keys `j w <cmd> x y Escape u c @ Escape` (after `j w` the selection is the 4 leading spaces of line 2, `w` from the line start selects the whitespace run). The `@` shows which text the restored selection covered:
+
+| Entering command | Line 2 after `u c @ Escape` | Restored selection (old state of the revision) |
+|------------------|------------------------------|-----------------------------------------------|
+| `i` | `@let sum = a + b;` | the 4 leading spaces (the selection before `i`) |
+| `a` | `@et sum = a + b;` | the 4 spaces plus the next character (the selection after `a` extended it) |
+| `I` | `    @et sum = a + b;` | the 1-character range on `l` (first non-whitespace, after `I` moved) |
+| `A` | `    let sum = a + b;@    sum` | the 1-character range on the line break (after `A` moved to the line end) |
+| `o` | `@let sum = a + b;` | the 4 leading spaces (the selection before `o`; the opened line is gone) |
+| `O` | `@let sum = a + b;` | the 4 leading spaces (the selection before `O`; the opened line is gone) |
+| `c` | `@let sum = a + b;` | the 4 leading spaces (the selection before `c`; the deleted text is restored) |
+
+The implementation records `Changed { before }` with the selection per this table (the selection at the session's first document change) and does not blindly use the pre-command selection.
+
+## 3.2 Scenario impact
+
+No bundled scenario solution changes (see the resolution above); the list of affected scenario ids is empty and the implementing PR confirms it with `cargo nextest run scenario`.
 
 ## 4. Non-Functional Requirements
 
@@ -185,10 +209,8 @@ THEN  the first line is `abfn add(...` and the selection equals the one after th
 
 ## 9. Open Questions
 
-> [!question]
-> - [NEEDS CLARIFICATION: see the three questions under FR-012 (Insert-mode movement, counted/dot-repeated Insert commands, macro replay).]
-> - [NEEDS CLARIFICATION: do any bundled scenarios (for example `undo_redo_*`) depend on per-keystroke undo? `cargo nextest run scenario` after the change must confirm; list affected ids in the plan.]
-> - [NEEDS CLARIFICATION: the finding was recorded for `i`, `a`, `o`, `c`; confirm `I`, `A`, `O`, `C`, `s`-style changes against `hx` (they share the same entry path and are expected to behave identically).]
+> [!success] Closed 2026-11-11
+> All former `[NEEDS CLARIFICATION]` items are resolved with evidence in section 3.1. One residual item: `commit_undo_checkpoint` (`C-s`) is not simulated; if it is ever added, FR-012 gains a split point.
 
 ## 10. See Also
 

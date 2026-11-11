@@ -11,9 +11,11 @@
 //! [`KeymapOverlay`].
 
 mod context;
+mod fingerprint;
 mod keys;
 mod overlay;
 
 pub use context::KeyContext;
+pub use fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
 pub use keys::{CanonicalKeys, ParsePhysicalKeyError, PhysicalKey};
 pub use overlay::KeymapOverlay;

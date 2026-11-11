@@ -8,8 +8,7 @@
 //! - Character replacement: r
 //! - Change command: c
 
-use crate::game::EditorState;
-use crate::game::editor_state::{CursorPosition, Selection};
+use super::sim_with_selection;
 use crate::helix::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, Mode};
 
@@ -23,7 +22,7 @@ fn test_delete_char() {
 
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "ello");
 }
 
@@ -35,7 +34,7 @@ fn test_delete_char_in_middle() {
     sim.execute_command(CMD_MOVE_RIGHT).unwrap(); // Move to 'l'
     sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // Delete 'l'
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "helo");
 }
 
@@ -50,7 +49,7 @@ fn test_multiple_line_deletions() {
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "line3\n");
 }
 
@@ -65,10 +64,10 @@ fn test_undo() {
     // Delete line using x (select) + d (delete)
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "test\n");
+    assert_eq!(sim.display().content(), "test\n");
 }
 
 #[test]
@@ -77,13 +76,13 @@ fn test_undo_then_redo_round_trip() {
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "test\n");
+    assert_eq!(sim.display().content(), "test\n");
 
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 }
 
 #[test]
@@ -93,10 +92,10 @@ fn test_redo_via_ctrl_r_alias() {
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "test\n");
+    assert_eq!(sim.display().content(), "test\n");
 
     sim.execute_command(CMD_CTRL_R).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 }
 
 #[test]
@@ -106,35 +105,35 @@ fn test_multiple_sequential_undo_redo_walks_full_history() {
     // Three edits, each deleting the current (now-first) line
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "bbb\nccc\n");
+    assert_eq!(sim.display().content(), "bbb\nccc\n");
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "ccc\n");
+    assert_eq!(sim.display().content(), "ccc\n");
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 
     // Undo 3x should walk back through each intermediate state
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "ccc\n");
+    assert_eq!(sim.display().content(), "ccc\n");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "bbb\nccc\n");
+    assert_eq!(sim.display().content(), "bbb\nccc\n");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "aaa\nbbb\nccc\n");
+    assert_eq!(sim.display().content(), "aaa\nbbb\nccc\n");
 
     // Redo 3x should walk forward and land back at the latest state
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "bbb\nccc\n");
+    assert_eq!(sim.display().content(), "bbb\nccc\n");
 
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "ccc\n");
+    assert_eq!(sim.display().content(), "ccc\n");
 
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 }
 
 #[test]
@@ -145,17 +144,17 @@ fn test_new_edit_after_undo_clears_redo_stack() {
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "line1\nline2\nline3\n");
+    assert_eq!(sim.display().content(), "line1\nline2\nline3\n");
 
     // A fresh edit on a different line must invalidate the pending redo
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "line1\nline3\n");
+    assert_eq!(sim.display().content(), "line1\nline3\n");
 
     // Redo should now be a no-op: the stale "restore line1 deletion" entry is gone
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "line1\nline3\n");
+    assert_eq!(sim.display().content(), "line1\nline3\n");
 }
 
 #[test]
@@ -168,21 +167,21 @@ fn test_noop_command_after_undo_does_not_clear_pending_redo() {
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "test\n");
+    assert_eq!(sim.display().content(), "test\n");
 
     // Undo restores the pre-delete line selection; collapse it to a point
     // selection (anchor == head): no text to uppercase, so this produces an
     // empty changeset.
     sim.execute_command(CMD_COLLAPSE_SELECTION).unwrap();
     sim.execute_command(CMD_SWITCH_TO_UPPERCASE).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "test\n");
+    assert_eq!(sim.display().content(), "test\n");
 
     // The pending redo from the earlier undo must still be intact.
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 }
 
 #[test]
@@ -191,16 +190,16 @@ fn test_interleaved_undo_redo_undo_round_trips() {
 
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "bbb\n");
+    assert_eq!(sim.display().content(), "bbb\n");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "aaa\nbbb\n");
+    assert_eq!(sim.display().content(), "aaa\nbbb\n");
 
     sim.execute_command(CMD_REDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "bbb\n");
+    assert_eq!(sim.display().content(), "bbb\n");
 
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "aaa\nbbb\n");
+    assert_eq!(sim.display().content(), "aaa\nbbb\n");
 }
 
 // ============================================================================
@@ -212,12 +211,12 @@ fn test_open_below() {
     let mut sim = AnyModeSimulator::new("line1\nline2".to_string());
 
     // Cursor at start of first line
-    assert_eq!(sim.state().unwrap().cursor_position().0, 0);
+    assert_eq!(sim.display().cursor_position().0, 0);
 
     // Press 'o' should insert new line below and enter insert mode
     sim.execute_command(CMD_OPEN_BELOW).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "line1\n\nline2");
     assert_eq!(state.cursor_position().0, 1); // On new empty line
@@ -229,12 +228,12 @@ fn test_open_above() {
 
     // Move to second line
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    assert_eq!(sim.state().unwrap().cursor_position().0, 1);
+    assert_eq!(sim.display().cursor_position().0, 1);
 
     // Press 'O' should insert new line above and enter insert mode
     sim.execute_command(CMD_OPEN_ABOVE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "line1\n\nline2");
     assert_eq!(state.cursor_position().0, 1); // On new empty line
@@ -251,7 +250,7 @@ fn test_join_lines() {
     // Join first two lines
     sim.execute_command(CMD_JOIN_LINES).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "line1 line2\nline3");
     assert_eq!(state.cursor_position().0, 0);
 }
@@ -262,12 +261,12 @@ fn test_join_lines_at_last_line() {
 
     // Move to last line
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    assert_eq!(sim.state().unwrap().cursor_position().0, 1);
+    assert_eq!(sim.display().cursor_position().0, 1);
 
     // Try to join - should do nothing
     sim.execute_command(CMD_JOIN_LINES).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "line1\nline2");
 }
 
@@ -282,7 +281,7 @@ fn test_indent_line() {
     // Indent first line
     sim.execute_command(CMD_INDENT).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "    hello\nworld");
     // The cursor stays on its character
     assert_eq!(state.cursor_position().1, 4);
@@ -295,7 +294,7 @@ fn test_dedent_line() {
     // Dedent first line (remove 2 spaces)
     sim.execute_command(CMD_DEDENT).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hello\n    world");
     assert_eq!(state.cursor_position().1, 0);
 }
@@ -307,7 +306,7 @@ fn test_dedent_line_with_one_space() {
     // Dedent - should remove only 1 space
     sim.execute_command(CMD_DEDENT).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hello");
     assert_eq!(state.cursor_position().1, 0);
 }
@@ -319,7 +318,7 @@ fn test_dedent_line_no_spaces() {
     // Dedent line with no leading spaces - should do nothing
     sim.execute_command(CMD_DEDENT).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hello");
 }
 
@@ -331,7 +330,7 @@ fn test_multiple_indent() {
     sim.execute_command(CMD_INDENT).unwrap();
     sim.execute_command(CMD_INDENT).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "        code");
     assert_eq!(state.cursor_position().1, 8);
 }
@@ -345,12 +344,12 @@ fn test_replace_char() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Cursor at start
-    assert_eq!(sim.state().unwrap().content(), "hello");
+    assert_eq!(sim.display().content(), "hello");
 
     // Press 'r' then 'X' should replace 'h' with 'X'
     sim.execute_command("rX").unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "Xello");
     assert_eq!(sim.mode(), Mode::Normal); // Should stay in normal mode
 }
@@ -364,13 +363,13 @@ fn test_change_selection() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Cursor at start
-    assert_eq!(sim.state().unwrap().content(), "hello");
+    assert_eq!(sim.display().content(), "hello");
     assert_eq!(sim.mode(), Mode::Normal);
 
     // Press 'c' should delete 'h' and enter insert mode
     sim.execute_command(CMD_CHANGE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "ello");
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.cursor_position().1, 0); // Cursor stays at start
@@ -381,13 +380,13 @@ fn test_change_selection_noyank() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Cursor at start
-    assert_eq!(sim.state().unwrap().content(), "hello");
+    assert_eq!(sim.display().content(), "hello");
     assert_eq!(sim.mode(), Mode::Normal);
 
     // Press Alt-c should delete 'h' and enter insert mode, without yanking
     sim.execute_command(CMD_CHANGE_SELECTION_NOYANK).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "ello");
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.cursor_position().1, 0); // Cursor stays at start
@@ -396,14 +395,10 @@ fn test_change_selection_noyank() {
 #[test]
 fn test_change_selection_deletes_full_multichar_range() {
     // "world" as a forward range (anchor=6 < head=11) in "hello world"
-    let cursor = CursorPosition::new(0, 11).unwrap();
-    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
-    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
-
-    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
     sim.execute_command(CMD_CHANGE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.content(),
         "hello ",
@@ -420,13 +415,13 @@ fn test_delete_selection_populates_register_for_paste() {
 
     // 'd' deletes 'a' and should write it to the default register
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "bc");
+    assert_eq!(sim.display().content(), "bc");
 
     // Move to end and paste - the deleted 'a' should come back
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "bca");
 }
 
@@ -438,13 +433,13 @@ fn test_change_selection_populates_register_for_paste() {
     sim.execute_command(CMD_CHANGE).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
     sim.execute_command(CMD_ESCAPE).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "bc");
+    assert_eq!(sim.display().content(), "bc");
 
     // Move to end and paste - the changed-away 'a' should come back
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "bca");
 }
 
@@ -466,14 +461,14 @@ fn test_change_selection_noyank_does_not_clobber_existing_register() {
     sim.execute_command(CMD_CHANGE_SELECTION_NOYANK).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
     sim.execute_command(CMD_ESCAPE).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "y bc");
+    assert_eq!(sim.display().content(), "y bc");
 
     // Paste before at document start must produce the ORIGINAL 'y', not
     // the 'a' that Alt-c just deleted
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.content(),
         "yy bc",
@@ -484,35 +479,28 @@ fn test_change_selection_noyank_does_not_clobber_existing_register() {
 #[test]
 fn test_delete_and_change_register_round_trip_exact_multichar_text() {
     // "world" as a forward range (anchor=6 < head=11) in "hello world"
-    let cursor = CursorPosition::new(0, 11).unwrap();
-    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
-    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
-
-    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "hello ");
+    assert_eq!(sim.display().content(), "hello ");
 
     // Paste-after restores the exact multi-char deleted text, not just a
     // single character or some non-empty placeholder
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
     assert_eq!(
-        sim.state().unwrap().content(),
+        sim.display().content(),
         "hello world",
         "'d' must round-trip the EXACT deleted multi-char text through 'p'"
     );
 
     // Same check for 'c', on a fresh selection
-    let cursor = CursorPosition::new(0, 11).unwrap();
-    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
-    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
-    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
     sim.execute_command(CMD_CHANGE).unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "hello ");
+    assert_eq!(sim.display().content(), "hello ");
 
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
     assert_eq!(
-        sim.state().unwrap().content(),
+        sim.display().content(),
         "hello world",
         "'c' must round-trip the EXACT deleted multi-char text through 'p'"
     );
@@ -525,11 +513,11 @@ fn test_delete_selection_register_round_trips_through_paste_before() {
     let mut sim = AnyModeSimulator::new("abc".to_string());
 
     sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // deletes 'a'
-    assert_eq!(sim.state().unwrap().content(), "bc");
+    assert_eq!(sim.display().content(), "bc");
 
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "abc");
 }
 
@@ -570,7 +558,7 @@ fn test_change_selection_multi_range_maps_cursor_through_earlier_deletions() {
     // Typing at the (correctly mapped) cursor must land between the
     // newline and 'd', not after 'd'
     sim.execute_command("X").unwrap();
-    assert_eq!(sim.state().unwrap().content(), "b\nXd");
+    assert_eq!(sim.display().content(), "b\nXd");
 }
 
 #[test]
@@ -604,13 +592,13 @@ fn test_select_line_then_change_opens_blank_line() {
     // mid-line insert
     sim.execute_command(CMD_CHANGE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "\ntwo\nthree");
     assert_eq!(state.cursor_position(), (0, 0));
 
     sim.execute_command("X").unwrap();
-    assert_eq!(sim.state().unwrap().content(), "X\ntwo\nthree");
+    assert_eq!(sim.display().content(), "X\ntwo\nthree");
 }
 
 #[test]
@@ -620,7 +608,7 @@ fn test_select_line_then_change_noyank_also_opens_blank_line() {
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_CHANGE_SELECTION_NOYANK).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "\ntwo");
     assert_eq!(state.cursor_position(), (0, 0));
@@ -634,7 +622,7 @@ fn test_select_line_middle_then_change_opens_blank_line_in_place() {
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_CHANGE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "one\n\nthree");
     assert_eq!(state.cursor_position(), (1, 0));
@@ -649,7 +637,7 @@ fn test_change_non_linewise_selection_does_not_open_blank_line() {
 
     sim.execute_command(CMD_CHANGE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "ne\ntwo");
     assert_eq!(state.cursor_position(), (0, 0));
@@ -669,13 +657,13 @@ fn test_delete_selection_blackhole_register_discards_text() {
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command("\"_d").unwrap(); // blackhole-delete 'a'
-    assert_eq!(sim.state().unwrap().content(), "y bc");
+    assert_eq!(sim.display().content(), "y bc");
 
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
     assert_eq!(
-        sim.state().unwrap().content(),
+        sim.display().content(),
         "yy bc",
         "\"_d must not write the deleted text anywhere"
     );
@@ -692,13 +680,13 @@ fn test_change_selection_blackhole_register_discards_text() {
     sim.execute_command("\"_c").unwrap(); // blackhole-change 'a'
     assert_eq!(sim.mode(), Mode::Insert);
     sim.execute_command(CMD_ESCAPE).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "y bc");
+    assert_eq!(sim.display().content(), "y bc");
 
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
     assert_eq!(
-        sim.state().unwrap().content(),
+        sim.display().content(),
         "yy bc",
         "\"_c must not write the deleted text anywhere"
     );
@@ -709,12 +697,12 @@ fn test_delete_selection_named_register_round_trips_through_paste() {
     let mut sim = AnyModeSimulator::new("abc".to_string());
 
     sim.execute_command("\"ad").unwrap(); // delete 'a' into register 'a'
-    assert_eq!(sim.state().unwrap().content(), "bc");
+    assert_eq!(sim.display().content(), "bc");
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command("\"ap").unwrap(); // paste register 'a' after cursor
 
-    assert_eq!(sim.state().unwrap().content(), "bca");
+    assert_eq!(sim.display().content(), "bca");
 }
 
 #[test]
@@ -730,7 +718,7 @@ fn test_blackhole_change_on_linewise_selection_opens_blank_line_without_yanking(
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command("\"_c").unwrap(); // blackhole-change the whole line
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
     assert_eq!(state.content(), "y\n\ntwo");
     assert_eq!(state.cursor_position(), (1, 0));
@@ -740,7 +728,7 @@ fn test_blackhole_change_on_linewise_selection_opens_blank_line_without_yanking(
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
     assert_eq!(
-        sim.state().unwrap().content(),
+        sim.display().content(),
         "yy\n\ntwo",
         "\"_c must not write the deleted line anywhere"
     );
@@ -760,13 +748,13 @@ fn test_delete_selection_noyank_does_not_populate_register() {
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION_NOYANK).unwrap(); // Alt-d deletes 'a'
     assert_eq!(sim.mode(), Mode::Normal);
-    assert_eq!(sim.state().unwrap().content(), "y bc");
+    assert_eq!(sim.display().content(), "y bc");
 
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
     assert_eq!(
-        sim.state().unwrap().content(),
+        sim.display().content(),
         "yy bc",
         "Alt-d must leave a pre-existing register ('y') untouched"
     );
@@ -784,20 +772,20 @@ fn test_repeat_blackhole_delete() {
     let mut sim = AnyModeSimulator::new("abcabc".to_string());
 
     sim.execute_command("\"_d").unwrap(); // delete 'a' at index 0, discard it
-    assert_eq!(sim.state().unwrap().content(), "bcabc");
+    assert_eq!(sim.display().content(), "bcabc");
 
     // "bcabc": b(0) c(1) a(2) b(3) c(4) - two moves lands on the 'a'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_REPEAT).unwrap(); // '.' must replay "_d, deleting 'a' again
 
-    assert_eq!(sim.state().unwrap().content(), "bcbc");
+    assert_eq!(sim.display().content(), "bcbc");
 
     // The register must still be empty - the repeat must not have yanked
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
     assert_eq!(
-        sim.state().unwrap().content(),
+        sim.display().content(),
         "bcbc",
         "repeated \"_d must not have written anything to the default register"
     );
@@ -808,19 +796,19 @@ fn test_repeat_named_register_delete() {
     let mut sim = AnyModeSimulator::new("aXaX".to_string());
 
     sim.execute_command("\"rd").unwrap(); // delete 'a' into register 'r'
-    assert_eq!(sim.state().unwrap().content(), "XaX");
+    assert_eq!(sim.display().content(), "XaX");
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_REPEAT).unwrap(); // '.' must replay "rd on the second 'a'
 
-    assert_eq!(sim.state().unwrap().content(), "XX");
+    assert_eq!(sim.display().content(), "XX");
 
     // Register 'r' must hold the SECOND deleted 'a' (overwritten by the
     // repeat), proving the repeat actually re-executed "rd and not a stale
     // prior action
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     sim.execute_command("\"rp").unwrap();
-    assert_eq!(sim.state().unwrap().content(), "XaX");
+    assert_eq!(sim.display().content(), "XaX");
 }
 
 // ============================================================================
@@ -836,7 +824,7 @@ fn run_then_delete(commands: &[&str]) -> String {
         sim.execute_command(command).unwrap();
     }
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 fn run(commands: &[&str]) -> String {
@@ -844,7 +832,7 @@ fn run(commands: &[&str]) -> String {
     for command in commands {
         sim.execute_command(command).unwrap();
     }
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 #[test]
@@ -917,7 +905,7 @@ fn test_backtick_lowercases_selection_instead_of_toggling() {
     let mut sim = AnyModeSimulator::new("Hello WORLD".to_string());
     sim.execute_command(CMD_SELECT_ALL).unwrap();
     sim.execute_command(CMD_SWITCH_CASE_ALT).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "hello world");
+    assert_eq!(sim.display().content(), "hello world");
 }
 
 #[test]
@@ -925,7 +913,7 @@ fn test_alt_backtick_uppercases_selection_without_toggling() {
     let mut sim = AnyModeSimulator::new("Hello world".to_string());
     sim.execute_command(CMD_SELECT_ALL).unwrap();
     sim.execute_command(CMD_SWITCH_TO_UPPERCASE).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "HELLO WORLD");
+    assert_eq!(sim.display().content(), "HELLO WORLD");
 }
 
 #[test]
@@ -965,9 +953,9 @@ fn test_surround_add_selects_whole_surrounded_span() {
     let mut sim = AnyModeSimulator::new("hello world".to_string());
     sim.execute_command(CMD_SELECT_ALL).unwrap();
     sim.execute_command("ms[").unwrap();
-    assert_eq!(sim.state().unwrap().content(), "[hello world]");
+    assert_eq!(sim.display().content(), "[hello world]");
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "");
+    assert_eq!(sim.display().content(), "");
 }
 
 #[test]
@@ -976,7 +964,7 @@ fn test_surround_add_is_a_single_undo_step() {
     sim.execute_command(CMD_SELECT_ALL).unwrap();
     sim.execute_command("ms(").unwrap();
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "hello");
+    assert_eq!(sim.display().content(), "hello");
 }
 
 #[test]
@@ -986,9 +974,9 @@ fn test_surround_delete_keeps_selection_over_content() {
         sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     }
     sim.execute_command("md(").unwrap();
-    assert_eq!(sim.state().unwrap().content(), "x abc y");
+    assert_eq!(sim.display().content(), "x abc y");
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "x bc y");
+    assert_eq!(sim.display().content(), "x bc y");
 }
 
 #[test]
@@ -1021,9 +1009,9 @@ fn test_surround_delete_is_a_single_undo_step() {
     let mut sim = AnyModeSimulator::new("(abc)".to_string());
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command("md(").unwrap();
-    assert_eq!(sim.state().unwrap().content(), "abc");
+    assert_eq!(sim.display().content(), "abc");
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "(abc)");
+    assert_eq!(sim.display().content(), "(abc)");
 }
 
 #[test]
@@ -1031,9 +1019,9 @@ fn test_surround_replace_swaps_pair_in_single_undo_step() {
     let mut sim = AnyModeSimulator::new("(abc)".to_string());
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command("mr([").unwrap();
-    assert_eq!(sim.state().unwrap().content(), "[abc]");
+    assert_eq!(sim.display().content(), "[abc]");
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "(abc)");
+    assert_eq!(sim.display().content(), "(abc)");
 }
 
 #[test]
@@ -1043,7 +1031,7 @@ fn test_join_selections_space_selects_every_inserted_space() {
     sim.execute_command(CMD_JOIN_SELECTIONS_SPACE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
     assert_eq!(
-        sim.state().unwrap().content(),
+        sim.display().content(),
         "fn add(a: i32, b: i32) -> i32 {let sum = a + b;sum}"
     );
 }
@@ -1055,7 +1043,7 @@ fn test_counted_join_joins_one_pair_only() {
         sim.execute_counted(CMD_JOIN_LINES, std::num::NonZeroUsize::new(count).unwrap())
             .unwrap();
         assert_eq!(
-            sim.state().unwrap().content(),
+            sim.display().content(),
             "fn add(a: i32, b: i32) -> i32 { let sum = a + b;\n    sum\n}",
             "{count}J must join a single pair"
         );

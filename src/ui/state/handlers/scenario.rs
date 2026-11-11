@@ -7,7 +7,7 @@ use crate::config::Difficulty;
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::UserProfile;
-use crate::learning::Analytics;
+use crate::learning::{Analytics, ProgressionTier, ReferenceTime};
 use crate::security::UserError;
 use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
@@ -18,6 +18,7 @@ use crate::ui::state::{
 };
 use crate::ui::state::{CategoryProgress, MasteryInfo};
 use rust_i18n::t;
+use std::num::NonZeroUsize;
 
 /// Handle `StartScenario` message
 ///
@@ -92,6 +93,9 @@ fn record_scenario_completion(
         &commands,
         feedback.duration,
         feedback.score > 0,
+        ReferenceTime::for_optimal_actions(
+            NonZeroUsize::new(feedback.optimal_actions).unwrap_or(NonZeroUsize::MIN),
+        ),
     );
 
     // Save after FSRS data has been recorded so `performance_data` reflects this
@@ -112,7 +116,7 @@ fn record_scenario_completion(
             .notifications
             .push(Notification::new(NotificationType::MasteryLevelUp {
                 command: command.into_string(),
-                new_level,
+                new_level: new_level.name().to_string(),
             }));
     }
 
@@ -229,11 +233,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
     // via the `UpdateQuestProgress` dispatch above; only `actual_xp` still needs to be
     // added here. `total_xp` (used above for the XP breakdown display) must not be
     // passed to `record_scenario_completion`, or quest XP would be double-counted.
-    let scenario_difficulty = completed_session
-        .scenario()
-        .metadata
-        .as_ref()
-        .and_then(|m| m.difficulty);
+    let scenario_difficulty = completed_session.scenario().metadata.difficulty;
     record_scenario_completion(
         &mut ctx,
         &feedback,
@@ -530,7 +530,7 @@ mod tests {
         state: &mut AppState,
         completed: GameSession<crate::game::session::Completed>,
     ) {
-        let completed = CompletedTask::new(completed).unwrap();
+        let completed = CompletedTask::new(completed, state.progress.monotonic_now()).unwrap();
         state.screen = TypedScreen::Task(TaskData {
             session: TaskSession::Completed(completed),
             ..TaskData::new(GameSession::new(create_test_scenario()).unwrap())
@@ -856,7 +856,7 @@ mod tests {
                 .profile
                 .has_achievement(&AchievementId::Centurion)
         );
-        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+        assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
             crate::ui::notification::NotificationType::Achievement { ref name, .. }
                 if name == "Centurion"
@@ -939,7 +939,7 @@ mod tests {
                 .profile
                 .has_achievement(&AchievementId::Polyglot)
         );
-        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+        assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
             crate::ui::notification::NotificationType::Achievement { ref name, .. }
                 if name == "Polyglot"
@@ -1195,7 +1195,7 @@ mod tests {
         // would evict LevelUp from the notification queue's fixed-size (3-slot)
         // `visible()` window if it were pushed first instead of last.
         assert!(
-            ctx.ui.notifications.visible().iter().any(|n| matches!(
+            ctx.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { .. }
             )),
@@ -1251,7 +1251,7 @@ mod tests {
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
 
         assert!(
-            ctx.ui.notifications.visible().iter().any(|n| matches!(
+            ctx.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { .. }
             )),
@@ -1278,7 +1278,7 @@ mod tests {
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert!(
-            !ctx.ui.notifications.visible().iter().any(|n| matches!(
+            !ctx.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { .. }
             )),
@@ -1328,7 +1328,7 @@ mod tests {
             "expected a level-up driven by quest XP"
         );
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { .. }
             )),
@@ -1930,7 +1930,7 @@ mod tests {
 
         assert_matches!(outcome, HandlerOutcome::Stay);
         assert!(
-            ctx.ui.notifications.visible().iter().any(|n| matches!(
+            ctx.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::Info { .. }
             )),

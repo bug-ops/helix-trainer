@@ -21,17 +21,17 @@
 use crate::async_state::SaveRequest;
 use crate::config::Scenario;
 use crate::gamification::{ProfileStorage, UserProfile};
-use crate::ids::{CommandId, ScenarioId};
+use crate::ids::ScenarioId;
 use crate::learning::PerformanceTracker;
 use crate::security::UserError;
 use crate::sound::SoundEffect;
-use crate::time::Clock;
+use crate::time::{Clock, MonotonicClock};
 use crate::ui::layout::{
     achievement_list_rows, clamp_achievement_scroll, clamp_menu_view, menu_list_rows,
 };
 use std::fmt;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 // Message handlers in separate modules
@@ -39,6 +39,9 @@ mod handlers;
 
 mod effect;
 pub use effect::Effect;
+
+// Carried by `Message::CompleteReviewCommand`; owned by the learning module.
+pub use crate::learning::ReviewOutcome;
 
 // Handler infrastructure for type-safe handlers
 mod handler_context;
@@ -100,53 +103,6 @@ pub struct QuestProgressChange {
     pub old_progress: u32,
     /// Progress after the run.
     pub new_progress: u32,
-}
-
-/// State for review session
-#[derive(Debug, Clone)]
-pub struct ReviewSessionState {
-    /// Commands due for review, in review order.
-    pub due_commands: Vec<CommandId>,
-    /// Index of the command being reviewed.
-    pub current_index: usize,
-    /// When the session started.
-    pub session_started_at: Instant,
-    /// Results recorded so far.
-    pub completed_reviews: Vec<ReviewResult>,
-}
-
-impl ReviewSessionState {
-    /// The command currently being reviewed, `None` once every command is done
-    pub fn current_command(&self) -> Option<&CommandId> {
-        self.due_commands.get(self.current_index)
-    }
-}
-
-/// Whether the player recalled a reviewed command
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReviewOutcome {
-    /// The command was recalled correctly
-    Recalled,
-    /// The command was not recalled
-    Forgot,
-}
-
-impl ReviewOutcome {
-    /// Whether the command was recalled
-    pub fn is_recalled(self) -> bool {
-        self == Self::Recalled
-    }
-}
-
-/// Result of a single review
-#[derive(Debug, Clone)]
-pub struct ReviewResult {
-    /// Reviewed command.
-    pub command: CommandId,
-    /// How the review ended.
-    pub outcome: ReviewOutcome,
-    /// Time the review took.
-    pub duration: Duration,
 }
 
 /// Screens that can be entered without carrying any session or result data
@@ -490,37 +446,42 @@ impl AppState {
         performance_tracker: PerformanceTracker,
         config: ConfigState,
     ) -> Self {
-        Self::with_clock(
+        Self::with_clocks(
             scenarios,
             profile,
             profile_storage,
             performance_tracker,
             config,
             Arc::new(crate::time::SystemClock),
+            Arc::new(crate::time::SystemMonotonicClock),
         )
     }
 
     /// Create a new application state with custom configuration and an explicit clock
     ///
-    /// Primarily useful for tests that need deterministic control over day-boundary
-    /// and scheduling behavior; see [`crate::time::FakeClock`].
-    pub fn with_clock(
+    /// The single point where clocks are injected: `clock` (wall time) feeds the tracker,
+    /// scheduler and day logic, and `monotonic` times notifications, the save debounce and
+    /// review answers. Primarily useful for tests that need deterministic control over
+    /// day-boundary, scheduling and timer behavior; see [`crate::time`].
+    pub fn with_clocks(
         scenarios: Vec<Scenario>,
         profile: UserProfile,
         profile_storage: ProfileStorage,
         performance_tracker: PerformanceTracker,
         config: ConfigState,
         clock: Arc<dyn Clock>,
+        monotonic: Arc<dyn MonotonicClock>,
     ) -> Self {
         Self {
             screen: TypedScreen::ModeSelection(ModeSelectionData::default()),
-            ui: UIState::new(),
+            ui: UIState::with_clock(monotonic.clone()),
             game: GameState::new(scenarios),
-            progress: ProgressState::with_clock(
+            progress: ProgressState::with_clocks(
                 profile,
                 performance_tracker,
                 profile_storage,
                 clock,
+                monotonic,
             ),
             config,
         }
@@ -993,7 +954,24 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
             Ok(())
         }
         Message::CompleteReviewCommand { outcome } => {
-            extract_screen!(state, Review, mut data, ctx => handlers::handle_complete_review_command(data, &mut ctx, outcome))
+            let placeholder = TypedScreen::Menu(MenuData::default());
+            match std::mem::replace(&mut state.screen, placeholder) {
+                TypedScreen::Review(data) => {
+                    let mut ctx = HandlerContext::new(
+                        &mut state.ui,
+                        &mut state.game,
+                        &mut state.progress,
+                        &state.config,
+                    );
+                    let outcome = handlers::handle_complete_review_command(data, &mut ctx, outcome);
+                    apply_outcome(state, outcome);
+                    Ok(())
+                }
+                other => {
+                    state.screen = other;
+                    Err(UserError::WrongScreen)
+                }
+            }
         }
         Message::AbandonReviewSession => {
             run_with_context(state, handlers::handle_abandon_review_session)

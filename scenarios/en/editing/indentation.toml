@@ -39,7 +39,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["indent"]
 commands_taught = [">"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "dedent_line_001"
@@ -81,4 +80,3 @@ category = "editing"
 difficulty = "beginner"
 tags = ["dedent", "indent"]
 commands_taught = ["<"]
-estimated_time_seconds = 10

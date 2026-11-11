@@ -8,14 +8,12 @@ use std::time::Duration;
 use crate::helix::{ModeKind, SelectionBounds};
 
 pub mod command_context;
-pub mod editor_state;
 pub mod scenario_state;
 pub mod scorer;
 pub mod services;
 pub mod session;
 
 pub use command_context::{CommandExecutor, format_key_for_display};
-pub use editor_state::EditorState;
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};
 pub use session::{
@@ -28,9 +26,9 @@ pub use session::{
 /// Both training mode (`GameSession<Active>`) and arcade mode (`ActiveMiniScenario`)
 /// implement this trait, enabling shared rendering and state inspection logic.
 ///
-/// This trait uses primitive types (strings, tuples) instead of `EditorState`
-/// to minimize coupling with legacy types. Implementations typically use
-/// the simulator's `EditorDisplay` facade internally.
+/// This trait uses primitive types (strings, tuples) to minimize coupling
+/// with the simulator. Implementations typically use the simulator's
+/// `EditorDisplay` facade internally.
 ///
 /// # Examples
 ///

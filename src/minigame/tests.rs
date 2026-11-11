@@ -37,17 +37,16 @@ fn create_simple_scenario(id: &str) -> Scenario {
             commands: vec!["x".to_string()],
             description: "Delete char".to_string(),
         },
-        alternatives: vec![],
         hints: vec![],
         scoring: ScoringConfig {
             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },
-        metadata: Some(ScenarioMetadata {
+        metadata: ScenarioMetadata {
             difficulty: Some(Difficulty::Beginner),
             ..Default::default()
-        }),
+        },
     }
 }
 
@@ -94,7 +93,7 @@ fn test_difficulty_adapts_to_performance() {
     session.tick_countdown();
     session.tick_countdown();
 
-    let initial_level = session.difficulty_level();
+    let initial_level = session.difficulty_level().get();
 
     // Simulate multiple successes
     for _ in 0..10 {
@@ -103,7 +102,7 @@ fn test_difficulty_adapts_to_performance() {
     }
 
     // Difficulty should increase
-    assert!(session.difficulty_level() > initial_level);
+    assert!(session.difficulty_level().get() > initial_level);
 }
 
 #[test]
@@ -272,7 +271,7 @@ fn test_stats_lose_life() {
 #[test]
 fn test_difficulty_controller_initial_level() {
     let controller = DifficultyController::new();
-    assert_eq!(controller.current_level(), 1);
+    assert_eq!(controller.current_level().get(), 1);
 }
 
 #[test]
@@ -286,7 +285,7 @@ fn test_difficulty_controller_adjust_up() {
     }
 
     // Level should have increased
-    assert!(controller.current_level() > 1);
+    assert!(controller.current_level().get() > 1);
 }
 
 #[test]
@@ -299,7 +298,7 @@ fn test_difficulty_controller_adjust_down() {
         controller.update_after_scenario(point);
     }
 
-    let high_level = controller.current_level();
+    let high_level = controller.current_level().get();
 
     // Now record failures
     for _ in 0..15 {
@@ -308,7 +307,7 @@ fn test_difficulty_controller_adjust_down() {
     }
 
     // Level should have decreased
-    assert!(controller.current_level() < high_level);
+    assert!(controller.current_level().get() < high_level);
 }
 
 #[test]

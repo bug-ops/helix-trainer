@@ -3,6 +3,7 @@
 
 use helix_trainer::gamification::{ProfileStorage, QuestType, UserProfile};
 use helix_trainer::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
+use helix_trainer::input::keymap::{KeymapFingerprint, StoredKeymapFingerprint};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -63,17 +64,17 @@ fn legacy_profile_json() -> Value {
     profile
 }
 
-fn load_legacy_profile() -> UserProfile {
+fn load_profile_json(profile: &Value) -> UserProfile {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("profile.json");
-    std::fs::write(
-        &path,
-        json!({ "profile": legacy_profile_json() }).to_string(),
-    )
-    .unwrap();
+    std::fs::write(&path, json!({ "profile": profile }).to_string()).unwrap();
     ProfileStorage::with_path(&path)
         .load()
-        .expect("legacy profile loads")
+        .expect("profile loads")
+}
+
+fn load_legacy_profile() -> UserProfile {
+    load_profile_json(&legacy_profile_json())
 }
 
 #[test]
@@ -115,6 +116,48 @@ fn legacy_cards_with_non_card_keys_are_dropped_not_fatal() {
             "{key}"
         );
     }
+}
+
+/// #560: a profile written before the fingerprint carried an algorithm tag holds a bare number
+#[test]
+fn legacy_numeric_keymap_fingerprint_loads_as_legacy() {
+    let mut profile = legacy_profile_json();
+    profile["keymap_fingerprint"] = json!(11_400_714_819_323_198_485_u64);
+
+    let loaded = load_profile_json(&profile);
+
+    assert_eq!(
+        loaded.keymap_fingerprint,
+        Some(StoredKeymapFingerprint::Legacy(11_400_714_819_323_198_485))
+    );
+}
+
+#[test]
+fn tagged_keymap_fingerprint_survives_a_save_and_load() {
+    let mut profile = legacy_profile_json();
+    profile["keymap_fingerprint"] = json!({ "Fnv1a64V1": 42 });
+
+    let loaded = load_profile_json(&profile);
+
+    assert_eq!(
+        loaded.keymap_fingerprint,
+        Some(StoredKeymapFingerprint::Current(
+            KeymapFingerprint::Fnv1a64V1(42)
+        ))
+    );
+    let rewritten = serde_json::to_value(&loaded).unwrap();
+    assert_eq!(rewritten["keymap_fingerprint"], json!({ "Fnv1a64V1": 42 }));
+}
+
+#[test]
+fn profile_without_a_keymap_fingerprint_loads_with_none() {
+    let mut profile = legacy_profile_json();
+    profile
+        .as_object_mut()
+        .unwrap()
+        .remove("keymap_fingerprint");
+
+    assert_eq!(load_profile_json(&profile).keymap_fingerprint, None);
 }
 
 /// Sets serialize in hash order, so arrays of strings are compared sorted.

@@ -190,22 +190,14 @@ impl Scorer {
     /// assert_eq!(Scorer::rating(75, 100), PerformanceRating::Good);
     /// assert_eq!(Scorer::rating(30, 100), PerformanceRating::Poor);
     /// ```
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "percentage is truncated toward zero to select the rating band"
-    )]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
-    )]
     pub fn rating(score: u32, max_points: u32) -> PerformanceRating {
         if max_points == 0 {
             return PerformanceRating::Poor;
         }
 
-        let percentage = (f64::from(score) / f64::from(max_points)) * 100.0;
+        let ratio = f64::from(score) / f64::from(max_points);
 
-        match percentage as u32 {
+        match crate::numeric::floor_percent(ratio) {
             100 => PerformanceRating::Perfect,
             80..=99 => PerformanceRating::Excellent,
             60..=79 => PerformanceRating::Good,

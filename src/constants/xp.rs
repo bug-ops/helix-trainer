@@ -37,3 +37,17 @@ pub const MINIGAME_STREAK_BONUS_MAX_XP: u64 = 15;
 pub const MINIGAME_SCENARIO_BASE_XP: u64 = 15;
 /// XP multiplier per streak level in arcade mode
 pub const MINIGAME_STREAK_XP_MULTIPLIER: u64 = 2;
+
+// Scenario XP multipliers
+/// XP multiplier for a scenario still being learned
+pub const MASTERY_FACTOR_LEARNING: f64 = 1.0;
+/// XP multiplier for a proficient scenario
+pub const MASTERY_FACTOR_PROFICIENT: f64 = 0.5;
+/// XP multiplier for a mastered scenario
+pub const MASTERY_FACTOR_MASTERED: f64 = 0.2;
+/// XP multiplier for the first attempt of a scenario today
+pub const REPEAT_PENALTY_NONE: f64 = 1.0;
+/// XP multiplier for the second and third attempt of a scenario today
+pub const REPEAT_PENALTY_LIGHT: f64 = 0.7;
+/// XP multiplier for the fourth and later attempts of a scenario today
+pub const REPEAT_PENALTY_HEAVY: f64 = 0.3;

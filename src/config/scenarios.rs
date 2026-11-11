@@ -4,9 +4,8 @@
 
 use crate::ids::{CommandId, NormalizedCommand, ScenarioId};
 use crate::security::limits::{
-    MAX_ALTERNATIVES, MAX_COMMAND_SEQUENCE_LENGTH, MAX_CURSORS_PER_SCENARIO,
-    MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE, MAX_SCENARIOS_PER_FILE,
-    MAX_SELECTIONS_PER_SCENARIO,
+    MAX_COMMAND_SEQUENCE_LENGTH, MAX_CURSORS_PER_SCENARIO, MAX_FILE_CONTENT_LENGTH, MAX_HINTS,
+    MAX_SCENARIO_FILE_SIZE, MAX_SCENARIOS_PER_FILE, MAX_SELECTIONS_PER_SCENARIO,
 };
 use crate::security::validators::validate_language_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
@@ -15,6 +14,44 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
+
+/// Why a scenario's cursor setup or target was rejected.
+///
+/// Wrapped in [`SecurityError::Scenario`];
+/// the text is for logs only.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::scenarios::ScenarioValidationError;
+///
+/// let err = ScenarioValidationError::TooManyCursors { max: 100, actual: 101 };
+/// assert_eq!(err.to_string(), "too many cursors (max 100, got 101)");
+/// ```
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
+pub enum ScenarioValidationError {
+    /// Neither `cursor_position`, `cursors` nor `selections` is set.
+    #[error("must specify cursor_position, cursors, or selections")]
+    NoCursorSpecified,
+
+    /// More cursors than allowed.
+    #[error("too many cursors (max {max}, got {actual})")]
+    TooManyCursors {
+        /// Maximum allowed count.
+        max: usize,
+        /// Observed count.
+        actual: usize,
+    },
+
+    /// More selections than allowed.
+    #[error("too many selections (max {max}, got {actual})")]
+    TooManySelections {
+        /// Maximum allowed count.
+        max: usize,
+        /// Observed count.
+        actual: usize,
+    },
+}
 
 /// Wrapper for scenarios array in TOML file
 #[derive(Deserialize, Debug, Clone)]
@@ -129,14 +166,6 @@ pub struct ScenarioMetadata {
     /// Prerequisite scenario IDs that should be completed first
     #[serde(default)]
     pub prerequisites: Vec<ScenarioId>,
-
-    /// Estimated time to complete scenario in seconds
-    #[serde(default)]
-    pub estimated_time_seconds: Option<u32>,
-
-    /// Locale/language code (e.g., "en", "ru")
-    #[serde(default)]
-    pub locale: Option<String>,
 }
 
 /// Scenario category for organization and filtering
@@ -207,10 +236,6 @@ pub struct Scenario {
     /// Canonical shortest solution.
     pub solution: Solution,
 
-    /// Other accepted solutions with their score multipliers.
-    #[serde(default)]
-    pub alternatives: Vec<AlternativeSolution>,
-
     /// Progressive hints revealed on request.
     #[serde(default)]
     pub hints: Vec<String>,
@@ -218,9 +243,9 @@ pub struct Scenario {
     /// Parameters of the scoring formula.
     pub scoring: ScoringConfig,
 
-    /// Metadata for filtering, sorting, and quest generation (optional for backward compatibility)
+    /// Metadata for filtering, sorting, and quest generation.
     #[serde(default)]
-    pub metadata: Option<ScenarioMetadata>,
+    pub metadata: ScenarioMetadata,
 }
 
 impl Scenario {
@@ -235,13 +260,11 @@ impl Scenario {
         target_reached: bool,
         last_action: Option<LastAction<'_>>,
     ) -> bool {
-        let (rule, taught) = self
-            .metadata
-            .as_ref()
-            .map_or((CompletionRule::default(), &[][..]), |m| {
-                (m.completion, m.commands_taught.as_slice())
-            });
-        rule.is_satisfied(target_reached, taught, last_action)
+        self.metadata.completion.is_satisfied(
+            target_reached,
+            &self.metadata.commands_taught,
+            last_action,
+        )
     }
 }
 
@@ -315,17 +338,6 @@ pub struct Solution {
     /// Key sequence of the optimal solution, one command per entry.
     pub commands: Vec<String>,
     /// Explanation of why this solution is optimal.
-    pub description: String,
-}
-
-/// Alternative solution
-#[derive(Deserialize, Debug, Clone)]
-pub struct AlternativeSolution {
-    /// Key sequence of the alternative, one command per entry.
-    pub commands: Vec<String>,
-    /// Score multiplier applied when this alternative is used.
-    pub points_multiplier: f32,
-    /// Explanation of how this alternative differs.
     pub description: String,
 }
 
@@ -741,17 +753,8 @@ impl ScenarioLoader {
             return Err(SecurityError::TooManyHints { max: MAX_HINTS });
         }
 
-        if scenario.alternatives.len() > MAX_ALTERNATIVES {
-            return Err(SecurityError::TooManyAlternatives {
-                max: MAX_ALTERNATIVES,
-            });
-        }
-
         // Validate command sequences
         Self::validate_command_sequence(&scenario.solution.commands)?;
-        for alt in &scenario.alternatives {
-            Self::validate_command_sequence(&alt.commands)?;
-        }
 
         Ok(())
     }
@@ -773,9 +776,7 @@ impl ScenarioLoader {
     fn validate_setup_or_target_config(spec: &CursorSpec) -> Result<(), SecurityError> {
         // Must have at least one cursor specification
         if spec.cursor_position.is_none() && spec.cursors.is_none() && spec.selections.is_none() {
-            return Err(SecurityError::InvalidInput(
-                "Must specify cursor_position, cursors, or selections".to_string(),
-            ));
+            return Err(ScenarioValidationError::NoCursorSpecified.into());
         }
 
         // Validate single cursor_position
@@ -792,11 +793,11 @@ impl ScenarioLoader {
         // Validate multi-cursor positions (with array length limit check)
         if let Some(positions) = &spec.cursors {
             if positions.len() > MAX_CURSORS_PER_SCENARIO {
-                return Err(SecurityError::InvalidInput(format!(
-                    "Too many cursors (max {}, got {})",
-                    MAX_CURSORS_PER_SCENARIO,
-                    positions.len()
-                )));
+                return Err(ScenarioValidationError::TooManyCursors {
+                    max: MAX_CURSORS_PER_SCENARIO,
+                    actual: positions.len(),
+                }
+                .into());
             }
             for pos in positions {
                 Self::validate_cursor_position((pos[0], pos[1]))?;
@@ -806,11 +807,11 @@ impl ScenarioLoader {
         // Validate multi-selection ranges (with array length limit check)
         if let Some(sels) = &spec.selections {
             if sels.len() > MAX_SELECTIONS_PER_SCENARIO {
-                return Err(SecurityError::InvalidInput(format!(
-                    "Too many selections (max {}, got {})",
-                    MAX_SELECTIONS_PER_SCENARIO,
-                    sels.len()
-                )));
+                return Err(ScenarioValidationError::TooManySelections {
+                    max: MAX_SELECTIONS_PER_SCENARIO,
+                    actual: sels.len(),
+                }
+                .into());
             }
             for sel in sels {
                 Self::validate_cursor_position((sel[0], sel[1]))?;
@@ -833,3 +834,61 @@ pub mod embedded;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod cursor_validation_tests {
+    use super::*;
+    use std::assert_matches;
+
+    fn spec() -> CursorSpec {
+        CursorSpec {
+            cursor_position: Some((0, 0)),
+            selection: None,
+            cursors: None,
+            selections: None,
+        }
+    }
+
+    fn rejects(spec: &CursorSpec) -> ScenarioValidationError {
+        match ScenarioLoader::validate_setup_or_target_config(spec) {
+            Err(SecurityError::Scenario(err)) => err,
+            other => panic!("expected a scenario validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_spec_without_any_cursor_is_rejected() {
+        let empty = CursorSpec {
+            cursor_position: None,
+            ..spec()
+        };
+        assert_eq!(rejects(&empty), ScenarioValidationError::NoCursorSpecified);
+    }
+
+    #[test]
+    fn too_many_cursors_and_selections_are_typed() {
+        let cursors = CursorSpec {
+            cursors: Some(vec![[0, 0]; MAX_CURSORS_PER_SCENARIO + 1]),
+            ..spec()
+        };
+        assert_matches!(
+            rejects(&cursors),
+            ScenarioValidationError::TooManyCursors { max, actual }
+                if max == MAX_CURSORS_PER_SCENARIO && actual == max + 1
+        );
+
+        let selections = CursorSpec {
+            selections: Some(vec![[0, 0, 0, 0]; MAX_SELECTIONS_PER_SCENARIO + 1]),
+            ..spec()
+        };
+        assert_matches!(
+            rejects(&selections),
+            ScenarioValidationError::TooManySelections { .. }
+        );
+    }
+
+    #[test]
+    fn a_valid_spec_passes() {
+        assert!(ScenarioLoader::validate_setup_or_target_config(&spec()).is_ok());
+    }
+}

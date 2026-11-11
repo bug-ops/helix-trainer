@@ -1,5 +1,6 @@
 //! Profile screen rendering
 
+use crate::gamification::LevelProgress;
 use crate::learning::Analytics;
 use crate::ui::state::AppState;
 use ratatui::{
@@ -59,12 +60,9 @@ fn render_profile_content(frame: &mut Frame, state: &AppState, area: ratatui::la
     let profile = &state.progress.profile;
     let level = profile.level;
     let total_xp = profile.total_xp;
-    let xp_progress = profile.xp_progress();
-    let xp_for_next = profile.xp_for_next_level();
+    let progress = profile.level_progress();
     let scenarios_completed = profile.scenarios_completed;
     let perfect_scenarios = profile.perfect_scenarios;
-
-    let xp_in_level = profile.xp_in_level();
 
     // Split content into two sections
     let content_chunks = Layout::default()
@@ -77,14 +75,7 @@ fn render_profile_content(frame: &mut Frame, state: &AppState, area: ratatui::la
         .split(inner_area);
 
     // Level and XP progress bar
-    render_level_section(
-        frame,
-        level,
-        xp_in_level,
-        xp_for_next,
-        xp_progress,
-        content_chunks[0],
-    );
+    render_level_section(frame, level, progress, content_chunks[0]);
 
     // Statistics and quests
     render_stats_section(
@@ -101,9 +92,7 @@ fn render_profile_content(frame: &mut Frame, state: &AppState, area: ratatui::la
 fn render_level_section(
     frame: &mut Frame,
     level: u32,
-    xp_in_level: u64,
-    xp_for_next: u64,
-    xp_progress: f64,
+    progress: LevelProgress,
     area: ratatui::layout::Rect,
 ) {
     let level_chunks = Layout::default()
@@ -125,7 +114,7 @@ fn render_level_section(
     frame.render_widget(level_text, level_chunks[0]);
 
     // XP progress bar
-    let xp_label = format!("{xp_in_level}/{xp_for_next} XP");
+    let xp_label = format!("{}/{} XP", progress.earned(), progress.span());
     let gauge = Gauge::default()
         .block(Block::default())
         .gauge_style(
@@ -135,7 +124,7 @@ fn render_level_section(
                 .add_modifier(Modifier::BOLD),
         )
         .label(xp_label)
-        .ratio(xp_progress.clamp(0.0, 1.0));
+        .ratio(progress.ratio());
     frame.render_widget(gauge, level_chunks[1]);
 }
 
@@ -184,8 +173,13 @@ fn render_stats_section(
 
     // Quest section
     let profile = &state.progress.profile;
-    let active_quests = profile.daily_quests.len();
-    let completed_today = profile.daily_quests.iter().filter(|q| q.completed).count();
+    let total_quests = profile.daily_quests.len();
+    let completed_today = profile
+        .daily_quests
+        .iter()
+        .filter(|q| q.is_completed())
+        .count();
+    let active_quests = total_quests.saturating_sub(completed_today);
 
     lines.push(Line::from(vec![Span::styled(
         "🎯 Daily Quests:",
@@ -198,7 +192,7 @@ fn render_stats_section(
     lines.push(Line::from(vec![
         Span::raw("  Active Quests: "),
         Span::styled(
-            format!("{active_quests}/3"),
+            format!("{active_quests}/{total_quests}"),
             Style::default().fg(Color::Cyan),
         ),
     ]));

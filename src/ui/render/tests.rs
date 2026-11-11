@@ -539,9 +539,6 @@ mod screen_render_tests {
         );
     }
 
-    // Note: Review screen test omitted as ReviewData requires ReviewSessionState
-    // which needs complex setup. The render function is tested via integration tests.
-
     #[test]
     fn test_render_task_screen_with_active_session() {
         let mut terminal = create_terminal();
@@ -730,7 +727,8 @@ fn create_test_scenario_with_id(id: &str) -> Scenario {
 
 mod review_tests {
     use super::*;
-    use crate::ui::state::{ReviewData, ReviewSessionState, TypedScreen};
+    use crate::learning::{ReviewOutcome, ReviewSession, ReviewStep};
+    use crate::ui::state::{ReviewData, TypedScreen};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use std::time::Instant;
@@ -740,13 +738,9 @@ mod review_tests {
         Terminal::new(backend).unwrap()
     }
 
-    fn create_review_session(commands: Vec<&str>) -> ReviewSessionState {
-        ReviewSessionState {
-            due_commands: commands.into_iter().map(cid).collect(),
-            current_index: 0,
-            session_started_at: Instant::now(),
-            completed_reviews: vec![],
-        }
+    fn create_review_session(commands: Vec<&str>) -> ReviewSession {
+        ReviewSession::start(commands.into_iter().map(cid).collect(), Instant::now())
+            .expect("fixture has at least one command")
     }
 
     #[test]
@@ -785,8 +779,16 @@ mod review_tests {
         let mut state = create_test_app_state(vec![create_test_scenario()]);
 
         let mut session = create_review_session(vec!["h", "j", "k", "l"]);
-        session.current_index = 2; // Midway through
-        session.current_index = 2;
+        for _ in 0..2 {
+            session = match session.answer(
+                ReviewOutcome::Recalled,
+                Instant::now(),
+                &mut state.progress.performance_tracker,
+            ) {
+                ReviewStep::Next(next) => next,
+                ReviewStep::Finished(_) => panic!("four commands outlast two answers"),
+            };
+        }
         state.screen = TypedScreen::Review(ReviewData { session });
 
         terminal
@@ -1098,10 +1100,6 @@ mod results_tests {
         ResultsData::from_abandoned(abandoned, feedback, Some(0))
     }
 
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-    )]
     fn create_xp_breakdown(
         base: u64,
         perfect_bonus: u64,
@@ -1109,13 +1107,10 @@ mod results_tests {
         mastery_factor: f64,
         repeat_penalty: f64,
     ) -> XPBreakdown {
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "mirrors the production XP formula with non-negative inputs"
-        )]
-        let total =
-            ((base + perfect_bonus + first_today) as f64 * mastery_factor * repeat_penalty) as u64;
+        let total = crate::learning::scenario_history::scale_xp(
+            base + perfect_bonus + first_today,
+            mastery_factor * repeat_penalty,
+        );
         XPBreakdown {
             base_xp: base,
             perfect_bonus,
@@ -2583,4 +2578,109 @@ mod popup_additional_tests {
             })
             .unwrap();
     }
+}
+
+mod shared_definitions {
+    use super::create_test_app_state;
+    use crate::gamification::{Quest, QuestDifficulty, QuestType};
+    use crate::testing::qid;
+    use crate::ui::state::{AppState, MenuData, ProfileData, ReturnDestination, TypedScreen};
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn screen_text(state: &AppState) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        terminal.draw(|f| super::super::render(f, state)).unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect()
+    }
+
+    fn state_with_progress(level: u32, total_xp: u64, screen: TypedScreen) -> AppState {
+        let mut state = create_test_app_state(vec![]);
+        state.progress.profile.level = level;
+        state.progress.profile.total_xp = total_xp;
+        state.screen = screen;
+        state
+    }
+
+    fn profile_screen() -> TypedScreen {
+        TypedScreen::Profile(ProfileData {
+            return_to: ReturnDestination::Menu,
+        })
+    }
+
+    #[test]
+    fn profile_label_uses_the_level_span_like_the_menu_header() {
+        for (level, total_xp, label) in [(1, 50, "50/100"), (22, 9822, "199/696")] {
+            let profile = screen_text(&state_with_progress(level, total_xp, profile_screen()));
+            let menu = screen_text(&state_with_progress(
+                level,
+                total_xp,
+                TypedScreen::Menu(MenuData::default()),
+            ));
+            assert!(profile.contains(&format!("{label} XP")), "{profile}");
+            assert!(menu.contains(&format!("XP: {label}")), "{menu}");
+        }
+    }
+
+    #[test]
+    fn profile_label_is_full_at_the_level_cap_on_every_screen() {
+        let profile = screen_text(&state_with_progress(100, 1_000_000, profile_screen()));
+        let menu = screen_text(&state_with_progress(
+            100,
+            1_000_000,
+            TypedScreen::Menu(MenuData::default()),
+        ));
+        assert!(profile.contains("1496/1496 XP"), "{profile}");
+        assert!(menu.contains("XP: 1496/1496 (100%)"), "{menu}");
+    }
+
+    #[test]
+    fn profile_active_quests_total_is_the_generated_count() {
+        let mut state = state_with_progress(22, 9822, profile_screen());
+        state.progress.profile.daily_quests = (0..4)
+            .map(|i| {
+                Quest::new(
+                    qid(&format!("quest_{i}")),
+                    QuestType::ScenarioCompletion {
+                        target: 5,
+                        current: 0,
+                    },
+                    "Quest".to_string(),
+                    QuestDifficulty::Easy,
+                )
+            })
+            .collect();
+        state.progress.profile.daily_quests[0].completed = true;
+        let text = screen_text(&state);
+        assert!(text.contains("Active Quests: 3/4"), "{text}");
+    }
+}
+
+#[test]
+fn localized_screens_use_only_existing_locale_keys() {
+    let sources = [
+        include_str!("statistics.rs"),
+        include_str!("category_filters.rs"),
+        include_str!("minigame.rs"),
+        include_str!("mode_selection.rs"),
+        include_str!("end_game.rs"),
+    ];
+    let mut checked = 0;
+    for source in sources {
+        for (at, _) in source.match_indices("t!(\"") {
+            if source[..at].ends_with(|c: char| c.is_alphanumeric()) {
+                continue;
+            }
+            let rest = &source[at + 4..];
+            let key = &rest[..rest.find('"').unwrap()];
+            assert_ne!(rust_i18n::t!(key), key, "missing locale key {key}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 80, "only {checked} keys found");
 }

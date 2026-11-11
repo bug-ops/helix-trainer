@@ -31,15 +31,11 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
             };
 
             // Get difficulty indicator
-            let difficulty_indicator = scenario
-                .metadata
-                .as_ref()
-                .and_then(|m| m.difficulty)
-                .map_or("  ", |d| match d {
-                    crate::config::Difficulty::Beginner => "🟢",
-                    crate::config::Difficulty::Intermediate => "🟡",
-                    crate::config::Difficulty::Advanced => "🔴",
-                });
+            let difficulty_indicator = scenario.metadata.difficulty.map_or("  ", |d| match d {
+                crate::config::Difficulty::Beginner => "🟢",
+                crate::config::Difficulty::Intermediate => "🟡",
+                crate::config::Difficulty::Advanced => "🔴",
+            });
 
             // Get completion status
             let completion_indicator = if profile.scenario_history.get(&scenario.id).is_some() {
@@ -377,12 +373,15 @@ pub(super) fn render_main_menu(frame: &mut Frame, state: &AppState) {
 fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
     let profile = &state.progress.profile;
 
-    let (xp_in_level, xp_needed) = super::helpers::level_xp_progress(profile);
-    let progress_pct = crate::numeric::floor_percent(profile.xp_progress());
+    let progress = profile.level_progress();
 
     let header_text = format!(
         "Level {} ⭐  🔥 {} days   XP: {}/{} ({}%)",
-        profile.level, profile.current_streak, xp_in_level, xp_needed, progress_pct
+        profile.level,
+        profile.current_streak,
+        progress.earned(),
+        progress.span(),
+        progress.percent()
     );
 
     let header = Paragraph::new(header_text)

@@ -299,6 +299,7 @@ THEN  line 2 is `let sumum = a + b;` and line 3 is `    sumum`
 | FR-123 | WHEN the user presses `K` (`keep_selections`) or `Alt-K` (`remove_selections`) in Normal mode with an active selection THE SYSTEM SHALL open a regex prompt (same typestate pattern, caps and error handling as `s`/`S`, FR-001..FR-004) and on confirm keep (`K`) or remove (`Alt-K`) the selection ranges whose text matches the pattern; when no range would remain `hx` behavior applies and is asserted by a differential test Bare `K`/`Alt-K` with no pattern SHALL return a `UserError`; the prompts emit the command strings `? <pat>`, `K <pat>` and `Alt-K <pat>` | #510 | must |
 | FR-124 | WHEN the user presses `&` (`align_selections`) THE SYSTEM SHALL execute it immediately as one command and one action, without a prompt, with `hx` 25.07.1 alignment semantics | #510 | must |
 | FR-125 | WHEN `K`/`Alt-K` completions are recorded for review THE SYSTEM SHALL normalize the typed-pattern forms to the skill ids `keep_selections` and `remove_selections` (as FR-009 does for `s`/`S`), and `? sum` to the command `?` (as `/ sum` to `/`, see [[../fsrs-proptest-coverage-gap/spec#11. Follow-Up Requirements: Review Queue Ordering, Eq/Ord Agreement, Reviewable Commands (#433, #434, #505)\|FSRS spec FR-015]]) | #510, #513 | must |
+| FR-126 | `n` SHALL always search FORWARD and `N` always BACKWARD from the cursor, whether the stored pattern came from `/` or `?` (hx `search_next`/`search_prev` do not depend on the direction of the original search; this amends the "continue" wording of FR-121); in Select mode `n`/`N` keep the push-a-new-range behavior of FR-036 of [[../helix-core-post-25-07-1-upgrade-readiness/spec]] | #576 | must |
 
 ### 11.2 Acceptance Criteria
 
@@ -321,6 +322,10 @@ THEN  the second occurrence is selected as one action; Escape instead discards t
 GIVEN three selection ranges, two of which contain `a`
 WHEN  K, a, Enter are pressed  THEN only the two ranges containing `a` remain
 WHEN  Alt-K, a, Enter are pressed  THEN only the range without `a` remains
+```
+```
+GIVEN a buffer with three occurrences of `sum` and a backward search `?sum` confirmed from the end
+WHEN  n is pressed  THEN the search goes forward (wrapping); N goes backward
 ```
 
 ### 11.3 Edge Cases

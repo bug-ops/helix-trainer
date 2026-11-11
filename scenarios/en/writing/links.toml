@@ -8,7 +8,7 @@ description = "Select a word, wrap it in brackets, then append a URL in parenthe
 
 hints = [
     "'miw' selects the word, 'ms[' wraps it in [ ]",
-    "';' collapses the selection to the cursor so 'a' appends right after the closing bracket",
+    "'a' appends right after the selection, which ends at the closing bracket",
 ]
 
 [scenarios.setup]
@@ -21,11 +21,11 @@ file_content = """See [documentation](url) for details."""
 cursor_position = [0, 24]
 
 [scenarios.solution]
-commands = ["miw", "ms[", ";", "a", "(", "u", "r", "l", ")", "Escape"]
-description = "Select the word, wrap it in brackets, collapse the selection, then append the URL"
+commands = ["miw", "ms[", "a", "(", "u", "r", "l", ")", "Escape"]
+description = "Select the word, wrap it in brackets, then append the URL"
 
 [scenarios.scoring]
-optimal_count = 10
+optimal_count = 9
 max_points = 100
 tolerance = 1
 
@@ -34,4 +34,3 @@ category = "writing"
 difficulty = "intermediate"
 tags = ["surround", "link", "markdown"]
 commands_taught = ["ms", "miw"]
-estimated_time_seconds = 20

@@ -35,7 +35,6 @@ category = "writing"
 difficulty = "beginner"
 tags = ["surround", "emphasis", "italic", "markdown"]
 commands_taught = ["ms", "miw"]
-estimated_time_seconds = 15
 
 [[scenarios]]
 id = "writing_emphasis_bold_001"
@@ -71,4 +70,3 @@ category = "writing"
 difficulty = "intermediate"
 tags = ["surround", "emphasis", "bold", "markdown"]
 commands_taught = ["ms", "miw"]
-estimated_time_seconds = 15

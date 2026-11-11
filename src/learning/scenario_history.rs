@@ -7,7 +7,12 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::constants::{
+    MASTERY_FACTOR_LEARNING, MASTERY_FACTOR_MASTERED, MASTERY_FACTOR_PROFICIENT,
+    REPEAT_PENALTY_HEAVY, REPEAT_PENALTY_LIGHT, REPEAT_PENALTY_NONE,
+};
 use crate::ids::ScenarioId;
+use crate::numeric::{Rounding, scale_u64};
 
 /// Maximum recursion depth for repeat command protection
 const MAX_REPEAT_DEPTH: u32 = 100;
@@ -15,6 +20,11 @@ const MAX_REPEAT_DEPTH: u32 = 100;
 /// Maximum number of scenarios to track in history (prevents unbounded growth)
 /// Current application has ~20 scenarios, this allows room for 500x growth
 const MAX_SCENARIOS_TRACKED: usize = 10_000;
+
+/// Scales base XP by a mastery and repeat multiplier, rounding to the nearest whole XP.
+pub(crate) fn scale_xp(base_xp: u64, multiplier: f64) -> u64 {
+    scale_u64(base_xp, multiplier, Rounding::Nearest)
+}
 
 /// Mastery level for a scenario based on performance history
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,9 +60,9 @@ impl ScenarioMastery {
 impl super::traits::Modifier for ScenarioMastery {
     fn factor(&self) -> f64 {
         match self {
-            ScenarioMastery::Learning => 1.0,
-            ScenarioMastery::Proficient => 0.5,
-            ScenarioMastery::Mastered => 0.2,
+            ScenarioMastery::Learning => MASTERY_FACTOR_LEARNING,
+            ScenarioMastery::Proficient => MASTERY_FACTOR_PROFICIENT,
+            ScenarioMastery::Mastered => MASTERY_FACTOR_MASTERED,
         }
     }
 }
@@ -233,10 +243,9 @@ impl ScenarioCompletion {
     /// Returns factor based on attempts today: 1st = 1.0, 2nd-3rd = 0.7, 4th+ = 0.3
     pub fn repeat_penalty(&self) -> f64 {
         match self.attempts_today {
-            0 => 1.0, // First today (before current attempt)
-            1 => 0.7, // Second attempt today
-            2 => 0.7, // Third attempt today
-            _ => 0.3, // Heavy reduction (4th+ repeat)
+            0 => REPEAT_PENALTY_NONE,
+            1 | 2 => REPEAT_PENALTY_LIGHT,
+            _ => REPEAT_PENALTY_HEAVY,
         }
     }
 
@@ -329,10 +338,6 @@ impl ScenarioHistory {
     /// assert_eq!(xp, 50); // First attempt, full XP
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-    )]
     pub fn record_completion(
         &mut self,
         scenario_id: &ScenarioId,
@@ -355,13 +360,7 @@ impl ScenarioHistory {
             .get(scenario_id)
             .map_or(1.0, ScenarioCompletion::xp_multiplier); // First attempt = full XP
 
-        // Round to nearest integer to avoid floating point truncation issues
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "XP formula: the result is non-negative and far below u64::MAX"
-        )]
-        let actual_xp = (base_xp as f64 * multiplier).round() as u64;
+        let actual_xp = scale_xp(base_xp, multiplier);
 
         // Record completion (creates new or updates existing)
         self.completions

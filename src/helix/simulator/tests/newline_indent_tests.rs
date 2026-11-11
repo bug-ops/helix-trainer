@@ -16,7 +16,7 @@ pub(super) fn run_in(language: &str, text: &str, keys: &[&str]) -> String {
         sim.execute_command(key).unwrap();
     }
     sim.execute_command(CMD_ESCAPE).unwrap();
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 const MAIN: &str = "fn main() {\n    let x = 1;\n}\n";

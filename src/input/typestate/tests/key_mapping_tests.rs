@@ -346,6 +346,51 @@ fn test_map_single_key_selection_manipulation() {
     );
 }
 
+/// #575: bare `,` keeps only the primary selection
+#[test]
+fn test_map_single_key_comma_is_keep_primary_selection() {
+    assert_eq!(
+        map_single_key_command(',', KeyModifiers::NONE),
+        Some(CMD_KEEP_PRIMARY_SELECTION)
+    );
+    assert_eq!(
+        map_single_key_command(',', KeyModifiers::ALT),
+        Some(CMD_REMOVE_PRIMARY_SELECTION)
+    );
+}
+
+#[test]
+fn test_comma_after_select_regex_keeps_only_the_primary_range() {
+    use crate::helix::AnyModeSimulator;
+    use crate::input::typestate::{HandlerResult, InputStateMachine};
+
+    let mut sim = AnyModeSimulator::new("fn add(a: i32, b: i32) -> i32 {\n".to_string());
+    let mut sm = InputStateMachine::new();
+    sim.execute_command("%").unwrap();
+    sim.execute_command("s a").unwrap();
+    for c in [',', 'd'] {
+        let HandlerResult::Execute(cmd) =
+            sm.process_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE))
+        else {
+            panic!("`{c}` must execute");
+        };
+        sim.execute_command(&cmd).unwrap();
+    }
+    assert_eq!(
+        sim.to_snapshot().content,
+        "fn dd(a: i32, b: i32) -> i32 {\n"
+    );
+}
+
+/// #570: `Ctrl-c` reaches the machine as `toggle_comments`
+#[test]
+fn test_map_single_key_ctrl_c_is_toggle_comments() {
+    assert_eq!(
+        map_single_key_command('c', KeyModifiers::CONTROL),
+        Some(CMD_TOGGLE_COMMENTS)
+    );
+}
+
 #[test]
 fn test_map_single_key_unknown() {
     assert_eq!(map_single_key_command('q', KeyModifiers::NONE), None);
@@ -403,12 +448,26 @@ fn test_count_compatible_search_nav() {
 }
 
 #[test]
+fn test_count_compatible_open_line() {
+    assert!(is_count_compatible_command('o', KeyModifiers::NONE));
+    assert!(is_count_compatible_command('O', KeyModifiers::SHIFT));
+}
+
+#[test]
 fn test_count_not_compatible() {
-    assert!(!is_count_compatible_command('y', KeyModifiers::NONE));
     assert!(!is_count_compatible_command('p', KeyModifiers::NONE));
-    assert!(!is_count_compatible_command('i', KeyModifiers::NONE));
-    assert!(!is_count_compatible_command('a', KeyModifiers::NONE));
-    assert!(!is_count_compatible_command('o', KeyModifiers::NONE));
+    assert!(!is_count_compatible_command('r', KeyModifiers::NONE));
+}
+
+/// #577
+#[test]
+fn test_count_compatible_yank_select_and_insert_entries() {
+    for c in ['y', 'v', 'i', 'a'] {
+        assert!(is_count_compatible_command(c, KeyModifiers::NONE), "{c}");
+    }
+    for c in ['I', 'A', 'C'] {
+        assert!(is_count_compatible_command(c, KeyModifiers::SHIFT), "{c}");
+    }
 }
 
 // ============================================================================
@@ -581,59 +640,54 @@ fn test_insert_mode_altgr_chars_are_typed() {
 
 #[test]
 fn test_command_to_key_single_lowercase() {
-    let key = command_to_key_event("h");
+    let key = command_to_key_event("h").unwrap();
     assert_eq!(key.code, KeyCode::Char('h'));
     assert_eq!(key.modifiers, KeyModifiers::NONE);
 }
 
 #[test]
 fn test_command_to_key_single_uppercase() {
-    let key = command_to_key_event("W");
+    let key = command_to_key_event("W").unwrap();
     assert_eq!(key.code, KeyCode::Char('W'));
     assert_eq!(key.modifiers, KeyModifiers::SHIFT);
 }
 
 #[test]
 fn test_command_to_key_escape() {
-    let key = command_to_key_event("Escape");
+    let key = command_to_key_event("Escape").unwrap();
     assert_eq!(key.code, KeyCode::Esc);
     assert_eq!(key.modifiers, KeyModifiers::NONE);
 }
 
 #[test]
 fn test_command_to_key_arrows() {
-    let key = command_to_key_event("Left");
+    let key = command_to_key_event("Left").unwrap();
     assert_eq!(key.code, KeyCode::Left);
 
-    let key = command_to_key_event("Right");
+    let key = command_to_key_event("Right").unwrap();
     assert_eq!(key.code, KeyCode::Right);
 
-    let key = command_to_key_event("Up");
+    let key = command_to_key_event("Up").unwrap();
     assert_eq!(key.code, KeyCode::Up);
 
-    let key = command_to_key_event("Down");
+    let key = command_to_key_event("Down").unwrap();
     assert_eq!(key.code, KeyCode::Down);
 }
 
 #[test]
 fn test_command_to_key_backspace() {
-    let key = command_to_key_event("Backspace");
+    let key = command_to_key_event("Backspace").unwrap();
     assert_eq!(key.code, KeyCode::Backspace);
 }
 
 #[test]
 fn test_command_to_key_unknown_multichar() {
-    // Unknown multi-character strings that aren't recognized special keys
-    // fall back to space (via parse_helix_key_string returning None)
-    let key = command_to_key_event("unknown");
-    assert_eq!(key.code, KeyCode::Char(' '));
+    assert_eq!(command_to_key_event("unknown"), None);
 }
 
 #[test]
 fn test_command_to_key_empty() {
-    // Empty string falls back to space character
-    let key = command_to_key_event("");
-    assert_eq!(key.code, KeyCode::Char(' '));
+    assert_eq!(command_to_key_event(""), None);
 }
 
 // ============================================================================

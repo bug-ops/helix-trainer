@@ -51,7 +51,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["character", "basic"]
 commands_taught = ["h"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "move_right_basic_001"
@@ -103,7 +102,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["character", "basic"]
 commands_taught = ["l"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "move_down_basic_001"
@@ -155,7 +153,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "basic"]
 commands_taught = ["j"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "move_up_basic_001"
@@ -207,7 +204,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "basic"]
 commands_taught = ["k"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "move_left_multiple_001"
@@ -259,7 +255,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["character", "multiple", "count"]
 commands_taught = ["3h"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "move_right_multiple_001"
@@ -311,7 +306,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["character", "multiple"]
 commands_taught = ["l"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "move_down_multiple_001"
@@ -363,7 +357,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "multiple"]
 commands_taught = ["j"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "move_up_multiple_001"
@@ -415,7 +408,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "multiple"]
 commands_taught = ["k"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "diagonal_basic_001"
@@ -457,4 +449,3 @@ category = "movement"
 difficulty = "beginner"
 tags = ["combined", "basic"]
 commands_taught = ["j", "l"]
-estimated_time_seconds = 10

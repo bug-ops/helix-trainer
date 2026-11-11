@@ -49,23 +49,20 @@ fn create_scenario(
             commands: vec!["x".to_string()],
             description: "Delete first line".to_string(),
         },
-        alternatives: vec![],
         hints: vec!["Use x to delete a line".to_string()],
         scoring: ScoringConfig {
             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },
-        metadata: Some(ScenarioMetadata {
+        metadata: ScenarioMetadata {
             category,
             difficulty,
             commands_taught: vec![NormalizedCommand::from_raw("x").expect("valid command")],
             prerequisites: vec![],
             tags: vec![],
-            estimated_time_seconds: Some(30),
-            locale: Some("en".to_string()),
             ..Default::default()
-        }),
+        },
     }
 }
 
@@ -586,7 +583,7 @@ fn bench_menu_render_simulation(c: &mut Criterion) {
                         black_box(completed);
 
                         // Get difficulty indicator (like menu does)
-                        let difficulty = scenario.metadata.as_ref().and_then(|m| m.difficulty);
+                        let difficulty = scenario.metadata.difficulty;
                         black_box(difficulty);
                         count += 1;
                     }

@@ -312,22 +312,39 @@ impl QuestDistribution {
     ) -> QuestGeneration {
         let mut quests = Vec::new();
         let mut unfilled_slots: usize = 0;
+        let mut picked = HashSet::new();
         let mut fill = |quest: Option<Quest>| match quest {
             Some(quest) => quests.push(quest),
             None => unfilled_slots = unfilled_slots.saturating_add(1),
         };
 
         for _ in 0..self.easy {
-            fill(QuestGenerator::generate_easy_quest(rng, registry));
+            fill(QuestGenerator::generate_easy_quest(
+                rng,
+                registry,
+                &mut picked,
+            ));
         }
         for _ in 0..self.medium {
-            fill(QuestGenerator::generate_medium_quest(rng, registry));
+            fill(QuestGenerator::generate_medium_quest(
+                rng,
+                registry,
+                &mut picked,
+            ));
         }
         for _ in 0..self.hard {
-            fill(QuestGenerator::generate_hard_quest(rng, registry));
+            fill(QuestGenerator::generate_hard_quest(
+                rng,
+                registry,
+                &mut picked,
+            ));
         }
         for _ in 0..self.exploration {
-            fill(QuestGenerator::generate_exploration_quest(rng, registry));
+            fill(QuestGenerator::generate_exploration_quest(
+                rng,
+                registry,
+                &mut picked,
+            ));
         }
 
         QuestGeneration {
@@ -579,34 +596,57 @@ impl QuestGenerator {
         StdRng::seed_from_u64(seed)
     }
 
-    fn pick_quest(rng: &mut StdRng, templates: &[&QuestTemplate], kind: &str) -> Option<Quest> {
-        if templates.is_empty() {
-            tracing::warn!(kind, "No quest templates available");
+    fn pick_quest(
+        rng: &mut StdRng,
+        templates: &[&QuestTemplate],
+        kind: &str,
+        picked: &mut HashSet<QuestId>,
+    ) -> Option<Quest> {
+        let candidates: Vec<&&QuestTemplate> = templates
+            .iter()
+            .filter(|template| !picked.contains(&template.id))
+            .collect();
+        if candidates.is_empty() {
+            tracing::warn!(kind, "No unpicked quest templates available");
             return None;
         }
-        let template = templates.get(rng.random_range(0..templates.len()))?;
+        let template = candidates.get(rng.random_range(0..candidates.len()))?;
         tracing::debug!(id = %template.id, kind, "Selected quest template");
+        picked.insert(template.id.clone());
         Some(template.to_quest())
     }
 
-    fn generate_easy_quest(rng: &mut StdRng, registry: &QuestTemplateRegistry) -> Option<Quest> {
+    fn generate_easy_quest(
+        rng: &mut StdRng,
+        registry: &QuestTemplateRegistry,
+        picked: &mut HashSet<QuestId>,
+    ) -> Option<Quest> {
         let templates = registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Easy);
-        Self::pick_quest(rng, &templates, "easy")
+        Self::pick_quest(rng, &templates, "easy", picked)
     }
 
-    fn generate_medium_quest(rng: &mut StdRng, registry: &QuestTemplateRegistry) -> Option<Quest> {
+    fn generate_medium_quest(
+        rng: &mut StdRng,
+        registry: &QuestTemplateRegistry,
+        picked: &mut HashSet<QuestId>,
+    ) -> Option<Quest> {
         let templates = registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Medium);
-        Self::pick_quest(rng, &templates, "medium")
+        Self::pick_quest(rng, &templates, "medium", picked)
     }
 
-    fn generate_hard_quest(rng: &mut StdRng, registry: &QuestTemplateRegistry) -> Option<Quest> {
+    fn generate_hard_quest(
+        rng: &mut StdRng,
+        registry: &QuestTemplateRegistry,
+        picked: &mut HashSet<QuestId>,
+    ) -> Option<Quest> {
         let templates = registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Hard);
-        Self::pick_quest(rng, &templates, "hard")
+        Self::pick_quest(rng, &templates, "hard", picked)
     }
 
     fn generate_exploration_quest(
         rng: &mut StdRng,
         registry: &QuestTemplateRegistry,
+        picked: &mut HashSet<QuestId>,
     ) -> Option<Quest> {
         // Exploration quests can be either Medium or Hard difficulty
         let mut templates =
@@ -615,7 +655,7 @@ impl QuestGenerator {
             .extend(registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Medium));
         templates
             .retain(|t| matches!(t.spec, crate::config::quests::QuestSpec::Exploration { .. }));
-        Self::pick_quest(rng, &templates, "exploration")
+        Self::pick_quest(rng, &templates, "exploration", picked)
     }
 }
 
@@ -792,6 +832,36 @@ mod tests {
         profile.level = 20;
         let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
         assert_eq!(quests.len(), 4);
+    }
+
+    #[test]
+    fn generated_quests_are_distinct_templates() {
+        let registry = test_registry();
+        let day = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).unwrap();
+        let days = [day(2026, 11, 11), day(2026, 1, 1), day(2025, 6, 30)];
+        for level in [6, 10, 15, 16, 22, 40] {
+            for today in days {
+                let mut profile = UserProfile::new();
+                profile.level = level;
+                let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
+                let ids: HashSet<_> = quests.iter().map(|q| q.id.clone()).collect();
+                assert_eq!(ids.len(), quests.len(), "level {level} on {today}");
+            }
+        }
+    }
+
+    #[test]
+    fn slot_without_unpicked_templates_stays_unfilled() {
+        let registry = test_registry();
+        let mut picked = HashSet::new();
+        let templates = registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Easy);
+        let mut rng = QuestGenerator::create_rng(NaiveDate::from_ymd_opt(2026, 11, 11).unwrap());
+        for _ in &templates {
+            assert!(
+                QuestGenerator::pick_quest(&mut rng, &templates, "easy", &mut picked).is_some()
+            );
+        }
+        assert!(QuestGenerator::pick_quest(&mut rng, &templates, "easy", &mut picked).is_none());
     }
 
     #[test]

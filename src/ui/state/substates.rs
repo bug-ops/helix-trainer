@@ -13,7 +13,7 @@ use crate::ids::NormalizedCommand;
 use crate::input::keymap::KeymapOverlay;
 use crate::learning::{PerformanceTracker, Scheduler};
 use crate::sound::{SoundConfig, SoundManager};
-use crate::time::Clock;
+use crate::time::{Clock, MonotonicClock, SystemMonotonicClock};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
@@ -50,13 +50,18 @@ pub struct UIState {
 }
 
 impl UIState {
-    /// Create new `UIState` with default values
+    /// Create new `UIState` with default values, timing notifications on the system clock
     pub fn new() -> Self {
+        Self::with_clock(Arc::new(SystemMonotonicClock))
+    }
+
+    /// Create new `UIState` whose notifications expire on `clock`
+    pub fn with_clock(clock: Arc<dyn MonotonicClock>) -> Self {
         Self {
             running: true,
             show_key_history: true,
             viewport: crate::ui::layout::Viewport::MINIMUM,
-            notifications: NotificationQueue::new(),
+            notifications: NotificationQueue::with_clock(clock),
             effects: Vec::new(),
             last_menu_selected: 0,
             last_menu_scroll: 0,
@@ -192,11 +197,14 @@ pub struct ProgressState {
     /// Source of the current time, injected for testability
     ///
     /// Private: construction is routed exclusively through [`ProgressState::new`] /
-    /// [`ProgressState::with_clock`] so that every clock-consuming field
+    /// [`ProgressState::with_clocks`] so that every clock-consuming field
     /// (`performance_tracker`, `scheduler`) is guaranteed to share this same instance.
     /// Reassigning the field directly after construction would not re-point those fields
     /// and would silently reintroduce clock drift between them.
     clock: Arc<dyn Clock>,
+
+    /// Source of monotonic time for the session timer and the save debounce
+    monotonic: Arc<dyn MonotonicClock>,
 
     /// Channel to the serialized save writer (see
     /// [`crate::data_loader::spawn_save_writer`]), used to dispatch profile
@@ -215,29 +223,32 @@ pub struct ProgressState {
 }
 
 impl ProgressState {
-    /// Create new `ProgressState` backed by the system clock
+    /// Create new `ProgressState` backed by the system clocks
     pub fn new(
         profile: UserProfile,
         performance_tracker: PerformanceTracker,
         storage: ProfileStorage,
     ) -> Self {
-        Self::with_clock(
+        Self::with_clocks(
             profile,
             performance_tracker,
             storage,
             Arc::new(crate::time::SystemClock),
+            Arc::new(SystemMonotonicClock),
         )
     }
 
-    /// Create new `ProgressState` with an explicit clock
+    /// Create new `ProgressState` with explicit wall and monotonic clocks
     ///
-    /// The clock is propagated to every clock-consuming field (`performance_tracker`,
-    /// `scheduler`) so they observe the same time, not just `self.clock`.
-    pub fn with_clock(
+    /// `clock` is propagated to every clock-consuming field (`performance_tracker`,
+    /// `scheduler`) so they observe the same time, not just `self.clock`; `monotonic`
+    /// times the session and the save debounce.
+    pub fn with_clocks(
         profile: UserProfile,
         mut performance_tracker: PerformanceTracker,
         storage: ProfileStorage,
         clock: Arc<dyn Clock>,
+        monotonic: Arc<dyn MonotonicClock>,
     ) -> Self {
         // Initialize sound manager from profile config
         let mut sound_manager = SoundManager::new(profile.sound_config.clone());
@@ -254,10 +265,11 @@ impl ProgressState {
             quest_registry: QuestRegistrySlot::default(),
             scenarios_completed_today: 0,
             commands_used_today: HashSet::new(),
-            session_start_time: Instant::now(),
+            session_start_time: monotonic.now(),
             last_save_time: None,
             sound_manager,
             clock,
+            monotonic,
             save_tx: None,
             persistence: ProfilePersistence::Loading,
         }
@@ -321,6 +333,11 @@ impl ProgressState {
         self.clock.now()
     }
 
+    /// Get the current monotonic instant from the injected clock
+    pub fn monotonic_now(&self) -> Instant {
+        self.monotonic.now()
+    }
+
     /// Get the current date from the injected clock
     pub fn today(&self) -> chrono::NaiveDate {
         self.clock.today()
@@ -360,13 +377,14 @@ impl ProgressState {
 
     /// Check if enough time has passed since last save
     pub fn should_save(&self) -> bool {
-        self.last_save_time
-            .is_none_or(|last| last.elapsed() >= PROFILE_SAVE_DEBOUNCE)
+        self.last_save_time.is_none_or(|last| {
+            self.monotonic.now().saturating_duration_since(last) >= PROFILE_SAVE_DEBOUNCE
+        })
     }
 
     /// Mark save as completed
     pub fn mark_saved(&mut self) {
-        self.last_save_time = Some(Instant::now());
+        self.last_save_time = Some(self.monotonic.now());
     }
 
     /// Mark the profile as needing a save again.
@@ -728,25 +746,26 @@ mod tests {
         assert!(progress.last_save_time.is_some());
     }
 
-    /// Regression test: `ProgressState::with_clock` must propagate the injected clock to
+    /// Regression test: `ProgressState::with_clocks` must propagate the injected clock to
     /// every clock-consuming field, not just `self.clock`. Previously `performance_tracker`
     /// kept whatever clock it was constructed with (typically `SystemClock`), so a command
     /// recorded through it stamped `due`/`last_review` from the wall clock while
     /// `scheduler.get_due_reviews` compared against the injected fake clock — due dates
     /// would land far off from what the fake clock reported "now" as.
     #[test]
-    fn test_with_clock_propagates_to_performance_tracker_and_scheduler() {
+    fn test_with_clocks_propagates_to_performance_tracker_and_scheduler() {
         use crate::gamification::{ProfileStorage, UserProfile};
         use crate::learning::PerformanceTracker;
         use crate::time::{Clock, FakeClock};
         use std::sync::Arc;
 
         let clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
-        let mut progress = ProgressState::with_clock(
+        let mut progress = ProgressState::with_clocks(
             UserProfile::new(),
             PerformanceTracker::new(), // built with the default SystemClock
             ProfileStorage::for_test(),
             clock.clone(),
+            Arc::new(crate::time::SystemMonotonicClock),
         )
         .loaded();
 
@@ -883,23 +902,26 @@ mod tests {
     fn test_save_debounced_writes_once_debounce_elapses() {
         use crate::gamification::{ProfileStorage, UserProfile};
         use crate::learning::PerformanceTracker;
-        use std::time::{Duration, Instant};
+        use crate::time::{FakeClock, FakeMonotonicClock};
+        use std::time::Duration;
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
         let profile_path = temp_dir.path().join("profile.json");
+        let monotonic = Arc::new(FakeMonotonicClock::new());
 
-        let mut progress = ProgressState::new(
+        let mut progress = ProgressState::with_clocks(
             UserProfile::new(),
             PerformanceTracker::new(),
             ProfileStorage::with_path(&profile_path),
+            Arc::new(FakeClock::at("2026-01-15T12:00:00Z")),
+            monotonic.clone(),
         )
         .loaded();
 
-        // Simulate a save that happened long enough ago for the debounce to elapse,
-        // without needing to sleep in the test.
-        progress.last_save_time =
-            Instant::now().checked_sub(PROFILE_SAVE_DEBOUNCE + Duration::from_secs(1));
+        progress.mark_saved();
+        assert!(!progress.should_save());
+        monotonic.advance(PROFILE_SAVE_DEBOUNCE + Duration::from_secs(1));
 
         progress.performance_tracker.record_attempt(
             &cid("j"),

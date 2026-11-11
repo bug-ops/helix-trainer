@@ -51,4 +51,3 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "navigation", "python"]
 commands_taught = ["w"]
-estimated_time_seconds = 20

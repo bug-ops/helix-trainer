@@ -8,10 +8,10 @@ use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
 use crate::security::UserError;
 use crate::testing::default_test_scenario;
-use crate::time::Clock;
+use crate::time::{Clock, MonotonicClock, SystemClock, SystemMonotonicClock};
 use crate::ui::state::{
     AppState, ConfigState, MenuData, Message, MiniGameData, ProgressState, ReturnDestination,
-    ReviewSessionState, TypedScreen, UIState, update,
+    TypedScreen, UIState, update,
 };
 use std::sync::Arc;
 
@@ -41,6 +41,7 @@ pub struct TestAppStateBuilder {
     storage: Option<ProfileStorage>,
     tracker: Option<PerformanceTracker>,
     clock: Option<Arc<dyn Clock>>,
+    monotonic: Option<Arc<dyn MonotonicClock>>,
 }
 
 impl Default for TestAppStateBuilder {
@@ -58,6 +59,7 @@ impl TestAppStateBuilder {
             storage: None,
             tracker: None,
             clock: None,
+            monotonic: None,
         }
     }
 
@@ -103,22 +105,29 @@ impl TestAppStateBuilder {
         self
     }
 
+    /// Set a custom monotonic clock (e.g. [`crate::time::FakeMonotonicClock`]) for
+    /// deterministic timer tests
+    #[must_use]
+    pub fn with_monotonic_clock(mut self, monotonic: Arc<dyn MonotonicClock>) -> Self {
+        self.monotonic = Some(monotonic);
+        self
+    }
+
     /// Build the `AppState`
     pub fn build(self) -> AppState {
         let profile = self.profile.unwrap_or_default();
         let storage = self.storage.unwrap_or_else(ProfileStorage::for_test);
         let tracker = self.tracker.unwrap_or_default();
-        let mut state = match self.clock {
-            Some(clock) => AppState::with_clock(
-                self.scenarios,
-                profile,
-                storage,
-                tracker,
-                ConfigState::default(),
-                clock,
-            ),
-            None => AppState::new(self.scenarios, profile, storage, tracker),
-        };
+        let mut state = AppState::with_clocks(
+            self.scenarios,
+            profile,
+            storage,
+            tracker,
+            ConfigState::default(),
+            self.clock.unwrap_or_else(|| Arc::new(SystemClock)),
+            self.monotonic
+                .unwrap_or_else(|| Arc::new(SystemMonotonicClock)),
+        );
         state.progress.mark_profile_loaded();
         state
     }
@@ -164,7 +173,7 @@ pub fn update_executing_effects(state: &mut AppState, msg: Message) -> Result<()
 }
 
 /// The review session currently on screen, if the state is on the review screen.
-pub fn review_session(state: &AppState) -> Option<&ReviewSessionState> {
+pub fn review_session(state: &AppState) -> Option<&crate::learning::ReviewSession> {
     match &state.screen {
         TypedScreen::Review(data) => Some(&data.session),
         _ => None,

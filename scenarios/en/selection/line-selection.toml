@@ -40,7 +40,6 @@ category = "selection"
 difficulty = "beginner"
 tags = ["selection", "line"]
 commands_taught = ["x"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "select_line_002"
@@ -81,7 +80,6 @@ category = "selection"
 difficulty = "beginner"
 tags = ["selection", "line"]
 commands_taught = ["x"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "extend_line_001"
@@ -123,4 +121,3 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "extend", "line"]
 commands_taught = ["X"]
-estimated_time_seconds = 5

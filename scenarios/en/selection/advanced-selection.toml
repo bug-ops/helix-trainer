@@ -40,7 +40,6 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "trim", "whitespace"]
 commands_taught = ["_"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "trim_selections_002"
@@ -76,7 +75,6 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "trim", "whitespace"]
 commands_taught = ["_"]
-estimated_time_seconds = 10
 
 # ============================================================================
 # COPY SELECTION TO NEXT/PREV LINE (C, Alt-C commands)
@@ -112,7 +110,6 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "multi-cursor", "line"]
 commands_taught = ["C"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "copy_selection_prev_001"
@@ -144,7 +141,6 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "multi-cursor", "line"]
 commands_taught = ["Alt-C"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "copy_selection_next_clamp_001"
@@ -176,7 +172,6 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "multi-cursor", "clamping"]
 commands_taught = ["C"]
-estimated_time_seconds = 10
 
 # ============================================================================
 # SPLIT SELECTION ON NEWLINES (Alt-s command)
@@ -214,7 +209,6 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "split", "multi-cursor"]
 commands_taught = ["Alt-s"]
-estimated_time_seconds = 15
 
 # ============================================================================
 # SHRINK TO LINE BOUNDS (Alt-x command)
@@ -252,4 +246,3 @@ estimated_time_seconds = 15
 # difficulty = "intermediate"
 # tags = ["selection", "line", "shrink"]
 # commands_taught = ["Alt-x"]
-# estimated_time_seconds = 10

@@ -9,25 +9,27 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Paragraph},
 };
+use rust_i18n::t;
 
 /// Get a human-readable display name for a category
 ///
 /// `pub(super)` so `end_game.rs` can reuse it for the category-mastery
 /// breakdown instead of duplicating the match.
-pub(super) fn category_display_name(category: ScenarioCategory) -> &'static str {
+pub(super) fn category_display_name(category: ScenarioCategory) -> String {
     match category {
-        ScenarioCategory::Movement => "Movement",
-        ScenarioCategory::Editing => "Editing",
-        ScenarioCategory::Clipboard => "Clipboard",
-        ScenarioCategory::Search => "Search",
-        ScenarioCategory::Selection => "Selection",
-        ScenarioCategory::TextObjects => "Text Objects",
-        ScenarioCategory::Advanced => "Advanced",
-        ScenarioCategory::Registers => "Registers",
-        ScenarioCategory::Multi => "Multi",
-        ScenarioCategory::Other => "Other",
-        ScenarioCategory::Writing => "Writing",
+        ScenarioCategory::Movement => t!("category.movement"),
+        ScenarioCategory::Editing => t!("category.editing"),
+        ScenarioCategory::Clipboard => t!("category.clipboard"),
+        ScenarioCategory::Search => t!("category.search"),
+        ScenarioCategory::Selection => t!("category.selection"),
+        ScenarioCategory::TextObjects => t!("category.text_objects"),
+        ScenarioCategory::Advanced => t!("category.advanced"),
+        ScenarioCategory::Registers => t!("category.registers"),
+        ScenarioCategory::Multi => t!("category.multi"),
+        ScenarioCategory::Other => t!("category.other"),
+        ScenarioCategory::Writing => t!("category.writing"),
     }
+    .to_string()
 }
 
 /// Get an icon for a category
@@ -77,7 +79,8 @@ pub(super) fn render_category_filters(frame: &mut Frame, state: &AppState) {
     frame.render_widget(clear_block, popup_area);
 
     // Render popup block with title
-    let block = super::helpers::popup_block(Some(" CATEGORY FILTERS "), Color::Cyan);
+    let title = t!("category.filters_title");
+    let block = super::helpers::popup_block(Some(&title), Color::Cyan);
     frame.render_widget(&block, popup_area);
 
     // Get inner area for content
@@ -97,7 +100,7 @@ fn render_popup_content(
     let categories = state.game.scenario_collection.categories();
 
     if categories.is_empty() {
-        let empty_msg = Paragraph::new("No categories available")
+        let empty_msg = Paragraph::new(t!("category.none_available").to_string())
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);
         frame.render_widget(empty_msg, area);
@@ -158,15 +161,16 @@ fn render_popup_content(
     let enabled_count = enabled_categories.map_or(categories.len(), std::collections::HashSet::len);
 
     let summary_text = if enabled_count == categories.len() {
-        "All categories enabled".to_string()
+        t!("category.all_enabled").to_string()
     } else if enabled_count == 0 {
-        "No categories enabled (showing all)".to_string()
+        t!("category.none_enabled").to_string()
     } else {
-        format!(
-            "{} of {} categories enabled",
-            enabled_count,
-            categories.len()
+        t!(
+            "category.some_enabled",
+            enabled = enabled_count,
+            total = categories.len()
         )
+        .to_string()
     };
 
     lines.push(Line::from(vec![
@@ -177,7 +181,7 @@ fn render_popup_content(
     // Add compact instructions at bottom
     lines.push(Line::from("")); // Spacing
     lines.push(Line::from(vec![Span::styled(
-        "   j/k Toggle  a:All  Esc:Back",
+        t!("category.filter_instructions").to_string(),
         Style::default().fg(Color::DarkGray),
     )]));
 

@@ -39,7 +39,6 @@ category = "selection"
 difficulty = "beginner"
 tags = ["selection", "select-all"]
 commands_taught = ["%"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "replace_with_yanked_001"
@@ -79,7 +78,6 @@ category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "replace", "yank", "register"]
 commands_taught = ["R"]
-estimated_time_seconds = 15
 
 # ============================================================================
 # SELECT REGEX MATCHES (s command)
@@ -119,7 +117,6 @@ category = "selection"
 difficulty = "advanced"
 tags = ["selection", "regex"]
 commands_taught = ["s"]
-estimated_time_seconds = 15
 
 # ============================================================================
 # SPLIT SELECTION ON REGEX (S command)
@@ -159,4 +156,3 @@ category = "selection"
 difficulty = "advanced"
 tags = ["selection", "regex", "split"]
 commands_taught = ["S"]
-estimated_time_seconds = 15

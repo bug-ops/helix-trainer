@@ -35,7 +35,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["test"]
 commands_taught = ["w", "cw"]
-estimated_time_seconds = 10
         "#
     .to_string()
 }
@@ -423,53 +422,6 @@ tolerance = 0
 }
 
 #[test]
-fn test_too_many_alternatives() {
-    let mut toml = r#"
-[[scenarios]]
-id = "test_001"
-name = "Test"
-description = "Test"
-
-[scenarios.setup]
-file_content = "test"
-cursor_position = [0, 0]
-
-[scenarios.target]
-file_content = "test"
-cursor_position = [0, 0]
-
-[scenarios.solution]
-commands = ["test"]
-description = "test"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-"#
-    .to_string();
-
-    // Add 21 alternatives (MAX_ALTERNATIVES is 20)
-    for i in 0..21 {
-        write!(
-            toml,
-            "\n[[scenarios.alternatives]]\ncommands = [\"alt{i}\"]\npoints_multiplier = 1.0\ndescription = \"Alternative {i}\""
-        )
-.unwrap();
-    }
-
-    let mut temp_file = NamedTempFile::new().unwrap();
-    temp_file.write_all(toml.as_bytes()).unwrap();
-    temp_file.flush().unwrap();
-
-    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
-    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
-
-    let result = loader.load(temp_file.path());
-    assert!(result.is_err(), "Should reject too many alternatives");
-}
-
-#[test]
 fn test_command_sequence_too_long() {
     let commands = vec!["cmd".to_string(); MAX_COMMAND_SEQUENCE_LENGTH + 1];
     let commands_str = commands
@@ -519,64 +471,12 @@ tolerance = 0
 }
 
 #[test]
-fn test_alternative_command_sequence_too_long() {
-    let commands_str = (0..=MAX_COMMAND_SEQUENCE_LENGTH)
-        .map(|i| format!("\"cmd{i}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let toml = format!(
-        r#"
-[[scenarios]]
-id = "test_001"
-name = "Test"
-description = "Test"
-
-[scenarios.setup]
-file_content = "test"
-cursor_position = [0, 0]
-
-[scenarios.target]
-file_content = "test"
-cursor_position = [0, 0]
-
-[scenarios.solution]
-commands = ["test"]
-description = "test"
-
-[[scenarios.alternatives]]
-commands = [{commands_str}]
-points_multiplier = 1.0
-description = "Alternative"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-        "#
-    );
-
-    let mut temp_file = NamedTempFile::new().unwrap();
-    temp_file.write_all(toml.as_bytes()).unwrap();
-    temp_file.flush().unwrap();
-
-    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
-    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
-
-    let result = loader.load(temp_file.path());
-    assert!(
-        result.is_err(),
-        "Should reject alternative command sequence that is too long"
-    );
-}
-
-#[test]
-fn test_scenario_with_hints_and_alternatives() {
+fn test_scenario_with_hints() {
     let toml = r#"
 [[scenarios]]
 id = "comprehensive_test_001"
 name = "Comprehensive Test"
-description = "A test with hints and alternatives"
+description = "A test with hints"
 hints = ["First hint", "Second hint"]
 
 [scenarios.setup]
@@ -593,16 +493,6 @@ cursor_position = [1, 0]
 [scenarios.solution]
 commands = ["d", "d"]
 description = "Delete line 2"
-
-[[scenarios.alternatives]]
-commands = ["j", "d", "d"]
-points_multiplier = 0.9
-description = "Move down then delete"
-
-[[scenarios.alternatives]]
-commands = ["ctrl-k"]
-points_multiplier = 0.95
-description = "Using Ctrl+K shortcut"
 
 [scenarios.scoring]
 optimal_count = 2
@@ -630,9 +520,39 @@ tolerance = 1
 
     let scenario = &scenarios[0];
     assert_eq!(scenario.id.as_str(), "comprehensive_test_001");
-    assert_eq!(scenario.alternatives.len(), 2);
     assert_eq!(scenario.hints.len(), 2);
     assert_eq!(scenario.solution.commands.len(), 2);
+}
+
+#[test]
+fn test_removed_alternatives_field_is_rejected() {
+    let base = create_test_scenario_toml();
+    let base = base.split("[scenarios.metadata]").next().unwrap();
+    let toml = format!(
+        "{base}\n[[scenarios.alternatives]]\ncommands = [\"j\"]\npoints_multiplier = 1.0\ndescription = \"x\"\n"
+    );
+    assert!(toml::from_str::<ScenariosFile>(&toml).is_err());
+    assert!(toml::from_str::<ScenariosFile>(base).is_ok());
+}
+
+/// Legacy keys inside `[scenarios.metadata]` stay silently ignored: only the scenario table
+/// itself rejects unknown fields.
+#[test]
+fn test_legacy_keys_in_metadata_table_are_ignored() {
+    let toml = create_test_scenario_toml();
+    let toml = format!("{toml}\nestimated_time_seconds = 30\nlocale = \"en\"\n");
+    let file: ScenariosFile = toml::from_str(&toml).unwrap();
+    assert_eq!(file.scenarios.len(), 1);
+}
+
+#[test]
+fn test_scenario_without_metadata_table_gets_default_metadata() {
+    let toml = create_test_scenario_toml();
+    let toml = toml.split("[scenarios.metadata]").next().unwrap();
+    let file: ScenariosFile = toml::from_str(toml).unwrap();
+    let metadata = &file.scenarios[0].metadata;
+    assert_eq!(metadata.category, None);
+    assert!(metadata.tags.is_empty());
 }
 
 #[test]
@@ -683,11 +603,11 @@ fn test_repeat_insert_scenario_loads_correctly() {
 
     // Verify cursor positions are within bounds
     assert_eq!(scenario.setup.cursor.cursor_position, Some((0, 4)));
-    assert_eq!(scenario.target.cursor.cursor_position, Some((0, 8)));
+    assert_eq!(scenario.target.cursor.cursor_position, Some((0, 7)));
 
     // Verify content - realistic Rust code
     assert_eq!(scenario.setup.file_content, "fn f() {}");
-    assert_eq!(scenario.target.file_content, "fn f(x)x {}");
+    assert_eq!(scenario.target.file_content, "fn f(xx) {}");
 
     // Try to create a game session - this validates all constraints
     let session_result = GameSession::new(scenario.clone());
@@ -960,8 +880,6 @@ difficulty = "intermediate"
 tags = ["test", "metadata"]
 commands_taught = ["h", "j", "k", "l"]
 prerequisites = ["basic_001"]
-estimated_time_seconds = 30
-locale = "en"
         "#;
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -980,7 +898,7 @@ locale = "en"
     );
 
     let scenarios = result.unwrap();
-    let metadata = scenarios[0].metadata.as_ref().unwrap();
+    let metadata = &scenarios[0].metadata;
 
     assert_eq!(metadata.category, Some(ScenarioCategory::Movement));
     assert_eq!(metadata.difficulty, Some(Difficulty::Intermediate));
@@ -990,8 +908,6 @@ locale = "en"
         vec![ncmd("h"), ncmd("j"), ncmd("k"), ncmd("l")]
     );
     assert_eq!(metadata.prerequisites, vec![sid("basic_001")]);
-    assert_eq!(metadata.estimated_time_seconds, Some(30));
-    assert_eq!(metadata.locale, Some("en".to_string()));
 }
 
 #[test]

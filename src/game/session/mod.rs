@@ -506,8 +506,8 @@ impl GameSession<Active> {
 
     /// Create a session that reads time from `clock` instead of the system clock.
     ///
-    /// Tests inject a [`FakeMonotonicClock`](crate::time::FakeMonotonicClock) to
-    /// drive elapsed time without sleeping.
+    /// Tests inject a `FakeMonotonicClock` (see [`crate::time`]) to drive elapsed time
+    /// without sleeping.
     ///
     /// # Errors
     ///
@@ -517,7 +517,7 @@ impl GameSession<Active> {
         clock: Arc<dyn MonotonicClock>,
     ) -> Result<Self, UserError> {
         // Use unified ScenarioState helper for initialization
-        let state = crate::game::ScenarioState::from_scenario(&scenario)?;
+        let state = crate::game::ScenarioState::from_scenario(&scenario);
 
         Ok(Self {
             scenario,
@@ -771,9 +771,7 @@ impl GameSession<Active> {
     /// ```
     pub fn reset(&mut self) -> Result<(), SecurityError> {
         // Same construction path as `new`, so the scenario's language (indent unit) survives
-        self.simulator = crate::game::ScenarioState::from_scenario(&self.scenario)
-            .map_err(|e| SecurityError::InvalidState(e.to_string()))?
-            .simulator;
+        self.simulator = crate::game::ScenarioState::from_scenario(&self.scenario).simulator;
         self.user_actions.clear();
         self.started_at = self.clock.now();
         self.completed_at = None;

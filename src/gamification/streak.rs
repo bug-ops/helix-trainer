@@ -57,17 +57,17 @@ impl StreakManager {
     /// ```
     /// use helix_trainer::gamification::{StreakManager, UserProfile, StreakChange};
     /// use helix_trainer::ids::QuestId;
-    /// use helix_trainer::time::{Clock, FakeClock};
+    /// use chrono::{DateTime, Duration, Utc};
     ///
-    /// let clock = FakeClock::at("2026-01-15T12:00:00Z");
-    /// let mut profile = UserProfile::new_at(clock.now());
+    /// let today: DateTime<Utc> = "2026-01-15T12:00:00Z".parse().unwrap();
+    /// let mut profile = UserProfile::new_at(today);
     /// profile.current_streak = 5;
     /// profile.complete_quest(QuestId::parse("test_quest").unwrap());
     ///
     /// // Simulate next day activity
-    /// clock.advance_days(1);
+    /// let tomorrow = today + Duration::days(1);
     ///
-    /// let change = StreakManager::update_streak(&mut profile, clock.now());
+    /// let change = StreakManager::update_streak(&mut profile, tomorrow);
     /// assert_eq!(change, StreakChange::Incremented { new_streak: 6 });
     /// assert_eq!(profile.current_streak, 6);
     /// ```

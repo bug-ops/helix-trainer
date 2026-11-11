@@ -390,22 +390,12 @@ fn test_all_achievement_metadata() {
 }
 
 #[test]
-fn test_scenario_xp_calculation() {
-    // Perfect score with full multiplier
-    let xp = XPCalculator::scenario_xp(100, 1.0);
-    assert_eq!(xp, 50); // 100 * 50 / 100 = 50
-
-    // Normal score
-    let xp = XPCalculator::scenario_xp(85, 1.0);
-    assert_eq!(xp, 42); // 85 * 50 / 100 = 42
-
-    // 50% score
-    let xp = XPCalculator::scenario_xp(50, 1.0);
-    assert_eq!(xp, 25); // 50 * 50 / 100 = 25
-
-    // Mastered scenario (20% multiplier)
-    let xp = XPCalculator::scenario_xp(100, 0.2);
-    assert_eq!(xp, 10); // 50 * 0.2 = 10
+fn test_training_base_xp_calculation() {
+    let base = |score| XPCalculator::training_xp_components(score, false, false).base_xp;
+    assert_eq!(base(100), 50);
+    assert_eq!(base(85), 42);
+    assert_eq!(base(50), 25);
+    assert_eq!(base(0), 0);
 }
 
 #[test]

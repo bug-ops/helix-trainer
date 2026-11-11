@@ -1,7 +1,7 @@
 //! Movement commands
 
+use crate::helix::error::SimulatorError;
 use crate::helix::simulator::{EditorMode, FindDirection, FindType, HelixSimulator};
-use crate::security::UserError;
 use helix_core::{
     Range, RopeSlice, Selection,
     doc_formatter::TextFormat,
@@ -23,7 +23,7 @@ use std::num::NonZeroUsize;
 pub fn move_left<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -55,7 +55,7 @@ pub fn move_left<M: EditorMode>(
 pub fn move_right<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -87,7 +87,7 @@ pub fn move_right<M: EditorMode>(
 pub fn move_down<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -116,7 +116,10 @@ pub fn move_down<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn move_up<M: EditorMode>(sim: &mut HelixSimulator<M>, count: usize) -> Result<(), UserError> {
+pub fn move_up<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), SimulatorError> {
     use helix_core::movement::Direction;
 
     let slice = sim.doc.slice(..);
@@ -145,7 +148,7 @@ pub fn move_up<M: EditorMode>(sim: &mut HelixSimulator<M>, count: usize) -> Resu
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn move_next_word_start(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
+pub fn move_next_word_start(sim: &mut HelixSimulator, count: usize) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -162,7 +165,7 @@ pub fn move_next_word_start(sim: &mut HelixSimulator, count: usize) -> Result<()
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn move_prev_word_start(sim: &mut HelixSimulator, count: usize) -> Result<(), UserError> {
+pub fn move_prev_word_start(sim: &mut HelixSimulator, count: usize) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -182,7 +185,7 @@ pub fn move_prev_word_start(sim: &mut HelixSimulator, count: usize) -> Result<()
 pub fn move_next_word_end<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -202,7 +205,7 @@ pub fn move_next_word_end<M: EditorMode>(
 pub fn move_next_long_word_start<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -222,7 +225,7 @@ pub fn move_next_long_word_start<M: EditorMode>(
 pub fn move_prev_long_word_start<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -242,7 +245,7 @@ pub fn move_prev_long_word_start<M: EditorMode>(
 pub fn move_next_long_word_end<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let new_selection = sim
         .selection
@@ -259,7 +262,7 @@ pub fn move_next_long_word_end<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn move_line_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn move_line_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
@@ -277,7 +280,7 @@ pub fn move_line_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn move_line_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn move_line_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let text = sim.doc.slice(..);
     sim.selection = sim.selection.clone().transform(|range| {
         let line = range.cursor_line(text);
@@ -294,7 +297,9 @@ pub fn move_line_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), U
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn move_document_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn move_document_start<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     sim.selection = Selection::point(0);
     Ok(())
 }
@@ -305,7 +310,7 @@ pub fn move_document_start<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn move_document_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn move_document_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let end = sim.doc.len_chars();
     sim.selection = Selection::point(end);
     Ok(())
@@ -384,7 +389,7 @@ pub fn find_next_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     find_char(sim, ch, FindType::Find, FindDirection::Forward, count);
     Ok(())
 }
@@ -399,7 +404,7 @@ pub fn find_prev_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     find_char(sim, ch, FindType::Find, FindDirection::Backward, count);
     Ok(())
 }
@@ -414,7 +419,7 @@ pub fn till_next_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     find_char(sim, ch, FindType::Till, FindDirection::Forward, count);
     Ok(())
 }
@@ -429,7 +434,7 @@ pub fn till_prev_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     find_char(sim, ch, FindType::Till, FindDirection::Backward, count);
     Ok(())
 }
@@ -462,7 +467,7 @@ pub fn goto_line<M: EditorMode>(sim: &mut HelixSimulator<M>, count: NonZeroUsize
 /// with the fallible commands that share the registry's function type.
 pub fn goto_first_nonwhitespace<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(line);
@@ -496,7 +501,7 @@ pub fn goto_first_nonwhitespace<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let total_lines = sim.doc.len_lines();
     let doc_len = sim.doc.len_chars();
 
@@ -523,20 +528,22 @@ pub fn goto_last_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), 
     Ok(())
 }
 
-/// Match brackets - find matching bracket pair (Helix 'mm' command)
+/// Match brackets - jump to the bracket matching the one under each range's
+/// block cursor (Helix 'mm' command)
+///
+/// The bracket is the character under the head's block cursor, so for a
+/// forward selection that is its last selected character. Each range with a
+/// bracket there collapses onto the matching one; the others stay.
 ///
 /// # Errors
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let head = sim.selection.primary().head;
+pub fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
-
-    if let Some(matching_pos) = find_matching_bracket_plaintext(slice, head) {
-        sim.selection = Selection::point(matching_pos);
-    }
-
+    sim.selection = sim.selection.clone().transform(|range| {
+        find_matching_bracket_plaintext(slice, range.cursor(slice)).map_or(range, Range::point)
+    });
     Ok(())
 }
 
@@ -546,7 +553,7 @@ pub fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), 
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let range = sim.selection.primary();
     sim.selection = Selection::single(range.head, range.anchor);
     Ok(())
@@ -578,7 +585,7 @@ fn move_paragraph<M: EditorMode>(
 pub fn goto_prev_paragraph<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     move_paragraph(sim, count, movement::move_prev_paragraph);
     Ok(())
 }
@@ -592,7 +599,7 @@ pub fn goto_prev_paragraph<M: EditorMode>(
 pub fn goto_next_paragraph<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     move_paragraph(sim, count, movement::move_next_paragraph);
     Ok(())
 }
@@ -603,7 +610,9 @@ pub fn goto_next_paragraph<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn repeat_last_motion<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn repeat_last_motion<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     if let Some((ch, find_type, direction)) = sim.find_state.get() {
         find_char(sim, ch, find_type, direction, 1);
     }
@@ -618,7 +627,10 @@ const PAGE_SIZE: usize = 20;
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn page_up<M: EditorMode>(sim: &mut HelixSimulator<M>, count: usize) -> Result<(), UserError> {
+pub fn page_up<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    count: usize,
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(current_line);
@@ -649,7 +661,7 @@ pub fn page_up<M: EditorMode>(sim: &mut HelixSimulator<M>, count: usize) -> Resu
 pub fn page_down<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(current_line);
@@ -681,7 +693,7 @@ pub fn page_down<M: EditorMode>(
 pub fn half_page_up<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(current_line);
@@ -712,7 +724,7 @@ pub fn half_page_up<M: EditorMode>(
 pub fn half_page_down<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let current_line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(current_line);

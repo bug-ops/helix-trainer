@@ -12,9 +12,9 @@ use crate::helix::commands::{
     CMD_PASTE_BEFORE, CMD_REPLACE_WITH_YANKED, CMD_SWITCH_CASE, CMD_SWITCH_CASE_ALT,
     CMD_SWITCH_TO_UPPERCASE, CMD_TOGGLE_COMMENTS, CMD_YANK,
 };
+use crate::helix::error::SimulatorError;
 use crate::helix::registry::parse_counted_command;
 use crate::helix::simulator::{EditorMode, HelixSimulator, NormalMode};
-use crate::security::UserError;
 use helix_core::{Selection, ropey::RopeSlice};
 
 /// Toggle Select mode (`v` command)
@@ -23,7 +23,7 @@ use helix_core::{Selection, ropey::RopeSlice};
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn toggle<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn toggle<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     sim.select_mode = !sim.select_mode;
     Ok(())
 }
@@ -33,7 +33,10 @@ pub fn toggle<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserErro
 /// In Select mode a motion keeps the old anchor and moves only the head, as
 /// the `extend_*` commands of `hx` do (`v l l` covers the characters moved
 /// over). Commands that call `exit_select_mode` in `hx` return to Normal mode.
-pub(super) fn execute(sim: &mut HelixSimulator<NormalMode>, cmd: &str) -> Result<(), UserError> {
+pub(super) fn execute(
+    sim: &mut HelixSimulator<NormalMode>,
+    cmd: &str,
+) -> Result<(), SimulatorError> {
     if !sim.select_mode {
         return execute_normal_mode_command_internal(sim, cmd);
     }

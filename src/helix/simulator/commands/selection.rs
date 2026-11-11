@@ -1,7 +1,7 @@
 //! Selection commands (s, S, Alt-s, &, _, Alt--, Alt-_, C, Alt-C, K, Alt-K, Ctrl-c)
 
+use crate::helix::error::SimulatorError;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
-use crate::security::UserError;
 use crate::security::limits::MAX_REGEX_SELECTION_MATCHES;
 use helix_core::comment::toggle_line_comments;
 use helix_core::graphemes::{ensure_grapheme_boundary_prev, grapheme_width};
@@ -40,7 +40,7 @@ fn visual_position(slice: RopeSlice, pos: usize) -> (usize, usize) {
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let range = sim.selection.primary();
     let start = range.from();
     let end = range.to();
@@ -86,18 +86,14 @@ pub fn trim_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
     Ok(())
 }
 
-/// Merge all selections into one (Alt-- command)
+/// Merge all selections into one range spanning from the first to the last (Alt-- command)
 ///
 /// # Errors
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn merge_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
-    let range = sim.selection.primary();
-    let start = range.from();
-    let end = range.to();
-    sim.selection = Selection::single(start, end);
-
+pub fn merge_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+    sim.selection = sim.selection.clone().merge_ranges();
     Ok(())
 }
 
@@ -112,7 +108,7 @@ pub fn merge_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 /// with the fallible commands that share the registry's function type.
 pub fn copy_selection_next_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let range = sim.selection.primary();
     let head = range.head;
 
@@ -158,7 +154,7 @@ pub fn copy_selection_next_line<M: EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn copy_selection_prev_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let range = sim.selection.primary();
     let head = range.head;
     let current_line = sim.doc.char_to_line(head);
@@ -193,7 +189,7 @@ pub fn copy_selection_prev_line<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn toggle_comments<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn toggle_comments<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let transaction = toggle_line_comments(&sim.doc, &sim.selection, Some("//"));
     sim.apply_transaction(&transaction);
     Ok(())
@@ -207,7 +203,7 @@ pub fn toggle_comments<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(),
 /// with the fallible commands that share the registry's function type.
 pub fn split_selection_newlines<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     sim.selection = split_on_newline(slice, &sim.selection);
     Ok(())
@@ -222,8 +218,8 @@ pub fn split_selection_newlines<M: EditorMode>(
 ///
 /// # Errors
 ///
-/// Returns a `UserError` when a range spans several lines; nothing changes.
-pub fn align_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+/// Returns a [`SimulatorError`] when a range spans several lines; nothing changes.
+pub fn align_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let mut columns: Vec<Vec<(usize, usize)>> = Vec::new();
     let mut last_row = slice.len_lines() + 1;
@@ -233,9 +229,7 @@ pub fn align_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
         let head = visual_position(slice, range.head);
         let anchor = visual_position(slice, range.anchor);
         if head.0 != anchor.0 {
-            return Err(UserError::command_failed(
-                "align cannot work with multi line selections",
-            ));
+            return Err(SimulatorError::AlignSpansLines);
         }
 
         column = if head.0 == last_row { column + 1 } else { 0 };
@@ -269,13 +263,11 @@ pub fn align_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 
     changes.sort_unstable_by_key(|(from, _, _)| *from);
     let transaction = Transaction::change(&sim.doc, changes.into_iter());
-    let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(&transaction);
-    sim.selection = mapped;
     Ok(())
 }
 
-/// Merge consecutive selections (Alt-_ command)
+/// Merge ranges that touch each other (Alt-_ command); separate ranges stay separate
 ///
 /// # Errors
 ///
@@ -283,8 +275,9 @@ pub fn align_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 /// fallible commands that share the registry's function type.
 pub fn merge_consecutive_selections<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
-    merge_selections(sim)
+) -> Result<(), SimulatorError> {
+    sim.selection = sim.selection.clone().merge_consecutive_ranges();
+    Ok(())
 }
 
 /// Truncate a selection to at most `max` ranges.
@@ -299,6 +292,15 @@ fn truncate_matches(selection: Selection, max: usize) -> Selection {
     Selection::new(ranges.into(), 0)
 }
 
+/// Compile `pattern` for the rope-based matchers.
+///
+/// The rope regex engine reports its own build error type, which this crate cannot name,
+/// so the failure is carried as a syntax error with the engine's message.
+fn compile_regex(pattern: &str) -> Result<Regex, SimulatorError> {
+    Regex::new(pattern)
+        .map_err(|e| SimulatorError::InvalidRegex(helix_core::regex::Error::Syntax(e.to_string())))
+}
+
 /// Select regex matches within the current selection (s command)
 ///
 /// `pattern` has already been prompt-validated by `RegexPromptPending`
@@ -308,13 +310,12 @@ fn truncate_matches(selection: Selection, max: usize) -> Selection {
 ///
 /// # Errors
 ///
-/// Returns a `UserError` if `pattern` is not a valid regex.
+/// Returns a [`SimulatorError`] if `pattern` is not a valid regex.
 pub fn select_regex<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
-) -> Result<(), UserError> {
-    let regex = Regex::new(pattern)
-        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+) -> Result<(), SimulatorError> {
+    let regex = compile_regex(pattern)?;
     let slice = sim.doc.slice(..);
     if let Some(new_selection) = select_on_matches(slice, &sim.selection, &regex) {
         sim.selection = truncate_matches(new_selection, MAX_REGEX_SELECTION_MATCHES);
@@ -329,13 +330,12 @@ pub fn select_regex<M: EditorMode>(
 ///
 /// # Errors
 ///
-/// Returns a `UserError` if `pattern` is not a valid regex.
+/// Returns a [`SimulatorError`] if `pattern` is not a valid regex.
 pub fn split_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
-) -> Result<(), UserError> {
-    let regex = Regex::new(pattern)
-        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+) -> Result<(), SimulatorError> {
+    let regex = compile_regex(pattern)?;
     let slice = sim.doc.slice(..);
     let new_selection = split_on_matches(slice, &sim.selection, &regex);
     sim.selection = truncate_matches(new_selection, MAX_REGEX_SELECTION_MATCHES);
@@ -347,38 +347,34 @@ pub fn split_selection<M: EditorMode>(
 ///
 /// # Errors
 ///
-/// Always returns a `UserError`: the bare command needs a pattern from its prompt.
+/// Always returns a [`SimulatorError`]: the bare command needs a pattern from its prompt.
 pub fn keep_selections_matching<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
-    Err(UserError::command_failed(
-        "keep_selections needs a pattern from its prompt",
-    ))
+) -> Result<(), SimulatorError> {
+    Err(SimulatorError::PatternRequired)
 }
 
 /// Bare `Alt-K`: see [`keep_selections_matching`]
 ///
 /// # Errors
 ///
-/// Always returns a `UserError`: the bare command needs a pattern from its prompt.
+/// Always returns a [`SimulatorError`]: the bare command needs a pattern from its prompt.
 pub fn remove_selections_matching<M: EditorMode>(
     _sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
-    Err(UserError::command_failed(
-        "remove_selections needs a pattern from its prompt",
-    ))
+) -> Result<(), SimulatorError> {
+    Err(SimulatorError::PatternRequired)
 }
 
 /// Keep the ranges whose text matches `pattern` (`K <pattern>` prompt form)
 ///
 /// # Errors
 ///
-/// Returns a `UserError` for an invalid regex, or when no range would remain
+/// Returns a [`SimulatorError`] for an invalid regex, or when no range would remain
 /// (Helix reports "no selections remaining"); the selection is left unchanged.
 pub fn keep_selections_regex<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     filter_selections_by_regex(sim, pattern, false)
 }
 
@@ -388,12 +384,12 @@ pub fn keep_selections_regex<M: EditorMode>(
 ///
 /// # Errors
 ///
-/// Returns a `UserError` for an invalid regex, or when no range would remain; see
+/// Returns a [`SimulatorError`] for an invalid regex, or when no range would remain; see
 /// [`keep_selections_regex`].
 pub fn remove_selections_regex<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     filter_selections_by_regex(sim, pattern, true)
 }
 
@@ -401,12 +397,11 @@ fn filter_selections_by_regex<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
     remove: bool,
-) -> Result<(), UserError> {
-    let regex = Regex::new(pattern)
-        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+) -> Result<(), SimulatorError> {
+    let regex = compile_regex(pattern)?;
     let slice = sim.doc.slice(..);
     let kept = keep_or_remove_matches(slice, &sim.selection, &regex, remove)
-        .ok_or_else(|| UserError::command_failed("no selections remaining"))?;
+        .ok_or(SimulatorError::NoSelections)?;
     sim.selection = kept;
     Ok(())
 }
@@ -417,7 +412,9 @@ fn filter_selections_by_regex<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn keep_primary_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn keep_primary_selection<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     let range = sim.selection.primary();
     sim.selection = Selection::single(range.anchor, range.head);
     Ok(())
@@ -434,7 +431,7 @@ pub fn keep_primary_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Res
 /// with the fallible commands that share the registry's function type.
 pub fn remove_primary_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     if sim.selection.len() > 1 {
         sim.selection = sim.selection.clone().remove(sim.selection.primary_index());
     }
@@ -447,7 +444,9 @@ pub fn remove_primary_selection<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn shrink_to_line_bounds<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn shrink_to_line_bounds<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     let range = sim.selection.primary();
     let head = range.head;
     let line = sim.doc.char_to_line(head);
@@ -468,6 +467,7 @@ pub fn shrink_to_line_bounds<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
 mod tests {
     use super::*;
     use crate::helix::simulator::NormalMode;
+    use std::assert_matches;
 
     #[test]
     fn test_trim_selections_whitespace() {
@@ -1038,7 +1038,10 @@ mod tests {
         let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
         sim.selection = Selection::single(0, 5);
 
-        assert!(select_regex(&mut sim, "(").is_err());
+        assert_matches!(
+            select_regex(&mut sim, "("),
+            Err(SimulatorError::InvalidRegex(_))
+        );
     }
 
     #[test]
@@ -1060,7 +1063,10 @@ mod tests {
         let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("a,b,c".to_string());
         sim.selection = Selection::single(0, 5);
 
-        assert!(split_selection(&mut sim, "[").is_err());
+        assert_matches!(
+            split_selection(&mut sim, "["),
+            Err(SimulatorError::InvalidRegex(_))
+        );
     }
 
     #[test]

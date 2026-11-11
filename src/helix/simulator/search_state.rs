@@ -3,6 +3,7 @@
 //! Provides search pattern storage, direction tracking, and match caching
 //! for search commands (/, ?, n, N, *, Alt-*).
 
+use crate::helix::error::SimulatorError;
 use helix_core::regex::{self, Regex};
 use std::ops::Range;
 
@@ -85,20 +86,20 @@ impl SearchState {
     ///
     /// # Errors
     ///
-    /// Returns a [`regex::Error`] if `pattern` exceeds the length limit or is not a valid regex.
+    /// Returns a [`SimulatorError`] if `pattern` exceeds the length limit or is not a valid regex.
     pub fn set_pattern(
         &mut self,
         pattern: &str,
         direction: SearchDirection,
-    ) -> Result<(), regex::Error> {
+    ) -> Result<(), SimulatorError> {
         // Security: limit pattern length to prevent regex DoS
         if pattern.len() > MAX_PATTERN_LENGTH {
-            return Err(regex::Error::Syntax(format!(
-                "pattern exceeds maximum length of {MAX_PATTERN_LENGTH} characters"
-            )));
+            return Err(SimulatorError::PatternTooLong {
+                max: MAX_PATTERN_LENGTH,
+            });
         }
 
-        let regex = Regex::new(pattern)?;
+        let regex = Regex::new(pattern).map_err(SimulatorError::InvalidRegex)?;
         self.pattern = Some(pattern.to_string());
         self.direction = direction;
         self.regex = Some(regex);
@@ -114,13 +115,13 @@ impl SearchState {
     ///
     /// # Errors
     ///
-    /// Returns a [`regex::Error`] if the generated pattern exceeds the length limit; see
+    /// Returns a [`SimulatorError`] if the generated pattern exceeds the length limit; see
     /// [`Self::set_pattern`].
     pub fn set_word_pattern(
         &mut self,
         word: &str,
         direction: SearchDirection,
-    ) -> Result<(), regex::Error> {
+    ) -> Result<(), SimulatorError> {
         let pattern = format!(r"\b{}\b", regex::escape(word));
         self.set_pattern(&pattern, direction)
     }
@@ -131,13 +132,13 @@ impl SearchState {
     ///
     /// # Errors
     ///
-    /// Returns a [`regex::Error`] if the generated pattern exceeds the length limit; see
+    /// Returns a [`SimulatorError`] if the generated pattern exceeds the length limit; see
     /// [`Self::set_pattern`].
     pub fn set_selection_pattern(
         &mut self,
         selection: &str,
         direction: SearchDirection,
-    ) -> Result<(), regex::Error> {
+    ) -> Result<(), SimulatorError> {
         let pattern = regex::escape(selection);
         self.set_pattern(&pattern, direction)
     }
@@ -249,6 +250,7 @@ impl SearchState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn test_search_state_new() {
@@ -271,10 +273,9 @@ mod tests {
     #[test]
     fn test_set_pattern_invalid_regex() {
         let mut state = SearchState::new();
-        assert!(
-            state
-                .set_pattern("[invalid", SearchDirection::Forward)
-                .is_err()
+        assert_matches!(
+            state.set_pattern("[invalid", SearchDirection::Forward),
+            Err(SimulatorError::InvalidRegex(_))
         );
     }
 
@@ -406,7 +407,12 @@ mod tests {
         // Create a pattern longer than MAX_PATTERN_LENGTH (1000)
         let long_pattern = "a".repeat(1001);
         let result = state.set_pattern(&long_pattern, SearchDirection::Forward);
-        assert!(result.is_err());
+        assert_matches!(
+            result,
+            Err(SimulatorError::PatternTooLong {
+                max: MAX_PATTERN_LENGTH
+            })
+        );
         assert!(state.pattern().is_none());
     }
 

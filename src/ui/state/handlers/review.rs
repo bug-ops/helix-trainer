@@ -4,7 +4,7 @@
 
 use crate::constants::OPTIMAL_REVIEW_TIME;
 use crate::gamification::XPCalculator;
-use crate::security::UserError;
+use crate::security::{UserError, error_chain};
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
@@ -81,7 +81,10 @@ pub fn handle_complete_review_command(
         // Persist periodically so review progress survives a crash mid-session
         // (non-fatal error - log but continue, a review keypress must not kill the session)
         if let Err(e) = ctx.progress.save_debounced() {
-            tracing::error!("Failed to save profile during review session: {:?}", e);
+            tracing::error!(
+                error = %error_chain(&e),
+                "Failed to save profile during review session"
+            );
         }
     }
 

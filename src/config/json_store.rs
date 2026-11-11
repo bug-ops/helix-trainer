@@ -10,13 +10,15 @@ use std::fs;
 use std::io::{self, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
-use crate::security::{SecurityError, path_validator, private_fs};
+use crate::gamification::QuarantineError;
+use crate::security::{CappedReadError, path_validator, private_fs};
 
 /// Per-process counter used to make temporary save files unique.
 ///
@@ -108,67 +110,142 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-/// Failure of a [`JsonStore`] operation. `label` names the document
-/// ("profile", "config") in the message.
+/// The persisted document a [`StorageError`] refers to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Document {
+    /// `profile.json`: progress, quests, FSRS cards.
+    Profile,
+    /// `config.json`: user settings.
+    Config,
+}
+
+impl fmt::Display for Document {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Profile => "profile",
+            Self::Config => "config",
+        })
+    }
+}
+
+/// Failure of a persistence operation on a [`Document`].
+///
+/// Every variant keeps its cause as a `#[source]` and never interpolates it into its own
+/// message, so [`crate::security::error_chain`] prints each cause exactly once.
 #[derive(Debug, Error)]
-pub enum JsonStoreError {
-    /// The file could not be inspected or was rejected before parsing
-    /// (not a regular file, unreadable, invalid UTF-8).
-    #[error("Failed to read {label}: {reason}")]
+pub enum StorageError {
+    /// The file could not be inspected or was rejected before parsing (not a regular file,
+    /// unreadable, invalid UTF-8).
+    #[error("failed to read the {doc} file {}", path.display())]
     Read {
-        /// Document name.
-        label: &'static str,
-        /// Underlying cause.
-        reason: String,
+        /// Document read.
+        doc: Document,
+        /// File that was read.
+        path: PathBuf,
+        /// Why the read failed.
+        #[source]
+        source: CappedReadError,
     },
 
     /// The file exceeds the document's size cap.
-    #[error("{label} file too large: {source}")]
+    #[error("the {doc} file {} is too large ({actual} > {max} bytes)", path.display())]
     TooLarge {
-        /// Document name.
-        label: &'static str,
-        /// The size-guard rejection.
-        source: SecurityError,
+        /// Document read.
+        doc: Document,
+        /// File that was read.
+        path: PathBuf,
+        /// Size cap in bytes.
+        max: u64,
+        /// Bytes read, a lower bound on the real size.
+        actual: u64,
     },
 
     /// The file is not valid JSON for the document type.
-    #[error("Failed to parse {label} JSON: {source}")]
-    Parse {
-        /// Document name.
-        label: &'static str,
+    #[error("the {doc} file {} is corrupt", path.display())]
+    Corrupt {
+        /// Document parsed.
+        doc: Document,
+        /// File that was parsed.
+        path: PathBuf,
         /// The parser error.
+        #[source]
         source: serde_json::Error,
     },
 
     /// The document could not be serialized.
-    #[error("Failed to serialize {label}: {source}")]
+    #[error("failed to serialize the {doc}")]
     Serialize {
-        /// Document name.
-        label: &'static str,
+        /// Document serialized.
+        doc: Document,
         /// The serializer error.
+        #[source]
         source: serde_json::Error,
     },
 
-    /// Copying the document from its previous location failed; the
-    /// destination was not created.
-    #[error("Failed to migrate {label} from {}: {reason}", from.display())]
-    Migrate {
-        /// Document name.
-        label: &'static str,
-        /// The previous location.
-        from: PathBuf,
-        /// Underlying cause.
-        reason: String,
-    },
-
     /// Writing, syncing or renaming the file failed.
-    #[error("Failed to write {label}: {source}")]
+    #[error("failed to write the {doc} file {}", path.display())]
     Write {
-        /// Document name.
-        label: &'static str,
+        /// Document written.
+        doc: Document,
+        /// File that was written.
+        path: PathBuf,
         /// The I/O error.
+        #[source]
         source: io::Error,
     },
+
+    /// Copying the document from its previous location failed; the destination was not
+    /// created.
+    #[error("failed to migrate the {doc} from {}", from.display())]
+    Migrate {
+        /// Document migrated.
+        doc: Document,
+        /// The previous location.
+        from: PathBuf,
+        /// The read or write failure behind the failed copy.
+        #[source]
+        source: Box<StorageError>,
+    },
+
+    /// An unreadable document could not be backed up, so it must not be replaced.
+    #[error("refusing to replace the {doc} without a backup")]
+    NoBackup {
+        /// Document that would have been replaced.
+        doc: Document,
+        /// Why the backup failed.
+        #[source]
+        source: Arc<QuarantineError>,
+    },
+
+    /// Removing the file failed.
+    #[error("failed to delete the {doc} file {}", path.display())]
+    Delete {
+        /// Document deleted.
+        doc: Document,
+        /// File that was removed.
+        path: PathBuf,
+        /// The I/O error.
+        #[source]
+        source: io::Error,
+    },
+}
+
+impl StorageError {
+    fn read(doc: Document, path: &Path, source: CappedReadError) -> Self {
+        match source {
+            CappedReadError::TooLarge { max, actual } => Self::TooLarge {
+                doc,
+                path: path.to_path_buf(),
+                max,
+                actual,
+            },
+            source => Self::Read {
+                doc,
+                path: path.to_path_buf(),
+                source,
+            },
+        }
+    }
 }
 
 /// Atomic, size-guarded JSON document `T` stored at one path.
@@ -176,7 +253,7 @@ pub enum JsonStoreError {
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::config::json_store::JsonStore;
+/// use helix_trainer::config::json_store::{Document, JsonStore};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -185,14 +262,14 @@ pub enum JsonStoreError {
 /// }
 ///
 /// let dir = tempfile::tempdir().unwrap();
-/// let store = JsonStore::<Doc>::new(dir.path().join("doc.json"), "doc", 1024);
+/// let store = JsonStore::<Doc>::new(dir.path().join("doc.json"), Document::Config, 1024);
 /// assert_eq!(store.load().unwrap(), None);
 /// store.save(&Doc { value: 7 }).unwrap();
 /// assert_eq!(store.load().unwrap(), Some(Doc { value: 7 }));
 /// ```
 pub struct JsonStore<T> {
     path: PathBuf,
-    label: &'static str,
+    doc: Document,
     max_size: u64,
     legacy: Option<PathBuf>,
     document: PhantomData<fn() -> T>,
@@ -201,10 +278,10 @@ pub struct JsonStore<T> {
 impl<T> JsonStore<T> {
     /// Creates a store for the document at `path`; reads larger than
     /// `max_size` bytes are rejected.
-    pub fn new(path: impl Into<PathBuf>, label: &'static str, max_size: u64) -> Self {
+    pub fn new(path: impl Into<PathBuf>, doc: Document, max_size: u64) -> Self {
         Self {
             path: path.into(),
-            label,
+            doc,
             max_size,
             legacy: None,
             document: PhantomData,
@@ -222,7 +299,7 @@ impl<T> JsonStore<T> {
     /// # Examples
     ///
     /// ```
-    /// use helix_trainer::config::json_store::JsonStore;
+    /// use helix_trainer::config::json_store::{Document, JsonStore};
     /// use serde::{Deserialize, Serialize};
     ///
     /// #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -231,10 +308,10 @@ impl<T> JsonStore<T> {
     /// }
     ///
     /// let dir = tempfile::tempdir().unwrap();
-    /// let old = JsonStore::<Doc>::new(dir.path().join("old.json"), "doc", 1024);
+    /// let old = JsonStore::<Doc>::new(dir.path().join("old.json"), Document::Config, 1024);
     /// old.save(&Doc { value: 5 }).unwrap();
     ///
-    /// let new = JsonStore::<Doc>::new(dir.path().join("new.json"), "doc", 1024)
+    /// let new = JsonStore::<Doc>::new(dir.path().join("new.json"), Document::Config, 1024)
     ///     .migrating_from(Some(old.path().to_path_buf()));
     /// assert_eq!(new.load().unwrap(), Some(Doc { value: 5 }));
     /// assert!(old.exists());
@@ -266,47 +343,29 @@ impl<T: DeserializeOwned> JsonStore<T> {
     ///
     /// # Errors
     ///
-    /// Returns [`JsonStoreError`] when the path exists but is not a regular
-    /// file, is unreadable, exceeds the size cap, or does not parse, or when
-    /// copying from the declared previous location fails.
-    pub fn load(&self) -> Result<Option<T>, JsonStoreError> {
+    /// Returns [`StorageError`] when the path exists but is not a regular file, is
+    /// unreadable, exceeds the size cap, or does not parse, or when copying from the declared
+    /// previous location fails.
+    pub fn load(&self) -> Result<Option<T>, StorageError> {
         self.migrate_legacy()?;
-        match fs::metadata(&self.path) {
-            Ok(_) => {}
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => {
-                return Err(JsonStoreError::Read {
-                    label: self.label,
-                    reason: e.to_string(),
-                });
-            }
-        }
-
-        let contents = path_validator::read_capped(&self.path, self.max_size).map_err(|e| {
-            if matches!(e, SecurityError::FileTooLarge { .. }) {
-                JsonStoreError::TooLarge {
-                    label: self.label,
-                    source: e,
-                }
-            } else {
-                JsonStoreError::Read {
-                    label: self.label,
-                    reason: e.to_string(),
-                }
-            }
-        })?;
+        let contents = match path_validator::read_capped(&self.path, self.max_size) {
+            Ok(contents) => contents,
+            Err(e) if e.is_not_found() => return Ok(None),
+            Err(e) => return Err(StorageError::read(self.doc, &self.path, e)),
+        };
 
         serde_json::from_str(&contents)
             .map(Some)
-            .map_err(|source| JsonStoreError::Parse {
-                label: self.label,
+            .map_err(|source| StorageError::Corrupt {
+                doc: self.doc,
+                path: self.path.clone(),
                 source,
             })
     }
 }
 
 impl<T> JsonStore<T> {
-    fn migrate_legacy(&self) -> Result<(), JsonStoreError> {
+    fn migrate_legacy(&self) -> Result<(), StorageError> {
         let Some(legacy) = &self.legacy else {
             return Ok(());
         };
@@ -320,16 +379,22 @@ impl<T> JsonStore<T> {
             return Ok(());
         }
 
-        let migrate_err = |reason: String| JsonStoreError::Migrate {
-            label: self.label,
+        let migrate_err = |source: StorageError| StorageError::Migrate {
+            doc: self.doc,
             from: legacy.clone(),
-            reason,
+            source: Box::new(source),
         };
         let contents = path_validator::read_capped(legacy, self.max_size)
-            .map_err(|e| migrate_err(e.to_string()))?;
-        write_atomic(&self.path, contents.as_bytes()).map_err(|e| migrate_err(e.to_string()))?;
+            .map_err(|e| migrate_err(StorageError::read(self.doc, legacy, e)))?;
+        write_atomic(&self.path, contents.as_bytes()).map_err(|source| {
+            migrate_err(StorageError::Write {
+                doc: self.doc,
+                path: self.path.clone(),
+                source,
+            })
+        })?;
         tracing::info!(
-            label = self.label,
+            doc = %self.doc,
             from = %legacy.display(),
             to = %self.path.display(),
             "Migrated document to the new data directory"
@@ -343,16 +408,17 @@ impl<T: Serialize> JsonStore<T> {
     ///
     /// # Errors
     ///
-    /// Returns [`JsonStoreError`] if serialization or any write step fails;
+    /// Returns [`StorageError`] if serialization or any write step fails;
     /// the previous file is left intact.
-    pub fn save(&self, document: &T) -> Result<(), JsonStoreError> {
+    pub fn save(&self, document: &T) -> Result<(), StorageError> {
         let json =
-            serde_json::to_string_pretty(document).map_err(|source| JsonStoreError::Serialize {
-                label: self.label,
+            serde_json::to_string_pretty(document).map_err(|source| StorageError::Serialize {
+                doc: self.doc,
                 source,
             })?;
-        write_atomic(&self.path, json.as_bytes()).map_err(|source| JsonStoreError::Write {
-            label: self.label,
+        write_atomic(&self.path, json.as_bytes()).map_err(|source| StorageError::Write {
+            doc: self.doc,
+            path: self.path.clone(),
             source,
         })
     }
@@ -362,7 +428,7 @@ impl<T> Clone for JsonStore<T> {
     fn clone(&self) -> Self {
         Self {
             path: self.path.clone(),
-            label: self.label,
+            doc: self.doc,
             max_size: self.max_size,
             legacy: self.legacy.clone(),
             document: PhantomData,
@@ -374,7 +440,7 @@ impl<T> fmt::Debug for JsonStore<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("JsonStore")
             .field("path", &self.path)
-            .field("label", &self.label)
+            .field("doc", &self.doc)
             .field("max_size", &self.max_size)
             .field("legacy", &self.legacy)
             .finish()
@@ -392,7 +458,11 @@ mod tests {
     }
 
     fn store(dir: &Path, max_size: u64) -> JsonStore<Doc> {
-        JsonStore::new(dir.join("nested").join("doc.json"), "doc", max_size)
+        JsonStore::new(
+            dir.join("nested").join("doc.json"),
+            Document::Config,
+            max_size,
+        )
     }
 
     #[test]
@@ -433,7 +503,7 @@ mod tests {
 
         assert!(matches!(
             store.save(&Doc { value: 2 }),
-            Err(JsonStoreError::Write { .. })
+            Err(StorageError::Write { .. })
         ));
         assert!(store.path().is_dir());
         let names: Vec<_> = fs::read_dir(store.path().parent().unwrap())
@@ -504,7 +574,7 @@ mod tests {
         let store = store(dir.path(), 8);
         store.save(&Doc { value: 1234567 }).unwrap();
         let err = store.load().unwrap_err();
-        assert!(matches!(err, JsonStoreError::TooLarge { .. }), "{err}");
+        assert!(matches!(err, StorageError::TooLarge { .. }), "{err}");
         assert!(err.to_string().contains("too large"));
     }
 
@@ -514,7 +584,7 @@ mod tests {
         let store = store(dir.path(), 1024);
         store.save(&Doc { value: 1 }).unwrap();
         fs::write(store.path(), "{broken").unwrap();
-        assert!(matches!(store.load(), Err(JsonStoreError::Parse { .. })));
+        assert!(matches!(store.load(), Err(StorageError::Corrupt { .. })));
     }
 
     #[test]
@@ -522,12 +592,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = store(dir.path(), 1024);
         fs::create_dir_all(store.path()).unwrap();
-        assert!(matches!(store.load(), Err(JsonStoreError::Read { .. })));
+        assert!(matches!(store.load(), Err(StorageError::Read { .. })));
     }
 
     fn migrating_store(dir: &Path, max_size: u64) -> (JsonStore<Doc>, JsonStore<Doc>) {
-        let old = JsonStore::new(dir.join("old").join("doc.json"), "doc", max_size);
-        let new = JsonStore::new(dir.join("new").join("doc.json"), "doc", max_size)
+        let old = JsonStore::new(dir.join("old").join("doc.json"), Document::Config, max_size);
+        let new = JsonStore::new(dir.join("new").join("doc.json"), Document::Config, max_size)
             .migrating_from(Some(old.path().to_path_buf()));
         (old, new)
     }
@@ -582,7 +652,7 @@ mod tests {
         let (old, new) = migrating_store(dir.path(), 8);
         old.save(&Doc { value: 1234567 }).unwrap();
 
-        assert!(matches!(new.load(), Err(JsonStoreError::Migrate { .. })));
+        assert!(matches!(new.load(), Err(StorageError::Migrate { .. })));
         assert!(!new.exists());
     }
 
@@ -592,7 +662,7 @@ mod tests {
         let (old, new) = migrating_store(dir.path(), 1024);
         fs::create_dir_all(old.path()).unwrap();
 
-        assert!(matches!(new.load(), Err(JsonStoreError::Migrate { .. })));
+        assert!(matches!(new.load(), Err(StorageError::Migrate { .. })));
         assert!(!new.exists());
     }
 
@@ -606,5 +676,67 @@ mod tests {
         let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(store.path()), 0o600);
         assert_eq!(mode(store.path().parent().unwrap()), 0o700);
+    }
+
+    #[test]
+    fn corrupt_file_chain_prints_the_parser_cause_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store(dir.path(), 1024);
+        fs::create_dir_all(store.path().parent().unwrap()).unwrap();
+        fs::write(store.path(), "{broken").unwrap();
+
+        let err = store.load().unwrap_err();
+
+        let cause = serde_json::from_str::<Doc>("{broken")
+            .unwrap_err()
+            .to_string();
+        let chain = crate::security::error_chain(&err);
+        assert!(matches!(err, StorageError::Corrupt { .. }), "{chain}");
+        assert_eq!(chain.matches(&cause).count(), 1, "{chain}");
+    }
+
+    #[test]
+    fn rejected_read_chain_names_the_cause_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store(dir.path(), 1024);
+        fs::create_dir_all(store.path()).unwrap();
+
+        let chain = crate::security::error_chain(&store.load().unwrap_err());
+
+        assert_eq!(chain.matches("not a regular file").count(), 1, "{chain}");
+    }
+
+    #[test]
+    fn unserializable_document_is_a_serialize_error() {
+        struct Failing;
+        impl Serialize for Failing {
+            fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+                Err(serde::ser::Error::custom("nope"))
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let store = JsonStore::<Failing>::new(dir.path().join("f.json"), Document::Config, 1024);
+
+        let err = store.save(&Failing).unwrap_err();
+
+        assert!(matches!(err, StorageError::Serialize { .. }), "{err}");
+        assert_eq!(
+            crate::security::error_chain(&err).matches("nope").count(),
+            1
+        );
+    }
+
+    #[test]
+    fn migrate_error_chain_reaches_the_read_cause_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old, new) = migrating_store(dir.path(), 4);
+        old.save(&Doc { value: 123_456 }).unwrap();
+
+        let err = new.load().unwrap_err();
+
+        let chain = crate::security::error_chain(&err);
+        assert!(matches!(err, StorageError::Migrate { .. }), "{chain}");
+        assert!(chain.contains("too large"), "{chain}");
+        assert_eq!(chain.matches("too large").count(), 1, "{chain}");
     }
 }

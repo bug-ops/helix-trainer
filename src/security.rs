@@ -122,6 +122,89 @@ pub enum SecurityError {
     ReadFailed(String),
 }
 
+/// Why [`path_validator::read_capped`] refused or failed to read a file.
+///
+/// Keeps the I/O and UTF-8 causes as sources so callers can tell "the file does not exist"
+/// (first launch) from every other failure; [`SecurityError`] is derived from it for the
+/// scenario, quest and keymap loaders.
+#[derive(Error, Debug)]
+pub enum CappedReadError {
+    /// The path exists but is not a regular file (directory, device, FIFO, ...).
+    #[error("not a regular file")]
+    NotRegularFile,
+
+    /// The file is larger than the cap.
+    #[error("file too large (max {max} bytes, got {actual} bytes)")]
+    TooLarge {
+        /// Maximum allowed size in bytes.
+        max: u64,
+        /// Number of bytes read, a lower bound on the real size.
+        actual: u64,
+    },
+
+    /// Inspecting, opening or reading the file failed.
+    #[error("I/O error while reading the file")]
+    Io(#[source] std::io::Error),
+
+    /// The content is not valid UTF-8.
+    #[error("file content is not valid UTF-8")]
+    InvalidUtf8(#[source] std::string::FromUtf8Error),
+}
+
+impl CappedReadError {
+    /// Whether the file simply does not exist.
+    #[must_use]
+    pub fn is_not_found(&self) -> bool {
+        matches!(self, Self::Io(e) if e.kind() == std::io::ErrorKind::NotFound)
+    }
+}
+
+impl From<CappedReadError> for SecurityError {
+    fn from(err: CappedReadError) -> Self {
+        use std::io::ErrorKind;
+        match err {
+            CappedReadError::NotRegularFile => Self::NotRegularFile,
+            CappedReadError::TooLarge { max, actual } => Self::FileTooLarge { max, actual },
+            CappedReadError::Io(e)
+                if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::PermissionDenied) =>
+            {
+                Self::InvalidPath
+            }
+            CappedReadError::Io(e) => Self::ReadFailed(e.to_string()),
+            CappedReadError::InvalidUtf8(_) => Self::InvalidEncoding,
+        }
+    }
+}
+
+/// Renders `error` and every cause below it as `top: cause: root cause`.
+///
+/// Error sinks log this instead of `Display` alone, because variants that keep their cause
+/// as a `#[source]` do not repeat it in their own message.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::security::error_chain;
+///
+/// let io = std::io::Error::other("disk full");
+/// let wrapped = helix_trainer::security::CappedReadError::Io(io);
+/// assert_eq!(
+///     error_chain(&wrapped),
+///     "I/O error while reading the file: disk full"
+/// );
+/// ```
+#[must_use]
+pub fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut rendered = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        rendered.push_str(": ");
+        rendered.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    rendered
+}
+
 /// User-facing error messages (sanitized)
 #[derive(Error, Debug)]
 pub enum UserError {
@@ -156,6 +239,11 @@ pub enum UserError {
         /// What was being executed, for debugging.
         context: String,
     },
+
+    /// Reading or writing the saved profile or configuration failed. The cause is kept as a
+    /// source for logs; the displayed text carries no paths or OS messages.
+    #[error("Could not read or save your data. Please try again.")]
+    Storage(#[source] crate::config::json_store::StorageError),
 }
 
 impl UserError {
@@ -176,8 +264,6 @@ impl UserError {
 
 impl From<SecurityError> for UserError {
     fn from(err: SecurityError) -> Self {
-        tracing::error!("Security error occurred: {:?}", err);
-
         match err {
             SecurityError::PathTraversal
             | SecurityError::InvalidPath
@@ -209,10 +295,8 @@ impl From<SecurityError> for UserError {
 impl From<crate::gamification::GamificationError> for UserError {
     fn from(err: crate::gamification::GamificationError) -> Self {
         use crate::gamification::GamificationError;
-        tracing::error!("Gamification error occurred: {:?}", err);
 
         match err {
-            GamificationError::StorageError(_) => UserError::OperationFailed,
             GamificationError::QuestNotFound(_) => UserError::OperationFailed,
             GamificationError::InvalidLevel(_) => UserError::invalid_state("Invalid level"),
             GamificationError::StreakFreezeUnavailable => UserError::OperationFailed,
@@ -226,7 +310,6 @@ impl From<crate::gamification::GamificationError> for UserError {
 impl From<crate::learning::LearningError> for UserError {
     fn from(err: crate::learning::LearningError) -> Self {
         use crate::learning::LearningError;
-        tracing::error!("Learning error occurred: {:?}", err);
 
         match err {
             LearningError::InvalidStability(_)
@@ -240,6 +323,12 @@ impl From<crate::learning::LearningError> for UserError {
             }
             LearningError::FsrsError(_) => UserError::OperationFailed,
         }
+    }
+}
+
+impl From<crate::config::json_store::StorageError> for UserError {
+    fn from(err: crate::config::json_store::StorageError) -> Self {
+        Self::Storage(err)
     }
 }
 
@@ -415,10 +504,11 @@ pub mod path_validator {
     ///
     /// # Errors
     ///
-    /// - [`SecurityError::InvalidPath`] if the path cannot be opened
-    /// - [`SecurityError::NotRegularFile`] if it is not a regular file
-    /// - [`SecurityError::FileTooLarge`] if it exceeds `max_size`
-    /// - [`SecurityError::InvalidEncoding`] if the content is not UTF-8
+    /// - [`CappedReadError::Io`] if the path cannot be inspected, opened or read (a missing
+    ///   file is `Io` with [`std::io::ErrorKind::NotFound`])
+    /// - [`CappedReadError::NotRegularFile`] if it is not a regular file
+    /// - [`CappedReadError::TooLarge`] if it exceeds `max_size`
+    /// - [`CappedReadError::InvalidUtf8`] if the content is not UTF-8
     ///
     /// # Examples
     ///
@@ -431,38 +521,31 @@ pub mod path_validator {
     /// assert_eq!(read_capped(&path, 16).unwrap(), "hello");
     /// assert!(read_capped(&path, 4).is_err());
     /// ```
-    pub fn read_capped(path: &Path, max_size: u64) -> Result<String, SecurityError> {
+    pub fn read_capped(path: &Path, max_size: u64) -> Result<String, CappedReadError> {
         // `stat` never blocks, so a FIFO is rejected here before `open` could hang on it.
-        if !fs::metadata(path)
-            .map_err(|_| SecurityError::InvalidPath)?
-            .is_file()
-        {
-            return Err(SecurityError::NotRegularFile);
+        if !fs::metadata(path).map_err(CappedReadError::Io)?.is_file() {
+            return Err(CappedReadError::NotRegularFile);
         }
 
-        let file = fs::File::open(path).map_err(|_| SecurityError::InvalidPath)?;
-        let is_file = file
-            .metadata()
-            .map_err(|e| SecurityError::ReadFailed(e.to_string()))?
-            .is_file();
-        if !is_file {
-            return Err(SecurityError::NotRegularFile);
+        let file = fs::File::open(path).map_err(CappedReadError::Io)?;
+        if !file.metadata().map_err(CappedReadError::Io)?.is_file() {
+            return Err(CappedReadError::NotRegularFile);
         }
 
         let mut buf = Vec::new();
         file.take(max_size.saturating_add(1))
             .read_to_end(&mut buf)
-            .map_err(|e| SecurityError::ReadFailed(e.to_string()))?;
+            .map_err(CappedReadError::Io)?;
 
         let read = buf.len() as u64;
         if read > max_size {
-            return Err(SecurityError::FileTooLarge {
+            return Err(CappedReadError::TooLarge {
                 max: max_size,
                 actual: read,
             });
         }
 
-        String::from_utf8(buf).map_err(|_| SecurityError::InvalidEncoding)
+        String::from_utf8(buf).map_err(CappedReadError::InvalidUtf8)
     }
 }
 
@@ -1169,6 +1252,25 @@ mod tests {
         );
     }
 
+    #[test]
+    fn error_chain_joins_every_cause() {
+        let root = std::io::Error::other("disk full");
+        let storage = crate::config::json_store::StorageError::Write {
+            doc: crate::config::json_store::Document::Profile,
+            path: "/secret/profile.json".into(),
+            source: root,
+        };
+        let chain = error_chain(&storage);
+        assert_eq!(
+            chain,
+            "failed to write the profile file /secret/profile.json: disk full"
+        );
+
+        let user = UserError::from(storage);
+        assert!(!user.to_string().contains("/secret"), "{user}");
+        assert_eq!(error_chain(&user).matches("disk full").count(), 1);
+    }
+
     mod read_capped {
         use super::*;
 
@@ -1187,7 +1289,7 @@ mod tests {
             std::fs::write(&path, "123456").unwrap();
             assert!(matches!(
                 path_validator::read_capped(&path, 5),
-                Err(SecurityError::FileTooLarge { max: 5, .. })
+                Err(CappedReadError::TooLarge { max: 5, .. })
             ));
         }
 
@@ -1196,7 +1298,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             assert!(matches!(
                 path_validator::read_capped(dir.path(), 5),
-                Err(SecurityError::NotRegularFile)
+                Err(CappedReadError::NotRegularFile)
             ));
         }
 
@@ -1207,16 +1309,18 @@ mod tests {
             std::fs::write(&path, [0xff, 0xfe]).unwrap();
             assert!(matches!(
                 path_validator::read_capped(&path, 5),
-                Err(SecurityError::InvalidEncoding)
+                Err(CappedReadError::InvalidUtf8(_))
             ));
         }
 
         #[test]
-        fn missing_path_is_invalid_path() {
+        fn missing_path_is_not_found() {
             let dir = tempfile::tempdir().unwrap();
+            let err = path_validator::read_capped(&dir.path().join("nope"), 5).unwrap_err();
+            assert!(err.is_not_found(), "{err}");
             assert!(matches!(
-                path_validator::read_capped(&dir.path().join("nope"), 5),
-                Err(SecurityError::InvalidPath)
+                SecurityError::from(err),
+                SecurityError::InvalidPath
             ));
         }
 
@@ -1228,7 +1332,7 @@ mod tests {
             std::os::unix::fs::symlink("/dev/zero", &link).unwrap();
             assert!(matches!(
                 path_validator::read_capped(&link, 1024),
-                Err(SecurityError::NotRegularFile)
+                Err(CappedReadError::NotRegularFile)
             ));
         }
 
@@ -1244,7 +1348,7 @@ mod tests {
             assert!(status.success());
             assert!(matches!(
                 path_validator::read_capped(&fifo, 1024),
-                Err(SecurityError::NotRegularFile)
+                Err(CappedReadError::NotRegularFile)
             ));
         }
     }

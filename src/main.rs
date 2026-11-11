@@ -10,6 +10,7 @@ use helix_trainer::{
     data_loader::{spawn_data_loaders, spawn_save_writer},
     gamification::ProfileStorage,
     learning::PerformanceTracker,
+    security::error_chain,
     ui::{self, AppState, Notification, NotificationType},
 };
 use std::io;
@@ -18,6 +19,8 @@ use tokio::sync::mpsc;
 mod cli;
 mod data_handling;
 mod event_loop;
+#[cfg(test)]
+mod log_capture;
 mod logging;
 mod terminal;
 
@@ -67,7 +70,7 @@ async fn main() -> Result<()> {
     // Load application configuration
     let config_storage = ConfigStorage::new();
     let app_config = config_storage.load().unwrap_or_else(|e| {
-        tracing::warn!("Failed to load config, using defaults: {}", e);
+        tracing::warn!(error = %error_chain(&e), "Failed to load config, using defaults");
         AppConfig::default()
     });
 
@@ -169,7 +172,7 @@ async fn main() -> Result<()> {
             tracing::info!("Profile saved successfully");
         }
         Ok(SaveWriterOutcome::LastSaveFailed(err)) => {
-            tracing::error!("Failed to save profile on exit: {}", err);
+            tracing::error!(error = %error_chain(&*err), "Failed to save profile on exit");
         }
         Ok(SaveWriterOutcome::NoRequestsProcessed) if exit_save_requested => {
             tracing::error!("Profile save writer exited without processing the exit-time save");
@@ -177,7 +180,9 @@ async fn main() -> Result<()> {
         Ok(SaveWriterOutcome::NoRequestsProcessed) => {
             tracing::info!("Exit-time profile save skipped (profile not loaded or load failed)");
         }
-        Err(e) => tracing::error!("Profile save writer task panicked: {}", e),
+        Err(e) => {
+            tracing::error!(error = %error_chain(&e), "Profile save writer task panicked");
+        }
     }
 
     // Restore terminal

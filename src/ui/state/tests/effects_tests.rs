@@ -51,7 +51,7 @@ fn test_start_fresh_profile_requires_a_backed_up_quarantine() {
 
     state
         .progress
-        .quarantine_profile(QuarantineOutcome::Failed("no space".to_string()));
+        .quarantine_profile(crate::testing::failed_backup());
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
     assert!(
         effects.is_empty(),
@@ -82,5 +82,5 @@ fn test_second_start_fresh_request_is_ignored_while_the_first_is_in_flight() {
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
 
     assert_eq!(effects, vec![Effect::StartFreshProfile]);
-    assert_eq!(state.progress.persistence(), &ProfilePersistence::Loading);
+    std::assert_matches!(state.progress.persistence(), ProfilePersistence::Loading);
 }

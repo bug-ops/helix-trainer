@@ -3,15 +3,17 @@
 use std::fs;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::config::data_dir::DataDir;
-use crate::config::json_store::{JsonStore, create_unique_tmp};
+use crate::config::json_store::{Document, JsonStore, StorageError, create_unique_tmp};
 use crate::security::limits::{MAX_LOCK_FILE_SIZE, MAX_PROFILE_FILE_SIZE};
 use crate::security::{path_validator, private_fs};
 
-use super::{GamificationError, Result, UserProfile};
+use super::UserProfile;
 
 /// Check whether a process with the given pid is currently alive.
 ///
@@ -104,14 +106,41 @@ struct ProfileData {
     profile: UserProfile,
 }
 
+/// Why an unreadable `profile.json` could not be backed up.
+#[derive(Debug, Error)]
+pub enum QuarantineError {
+    /// There is no profile file (and no untransferred legacy file) to back up.
+    #[error("there is no profile file to back up")]
+    Missing,
+
+    /// The path exists but is not a regular file, so it is not copied (reading it could block
+    /// or never end).
+    #[error("the profile path is not a regular file")]
+    NotRegularFile,
+
+    /// Inspecting, reading or copying the file failed.
+    #[error("failed to copy the profile file")]
+    Copy {
+        /// The I/O error.
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+impl From<std::io::Error> for QuarantineError {
+    fn from(source: std::io::Error) -> Self {
+        Self::Copy { source }
+    }
+}
+
 /// Result of preserving an unreadable `profile.json` via [`ProfileStorage::quarantine`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum QuarantineOutcome {
     /// The original file was copied to this path; the original is untouched.
     BackedUp(PathBuf),
 
     /// The backup could not be made; the original is untouched.
-    Failed(String),
+    Failed(Arc<QuarantineError>),
 }
 
 /// Outcome of [`ProfileStorage::check_and_refresh_lock`].
@@ -158,7 +187,7 @@ impl ProfileStorage {
         Self {
             store: JsonStore::new(
                 data_dir.file(PROFILE_FILE_NAME),
-                "profile",
+                Document::Profile,
                 MAX_PROFILE_FILE_SIZE,
             )
             .migrating_from(data_dir.legacy_file(PROFILE_FILE_NAME)),
@@ -168,7 +197,7 @@ impl ProfileStorage {
     /// Create storage with custom path
     pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            store: JsonStore::new(path.as_ref(), "profile", MAX_PROFILE_FILE_SIZE),
+            store: JsonStore::new(path.as_ref(), Document::Profile, MAX_PROFILE_FILE_SIZE),
         }
     }
 
@@ -220,7 +249,7 @@ impl ProfileStorage {
     /// let profile = storage.load().unwrap();
     /// println!("Level: {}", profile.level);
     /// ```
-    pub fn load(&self) -> Result<UserProfile> {
+    pub fn load(&self) -> Result<UserProfile, StorageError> {
         match self.store.load()? {
             Some(mut data) => {
                 data.profile.recompute_level();
@@ -244,25 +273,24 @@ impl ProfileStorage {
     pub fn quarantine(&self) -> QuarantineOutcome {
         match self.try_quarantine() {
             Ok(path) => QuarantineOutcome::BackedUp(path),
-            Err(e) => QuarantineOutcome::Failed(e.to_string()),
+            Err(e) => QuarantineOutcome::Failed(Arc::new(e)),
         }
     }
 
-    fn try_quarantine(&self) -> std::io::Result<PathBuf> {
-        let not_regular = || std::io::Error::other("not a regular file");
+    fn try_quarantine(&self) -> Result<PathBuf, QuarantineError> {
         let metadata = match fs::metadata(self.path()) {
             Ok(metadata) => metadata,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return self.untransferred_legacy().ok_or(e);
+                return self.untransferred_legacy().ok_or(QuarantineError::Missing);
             }
-            Err(e) => return Err(e),
+            Err(e) => return Err(e.into()),
         };
         if !metadata.is_file() {
-            return Err(not_regular());
+            return Err(QuarantineError::NotRegularFile);
         }
         let mut source = fs::File::open(self.path())?;
         if !source.metadata()?.is_file() {
-            return Err(not_regular());
+            return Err(QuarantineError::NotRegularFile);
         }
         if let Some(existing) = self.find_identical_backup(&mut source) {
             return Ok(existing);
@@ -281,14 +309,14 @@ impl ProfileStorage {
             match private_fs::create_new_file(&candidate) {
                 Ok(file) => break (candidate, file),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
-                Err(e) => return Err(e),
+                Err(e) => return Err(e.into()),
             }
         };
 
         let copied = std::io::copy(&mut source, &mut backup).and_then(|_| backup.sync_all());
         if let Err(e) = copied {
             let _ = fs::remove_file(&backup_path);
-            return Err(e);
+            return Err(e.into());
         }
         Ok(backup_path)
     }
@@ -364,11 +392,12 @@ impl ProfileStorage {
     /// assert_eq!(fresh.level, 1);
     /// assert_eq!(storage.load().unwrap().level, 1);
     /// ```
-    pub fn start_fresh(&self) -> Result<UserProfile> {
-        if let QuarantineOutcome::Failed(reason) = self.quarantine() {
-            return Err(GamificationError::StorageError(format!(
-                "Refusing to replace the profile without a backup: {reason}"
-            )));
+    pub fn start_fresh(&self) -> Result<UserProfile, StorageError> {
+        if let QuarantineOutcome::Failed(source) = self.quarantine() {
+            return Err(StorageError::NoBackup {
+                doc: Document::Profile,
+                source,
+            });
         }
         let profile = UserProfile::new();
         self.save(&profile)?;
@@ -402,7 +431,7 @@ impl ProfileStorage {
     /// profile.add_xp(100);
     /// storage.save(&profile).unwrap();
     /// ```
-    pub fn save(&self, profile: &UserProfile) -> Result<()> {
+    pub fn save(&self, profile: &UserProfile) -> Result<(), StorageError> {
         self.store.save(&ProfileData {
             profile: profile.clone(),
         })?;
@@ -510,10 +539,12 @@ impl ProfileStorage {
     /// # Errors
     ///
     /// Returns error if file exists but cannot be deleted
-    pub fn delete(&self) -> Result<()> {
+    pub fn delete(&self) -> Result<(), StorageError> {
         if self.exists() {
-            fs::remove_file(self.path()).map_err(|e| {
-                GamificationError::StorageError(format!("Failed to delete profile: {}", e))
+            fs::remove_file(self.path()).map_err(|source| StorageError::Delete {
+                doc: Document::Profile,
+                path: self.path().to_path_buf(),
+                source,
             })?;
         }
         let _ = fs::remove_file(self.lock_path());
@@ -902,7 +933,7 @@ mod tests {
         let second = storage.quarantine();
 
         assert!(matches!(first, QuarantineOutcome::BackedUp(_)));
-        assert_eq!(first, second);
+        std::assert_matches!((&first, &second), (QuarantineOutcome::BackedUp(a), QuarantineOutcome::BackedUp(b)) if a == b);
         assert_eq!(backups_in(dir.path()).len(), 1);
     }
 
@@ -1253,7 +1284,16 @@ mod tests {
 
         let err = ProfileStorage::with_path(&path).load().unwrap_err();
 
-        assert!(err.to_string().contains("Not a regular file"), "{err}");
+        assert!(
+            matches!(
+                err,
+                StorageError::Read {
+                    source: crate::security::CappedReadError::NotRegularFile,
+                    ..
+                }
+            ),
+            "{err}"
+        );
     }
 
     /// #441: a FIFO must be rejected without blocking.
@@ -1311,5 +1351,40 @@ mod tests {
             .unwrap();
 
         assert_eq!(mode_of(&path), 0o600);
+    }
+
+    #[test]
+    fn start_fresh_without_a_profile_file_is_a_no_backup_error() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        let err = storage.start_fresh().unwrap_err();
+
+        assert!(matches!(err, StorageError::NoBackup { .. }), "{err}");
+        let chain = crate::security::error_chain(&err);
+        assert_eq!(chain.matches("no profile file").count(), 1, "{chain}");
+        assert!(!storage.exists());
+    }
+
+    #[test]
+    fn delete_failure_is_a_typed_delete_error() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::create_dir(&path).unwrap();
+
+        let err = ProfileStorage::with_path(&path).delete().unwrap_err();
+
+        assert!(matches!(err, StorageError::Delete { .. }), "{err}");
+    }
+
+    #[test]
+    fn quarantine_failure_for_a_missing_file_is_typed() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        std::assert_matches!(
+            storage.quarantine(),
+            QuarantineOutcome::Failed(e) if matches!(*e, QuarantineError::Missing)
+        );
     }
 }

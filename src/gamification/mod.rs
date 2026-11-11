@@ -14,7 +14,7 @@ pub use quests::{
     Quest, QuestDifficulty, QuestGeneration, QuestGenerator, QuestRegistrySlot,
     QuestTemplateRegistry, QuestTracker, QuestType,
 };
-pub use storage::{LockStatus, ProfileStorage, QuarantineOutcome};
+pub use storage::{LockStatus, ProfileStorage, QuarantineError, QuarantineOutcome};
 pub use streak::{StreakChange, StreakManager};
 
 use thiserror::Error;
@@ -25,10 +25,6 @@ pub enum GamificationError {
     /// No quest matches the requested id.
     #[error("Quest not found: {0}")]
     QuestNotFound(String),
-
-    /// Reading or writing persisted data failed.
-    #[error("Storage error: {0}")]
-    StorageError(String),
 
     /// A level outside the valid range was requested.
     #[error("Invalid level: {0}")]
@@ -56,12 +52,6 @@ pub enum GamificationError {
     /// The achievement was unlocked earlier and cannot be unlocked twice.
     #[error("Achievement already unlocked: {0:?}")]
     AchievementAlreadyUnlocked(AchievementId),
-}
-
-impl From<crate::config::json_store::JsonStoreError> for GamificationError {
-    fn from(e: crate::config::json_store::JsonStoreError) -> Self {
-        Self::StorageError(e.to_string())
-    }
 }
 
 /// Result alias with [`GamificationError`] as the error type.

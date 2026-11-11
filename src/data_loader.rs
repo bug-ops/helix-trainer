@@ -6,13 +6,19 @@
 //! Scenarios are loaded from compile-time embedded data, while
 //! profiles are loaded from the user's config directory.
 
-use crate::async_state::{DataLoadMessage, SaveRequest, SaveWriterOutcome};
+use crate::async_state::{
+    DataLoadMessage, LoaderError, SaveFailure, SaveRequest, SaveWriterOutcome,
+};
+use crate::config::json_store::{Document, StorageError};
 use crate::config::{Scenario, ScenarioLoader};
 use crate::constants::PROFILE_SAVE_QUEUE_CAPACITY;
-use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile};
-use anyhow::Result;
+use crate::gamification::{
+    ProfileStorage, QuarantineError, QuarantineOutcome, QuestTemplateRegistry, UserProfile,
+};
+use crate::security::CappedReadError;
+use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
+use tokio::task::{JoinError, JoinHandle};
 
 /// Spawn background data loaders for scenarios, profile, and quest registry
 ///
@@ -50,7 +56,7 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
         let result = load_scenarios_async().await;
         let msg = match result {
             Ok(scenarios) => DataLoadMessage::ScenariosReady(scenarios),
-            Err(e) => DataLoadMessage::ScenariosError(e.to_string()),
+            Err(e) => DataLoadMessage::ScenariosError(e),
         };
         if tx_scenarios.send(msg).await.is_err() {
             tracing::warn!("Failed to send scenarios message: receiver dropped");
@@ -62,7 +68,7 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
         let locale = rust_i18n::locale();
         let msg = match load_quest_registry_async(&locale).await {
             Ok(registry) => DataLoadMessage::QuestRegistryReady(registry),
-            Err(e) => DataLoadMessage::QuestRegistryError(e.to_string()),
+            Err(e) => DataLoadMessage::QuestRegistryError(e),
         };
         if tx_quests.send(msg).await.is_err() {
             tracing::warn!("Failed to send quest registry message: receiver dropped");
@@ -71,13 +77,10 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
 
     // Spawn profile loader (runs in parallel)
     tokio::spawn(async move {
-        let msg = match load_profile_message(ProfileStorage::new()).await {
+        let storage = ProfileStorage::new();
+        let msg = match load_profile_message(storage.clone()).await {
             Ok(msg) => msg,
-            Err(e) => DataLoadMessage::ProfileError {
-                error: e.to_string(),
-                fallback: UserProfile::new(),
-                backup: QuarantineOutcome::Failed("profile loader task failed".to_string()),
-            },
+            Err(e) => profile_task_failed(&storage, e),
         };
         if tx_profile.send(msg).await.is_err() {
             tracing::warn!("Failed to send profile message: receiver dropped");
@@ -129,7 +132,7 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
 ///
 ///     drop(save_tx);
 ///     let outcome = writer_handle.await.unwrap();
-///     assert_eq!(outcome, SaveWriterOutcome::LastSaveSucceeded);
+///     assert!(matches!(outcome, SaveWriterOutcome::LastSaveSucceeded));
 /// }
 /// ```
 pub fn spawn_save_writer(
@@ -142,23 +145,21 @@ pub fn spawn_save_writer(
         while let Some(request) = save_rx.recv().await {
             let SaveRequest { storage, profile } = request;
             let result = tokio::task::spawn_blocking(move || storage.save(&profile)).await;
-            let (msg, latest_outcome) = match result {
-                Ok(Ok(())) => (
+            let failure = match result {
+                Ok(Ok(())) => None,
+                Ok(Err(e)) => Some(SaveFailure::Storage(e)),
+                Err(e) => Some(SaveFailure::Task(e)),
+            };
+            let (msg, latest_outcome) = match failure {
+                None => (
                     DataLoadMessage::ProfileSaved,
                     SaveWriterOutcome::LastSaveSucceeded,
                 ),
-                Ok(Err(e)) => {
-                    let error = e.to_string();
+                Some(failure) => {
+                    let failure = Arc::new(failure);
                     (
-                        DataLoadMessage::ProfileSaveError(error.clone()),
-                        SaveWriterOutcome::LastSaveFailed(error),
-                    )
-                }
-                Err(join_err) => {
-                    let error = join_err.to_string();
-                    (
-                        DataLoadMessage::ProfileSaveError(error.clone()),
-                        SaveWriterOutcome::LastSaveFailed(error),
+                        DataLoadMessage::ProfileSaveError(Arc::clone(&failure)),
+                        SaveWriterOutcome::LastSaveFailed(failure),
                     )
                 }
             };
@@ -181,8 +182,9 @@ pub fn spawn_save_writer(
 ///
 /// # Errors
 ///
-/// Returns an error if scenarios cannot be loaded from embedded data.
-pub async fn load_scenarios_async() -> Result<Vec<Scenario>> {
+/// Returns [`LoaderError::Scenarios`] if scenarios cannot be loaded from embedded data and
+/// [`LoaderError::Task`] if the blocking task fails.
+pub async fn load_scenarios_async() -> Result<Vec<Scenario>, LoaderError> {
     tokio::task::spawn_blocking(move || {
         let current_locale = rust_i18n::locale();
         let locale_str: &str = current_locale.as_ref();
@@ -190,7 +192,7 @@ pub async fn load_scenarios_async() -> Result<Vec<Scenario>> {
         let loader = ScenarioLoader::new();
         loader
             .load_from_embedded(locale_str)
-            .map_err(|e| anyhow::anyhow!("Scenario load error: {:?}", e))
+            .map_err(LoaderError::Scenarios)
     })
     .await?
 }
@@ -206,16 +208,32 @@ pub async fn load_scenarios_async() -> Result<Vec<Scenario>> {
 ///
 /// Returns an error only if the blocking task itself panics or is cancelled;
 /// load failures are reported as [`DataLoadMessage::ProfileError`].
-pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage> {
-    Ok(tokio::task::spawn_blocking(move || match storage.load() {
+pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage, JoinError> {
+    tokio::task::spawn_blocking(move || match storage.load() {
         Ok(profile) => DataLoadMessage::ProfileReady(profile),
-        Err(e) => DataLoadMessage::ProfileError {
-            error: e.to_string(),
+        Err(error) => DataLoadMessage::ProfileError {
+            error,
             fallback: UserProfile::new(),
             backup: storage.quarantine(),
         },
     })
-    .await?)
+    .await
+}
+
+/// The refusal reported when a profile task panicked or was cancelled before it produced a
+/// message, so the event loop still receives a [`DataLoadMessage::ProfileError`].
+fn profile_task_failed(storage: &ProfileStorage, error: JoinError) -> DataLoadMessage {
+    DataLoadMessage::ProfileError {
+        error: StorageError::Read {
+            doc: Document::Profile,
+            path: storage.path().to_path_buf(),
+            source: CappedReadError::Io(std::io::Error::other(error)),
+        },
+        fallback: UserProfile::new(),
+        backup: QuarantineOutcome::Failed(Arc::new(QuarantineError::Copy {
+            source: std::io::Error::other("the profile task failed"),
+        })),
+    }
 }
 
 /// Async "Start fresh" for a quarantined profile.
@@ -250,18 +268,18 @@ pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMes
 /// assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
 /// # }
 /// ```
-pub async fn start_fresh_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage> {
-    Ok(
-        tokio::task::spawn_blocking(move || match storage.start_fresh() {
-            Ok(profile) => DataLoadMessage::ProfileReady(profile),
-            Err(e) => DataLoadMessage::ProfileError {
-                error: e.to_string(),
-                fallback: UserProfile::new(),
-                backup: storage.quarantine(),
-            },
-        })
-        .await?,
-    )
+pub async fn start_fresh_profile_message(
+    storage: ProfileStorage,
+) -> Result<DataLoadMessage, JoinError> {
+    tokio::task::spawn_blocking(move || match storage.start_fresh() {
+        Ok(profile) => DataLoadMessage::ProfileReady(profile),
+        Err(error) => DataLoadMessage::ProfileError {
+            error,
+            fallback: UserProfile::new(),
+            backup: storage.quarantine(),
+        },
+    })
+    .await
 }
 
 /// Locale whose quest templates stand in when the active locale has none
@@ -275,9 +293,9 @@ const FALLBACK_QUEST_LOCALE: &str = "en";
 ///
 /// # Errors
 ///
-/// Returns an error if neither `locale` nor the fallback locale yields a
-/// valid registry.
-pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegistry> {
+/// Returns [`LoaderError::QuestRegistry`] if neither `locale` nor the fallback locale yields a
+/// valid registry, and [`LoaderError::Task`] if the blocking task fails.
+pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegistry, LoaderError> {
     let locale = locale.to_string();
     tokio::task::spawn_blocking(move || {
         QuestTemplateRegistry::from_embedded(&locale)
@@ -288,7 +306,7 @@ pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegi
                 tracing::warn!(%locale, "No quest templates for locale, using the fallback");
                 QuestTemplateRegistry::from_embedded(FALLBACK_QUEST_LOCALE)
             })
-            .map_err(|e| anyhow::anyhow!("Quest registry error: {:?}", e))
+            .map_err(LoaderError::QuestRegistry)
     })
     .await?
 }

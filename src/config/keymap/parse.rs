@@ -99,7 +99,8 @@ pub fn load_keymap_file(path: &Path) -> Result<(KeymapOverlay, KeymapReport), Ke
     if !path.exists() {
         return Err(KeymapLoadError::NotFound);
     }
-    let content = path_validator::read_capped(path, limits::MAX_KEYMAP_FILE_SIZE)?;
+    let content = path_validator::read_capped(path, limits::MAX_KEYMAP_FILE_SIZE)
+        .map_err(crate::security::SecurityError::from)?;
     Ok(resolve_str(&content)?)
 }
 

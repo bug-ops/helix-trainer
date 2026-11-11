@@ -275,7 +275,7 @@ impl QuestLoader {
 
         // Bounded read of a regular file to prevent resource exhaustion
         let content = path_validator::read_capped(&canonical, MAX_SCENARIO_FILE_SIZE)
-            .map_err(UserError::from)?;
+            .map_err(|e| UserError::from(SecurityError::from(e)))?;
 
         // Parse, count-check, and validate each quest template
         let quests = super::loader::parse_and_validate::<QuestsFile>(

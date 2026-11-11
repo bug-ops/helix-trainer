@@ -4,6 +4,7 @@
 //! data loader) is returned as an [`Effect`] for the caller to execute. Effects pushed before a
 //! failing step are still delivered, so a recoverable error never drops a save or a sound.
 
+use crate::security::error_chain;
 use crate::sound::SoundEffect;
 
 use super::ProgressState;
@@ -31,7 +32,7 @@ impl Effect {
             Self::Play(effect) => progress.sound_manager.play(effect),
             Self::SaveProfile => {
                 if let Err(e) = progress.save_immediate() {
-                    tracing::error!("Failed to save profile: {:?}", e);
+                    tracing::error!(error = %error_chain(&e), "Failed to save profile");
                 }
             }
             Self::StartFreshProfile => return Some(self),

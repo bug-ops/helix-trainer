@@ -35,7 +35,14 @@ pub use scenario::{
     ScenarioBuilder, default_test_scenario, test_scenario_with_difficulty, test_scenario_with_id,
 };
 
+use crate::gamification::{QuarantineError, QuarantineOutcome};
 use crate::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
+
+/// A quarantine outcome for a profile whose backup could not be made.
+#[must_use]
+pub fn failed_backup() -> QuarantineOutcome {
+    QuarantineOutcome::Failed(std::sync::Arc::new(QuarantineError::Missing))
+}
 
 /// Build a [`ScenarioId`] from a literal, panicking on an invalid test fixture.
 #[must_use]

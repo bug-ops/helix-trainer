@@ -122,7 +122,7 @@ impl std::fmt::Debug for GameState {
 ///
 /// Every save path consults this, so a placeholder or fallback profile can
 /// never overwrite the user's real `profile.json`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum ProfilePersistence {
     /// The real profile is still loading; the in-memory one is a placeholder.
     Loading,
@@ -370,7 +370,7 @@ impl ProgressState {
     }
 
     /// Synchronously write the profile to disk, bypassing off-thread dispatch.
-    fn save_sync(&mut self) -> Result<(), crate::gamification::GamificationError> {
+    fn save_sync(&mut self) -> Result<(), crate::config::json_store::StorageError> {
         if !self.persistence.is_writable() {
             return Ok(());
         }
@@ -412,7 +412,7 @@ impl ProgressState {
     /// synchronous fallback path) failed outright — the async path's real
     /// write outcome otherwise arrives later as a
     /// [`crate::async_state::DataLoadMessage`].
-    pub fn save_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
+    pub fn save_immediate(&mut self) -> Result<(), crate::config::json_store::StorageError> {
         if !self.persistence.is_writable() {
             tracing::debug!(state = ?self.persistence, "Profile save skipped: profile is not saveable");
             return Ok(());
@@ -471,7 +471,7 @@ impl ProgressState {
     /// # Errors
     ///
     /// Returns an error if the save operation fails.
-    pub fn save_debounced(&mut self) -> Result<(), crate::gamification::GamificationError> {
+    pub fn save_debounced(&mut self) -> Result<(), crate::config::json_store::StorageError> {
         if !self.should_save() {
             return Ok(());
         }
@@ -568,7 +568,7 @@ mod tests {
     fn test_non_writable_profile_refuses_every_save_path() {
         for state in [
             ProfilePersistence::Loading,
-            ProfilePersistence::Quarantined(QuarantineOutcome::Failed("x".into())),
+            ProfilePersistence::Quarantined(crate::testing::failed_backup()),
         ] {
             let mut progress = writable_progress();
             match &state {
@@ -595,7 +595,7 @@ mod tests {
             ProfileStorage::for_test(),
         );
 
-        assert_eq!(progress.persistence(), &ProfilePersistence::Loading);
+        assert_matches!(progress.persistence(), ProfilePersistence::Loading);
         progress.save_immediate().unwrap();
         assert!(!progress.storage.exists());
         assert!(progress.prepare_final_save_request().is_none());
@@ -652,7 +652,7 @@ mod tests {
     #[test]
     fn test_toggle_sound_does_not_touch_quarantined_profile() {
         let mut progress = writable_progress();
-        progress.quarantine_profile(QuarantineOutcome::Failed("x".into()));
+        progress.quarantine_profile(crate::testing::failed_backup());
 
         progress.toggle_sound();
 

@@ -8,7 +8,7 @@ use std::time::Duration;
 use crate::game::format_key_for_display;
 use crate::helix::commands::CMD_ESCAPE;
 use crate::input::typestate::{HandlerResult, command_to_key_event};
-use crate::security::UserError;
+use crate::security::{UserError, error_chain};
 use crate::ui::state::{
     AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, dispatch,
 };
@@ -35,6 +35,7 @@ fn process_session_result(
                     // Keep the completed session rather than dropping the
                     // player's progress with it.
                     state.game.pending_completed_session = Some(s);
+                    tracing::error!(error = %error_chain(&e), "Failed to build the scenario feedback");
                     return Err(UserError::from(e));
                 }
             };

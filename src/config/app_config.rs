@@ -7,11 +7,10 @@
 
 use std::path::Path;
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use super::data_dir::DataDir;
-use super::json_store::JsonStore;
+use super::json_store::{Document, JsonStore, StorageError};
 use crate::security::limits::MAX_CONFIG_FILE_SIZE;
 
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -88,7 +87,7 @@ impl ConfigStorage {
         Self {
             store: JsonStore::new(
                 data_dir.file(CONFIG_FILE_NAME),
-                "config",
+                Document::Config,
                 MAX_CONFIG_FILE_SIZE,
             )
             .migrating_from(data_dir.legacy_file(CONFIG_FILE_NAME)),
@@ -98,7 +97,7 @@ impl ConfigStorage {
     /// Create storage with custom path
     pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            store: JsonStore::new(path.as_ref(), "config", MAX_CONFIG_FILE_SIZE),
+            store: JsonStore::new(path.as_ref(), Document::Config, MAX_CONFIG_FILE_SIZE),
         }
     }
 
@@ -118,7 +117,7 @@ impl ConfigStorage {
     /// let storage = ConfigStorage::new();
     /// let config = storage.load().unwrap();
     /// ```
-    pub fn load(&self) -> Result<AppConfig> {
+    pub fn load(&self) -> Result<AppConfig, StorageError> {
         Ok(self
             .store
             .load()?
@@ -144,10 +143,10 @@ impl ConfigStorage {
     /// let config = AppConfig::default();
     /// storage.save(&config).unwrap();
     /// ```
-    pub fn save(&self, config: &AppConfig) -> Result<()> {
-        Ok(self.store.save(&ConfigData {
+    pub fn save(&self, config: &AppConfig) -> Result<(), StorageError> {
+        self.store.save(&ConfigData {
             config: config.clone(),
-        })?)
+        })
     }
 
     /// Check if config file exists
@@ -322,14 +321,13 @@ mod tests {
         // Write invalid JSON
         fs::write(&file_path, "invalid json {").unwrap();
 
-        let result = storage.load();
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Failed to parse config JSON")
-        );
+        assert!(matches!(
+            storage.load(),
+            Err(StorageError::Corrupt {
+                doc: Document::Config,
+                ..
+            })
+        ));
     }
 
     #[test]

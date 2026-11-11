@@ -9,6 +9,7 @@ use crate::game::services::ScenarioCompletionService;
 use crate::gamification::UserProfile;
 use crate::learning::Analytics;
 use crate::security::UserError;
+use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
@@ -100,7 +101,10 @@ fn record_scenario_completion(
     if leveled_up {
         ctx.ui.effects.push(Effect::SaveProfile);
     } else if let Err(e) = ctx.progress.save_debounced() {
-        tracing::error!("Failed to save profile after scenario completion: {:?}", e);
+        tracing::error!(
+            error = %error_chain(&e),
+            "Failed to save profile after scenario completion"
+        );
     }
 
     // Generate notifications for mastery level ups

@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use helix_trainer::{
     async_state::DataLoadMessage,
     constants::{ANIMATION_TICK_INTERVAL, COUNTDOWN_TICK_INTERVAL, SUCCESS_SCREEN_DELAY},
-    security::UserError,
+    security::{UserError, error_chain},
     ui::{self, AppState, Message, Notification, NotificationType, state::Effect},
 };
 
@@ -40,7 +40,7 @@ fn report_update_error(state: &mut AppState, error: &UserError) {
         );
         return;
     }
-    tracing::warn!(error = %error, "Update failed");
+    tracing::warn!(error = %error_chain(error), "Update failed");
     state
         .ui
         .notifications
@@ -65,10 +65,12 @@ fn spawn_start_fresh_profile(state: &AppState, data_tx: &mpsc::Sender<DataLoadMe
         match start_fresh_profile_message(storage).await {
             Ok(msg) => {
                 if let Err(e) = data_tx.send(msg).await {
-                    tracing::error!("Failed to report the fresh profile: {}", e);
+                    tracing::error!(error = %error_chain(&e), "Failed to report the fresh profile");
                 }
             }
-            Err(e) => tracing::error!("Failed to start a fresh profile: {:#}", e),
+            Err(e) => {
+                tracing::error!(error = %error_chain(&e), "Failed to start a fresh profile");
+            }
         }
     });
 }
@@ -389,5 +391,31 @@ mod tests {
 
         assert!(state.ui.running);
         assert_eq!(state.ui.notifications.count(), 1);
+    }
+
+    /// FR-094: the update-error sink logs the whole cause chain of a storage error, while
+    /// the notification stays free of paths and OS messages.
+    #[test]
+    fn test_storage_error_is_logged_with_its_cause_and_shown_sanitized() {
+        use helix_trainer::config::json_store::{Document, StorageError};
+
+        let mut state = test_state();
+        let cause = serde_json::from_str::<u8>("x").unwrap_err();
+        let cause_text = cause.to_string();
+        let error = UserError::from(StorageError::Corrupt {
+            doc: Document::Profile,
+            path: "/secret/dir/profile.json".into(),
+            source: cause,
+        });
+
+        let logs = crate::log_capture::capture_logs(|| report_update_error(&mut state, &error));
+
+        assert!(logs.contains(&cause_text), "{logs}");
+        let shown = state.ui.notifications.visible();
+        let message = shown
+            .iter()
+            .map(|n| format!("{:?}", n.notification_type))
+            .collect::<String>();
+        assert!(!message.contains("/secret"), "{message}");
     }
 }

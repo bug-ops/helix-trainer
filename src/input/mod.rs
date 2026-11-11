@@ -87,7 +87,7 @@ mod tests {
 
         state
             .progress
-            .quarantine_profile(QuarantineOutcome::Failed("x".to_string()));
+            .quarantine_profile(crate::testing::failed_backup());
         assert_ne!(
             handle_key_event(ctrl_n(), &state),
             Some(Message::StartFreshProfile)

@@ -38,6 +38,16 @@ fn profile_load_failure_message(backup: &QuarantineOutcome) -> String {
     .to_string()
 }
 
+/// Warning shown when a profile save fails; the next save retries.
+fn save_failed_notification(error: &impl std::fmt::Display) -> Notification {
+    Notification::with_duration(
+        NotificationType::Info {
+            message: format!("Failed to save progress: {error}. Will retry automatically."),
+        },
+        WARNING_NOTIFICATION_DURATION,
+    )
+}
+
 /// Check if daily quests should be refreshed
 ///
 /// Returns true if the current date differs from the last quest refresh date.
@@ -209,19 +219,9 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
                             description: achievement.description,
                         }));
                 }
-                match state.progress.storage.save(&state.progress.profile) {
-                    Ok(()) => state.progress.mark_saved(),
-                    Err(e) => {
-                        tracing::error!("Failed to save profile after startup unlocks: {}", e);
-                        state.ui.notifications.push(Notification::with_duration(
-                            NotificationType::Info {
-                                message: format!(
-                                    "Failed to save progress: {e}. Will retry automatically."
-                                ),
-                            },
-                            WARNING_NOTIFICATION_DURATION,
-                        ));
-                    }
+                if let Err(e) = state.progress.save_immediate() {
+                    tracing::error!("Failed to save profile after startup unlocks: {}", e);
+                    state.ui.notifications.push(save_failed_notification(&e));
                 }
             }
 
@@ -265,12 +265,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) -> Result
             // immediate save retries, instead of the debounce gate
             // treating this failure as a successful save indefinitely.
             state.progress.mark_unsaved();
-            state.ui.notifications.push(Notification::with_duration(
-                NotificationType::Info {
-                    message: format!("Failed to save progress: {err}. Will retry automatically."),
-                },
-                WARNING_NOTIFICATION_DURATION,
-            ));
+            state.ui.notifications.push(save_failed_notification(&err));
         }
     }
 
@@ -1053,6 +1048,32 @@ mod tests {
             )),
             "the failed startup save must be surfaced"
         );
+    }
+
+    /// Regression test for #467: load-time achievement saves go through the
+    /// serialized save writer, not a direct `ProfileStorage::save` call.
+    #[test]
+    fn test_profile_ready_startup_save_uses_serialized_writer() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.json");
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            ProfileStorage::with_path(&path),
+            PerformanceTracker::new(),
+        );
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        state.set_save_channel(tx);
+        let mut profile = UserProfile::new();
+        profile.current_streak = 400;
+        profile.longest_streak = 400;
+        profile.last_activity = state.progress.now();
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile)).unwrap();
+
+        let request = rx.try_recv().expect("save must be queued on the writer");
+        assert_eq!(request.storage.path(), path);
+        assert!(!path.exists(), "no synchronous write on the event loop");
     }
 
     /// Regression test for a non-blocking finding in the #298 critique: the

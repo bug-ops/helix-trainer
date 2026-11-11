@@ -37,6 +37,7 @@ The 2026-11-11 P2-P3 batch (PR for #509) further extends [[helix-core-post-25-07
 | [[cli-version-and-help-flags/spec\|`--version` and `--help` Command-Line Flags]] | specify (lightweight bug-fix spec) | proposed — #452 |
 | [[training-progress-indicator/spec\|Training Progress Indicator Reflects Cursor and Selection]] | specify (lightweight bug-fix spec) | proposed — #451 |
 | [[optimal-count-action-counter-unit/spec\|`optimal_count` and Action Counter Use the Same Unit]] | specify (lightweight bug-fix spec) | proposed — #488; section 7 adds the opt-in `after_taught_commands` completion rule (#512) |
+| [[profile-screen-xp-progress-label/spec\|One Definition of Level XP Progress on Every Screen]] | specify (lightweight bug-fix spec) | proposed — #572; Profile label showed XP remaining instead of level span; shared helper (P2) |
 | [[sound-setting-persistence/spec\|Sound Toggle Persists Across Restarts]] | specify (lightweight bug-fix spec) | proposed — #459 |
 | [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444; extended 2026-11-11 with #467, #484, #515, #518, #460, #457, #456, #531, #454, #523, #463 (section 7) |
 
@@ -68,6 +69,8 @@ Not yet built. Drafted for review/prioritization only.
 |---------|-------|--------|
 | [[fsrs-7-crate-migration/spec\|Migrate `fsrs` Crate from 6.6 to 7.0 (FSRS-6 Behavior Preserved)]] | specify (lightweight, per SDD scaling guidance) | proposed — dependency major bump; model change tracked in [[fsrs-7-model-adoption/spec]] |
 | [[fsrs-7-model-adoption/spec\|Evaluate Switching the Scheduler from the FSRS-6 Model to the FSRS-7 Model]] | specify (lightweight, per SDD scaling guidance) | proposed — go/no-go evaluation (research, P4); prerequisite: [[fsrs-7-crate-migration/spec]] |
+| [[mutation-testing-critical-paths/spec\|Adopt Mutation Testing on Scoring, FSRS Scheduling and Quest-Generation Critical Paths]] | specify (lightweight, per SDD scaling guidance) | proposed — non-gating scheduled cargo-mutants run (research, P4); related: #536 |
+| [[undo-insert-session-granularity/spec\|One Undo Step per Insert Session (`u` Undoes the Whole `i ... Escape`)]] | specify (lightweight, per SDD scaling guidance) | proposed — #571; related: #501 |
 
 ## Project Foundation
 

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Specs for single-step Insert undo, shared level XP progress and cargo-mutants on critical paths (#590)
 - Syntect highlighting is pre-warmed on a background thread after the first frame, removing the first-view hitch (#538, #547)
 - Restore action (Ctrl-R) on the corrupt-profile banner restores `profile.json.prev`, a validated copy rotated from the last good in-memory bytes on every save (#545)
 - `ScenarioId`, `QuestId`, `CommandId` and `NormalizedCommand` newtypes with validating serde; the on-disk JSON is unchanged (#545)

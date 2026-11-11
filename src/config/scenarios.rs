@@ -555,7 +555,7 @@ impl ScenarioLoader {
         })?;
 
         let mut scenarios = Vec::new();
-        let mut file_count = 0;
+        let mut file_count: usize = 0;
 
         for entry in entries {
             let entry = entry.map_err(|e| {
@@ -569,7 +569,7 @@ impl ScenarioLoader {
                 // Recursively visit subdirectories
                 let (sub_scenarios, sub_count) = self.visit_toml_files(&path)?;
                 scenarios.extend(sub_scenarios);
-                file_count += sub_count;
+                file_count = file_count.saturating_add(sub_count);
             } else if path.extension().and_then(|s| s.to_str()) == Some("toml") {
                 // Load scenarios from this file
                 let file_scenarios = self.load(&path).map_err(|e| {
@@ -581,7 +581,7 @@ impl ScenarioLoader {
                     e
                 })?;
 
-                file_count += 1;
+                file_count = file_count.saturating_add(1);
                 scenarios.extend(file_scenarios);
             }
         }

@@ -2,6 +2,16 @@
 //!
 //! Implements FSRS algorithm for optimal review scheduling
 
+#![cfg_attr(
+    not(test),
+    warn(
+        clippy::arithmetic_side_effects,
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used
+    )
+)]
+
 /// Aggregate learning statistics derived from the tracker.
 pub mod analytics;
 /// Per-command FSRS state and the tracker that updates it.

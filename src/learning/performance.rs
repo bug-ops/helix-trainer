@@ -19,8 +19,11 @@ const FSRS_PARAMS: [f32; 21] = fsrs::FSRS6_DEFAULT_PARAMETERS;
 
 static MODEL: LazyLock<FSRS> = LazyLock::new(default_fsrs);
 
+#[expect(
+    clippy::expect_used,
+    reason = "`FSRS_PARAMS` is the crate's own FSRS-6 default parameter set, so construction cannot fail"
+)]
 fn default_fsrs() -> FSRS {
-    // Cannot fail: `FSRS_PARAMS` is the crate's own FSRS-6 default parameter set.
     FSRS::new(&FSRS_PARAMS).expect("default FSRS parameters are valid")
 }
 
@@ -59,7 +62,7 @@ impl<'de> Deserialize<'de> for PerformanceData {
         let mut invalid = Vec::new();
         for (key, value) in raw {
             let Some(command) = CommandId::from_card_id(&key) else {
-                not_reviewable += 1;
+                not_reviewable = not_reviewable.saturating_add(1);
                 continue;
             };
             let card = CardRecord::deserialize(value)
@@ -365,7 +368,9 @@ impl CommandPerformance {
     /// Average time per attempt, derived from the totals.
     #[must_use]
     pub fn avg_time(&self) -> Duration {
-        self.total_time / self.attempts.max(1)
+        self.total_time
+            .checked_div(self.attempts.max(1))
+            .unwrap_or_default()
     }
 
     /// Timestamp of the last review.
@@ -411,7 +416,10 @@ impl CommandPerformance {
         if memory.stability <= 0.0 {
             return 0.0;
         }
-        let elapsed_days = (now - self.last_review).num_days().max(0) as f32;
+        let elapsed_days = now
+            .signed_duration_since(self.last_review)
+            .num_days()
+            .max(0) as f32;
         MODEL.current_retrievability(memory, elapsed_days)
     }
 
@@ -515,7 +523,10 @@ impl CommandPerformance {
         if self.reps == 0 {
             self.due = self.last_review; // Immediately due
         } else {
-            self.due = self.last_review + chrono::Duration::days(self.scheduled_days as i64);
+            self.due = self
+                .last_review
+                .checked_add_signed(chrono::Duration::days(i64::from(self.scheduled_days)))
+                .unwrap_or(DateTime::<Utc>::MAX_UTC);
         }
 
         self.reps = self.reps.saturating_add(1);
@@ -667,7 +678,12 @@ impl PerformanceTracker {
         if perf.reps == 0 {
             0
         } else {
-            u32::try_from((now - perf.last_review).num_days().max(0)).unwrap_or(u32::MAX)
+            u32::try_from(
+                now.signed_duration_since(perf.last_review)
+                    .num_days()
+                    .max(0),
+            )
+            .unwrap_or(u32::MAX)
         }
     }
 

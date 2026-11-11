@@ -308,8 +308,11 @@ fn apply_minor_mode_binding(
         return;
     };
     let full = CanonicalKeys::from_static(canonical_key);
-    let tokens = full.tokens();
-    if tokens.len() != 2 || Some(tokens[0]) != context.prefix_char() {
+    let &[prefix, remainder_token] = full.tokens().as_slice() else {
+        resolution.ignore(path, KeymapWarningReason::UnsupportedRelocation);
+        return;
+    };
+    if Some(prefix) != context.prefix_char() {
         resolution.ignore(path, KeymapWarningReason::UnsupportedRelocation);
         return;
     }
@@ -320,7 +323,7 @@ fn apply_minor_mode_binding(
         );
         return;
     };
-    let remainder = CanonicalKeys::from_owned(tokens[1].to_string());
+    let remainder = CanonicalKeys::from_owned(remainder_token.to_string());
     resolution.apply(context, physical, remainder, path);
 }
 

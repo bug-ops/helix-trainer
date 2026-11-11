@@ -393,9 +393,11 @@ impl ScenarioHistory {
 
         for completion in self.completions.values() {
             match completion.mastery_level {
-                ScenarioMastery::Learning => stats.learning += 1,
-                ScenarioMastery::Proficient => stats.proficient += 1,
-                ScenarioMastery::Mastered => stats.mastered += 1,
+                ScenarioMastery::Learning => stats.learning = stats.learning.saturating_add(1),
+                ScenarioMastery::Proficient => {
+                    stats.proficient = stats.proficient.saturating_add(1);
+                }
+                ScenarioMastery::Mastered => stats.mastered = stats.mastered.saturating_add(1),
             }
         }
 

@@ -45,10 +45,10 @@ impl Analytics {
             };
         }
 
-        let mut master = 0;
-        let mut advanced = 0;
-        let mut intermediate = 0;
-        let mut beginner = 0;
+        let mut master: usize = 0;
+        let mut advanced: usize = 0;
+        let mut intermediate: usize = 0;
+        let mut beginner: usize = 0;
         let mut total_stability = 0.0;
         let mut total_difficulty = 0.0;
 
@@ -56,10 +56,10 @@ impl Analytics {
             if let Some(perf) = tracker.performance(command) {
                 use super::ProgressionTier;
                 match perf.mastery_level().tier_level() {
-                    3 => master += 1,
-                    2 => advanced += 1,
-                    1 => intermediate += 1,
-                    _ => beginner += 1,
+                    3 => master = master.saturating_add(1),
+                    2 => advanced = advanced.saturating_add(1),
+                    1 => intermediate = intermediate.saturating_add(1),
+                    _ => beginner = beginner.saturating_add(1),
                 }
                 total_stability += perf.stability();
                 total_difficulty += perf.difficulty();
@@ -127,7 +127,9 @@ impl Analytics {
 
         (0..=days)
             .map(|day| {
-                let timestamp = now - chrono::Duration::days((days - day) as i64);
+                let timestamp = now
+                    .checked_sub_signed(chrono::Duration::days(i64::from(days.saturating_sub(day))))
+                    .unwrap_or(DateTime::<Utc>::MIN_UTC);
                 let avg_stability = step * day as f64;
                 (timestamp, avg_stability)
             })

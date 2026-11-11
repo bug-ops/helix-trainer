@@ -46,7 +46,12 @@ fn start_scenario_from_menu(state: &mut AppState, index: usize) -> Result<(), Us
 /// Helper to create AppState for testing
 fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
     let profile = UserProfile::new();
-    let storage = ProfileStorage::new();
+    let storage = ProfileStorage::with_path(
+        tempfile::tempdir()
+            .expect("create temp dir")
+            .keep()
+            .join("profile.json"),
+    );
     let tracker = PerformanceTracker::new();
     AppState::new(scenarios, profile, storage, tracker)
 }

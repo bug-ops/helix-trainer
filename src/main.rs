@@ -6,7 +6,10 @@
 use anyhow::Result;
 use helix_trainer::{
     async_state::SaveWriterOutcome,
-    config::{AppConfig, ConfigStorage, keymap::resolve_startup_overlay},
+    config::{
+        AppConfig, ConfigStorage, app_config::config_load_failed_message, data_dir::DataDir,
+        keymap::resolve_startup_overlay,
+    },
     data_loader::{spawn_data_loaders, spawn_save_writer},
     gamification::ProfileStorage,
     learning::PerformanceTracker,
@@ -20,6 +23,7 @@ mod cli;
 mod data_handling;
 mod event_loop;
 #[cfg(test)]
+#[path = "testing/log_capture.rs"]
 mod log_capture;
 mod logging;
 mod terminal;
@@ -52,6 +56,15 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Resolved before logging and the terminal exist so the message is readable.
+    let Some(data_dir) = DataDir::resolve() else {
+        eprintln!(
+            "error: cannot determine the configuration directory; \
+             set HOME or XDG_CONFIG_HOME to an absolute path"
+        );
+        std::process::exit(1);
+    };
+
     // Warn if running debug build
     #[cfg(debug_assertions)]
     {
@@ -68,11 +81,14 @@ async fn main() -> Result<()> {
     let (data_tx, mut data_rx) = mpsc::channel(32);
 
     // Load application configuration
-    let config_storage = ConfigStorage::new();
-    let app_config = config_storage.load().unwrap_or_else(|e| {
-        tracing::warn!(error = %error_chain(&e), "Failed to load config, using defaults");
-        AppConfig::default()
-    });
+    let config_storage = ConfigStorage::in_data_dir(&data_dir);
+    let (app_config, config_startup_message) = match config_storage.load() {
+        Ok(config) => (config, None),
+        Err(e) => {
+            tracing::warn!(error = %error_chain(&e), "Failed to load config, using defaults");
+            (AppConfig::default(), Some(config_load_failed_message()))
+        }
+    };
 
     // Resolve the gameplay keymap overlay from the user's Helix config, if
     // `use_helix_keymap` is enabled. Degrades to the stock keymap
@@ -80,7 +96,7 @@ async fn main() -> Result<()> {
     let (keymap, keymap_report, keymap_startup_message) = resolve_startup_overlay(&app_config);
 
     // Initialize app state (empty, will be populated by async loaders)
-    let profile_storage = ProfileStorage::new();
+    let profile_storage = ProfileStorage::in_data_dir(&data_dir);
     let tracker = PerformanceTracker::new();
 
     // Create ConfigState from loaded AppConfig
@@ -102,7 +118,10 @@ async fn main() -> Result<()> {
         config_state,
     );
 
-    if let Some(message) = keymap_startup_message {
+    for message in config_startup_message
+        .into_iter()
+        .chain(keymap_startup_message)
+    {
         app_state
             .ui
             .notifications

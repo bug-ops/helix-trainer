@@ -169,7 +169,8 @@ pub fn spawn_save_writer(
             };
             outcome = latest_outcome;
             if result_tx.send(msg).await.is_err() {
-                tracing::warn!("Failed to send profile save result: receiver dropped");
+                // The receiver is intentionally gone once the event loop has exited at shutdown.
+                tracing::debug!("Profile save result not delivered: receiver dropped");
             }
         }
         outcome
@@ -367,6 +368,39 @@ pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegi
 mod tests {
     use super::*;
     use crate::constants::DATA_LOADING_TIMEOUT;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn save_writer_does_not_warn_when_the_result_receiver_is_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        let logs = crate::testing::log_capture::capture_logs(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async {
+                let (result_tx, result_rx) = mpsc::channel(1);
+                drop(result_rx);
+                let (save_tx, handle) = spawn_save_writer(result_tx);
+                save_tx
+                    .send(SaveRequest {
+                        storage,
+                        profile: UserProfile::new(),
+                    })
+                    .await
+                    .unwrap();
+                drop(save_tx);
+                assert!(matches!(
+                    handle.await.unwrap(),
+                    SaveWriterOutcome::LastSaveSucceeded
+                ));
+            });
+        });
+
+        assert!(!logs.contains("WARN"), "unexpected warning: {logs}");
+    }
 
     // Miri is too slow for async/tokio tests (300+ seconds per test)
     #[tokio::test]

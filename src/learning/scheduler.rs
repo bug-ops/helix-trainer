@@ -61,6 +61,12 @@ impl Default for Scheduler {
 }
 
 impl Scheduler {
+    fn average_duration(total: std::time::Duration, count: usize) -> std::time::Duration {
+        total
+            .checked_div(u32::try_from(count).unwrap_or(u32::MAX))
+            .unwrap_or(std::time::Duration::ZERO)
+    }
+
     /// Create a new scheduler backed by the system clock
     pub fn new() -> Self {
         Self::with_clock(Arc::new(SystemClock))
@@ -93,7 +99,7 @@ impl Scheduler {
         }
 
         // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = total_duration / u32::try_from(commands.len()).unwrap_or(u32::MAX);
+        let avg_duration = Self::average_duration(total_duration, commands.len());
 
         // Optimal time is slightly less than avg (assume user could be 20% faster)
         let optimal_time = avg_duration.mul_f32(0.8);
@@ -121,7 +127,7 @@ impl Scheduler {
         }
 
         // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = total_duration / u32::try_from(commands.len()).unwrap_or(u32::MAX);
+        let avg_duration = Self::average_duration(total_duration, commands.len());
 
         // Optimal time is slightly less than avg (assume user could be 20% faster)
         let optimal_time = avg_duration.mul_f32(0.8);
@@ -247,7 +253,7 @@ impl Scheduler {
         // Split session: 50% reviews, 50% new/weak content
         let review_items = max_items / 2;
         let review_count = review_items as usize;
-        let new_content_count = (max_items - review_items) as usize;
+        let new_content_count = max_items.saturating_sub(review_items) as usize;
 
         // Get review items (commands due for practice)
         let review_items = self.get_review_queue(tracker, review_count);

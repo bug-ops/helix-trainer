@@ -204,7 +204,9 @@ impl StreakManager {
 
     /// Calculate days between two dates
     fn days_between(start: DateTime<Utc>, end: DateTime<Utc>) -> i64 {
-        (end.date_naive() - start.date_naive()).num_days()
+        end.date_naive()
+            .signed_duration_since(start.date_naive())
+            .num_days()
     }
 
     /// Check if streak milestone reached

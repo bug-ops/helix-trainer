@@ -69,8 +69,11 @@ fn same_content(a: &mut fs::File, b: &mut fs::File) -> std::io::Result<bool> {
         if n == 0 {
             return Ok(b.read(&mut buf_b)? == 0);
         }
-        match b.read_exact(&mut buf_b[..n]) {
-            Ok(()) if buf_a[..n] == buf_b[..n] => {}
+        let (Some(chunk_a), Some(chunk_b)) = (buf_a.get(..n), buf_b.get_mut(..n)) else {
+            return Ok(false);
+        };
+        match b.read_exact(chunk_b) {
+            Ok(()) if chunk_a == chunk_b => {}
             Ok(()) => return Ok(false),
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(false),
             Err(e) => return Err(e),
@@ -191,22 +194,6 @@ impl std::fmt::Debug for ProfileStorage {
 }
 
 impl ProfileStorage {
-    /// Create a new storage handler
-    ///
-    /// Default path: `profile.json` in the data directory ([`DataDir::resolve`]):
-    /// `dirs::config_dir()/helix-trainer`, or `~/.config/helix-trainer` on macOS
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use helix_trainer::gamification::ProfileStorage;
-    ///
-    /// let storage = ProfileStorage::new();
-    /// ```
-    pub fn new() -> Self {
-        Self::in_data_dir(&DataDir::resolve())
-    }
-
     /// Create storage for `profile.json` in `data_dir`.
     ///
     /// When the data directory moved (macOS), [`ProfileStorage::load`] first
@@ -240,9 +227,9 @@ impl ProfileStorage {
     /// `helix-trainer/profile.json` or with another test's storage, even
     /// under parallel `cargo nextest` execution. All test fixture builders (
     /// `src/testing/app_state.rs` and the per-file `create_test_state()` helpers)
-    /// must construct `ProfileStorage` through this function, not `new()` — `new()`
-    /// resolves to the real user profile path and a test that reaches a save call
-    /// with it will silently overwrite the developer's real progress data.
+    /// must construct `ProfileStorage` through this function, never from the real
+    /// data directory — a test that reaches a save call with it would silently
+    /// overwrite the developer's real progress data.
     ///
     /// The backing temp directory is intentionally never cleaned up mid-process
     /// (it outlives any single test), relying on the OS to reclaim it; this mirrors
@@ -277,7 +264,7 @@ impl ProfileStorage {
     /// ```no_run
     /// use helix_trainer::gamification::ProfileStorage;
     ///
-    /// let storage = ProfileStorage::new();
+    /// let storage = ProfileStorage::with_path("profile.json");
     /// let profile = storage.load().unwrap();
     /// println!("Level: {}", profile.level);
     /// ```
@@ -439,7 +426,9 @@ impl ProfileStorage {
             let candidate = self.path().with_added_extension(extension);
             match private_fs::create_new_file(&candidate) {
                 Ok(file) => break (candidate, file),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    attempt = attempt.saturating_add(1);
+                }
                 Err(e) => return Err(e.into()),
             }
         };
@@ -557,7 +546,7 @@ impl ProfileStorage {
     /// ```no_run
     /// use helix_trainer::gamification::{ProfileStorage, UserProfile};
     ///
-    /// let storage = ProfileStorage::new();
+    /// let storage = ProfileStorage::with_path("profile.json");
     /// let mut profile = UserProfile::new();
     /// profile.add_xp(100);
     /// storage.save(&profile).unwrap();
@@ -647,7 +636,7 @@ impl ProfileStorage {
     /// ```no_run
     /// use helix_trainer::gamification::{LockStatus, ProfileStorage};
     ///
-    /// let storage = ProfileStorage::new();
+    /// let storage = ProfileStorage::with_path("profile.json");
     /// match storage.check_and_refresh_lock() {
     ///     LockStatus::Acquired => {}
     ///     LockStatus::OtherInstanceRunning(pid) => {
@@ -703,12 +692,6 @@ impl ProfileStorage {
     /// Get file path
     pub fn path(&self) -> &Path {
         self.store.path()
-    }
-}
-
-impl Default for ProfileStorage {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -1281,7 +1264,7 @@ mod tests {
     }
 
     fn moved_data_dir(root: &Path) -> DataDir {
-        DataDir::resolve_for(true, Some(root.join("xdg")), Some(root.join("os")))
+        DataDir::resolve_for(true, Some(root.join("xdg")), Some(root.join("os"))).unwrap()
     }
 
     fn legacy_profile_path(root: &Path) -> PathBuf {

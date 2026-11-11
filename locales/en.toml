@@ -91,6 +91,9 @@ next_imperfect = "%{count} scenarios not yet perfected"
 next_arcade = "(a) Arcade mode"
 instructions = "(r) Review | (a) Arcade | (l) List | (m) Menu | (q) Quit"
 
+[config]
+load_failed = "Configuration could not be loaded - using default settings"
+
 [keymap]
 startup_summary = "Helix keymap loaded: %{applied} binding(s) applied, %{ignored} ignored"
 startup_not_found = "Helix keymap enabled, but config.toml was not found — using stock keymap"

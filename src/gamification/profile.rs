@@ -44,7 +44,7 @@ where
     if known.len() < total {
         tracing::warn!(
             "Ignored {} unknown achievement id(s) in profile",
-            total - known.len()
+            total.saturating_sub(known.len())
         );
     }
     Ok(known)
@@ -387,8 +387,9 @@ impl XPCalculator {
         if level <= 1 {
             0
         } else {
-            (XP_LEVEL_FORMULA_BASE * ((level - 1) as f64).powf(XP_LEVEL_FORMULA_EXPONENT)).round()
-                as u64
+            (XP_LEVEL_FORMULA_BASE
+                * (f64::from(level.saturating_sub(1))).powf(XP_LEVEL_FORMULA_EXPONENT))
+            .round() as u64
         }
     }
 
@@ -412,11 +413,11 @@ impl XPCalculator {
         let mut high = MAX_PLAYER_LEVEL;
 
         while low < high {
-            let mid = (low + high).div_ceil(2);
+            let mid = low.saturating_add(high).div_ceil(2);
             if Self::xp_for_level(mid) <= total_xp {
                 low = mid;
             } else {
-                high = mid - 1;
+                high = mid.saturating_sub(1);
             }
         }
 
@@ -538,7 +539,9 @@ impl XPCalculator {
         } else {
             0
         };
-        let total_base_xp = base_xp + perfect_bonus + first_today_bonus;
+        let total_base_xp = base_xp
+            .saturating_add(perfect_bonus)
+            .saturating_add(first_today_bonus);
 
         XPComponents {
             base_xp,
@@ -560,8 +563,9 @@ impl XPCalculator {
     /// ```
     #[must_use]
     pub fn arcade_scenario_xp(streak: u32) -> u64 {
-        MINIGAME_SCENARIO_BASE_XP
-            + (streak.saturating_sub(1) as u64 * MINIGAME_STREAK_XP_MULTIPLIER)
+        MINIGAME_SCENARIO_BASE_XP.saturating_add(
+            u64::from(streak.saturating_sub(1)).saturating_mul(MINIGAME_STREAK_XP_MULTIPLIER),
+        )
     }
 
     /// XP for a finished review session: a flat amount per completed command plus a
@@ -587,8 +591,9 @@ impl XPCalculator {
         } else {
             0.0
         };
-        (completed as u64 * REVIEW_XP_PER_COMMAND)
-            + (success_rate * REVIEW_SUCCESS_BONUS_MAX_XP) as u64
+        (completed as u64)
+            .saturating_mul(REVIEW_XP_PER_COMMAND)
+            .saturating_add((success_rate * REVIEW_SUCCESS_BONUS_MAX_XP) as u64)
     }
 
     /// Calculate XP earned from mini-game session
@@ -623,13 +628,15 @@ impl XPCalculator {
         let base_xp = score / MINIGAME_XP_PER_100_POINTS;
 
         // Level bonus per level reached
-        let level_bonus = level as u64 * MINIGAME_LEVEL_BONUS_XP;
+        let level_bonus = u64::from(level).saturating_mul(MINIGAME_LEVEL_BONUS_XP);
 
         // Streak bonus per streak milestone
-        let streak_bonus =
-            (best_streak as u64 / MINIGAME_STREAK_BONUS_DIVISOR) * MINIGAME_STREAK_BONUS_MAX_XP;
+        let streak_bonus = (u64::from(best_streak) / MINIGAME_STREAK_BONUS_DIVISOR)
+            .saturating_mul(MINIGAME_STREAK_BONUS_MAX_XP);
 
-        base_xp + level_bonus + streak_bonus
+        base_xp
+            .saturating_add(level_bonus)
+            .saturating_add(streak_bonus)
     }
 }
 

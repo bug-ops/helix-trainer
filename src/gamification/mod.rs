@@ -2,6 +2,16 @@
 //!
 //! Implements daily quests, XP/leveling, streaks, and achievements
 
+#![cfg_attr(
+    not(test),
+    warn(
+        clippy::arithmetic_side_effects,
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used
+    )
+)]
+
 pub mod achievements;
 pub mod profile;
 pub mod quests;

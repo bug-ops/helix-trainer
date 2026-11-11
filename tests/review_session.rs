@@ -39,7 +39,12 @@ fn review_session(state: &AppState) -> Option<&ReviewSessionState> {
 /// Helper: Create test app state with optional due reviews
 fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
     let profile = UserProfile::new();
-    let storage = ProfileStorage::new();
+    let storage = ProfileStorage::with_path(
+        tempfile::tempdir()
+            .expect("create temp dir")
+            .keep()
+            .join("profile.json"),
+    );
     let mut tracker = PerformanceTracker::new();
 
     // Record attempts to create due reviews

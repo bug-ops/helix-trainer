@@ -307,10 +307,10 @@ impl QuestDistribution {
         registry: &QuestTemplateRegistry,
     ) -> QuestGeneration {
         let mut quests = Vec::new();
-        let mut unfilled_slots = 0;
+        let mut unfilled_slots: usize = 0;
         let mut fill = |quest: Option<Quest>| match quest {
             Some(quest) => quests.push(quest),
-            None => unfilled_slots += 1,
+            None => unfilled_slots = unfilled_slots.saturating_add(1),
         };
 
         for _ in 0..self.easy {
@@ -580,7 +580,7 @@ impl QuestGenerator {
             tracing::warn!(kind, "No quest templates available");
             return None;
         }
-        let template = templates[rng.random_range(0..templates.len())];
+        let template = templates.get(rng.random_range(0..templates.len()))?;
         tracing::debug!(id = %template.id, kind, "Selected quest template");
         Some(template.to_quest())
     }
@@ -632,7 +632,7 @@ impl QuestTracker {
                     target,
                     current,
                 } if cmd == command => {
-                    *current = (*current + 1).min(*target);
+                    *current = current.saturating_add(1).min(*target);
                     if *current >= *target {
                         quest.completed = true;
                     }
@@ -664,7 +664,7 @@ impl QuestTracker {
 
             match &mut quest.quest_type {
                 QuestType::ScenarioCompletion { target, current } => {
-                    *current = (*current + 1).min(*target);
+                    *current = current.saturating_add(1).min(*target);
                     if *current >= *target {
                         quest.completed = true;
                     }
@@ -692,7 +692,7 @@ impl QuestTracker {
                 current_minutes,
             } = &mut quest.quest_type
             {
-                *current_minutes = (*current_minutes + minutes).min(*target_minutes);
+                *current_minutes = current_minutes.saturating_add(minutes).min(*target_minutes);
                 if *current_minutes >= *target_minutes {
                     quest.completed = true;
                 }

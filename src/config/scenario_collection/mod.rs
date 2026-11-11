@@ -5,7 +5,7 @@
 //! - Sorting by name, difficulty, category, progress, mastery
 //! - Efficient index mapping for menu display
 
-use super::scenarios::{Difficulty, Scenario, ScenarioCategory};
+use super::scenarios::{Difficulty, Scenario, ScenarioCategory, ScenarioMetadata};
 use crate::gamification::UserProfile;
 use crate::ids::NormalizedCommand;
 use std::collections::HashSet;
@@ -135,15 +135,17 @@ impl ScenarioCollection {
 
         match mode {
             SortMode::ByName => {
-                self.filtered_indices
-                    .sort_by(|&a, &b| self.scenarios[a].name.cmp(&self.scenarios[b].name));
+                self.filtered_indices.sort_by(|&a, &b| {
+                    self.scenarios
+                        .get(a)
+                        .map(|s| &s.name)
+                        .cmp(&self.scenarios.get(b).map(|s| &s.name))
+                });
             }
 
             SortMode::ByDifficulty => {
                 self.filtered_indices.sort_by_key(|&idx| {
-                    self.scenarios[idx]
-                        .metadata
-                        .as_ref()
+                    Self::metadata_of(&self.scenarios, idx)
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner) // Default to beginner if no metadata
                 });
@@ -152,9 +154,7 @@ impl ScenarioCollection {
             SortMode::ByCategory => {
                 self.filtered_indices.sort_by_key(|&idx| {
                     // Sort by category as integers (based on enum order)
-                    self.scenarios[idx]
-                        .metadata
-                        .as_ref()
+                    Self::metadata_of(&self.scenarios, idx)
                         .and_then(|m| m.category)
                         .map(|c| c as u8)
                         .unwrap_or(255) // Put scenarios without category at the end
@@ -165,8 +165,9 @@ impl ScenarioCollection {
                 if let Some(prof) = profile {
                     self.filtered_indices.sort_by_key(|&idx| {
                         // Completed scenarios go to the end
-                        let scenario_id = &self.scenarios[idx].id;
-                        prof.scenario_history.get(scenario_id).is_some()
+                        self.scenarios
+                            .get(idx)
+                            .is_some_and(|s| prof.scenario_history.get(&s.id).is_some())
                     });
                 }
                 // If no profile, don't change order
@@ -174,7 +175,7 @@ impl ScenarioCollection {
 
             SortMode::ByCategoryThenDifficulty => {
                 self.filtered_indices.sort_by_key(|&idx| {
-                    let metadata = self.scenarios[idx].metadata.as_ref();
+                    let metadata = Self::metadata_of(&self.scenarios, idx);
                     let category = metadata
                         .and_then(|m| m.category)
                         .map(|c| c as u8)
@@ -188,7 +189,7 @@ impl ScenarioCollection {
 
             SortMode::ByDifficultyThenCategory => {
                 self.filtered_indices.sort_by_key(|&idx| {
-                    let metadata = self.scenarios[idx].metadata.as_ref();
+                    let metadata = Self::metadata_of(&self.scenarios, idx);
                     let difficulty = metadata
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner);
@@ -204,9 +205,9 @@ impl ScenarioCollection {
                 if let Some(prof) = profile {
                     self.filtered_indices.sort_by_key(|&idx| {
                         // Sort by completion count (fewer completions = lower mastery = higher priority)
-                        let scenario_id = &self.scenarios[idx].id;
-                        prof.scenario_history
-                            .get(scenario_id)
+                        self.scenarios
+                            .get(idx)
+                            .and_then(|s| prof.scenario_history.get(&s.id))
                             .map(|completion| completion.attempts)
                             .unwrap_or(0) // Never attempted = highest priority
                     });
@@ -216,11 +217,15 @@ impl ScenarioCollection {
         }
     }
 
+    fn metadata_of(scenarios: &[Scenario], idx: usize) -> Option<&ScenarioMetadata> {
+        scenarios.get(idx).and_then(|s| s.metadata.as_ref())
+    }
+
     /// Filtered scenarios (references)
     pub fn filtered(&self) -> Vec<&Scenario> {
         self.filtered_indices
             .iter()
-            .map(|&idx| &self.scenarios[idx])
+            .filter_map(|&idx| self.scenarios.get(idx))
             .collect()
     }
 
@@ -228,7 +233,7 @@ impl ScenarioCollection {
     pub fn get_filtered_by_index(&self, filtered_idx: usize) -> Option<&Scenario> {
         self.filtered_indices
             .get(filtered_idx)
-            .map(|&original_idx| &self.scenarios[original_idx])
+            .and_then(|&original_idx| self.scenarios.get(original_idx))
     }
 
     /// Get total count of filtered scenarios
@@ -559,18 +564,18 @@ impl ScenarioCollection {
                 .is_some_and(|c| c.perfect_count > 0);
 
             if completed {
-                stats.completed += 1;
+                stats.completed = stats.completed.saturating_add(1);
             }
             if perfected {
-                stats.perfected += 1;
+                stats.perfected = stats.perfected.saturating_add(1);
             }
 
             if let Some(category) = scenario.metadata.as_ref().and_then(|m| m.category) {
                 match per_category.iter_mut().find(|(c, _, _)| *c == category) {
                     Some((_, cat_perfected, cat_total)) => {
-                        *cat_total += 1;
+                        *cat_total = cat_total.saturating_add(1);
                         if perfected {
-                            *cat_perfected += 1;
+                            *cat_perfected = cat_perfected.saturating_add(1);
                         }
                     }
                     None => per_category.push((category, usize::from(perfected), 1)),

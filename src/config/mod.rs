@@ -3,6 +3,16 @@
 //! This module handles loading and parsing scenario files in TOML format,
 //! as well as application configuration.
 
+#![cfg_attr(
+    not(test),
+    warn(
+        clippy::arithmetic_side_effects,
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used
+    )
+)]
+
 pub mod app_config;
 pub mod data_dir;
 pub mod json_store;

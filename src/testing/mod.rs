@@ -23,6 +23,7 @@
 //! ```
 
 pub mod app_state;
+pub mod log_capture;
 pub mod scenario;
 
 // Re-export commonly used items

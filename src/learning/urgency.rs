@@ -67,7 +67,7 @@ pub fn command_urgency(perf: Option<&CommandPerformance>, now: DateTime<Utc>) ->
     let Some(perf) = perf else {
         return Urgency::Novel;
     };
-    let days_overdue = (now - perf.due()).num_days().max(0) as f64;
+    let days_overdue = now.signed_duration_since(perf.due()).num_days().max(0) as f64;
     Urgency::Practiced {
         overdue_ratio: days_overdue / f64::from(perf.scheduled_days().max(1)),
         difficulty: f64::from(perf.difficulty()),

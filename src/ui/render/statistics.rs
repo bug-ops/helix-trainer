@@ -162,7 +162,8 @@ fn render_mastery_bar(
     total: usize,
     color: Color,
 ) {
-    let percentage = (count * 100)
+    let percentage = count
+        .saturating_mul(100)
         .checked_div(total)
         .map_or(0, |pct| u32::try_from(pct).unwrap_or(u32::MAX));
 
@@ -327,6 +328,9 @@ fn render_scenario_mastery_section(lines: &mut Vec<Line<'static>>, state: &AppSt
     let stats = profile.scenario_history.mastery_stats();
 
     let total = stats.learning + stats.proficient + stats.mastered;
+    let [mastered, proficient, learning, total_count] =
+        [stats.mastered, stats.proficient, stats.learning, total]
+            .map(|n| usize::try_from(n).unwrap_or(usize::MAX));
 
     if total == 0 {
         lines.push(Line::from(vec![Span::styled(
@@ -337,44 +341,19 @@ fn render_scenario_mastery_section(lines: &mut Vec<Line<'static>>, state: &AppSt
     }
 
     // Mastered scenarios
-    render_scenario_mastery_bar(lines, "Mastered", stats.mastered, total, Color::Yellow);
+    render_mastery_bar(lines, "Mastered", mastered, total_count, Color::Yellow);
 
     // Proficient scenarios
-    render_scenario_mastery_bar(lines, "Proficient", stats.proficient, total, Color::Cyan);
+    render_mastery_bar(lines, "Proficient", proficient, total_count, Color::Cyan);
 
     // Learning scenarios
-    render_scenario_mastery_bar(lines, "Learning", stats.learning, total, Color::Gray);
+    render_mastery_bar(lines, "Learning", learning, total_count, Color::Gray);
 
     // Total scenarios attempted
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::raw("  Total Scenarios Attempted: "),
         Span::styled(format!("{}", total), Style::default().fg(Color::White)),
-    ]));
-}
-
-/// Render a horizontal bar for scenario mastery distribution
-fn render_scenario_mastery_bar(
-    lines: &mut Vec<Line<'static>>,
-    label: &str,
-    count: u32,
-    total: u32,
-    color: Color,
-) {
-    let percentage = (u64::from(count) * 100)
-        .checked_div(u64::from(total))
-        .map_or(0, |pct| u32::try_from(pct).unwrap_or(u32::MAX));
-
-    // Create horizontal progress bar
-    let filled = (percentage as usize * PROGRESS_BAR_WIDTH / 100).min(PROGRESS_BAR_WIDTH);
-    let empty = PROGRESS_BAR_WIDTH - filled;
-    let bar = format!("{}{}", "|".repeat(filled), ".".repeat(empty));
-
-    lines.push(Line::from(vec![
-        Span::raw(format!("  {:12}: ", label)),
-        Span::styled(format!("{:3} ", count), Style::default().fg(Color::White)),
-        Span::styled(bar, Style::default().fg(color)),
-        Span::raw(format!("  {:3}%", percentage)),
     ]));
 }
 
@@ -524,4 +503,37 @@ fn render_arcade_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
             Style::default().fg(Color::Green),
         ),
     ]));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bar_text(count: usize, total: usize) -> String {
+        let mut lines = Vec::new();
+        render_mastery_bar(&mut lines, "Label", count, total, Color::Gray);
+        lines
+            .iter()
+            .flat_map(|line| line.spans.iter())
+            .map(|span| span.content.as_ref())
+            .collect()
+    }
+
+    #[test]
+    fn test_mastery_bar_fills_proportionally() {
+        let text = bar_text(1, 2);
+        assert!(text.contains(" 50%"), "{text}");
+        assert_eq!(text.matches('|').count(), PROGRESS_BAR_WIDTH / 2);
+    }
+
+    #[test]
+    fn test_mastery_bar_with_empty_total_is_zero_percent() {
+        assert!(bar_text(0, 0).contains("  0%"));
+    }
+
+    #[test]
+    fn test_mastery_bar_survives_extreme_counts() {
+        let text = bar_text(usize::MAX, usize::MAX);
+        assert!(text.contains('%'), "{text}");
+    }
 }

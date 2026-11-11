@@ -3,6 +3,7 @@
 //! Provides compile-time guarantees that handlers receive the correct
 //! screen data type, eliminating runtime type checks.
 
+use crate::security::UserError;
 use crate::ui::state::{ConfigState, GameState, ProgressState, TypedScreen, UIState};
 
 /// Shared context for handlers that need access to non-screen state
@@ -16,19 +17,20 @@ use crate::ui::state::{ConfigState, GameState, ProgressState, TypedScreen, UISta
 /// Simple handlers that only modify screen data don't need HandlerContext:
 ///
 /// ```
-/// use helix_trainer::security::UserError;
 /// use helix_trainer::ui::state::{HandlerOutcome, MenuData};
 ///
-/// fn handle_menu_up(data: &mut MenuData) -> Result<HandlerOutcome, UserError> {
+/// fn handle_menu_up(data: &mut MenuData) -> HandlerOutcome {
 ///     data.selected_item = data.selected_item.saturating_sub(1);
-///     Ok(HandlerOutcome::Stay)
+///     HandlerOutcome::Stay
 /// }
 ///
 /// let mut data = MenuData { selected_item: 1, ..MenuData::default() };
-/// assert!(handle_menu_up(&mut data)?.is_stay());
+/// assert!(handle_menu_up(&mut data).is_stay());
 /// assert_eq!(data.selected_item, 0);
-/// # Ok::<(), UserError>(())
 /// ```
+///
+/// Handlers with a real failure path return `Result<HandlerOutcome, UserError>` instead;
+/// the dispatcher accepts both.
 ///
 /// Complex handlers that need transitions or shared state take a `HandlerContext`
 /// and may return [`HandlerOutcome::Transition`] with the next screen.
@@ -139,6 +141,28 @@ impl HandlerOutcome {
     }
 }
 
+/// The single boundary between handler signatures and the dispatcher
+///
+/// Handlers that cannot fail return a plain [`HandlerOutcome`]; only handlers with a real
+/// failure path return `Result<HandlerOutcome, UserError>`. `update()` accepts both through
+/// this trait, so the error policy lives in one place.
+pub(super) trait IntoHandlerResult {
+    /// Convert the handler's return value into the uniform fallible form
+    fn into_outcome(self) -> Result<HandlerOutcome, UserError>;
+}
+
+impl IntoHandlerResult for HandlerOutcome {
+    fn into_outcome(self) -> Result<HandlerOutcome, UserError> {
+        Ok(self)
+    }
+}
+
+impl IntoHandlerResult for Result<HandlerOutcome, UserError> {
+    fn into_outcome(self) -> Result<HandlerOutcome, UserError> {
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,6 +180,15 @@ mod tests {
         let outcome = HandlerOutcome::Transition(Box::new(TypedScreen::Menu(MenuData::default())));
         assert!(!outcome.is_stay());
         assert!(outcome.is_transition());
+    }
+
+    #[test]
+    fn test_into_outcome_passes_plain_and_fallible_handlers_through() {
+        assert!(HandlerOutcome::Stay.into_outcome().unwrap().is_stay());
+        let ok: Result<HandlerOutcome, UserError> = Ok(HandlerOutcome::Stay);
+        assert!(ok.into_outcome().unwrap().is_stay());
+        let err: Result<HandlerOutcome, UserError> = Err(UserError::WrongScreen);
+        assert!(err.into_outcome().is_err());
     }
 
     #[test]

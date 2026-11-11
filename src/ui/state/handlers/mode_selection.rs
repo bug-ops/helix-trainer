@@ -4,7 +4,6 @@
 //! performing runtime checks on AppState.
 
 use crate::minigame::MiniGameSession;
-use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
@@ -20,14 +19,14 @@ use std::sync::Arc;
 /// guarantee that it's called on the correct screen.
 pub(in crate::ui::state) fn handle_mode_selection_up(
     data: &mut ModeSelectionData,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     // Check if mini-game mode selection is active
     if let Some(ref mut selection) = data.minigame_mode_selection {
         selection.select_previous();
     } else {
         data.selected_mode = data.selected_mode.previous();
     }
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle mode selection down navigation
@@ -35,14 +34,14 @@ pub(in crate::ui::state) fn handle_mode_selection_up(
 /// Type-safe handler that only accepts ModeSelectionData.
 pub(in crate::ui::state) fn handle_mode_selection_down(
     data: &mut ModeSelectionData,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     // Check if mini-game mode selection is active
     if let Some(ref mut selection) = data.minigame_mode_selection {
         selection.select_next();
     } else {
         data.selected_mode = data.selected_mode.next();
     }
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle mode selection confirmation
@@ -52,7 +51,7 @@ pub(in crate::ui::state) fn handle_mode_selection_down(
 pub(in crate::ui::state) fn handle_mode_selection_select(
     data: &mut ModeSelectionData,
     ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     // Check if mini-game mode selection is active
     if let Some(ref selection) = data.minigame_mode_selection {
         // Launch the selected mini-game mode
@@ -65,7 +64,7 @@ pub(in crate::ui::state) fn handle_mode_selection_select(
         TopMode::Arcade => {
             // Show mini-game mode selection instead of immediately starting arcade
             data.minigame_mode_selection = Some(MiniGameModeSelection::new());
-            Ok(HandlerOutcome::Stay)
+            HandlerOutcome::Stay
         }
     }
 }
@@ -75,11 +74,11 @@ pub(in crate::ui::state) fn handle_mode_selection_select(
 /// If mini-game mode selection is open, close it. Otherwise, do nothing.
 pub(in crate::ui::state) fn handle_mode_selection_back(
     data: &mut ModeSelectionData,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     if data.minigame_mode_selection.is_some() {
         data.minigame_mode_selection = None;
     }
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle selecting Training Mode
@@ -87,10 +86,8 @@ pub(in crate::ui::state) fn handle_mode_selection_back(
 /// Transitions to the main menu screen.
 pub(in crate::ui::state) fn handle_select_training_mode(
     _ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-        MenuData::default(),
-    ))))
+) -> HandlerOutcome {
+    HandlerOutcome::Transition(Box::new(TypedScreen::Menu(MenuData::default())))
 }
 
 /// Handle selecting Arcade Mode
@@ -99,18 +96,16 @@ pub(in crate::ui::state) fn handle_select_training_mode(
 /// notification when no scenario matches the active filters.
 pub(in crate::ui::state) fn handle_select_arcade_mode(
     ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     let Some(session) =
         super::minigame::create_minigame_session(ctx.game, Some(&ctx.progress.performance_tracker))
     else {
         notify_no_scenarios(ctx.ui);
-        return Ok(HandlerOutcome::Stay);
+        return HandlerOutcome::Stay;
     };
     ctx.ui.show_key_history = false;
 
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
-        MiniGameData::new(session),
-    ))))
+    HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(MiniGameData::new(session))))
 }
 
 fn notify_no_scenarios(ui: &mut crate::ui::state::UIState) {
@@ -126,7 +121,7 @@ fn notify_no_scenarios(ui: &mut crate::ui::state::UIState) {
 pub(in crate::ui::state) fn handle_launch_minigame_mode(
     ctx: &mut HandlerContext<'_>,
     mode: crate::minigame::MiniGameMode,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     use crate::config::Scenario;
 
     let today = ctx.progress.today();
@@ -136,7 +131,7 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
             .push(Notification::new(NotificationType::Info {
                 message: t!("minigame.challenge_no_attempts_left").to_string(),
             }));
-        return Ok(HandlerOutcome::Stay);
+        return HandlerOutcome::Stay;
     }
 
     // Collect scenarios
@@ -150,7 +145,7 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
 
     if scenarios.is_empty() {
         notify_no_scenarios(ctx.ui);
-        return Ok(HandlerOutcome::Stay);
+        return HandlerOutcome::Stay;
     }
 
     // Only consume an attempt once the launch is actually going to succeed -
@@ -170,9 +165,7 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
     session.start(); // Begin countdown
     ctx.ui.show_key_history = false;
 
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
-        MiniGameData::new(session),
-    ))))
+    HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(MiniGameData::new(session))))
 }
 
 #[cfg(test)]
@@ -235,7 +228,7 @@ mod tests {
             minigame_mode_selection: None,
         };
 
-        let outcome = handle_mode_selection_up(&mut data).unwrap();
+        let outcome = handle_mode_selection_up(&mut data);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_mode, crate::ui::state::TopMode::Training); // Should move to Training
@@ -245,7 +238,7 @@ mod tests {
     fn test_mode_selection_up_at_top() {
         let mut data = ModeSelectionData::default(); // Already at top (0)
 
-        let outcome = handle_mode_selection_up(&mut data).unwrap();
+        let outcome = handle_mode_selection_up(&mut data);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_mode, crate::ui::state::TopMode::Training); // Should stay at 0
@@ -255,7 +248,7 @@ mod tests {
     fn test_mode_selection_down() {
         let mut data = ModeSelectionData::default(); // Start at 0 (Training)
 
-        let outcome = handle_mode_selection_down(&mut data).unwrap();
+        let outcome = handle_mode_selection_down(&mut data);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_mode, crate::ui::state::TopMode::Arcade); // Should move to Arcade
@@ -268,7 +261,7 @@ mod tests {
             minigame_mode_selection: None,
         };
 
-        let outcome = handle_mode_selection_down(&mut data).unwrap();
+        let outcome = handle_mode_selection_down(&mut data);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_mode, crate::ui::state::TopMode::Arcade); // Should stay at 1
@@ -279,7 +272,7 @@ mod tests {
         let (mut ui, mut game, mut progress, config) = create_test_context();
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        let outcome = handle_select_training_mode(&mut ctx).unwrap();
+        let outcome = handle_select_training_mode(&mut ctx);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -292,7 +285,7 @@ mod tests {
         let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -305,7 +298,7 @@ mod tests {
         let (mut ui, mut game, mut progress, config) = create_test_context();
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx);
 
         assert!(outcome.is_stay());
         assert_eq!(
@@ -322,7 +315,7 @@ mod tests {
         ui.show_key_history = true;
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        handle_select_arcade_mode(&mut ctx).unwrap();
+        handle_select_arcade_mode(&mut ctx);
 
         assert!(!ctx.ui.show_key_history);
     }
@@ -335,7 +328,7 @@ mod tests {
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
         let mode = crate::minigame::MiniGameMode::default();
-        handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        handle_launch_minigame_mode(&mut ctx, mode);
 
         assert!(!ctx.ui.show_key_history);
     }
@@ -346,7 +339,7 @@ mod tests {
         let (mut ui, mut game, mut progress, config) = create_test_context();
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        let outcome = handle_mode_selection_select(&mut data, &mut ctx).unwrap();
+        let outcome = handle_mode_selection_select(&mut data, &mut ctx);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -363,7 +356,7 @@ mod tests {
         let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
-        let outcome = handle_mode_selection_select(&mut data, &mut ctx).unwrap();
+        let outcome = handle_mode_selection_select(&mut data, &mut ctx);
 
         // Should stay on screen but open mode selection
         assert!(outcome.is_stay());
@@ -384,28 +377,28 @@ mod tests {
         );
 
         // Move down to Survival
-        handle_mode_selection_down(&mut data).unwrap();
+        handle_mode_selection_down(&mut data);
         assert_eq!(
             data.minigame_mode_selection.as_ref().unwrap().selected,
             MiniGameModeKind::Survival
         );
 
         // Move down to Challenge
-        handle_mode_selection_down(&mut data).unwrap();
+        handle_mode_selection_down(&mut data);
         assert_eq!(
             data.minigame_mode_selection.as_ref().unwrap().selected,
             MiniGameModeKind::Challenge
         );
 
         // Wrap to Arcade
-        handle_mode_selection_down(&mut data).unwrap();
+        handle_mode_selection_down(&mut data);
         assert_eq!(
             data.minigame_mode_selection.as_ref().unwrap().selected,
             MiniGameModeKind::Arcade
         );
 
         // Move up to Challenge (wrap)
-        handle_mode_selection_up(&mut data).unwrap();
+        handle_mode_selection_up(&mut data);
         assert_eq!(
             data.minigame_mode_selection.as_ref().unwrap().selected,
             MiniGameModeKind::Challenge
@@ -419,7 +412,7 @@ mod tests {
             minigame_mode_selection: Some(MiniGameModeSelection::new()),
         };
 
-        handle_mode_selection_back(&mut data).unwrap();
+        handle_mode_selection_back(&mut data);
 
         assert!(data.minigame_mode_selection.is_none());
     }
@@ -431,7 +424,7 @@ mod tests {
 
         let mode =
             crate::minigame::MiniGameMode::Survival(crate::minigame::SurvivalConfig::default());
-        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode);
 
         let HandlerOutcome::Transition(screen) = outcome else {
             panic!("expected a transition to the mini-game screen");
@@ -451,7 +444,7 @@ mod tests {
         let mode = crate::minigame::MiniGameMode::Challenge(
             crate::minigame::ChallengeConfig::for_date(chrono::Utc::now().date_naive()),
         );
-        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode);
 
         let HandlerOutcome::Transition(screen) = outcome else {
             panic!("expected a transition to the mini-game screen");
@@ -475,12 +468,12 @@ mod tests {
         );
 
         for _ in 0..CHALLENGE_MAX_ATTEMPTS {
-            let outcome = handle_launch_minigame_mode(&mut ctx, mode.clone()).unwrap();
+            let outcome = handle_launch_minigame_mode(&mut ctx, mode.clone());
             assert!(outcome.is_transition());
         }
 
         // One more attempt beyond the cap must be rejected.
-        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode);
         assert!(outcome.is_stay());
         assert_eq!(
             ctx.progress.profile.challenge_progress.attempts_used_today,
@@ -521,13 +514,13 @@ mod tests {
             crate::minigame::ChallengeConfig::for_date(today),
         );
         for _ in 0..CHALLENGE_MAX_ATTEMPTS {
-            handle_launch_minigame_mode(&mut ctx, challenge_mode.clone()).unwrap();
+            handle_launch_minigame_mode(&mut ctx, challenge_mode.clone());
         }
         assert!(!ctx.progress.profile.challenge_progress.can_attempt(today));
 
         let survival_mode =
             crate::minigame::MiniGameMode::Survival(crate::minigame::SurvivalConfig::default());
-        let outcome = handle_launch_minigame_mode(&mut ctx, survival_mode).unwrap();
+        let outcome = handle_launch_minigame_mode(&mut ctx, survival_mode);
 
         assert!(outcome.is_transition());
     }
@@ -550,7 +543,7 @@ mod tests {
         let mode = crate::minigame::MiniGameMode::Challenge(
             crate::minigame::ChallengeConfig::for_date(ctx.progress.today()),
         );
-        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode);
 
         assert!(outcome.is_stay());
         assert!(
@@ -601,9 +594,9 @@ mod tests {
                 crate::minigame::ChallengeConfig::for_date(today),
             );
             for _ in 0..CHALLENGE_MAX_ATTEMPTS {
-                handle_launch_minigame_mode(&mut ctx, mode.clone()).unwrap();
+                handle_launch_minigame_mode(&mut ctx, mode.clone());
             }
-            let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+            let outcome = handle_launch_minigame_mode(&mut ctx, mode);
             assert!(outcome.is_stay());
         }
 
@@ -621,7 +614,7 @@ mod tests {
         let mode = crate::minigame::MiniGameMode::Challenge(
             crate::minigame::ChallengeConfig::for_date(today),
         );
-        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode);
         assert!(outcome.is_transition());
         assert_eq!(
             ctx.progress.profile.challenge_progress.attempts_used_today,
@@ -635,7 +628,7 @@ mod tests {
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
         let mode = crate::minigame::MiniGameMode::default();
-        let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+        let outcome = handle_launch_minigame_mode(&mut ctx, mode);
 
         // Should stay on screen and explain why when no scenarios are available
         assert!(outcome.is_stay());

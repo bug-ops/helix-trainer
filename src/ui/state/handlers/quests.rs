@@ -4,7 +4,6 @@
 
 use crate::gamification::{QuestTracker, QuestType, StreakManager};
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
-use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::QuestBonus;
 use crate::ui::state::{AppState, QuestProgressChange};
@@ -167,9 +166,8 @@ pub fn handle_update_quest_progress(
     scenario_completed: bool,
     scenario_id: Option<ScenarioId>,
     duration: Duration,
-) -> Result<(), UserError> {
+) {
     apply_quest_progress(state, command, scenario_completed, scenario_id, duration);
-    Ok(())
 }
 
 /// Update quest progress based on commands, scenario completions, or time, and return what

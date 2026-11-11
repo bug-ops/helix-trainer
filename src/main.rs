@@ -151,7 +151,7 @@ async fn main() -> Result<()> {
     // Force full redraw on first render by clearing the terminal
     // This ensures the UI is visible immediately on startup
     terminal.clear()?;
-    terminal.draw(|f| ui::render(f, &mut app_state))?;
+    terminal.draw(|f| ui::render(f, &app_state))?;
     // Flush to ensure immediate display
     io::Write::flush(terminal.backend_mut())?;
 

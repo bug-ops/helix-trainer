@@ -2,7 +2,6 @@
 //!
 //! Handles profile screen navigation
 
-use crate::security::UserError;
 use crate::ui::state::{
     AchievementsData, HandlerOutcome, ProfileData, StatisticsData, TypedScreen,
 };
@@ -10,34 +9,30 @@ use crate::ui::state::{
 /// Handle ShowProfile message
 ///
 /// Navigates to the profile screen, tracking where to return
-pub fn handle_show_profile(screen: &mut TypedScreen) -> Result<HandlerOutcome, UserError> {
+pub fn handle_show_profile(screen: &mut TypedScreen) -> HandlerOutcome {
     let return_to = screen.detour_return_destination();
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Profile(
-        ProfileData { return_to },
-    ))))
+    HandlerOutcome::Transition(Box::new(TypedScreen::Profile(ProfileData { return_to })))
 }
 
 /// Handle ShowStatistics message
 ///
 /// Navigates to the statistics screen, tracking where to return
-pub fn handle_show_statistics(screen: &mut TypedScreen) -> Result<HandlerOutcome, UserError> {
+pub fn handle_show_statistics(screen: &mut TypedScreen) -> HandlerOutcome {
     let return_to = screen.detour_return_destination();
-    Ok(HandlerOutcome::Transition(Box::new(
-        TypedScreen::Statistics(StatisticsData { return_to }),
-    )))
+    HandlerOutcome::Transition(Box::new(TypedScreen::Statistics(StatisticsData {
+        return_to,
+    })))
 }
 
 /// Handle ShowAchievements message
 ///
 /// Navigates to the achievements screen, tracking where to return
-pub fn handle_show_achievements(screen: &mut TypedScreen) -> Result<HandlerOutcome, UserError> {
+pub fn handle_show_achievements(screen: &mut TypedScreen) -> HandlerOutcome {
     let return_to = screen.detour_return_destination();
-    Ok(HandlerOutcome::Transition(Box::new(
-        TypedScreen::Achievements(AchievementsData {
-            return_to,
-            scroll_offset: 0,
-        }),
-    )))
+    HandlerOutcome::Transition(Box::new(TypedScreen::Achievements(AchievementsData {
+        return_to,
+        scroll_offset: 0,
+    })))
 }
 
 /// Handle ScrollAchievements message
@@ -45,12 +40,9 @@ pub fn handle_show_achievements(screen: &mut TypedScreen) -> Result<HandlerOutco
 /// Adjusts the achievement list scroll offset by `delta` rows (negative scrolls up).
 /// Only clamped to zero here; the upper bound depends on the rendered viewport height
 /// and content length, so it's clamped in `render_achievements_screen` instead.
-pub fn handle_scroll_achievements(
-    data: &mut AchievementsData,
-    delta: i32,
-) -> Result<HandlerOutcome, UserError> {
+pub fn handle_scroll_achievements(data: &mut AchievementsData, delta: i32) -> HandlerOutcome {
     data.scroll_offset = data.scroll_offset.saturating_add_signed(delta as isize);
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 #[cfg(test)]
@@ -106,7 +98,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx);
         crate::ui::state::apply_outcome(state, outcome);
     }
 
@@ -115,7 +107,7 @@ mod tests {
         let mut state = create_test_state();
         state.screen = TypedScreen::Menu(MenuData::default());
 
-        let outcome = handle_show_profile(&mut state.screen).unwrap();
+        let outcome = handle_show_profile(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
@@ -132,7 +124,7 @@ mod tests {
         let mut state = create_test_state();
         state.screen = TypedScreen::Menu(MenuData::default());
 
-        let outcome = handle_show_statistics(&mut state.screen).unwrap();
+        let outcome = handle_show_statistics(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
@@ -149,7 +141,7 @@ mod tests {
         let mut state = create_test_state();
         state.screen = TypedScreen::Menu(MenuData::default());
 
-        let outcome = handle_show_achievements(&mut state.screen).unwrap();
+        let outcome = handle_show_achievements(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
@@ -173,7 +165,7 @@ mod tests {
             session.pause();
         }
 
-        let outcome = handle_show_achievements(&mut state.screen).unwrap();
+        let outcome = handle_show_achievements(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
@@ -203,7 +195,7 @@ mod tests {
             assert!(session.state().is_paused());
         }
 
-        let outcome = handle_show_profile(&mut state.screen).unwrap();
+        let outcome = handle_show_profile(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
@@ -230,7 +222,7 @@ mod tests {
             session.pause();
         }
 
-        let outcome = handle_show_statistics(&mut state.screen).unwrap();
+        let outcome = handle_show_statistics(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
@@ -257,7 +249,7 @@ mod tests {
             assert!(session.state().is_playing());
         }
 
-        let outcome = handle_show_profile(&mut state.screen).unwrap();
+        let outcome = handle_show_profile(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {

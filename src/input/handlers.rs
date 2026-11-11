@@ -143,7 +143,7 @@ fn handle_task_special_keys(key: KeyEvent) -> Option<Message> {
 /// Works for both training mode (Task screen) and arcade mode (MiniGame screen).
 fn is_gameplay_insert_mode(state: &AppState) -> bool {
     match &state.screen {
-        TypedScreen::Task(task_data) => task_data.session.is_insert_mode(),
+        TypedScreen::Task(task_data) => task_data.session.playable().is_insert_mode(),
         TypedScreen::MiniGame(_) => state.minigame_session().is_some_and(|s| s.is_insert_mode()),
         _ => false,
     }
@@ -1876,7 +1876,7 @@ mod tests {
             let TypedScreen::Task(task_data) = &state.screen else {
                 panic!("expected Task screen");
             };
-            task_data.session.action_count()
+            task_data.session.playable().action_count()
         }
 
         fn input_state(state: &AppState) -> crate::input::typestate::InputState {
@@ -1993,7 +1993,7 @@ mod tests {
             let TypedScreen::Task(task_data) = &state.screen else {
                 panic!("player was thrown off the task screen: {:?}", state.screen);
             };
-            assert_eq!(task_data.session.action_count(), 0);
+            assert_eq!(task_data.session.playable().action_count(), 0);
             assert!(task_data.input_state().state().is_base());
         }
 
@@ -2006,7 +2006,7 @@ mod tests {
             let TypedScreen::Task(task_data) = &state.screen else {
                 panic!("expected Task screen");
             };
-            assert_eq!(task_data.session.action_count(), 1);
+            assert_eq!(task_data.session.playable().action_count(), 1);
         }
     }
 }

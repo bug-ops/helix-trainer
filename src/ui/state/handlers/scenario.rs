@@ -13,8 +13,8 @@ use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
-    AppState, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData, NextStep, ResultsData,
-    TaskData, TypedScreen, XPBreakdown,
+    AppState, CompletedTask, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData,
+    NextStep, ResultsData, TaskData, TaskSession, TypedScreen, XPBreakdown,
 };
 use crate::ui::state::{CategoryProgress, MasteryInfo};
 use rust_i18n::t;
@@ -44,7 +44,6 @@ pub fn handle_start_scenario(
 
         // Update UI state
         ctx.ui.show_key_history = false;
-        ctx.ui.completion_time = None;
 
         // Transition to Task screen with data
         return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Task(
@@ -149,37 +148,29 @@ fn record_scenario_completion(
 /// Processes scenario completion: awards XP, updates quests, records FSRS data
 ///
 /// Note: This handler needs full AppState access to call update() for quest progress
-pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, UserError> {
-    // Extract scenario_index from current TaskData before any transitions
-    let scenario_index = if let TypedScreen::Task(ref task_data) = state.screen {
-        task_data.scenario_index
-    } else {
-        None
+pub fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
+    let menu = || {
+        TypedScreen::Menu(MenuData {
+            selected_item: state.ui.last_menu_selected,
+            scroll_offset: state.ui.last_menu_scroll,
+            ..MenuData::default()
+        })
     };
-
-    // Get feedback and completed session from state
-    let (feedback, completed_session) = if let Some(ref feedback) = state.ui.last_feedback {
-        // Extract completed session from pending storage
-        let session = state.game.pending_completed_session.take();
-        (feedback.clone(), session)
-    } else {
-        let results_data = if let Some(session) = state.game.pending_completed_session.take() {
-            let feedback = session.feedback().map_err(UserError::from)?;
-            ResultsData::from_completed(session, feedback, scenario_index)
-        } else {
-            // No session either, just go to menu with restored position
-            return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-                MenuData {
-                    selected_item: state.ui.last_menu_selected,
-                    scroll_offset: state.ui.last_menu_scroll,
-                    ..MenuData::default()
-                },
-            ))));
-        };
-        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Results(
-            results_data,
-        ))));
+    let placeholder = menu();
+    let TypedScreen::Task(TaskData {
+        session: TaskSession::Completed(completed),
+        scenario_index,
+        ..
+    }) = std::mem::replace(&mut state.screen, placeholder)
+    else {
+        // No completed task to settle: go to the menu with its remembered position
+        return HandlerOutcome::Transition(Box::new(menu()));
     };
+    let CompletedTask {
+        session: completed_session,
+        feedback,
+        ..
+    } = completed;
 
     // Extract data from feedback
     let scenario_id = feedback.scenario_id.clone();
@@ -239,8 +230,9 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     // added here. `total_xp` (used above for the XP breakdown display) must not be
     // passed to `record_scenario_completion`, or quest XP would be double-counted.
     let scenario_difficulty = completed_session
+        .scenario()
+        .metadata
         .as_ref()
-        .and_then(|s| s.scenario().metadata.as_ref())
         .and_then(|m| m.difficulty);
     record_scenario_completion(
         &mut ctx,
@@ -250,32 +242,13 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         scenario_difficulty,
     );
 
-    // Create ResultsData with completed session and transition to Results screen
-    let Some(session) = completed_session else {
-        // No completed session available - go back to menu with restored position
-        // This shouldn't happen in normal flow, but handle gracefully
-        let selected = ctx.ui.last_menu_selected;
-        let scroll = ctx.ui.last_menu_scroll;
-        ctx.ui.clear_temp_results();
-        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-            MenuData {
-                selected_item: selected,
-                scroll_offset: scroll,
-                ..MenuData::default()
-            },
-        ))));
-    };
-
-    let mut results_data = ResultsData::from_completed(session, feedback.clone(), scenario_index);
+    let mut results_data = ResultsData::from_completed(completed_session, feedback, scenario_index);
     // Populate with XP breakdown and quest changes
     results_data.xp_breakdown = Some(xp_breakdown);
     results_data.quest_changes = quest_update.changes;
     results_data.scenario_mastery = Some(mastery);
 
-    ctx.ui.clear_temp_results();
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Results(
-        results_data,
-    ))))
+    HandlerOutcome::Transition(Box::new(TypedScreen::Results(results_data)))
 }
 
 /// Handle AbandonScenario message
@@ -283,16 +256,19 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
 /// Marks the session as abandoned and shows results
 ///
 /// Takes ownership of TaskData to consume the session
-pub fn handle_abandon_scenario(task_data: TaskData) -> Result<TypedScreen, UserError> {
-    // Take ownership and transition to abandoned state
-    let abandoned = task_data.session.abandon();
+pub fn handle_abandon_scenario(task_data: TaskData) -> TypedScreen {
+    // A finished task has nothing left to abandon: it keeps its success animation
+    let TaskSession::Active(session) = task_data.session else {
+        return TypedScreen::Task(task_data);
+    };
+    let abandoned = session.abandon();
     let feedback = abandoned.feedback();
 
     // Create ResultsData from abandoned session, preserving scenario index
     let results_data = ResultsData::from_abandoned(abandoned, feedback, task_data.scenario_index);
 
     // Return new screen directly
-    Ok(TypedScreen::Results(results_data))
+    TypedScreen::Results(results_data)
 }
 
 /// Handle RetryScenario message
@@ -320,7 +296,6 @@ pub fn handle_retry_scenario(
 
     // Reset UI state
     ctx.ui.show_key_history = false;
-    ctx.ui.completion_time = None;
 
     Ok(TypedScreen::Task(task_data))
 }
@@ -478,7 +453,7 @@ fn next_steps(ctx: &HandlerContext<'_>, imperfect: usize) -> Vec<NextStep> {
 pub fn handle_go_to_scenario_list(
     results_data: &ResultsData,
     ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     // Determine selected position with auto-advance for completed scenarios
     let selected = if results_data.session.is_completed() {
         // Auto-advance: move to next scenario after successful completion
@@ -494,13 +469,11 @@ pub fn handle_go_to_scenario_list(
             .unwrap_or(ctx.ui.last_menu_selected)
     };
 
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-        MenuData {
-            selected_item: selected,
-            scroll_offset: ctx.ui.last_menu_scroll,
-            ..MenuData::default()
-        },
-    ))))
+    HandlerOutcome::Transition(Box::new(TypedScreen::Menu(MenuData {
+        selected_item: selected,
+        scroll_offset: ctx.ui.last_menu_scroll,
+        ..MenuData::default()
+    })))
 }
 
 #[cfg(test)]
@@ -531,6 +504,36 @@ mod tests {
             .tolerance(1)
             .difficulty(difficulty)
             .build()
+    }
+
+    /// A completed session of the default test scenario (`x` then `d`)
+    fn finished_session() -> GameSession<crate::game::session::Completed> {
+        use crate::game::SessionAfterAction;
+
+        let session = GameSession::new(create_test_scenario()).unwrap();
+        let SessionAfterAction::StillActive(session) =
+            session.record_action("x".to_string()).unwrap()
+        else {
+            panic!("Should not complete after just 'x'");
+        };
+        let SessionAfterAction::Completed(completed) =
+            session.record_action("d".to_string()).unwrap()
+        else {
+            panic!("Should complete after 'x' + 'd'");
+        };
+        completed
+    }
+
+    /// Put `completed` on the task screen the way the gameplay handler leaves it
+    fn show_completed_task(
+        state: &mut AppState,
+        completed: GameSession<crate::game::session::Completed>,
+    ) {
+        let completed = CompletedTask::new(completed).unwrap();
+        state.screen = TypedScreen::Task(TaskData {
+            session: TaskSession::Completed(completed),
+            ..TaskData::new(GameSession::new(create_test_scenario()).unwrap())
+        });
     }
 
     fn create_test_state() -> AppState {
@@ -566,7 +569,6 @@ mod tests {
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Task(_))
         );
         assert!(!ctx.ui.show_key_history);
-        assert!(ctx.ui.completion_time.is_none());
     }
 
     #[test]
@@ -590,7 +592,7 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
         let task_data = TaskData::new(session);
 
-        let screen = handle_abandon_scenario(task_data).unwrap();
+        let screen = handle_abandon_scenario(task_data);
 
         assert_matches!(screen, TypedScreen::Results(_));
         if let TypedScreen::Results(results) = screen {
@@ -635,7 +637,6 @@ mod tests {
 
         assert_matches!(screen, TypedScreen::Task(_));
         assert!(!ctx.ui.show_key_history);
-        assert!(ctx.ui.completion_time.is_none());
     }
 
     #[test]
@@ -695,11 +696,9 @@ mod tests {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
-        let feedback = completed.feedback().unwrap();
-        state.ui.last_feedback = Some(feedback);
-        state.game.pending_completed_session = Some(completed);
+        show_completed_task(&mut state, completed);
 
-        let outcome = handle_complete_scenario(&mut state).unwrap();
+        let outcome = handle_complete_scenario(&mut state);
 
         let HandlerOutcome::Transition(screen) = outcome else {
             panic!("Expected Transition outcome");
@@ -747,12 +746,10 @@ mod tests {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
-        let feedback = completed.feedback().unwrap();
-        state.ui.last_feedback = Some(feedback);
-        state.game.pending_completed_session = Some(completed);
+        show_completed_task(&mut state, completed);
         let initial_xp = state.progress.profile.total_xp;
 
-        let outcome = handle_complete_scenario(&mut state).unwrap();
+        let outcome = handle_complete_scenario(&mut state);
 
         let HandlerOutcome::Transition(screen) = outcome else {
             panic!("Expected Transition outcome");
@@ -774,45 +771,11 @@ mod tests {
     fn test_handle_complete_scenario_no_feedback() {
         let mut state = create_test_state();
 
-        state.ui.last_feedback = None;
-        state.game.pending_completed_session = None;
-
-        let outcome = handle_complete_scenario(&mut state).unwrap();
+        let outcome = handle_complete_scenario(&mut state);
 
         assert_matches!(
             outcome,
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Menu(_))
-        );
-    }
-
-    #[test]
-    fn test_handle_complete_scenario_with_session_no_feedback() {
-        use crate::game::SessionAfterAction;
-
-        let mut state = create_test_state();
-        let scenario = create_test_scenario();
-        let session = GameSession::new(scenario).unwrap();
-
-        // Complete the scenario
-        let result = session.record_action("x".to_string()).unwrap();
-        let session = match result {
-            SessionAfterAction::StillActive(s) => s,
-            SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
-        };
-        let result = session.record_action("d".to_string()).unwrap();
-        let completed = match result {
-            SessionAfterAction::Completed(c) => c,
-            SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
-        };
-
-        state.ui.last_feedback = None;
-        state.game.pending_completed_session = Some(completed);
-
-        let outcome = handle_complete_scenario(&mut state).unwrap();
-
-        assert_matches!(
-            outcome,
-            HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Results(_))
         );
     }
 
@@ -840,13 +803,11 @@ mod tests {
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
-        state.ui.last_feedback = Some(feedback);
-        state.game.pending_completed_session = Some(completed);
+        show_completed_task(&mut state, completed);
 
         let initial_xp = state.progress.profile.total_xp;
 
-        let outcome = handle_complete_scenario(&mut state).unwrap();
+        let outcome = handle_complete_scenario(&mut state);
 
         assert_matches!(
             outcome,
@@ -884,11 +845,9 @@ mod tests {
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
-        state.ui.last_feedback = Some(feedback);
-        state.game.pending_completed_session = Some(completed);
+        show_completed_task(&mut state, completed);
 
-        handle_complete_scenario(&mut state).unwrap();
+        handle_complete_scenario(&mut state);
 
         assert!(
             state
@@ -927,11 +886,9 @@ mod tests {
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
-        state.ui.last_feedback = Some(feedback);
-        state.game.pending_completed_session = Some(completed);
+        show_completed_task(&mut state, completed);
 
-        handle_complete_scenario(&mut state).unwrap();
+        handle_complete_scenario(&mut state);
 
         assert!(
             state
@@ -970,11 +927,9 @@ mod tests {
                 SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
             };
 
-            let feedback = completed.feedback().unwrap();
-            state.ui.last_feedback = Some(feedback);
-            state.game.pending_completed_session = Some(completed);
+            show_completed_task(&mut state, completed);
 
-            handle_complete_scenario(&mut state).unwrap();
+            handle_complete_scenario(&mut state);
         }
 
         assert!(
@@ -1016,11 +971,9 @@ mod tests {
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
-        state.ui.last_feedback = Some(feedback);
-        state.game.pending_completed_session = Some(completed);
+        show_completed_task(&mut state, completed);
 
-        handle_complete_scenario(&mut state).unwrap();
+        handle_complete_scenario(&mut state);
 
         assert_eq!(state.progress.profile.speed_run_count, 1);
         assert_eq!(state.progress.profile.flash_run_count, 1);
@@ -1257,7 +1210,7 @@ mod tests {
         use crate::game::PerformanceRating;
         crate::game::Feedback {
             scenario_id: sid("test_scenario"),
-            success: true,
+            outcome: crate::game::FeedbackOutcome::Completed,
             score: 1,
             max_points: 2,
             rating: PerformanceRating::Good,
@@ -1265,7 +1218,6 @@ mod tests {
             optimal_actions: 1,
             duration: std::time::Duration::from_secs(5),
             hint: None,
-            is_optimal: false,
             user_actions: vec![],
         }
     }
@@ -1366,10 +1318,9 @@ mod tests {
             completed: false,
         }];
 
-        let feedback = completed_feedback_with_commands();
-        state.ui.last_feedback = Some(feedback);
+        show_completed_task(&mut state, finished_session());
 
-        handle_complete_scenario(&mut state).unwrap();
+        handle_complete_scenario(&mut state);
 
         assert!(
             state.progress.profile.level >= 2,
@@ -1401,10 +1352,9 @@ mod tests {
         let baseline_dir = TempDir::new().unwrap();
         baseline_state.progress.storage =
             ProfileStorage::with_path(baseline_dir.path().join("profile.json"));
-        let feedback = completed_feedback_with_commands();
-        baseline_state.ui.last_feedback = Some(feedback);
+        show_completed_task(&mut baseline_state, finished_session());
         let baseline_initial_xp = baseline_state.progress.profile.total_xp;
-        handle_complete_scenario(&mut baseline_state).unwrap();
+        handle_complete_scenario(&mut baseline_state);
         let actual_xp = baseline_state.progress.profile.total_xp - baseline_initial_xp;
 
         // Same completion, but with a daily quest one completion away from its target -
@@ -1424,11 +1374,10 @@ mod tests {
             xp_reward: quest_xp_reward,
             completed: false,
         }];
-        let feedback = completed_feedback_with_commands();
-        state.ui.last_feedback = Some(feedback);
+        show_completed_task(&mut state, finished_session());
 
         let initial_xp = state.progress.profile.total_xp;
-        handle_complete_scenario(&mut state).unwrap();
+        handle_complete_scenario(&mut state);
         let total_xp_gained = state.progress.profile.total_xp - initial_xp;
 
         assert!(
@@ -1467,7 +1416,7 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
         let task_data = TaskData::new(session);
 
-        let screen = handle_abandon_scenario(task_data).unwrap();
+        let screen = handle_abandon_scenario(task_data);
 
         if let TypedScreen::Results(results) = screen {
             assert_matches!(
@@ -1606,7 +1555,7 @@ mod tests {
             &state.config,
         );
 
-        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx);
 
         // Should always transition to Menu screen
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -1628,7 +1577,7 @@ mod tests {
             &state.config,
         );
 
-        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx);
 
         // Should always transition to Menu screen regardless of scenario_index
         if let HandlerOutcome::Transition(screen) = outcome {
@@ -1707,7 +1656,7 @@ mod tests {
         let mut task_data = TaskData::new(session);
         task_data.scenario_index = Some(2);
 
-        let screen = handle_abandon_scenario(task_data).unwrap();
+        let screen = handle_abandon_scenario(task_data);
 
         if let TypedScreen::Results(results_data) = screen {
             assert_eq!(
@@ -1783,7 +1732,7 @@ mod tests {
             &state.config,
         );
 
-        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx);
 
         if let HandlerOutcome::Transition(screen) = outcome {
             if let TypedScreen::Menu(menu_data) = *screen {
@@ -1818,7 +1767,7 @@ mod tests {
             &state.config,
         );
 
-        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx);
 
         if let HandlerOutcome::Transition(screen) = outcome {
             if let TypedScreen::Menu(menu_data) = *screen {
@@ -1868,7 +1817,7 @@ mod tests {
             &state.config,
         );
 
-        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx).unwrap();
+        let outcome = handle_go_to_scenario_list(&results_data, &mut ctx);
 
         if let HandlerOutcome::Transition(screen) = outcome {
             if let TypedScreen::Menu(menu_data) = *screen {

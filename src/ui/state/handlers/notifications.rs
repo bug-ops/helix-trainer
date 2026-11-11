@@ -1,6 +1,5 @@
 //! Notification message handlers
 
-use crate::security::UserError;
 use crate::ui::state::handler_context::HandlerOutcome;
 
 /// Handle CleanupNotifications message
@@ -8,9 +7,9 @@ use crate::ui::state::handler_context::HandlerOutcome;
 /// Removes expired notifications from the queue
 pub(in crate::ui::state) fn handle_cleanup_notifications(
     ui: &mut crate::ui::state::UIState,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     ui.notifications.remove_expired();
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 #[cfg(test)]
@@ -32,7 +31,7 @@ mod tests {
         assert_eq!(ui.notifications.count(), 1);
 
         // Cleanup (should not remove fresh notifications)
-        handle_cleanup_notifications(&mut ui).unwrap();
+        handle_cleanup_notifications(&mut ui);
         assert_eq!(ui.notifications.count(), 1);
     }
 }

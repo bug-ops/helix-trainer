@@ -3,11 +3,6 @@
 //! This module contains all message handlers, organized by functional domain.
 //! Each handler is a pure function that modifies AppState based on a message.
 
-#![expect(
-    clippy::unnecessary_wraps,
-    reason = "handlers share one fallible signature so `update` can dispatch them uniformly"
-)]
-
 // Re-export all handlers for use in the main update function
 pub(super) use category_filters::{
     handle_category_filter_down, handle_category_filter_select_all, handle_category_filter_toggle,

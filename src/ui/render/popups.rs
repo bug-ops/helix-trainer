@@ -266,8 +266,11 @@ pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
         "Profile load failed: saving is disabled this session.".to_string(),
         backup_line,
     ];
-    if matches!(backup, QuarantineOutcome::BackedUp(_)) {
+    if quarantine.can_start_fresh() {
         lines.push(t!("profile.start_fresh_action").to_string());
+    }
+    if quarantine.can_restore_previous() {
+        lines.push(t!("profile.restore_action").to_string());
     }
 
     // +1 line of slack because word wrapping can need more rows than a plain
@@ -348,6 +351,34 @@ mod tests {
         let expected: String = path.split_whitespace().collect();
         assert!(joined.contains(&expected), "{rendered:#?}");
         assert!(rendered[0].contains("Profile load failed"));
+    }
+
+    #[test]
+    fn test_profile_load_banner_offers_restore_only_with_an_available_previous_copy() {
+        use crate::gamification::PreviousCopy;
+        use crate::ui::state::Quarantine;
+
+        let mut state = quarantined_state("/tmp/profile.json.corrupt-1");
+        let without = rows(&render_banner(&state, 100, 12)).join("");
+        assert!(without.contains("Ctrl-N"));
+        assert!(!without.contains("Ctrl-R"), "{without}");
+
+        state.progress.quarantine_profile(Quarantine {
+            backup: QuarantineOutcome::BackedUp("/tmp/profile.json.corrupt-1".into()),
+            previous: PreviousCopy::Available,
+        });
+        let with = rows(&render_banner(&state, 100, 12)).join("");
+        assert!(with.contains("Ctrl-N") && with.contains("Ctrl-R"), "{with}");
+
+        state.progress.quarantine_profile(Quarantine {
+            backup: crate::testing::failed_backup(),
+            previous: PreviousCopy::Available,
+        });
+        let no_backup = rows(&render_banner(&state, 100, 12)).join("");
+        assert!(
+            !no_backup.contains("Ctrl-R"),
+            "no backup, no restore: {no_backup}"
+        );
     }
 
     #[test]

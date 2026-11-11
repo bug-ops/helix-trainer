@@ -18,7 +18,6 @@ fn test_new_state() {
     }
     assert!(state.ui.running);
     assert!(review_session(&state).is_none());
-    assert!(state.game.pending_completed_session.is_none());
 }
 
 #[test]

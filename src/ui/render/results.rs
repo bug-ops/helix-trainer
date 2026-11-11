@@ -41,12 +41,12 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
             .split(area);
 
         // Title
-        let title_text = if feedback.success {
+        let title_text = if feedback.success() {
             t!("results.completed").to_string()
         } else {
             t!("results.abandoned").to_string()
         };
-        let title_color = if feedback.success {
+        let title_color = if feedback.success() {
             Color::Green
         } else {
             Color::Red
@@ -94,7 +94,7 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
         ]));
 
         // Actions
-        let action_color = if feedback.is_optimal {
+        let action_color = if feedback.is_optimal() {
             Color::Green
         } else {
             Color::Yellow
@@ -341,10 +341,7 @@ fn render_progression_panel(
     lines.push(Line::from(""));
 
     let profile = &state.progress.profile;
-    let current_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level);
-    let next_level_xp = crate::gamification::XPCalculator::xp_for_level(profile.level + 1);
-    let xp_in_level = profile.total_xp.saturating_sub(current_level_xp);
-    let xp_needed_for_level = next_level_xp.saturating_sub(current_level_xp);
+    let (xp_in_level, xp_needed_for_level) = super::helpers::level_xp_progress(profile);
     let level = profile.level;
     let total_xp = profile.total_xp;
     let scenarios = profile.scenarios_completed;

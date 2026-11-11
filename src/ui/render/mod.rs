@@ -1,8 +1,9 @@
 //! Pure rendering functions for the TUI
 //!
 //! This module contains all rendering logic for the terminal user interface.
-//! Rendering functions may update view-related state (like scroll offsets) but
-//! do not modify business logic state.
+//! Rendering functions take the state by shared reference: view state (selection, scroll
+//! offsets) is clamped in `AppState::normalize_view`, and rendering only applies a read-only
+//! defensive clamp.
 
 use ratatui::style::Color;
 
@@ -36,14 +37,13 @@ use ratatui::Frame;
 
 /// Main render function dispatches to screen-specific renderers
 ///
-/// This is the entry point for all rendering. It may update view state like
-/// scroll offsets to keep UI elements visible.
+/// This is the entry point for all rendering. It never mutates the state.
 ///
 /// # Arguments
 ///
 /// * `frame` - The ratatui frame to render to
-/// * `state` - The application state (mutable for view state updates)
-pub fn render(frame: &mut Frame, state: &mut AppState) {
+/// * `state` - The application state
+pub fn render(frame: &mut Frame, state: &AppState) {
     // Use TypedScreen pattern for type-safe dispatch
     match &state.screen {
         crate::ui::state::TypedScreen::ModeSelection(_) => {

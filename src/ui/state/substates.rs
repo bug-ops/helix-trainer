@@ -6,7 +6,6 @@
 use crate::async_state::SaveRequest;
 use crate::config::{AppConfig, ScenarioCollection};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
-use crate::game::GameSession;
 use crate::gamification::{
     PreviousCopy, ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile,
 };
@@ -34,11 +33,8 @@ pub struct UIState {
     /// Whether to show key history popup (global setting)
     pub show_key_history: bool,
 
-    /// Time when scenario was completed (for success animation)
-    pub completion_time: Option<Instant>,
-
-    /// Feedback storage for transition to results screen
-    pub last_feedback: Option<crate::game::Feedback>,
+    /// Terminal size, updated from the resize event; list layouts are clamped against it
+    pub viewport: crate::ui::layout::Viewport,
 
     /// Notification queue for transient messages (level-up, achievements, etc.)
     pub notifications: NotificationQueue,
@@ -59,18 +55,12 @@ impl UIState {
         Self {
             running: true,
             show_key_history: true,
-            completion_time: None,
-            last_feedback: None,
+            viewport: crate::ui::layout::Viewport::MINIMUM,
             notifications: NotificationQueue::new(),
             effects: Vec::new(),
             last_menu_selected: 0,
             last_menu_scroll: 0,
         }
-    }
-
-    /// Clear results data after transitioning away from results screen
-    pub fn clear_temp_results(&mut self) {
-        self.last_feedback = None;
     }
 }
 
@@ -84,9 +74,6 @@ impl Default for UIState {
 pub struct GameState {
     /// All available scenarios with filtering and sorting
     pub scenario_collection: ScenarioCollection,
-
-    /// Completed session pending transition to results screen
-    pub pending_completed_session: Option<GameSession<crate::game::session::Completed>>,
 }
 
 impl GameState {
@@ -94,7 +81,6 @@ impl GameState {
     pub fn new(scenarios: Vec<crate::config::Scenario>) -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(scenarios),
-            pending_completed_session: None,
         }
     }
 }
@@ -103,7 +89,6 @@ impl Default for GameState {
     fn default() -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(vec![]),
-            pending_completed_session: None,
         }
     }
 }
@@ -112,10 +97,6 @@ impl std::fmt::Debug for GameState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GameState")
             .field("scenario_count", &self.scenario_collection.count())
-            .field(
-                "pending_completed_session",
-                &self.pending_completed_session.is_some(),
-            )
             .finish()
     }
 }
@@ -129,6 +110,19 @@ pub struct Quarantine {
 
     /// Whether `profile.json.prev` can be restored.
     pub previous: PreviousCopy,
+}
+
+impl Quarantine {
+    /// Whether Start fresh is offered: only after the unreadable file was preserved, so the
+    /// original is never discarded.
+    pub fn can_start_fresh(&self) -> bool {
+        matches!(self.backup, QuarantineOutcome::BackedUp(_))
+    }
+
+    /// Whether Restore previous is offered: a backup exists and the previous copy loads.
+    pub fn can_restore_previous(&self) -> bool {
+        self.can_start_fresh() && self.previous == PreviousCopy::Available
+    }
 }
 
 /// Whether the in-memory profile may be written to disk.
@@ -152,6 +146,14 @@ impl ProfilePersistence {
     /// Whether saves are allowed.
     pub fn is_writable(&self) -> bool {
         matches!(self, Self::Writable)
+    }
+
+    /// The quarantine details while loading has failed.
+    pub fn quarantine(&self) -> Option<&Quarantine> {
+        match self {
+            Self::Quarantined(quarantine) => Some(quarantine),
+            Self::Loading | Self::Writable => None,
+        }
     }
 }
 
@@ -679,7 +681,6 @@ mod tests {
         let ui = UIState::new();
         assert!(ui.running);
         assert!(ui.show_key_history);
-        assert!(ui.completion_time.is_none());
         assert_eq!(ui.last_menu_selected, 0);
         assert_eq!(ui.last_menu_scroll, 0);
     }
@@ -694,7 +695,6 @@ mod tests {
     fn test_game_state_default() {
         let game = GameState::default();
         assert_eq!(game.scenario_collection.count(), 0);
-        assert!(game.pending_completed_session.is_none());
     }
 
     #[test]

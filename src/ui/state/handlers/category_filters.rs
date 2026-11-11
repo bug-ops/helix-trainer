@@ -2,19 +2,18 @@
 //!
 //! Handles navigation and toggle operations for the category filters screen
 
-use crate::security::UserError;
 use crate::ui::state::{CategoryFiltersData, HandlerContext, HandlerOutcome, TypedScreen};
 
 /// Handle ShowCategoryFilters message
 ///
 /// Navigates to the category filters screen, tracking where to return
-pub fn handle_show_category_filters(screen: &mut TypedScreen) -> Result<HandlerOutcome, UserError> {
+pub fn handle_show_category_filters(screen: &mut TypedScreen) -> HandlerOutcome {
     let return_to = screen.detour_return_destination();
-    Ok(HandlerOutcome::Transition(Box::new(
-        TypedScreen::CategoryFilters(CategoryFiltersData {
+    HandlerOutcome::Transition(Box::new(TypedScreen::CategoryFilters(
+        CategoryFiltersData {
             selected_index: 0,
             return_to,
-        }),
+        },
     )))
 }
 
@@ -24,11 +23,11 @@ pub fn handle_show_category_filters(screen: &mut TypedScreen) -> Result<HandlerO
 pub fn handle_category_filter_up(
     data: &mut CategoryFiltersData,
     ctx: &HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     let category_count = ctx.game.scenario_collection.categories().len();
 
     if category_count == 0 {
-        return Ok(HandlerOutcome::Stay);
+        return HandlerOutcome::Stay;
     }
 
     // Bounds check: ensure selected_index is valid before decrement
@@ -43,7 +42,7 @@ pub fn handle_category_filter_up(
         data.selected_index = category_count.saturating_sub(1);
     }
 
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle CategoryFilterDown message
@@ -52,23 +51,23 @@ pub fn handle_category_filter_up(
 pub fn handle_category_filter_down(
     data: &mut CategoryFiltersData,
     ctx: &HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     let category_count = ctx.game.scenario_collection.categories().len();
 
     if category_count == 0 {
-        return Ok(HandlerOutcome::Stay);
+        return HandlerOutcome::Stay;
     }
 
     // Bounds check: ensure selected_index is valid
     if data.selected_index >= category_count {
         data.selected_index = 0;
-        return Ok(HandlerOutcome::Stay);
+        return HandlerOutcome::Stay;
     }
 
     // Move down with wraparound
     data.selected_index = (data.selected_index + 1) % category_count;
 
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle CategoryFilterToggle message
@@ -77,12 +76,12 @@ pub fn handle_category_filter_down(
 pub fn handle_category_filter_toggle(
     data: &CategoryFiltersData,
     ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     let categories = ctx.game.scenario_collection.categories();
 
     // Bounds check: ensure selected_index is valid
     let Some(category) = categories.get(data.selected_index) else {
-        return Ok(HandlerOutcome::Stay);
+        return HandlerOutcome::Stay;
     };
 
     // Toggle this category using the existing filter infrastructure
@@ -104,15 +103,13 @@ pub fn handle_category_filter_toggle(
         .scenario_collection
         .apply_filter(&new_filter, Some(profile));
 
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle CategoryFilterSelectAll message
 ///
 /// Resets category filters to show all categories (clears category filter)
-pub fn handle_category_filter_select_all(
-    ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+pub fn handle_category_filter_select_all(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
     let profile = &ctx.progress.profile;
     let current_filter = ctx.game.scenario_collection.active_filter();
     let mut new_filter = current_filter.clone();
@@ -124,7 +121,7 @@ pub fn handle_category_filter_select_all(
         .scenario_collection
         .apply_filter(&new_filter, Some(profile));
 
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 #[cfg(test)]
@@ -195,7 +192,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx);
         crate::ui::state::apply_outcome(state, outcome);
     }
 
@@ -204,7 +201,7 @@ mod tests {
         let mut state = create_test_state_with_categories();
         state.screen = TypedScreen::Menu(MenuData::default());
 
-        let outcome = handle_show_category_filters(&mut state.screen).unwrap();
+        let outcome = handle_show_category_filters(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
@@ -230,7 +227,7 @@ mod tests {
             session.pause();
         }
 
-        let outcome = handle_show_category_filters(&mut state.screen).unwrap();
+        let outcome = handle_show_category_filters(&mut state.screen);
 
         assert!(outcome.is_transition());
         if let HandlerOutcome::Transition(boxed) = outcome {
@@ -256,7 +253,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_category_filter_up(&mut data, &ctx).unwrap();
+        let outcome = handle_category_filter_up(&mut data, &ctx);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_index, 0);
@@ -276,7 +273,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_category_filter_up(&mut data, &ctx).unwrap();
+        let outcome = handle_category_filter_up(&mut data, &ctx);
 
         assert!(outcome.is_stay());
         // Should wrap to last category (index 2, since we have 3 categories)
@@ -297,7 +294,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_category_filter_up(&mut data, &ctx).unwrap();
+        let outcome = handle_category_filter_up(&mut data, &ctx);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_index, 0);
@@ -317,7 +314,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_category_filter_up(&mut data, &ctx).unwrap();
+        let outcome = handle_category_filter_up(&mut data, &ctx);
 
         assert!(outcome.is_stay());
         // Should be clamped and then decremented
@@ -338,7 +335,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_category_filter_down(&mut data, &ctx).unwrap();
+        let outcome = handle_category_filter_down(&mut data, &ctx);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_index, 1);
@@ -359,7 +356,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_category_filter_down(&mut data, &ctx).unwrap();
+        let outcome = handle_category_filter_down(&mut data, &ctx);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_index, 0);
@@ -379,7 +376,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_category_filter_down(&mut data, &ctx).unwrap();
+        let outcome = handle_category_filter_down(&mut data, &ctx);
 
         assert!(outcome.is_stay());
         assert_eq!(data.selected_index, 0);
@@ -399,7 +396,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_category_filter_down(&mut data, &ctx).unwrap();
+        let outcome = handle_category_filter_down(&mut data, &ctx);
 
         assert!(outcome.is_stay());
         // Should be reset to 0
@@ -430,7 +427,7 @@ mod tests {
                 .is_none()
         );
 
-        let outcome = handle_category_filter_toggle(&data, &mut ctx).unwrap();
+        let outcome = handle_category_filter_toggle(&data, &mut ctx);
         assert!(outcome.is_stay());
 
         // Category filter should now be set
@@ -454,10 +451,10 @@ mod tests {
         );
 
         // Enable filter first
-        handle_category_filter_toggle(&data, &mut ctx).unwrap();
+        handle_category_filter_toggle(&data, &mut ctx);
 
         // Toggle again to disable
-        let outcome = handle_category_filter_toggle(&data, &mut ctx).unwrap();
+        let outcome = handle_category_filter_toggle(&data, &mut ctx);
         assert!(outcome.is_stay());
 
         // Category filter should be cleared
@@ -468,13 +465,12 @@ mod tests {
     /// Regression test for #312/S1: `handle_category_filter_toggle` runs while
     /// `state.screen == CategoryFilters`, not `Menu`, so it has no way to touch
     /// `MenuData::selected_item` itself even though it can shrink the filtered list. The
-    /// render-time clamp in `render_main_menu` is defensive coverage for a `selected_item`
-    /// left stale by a toggle like this one — today `handle_back_to_menu` always resets
-    /// `MenuData` to default when leaving `CategoryFilters`, so this path doesn't currently
-    /// produce a stale index in production, but the same clamp also guards the
-    /// `ui.last_menu_selected` restore paths in `src/ui/state/handlers/scenario.rs`.
+    /// read-only clamp in `render_main_menu` keeps such a stale `selected_item` from breaking
+    /// the frame, and `AppState::normalize_view` (run after every `update`) repairs the stored
+    /// value (#529); the same paths guard the `ui.last_menu_selected` restore paths in
+    /// `src/ui/state/handlers/scenario.rs`.
     #[test]
-    fn test_category_filter_toggle_live_path_leaves_stale_selection_for_render_to_clamp() {
+    fn test_category_filter_toggle_live_path_leaves_stale_selection_for_normalization() {
         use ratatui::Terminal;
         use ratatui::backend::TestBackend;
 
@@ -495,7 +491,7 @@ mod tests {
             &state.config,
         );
         // The real production handler behind the live CategoryFilterToggle message.
-        handle_category_filter_toggle(&data, &mut ctx).unwrap();
+        handle_category_filter_toggle(&data, &mut ctx);
 
         let filtered_count = state.game.scenario_collection.count();
         assert_eq!(
@@ -504,13 +500,23 @@ mod tests {
         );
 
         // state.screen is still Menu with the stale selected_item=6 here — nothing about
-        // handle_category_filter_toggle touches it. Rendering the Menu screen is the only
-        // remaining point that can catch it.
+        // handle_category_filter_toggle touches it. Rendering must survive it read-only,
+        // and normalization repairs it.
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
-            .draw(|f| crate::ui::render::render(f, &mut state))
+            .draw(|f| crate::ui::render::render(f, &state))
             .unwrap();
+
+        let TypedScreen::Menu(menu_data) = &state.screen else {
+            panic!("expected TypedScreen::Menu");
+        };
+        assert_eq!(
+            menu_data.selected_item, 6,
+            "render must not mutate the state"
+        );
+
+        state.normalize_view();
 
         let TypedScreen::Menu(menu_data) = &state.screen else {
             panic!("expected TypedScreen::Menu");
@@ -533,7 +539,7 @@ mod tests {
             &state.config,
         );
 
-        let outcome = handle_category_filter_toggle(&data, &mut ctx).unwrap();
+        let outcome = handle_category_filter_toggle(&data, &mut ctx);
         assert!(outcome.is_stay());
 
         // No change should have occurred
@@ -562,7 +568,7 @@ mod tests {
         );
 
         // Enable a filter first
-        handle_category_filter_toggle(&data, &mut ctx).unwrap();
+        handle_category_filter_toggle(&data, &mut ctx);
         assert!(
             ctx.game
                 .scenario_collection
@@ -572,7 +578,7 @@ mod tests {
         );
 
         // Select all should clear the filter
-        let outcome = handle_category_filter_select_all(&mut ctx).unwrap();
+        let outcome = handle_category_filter_select_all(&mut ctx);
         assert!(outcome.is_stay());
 
         // Category filter should be cleared
@@ -611,7 +617,7 @@ mod tests {
                 &mut state.progress,
                 &state.config,
             );
-            handle_category_filter_toggle(&data, &mut ctx).unwrap();
+            handle_category_filter_toggle(&data, &mut ctx);
         }
 
         // Select all should clear only category filter
@@ -622,7 +628,7 @@ mod tests {
                 &mut state.progress,
                 &state.config,
             );
-            handle_category_filter_select_all(&mut ctx).unwrap();
+            handle_category_filter_select_all(&mut ctx);
 
             let filter = ctx.game.scenario_collection.active_filter();
             assert!(filter.categories.is_none());

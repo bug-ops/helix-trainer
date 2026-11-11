@@ -19,8 +19,8 @@ pub use editor_state::EditorState;
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};
 pub use session::{
-    Abandoned, Active, Completed, Feedback, GameSession, SessionAfterAction, SessionState,
-    UserAction,
+    Abandoned, Active, Completed, Feedback, FeedbackOutcome, GameSession, SessionAfterAction,
+    SessionState, UserAction,
 };
 
 /// Trait for types that represent a playable scenario session.

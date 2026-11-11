@@ -4,7 +4,6 @@
 //! like 'dd', 'gg', 'r<char>' through the typestate-based InputStateMachine.
 
 use helix_trainer::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
-use helix_trainer::game::PlayableScenario;
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::input::keymap::CanonicalKeys;
 use helix_trainer::learning::PerformanceTracker;
@@ -129,7 +128,7 @@ fn test_replace_command_multi_key() {
             task_data.input_state().state()
         );
         // Content should still be "Hxllo" - nothing changed yet
-        assert_eq!(task_data.session.current_content(), "Hxllo");
+        assert_eq!(task_data.session.playable().current_content(), "Hxllo");
     } else {
         panic!("Should be on Task screen");
     }
@@ -139,8 +138,7 @@ fn test_replace_command_multi_key() {
 
     // After typestate refactoring and success popup changes:
     // - Session completes when target is reached
-    // - We stay on Task screen with completion_time set
-    // - pending_completed_session contains the completed session
+    // - We stay on Task screen with the session in its completed state
     // - After delay, CompleteScenario transitions to Results
     match &state.screen {
         TypedScreen::Task(task_data) => {
@@ -150,20 +148,12 @@ fn test_replace_command_multi_key() {
                 "Expected Base state after command, got {:?}",
                 task_data.input_state().state()
             );
-            // Check completion via pending session or completion_time
-            if state.ui.completion_time.is_some() {
-                // Scenario completed - check pending session has correct content
-                let pending = state.game.pending_completed_session.as_ref();
-                assert!(pending.is_some(), "Should have pending completed session");
-                assert_eq!(pending.unwrap().current_content(), "Hello");
-            } else {
-                // Scenario not yet complete - check session content
-                assert_eq!(task_data.session.current_content(), "Hello");
-            }
+            // The editor state reads the same whether the task is active or completed
+            assert_eq!(task_data.session.playable().current_content(), "Hello");
         }
         TypedScreen::Results(results_data) => {
             // Session completed and transitioned to Results
-            assert!(results_data.feedback.success);
+            assert!(results_data.feedback.success());
         }
         _ => panic!("Should be on Task or Results screen"),
     }
@@ -191,10 +181,13 @@ fn test_xd_command_line_delete() {
         // Input state should be Base (single-key command executes immediately)
         assert!(task_data.input_state().state().is_base());
         // Content unchanged after x (selection only)
-        assert_eq!(task_data.session.current_content(), "line1\nline2\nline3");
+        assert_eq!(
+            task_data.session.playable().current_content(),
+            "line1\nline2\nline3"
+        );
         // Selection should be set
         assert!(
-            task_data.session.current_selection().is_some(),
+            task_data.session.playable().current_selection().is_some(),
             "Selection should be set after 'x'"
         );
     } else {
@@ -207,7 +200,10 @@ fn test_xd_command_line_delete() {
     if let TypedScreen::Task(task_data) = &state.screen {
         // Input state should be Base
         assert!(task_data.input_state().state().is_base());
-        assert_eq!(task_data.session.current_content(), "line1\nline3");
+        assert_eq!(
+            task_data.session.playable().current_content(),
+            "line1\nline3"
+        );
     } else {
         panic!("Should be on Task screen after xd (scenario incomplete)");
     }
@@ -246,7 +242,7 @@ fn test_gg_command_multi_key() {
     if let TypedScreen::Task(task_data) = &state.screen {
         // Input state should be back to Base
         assert!(task_data.input_state().state().is_base());
-        let cursor = task_data.session.current_cursor();
+        let cursor = task_data.session.playable().current_cursor();
         assert_eq!(cursor, (0, 0));
     } else {
         panic!("Should be on Task screen after gg (scenario incomplete)");
@@ -282,7 +278,7 @@ fn test_replace_command_valid_sequence() {
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
         // Content should be "rest" (replaced 't' with 'r')
-        assert_eq!(task_data.session.current_content(), "rest");
+        assert_eq!(task_data.session.playable().current_content(), "rest");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -310,7 +306,7 @@ fn test_single_key_command_immediate_execution() {
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
         // Cursor should have moved
-        assert_eq!(task_data.session.current_cursor().1, 1);
+        assert_eq!(task_data.session.playable().current_cursor().1, 1);
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -330,7 +326,7 @@ fn test_replace_with_special_chars() {
     update(&mut state, exec("!")).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.session.current_content(), "!");
+        assert_eq!(task_data.session.playable().current_content(), "!");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -356,7 +352,7 @@ fn test_undo_integration() {
     update(&mut state, exec("d")).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.session.current_content(), "line2");
+        assert_eq!(task_data.session.playable().current_content(), "line2");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -366,7 +362,10 @@ fn test_undo_integration() {
 
     if let TypedScreen::Task(task_data) = &state.screen {
         // After undo, line1 should be restored
-        assert_eq!(task_data.session.current_content(), "line1\nline2");
+        assert_eq!(
+            task_data.session.playable().current_content(),
+            "line1\nline2"
+        );
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -404,7 +403,7 @@ fn test_register_yank_paste_multi_key() {
             helix_trainer::input::typestate::InputState::RegisterOpPending { register: 'a' }
         );
         // Nothing executed yet
-        assert_eq!(task_data.session.current_content(), "alpha beta");
+        assert_eq!(task_data.session.playable().current_content(), "alpha beta");
     } else {
         panic!("Should be on Task screen");
     }
@@ -413,7 +412,7 @@ fn test_register_yank_paste_multi_key() {
     update(&mut state, exec("y")).unwrap();
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
-        assert_eq!(task_data.session.current_content(), "alpha beta");
+        assert_eq!(task_data.session.playable().current_content(), "alpha beta");
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -426,13 +425,12 @@ fn test_register_yank_paste_multi_key() {
     update(&mut state, exec("a")).unwrap();
     update(&mut state, exec("p")).unwrap();
 
-    if state.ui.completion_time.is_some() {
-        let pending = state.game.pending_completed_session.as_ref();
-        assert!(pending.is_some(), "Should have pending completed session");
-        assert_eq!(pending.unwrap().current_content(), "aalpha beta");
-    } else if let TypedScreen::Task(task_data) = &state.screen {
+    if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
-        assert_eq!(task_data.session.current_content(), "aalpha beta");
+        assert_eq!(
+            task_data.session.playable().current_content(),
+            "aalpha beta"
+        );
     } else {
         panic!("Should be on Task screen (or completed) after the register sequence");
     }
@@ -454,7 +452,7 @@ fn test_register_op_cancels_on_out_of_scope_operator() {
 
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
-        assert_eq!(task_data.session.current_content(), "hello");
+        assert_eq!(task_data.session.playable().current_content(), "hello");
     } else {
         panic!("Should be on Task screen");
     }
@@ -498,7 +496,7 @@ fn test_command_line_goto_multi_key() {
             Some("goto 3")
         );
         // Nothing executed yet - the buffer only assembles until Enter
-        assert_eq!(task_data.session.current_cursor(), (0, 0));
+        assert_eq!(task_data.session.playable().current_cursor(), (0, 0));
     } else {
         panic!("Should be on Task screen");
     }
@@ -506,17 +504,11 @@ fn test_command_line_goto_multi_key() {
     update(&mut state, exec("Enter")).unwrap();
 
     // ':goto 3' reaches the target cursor exactly, so the scenario completes
-    // immediately; the completed session lives in `pending_completed_session`
-    // while the screen stays on Task for the success popup (see
-    // `process_session_result`), matching the pattern other multi-key tests
-    // in this file use to check post-completion state.
-    if state.ui.completion_time.is_some() {
-        let pending = state.game.pending_completed_session.as_ref();
-        assert!(pending.is_some(), "Should have pending completed session");
-        assert_eq!(pending.unwrap().current_cursor(), (2, 0));
-    } else if let TypedScreen::Task(task_data) = &state.screen {
+    // immediately; the screen stays on Task for the success popup with the
+    // session in its completed state.
+    if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
-        assert_eq!(task_data.session.current_cursor(), (2, 0));
+        assert_eq!(task_data.session.playable().current_cursor(), (2, 0));
     } else {
         panic!("Should be on Task screen (or completed) after ':goto 3'");
     }
@@ -535,7 +527,7 @@ fn test_command_line_escape_cancels_buffer() {
 
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
-        assert_eq!(task_data.session.current_content(), "hello");
+        assert_eq!(task_data.session.playable().current_content(), "hello");
     } else {
         panic!("Should be on Task screen");
     }

@@ -38,18 +38,26 @@ pub fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
     use crate::ui::state::TypedScreen;
     use crossterm::event::{KeyCode, KeyModifiers};
 
-    // Banner action (#518): offered only while a backed-up profile is quarantined
-    if key.code == KeyCode::Char('n')
-        && key.modifiers == KeyModifiers::CONTROL
-        && matches!(
-            state.progress.persistence(),
-            crate::ui::state::ProfilePersistence::Quarantined(crate::ui::state::Quarantine {
-                backup: crate::gamification::QuarantineOutcome::BackedUp(_),
-                ..
-            })
-        )
+    // Banner actions (#518, #531): offered only while the matching quarantine state holds
+    if key.modifiers == KeyModifiers::CONTROL
+        && let Some(quarantine) = state.progress.persistence().quarantine()
     {
-        return Some(Message::StartFreshProfile);
+        match key.code {
+            KeyCode::Char('n') if quarantine.can_start_fresh() => {
+                return Some(Message::StartFreshProfile);
+            }
+            // Ctrl-R is redo in gameplay, so the banner action leaves those screens alone
+            KeyCode::Char('r')
+                if quarantine.can_restore_previous()
+                    && !matches!(
+                        state.screen,
+                        TypedScreen::Task(_) | TypedScreen::MiniGame(_)
+                    ) =>
+            {
+                return Some(Message::RestoreProfile);
+            }
+            _ => {}
+        }
     }
 
     match &state.screen {
@@ -70,7 +78,8 @@ pub fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gamification::QuarantineOutcome;
+    use crate::gamification::{PreviousCopy, QuarantineOutcome};
+    use crate::ui::state::Quarantine;
     use crossterm::event::{KeyCode, KeyModifiers};
 
     fn ctrl_n() -> KeyEvent {
@@ -102,6 +111,68 @@ mod tests {
         assert_eq!(
             handle_key_event(ctrl_n(), &state),
             Some(Message::StartFreshProfile)
+        );
+    }
+
+    fn ctrl_r() -> KeyEvent {
+        KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL)
+    }
+
+    fn quarantine_with(backup: QuarantineOutcome, previous: PreviousCopy) -> Quarantine {
+        Quarantine { backup, previous }
+    }
+
+    /// #531: Ctrl-R restores only with a backup on disk and a loadable previous copy
+    #[test]
+    fn test_ctrl_r_restores_only_with_a_backup_and_an_available_previous_copy() {
+        let mut state = crate::testing::empty_test_app_state();
+        assert_ne!(
+            handle_key_event(ctrl_r(), &state),
+            Some(Message::RestoreProfile)
+        );
+
+        for (backup, previous, offered) in [
+            (
+                QuarantineOutcome::BackedUp("backup".into()),
+                PreviousCopy::Unavailable,
+                false,
+            ),
+            (
+                crate::testing::failed_backup(),
+                PreviousCopy::Available,
+                false,
+            ),
+            (
+                QuarantineOutcome::BackedUp("backup".into()),
+                PreviousCopy::Available,
+                true,
+            ),
+        ] {
+            state
+                .progress
+                .quarantine_profile(quarantine_with(backup, previous));
+            assert_eq!(
+                handle_key_event(ctrl_r(), &state) == Some(Message::RestoreProfile),
+                offered
+            );
+        }
+    }
+
+    /// Ctrl-R is redo on the task screen: the banner action must not steal it
+    #[test]
+    fn test_ctrl_r_stays_redo_on_the_task_screen_while_quarantined() {
+        let mut state = crate::testing::empty_test_app_state();
+        state.progress.quarantine_profile(quarantine_with(
+            QuarantineOutcome::BackedUp("backup".into()),
+            PreviousCopy::Available,
+        ));
+        state.screen = crate::ui::state::TypedScreen::Task(crate::ui::state::TaskData::new(
+            crate::game::GameSession::new(crate::testing::default_test_scenario()).unwrap(),
+        ));
+
+        assert_ne!(
+            handle_key_event(ctrl_r(), &state),
+            Some(Message::RestoreProfile)
         );
     }
 }

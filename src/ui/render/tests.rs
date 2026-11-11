@@ -27,11 +27,11 @@ fn test_render_does_not_panic_on_empty_state() {
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
 
-    let mut state = create_test_app_state(vec![]);
+    let state = create_test_app_state(vec![]);
 
     terminal
         .draw(|f| {
-            super::super::render(f, &mut state);
+            super::super::render(f, &state);
         })
         .unwrap();
 }
@@ -52,7 +52,7 @@ fn test_render_task_screen_with_session() {
 
     terminal
         .draw(|f| {
-            super::super::render(f, &mut state);
+            super::super::render(f, &state);
         })
         .unwrap();
 }
@@ -349,9 +349,29 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
+    }
+
+    /// #523: a profile at `u32::MAX` must not overflow `level + 1` on the menu header or the
+    /// results screen.
+    #[test]
+    fn test_render_saturates_next_level_at_the_level_cap() {
+        let mut terminal = create_terminal();
+        let mut state = create_test_app_state(vec![create_test_scenario()]);
+        state.progress.profile.level = u32::MAX;
+        state.screen = TypedScreen::Menu(MenuData::default());
+        terminal.draw(|f| super::super::render(f, &state)).unwrap();
+
+        let abandoned = crate::game::GameSession::new(create_test_scenario())
+            .unwrap()
+            .abandon();
+        let feedback = abandoned.feedback();
+        state.screen = TypedScreen::Results(crate::ui::state::ResultsData::from_abandoned(
+            abandoned, feedback, None,
+        ));
+        terminal.draw(|f| super::super::render(f, &state)).unwrap();
     }
 
     #[test]
@@ -362,7 +382,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -393,7 +413,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -408,7 +428,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -423,7 +443,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -439,7 +459,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -463,7 +483,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
 
@@ -480,7 +500,8 @@ mod screen_render_tests {
     /// entries. Before scrolling was added, entries past the visible window were simply
     /// invisible with no indicator - indistinguishable from an empty list on a fresh
     /// profile where every entry renders the same gray color. Scrolling past the end
-    /// must clamp instead of panicking or scrolling into blank space.
+    /// must clamp instead of panicking or scrolling into blank space. Rendering only applies a
+    /// read-only clamp; `AppState::normalize_view` clamps the stored offset (#529).
     #[test]
     fn test_render_achievements_screen_clamps_scroll_past_content() {
         let mut terminal = create_terminal();
@@ -493,9 +514,16 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
+
+        let TypedScreen::Achievements(data) = &state.screen else {
+            panic!("expected Achievements screen");
+        };
+        assert_eq!(data.scroll_offset, 9999, "render must not mutate the state");
+
+        state.normalize_view();
 
         let TypedScreen::Achievements(data) = &state.screen else {
             panic!("expected Achievements screen");
@@ -521,7 +549,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -538,7 +566,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -560,7 +588,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -589,7 +617,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -599,11 +627,11 @@ mod screen_render_tests {
         // Test rendering with minimal terminal size
         let backend = TestBackend::new(20, 5);
         let mut terminal = Terminal::new(backend).unwrap();
-        let mut state = create_test_app_state(vec![create_test_scenario()]);
+        let state = create_test_app_state(vec![create_test_scenario()]);
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -613,11 +641,11 @@ mod screen_render_tests {
         // Test rendering with large terminal
         let backend = TestBackend::new(200, 60);
         let mut terminal = Terminal::new(backend).unwrap();
-        let mut state = create_test_app_state(vec![create_test_scenario()]);
+        let state = create_test_app_state(vec![create_test_scenario()]);
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -632,7 +660,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -654,7 +682,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -670,7 +698,7 @@ mod screen_render_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -727,7 +755,7 @@ mod review_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -742,7 +770,7 @@ mod review_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -759,7 +787,7 @@ mod review_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -793,7 +821,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -809,7 +837,7 @@ mod popup_tests {
         // Key history should be empty initially
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -831,7 +859,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -850,7 +878,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -870,7 +898,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -890,7 +918,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -909,7 +937,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -929,7 +957,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -951,7 +979,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -970,7 +998,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -991,7 +1019,7 @@ mod popup_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1103,7 +1131,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1127,7 +1155,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
 
@@ -1178,7 +1206,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
 
@@ -1204,7 +1232,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
 
@@ -1225,7 +1253,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1246,7 +1274,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1263,7 +1291,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1292,7 +1320,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1321,7 +1349,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1345,7 +1373,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1365,7 +1393,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1385,7 +1413,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1423,7 +1451,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1470,7 +1498,7 @@ mod results_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1503,7 +1531,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1540,7 +1568,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1572,7 +1600,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1603,7 +1631,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1631,7 +1659,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1652,7 +1680,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1673,7 +1701,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1695,7 +1723,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1712,7 +1740,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1768,7 +1796,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1788,7 +1816,7 @@ mod statistics_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1824,7 +1852,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1842,7 +1870,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1862,7 +1890,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1882,7 +1910,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1902,7 +1930,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -1929,7 +1957,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
 
@@ -1972,7 +2000,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
 
@@ -2001,7 +2029,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2021,7 +2049,7 @@ mod mode_selection_extended_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2076,7 +2104,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2099,7 +2127,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2120,7 +2148,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2147,7 +2175,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2173,7 +2201,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2197,7 +2225,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2222,7 +2250,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2244,7 +2272,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2267,7 +2295,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2291,7 +2319,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2315,7 +2343,7 @@ mod minigame_screen_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2434,7 +2462,7 @@ mod popup_additional_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2456,7 +2484,7 @@ mod popup_additional_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2481,7 +2509,7 @@ mod popup_additional_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }
@@ -2523,7 +2551,7 @@ mod popup_additional_tests {
 
         terminal
             .draw(|f| {
-                super::super::render(f, &mut state);
+                super::super::render(f, &state);
             })
             .unwrap();
     }

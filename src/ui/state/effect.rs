@@ -18,13 +18,15 @@ pub enum Effect {
     SaveProfile,
     /// Replace the quarantined profile with a fresh one, keeping the backup (#518)
     StartFreshProfile,
+    /// Replace the quarantined profile with its validated previous copy
+    RestoreProfile,
 }
 
 impl Effect {
     /// Run the effects that only need the in-memory progress state.
     ///
     /// Returns the effect back when it still needs the async runtime
-    /// ([`Effect::StartFreshProfile`]), so the event loop can run it with an exhaustive match;
+    /// ([`Effect::StartFreshProfile`], [`Effect::RestoreProfile`]), so the event loop can run it with an exhaustive match;
     /// a failed save is logged, never fatal.
     #[must_use = "an unhandled effect is dropped silently"]
     pub fn execute(self, progress: &mut ProgressState) -> Option<Self> {
@@ -35,7 +37,7 @@ impl Effect {
                     tracing::error!(error = %error_chain(&e), "Failed to save profile");
                 }
             }
-            Self::StartFreshProfile => return Some(self),
+            Self::StartFreshProfile | Self::RestoreProfile => return Some(self),
         }
         None
     }

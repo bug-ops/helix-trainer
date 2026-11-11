@@ -5,13 +5,18 @@
 //! unrepresentable at compile time - you can't be on the Task screen without
 //! an active GameSession.
 
+use crate::config::Scenario;
 use crate::config::ScenarioCategory;
-use crate::game::{Abandoned, Active, Completed, Feedback, GameSession};
+use crate::game::{
+    Abandoned, Active, Completed, Feedback, GameSession, PlayableScenario, SessionAfterAction,
+};
 use crate::ids::ScenarioId;
 use crate::input::typestate::InputStateMachine;
 use crate::learning::ScenarioMastery;
 use crate::minigame::MiniGameSession;
+use crate::security::SecurityError;
 use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
+use std::time::Instant;
 
 /// Maximum number of keys to keep in history
 const KEY_HISTORY_CAPACITY: usize = 5;
@@ -139,6 +144,14 @@ impl TypedScreen {
         }
     }
 
+    /// The finished task while the task screen shows its success animation
+    pub fn completed_task(&self) -> Option<&CompletedTask> {
+        match self {
+            Self::Task(data) => data.session.completed(),
+            _ => None,
+        }
+    }
+
     /// Return destination for a detour screen opened from the current one.
     ///
     /// A paused arcade run is detached from the mini-game screen, or handed on from another
@@ -229,11 +242,116 @@ impl HintPanel {
     }
 }
 
-/// Data required for task screen (contains active session)
+/// A finished task kept on the task screen during the success animation
+///
+/// Owns the completed session together with the feedback derived from it and the instant it
+/// finished, so none of the three can exist without the others.
+#[derive(Debug)]
+pub struct CompletedTask {
+    /// The finished session, rendered as the final editor state
+    pub session: GameSession<Completed>,
+
+    /// Feedback derived once from the completed session
+    pub feedback: Feedback,
+
+    /// When the scenario was completed; the success animation runs from here
+    pub completed_at: Instant,
+}
+
+impl CompletedTask {
+    /// Derive the feedback of a completed session and stamp the completion time
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError`] when the scenario's scoring cannot score the run.
+    pub fn new(session: GameSession<Completed>) -> Result<Self, SecurityError> {
+        let feedback = session.feedback()?;
+        Ok(Self {
+            session,
+            feedback,
+            completed_at: Instant::now(),
+        })
+    }
+}
+
+/// Session of the task screen: being played, or finished and showing the success animation
+///
+/// A completed task cannot exist without its session and feedback, and an active task carries
+/// no completion data.
+#[derive(Debug)]
+pub enum TaskSession {
+    /// The scenario is being played
+    Active(GameSession<Active>),
+
+    /// The scenario was completed and the screen waits for the success animation to end
+    Completed(CompletedTask),
+}
+
+impl TaskSession {
+    /// The session while it is being played, `None` once completed
+    pub fn active(&self) -> Option<&GameSession<Active>> {
+        match self {
+            Self::Active(session) => Some(session),
+            Self::Completed(_) => None,
+        }
+    }
+
+    /// Mutable counterpart of [`TaskSession::active`]
+    pub fn active_mut(&mut self) -> Option<&mut GameSession<Active>> {
+        match self {
+            Self::Active(session) => Some(session),
+            Self::Completed(_) => None,
+        }
+    }
+
+    /// The completed task, `None` while the scenario is being played
+    pub fn completed(&self) -> Option<&CompletedTask> {
+        match self {
+            Self::Active(_) => None,
+            Self::Completed(task) => Some(task),
+        }
+    }
+
+    /// Read-only view of the editor state, valid in either state
+    pub fn playable(&self) -> &dyn PlayableScenario {
+        match self {
+            Self::Active(session) => session,
+            Self::Completed(task) => &task.session,
+        }
+    }
+
+    /// The scenario being played, in either state
+    pub fn scenario(&self) -> &Scenario {
+        match self {
+            Self::Active(session) => session.scenario(),
+            Self::Completed(task) => task.session.scenario(),
+        }
+    }
+
+    /// Resolve the state after an action was applied: an active session whose editor now matches
+    /// the target becomes a completed task, everything else is unchanged
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError`] when the completed run cannot be scored.
+    pub fn finish_action(self) -> Result<Self, SecurityError> {
+        match self {
+            Self::Active(session) => match session.finish_action() {
+                SessionAfterAction::StillActive(session) => Ok(Self::Active(session)),
+                SessionAfterAction::Completed(session) => {
+                    CompletedTask::new(session).map(Self::Completed)
+                }
+            },
+            completed @ Self::Completed(_) => Ok(completed),
+        }
+    }
+}
+
+/// Data required for task screen
 #[derive(Debug)]
 pub struct TaskData {
-    /// Active game session (guaranteed to exist)
-    pub session: GameSession<Active>,
+    /// Session of the task: active while playing, completed during the success animation
+    pub session: TaskSession,
 
     /// Typestate-based input state machine for multi-key commands
     ///
@@ -262,7 +380,7 @@ impl TaskData {
     /// * `session` - Active game session
     pub fn new(session: GameSession<Active>) -> Self {
         Self {
-            session,
+            session: TaskSession::Active(session),
             input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
             hint: HintPanel::Hidden,
@@ -278,13 +396,25 @@ impl TaskData {
     /// * `index` - Index of scenario in filtered list
     pub fn with_index(session: GameSession<Active>, index: usize) -> Self {
         Self {
-            session,
+            session: TaskSession::Active(session),
             input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
             hint: HintPanel::Hidden,
             last_command: None,
             scenario_index: Some(index),
         }
+    }
+
+    /// Resolve the session state after an action: see [`TaskSession::finish_action`]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError`] when the completed run cannot be scored.
+    pub fn finish_action(self) -> Result<Self, SecurityError> {
+        Ok(Self {
+            session: self.session.finish_action()?,
+            ..self
+        })
     }
 
     /// Add a key to the history (keeps last 5)

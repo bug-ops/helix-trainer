@@ -281,7 +281,7 @@ mod tests {
     fn create_test_feedback(score: u32, max_points: u32) -> Feedback {
         Feedback {
             scenario_id: sid("test"),
-            success: true,
+            outcome: crate::game::FeedbackOutcome::Optimal,
             score,
             max_points,
             rating: PerformanceRating::Perfect,
@@ -289,7 +289,6 @@ mod tests {
             optimal_actions: 1,
             duration: Duration::from_secs(5),
             hint: None,
-            is_optimal: true,
             user_actions: vec![],
         }
     }

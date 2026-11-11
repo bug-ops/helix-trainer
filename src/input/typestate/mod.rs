@@ -51,7 +51,6 @@ pub mod input_state;
 pub mod key_mapping;
 pub mod state_machine;
 pub mod state_types;
-pub mod typestate_wrapper;
 
 #[cfg(test)]
 mod tests;
@@ -73,4 +72,3 @@ pub use state_types::{
     TextObjectAroundPending, TextObjectInsidePending, UnmatchedNextPending, UnmatchedPrevPending,
     ViewPending,
 };
-pub use typestate_wrapper::{TypestateHandler, TypestateHandlerState};

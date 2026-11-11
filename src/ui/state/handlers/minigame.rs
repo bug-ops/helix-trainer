@@ -53,32 +53,28 @@ pub(in crate::ui::state) fn create_minigame_session(
 }
 
 /// Handle pausing mini-game
-pub(in crate::ui::state) fn handle_pause_minigame(
-    data: &mut MiniGameData,
-) -> Result<HandlerOutcome, UserError> {
+pub(in crate::ui::state) fn handle_pause_minigame(data: &mut MiniGameData) -> HandlerOutcome {
     data.session.pause();
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle resuming mini-game
-pub(in crate::ui::state) fn handle_resume_minigame(
-    data: &mut MiniGameData,
-) -> Result<HandlerOutcome, UserError> {
+pub(in crate::ui::state) fn handle_resume_minigame(data: &mut MiniGameData) -> HandlerOutcome {
     data.session.resume();
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle mini-game timer tick (100ms)
 pub(in crate::ui::state) fn handle_minigame_tick(
     data: &mut MiniGameData,
     ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     if data.session.state().is_countdown() {
         // Play countdown sound on each tick
         ctx.ui.effects.push(Effect::Play(SoundEffect::Countdown));
         data.session.tick_countdown();
     }
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Execute a command in the mini-game session
@@ -341,7 +337,7 @@ pub(in crate::ui::state) fn handle_minigame_command(
 }
 
 /// Handle timeout on current mini-game scenario
-pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) -> Result<(), UserError> {
+pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) {
     if let Some(session) = state
         .screen
         .minigame_data_mut()
@@ -352,13 +348,12 @@ pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) -> Res
         if session.state().is_game_over() {
             // Play game over sound
             state.ui.effects.push(Effect::Play(SoundEffect::GameOver));
-            handle_minigame_game_over(state)?;
+            handle_minigame_game_over(state);
         } else {
             // Play life lost sound (still has lives remaining)
             state.ui.effects.push(Effect::Play(SoundEffect::LifeLost));
         }
     }
-    Ok(())
 }
 
 /// Handle the mode's session-level time limit elapsing (e.g. Arcade's 60 seconds)
@@ -366,9 +361,7 @@ pub(in crate::ui::state) fn handle_minigame_timeout(state: &mut AppState) -> Res
 /// Ends the run immediately regardless of lives remaining, reusing the same
 /// game-over bookkeeping (FSRS recording, XP award, high scores, profile save)
 /// as a per-scenario timeout that depletes the last life.
-pub(in crate::ui::state) fn handle_minigame_session_timeout(
-    state: &mut AppState,
-) -> Result<(), UserError> {
+pub(in crate::ui::state) fn handle_minigame_session_timeout(state: &mut AppState) {
     if let Some(session) = state
         .screen
         .minigame_data_mut()
@@ -376,15 +369,12 @@ pub(in crate::ui::state) fn handle_minigame_session_timeout(
     {
         session.end_session_on_timeout();
         state.ui.effects.push(Effect::Play(SoundEffect::GameOver));
-        handle_minigame_game_over(state)?;
+        handle_minigame_game_over(state);
     }
-    Ok(())
 }
 
 /// Handle advancing to next scenario (after transition delay)
-pub(in crate::ui::state) fn handle_minigame_next_scenario(
-    state: &mut AppState,
-) -> Result<HandlerOutcome, UserError> {
+pub(in crate::ui::state) fn handle_minigame_next_scenario(state: &mut AppState) -> HandlerOutcome {
     if let Some(session) = state.minigame_session_mut()
         && let Err(e) = session.complete_transition()
     {
@@ -399,7 +389,7 @@ pub(in crate::ui::state) fn handle_minigame_next_scenario(
         // scenario must not leak into the next one's fresh input.
         data.reset_input_state();
     }
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle game over - calculate XP, update profile, save progress
@@ -416,15 +406,13 @@ pub(in crate::ui::state) fn handle_minigame_next_scenario(
 /// - Calculates and awards XP
 /// - Updates high scores
 /// - Saves profile to disk (non-fatal on error)
-pub(in crate::ui::state) fn handle_minigame_game_over(
-    state: &mut AppState,
-) -> Result<(), UserError> {
+pub(in crate::ui::state) fn handle_minigame_game_over(state: &mut AppState) {
     let should_process = state
         .minigame_session_mut()
         .is_some_and(|session| session.try_begin_game_over());
 
     if !should_process {
-        return Ok(());
+        return;
     }
 
     if let Some(session) = state.screen.minigame_data().map(|data| &*data.session) {
@@ -489,22 +477,18 @@ pub(in crate::ui::state) fn handle_minigame_game_over(
         // 4. Persist profile to disk (non-fatal error - log but continue)
         state.ui.effects.push(Effect::SaveProfile);
     }
-
-    Ok(())
 }
 
 /// Handle returning to mode selection from mini-game
-pub(in crate::ui::state) fn handle_minigame_back_to_menu(
-    state: &mut AppState,
-) -> Result<HandlerOutcome, UserError> {
+pub(in crate::ui::state) fn handle_minigame_back_to_menu(state: &mut AppState) -> HandlerOutcome {
     // `handle_minigame_game_over` is idempotent per session (see its doc comment),
     // so it's safe to call unconditionally here even if a prior timeout already
     // ran it for this same session.
     if state.minigame_session().is_some() {
-        handle_minigame_game_over(state)?;
+        handle_minigame_game_over(state);
     }
-    Ok(HandlerOutcome::Transition(Box::new(
-        TypedScreen::ModeSelection(ModeSelectionData::default()),
+    HandlerOutcome::Transition(Box::new(TypedScreen::ModeSelection(
+        ModeSelectionData::default(),
     )))
 }
 
@@ -592,7 +576,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
+        let outcome = handle_select_arcade_mode(&mut ctx);
         crate::ui::state::apply_outcome(state, outcome);
     }
 
@@ -828,7 +812,7 @@ mod tests {
             data.add_key_to_history("h".to_string());
         }
 
-        handle_minigame_next_scenario(&mut state).unwrap();
+        handle_minigame_next_scenario(&mut state);
 
         assert!(
             !state.ui.show_key_history,
@@ -902,7 +886,7 @@ mod tests {
 
         assert!(state.minigame_session().is_some());
 
-        let outcome = handle_minigame_back_to_menu(&mut state).unwrap();
+        let outcome = handle_minigame_back_to_menu(&mut state);
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         assert!(state.minigame_session().is_none());
@@ -963,7 +947,7 @@ mod tests {
         }
 
         // Trigger game over
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Check XP was awarded
@@ -993,7 +977,7 @@ mod tests {
             session.stats.score = 5000;
         }
 
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -1024,8 +1008,7 @@ mod tests {
                 &mut state.progress,
                 &state.config,
             );
-            let outcome =
-                super::super::mode_selection::handle_launch_minigame_mode(&mut ctx, mode).unwrap();
+            let outcome = super::super::mode_selection::handle_launch_minigame_mode(&mut ctx, mode);
             crate::ui::state::apply_outcome(&mut state, outcome);
         }
         assert_eq!(
@@ -1045,7 +1028,7 @@ mod tests {
             session.stats.scenarios_completed = 7;
         }
 
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -1088,7 +1071,7 @@ mod tests {
             Duration::from_millis(500),
         );
 
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -1189,7 +1172,7 @@ mod tests {
 
         // Deplete all 3 lives via timeout
         for _ in 0..3 {
-            handle_minigame_timeout(&mut state).unwrap();
+            handle_minigame_timeout(&mut state);
         }
 
         // Should be in game over state
@@ -1229,7 +1212,7 @@ mod tests {
 
         // Trigger game over
         for _ in 0..3 {
-            handle_minigame_timeout(&mut state).unwrap();
+            handle_minigame_timeout(&mut state);
         }
 
         // Verify game over state
@@ -1243,7 +1226,7 @@ mod tests {
         // Render should not panic - use public render function
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        let result = terminal.draw(|f| crate::ui::render::render(f, &mut state));
+        let result = terminal.draw(|f| crate::ui::render::render(f, &state));
         assert!(result.is_ok());
     }
 
@@ -1268,8 +1251,7 @@ mod tests {
         // Deplete all lives
         for _ in 0..3 {
             // Each timeout should succeed without panic
-            let result = handle_minigame_timeout(&mut state);
-            assert!(result.is_ok(), "handle_minigame_timeout should not fail");
+            handle_minigame_timeout(&mut state);
         }
 
         // Game over handler should have run successfully
@@ -1489,7 +1471,7 @@ mod tests {
             session.advance_to_next();
         }
 
-        let outcome = handle_minigame_next_scenario(&mut state).unwrap();
+        let outcome = handle_minigame_next_scenario(&mut state);
 
         assert_matches!(outcome, HandlerOutcome::Stay);
     }
@@ -1522,7 +1504,7 @@ mod tests {
             panic!("expected MiniGame screen");
         }
 
-        handle_minigame_next_scenario(&mut state).unwrap();
+        handle_minigame_next_scenario(&mut state);
 
         if let TypedScreen::MiniGame(ref data) = state.screen {
             assert!(
@@ -1657,7 +1639,7 @@ mod tests {
             }
         }
 
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -1686,7 +1668,7 @@ mod tests {
             session.stats.score = 500;
         }
 
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -1699,8 +1681,8 @@ mod tests {
         let mut state = create_test_state();
 
         // Should handle gracefully without session
-        let result = handle_minigame_timeout(&mut state);
-        assert!(result.is_ok());
+        handle_minigame_timeout(&mut state);
+        assert!(state.minigame_session().is_none());
     }
 
     #[test]
@@ -1724,7 +1706,7 @@ mod tests {
         }
 
         // Return to menu (should trigger game_over and increment games_played)
-        let outcome = handle_minigame_back_to_menu(&mut state).unwrap();
+        let outcome = handle_minigame_back_to_menu(&mut state);
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         // Games played should be incremented
@@ -1825,7 +1807,7 @@ mod tests {
             "arcade must not persist mid-session, even on achievement unlock"
         );
 
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -1973,7 +1955,7 @@ mod tests {
         }
 
         // Trigger game over
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Games played should be incremented
@@ -1986,7 +1968,7 @@ mod tests {
             session.tick_countdown();
             session.tick_countdown();
         }
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Should be 2 now
@@ -2017,7 +1999,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -2060,7 +2042,7 @@ mod tests {
         // Deplete all lives via timeout - this already runs `handle_minigame_game_over`
         // once, via `handle_minigame_timeout`.
         for _ in 0..3 {
-            handle_minigame_timeout(&mut state).unwrap();
+            handle_minigame_timeout(&mut state);
         }
         assert!(
             state
@@ -2073,7 +2055,7 @@ mod tests {
         let games_played_after_first_game_over = state.progress.profile.minigame_games_played;
 
         // Simulate Esc/`m`/Ctrl-q on the game-over screen.
-        let outcome = handle_minigame_back_to_menu(&mut state).unwrap();
+        let outcome = handle_minigame_back_to_menu(&mut state);
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         assert_eq!(
@@ -2106,7 +2088,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        handle_minigame_game_over(&mut state).unwrap();
+        handle_minigame_game_over(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -2166,7 +2148,7 @@ mod tests {
 
         let initial_xp = state.progress.profile.total_xp;
 
-        handle_minigame_session_timeout(&mut state).unwrap();
+        handle_minigame_session_timeout(&mut state);
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
@@ -2229,7 +2211,7 @@ mod tests {
 
         // Ends the run via the session-timer path (not lives depleted) - this
         // already runs `handle_minigame_game_over` once.
-        handle_minigame_session_timeout(&mut state).unwrap();
+        handle_minigame_session_timeout(&mut state);
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
         assert!(
             state
@@ -2242,7 +2224,7 @@ mod tests {
         let games_played_after_first_game_over = state.progress.profile.minigame_games_played;
 
         // Simulate Esc/`m`/Ctrl-q on the game-over screen.
-        let outcome = handle_minigame_back_to_menu(&mut state).unwrap();
+        let outcome = handle_minigame_back_to_menu(&mut state);
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         assert_eq!(

@@ -6,6 +6,21 @@ use ratatui::{
     widgets::{Block, Borders},
 };
 
+/// XP earned inside the current level and the XP the level spans, as `(earned, needed)`
+///
+/// The next level is `level + 1`, saturating so a profile at the level cap renders instead of
+/// overflowing (#523).
+pub(super) fn level_xp_progress(profile: &crate::gamification::UserProfile) -> (u64, u64) {
+    use crate::gamification::XPCalculator;
+
+    let current_level_xp = XPCalculator::xp_for_level(profile.level);
+    let next_level_xp = XPCalculator::xp_for_level(profile.level.saturating_add(1));
+    (
+        profile.total_xp.saturating_sub(current_level_xp),
+        next_level_xp.saturating_sub(current_level_xp),
+    )
+}
+
 /// Calculate centered popup area with given dimensions
 ///
 /// # Arguments

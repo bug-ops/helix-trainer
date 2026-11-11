@@ -106,3 +106,4 @@ no_scenarios_available = "No scenarios match the current filters. Adjust the fil
 
 [profile]
 start_fresh_action = "Press Ctrl-N to start a fresh profile (the backup is kept)."
+restore_action = "Press Ctrl-R to restore the previous profile (the backup is kept)."

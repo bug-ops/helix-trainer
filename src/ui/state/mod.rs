@@ -44,10 +44,10 @@ pub use substates::{ConfigState, GameState, ProfilePersistence, ProgressState, U
 // Type-safe screen variants with required data
 pub mod screen;
 pub use screen::{
-    AchievementsData, CategoryFiltersData, CompletedOrAbandoned, EndGameSummaryData,
-    InputStateAccess, KeyHistory, MenuData, MiniGameData, MiniGameModeSelection, ModeSelectionData,
-    NextStep, ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData,
-    TypedScreen,
+    AchievementsData, CategoryFiltersData, CategoryProgress, CompletedOrAbandoned,
+    EndGameSummaryData, InputStateAccess, KeyHistory, MasteryInfo, MenuData, MiniGameData,
+    MiniGameModeSelection, ModeSelectionData, NextStep, ProfileData, ResultsData,
+    ReturnDestination, ReviewData, StatisticsData, TaskData, TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario
@@ -59,8 +59,17 @@ pub struct XPBreakdown {
     pub mastery_multiplier: f64, // Combined XP scaling (mastery * repeat)
     pub mastery_factor: f64,     // Just mastery level factor
     pub repeat_penalty: f64,     // Just session repeat penalty
-    pub quest_bonuses: Vec<(String, u64)>, // (quest description, bonus xp)
+    pub quest_bonuses: Vec<QuestBonus>,
     pub total_xp: u64,
+}
+
+/// XP bonus granted for completing a quest
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuestBonus {
+    /// Quest description shown to the player
+    pub quest: String,
+    /// Bonus XP awarded
+    pub xp: u64,
 }
 
 /// Quest progress change (before → after)
@@ -76,16 +85,40 @@ pub struct QuestProgressChange {
 pub struct ReviewSessionState {
     pub due_commands: Vec<String>,
     pub current_index: usize,
-    pub current_command: Option<String>,
     pub session_started_at: Instant,
     pub completed_reviews: Vec<ReviewResult>,
+}
+
+impl ReviewSessionState {
+    /// The command currently being reviewed, `None` once every command is done
+    pub fn current_command(&self) -> Option<&str> {
+        self.due_commands
+            .get(self.current_index)
+            .map(String::as_str)
+    }
+}
+
+/// Whether the player recalled a reviewed command
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewOutcome {
+    /// The command was recalled correctly
+    Recalled,
+    /// The command was not recalled
+    Forgot,
+}
+
+impl ReviewOutcome {
+    /// Whether the command was recalled
+    pub fn is_recalled(self) -> bool {
+        self == Self::Recalled
+    }
 }
 
 /// Result of a single review
 #[derive(Debug, Clone)]
 pub struct ReviewResult {
     pub command: String,
-    pub success: bool,
+    pub outcome: ReviewOutcome,
     pub duration: Duration,
 }
 
@@ -264,7 +297,7 @@ pub enum Message {
     StartReviewSession,
 
     /// Complete current review command (mark as success or failure)
-    CompleteReviewCommand { success: bool },
+    CompleteReviewCommand { outcome: ReviewOutcome },
 
     /// Abandon the review session
     AbandonReviewSession,
@@ -848,8 +881,8 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             apply_outcome(state, outcome);
             Ok(())
         }
-        Message::CompleteReviewCommand { success } => {
-            extract_screen!(state, Review, mut data, ctx => handlers::handle_complete_review_command(data, &mut ctx, success))
+        Message::CompleteReviewCommand { outcome } => {
+            extract_screen!(state, Review, mut data, ctx => handlers::handle_complete_review_command(data, &mut ctx, outcome))
         }
         Message::AbandonReviewSession => {
             run_with_context(state, handlers::handle_abandon_review_session)

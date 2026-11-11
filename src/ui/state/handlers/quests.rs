@@ -5,6 +5,7 @@
 use crate::gamification::{QuestTracker, QuestType, StreakManager};
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
+use crate::ui::state::QuestBonus;
 use crate::ui::state::{AppState, QuestProgressChange};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -48,7 +49,7 @@ pub fn track_scenario_completion_for_quests(
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct QuestXpAward {
     /// (description, xp) pairs for each quest newly completed by this call
-    pub bonuses: Vec<(String, u64)>,
+    pub bonuses: Vec<QuestBonus>,
     /// Whether the XP granted here alone crossed an account level-up threshold.
     /// Callers that also call `profile.add_xp` for other XP in the same operation
     /// (e.g. scenario completion) must OR this into their own level-up check, since
@@ -92,9 +93,12 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
     }
 
     // Show notifications for each completed quest
-    let bonuses: Vec<(String, u64)> = newly_completed
+    let bonuses: Vec<QuestBonus> = newly_completed
         .iter()
-        .map(|(_, description, xp_reward)| (description.clone(), *xp_reward as u64))
+        .map(|(_, description, xp_reward)| QuestBonus {
+            quest: description.clone(),
+            xp: *xp_reward as u64,
+        })
         .collect();
     for (_, description, xp_reward) in newly_completed {
         state

@@ -6,6 +6,7 @@
 //! unit-testable without constructing a full `AppState`.
 
 use crate::gamification::XPCalculator;
+use crate::ui::state::CategoryProgress;
 use crate::ui::state::{EndGameSummaryData, NextStep};
 use ratatui::{
     Frame,
@@ -129,7 +130,7 @@ fn next_step_line(step: &NextStep) -> String {
 /// breakdown itself scrolls out of the fixed content area.
 fn render_stats(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
     // Fully perfected (imperfect == 0) gets a stronger highlight than partial progress.
-    let perfected_style = if data.imperfect == 0 {
+    let perfected_style = if data.imperfect() == 0 {
         Style::default()
             .fg(Color::Green)
             .add_modifier(Modifier::BOLD)
@@ -216,7 +217,12 @@ fn render_stats(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
                 .fg(Color::Magenta)
                 .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
         )));
-        for (category, perfected, total) in &data.category_breakdown {
+        for CategoryProgress {
+            category,
+            perfected,
+            total,
+        } in &data.category_breakdown
+        {
             lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(
@@ -251,14 +257,17 @@ mod tests {
         EndGameSummaryData {
             scenarios_total: 136,
             perfected: 100,
-            imperfect: 36,
             total_completions: 250,
             total_xp: 5000,
             level: 10,
             command_success_rate: 0.87,
             journey_days: 42,
             commands_mastered: 30,
-            category_breakdown: vec![(ScenarioCategory::Movement, 20, 25)],
+            category_breakdown: vec![crate::ui::state::CategoryProgress {
+                category: ScenarioCategory::Movement,
+                perfected: 20,
+                total: 25,
+            }],
             next_steps: vec![NextStep::DueReviews(3), NextStep::ArcadeMode],
         }
     }

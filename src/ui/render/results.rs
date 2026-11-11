@@ -1,5 +1,6 @@
 //! Results screen rendering
 
+use crate::ui::state::QuestBonus;
 use crate::{game::PerformanceRating, ui::state::AppState};
 use ratatui::{
     Frame,
@@ -231,8 +232,12 @@ fn render_progression_panel(
 
         // Mastery level factor (only show if < 1.0, i.e., Proficient or Mastered)
         if xp.mastery_factor < 1.0 {
-            let mastery_text = if let Some((mastery, _)) = &results_data.scenario_mastery {
-                format!("  {} {}: ", mastery.emoji(), mastery.display_name())
+            let mastery_text = if let Some(info) = &results_data.scenario_mastery {
+                format!(
+                    "  {} {}: ",
+                    info.mastery.emoji(),
+                    info.mastery.display_name()
+                )
             } else {
                 "  Mastery: ".to_string()
             };
@@ -260,7 +265,11 @@ fn render_progression_panel(
         }
 
         // Quest bonuses
-        for (desc, bonus_xp) in &xp.quest_bonuses {
+        for QuestBonus {
+            quest: desc,
+            xp: bonus_xp,
+        } in &xp.quest_bonuses
+        {
             lines.push(Line::from(vec![
                 Span::raw("  Quest ("),
                 Span::styled(desc.clone(), Style::default().fg(Color::Magenta)),

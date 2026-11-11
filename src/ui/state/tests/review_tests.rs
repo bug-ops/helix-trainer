@@ -68,7 +68,6 @@ fn test_review_session_no_due_reviews_stays_on_menu() {
 
 fn review_session_with_commands(due_commands: Vec<String>) -> ReviewSessionState {
     ReviewSessionState {
-        current_command: due_commands.first().cloned(),
         due_commands,
         current_index: 0,
         session_started_at: Instant::now(),
@@ -96,7 +95,13 @@ fn test_complete_review_command_persists_fsrs_data_mid_session() {
         "d".to_string(),
     ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Session should still be active (only 1 of 2 commands completed).
     assert!(review_session(&state).is_some());
@@ -130,7 +135,13 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
         "x".to_string(),
     ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     // Session should be cleared and XP awarded (1 completed * 10 + 100% success * 20).
     assert!(review_session(&state).is_none());
@@ -167,7 +178,13 @@ fn test_review_session_completion_persists_level_up() {
         "x".to_string(),
     ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     assert_eq!(state.progress.profile.level, 2);
 
@@ -196,7 +213,13 @@ fn test_review_session_completion_notifies_on_level_up() {
         "x".to_string(),
     ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     assert_eq!(state.progress.profile.level, 2);
     assert!(
@@ -221,7 +244,13 @@ fn test_review_session_completion_no_level_up_notification_without_level_up() {
         "x".to_string(),
     ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
 
     assert!(
         !state
@@ -257,7 +286,13 @@ fn test_abandon_review_session_persists_partial_progress() {
         "d".to_string(),
     ])));
 
-    update(&mut state, Message::CompleteReviewCommand { success: true }).unwrap();
+    update(
+        &mut state,
+        Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        },
+    )
+    .unwrap();
     assert!(review_session(&state).is_some(), "session still active");
 
     // Nothing persisted yet: the debounce window is still open.

@@ -13,6 +13,7 @@ use crate::ui::state::{
     AppState, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData, Message, NextStep,
     ResultsData, TaskData, TypedScreen, XPBreakdown, update,
 };
+use crate::ui::state::{CategoryProgress, MasteryInfo};
 use rust_i18n::t;
 
 /// Handle StartScenario message
@@ -164,7 +165,6 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         let results_data = if let Some(session) = state.game.pending_completed_session.take() {
             let feedback = session.feedback().map_err(UserError::from)?;
             ResultsData::from_completed(session, feedback, scenario_index)
-                .map_err(UserError::from)?
         } else {
             // No session either, just go to menu with restored position
             return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
@@ -216,14 +216,17 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
     );
 
     // Store mastery info for results display
-    ctx.ui.scenario_mastery = Some((xp_scaling.mastery_level, xp_scaling.applied_multiplier));
+    ctx.ui.scenario_mastery = Some(MasteryInfo {
+        mastery: xp_scaling.mastery_level,
+        xp_multiplier: xp_scaling.applied_multiplier,
+    });
 
     // Quest bonuses were already computed and applied to `profile.xp` by
     // `award_quest_completion_xp` during the `UpdateQuestProgress` dispatch above; reuse
     // that authoritative breakdown instead of re-deriving "newly completed" independently,
     // so this can never diverge from what was actually awarded (see `UIState::quest_xp_bonuses`).
     let quest_bonuses = ctx.ui.quest_xp_bonuses.clone();
-    let quest_xp = quest_bonuses.iter().map(|(_, xp)| xp).sum::<u64>();
+    let quest_xp = quest_bonuses.iter().map(|bonus| bonus.xp).sum::<u64>();
     let total_xp = xp_scaling.actual_xp + quest_xp;
 
     ctx.ui.xp_breakdown = Some(XPBreakdown {
@@ -269,8 +272,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         ))));
     };
 
-    let mut results_data = ResultsData::from_completed(session, feedback.clone(), scenario_index)
-        .map_err(UserError::from)?;
+    let mut results_data = ResultsData::from_completed(session, feedback.clone(), scenario_index);
     // Populate with XP breakdown and quest changes
     results_data.xp_breakdown = ctx.ui.xp_breakdown.clone();
     results_data.quest_changes = ctx.ui.quest_progress_changes.clone();
@@ -387,20 +389,28 @@ fn build_end_game_summary(ctx: &HandlerContext<'_>) -> EndGameSummaryData {
         .scenario_collection
         .curriculum_stats(&ctx.progress.profile);
     let imperfect = stats.total.saturating_sub(stats.perfected);
+    let category_breakdown = stats
+        .per_category
+        .into_iter()
+        .map(|(category, perfected, total)| CategoryProgress {
+            category,
+            perfected,
+            total,
+        })
+        .collect();
     let profile = &ctx.progress.profile;
     let tracker = &ctx.progress.performance_tracker;
 
     EndGameSummaryData {
         scenarios_total: stats.total,
         perfected: stats.perfected,
-        imperfect,
         total_completions: profile.scenarios_completed,
         total_xp: profile.total_xp,
         level: profile.level,
         command_success_rate: Analytics::avg_success_rate(tracker),
         journey_days: journey_days(profile),
         commands_mastered: Analytics::get_mastery_summary(tracker).master,
-        category_breakdown: stats.per_category,
+        category_breakdown,
         next_steps: next_steps(ctx, imperfect),
     }
 }
@@ -617,7 +627,7 @@ mod tests {
         };
 
         let feedback = completed.feedback().unwrap();
-        let results_data = ResultsData::from_completed(completed, feedback, None).unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, None);
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,
@@ -704,7 +714,7 @@ mod tests {
         };
         let bonuses = &results_data.xp_breakdown.unwrap().quest_bonuses;
         assert_eq!(bonuses.len(), 1);
-        assert_eq!(bonuses[0].1, 100);
+        assert_eq!(bonuses[0].xp, 100);
     }
 
     /// Regression test for #292 finding F2 (impl-critic): a quest that was already
@@ -1762,7 +1772,7 @@ mod tests {
         };
 
         let feedback = completed.feedback().unwrap();
-        let results_data = ResultsData::from_completed(completed, feedback, Some(0)).unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, Some(0));
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,
@@ -1847,7 +1857,7 @@ mod tests {
         };
 
         let feedback = completed.feedback().unwrap();
-        let results_data = ResultsData::from_completed(completed, feedback, Some(2)).unwrap();
+        let results_data = ResultsData::from_completed(completed, feedback, Some(2));
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,
@@ -1934,7 +1944,7 @@ mod tests {
             if let TypedScreen::EndGameSummary(data) = *screen {
                 assert_eq!(data.scenarios_total, 3);
                 assert_eq!(data.perfected, 3);
-                assert_eq!(data.imperfect, 0);
+                assert_eq!(data.imperfect(), 0);
             } else {
                 panic!("Expected EndGameSummary screen");
             }

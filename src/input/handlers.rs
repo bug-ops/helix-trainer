@@ -537,8 +537,12 @@ pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
     }
 
     match key.code {
-        KeyCode::Char('s') => Some(Message::CompleteReviewCommand { success: true }),
-        KeyCode::Char('f') => Some(Message::CompleteReviewCommand { success: false }),
+        KeyCode::Char('s') => Some(Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Recalled,
+        }),
+        KeyCode::Char('f') => Some(Message::CompleteReviewCommand {
+            outcome: crate::ui::state::ReviewOutcome::Forgot,
+        }),
         KeyCode::Esc => Some(Message::AbandonReviewSession),
         KeyCode::Char('q') => Some(Message::QuitApp),
         _ => None,

@@ -9,7 +9,7 @@ use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile};
 use crate::input::keymap::KeymapOverlay;
-use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
+use crate::learning::{PerformanceTracker, Scheduler};
 use crate::sound::{SoundConfig, SoundManager};
 use crate::time::Clock;
 use std::collections::HashSet;
@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 
-use super::{QuestProgressChange, XPBreakdown};
+use super::{MasteryInfo, QuestBonus, QuestProgressChange, XPBreakdown};
 use crate::ui::notification::NotificationQueue;
 
 /// UI rendering and display state
@@ -48,7 +48,7 @@ pub struct UIState {
     /// (description, xp), for results display. Sourced directly from the function that
     /// actually applies the XP to the profile, so this can never diverge from
     /// `profile.total_xp` the way a separately re-derived "newly completed" detector can.
-    pub quest_xp_bonuses: Vec<(String, u64)>,
+    pub quest_xp_bonuses: Vec<QuestBonus>,
 
     /// Whether the most recent `award_quest_completion_xp` call, on its own, crossed an
     /// account level-up threshold. Callers that also add other XP in the same operation
@@ -57,7 +57,7 @@ pub struct UIState {
     pub quest_leveled_up: bool,
 
     /// Scenario mastery info for results display
-    pub scenario_mastery: Option<(ScenarioMastery, f64)>,
+    pub scenario_mastery: Option<MasteryInfo>,
 
     /// Notification queue for transient messages (level-up, achievements, etc.)
     pub notifications: NotificationQueue,

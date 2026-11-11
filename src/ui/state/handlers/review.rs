@@ -7,8 +7,8 @@ use crate::gamification::XPCalculator;
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
-    HandlerContext, HandlerOutcome, MenuData, ReviewData, ReviewResult, ReviewSessionState,
-    TypedScreen,
+    HandlerContext, HandlerOutcome, MenuData, ReviewData, ReviewOutcome, ReviewResult,
+    ReviewSessionState, TypedScreen,
 };
 use std::time::Instant;
 
@@ -37,7 +37,6 @@ pub fn handle_start_review_session(
     let review_session = ReviewSessionState {
         due_commands: due_commands.clone(),
         current_index: 0,
-        current_command: due_commands.first().cloned(),
         session_started_at: Instant::now(),
         completed_reviews: Vec::new(),
     };
@@ -56,22 +55,27 @@ pub fn handle_start_review_session(
 pub fn handle_complete_review_command(
     data: &mut ReviewData,
     ctx: &mut HandlerContext<'_>,
-    success: bool,
+    outcome: ReviewOutcome,
 ) -> Result<HandlerOutcome, UserError> {
     let session = &mut data.session;
-    if let Some(command) = &session.current_command {
+    if let Some(command) = session.current_command().map(str::to_owned) {
         let duration = session.session_started_at.elapsed();
 
         // Record result
         session.completed_reviews.push(ReviewResult {
             command: command.clone(),
-            success,
+            outcome,
             duration,
         });
 
         // Update performance tracker
         let tracker = &mut ctx.progress.performance_tracker;
-        tracker.record_attempt(command, duration, success, OPTIMAL_REVIEW_TIME);
+        tracker.record_attempt(
+            &command,
+            duration,
+            outcome.is_recalled(),
+            OPTIMAL_REVIEW_TIME,
+        );
 
         // Persist periodically so review progress survives a crash mid-session
         // (non-fatal error - log but continue, a review keypress must not kill the session)
@@ -100,7 +104,7 @@ fn handle_next_review_command(
         let success_count = session
             .completed_reviews
             .iter()
-            .filter(|r| r.success)
+            .filter(|r| r.outcome.is_recalled())
             .count();
         let xp = XPCalculator::review_session_xp(completed, success_count);
         let leveled_up = ctx.progress.profile.add_xp(xp);
@@ -133,7 +137,6 @@ fn handle_next_review_command(
         ))));
     } else {
         // Move to next command
-        session.current_command = session.due_commands.get(session.current_index).cloned();
     }
     Ok(HandlerOutcome::Stay)
 }

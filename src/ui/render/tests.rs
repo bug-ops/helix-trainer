@@ -377,14 +377,17 @@ mod screen_render_tests {
         state.screen = TypedScreen::EndGameSummary(EndGameSummaryData {
             scenarios_total: 1,
             perfected: 1,
-            imperfect: 0,
             total_completions: 1,
             total_xp: 50,
             level: 1,
             command_success_rate: 1.0,
             journey_days: 0,
             commands_mastered: 0,
-            category_breakdown: vec![(ScenarioCategory::Movement, 1, 1)],
+            category_breakdown: vec![crate::ui::state::CategoryProgress {
+                category: ScenarioCategory::Movement,
+                perfected: 1,
+                total: 1,
+            }],
             next_steps: vec![NextStep::ArcadeMode],
         });
 
@@ -709,7 +712,6 @@ mod review_tests {
         ReviewSessionState {
             due_commands: commands.into_iter().map(String::from).collect(),
             current_index: 0,
-            current_command: Some("h".to_string()),
             session_started_at: Instant::now(),
             completed_reviews: vec![],
         }
@@ -752,7 +754,7 @@ mod review_tests {
 
         let mut session = create_review_session(vec!["h", "j", "k", "l"]);
         session.current_index = 2; // Midway through
-        session.current_command = Some("k".to_string());
+        session.current_index = 2;
         state.screen = TypedScreen::Review(ReviewData { session });
 
         terminal
@@ -1231,7 +1233,10 @@ mod results_tests {
 
         let mut results_data = create_abandoned_results_data(scenario);
         results_data.xp_breakdown = Some(create_xp_breakdown(50, 0, 0, 0.5, 1.0));
-        results_data.scenario_mastery = Some((ScenarioMastery::Proficient, 0.5));
+        results_data.scenario_mastery = Some(crate::ui::state::MasteryInfo {
+            mastery: ScenarioMastery::Proficient,
+            xp_multiplier: 0.5,
+        });
         state.screen = TypedScreen::Results(results_data);
 
         terminal
@@ -1267,8 +1272,14 @@ mod results_tests {
         let mut results_data = create_abandoned_results_data(scenario);
         let mut xp = create_xp_breakdown(50, 25, 0, 1.0, 1.0);
         xp.quest_bonuses = vec![
-            ("Complete 5 scenarios".to_string(), 100),
-            ("Use movement commands".to_string(), 50),
+            crate::ui::state::QuestBonus {
+                quest: "Complete 5 scenarios".to_string(),
+                xp: 100,
+            },
+            crate::ui::state::QuestBonus {
+                quest: "Use movement commands".to_string(),
+                xp: 50,
+            },
         ];
         xp.total_xp += 150;
         results_data.xp_breakdown = Some(xp);
@@ -1398,7 +1409,10 @@ mod results_tests {
         let mut state = create_test_app_state(vec![scenario.clone()]);
 
         let mut results_data = create_abandoned_results_data(scenario);
-        results_data.scenario_mastery = Some((ScenarioMastery::Mastered, 0.25));
+        results_data.scenario_mastery = Some(crate::ui::state::MasteryInfo {
+            mastery: ScenarioMastery::Mastered,
+            xp_multiplier: 0.25,
+        });
         results_data.xp_breakdown = Some(create_xp_breakdown(50, 25, 0, 0.25, 1.0));
         state.screen = TypedScreen::Results(results_data);
 
@@ -1428,12 +1442,18 @@ mod results_tests {
             mastery_multiplier: 0.5 * 0.8,
             mastery_factor: 0.5,
             repeat_penalty: 0.8,
-            quest_bonuses: vec![("Quest bonus".to_string(), 30)],
+            quest_bonuses: vec![crate::ui::state::QuestBonus {
+                quest: "Quest bonus".to_string(),
+                xp: 30,
+            }],
             total_xp: 46, // (50+25+10) * 0.5 * 0.8 + 30
         };
 
         let mut results_data = create_abandoned_results_data(scenario);
-        results_data.scenario_mastery = Some((ScenarioMastery::Mastered, 0.5));
+        results_data.scenario_mastery = Some(crate::ui::state::MasteryInfo {
+            mastery: ScenarioMastery::Mastered,
+            xp_multiplier: 0.5,
+        });
         results_data.quest_changes = vec![QuestProgressChange {
             quest_description: "Daily quest".to_string(),
             old_progress: 4,

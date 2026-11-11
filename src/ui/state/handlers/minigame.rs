@@ -240,7 +240,7 @@ fn execute_minigame_command(
     // Store total XP earned for display in the transition popup (only shown when this
     // keystroke completed the scenario).
     if scenario_xp > 0 {
-        let quest_xp: u64 = quest_award.bonuses.iter().map(|(_, xp)| xp).sum();
+        let quest_xp: u64 = quest_award.bonuses.iter().map(|bonus| bonus.xp).sum();
         let total_xp = scenario_xp + quest_xp;
         if let TypedScreen::MiniGame(ref mut data) = state.screen {
             data.last_xp_earned = Some(total_xp);

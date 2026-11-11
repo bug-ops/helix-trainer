@@ -71,7 +71,7 @@ fn render_review_content(
     state: &AppState,
     session: &ReviewSessionState,
 ) {
-    let Some(command) = &session.current_command else {
+    let Some(command) = session.current_command() else {
         return;
     };
 

@@ -293,7 +293,7 @@ pub struct ResultsData {
     pub quest_changes: Vec<QuestProgressChange>,
 
     /// Scenario mastery info (mastery level, multiplier)
-    pub scenario_mastery: Option<(ScenarioMastery, f64)>,
+    pub scenario_mastery: Option<MasteryInfo>,
 
     /// Index of current scenario in filtered list (for next/prev navigation)
     /// None if scenario was started from outside the normal list flow
@@ -311,15 +311,15 @@ impl ResultsData {
         session: GameSession<Completed>,
         feedback: Feedback,
         scenario_index: Option<usize>,
-    ) -> Result<Self, crate::security::SecurityError> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             session: CompletedOrAbandoned::Completed(session),
             feedback,
             xp_breakdown: None,
             quest_changes: Vec::new(),
             scenario_mastery: None,
             scenario_index,
-        })
+        }
     }
 
     /// Create new ResultsData from an abandoned session
@@ -450,8 +450,6 @@ pub struct EndGameSummaryData {
     pub scenarios_total: usize,
     /// Unique scenarios with at least one 100% completion.
     pub perfected: usize,
-    /// `scenarios_total - perfected`. Reaches 0 at full mastery.
-    pub imperfect: usize,
     /// Lifetime completion events, replays included. Must be labelled as such
     /// in copy — it is not the same axis as `scenarios_total`.
     pub total_completions: u32,
@@ -466,11 +464,17 @@ pub struct EndGameSummaryData {
     pub journey_days: i64,
     /// Number of commands at `MasteryLevel::Master`.
     pub commands_mastered: usize,
-    /// `(category, perfected_in_category, total_in_category)`, sorted by
-    /// category enum order (matches the filter screen and menu).
-    pub category_breakdown: Vec<(ScenarioCategory, usize, usize)>,
+    /// Per-category progress, sorted by category enum order (matches the filter screen and menu).
+    pub category_breakdown: Vec<CategoryProgress>,
     /// Suggested next actions, in display order.
     pub next_steps: Vec<NextStep>,
+}
+
+impl EndGameSummaryData {
+    /// Scenarios not yet perfected. Reaches 0 at full mastery.
+    pub fn imperfect(&self) -> usize {
+        self.scenarios_total.saturating_sub(self.perfected)
+    }
 }
 
 /// A suggested next action offered on the end-game summary screen.
@@ -577,6 +581,26 @@ impl MiniGameModeSelection {
             .map(crate::minigame::MiniGameMode::description)
             .unwrap_or("")
     }
+}
+
+/// Mastery level reached for a scenario and the XP multiplier it applied
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MasteryInfo {
+    /// Mastery level of the completed scenario
+    pub mastery: ScenarioMastery,
+    /// Combined XP scaling applied to the completion
+    pub xp_multiplier: f64,
+}
+
+/// Perfected scenarios within one category
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CategoryProgress {
+    /// The category
+    pub category: ScenarioCategory,
+    /// Scenarios in the category completed perfectly
+    pub perfected: usize,
+    /// All scenarios in the category
+    pub total: usize,
 }
 
 /// Data required for mini-game screen
@@ -980,7 +1004,6 @@ mod tests {
         let data = EndGameSummaryData {
             scenarios_total: 1,
             perfected: 1,
-            imperfect: 0,
             total_completions: 1,
             total_xp: 0,
             level: 1,

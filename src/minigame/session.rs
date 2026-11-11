@@ -10,7 +10,7 @@ use crate::helix::{AnyModeSimulator, EditorSnapshot};
 use crate::learning::PerformanceTracker;
 use crate::minigame::{
     DifficultyController, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
-    MultiplierChange, PerformancePoint, ScoreBreakdown, ScoreCalculator,
+    MultiplierChange, PerformancePoint, Ratio, ScoreBreakdown, ScoreCalculator,
     select_challenge_scenarios,
 };
 use crate::security::UserError;
@@ -198,11 +198,16 @@ impl ActiveMiniScenario {
         self.elapsed() >= self.time_limit
     }
 
-    /// Get progress percentage (0.0 to 1.0, clamped)
+    /// Fraction of the time limit used, clamped to `0.0..=1.0` even after expiry.
+    pub fn time_used(&self) -> Ratio {
+        Ratio::new(self.elapsed().as_secs_f64() / self.time_limit.as_secs_f64())
+    }
+
+    /// Time used as a float in `0.0..=1.0` (a fraction, not a percentage).
     ///
-    /// Returns value clamped to [0.0, 1.0] range even if time has expired.
+    /// Prefer [`Self::time_used`], which carries the unit in its type.
     pub fn progress_percent(&self) -> f64 {
-        (self.elapsed().as_secs_f64() / self.time_limit.as_secs_f64()).clamp(0.0, 1.0)
+        self.time_used().get()
     }
 
     /// Get number of actions taken
@@ -642,7 +647,7 @@ impl<R: Rng> MiniGameSession<R> {
     pub fn advance_to_next(&mut self) {
         if let Some(ref scenario) = self.current {
             // Calculate metrics for scoring
-            let time_ratio = scenario.progress_percent();
+            let time_ratio = scenario.time_used().get();
             let optimal_count = scenario.scenario.scoring.optimal_count.get();
             let actual_count = scenario.action_count().max(1);
             let efficiency = (optimal_count as f64 / actual_count as f64).min(1.0);
@@ -1822,6 +1827,21 @@ mod tests {
         assert!(!survival.is_session_expired());
         assert!(!challenge.mode().has_session_timer());
         assert!(!challenge.is_session_expired());
+    }
+
+    #[test]
+    fn test_time_used_is_clamped_fraction_of_limit() {
+        let (active, clock) = active_with_clock();
+
+        clock.advance(Duration::from_secs(15));
+        assert_eq!(active.time_used(), Ratio::new(0.25));
+        clock.advance(Duration::from_secs(600));
+        assert_eq!(active.time_used(), Ratio::ONE);
+    }
+
+    #[test]
+    fn test_ratio_nan_is_exhausted() {
+        assert_eq!(Ratio::new(f64::NAN), Ratio::ONE);
     }
 
     #[test]

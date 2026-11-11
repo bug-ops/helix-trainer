@@ -141,6 +141,58 @@ impl PerformancePoint {
 
 /// Level change event for UI feedback
 ///
+/// Difficulty level of the arcade controller, always within `MIN..=MAX` (1-10).
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::minigame::DifficultyLevel;
+///
+/// assert_eq!(DifficultyLevel::new(0), None);
+/// assert_eq!(DifficultyLevel::new(11), None);
+/// let level = DifficultyLevel::new(9).unwrap();
+/// assert_eq!(level.next().map(DifficultyLevel::get), Some(10));
+/// assert_eq!(DifficultyLevel::MAX.next(), None);
+/// assert_eq!(DifficultyLevel::MIN.previous(), None);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DifficultyLevel(u8);
+
+impl DifficultyLevel {
+    /// Lowest level (1).
+    pub const MIN: Self = Self(LEVEL_BEGINNER_MIN);
+    /// Highest level (10).
+    pub const MAX: Self = Self(LEVEL_ADVANCED_MAX);
+
+    /// Returns the level, or `None` when `level` is outside `MIN..=MAX`.
+    #[must_use]
+    pub const fn new(level: u8) -> Option<Self> {
+        if level >= Self::MIN.0 && level <= Self::MAX.0 {
+            Some(Self(level))
+        } else {
+            None
+        }
+    }
+
+    /// The numeric level (1-10).
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+
+    /// One level harder, or `None` at [`Self::MAX`].
+    #[must_use]
+    pub const fn next(self) -> Option<Self> {
+        Self::new(self.0 + 1)
+    }
+
+    /// One level easier, or `None` at [`Self::MIN`].
+    #[must_use]
+    pub const fn previous(self) -> Option<Self> {
+        Self::new(self.0 - 1)
+    }
+}
+
 /// Generated when difficulty level changes, allowing the UI
 /// to display appropriate notifications and animations.
 ///
@@ -232,7 +284,7 @@ impl LevelChange {
 #[derive(Debug, Clone)]
 pub struct DifficultyController {
     /// Current difficulty level (1-10)
-    level: u8,
+    level: DifficultyLevel,
 
     /// Recent performance history with detailed metrics
     recent_performance: VecDeque<PerformancePoint>,
@@ -284,7 +336,7 @@ impl DifficultyController {
     /// ```
     pub fn new() -> Self {
         Self {
-            level: 1,
+            level: DifficultyLevel::MIN,
             recent_performance: VecDeque::with_capacity(PERFORMANCE_HISTORY_SIZE),
             performance_score: DEFAULT_PERFORMANCE_SCORE,
             scenarios_at_level: 0,
@@ -303,7 +355,7 @@ impl DifficultyController {
     /// assert_eq!(controller.current_level(), 1);
     /// ```
     pub fn current_level(&self) -> u8 {
-        self.level
+        self.level.get()
     }
 
     /// Get time limit for a scenario based on its difficulty and current level
@@ -339,7 +391,7 @@ impl DifficultyController {
             .unwrap_or(FALLBACK_TIME_LIMIT);
 
         // Scale by current level (level 10 = 80% time, but not less than 50%)
-        let scale = match self.level {
+        let scale = match self.level.get() {
             LEVEL_BEGINNER_MIN..=LEVEL_BEGINNER_MAX => LEVEL_1_3_TIME_SCALE,
             LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => LEVEL_4_6_TIME_SCALE,
             LEVEL_ADVANCED_MIN..=LEVEL_ADVANCED_MAX => LEVEL_7_10_TIME_SCALE,
@@ -494,7 +546,7 @@ impl DifficultyController {
     /// assert!(diffs.contains(&Difficulty::Beginner));
     /// ```
     pub fn available_difficulties(&self) -> Vec<Difficulty> {
-        match self.level {
+        match self.level.get() {
             LEVEL_BEGINNER_MIN..=LEVEL_BEGINNER_MAX => vec![Difficulty::Beginner],
             LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => {
                 vec![Difficulty::Beginner, Difficulty::Intermediate]
@@ -616,7 +668,7 @@ impl DifficultyController {
     /// - Not already at max level
     fn should_increase_difficulty(&self) -> bool {
         // Must be below max level
-        if self.level >= LEVEL_ADVANCED_MAX {
+        if self.level == DifficultyLevel::MAX {
             return false;
         }
 
@@ -646,7 +698,7 @@ impl DifficultyController {
     /// - Not already at min level
     fn should_decrease_difficulty(&self) -> bool {
         // Must be above min level
-        if self.level <= LEVEL_BEGINNER_MIN {
+        if self.level == DifficultyLevel::MIN {
             return false;
         }
 
@@ -688,16 +740,16 @@ impl DifficultyController {
     /// Increase difficulty level (internal, with event generation)
     fn increase_level(&mut self) {
         let old_level = self.level;
-        if self.level < LEVEL_ADVANCED_MAX {
-            self.level += 1;
+        if let Some(next) = old_level.next() {
+            self.level = next;
             self.scenarios_at_level = 0;
             self.level_changed = Some(LevelChange::Increased {
-                from: old_level,
-                to: self.level,
+                from: old_level.get(),
+                to: next.get(),
             });
             tracing::info!(
-                old_level = old_level,
-                new_level = self.level,
+                old_level = old_level.get(),
+                new_level = next.get(),
                 performance = %self.performance_score,
                 "Difficulty increased"
             );
@@ -707,16 +759,16 @@ impl DifficultyController {
     /// Decrease difficulty level (internal, with event generation)
     fn decrease_level(&mut self) {
         let old_level = self.level;
-        if self.level > LEVEL_BEGINNER_MIN {
-            self.level -= 1;
+        if let Some(previous) = old_level.previous() {
+            self.level = previous;
             self.scenarios_at_level = 0;
             self.level_changed = Some(LevelChange::Decreased {
-                from: old_level,
-                to: self.level,
+                from: old_level.get(),
+                to: previous.get(),
             });
             tracing::info!(
-                old_level = old_level,
-                new_level = self.level,
+                old_level = old_level.get(),
+                new_level = previous.get(),
                 performance = %self.performance_score,
                 "Difficulty decreased"
             );
@@ -810,7 +862,7 @@ impl DifficultyController {
     ///
     /// A value between 0.0 and 1.0 indicating progress toward next level.
     pub fn level_progress(&self) -> f64 {
-        if self.level >= LEVEL_ADVANCED_MAX {
+        if self.level == DifficultyLevel::MAX {
             return 1.0; // Already at max
         }
 
@@ -870,7 +922,7 @@ impl DifficultyController {
     /// assert_eq!(controller.current_level(), 1);
     /// ```
     pub fn reset(&mut self) {
-        self.level = 1;
+        self.level = DifficultyLevel::MIN;
         self.recent_performance.clear();
         self.performance_score = DEFAULT_PERFORMANCE_SCORE;
         self.scenarios_at_level = 0;
@@ -1026,21 +1078,21 @@ mod tests {
         let scenario = create_test_scenario(Difficulty::Beginner, "b1");
 
         // Level 1-3: 100%
-        controller.level = 1;
+        controller.level = DifficultyLevel::new(1).unwrap();
         assert_eq!(controller.time_limit_for(&scenario).as_secs(), 10);
 
-        controller.level = 3;
+        controller.level = DifficultyLevel::new(3).unwrap();
         assert_eq!(controller.time_limit_for(&scenario).as_secs(), 10);
 
         // Level 4-6: 90%
-        controller.level = 4;
+        controller.level = DifficultyLevel::new(4).unwrap();
         assert_eq!(controller.time_limit_for(&scenario).as_secs(), 9);
 
         // Level 7-10: 80%
-        controller.level = 7;
+        controller.level = DifficultyLevel::new(7).unwrap();
         assert_eq!(controller.time_limit_for(&scenario).as_secs(), 8);
 
-        controller.level = 10;
+        controller.level = DifficultyLevel::new(10).unwrap();
         assert_eq!(controller.time_limit_for(&scenario).as_secs(), 8);
     }
 
@@ -1048,37 +1100,37 @@ mod tests {
     fn test_available_difficulties_by_level() {
         let mut controller = DifficultyController::new();
 
-        controller.level = 1;
+        controller.level = DifficultyLevel::new(1).unwrap();
         assert_eq!(
             controller.available_difficulties(),
             vec![Difficulty::Beginner]
         );
 
-        controller.level = 3;
+        controller.level = DifficultyLevel::new(3).unwrap();
         assert_eq!(
             controller.available_difficulties(),
             vec![Difficulty::Beginner]
         );
 
-        controller.level = 4;
+        controller.level = DifficultyLevel::new(4).unwrap();
         assert_eq!(
             controller.available_difficulties(),
             vec![Difficulty::Beginner, Difficulty::Intermediate]
         );
 
-        controller.level = 6;
+        controller.level = DifficultyLevel::new(6).unwrap();
         assert_eq!(
             controller.available_difficulties(),
             vec![Difficulty::Beginner, Difficulty::Intermediate]
         );
 
-        controller.level = 7;
+        controller.level = DifficultyLevel::new(7).unwrap();
         assert_eq!(
             controller.available_difficulties(),
             vec![Difficulty::Intermediate, Difficulty::Advanced]
         );
 
-        controller.level = 10;
+        controller.level = DifficultyLevel::new(10).unwrap();
         assert_eq!(
             controller.available_difficulties(),
             vec![Difficulty::Intermediate, Difficulty::Advanced]
@@ -1095,7 +1147,7 @@ mod tests {
         ];
 
         // Level 1-3: only beginner
-        controller.level = 1;
+        controller.level = DifficultyLevel::new(1).unwrap();
         for _ in 0..10 {
             let selected = controller
                 .next_scenario(&scenarios, None, &mut rand::rng())
@@ -1106,7 +1158,7 @@ mod tests {
         }
 
         // Level 7-10: intermediate and advanced
-        controller.level = 7;
+        controller.level = DifficultyLevel::new(7).unwrap();
         let mut found_intermediate = false;
         let mut found_advanced = false;
 
@@ -1314,7 +1366,7 @@ mod tests {
     #[test]
     fn test_difficulty_decrease_on_struggling() {
         let mut controller = DifficultyController::new();
-        controller.level = 5;
+        controller.level = DifficultyLevel::new(5).unwrap();
         let initial_level = controller.current_level();
 
         // Add consistent failures
@@ -1361,7 +1413,7 @@ mod tests {
     #[test]
     fn test_level_change_events_decrease() {
         let mut controller = DifficultyController::new();
-        controller.level = 5;
+        controller.level = DifficultyLevel::new(5).unwrap();
 
         // Force a level decrease with poor performance
         for _ in 0..10 {
@@ -1399,7 +1451,7 @@ mod tests {
     #[test]
     fn test_level_progress_at_max_level() {
         let mut controller = DifficultyController::new();
-        controller.level = LEVEL_ADVANCED_MAX;
+        controller.level = DifficultyLevel::MAX;
 
         // Progress should be 1.0 at max level
         assert!((controller.level_progress() - 1.0).abs() < 0.001);
@@ -1414,7 +1466,7 @@ mod tests {
         assert_eq!(controller.current_level(), 1);
 
         // Can't go above 10
-        controller.level = 10;
+        controller.level = DifficultyLevel::new(10).unwrap();
         controller.increase_difficulty();
         assert_eq!(controller.current_level(), 10);
     }
@@ -1422,7 +1474,7 @@ mod tests {
     #[test]
     fn test_reset() {
         let mut controller = DifficultyController::new();
-        controller.level = 5;
+        controller.level = DifficultyLevel::new(5).unwrap();
         controller.update_after_scenario(create_performance_point(
             true,
             0.5,
@@ -1450,7 +1502,7 @@ mod tests {
     #[test]
     fn test_min_level_cannot_decrease() {
         let mut controller = DifficultyController::new();
-        controller.level = 1;
+        controller.level = DifficultyLevel::new(1).unwrap();
 
         // Add many failures
         for _ in 0..20 {
@@ -1469,7 +1521,7 @@ mod tests {
     #[test]
     fn test_max_level_cannot_increase() {
         let mut controller = DifficultyController::new();
-        controller.level = 10;
+        controller.level = DifficultyLevel::new(10).unwrap();
 
         // Add many successes
         for _ in 0..20 {
@@ -1769,7 +1821,7 @@ mod tests {
             let scenarios = vec![beginner, advanced];
 
             // At level 1, only beginner scenarios should be selected
-            controller.level = 1;
+            controller.level = DifficultyLevel::new(1).unwrap();
             let mut rng = StdRng::seed_from_u64(42);
             for _ in 0..20 {
                 if let Some(scenario) =
@@ -1784,7 +1836,7 @@ mod tests {
 
             // At level 7+, intermediate and advanced are available
             // (but our test only has advanced, so advanced should be selected)
-            controller.level = 7;
+            controller.level = DifficultyLevel::new(7).unwrap();
             let mut rng = StdRng::seed_from_u64(42);
             let mut found_advanced = false;
             for _ in 0..20 {

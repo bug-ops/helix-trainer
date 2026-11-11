@@ -69,10 +69,6 @@ pub(crate) const MAX_VERSION_LENGTH: usize = 20;
 /// Maximum locale string length
 pub(crate) const MAX_LOCALE_LENGTH: usize = 10;
 
-/// Maximum length of a scenario `Setup.language` token (file-extension-style,
-/// e.g. "rs", "md", "py" — longest bundled syntect extensions are well under this)
-pub(crate) const MAX_LANGUAGE_LENGTH: usize = 20;
-
 /// Maximum required conditions count
 pub(crate) const MAX_REQUIRED_CONDITIONS: usize = 20;
 

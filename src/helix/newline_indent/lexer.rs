@@ -275,9 +275,10 @@ fn starts_with(rest: &[char], text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::helix::Language;
 
-    fn lex(language: &str, text: &str) -> Lexed {
-        let language = LanguageRules::for_language(language).unwrap();
+    fn lex(language: Language, text: &str) -> Lexed {
+        let language = language.rules();
         let rules = language.newline.as_ref().unwrap();
         Lexed::new(&Rope::from_str(text), language, rules)
     }
@@ -288,31 +289,37 @@ mod tests {
 
     #[test]
     fn block_comments_nest_and_hide_brackets() {
-        let lexed = lex("rs", "a(/* ( /* ) */ ) */ b)\n");
+        let lexed = lex(Language::Rs, "a(/* ( /* ) */ ) */ b)\n");
         assert_eq!(bracket_cols(&lexed), vec![(0, 1), (0, 21)]);
     }
 
     #[test]
     fn raw_strings_end_at_the_matching_hashes() {
-        let lexed = lex("rs", "r##\"(\"#)\"## ( bar\"(\"\n");
+        let lexed = lex(Language::Rs, "r##\"(\"#)\"## ( bar\"(\"\n");
         assert_eq!(bracket_cols(&lexed), vec![(0, 12)]);
     }
 
     #[test]
     fn rust_strings_span_lines_but_python_strings_do_not() {
-        assert_eq!(bracket_cols(&lex("rs", "\"a\n(\" (\n")), vec![(1, 3)]);
-        assert_eq!(bracket_cols(&lex("py", "\"a\n( (\n")), vec![(1, 0), (1, 2)]);
+        assert_eq!(
+            bracket_cols(&lex(Language::Rs, "\"a\n(\" (\n")),
+            vec![(1, 3)]
+        );
+        assert_eq!(
+            bracket_cols(&lex(Language::Py, "\"a\n( (\n")),
+            vec![(1, 0), (1, 2)]
+        );
     }
 
     #[test]
     fn python_triple_quotes_hide_brackets_across_lines() {
-        let lexed = lex("py", "x = (\"\"\"\n)\n\"\"\")\n");
+        let lexed = lex(Language::Py, "x = (\"\"\"\n)\n\"\"\")\n");
         assert_eq!(bracket_cols(&lexed), vec![(0, 4), (2, 3)]);
     }
 
     #[test]
     fn last_code_char_skips_comments_and_reports_the_kind() {
-        let lexed = lex("rs", "a {  // c\n\"{\" /* x */\n");
+        let lexed = lex(Language::Rs, "a {  // c\n\"{\" /* x */\n");
         assert_eq!(lexed.last_code_char(0, 99), Some((2, '{', Kind::Code)));
         assert_eq!(lexed.last_code_char(1, 99), Some((2, '"', Kind::Str)));
         assert!(lexed.has_comment(0));

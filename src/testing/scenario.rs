@@ -6,6 +6,7 @@ use crate::config::{
     CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioMetadata, ScoringConfig, Setup,
     Solution, TargetState,
 };
+use crate::helix::Language;
 use crate::testing::{point, selection};
 use std::num::NonZeroUsize;
 
@@ -26,7 +27,7 @@ pub struct ScenarioBuilder {
     name: Option<String>,
     description: String,
     setup_content: String,
-    setup_language: Option<String>,
+    setup_language: Option<Language>,
     setup_cursor: CursorSpec,
     target_content: String,
     target_cursor: CursorSpec,
@@ -99,10 +100,10 @@ impl ScenarioBuilder {
         self
     }
 
-    /// Set the setup content's language (file-extension-style token, e.g. `"md"`, `"py"`)
+    /// Set the setup content's language
     #[must_use]
-    pub fn setup_language(mut self, language: impl Into<String>) -> Self {
-        self.setup_language = Some(language.into());
+    pub fn setup_language(mut self, language: Language) -> Self {
+        self.setup_language = Some(language);
         self
     }
 

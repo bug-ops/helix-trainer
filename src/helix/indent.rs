@@ -1,6 +1,5 @@
 //! Indent unit used by `>`, `<`, Insert-mode `Tab` and new-line indentation.
 
-use super::language::LanguageRules;
 use helix_core::Rope;
 use helix_core::indent::{IndentStyle, auto_detect_indent_style};
 use std::num::NonZeroU8;
@@ -16,11 +15,10 @@ const TAB_STOP_WIDTH: usize = 4;
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::helix::IndentUnit;
+/// use helix_trainer::helix::Language;
 ///
-/// assert_eq!(IndentUnit::for_language("rs").unwrap().to_string(), "    ");
-/// assert_eq!(IndentUnit::for_language("md").unwrap().to_string(), "  ");
-/// assert_eq!(IndentUnit::for_language("unknown"), None);
+/// assert_eq!(Language::Rs.rules().indent_unit.to_string(), "    ");
+/// assert_eq!(Language::Md.rules().indent_unit.to_string(), "  ");
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IndentUnit {
@@ -34,17 +32,9 @@ pub(super) const FOUR_SPACES: IndentUnit = IndentUnit::Spaces(NonZeroU8::new(4).
 pub(super) const TWO_SPACES: IndentUnit = IndentUnit::Spaces(NonZeroU8::new(2).unwrap());
 
 impl IndentUnit {
-    /// Unit for scenarios that name no language or one outside the table
-    ///
-    /// ASSUMPTION: matches the default language `rs`; only user-supplied
-    /// scenarios can reach this for an unlisted language.
+    /// Unit of a simulator created without a language, matching the default
+    /// language `rs`
     pub const DEFAULT: Self = FOUR_SPACES;
-
-    /// The unit `hx` 25.07.1 uses for `language` (a file-extension token), or
-    /// `None` when the language has no table entry
-    pub fn for_language(language: &str) -> Option<Self> {
-        LanguageRules::for_language(language).map(|rules| rules.indent_unit)
-    }
 
     /// The unit `hx` auto-detects from consistently indented `text`, or
     /// `None` when the text reveals none
@@ -99,23 +89,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn table_entries_match_hx() {
-        assert_eq!(IndentUnit::for_language("rs"), Some(FOUR_SPACES));
-        assert_eq!(IndentUnit::for_language("md"), Some(TWO_SPACES));
-        assert_eq!(IndentUnit::for_language("py"), Some(FOUR_SPACES));
-    }
-
-    #[test]
     fn unit_text_and_width() {
         assert_eq!(FOUR_SPACES.to_string(), "    ");
         assert_eq!(FOUR_SPACES.width(), 4);
         assert_eq!(IndentUnit::Tab.to_string(), "\t");
         assert_eq!(IndentUnit::Tab.width(), 4);
-    }
-
-    #[test]
-    fn unlisted_language_has_no_entry() {
-        assert_eq!(IndentUnit::for_language("js"), None);
-        assert_eq!(IndentUnit::for_language(""), None);
     }
 }

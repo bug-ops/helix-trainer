@@ -5,6 +5,7 @@
 
 use super::{run_keys, run_keys_in};
 use crate::grammar::commands::*;
+use crate::helix::Language;
 
 fn typed(text: &str, keys: &[&str]) -> String {
     let keys: Vec<&str> = keys.iter().copied().chain([CMD_ESCAPE]).collect();
@@ -35,19 +36,19 @@ fn counted_open_uses_the_crlf_of_the_document() {
 fn an_unused_indent_after_a_crlf_is_stripped_like_after_an_lf() {
     let block = "fn f() {\r\n    a\r\n}";
     assert_eq!(
-        run_keys_in("rs", block, &["j", "o", CMD_ESCAPE])
+        run_keys_in(Language::Rs, block, &["j", "o", CMD_ESCAPE])
             .display()
             .content(),
         "fn f() {\r\n    a\r\n\r\n}"
     );
     assert_eq!(
-        run_keys_in("rs", block, &["j", "A", "\n", CMD_ESCAPE])
+        run_keys_in(Language::Rs, block, &["j", "A", "\n", CMD_ESCAPE])
             .display()
             .content(),
         "fn f() {\r\n    a\r\n\r\n}"
     );
     assert_eq!(
-        run_keys_in("rs", block, &["j", "o", "x", CMD_ESCAPE])
+        run_keys_in(Language::Rs, block, &["j", "o", "x", CMD_ESCAPE])
             .display()
             .content(),
         "fn f() {\r\n    a\r\n    x\r\n}"

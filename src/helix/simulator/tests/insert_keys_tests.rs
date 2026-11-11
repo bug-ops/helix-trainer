@@ -4,6 +4,7 @@
 //! Expected buffers were captured from `hx` 25.07.1 on the same text and keys.
 
 use crate::grammar::commands::*;
+use crate::helix::Language;
 use crate::helix::simulator::{AnyModeSimulator, InsertCommand};
 
 const SCENARIO_14: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";
@@ -201,12 +202,15 @@ fn tab_at_the_start_of_an_indented_line_keeps_the_existing_indent() {
 
 #[test]
 fn tab_unit_follows_the_language() {
-    for (language, text, expected) in [("md", "- a\n", "  z- a\n"), ("py", "x\n", "    zx\n")] {
+    for (language, text, expected) in [
+        (Language::Md, "- a\n", "  z- a\n"),
+        (Language::Py, "x\n", "    zx\n"),
+    ] {
         let mut sim = AnyModeSimulator::new(text.to_string()).with_language(language);
         for cmd in [CMD_INSERT, CMD_INSERT_TAB, "z", CMD_ESCAPE] {
             sim.execute_command(cmd).unwrap();
         }
-        assert_eq!(sim.display().content(), expected, "{language}");
+        assert_eq!(sim.display().content(), expected, "{language:?}");
     }
 }
 

@@ -2,12 +2,14 @@
 //!
 //! Expected buffers match `hx` 25.07.1 on the same keys (probe: `d`).
 
+use super::run_keys;
 use crate::grammar::commands::*;
+use crate::helix::Language;
 use crate::helix::simulator::AnyModeSimulator;
 
 const SCENARIO_14: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";
 
-fn run_in(language: &str, text: &str, keys: &[&str]) -> String {
+fn run_in(language: Language, text: &str, keys: &[&str]) -> String {
     let mut sim = AnyModeSimulator::new(text.to_string()).with_language(language);
     for key in keys {
         sim.execute_command(key).unwrap();
@@ -16,7 +18,7 @@ fn run_in(language: &str, text: &str, keys: &[&str]) -> String {
 }
 
 fn run(keys: &[&str]) -> String {
-    run_in("rs", SCENARIO_14, keys)
+    run_in(Language::Rs, SCENARIO_14, keys)
 }
 
 #[test]
@@ -55,7 +57,7 @@ fn indent_touches_the_lines_of_every_range() {
 #[test]
 fn indent_skips_blank_lines() {
     assert_eq!(
-        run_in("rs", "a\n\nb\n", &[CMD_SELECT_ALL, CMD_INDENT]),
+        run_in(Language::Rs, "a\n\nb\n", &[CMD_SELECT_ALL, CMD_INDENT]),
         "    a\n\n    b\n"
     );
 }
@@ -119,16 +121,16 @@ fn indent_then_dedent_roundtrips_one_unit() {
 #[test]
 fn indent_unit_follows_the_language() {
     assert_eq!(
-        run_in("md", "- a\n- b\n", &[CMD_SELECT_ALL, CMD_INDENT]),
+        run_in(Language::Md, "- a\n- b\n", &[CMD_SELECT_ALL, CMD_INDENT]),
         "  - a\n  - b\n"
     );
     assert_eq!(
-        run_in("py", "x\ny\n", &[CMD_INDENT, CMD_INDENT]),
+        run_in(Language::Py, "x\ny\n", &[CMD_INDENT, CMD_INDENT]),
         "        x\ny\n"
     );
     assert_eq!(
         run_in(
-            "md",
+            Language::Md,
             "- a\n- b\n",
             &[CMD_MOVE_DOWN, CMD_INDENT, CMD_INDENT, CMD_DEDENT]
         ),
@@ -139,34 +141,19 @@ fn indent_unit_follows_the_language() {
 #[test]
 fn dedent_removes_the_whole_unit_in_python() {
     assert_eq!(
-        run_in("py", "def f():\n    pass\n", &[CMD_MOVE_DOWN, CMD_DEDENT]),
+        run_in(
+            Language::Py,
+            "def f():\n    pass\n",
+            &[CMD_MOVE_DOWN, CMD_DEDENT]
+        ),
         "def f():\npass\n"
     );
 }
 
 #[test]
-fn unlisted_language_uses_the_default_unit() {
-    assert_eq!(run_in("js", "x\n", &[CMD_INDENT]), "    x\n");
-}
-
-#[test]
-fn every_scenario_language_has_an_indent_unit_entry() {
-    use crate::config::{DEFAULT_LANGUAGE, ScenarioLoader};
-    use crate::helix::IndentUnit;
-
-    let loader = ScenarioLoader::new();
-    for locale in loader.available_locales() {
-        for scenario in loader.load_from_embedded(&locale).unwrap() {
-            let language = scenario
-                .setup
-                .language
-                .as_deref()
-                .unwrap_or(DEFAULT_LANGUAGE);
-            assert!(
-                IndentUnit::for_language(language).is_some(),
-                "scenario {} uses language {language:?} without an indent unit entry",
-                scenario.id
-            );
-        }
-    }
+fn a_simulator_without_a_language_uses_the_default_unit() {
+    assert_eq!(
+        run_keys("x\n", &[CMD_INDENT]).display().content(),
+        "    x\n"
+    );
 }

@@ -5,8 +5,9 @@
 //! [`probed`]), `@` marks the selection the last command left behind; a probe
 //! of `d` is written out as the resulting text.
 
-use super::{SCENARIO_14, probed, run_keys, run_keys_in};
+use super::{SCENARIO_14, probed, probed_in, run_keys, run_keys_in};
 use crate::grammar::commands::*;
+use crate::helix::Language;
 
 fn line(content: &str, index: usize) -> &str {
     content.lines().nth(index).unwrap_or_default()
@@ -22,7 +23,6 @@ fn after_delete(keys: &[&str]) -> String {
 fn replace_with_yanked_on_a_point_cursor_replaces_the_grapheme_under_it() {
     let content = probed(
         SCENARIO_14,
-        "txt",
         &[CMD_YANK, CMD_MOVE_DOWN, CMD_REPLACE_WITH_YANKED],
     );
     assert_eq!(line(&content, 1), "@   let sum = a + b;");
@@ -32,7 +32,6 @@ fn replace_with_yanked_on_a_point_cursor_replaces_the_grapheme_under_it() {
 fn replace_with_yanked_after_word_motions_matches_hx() {
     let content = probed(
         SCENARIO_14,
-        "txt",
         &[
             CMD_MOVE_WORD_FORWARD,
             CMD_YANK,
@@ -45,7 +44,6 @@ fn replace_with_yanked_after_word_motions_matches_hx() {
 
     let content = probed(
         SCENARIO_14,
-        "txt",
         &[
             CMD_MOVE_WORD_FORWARD,
             CMD_YANK,
@@ -82,7 +80,11 @@ fn n_after_a_forward_search_is_unchanged() {
 
 #[test]
 fn star_keeps_the_selection_and_c_changes_it() {
-    let content = probed(SCENARIO_14, "rs", &[CMD_MOVE_WORD_FORWARD, CMD_SEARCH_WORD]);
+    let content = probed_in(
+        SCENARIO_14,
+        Language::Rs,
+        &[CMD_MOVE_WORD_FORWARD, CMD_SEARCH_WORD],
+    );
     assert_eq!(line(&content, 0), "@add(a: i32, b: i32) -> i32 {");
 }
 
@@ -178,7 +180,7 @@ fn insert_at_line_start_uses_the_line_of_the_block_cursor_after_a_line_selection
 fn insert_at_line_start_on_an_empty_line_auto_indents() {
     let rust = |text: &str| {
         run_keys_in(
-            "rs",
+            Language::Rs,
             text,
             &[CMD_MOVE_DOWN, CMD_INSERT_LINE_START, "a", CMD_ESCAPE],
         )
@@ -199,7 +201,7 @@ fn insert_at_line_start_on_an_empty_line_auto_indents() {
 #[test]
 fn insert_at_line_start_on_an_empty_line_copies_the_indent_above() {
     let content = run_keys_in(
-        "rs",
+        Language::Rs,
         "fn add() {\n    x\n\n}\n",
         &[
             CMD_MOVE_DOWN,
@@ -217,7 +219,7 @@ fn insert_at_line_start_on_an_empty_line_copies_the_indent_above() {
 #[test]
 fn insert_at_line_start_with_indent_is_one_undo_step() {
     let content = run_keys_in(
-        "rs",
+        Language::Rs,
         "fn f() {\n\n}\n",
         &[
             CMD_MOVE_DOWN,
@@ -232,7 +234,7 @@ fn insert_at_line_start_with_indent_is_one_undo_step() {
     assert_eq!(content, "fn f() {\n\n}\n");
 }
 
-fn change_line_probe(language: &str, text: &str, keys: &[&str]) -> String {
+fn change_line_probe(language: Language, text: &str, keys: &[&str]) -> String {
     let mut keys = keys.to_vec();
     keys.extend([CMD_SELECT_LINE, CMD_CHANGE, "@", CMD_ESCAPE]);
     run_keys_in(language, text, &keys).display().content()
@@ -241,25 +243,25 @@ fn change_line_probe(language: &str, text: &str, keys: &[&str]) -> String {
 #[test]
 fn changing_a_whole_line_keeps_the_indent_of_the_language_rule() {
     let third = change_line_probe(
-        "rs",
+        Language::Rs,
         SCENARIO_14,
         &[CMD_MOVE_RIGHT, CMD_MOVE_DOWN, CMD_MOVE_RIGHT, CMD_MOVE_DOWN],
     );
     assert_eq!(line(&third, 2), "    @");
     assert_eq!(third.lines().count(), 4);
 
-    let first = change_line_probe("rs", SCENARIO_14, &[CMD_MOVE_RIGHT]);
+    let first = change_line_probe(Language::Rs, SCENARIO_14, &[CMD_MOVE_RIGHT]);
     assert_eq!(line(&first, 0), "    @");
     assert_eq!(line(&first, 1), "    let sum = a + b;");
 
-    let word = change_line_probe("rs", SCENARIO_14, &[CMD_MOVE_WORD_FORWARD]);
+    let word = change_line_probe(Language::Rs, SCENARIO_14, &[CMD_MOVE_WORD_FORWARD]);
     assert_eq!(line(&word, 0), "    @");
 }
 
 #[test]
 fn changing_the_last_line_indents_like_the_line_above() {
     let content = change_line_probe(
-        "rs",
+        Language::Rs,
         SCENARIO_14,
         &[CMD_MOVE_DOWN, CMD_MOVE_DOWN, CMD_MOVE_DOWN],
     );
@@ -269,14 +271,14 @@ fn changing_the_last_line_indents_like_the_line_above() {
 #[test]
 fn changing_a_line_below_a_comment_does_not_continue_the_comment() {
     let text = "// note\nfn f() {\n    x\n}\n";
-    assert_eq!(line(&change_line_probe("rs", text, &[]), 0), "@");
+    assert_eq!(line(&change_line_probe(Language::Rs, text, &[]), 0), "@");
     assert_eq!(
-        line(&change_line_probe("rs", text, &[CMD_MOVE_DOWN]), 1),
+        line(&change_line_probe(Language::Rs, text, &[CMD_MOVE_DOWN]), 1),
         "@"
     );
     assert_eq!(
         line(
-            &change_line_probe("rs", text, &[CMD_MOVE_DOWN, CMD_MOVE_DOWN]),
+            &change_line_probe(Language::Rs, text, &[CMD_MOVE_DOWN, CMD_MOVE_DOWN]),
             2
         ),
         "    @"
@@ -287,12 +289,12 @@ fn changing_a_line_below_a_comment_does_not_continue_the_comment() {
 fn changing_a_python_block_line_keeps_the_block_indent() {
     let text = "def f():\n    x\n    y\nz = 1\n";
     assert_eq!(
-        line(&change_line_probe("py", text, &[CMD_MOVE_DOWN]), 1),
+        line(&change_line_probe(Language::Py, text, &[CMD_MOVE_DOWN]), 1),
         "    @"
     );
     assert_eq!(
         line(
-            &change_line_probe("py", text, &[CMD_MOVE_DOWN, CMD_MOVE_DOWN]),
+            &change_line_probe(Language::Py, text, &[CMD_MOVE_DOWN, CMD_MOVE_DOWN]),
             2
         ),
         "    @"
@@ -302,7 +304,7 @@ fn changing_a_python_block_line_keeps_the_block_indent() {
 #[test]
 fn changing_a_whole_line_is_one_undo_step() {
     let content = run_keys_in(
-        "rs",
+        Language::Rs,
         SCENARIO_14,
         &[
             CMD_MOVE_DOWN,
@@ -318,7 +320,7 @@ fn changing_a_whole_line_is_one_undo_step() {
     assert_eq!(content, SCENARIO_14);
 }
 
-fn typed_a_after(entry: &[&str], language: &str) -> String {
+fn typed_a_after(entry: &[&str], language: Language) -> String {
     let keys: Vec<&str> = entry.iter().copied().chain(["a", CMD_ESCAPE]).collect();
     run_keys_in(language, SCENARIO_14, &keys)
         .display()
@@ -328,23 +330,23 @@ fn typed_a_after(entry: &[&str], language: &str) -> String {
 /// #593: `i` inserts at the selection start whatever the range direction.
 #[test]
 fn insert_on_a_forward_selection_inserts_at_its_start() {
-    let content = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_INSERT], "rs");
+    let content = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_INSERT], Language::Rs);
     assert_eq!(line(&content, 0), "afn add(a: i32, b: i32) -> i32 {");
     assert_eq!(content.lines().count(), SCENARIO_14.lines().count());
 }
 
 #[test]
 fn insert_on_a_flipped_selection_matches_the_forward_one() {
-    let forward = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_INSERT], "rs");
+    let forward = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_INSERT], Language::Rs);
     let flipped = typed_a_after(
         &[CMD_MOVE_WORD_FORWARD, CMD_FLIP_SELECTIONS, CMD_INSERT],
-        "rs",
+        Language::Rs,
     );
     assert_eq!(flipped, forward);
 }
 
 #[test]
 fn append_on_a_selection_still_inserts_at_its_end() {
-    let content = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_APPEND], "rs");
+    let content = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_APPEND], Language::Rs);
     assert_eq!(line(&content, 0), "fn aadd(a: i32, b: i32) -> i32 {");
 }

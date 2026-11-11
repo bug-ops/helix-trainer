@@ -26,7 +26,7 @@ pub mod repeat;
 pub mod simulator;
 
 pub use indent::IndentUnit;
-pub use language::LanguageRules;
+pub use language::{Language, LanguageRules};
 pub use repeat::{
     InsertAction, InsertKey, Movement, RepeatBuffer, RepeatableAction, is_repeatable_command,
 };

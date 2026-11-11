@@ -166,12 +166,13 @@ fn replace_char_at_document_end_is_a_noop() {
 }
 
 mod insert_with_indent {
+    use crate::helix::Language;
     use crate::helix::simulator::tests::run_keys_in;
 
     const BLOCK_WITH_EMPTY_LINE: &str = "fn f() {\n    x\n\n}";
 
     fn rs(text: &str, keys: &[&str]) -> String {
-        run_keys_in("rs", text, keys).display().content()
+        run_keys_in(Language::Rs, text, keys).display().content()
     }
 
     #[test]

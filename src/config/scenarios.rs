@@ -3,12 +3,12 @@
 //! This module handles loading TOML scenario files with security validations.
 
 use crate::constants::{ADVANCED_TIME_LIMIT, BEGINNER_TIME_LIMIT, INTERMEDIATE_TIME_LIMIT};
+use crate::helix::Language;
 use crate::ids::{CommandId, NormalizedCommand, ScenarioId};
 use crate::limits::{
     MAX_COMMAND_SEQUENCE_LENGTH, MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE,
     MAX_SCENARIOS_PER_FILE,
 };
-use crate::security::validators::validate_language_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -332,8 +332,8 @@ impl Scenario {
 /// Matches the syntax highlighter's original hardcoded behavior (see FR-002 in
 /// `specs/language-aware-syntax-highlighting/spec.md`). Shared by
 /// `PlayableScenario::language`'s default implementation and its `GameSession`/
-/// `ActiveMiniScenario` overrides so the fallback literal exists in exactly one place.
-pub const DEFAULT_LANGUAGE: &str = "rs";
+/// `ActiveMiniScenario` overrides so the fallback exists in exactly one place.
+pub const DEFAULT_LANGUAGE: Language = Language::Rs;
 
 /// Initial editor setup
 #[derive(Deserialize, Debug, Clone)]
@@ -341,12 +341,12 @@ pub struct Setup {
     /// Initial document text.
     pub file_content: String,
 
-    /// Content's language as a file-extension-style token (e.g. `"rs"`, `"md"`, `"py"`),
-    /// resolved by the syntax highlighter against syntect's bundled `SyntaxSet`.
+    /// Content's language (`rs`, `md` or `py` in the scenario file); any other value,
+    /// including an empty one, is a scenario load error.
     /// `None` (the default for scenarios that omit this field) is treated as
     /// [`DEFAULT_LANGUAGE`], preserving the highlighter's original hardcoded behavior.
-    #[serde(default, deserialize_with = "validate_language_field")]
-    pub language: Option<String>,
+    #[serde(default)]
+    pub language: Option<Language>,
 
     /// Cursor and selection placement at the start.
     #[serde(flatten)]

@@ -5,12 +5,13 @@
 
 use super::{ranges_of, run_keys, run_keys_in};
 use crate::grammar::commands::*;
+use crate::helix::Language;
 
 const I1: &str = "fn f() {\n    a\n    b\n}";
 const I1_NO_EOL: &str = "fn f() {\n    a";
 
 fn rs(text: &str, keys: &[&str]) -> String {
-    run_keys_in("rs", text, keys).display().content()
+    run_keys_in(Language::Rs, text, keys).display().content()
 }
 
 fn expect_i1(keys: &[&str], expected: &str) {
@@ -43,7 +44,7 @@ fn counted_open_types_into_every_opened_line_with_the_first_primary() {
         &["j", "2o", "x", CMD_ESCAPE],
         "fn f() {\n    a\n    x\n    x\n    b\n}",
     );
-    let sim = run_keys_in("rs", I1, &["j", "2o", "x"]);
+    let sim = run_keys_in(Language::Rs, I1, &["j", "2o", "x"]);
     assert_eq!(ranges_of(&sim).len(), 2);
     assert_eq!(sim.to_snapshot().primary_idx, 0);
 }
@@ -101,7 +102,7 @@ fn escape_does_not_strip_when_the_new_line_is_last_without_a_line_break() {
 
 #[test]
 fn one_undo_restores_the_text_and_every_range_of_a_multi_cursor_session() {
-    let mut sim = run_keys_in("rs", I1, &["j", "C", "o", "x", CMD_ESCAPE]);
+    let mut sim = run_keys_in(Language::Rs, I1, &["j", "C", "o", "x", CMD_ESCAPE]);
     sim.execute_command(CMD_UNDO).unwrap();
     assert_eq!(sim.display().content(), I1);
     assert_eq!(ranges_of(&sim).len(), 2);
@@ -115,7 +116,7 @@ fn one_undo_restores_a_counted_open_and_an_open_whose_indent_was_stripped() {
         &["j", "o", CMD_ESCAPE],
         &["j", "O", CMD_ESCAPE],
     ] {
-        let mut sim = run_keys_in("rs", I1, keys);
+        let mut sim = run_keys_in(Language::Rs, I1, keys);
         assert_ne!(sim.display().content(), I1, "{keys:?}");
         sim.execute_command(CMD_UNDO).unwrap();
         assert_eq!(sim.display().content(), I1, "{keys:?}");

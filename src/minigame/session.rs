@@ -273,11 +273,10 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
         ActiveMiniScenario::elapsed(self)
     }
 
-    fn language(&self) -> &str {
+    fn language(&self) -> crate::helix::Language {
         self.scenario
             .setup
             .language
-            .as_deref()
             .unwrap_or(crate::config::DEFAULT_LANGUAGE)
     }
 
@@ -1341,6 +1340,7 @@ mod tests {
     use super::*;
     use crate::config::Difficulty;
     use crate::game::PlayableScenario;
+    use crate::helix::Language;
     use crate::minigame::{ArcadeConfig, ChallengeConfig, SurvivalConfig};
     use crate::testing::ScenarioBuilder;
     use crate::testing::cid;
@@ -1453,7 +1453,7 @@ mod tests {
             Duration::from_secs(60),
             Arc::new(SystemMonotonicClock),
         );
-        assert_eq!(active.language(), "rs");
+        assert_eq!(active.language(), Language::Rs);
     }
 
     #[test]
@@ -1461,7 +1461,7 @@ mod tests {
         let scenario = ScenarioBuilder::new()
             .id("s1")
             .setup_content("line 1\nline 2\n")
-            .setup_language("py")
+            .setup_language(Language::Py)
             .setup_cursor(1, 0)
             .target_content("line 1\n")
             .target_cursor(1, 0)
@@ -1472,7 +1472,7 @@ mod tests {
             Duration::from_secs(60),
             Arc::new(SystemMonotonicClock),
         );
-        assert_eq!(active.language(), "py");
+        assert_eq!(active.language(), Language::Py);
     }
 
     fn active_with_clock() -> (ActiveMiniScenario, Arc<FakeMonotonicClock>) {

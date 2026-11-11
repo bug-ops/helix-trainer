@@ -567,52 +567,6 @@ pub mod private_fs {
     }
 }
 
-/// Shared serde validators for scenario/quest configuration fields
-pub mod validators {
-    use crate::limits::MAX_LANGUAGE_LENGTH;
-    use serde::Deserialize;
-
-    /// Custom deserialization for `Setup.language` to validate format
-    ///
-    /// Unlike a content id, an explicit empty string is accepted rather than
-    /// rejected: it is a valid "unsupported language" value that the syntax highlighter
-    /// resolves to plain-text rendering rather than a load-time error (see
-    /// `specs/language-aware-syntax-highlighting/spec.md` edge cases). The character set is
-    /// deliberately permissive - real syntect extension tokens include symbols such as
-    /// `"c++"` or `"h++"` - rejecting only control characters, whitespace, and oversized
-    /// values; the value is only ever used as an exact-match lookup key into syntect's
-    /// `SyntaxSet`, never as a path or shell argument, so it carries no injection risk.
-    ///
-    /// # Errors
-    ///
-    /// Returns the deserializer's error, or a custom error if the language exceeds the length
-    /// limit or contains control characters or whitespace.
-    pub fn validate_language_field<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let opt: Option<String> = Option::deserialize(deserializer)?;
-
-        if let Some(ref language) = opt {
-            if language.len() > MAX_LANGUAGE_LENGTH {
-                return Err(serde::de::Error::custom(format!(
-                    "Invalid language: max {MAX_LANGUAGE_LENGTH} characters"
-                )));
-            }
-            if language
-                .chars()
-                .any(|c| c.is_control() || c.is_whitespace())
-            {
-                return Err(serde::de::Error::custom(
-                    "Invalid language: must not contain control characters or whitespace",
-                ));
-            }
-        }
-
-        Ok(opt)
-    }
-}
-
 /// Content sanitization utilities
 pub mod sanitizer {
     use std::path::Path;

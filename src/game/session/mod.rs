@@ -1055,11 +1055,10 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
         S::session_elapsed(self.started_at, self.completed_at, self.clock.now())
     }
 
-    fn language(&self) -> &str {
+    fn language(&self) -> crate::helix::Language {
         self.scenario
             .setup
             .language
-            .as_deref()
             .unwrap_or(crate::config::DEFAULT_LANGUAGE)
     }
 

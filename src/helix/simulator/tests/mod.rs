@@ -37,6 +37,7 @@ mod select_mode_tests;
 mod selection_bounds_tests;
 mod selection_tests;
 
+use crate::helix::Language;
 use crate::helix::simulator::{AnyModeSimulator, EditorSnapshot};
 
 /// Builds a Normal-mode simulator with the cursor at `(row, col)`.
@@ -76,14 +77,21 @@ pub(crate) fn selection_in_bounds(sim: &AnyModeSimulator) -> bool {
 pub(crate) const SCENARIO_14: &str =
     "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";
 
-/// Runs `keys` on a fresh Normal-mode simulator over `text`, unwrapping every command.
+/// Runs `keys` on a fresh Normal-mode simulator over `text` created without a
+/// language (plain rules), unwrapping every command.
 pub(crate) fn run_keys(text: &str, keys: &[&str]) -> AnyModeSimulator {
-    run_keys_in("txt", text, keys)
+    run_on(AnyModeSimulator::new(text.to_string()), keys)
 }
 
 /// Like [`run_keys`] for a document of the given language.
-pub(crate) fn run_keys_in(language: &str, text: &str, keys: &[&str]) -> AnyModeSimulator {
-    let mut sim = AnyModeSimulator::new(text.to_string()).with_language(language);
+pub(crate) fn run_keys_in(language: Language, text: &str, keys: &[&str]) -> AnyModeSimulator {
+    run_on(
+        AnyModeSimulator::new(text.to_string()).with_language(language),
+        keys,
+    )
+}
+
+fn run_on(mut sim: AnyModeSimulator, keys: &[&str]) -> AnyModeSimulator {
     for key in keys {
         sim.execute_command(key)
             .unwrap_or_else(|err| panic!("`{key}` failed: {err}"));
@@ -93,7 +101,17 @@ pub(crate) fn run_keys_in(language: &str, text: &str, keys: &[&str]) -> AnyModeS
 
 /// Content after `keys` and the probe `c @ Escape`, which shows where the
 /// selection a command left behind sits (it is replaced by `@`).
-pub(crate) fn probed(text: &str, language: &str, keys: &[&str]) -> String {
-    let keys: Vec<&str> = keys.iter().copied().chain(["c", "@", "Escape"]).collect();
-    run_keys_in(language, text, &keys).display().content()
+pub(crate) fn probed_in(text: &str, language: Language, keys: &[&str]) -> String {
+    run_keys_in(language, text, &with_probe(keys))
+        .display()
+        .content()
+}
+
+/// [`probed_in`] for a simulator created without a language.
+pub(crate) fn probed(text: &str, keys: &[&str]) -> String {
+    run_keys(text, &with_probe(keys)).display().content()
+}
+
+fn with_probe<'a>(keys: &[&'a str]) -> Vec<&'a str> {
+    keys.iter().copied().chain(["c", "@", "Escape"]).collect()
 }

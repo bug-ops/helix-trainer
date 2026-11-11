@@ -297,11 +297,12 @@ impl NewlineIndent<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::helix::Language;
     use crate::helix::indent::FOUR_SPACES;
 
-    fn below(language: &str, text: &str, line: usize) -> String {
+    fn below(language: Language, text: &str, line: usize) -> String {
         let doc = Rope::from_str(text);
-        let rules = LanguageRules::for_language(language).unwrap();
+        let rules = language.rules();
         let rule = NewlineIndent {
             doc: &doc,
             language: rules,
@@ -313,10 +314,10 @@ mod tests {
 
     #[test]
     fn brackets_inside_strings_and_comments_do_not_open() {
-        assert_eq!(below("rs", "x(\"(\");\n", 0), "");
-        assert_eq!(below("rs", "x = '(';\n", 0), "");
-        assert_eq!(below("rs", "x(1); // f(\n", 0), "");
-        assert_eq!(below("rs", "fn f<'a>(x: &'a u8) {\n}\n", 0), "    ");
+        assert_eq!(below(Language::Rs, "x(\"(\");\n", 0), "");
+        assert_eq!(below(Language::Rs, "x = '(';\n", 0), "");
+        assert_eq!(below(Language::Rs, "x(1); // f(\n", 0), "");
+        assert_eq!(below(Language::Rs, "fn f<'a>(x: &'a u8) {\n}\n", 0), "    ");
     }
 
     #[test]
@@ -324,7 +325,7 @@ mod tests {
         let doc = Rope::from_str("");
         let rule = NewlineIndent {
             doc: &doc,
-            language: &LanguageRules::UNLISTED,
+            language: &LanguageRules::PLAIN,
             unit: FOUR_SPACES,
         };
         assert_eq!(rule.dedent("        "), "    ");
@@ -332,11 +333,11 @@ mod tests {
         assert_eq!(rule.dedent(""), "");
     }
 
-    fn above(language: &str, text: &str, line: usize) -> NewLineStart {
+    fn above(language: Language, text: &str, line: usize) -> NewLineStart {
         let doc = Rope::from_str(text);
         let rule = NewlineIndent {
             doc: &doc,
-            language: LanguageRules::for_language(language).unwrap(),
+            language: language.rules(),
             unit: FOUR_SPACES,
         };
         rule.above(line, CommentContinuation::Continue)
@@ -345,19 +346,19 @@ mod tests {
     #[test]
     fn above_uses_the_previous_line_or_continues_a_comment() {
         let text = "fn f() {\n    a;\n    // c\n}\n";
-        assert_eq!(above("rs", text, 1).text(), "    ");
-        assert_eq!(above("rs", text, 0).text(), "");
-        assert_eq!(above("rs", text, 2).text(), "    // ");
-        assert_eq!(above("rs", text, 3).text(), "    ");
-        assert_eq!(above("md", "  a\n b\n", 1).text(), " ");
+        assert_eq!(above(Language::Rs, text, 1).text(), "    ");
+        assert_eq!(above(Language::Rs, text, 0).text(), "");
+        assert_eq!(above(Language::Rs, text, 2).text(), "    // ");
+        assert_eq!(above(Language::Rs, text, 3).text(), "    ");
+        assert_eq!(above(Language::Md, "  a\n b\n", 1).text(), " ");
     }
 
     #[test]
     fn crlf_line_endings_do_not_change_the_rule() {
-        assert_eq!(below("rs", "fn f() {\r\n}\r\n", 0), "    ");
-        assert_eq!(below("rs", "// c\r\n", 0), "// ");
-        assert_eq!(below("py", "if a:\r\n", 0), "    ");
-        assert_eq!(below("rs", "\tx;\r\n", 0), "\t");
+        assert_eq!(below(Language::Rs, "fn f() {\r\n}\r\n", 0), "    ");
+        assert_eq!(below(Language::Rs, "// c\r\n", 0), "// ");
+        assert_eq!(below(Language::Py, "if a:\r\n", 0), "    ");
+        assert_eq!(below(Language::Rs, "\tx;\r\n", 0), "\t");
     }
 
     #[test]
@@ -365,7 +366,7 @@ mod tests {
         let doc = Rope::from_str("");
         let rule = NewlineIndent {
             doc: &doc,
-            language: &LanguageRules::UNLISTED,
+            language: &LanguageRules::PLAIN,
             unit: IndentUnit::Tab,
         };
         assert_eq!(rule.dedent("\t\t"), "\t");
@@ -377,11 +378,11 @@ mod tests {
         fn rule_never_panics_on_arbitrary_text(
             text in "[ \\t\\r\\n(){}\\[\\]\"'a/#:\\\\]{0,60}",
             line in 0usize..8,
-            language in proptest::sample::select(vec!["rs", "py", "md"]),
+            language in proptest::sample::select(vec![Language::Rs, Language::Py, Language::Md]),
         ) {
             let doc = Rope::from_str(&text);
             let line = line.min(doc.len_lines() - 1);
-            let rules = LanguageRules::for_language(language).unwrap();
+            let rules = language.rules();
             let rule = NewlineIndent { doc: &doc, language: rules, unit: FOUR_SPACES };
             let end = line_end_char_index(&doc.slice(..), line);
             let _ = rule.below(line, end);
@@ -399,6 +400,6 @@ mod tests {
     #[test]
     fn closing_line_is_relative_to_the_line_that_opened_the_bracket() {
         let text = "fn f() {\n    let a = foo(1,\n        2);\n}\n";
-        assert_eq!(below("rs", text, 2), "    ");
+        assert_eq!(below(Language::Rs, text, 2), "    ");
     }
 }

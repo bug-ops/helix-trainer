@@ -29,7 +29,7 @@ mod tests;
 
 use crate::helix::error::SimulatorError;
 use crate::helix::indent::IndentUnit;
-use crate::helix::language::LanguageRules;
+use crate::helix::language::{Language, LanguageRules};
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
 use helix_core::auto_pairs::AutoPairs;
@@ -320,8 +320,8 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
-            language: &LanguageRules::UNLISTED,
-            auto_pairs: AutoPairs::new(LanguageRules::UNLISTED.auto_pairs),
+            language: &LanguageRules::PLAIN,
+            auto_pairs: AutoPairs::new(LanguageRules::PLAIN.auto_pairs),
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -522,11 +522,11 @@ impl AnyModeSimulator {
     /// The indent unit is auto-detected from the current text (as `hx` does)
     /// and falls back to the language table. The language also selects the
     /// comment tokens `J` strips and the bracket/comment rule `o`/`O`/Enter
-    /// use for the new line's indent; a language without a table entry gets
-    /// the default unit, no comment tokens and plain indent copying.
+    /// use for the new line's indent. A simulator never given a language uses
+    /// [`LanguageRules::PLAIN`].
     #[must_use]
-    pub fn with_language(mut self, language: &str) -> Self {
-        let rules = LanguageRules::for_language(language).unwrap_or(&LanguageRules::UNLISTED);
+    pub fn with_language(mut self, language: Language) -> Self {
+        let rules = language.rules();
         match &mut self {
             Self::Normal(sim) => sim.set_language(rules),
             Self::Insert(sim) => sim.set_language(rules),

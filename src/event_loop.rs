@@ -74,9 +74,7 @@ fn apply_data_message(state: &mut AppState, msg: DataLoadMessage) {
 /// Check if mini-game is in countdown state
 fn is_minigame_countdown(state: &AppState) -> bool {
     state
-        .game
-        .minigame_session
-        .as_ref()
+        .minigame_session()
         .map(|s| s.state().is_countdown())
         .unwrap_or(false)
 }
@@ -84,9 +82,7 @@ fn is_minigame_countdown(state: &AppState) -> bool {
 /// Check if mini-game is in playing state
 fn is_minigame_playing(state: &AppState) -> bool {
     state
-        .game
-        .minigame_session
-        .as_ref()
+        .minigame_session()
         .map(|s| s.state().is_playing())
         .unwrap_or(false)
 }
@@ -94,9 +90,7 @@ fn is_minigame_playing(state: &AppState) -> bool {
 /// Check if current mini-game scenario has timed out
 fn is_minigame_timed_out(state: &AppState) -> bool {
     state
-        .game
-        .minigame_session
-        .as_ref()
+        .minigame_session()
         .map(|s| s.is_timed_out())
         .unwrap_or(false)
 }
@@ -110,9 +104,7 @@ fn is_minigame_timed_out(state: &AppState) -> bool {
 /// again on the next scenario.
 fn is_minigame_session_expired(state: &AppState) -> bool {
     state
-        .game
-        .minigame_session
-        .as_ref()
+        .minigame_session()
         .map(|s| {
             let playing_or_transitioning = s.state().is_playing() || s.state().is_transition();
             playing_or_transitioning && s.is_session_expired()
@@ -123,9 +115,7 @@ fn is_minigame_session_expired(state: &AppState) -> bool {
 /// Check if mini-game should auto-advance to next scenario
 fn should_minigame_advance(state: &AppState) -> bool {
     state
-        .game
-        .minigame_session
-        .as_ref()
+        .minigame_session()
         .map(|s| s.should_advance_to_next())
         .unwrap_or(false)
 }

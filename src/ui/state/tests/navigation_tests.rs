@@ -3,6 +3,7 @@
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
+use crate::testing::review_session;
 use crate::ui::state::{Message, NavTarget, TypedScreen, update};
 
 #[test]
@@ -14,7 +15,7 @@ fn test_new_state() {
         panic!("Should be on ModeSelection screen");
     }
     assert!(state.ui.running);
-    assert!(state.game.review_session.is_none());
+    assert!(review_session(&state).is_none());
     assert!(state.game.pending_completed_session.is_none());
 }
 
@@ -36,9 +37,9 @@ fn test_quit_app_awards_minigame_game_over() {
     let mut state = create_test_app_state(vec![scenario]);
 
     update(&mut state, Message::SelectArcadeMode).unwrap();
-    assert!(state.game.minigame_session.is_some());
+    assert!(state.minigame_session().is_some());
 
-    if let Some(ref mut session) = state.game.minigame_session {
+    if let Some(session) = state.minigame_session_mut() {
         session.stats.score = 5000;
     }
     let initial_xp = state.progress.profile.total_xp;
@@ -67,7 +68,7 @@ fn test_quit_app_after_timeout_game_over_does_not_double_award() {
     for _ in 0..3 {
         update(&mut state, Message::MiniGameTick).unwrap();
     }
-    if let Some(ref mut session) = state.game.minigame_session {
+    if let Some(session) = state.minigame_session_mut() {
         session.stats.score = 5000;
     }
 
@@ -78,9 +79,7 @@ fn test_quit_app_after_timeout_game_over_does_not_double_award() {
     }
     assert!(
         state
-            .game
-            .minigame_session
-            .as_ref()
+            .minigame_session()
             .map(|s| s.state().is_game_over())
             .unwrap_or(false)
     );
@@ -110,7 +109,7 @@ fn test_quit_app_zero_score_session_awards_cleanly() {
     let mut state = create_test_app_state(vec![scenario]);
 
     update(&mut state, Message::SelectArcadeMode).unwrap();
-    assert!(state.game.minigame_session.is_some());
+    assert!(state.minigame_session().is_some());
 
     let initial_games_played = state.progress.profile.minigame_games_played;
 
@@ -185,7 +184,7 @@ fn test_quit_app_persists_fsrs_data_from_live_action() {
     state.progress.storage = ProfileStorage::with_path(&profile_path);
 
     update(&mut state, Message::SelectArcadeMode).unwrap();
-    if let Some(ref mut session) = state.game.minigame_session {
+    if let Some(session) = state.minigame_session_mut() {
         session.tick_countdown();
         session.tick_countdown();
         session.tick_countdown();
@@ -194,9 +193,7 @@ fn test_quit_app_persists_fsrs_data_from_live_action() {
     }
     assert_eq!(
         state
-            .game
-            .minigame_session
-            .as_ref()
+            .minigame_session()
             .and_then(|s| s.current_scenario())
             .map(|s| s.action_count()),
         Some(1),

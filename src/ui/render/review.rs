@@ -2,7 +2,7 @@
 
 use crate::helix::commands::CMD_ESCAPE;
 use crate::helix::registry::normal_registry;
-use crate::ui::state::{AppState, ReviewSessionState};
+use crate::ui::state::{AppState, ReviewData, ReviewSessionState};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -20,10 +20,8 @@ fn get_command_description(command: &str) -> &'static str {
 }
 
 /// Render the review session screen
-pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState) {
-    let Some(session) = &state.game.review_session else {
-        return;
-    };
+pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState, data: &ReviewData) {
+    let session = &data.session;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)

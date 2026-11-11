@@ -6,7 +6,7 @@ use crate::constants::difficulty::{
     LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN,
 };
 use crate::game::PlayableScenario;
-use crate::ui::state::{AppState, TypedScreen};
+use crate::ui::state::{AppState, MiniGameData};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -29,17 +29,8 @@ fn mode_title(session: &crate::minigame::MiniGameSession) -> &'static str {
 }
 
 /// Render the mini-game screen
-pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
-    // Extract MiniGameData from TypedScreen::MiniGame
-    let TypedScreen::MiniGame(minigame_data) = &state.screen else {
-        return; // Wrong screen type
-    };
-
-    // Get session reference
-    let Some(ref session) = state.game.minigame_session else {
-        render_no_session(frame);
-        return;
-    };
+pub(super) fn render_minigame(frame: &mut Frame, state: &AppState, minigame_data: &MiniGameData) {
+    let session = &minigame_data.session;
 
     let area = frame.area();
 
@@ -73,22 +64,6 @@ pub(super) fn render_minigame(frame: &mut Frame, state: &AppState) {
     } else if session.state().is_game_over() {
         render_game_over(frame, area, session);
     }
-}
-
-/// Render "no session" error
-fn render_no_session(frame: &mut Frame) {
-    let area = frame.area();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title("ERROR")
-        .border_style(Style::default().fg(Color::Red));
-
-    let text = Paragraph::new("No mini-game session active. Press Esc to return.")
-        .style(Style::default().fg(Color::Red))
-        .alignment(Alignment::Center)
-        .block(block);
-
-    frame.render_widget(text, area);
 }
 
 /// Render countdown screen (3, 2, 1, GO!)
@@ -588,22 +563,11 @@ mod tests {
             .build()
     }
 
-    #[test]
-    fn test_render_minigame_no_session() {
-        let backend = TestBackend::new(80, 24);
-        let mut terminal = Terminal::new(backend).unwrap();
-
-        let mut state = AppState::new(
-            vec![],
-            UserProfile::new(),
-            ProfileStorage::for_test(),
-            PerformanceTracker::new(),
-        );
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
-        // No session - should render error
-
-        let result = terminal.draw(|f| render_minigame(f, &state));
-        assert!(result.is_ok());
+    fn render_current_minigame(f: &mut ratatui::Frame, state: &AppState) {
+        let TypedScreen::MiniGame(data) = &state.screen else {
+            panic!("expected the mini-game screen");
+        };
+        render_minigame(f, state, data);
     }
 
     #[test]
@@ -621,10 +585,9 @@ mod tests {
             ProfileStorage::for_test(),
             PerformanceTracker::new(),
         );
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
-        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
-        let result = terminal.draw(|f| render_minigame(f, &state));
+        let result = terminal.draw(|f| render_current_minigame(f, &state));
         assert!(result.is_ok());
     }
 
@@ -649,7 +612,7 @@ mod tests {
             ProfileStorage::for_test(),
             PerformanceTracker::new(),
         );
-        let mut minigame_data = MiniGameData::default();
+        let mut minigame_data = MiniGameData::new(session);
         minigame_data
             .input_state
             .process_key(crossterm::event::KeyEvent::new(
@@ -658,12 +621,11 @@ mod tests {
             ));
         assert_eq!(minigame_data.input_state.pending_command_line(), Some(""));
         state.screen = TypedScreen::MiniGame(minigame_data);
-        state.game.minigame_session = Some(session);
 
         // Regression: must not panic when a command-line/register pending
         // state is live during Arcade rendering, and must actually render
         // the indicator text somewhere in the frame.
-        let result = terminal.draw(|f| render_minigame(f, &state));
+        let result = terminal.draw(|f| render_current_minigame(f, &state));
         assert!(result.is_ok());
 
         let buffer: &Buffer = terminal.backend().buffer();
@@ -695,7 +657,7 @@ mod tests {
             session.tick_countdown();
             assert!(session.state().is_playing());
 
-            let mut minigame_data = MiniGameData::default();
+            let mut minigame_data = crate::testing::started_minigame_data();
             if wide_history {
                 for key in ["regex-pattern", "Space", "⌫", "↵", "Esc"] {
                     minigame_data.key_history.push(key.to_string());
@@ -860,25 +822,5 @@ mod tests {
             rendered.contains("COMBO") && rendered.contains("STREAK") && rendered.contains("BEST"),
             "expected second stats line (COMBO/STREAK/BEST) to be visible in the rendered frame, not clipped by the bordered stats block"
         );
-    }
-
-    #[test]
-    fn test_render_minigame_wrong_screen() {
-        use crate::ui::state::MenuData;
-
-        let backend = TestBackend::new(80, 24);
-        let mut terminal = Terminal::new(backend).unwrap();
-
-        let mut state = AppState::new(
-            vec![],
-            UserProfile::new(),
-            ProfileStorage::for_test(),
-            PerformanceTracker::new(),
-        );
-        state.screen = TypedScreen::Menu(MenuData::default());
-
-        // Should not panic when called with wrong screen
-        let result = terminal.draw(|f| render_minigame(f, &state));
-        assert!(result.is_ok());
     }
 }

@@ -9,6 +9,7 @@ use crate::config::ScenarioCategory;
 use crate::game::{Abandoned, Active, Completed, Feedback, GameSession};
 use crate::input::typestate::InputStateMachine;
 use crate::learning::ScenarioMastery;
+use crate::minigame::MiniGameSession;
 use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
 
 /// Maximum number of keys to keep in history
@@ -118,6 +119,73 @@ impl TypedScreen {
             Self::Review(_) => "Review",
             Self::MiniGame(_) => "MiniGame",
             Self::EndGameSummary(_) => "EndGameSummary",
+        }
+    }
+
+    /// The arcade run this screen owns: the mini-game screen itself, or the detour screen
+    /// (profile, statistics, achievements, category filters) opened from a paused run.
+    pub fn minigame_data(&self) -> Option<&MiniGameData> {
+        match self {
+            Self::MiniGame(data) => Some(data),
+            Self::Profile(ProfileData { return_to })
+            | Self::Statistics(StatisticsData { return_to })
+            | Self::Achievements(AchievementsData { return_to, .. })
+            | Self::CategoryFilters(CategoryFiltersData { return_to, .. }) => match return_to {
+                ReturnDestination::PausedMiniGame(data) => Some(data),
+                ReturnDestination::Menu => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Return destination for a detour screen opened from the current one.
+    ///
+    /// A paused arcade run is detached from the mini-game screen, or handed on from another
+    /// detour screen, so the new detour screen owns it until the user returns; from any other
+    /// screen the destination is the menu. The caller must replace `self` with the detour screen
+    /// right after.
+    pub fn detour_return_destination(&mut self) -> ReturnDestination {
+        if let Some(destination) = self.take_return_destination() {
+            return destination;
+        }
+        match std::mem::replace(self, Self::Menu(MenuData::default())) {
+            Self::MiniGame(data) if data.session.state().is_paused() => {
+                ReturnDestination::PausedMiniGame(Box::new(data))
+            }
+            other => {
+                *self = other;
+                ReturnDestination::Menu
+            }
+        }
+    }
+
+    /// Take the return destination out of a detour screen, leaving the menu in its place.
+    ///
+    /// `None` when the current screen is not a detour screen.
+    pub fn take_return_destination(&mut self) -> Option<ReturnDestination> {
+        match self {
+            Self::Profile(ProfileData { return_to })
+            | Self::Statistics(StatisticsData { return_to })
+            | Self::Achievements(AchievementsData { return_to, .. })
+            | Self::CategoryFilters(CategoryFiltersData { return_to, .. }) => {
+                Some(std::mem::take(return_to))
+            }
+            _ => None,
+        }
+    }
+
+    /// Mutable counterpart of [`TypedScreen::minigame_data`].
+    pub fn minigame_data_mut(&mut self) -> Option<&mut MiniGameData> {
+        match self {
+            Self::MiniGame(data) => Some(data),
+            Self::Profile(ProfileData { return_to })
+            | Self::Statistics(StatisticsData { return_to })
+            | Self::Achievements(AchievementsData { return_to, .. })
+            | Self::CategoryFilters(CategoryFiltersData { return_to, .. }) => match return_to {
+                ReturnDestination::PausedMiniGame(data) => Some(data),
+                ReturnDestination::Menu => None,
+            },
+            _ => None,
         }
     }
 }
@@ -317,31 +385,38 @@ impl CompletedOrAbandoned {
 }
 
 /// Return destination when navigating back from profile/statistics screens
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Default)]
 pub enum ReturnDestination {
     /// Return to main menu (default)
     #[default]
     Menu,
-    /// Return to paused mini-game
-    PausedMiniGame,
+    /// Return to the paused mini-game, which stays owned here while the detour screen is shown
+    PausedMiniGame(Box<MiniGameData>),
+}
+
+impl ReturnDestination {
+    /// Whether this detour was entered from a paused mini-game
+    pub fn is_paused_minigame(&self) -> bool {
+        matches!(self, Self::PausedMiniGame(_))
+    }
 }
 
 /// Data required for profile screen
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct ProfileData {
     /// Where to return when pressing Esc/back
     pub return_to: ReturnDestination,
 }
 
 /// Data required for statistics screen
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct StatisticsData {
     /// Where to return when pressing Esc/back
     pub return_to: ReturnDestination,
 }
 
 /// Data required for achievements screen
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct AchievementsData {
     /// Where to return when pressing Esc/back
     pub return_to: ReturnDestination,
@@ -352,7 +427,7 @@ pub struct AchievementsData {
 }
 
 /// Data required for category filters screen
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct CategoryFiltersData {
     /// Index of currently selected category (0-indexed)
     pub selected_index: usize,
@@ -515,8 +590,11 @@ impl MiniGameModeSelection {
 }
 
 /// Data required for mini-game screen
-#[derive(Debug, Clone, Default)]
+///
+/// Owns the arcade session, so the mini-game screen cannot exist without one.
 pub struct MiniGameData {
+    /// The running arcade session (boxed to keep `TypedScreen` variants small)
+    pub session: Box<MiniGameSession>,
     /// Typestate-based input state machine for multi-key commands
     ///
     /// Replaces the old `command_buffer: String` with a compile-time safe
@@ -526,11 +604,28 @@ pub struct MiniGameData {
     pub last_xp_earned: Option<u64>,
     /// History of recent keypresses (shared KeyHistory struct)
     pub key_history: KeyHistory,
-    /// Current game mode (for display purposes)
-    pub mode: Option<crate::minigame::MiniGameMode>,
+}
+
+impl std::fmt::Debug for MiniGameData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MiniGameData")
+            .field("input_state", &self.input_state)
+            .field("last_xp_earned", &self.last_xp_earned)
+            .finish_non_exhaustive()
+    }
 }
 
 impl MiniGameData {
+    /// Wrap a freshly created session with empty input and key history
+    pub fn new(session: MiniGameSession) -> Self {
+        Self {
+            session: Box::new(session),
+            input_state: InputStateMachine::new(),
+            last_xp_earned: None,
+            key_history: KeyHistory::new(),
+        }
+    }
+
     /// Add a key to the history (keeps last 5)
     pub fn add_key_to_history(&mut self, key: String) {
         self.key_history.push(key);
@@ -915,17 +1010,17 @@ mod tests {
     fn test_category_filters_data_default() {
         let data = CategoryFiltersData::default();
         assert_eq!(data.selected_index, 0);
-        assert_eq!(data.return_to, ReturnDestination::Menu);
+        assert!(matches!(data.return_to, ReturnDestination::Menu));
     }
 
     #[test]
     fn test_category_filters_data_with_values() {
         let data = CategoryFiltersData {
             selected_index: 5,
-            return_to: ReturnDestination::PausedMiniGame,
+            return_to: crate::testing::paused_minigame_return(),
         };
         assert_eq!(data.selected_index, 5);
-        assert_eq!(data.return_to, ReturnDestination::PausedMiniGame);
+        assert!(data.return_to.is_paused_minigame());
     }
 
     #[test]

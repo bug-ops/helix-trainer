@@ -323,7 +323,14 @@ impl AppState {
     /// so callers do not reach through `state.game` field by field.
     #[must_use]
     pub fn minigame_session(&self) -> Option<&crate::minigame::MiniGameSession> {
-        self.game.minigame_session.as_ref()
+        self.screen.minigame_data().map(|data| &*data.session)
+    }
+
+    /// Mutable counterpart of [`AppState::minigame_session`].
+    pub fn minigame_session_mut(&mut self) -> Option<&mut crate::minigame::MiniGameSession> {
+        self.screen
+            .minigame_data_mut()
+            .map(|data| &mut *data.session)
     }
 
     /// Create a new application state with the given scenarios
@@ -561,15 +568,13 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
             Ok(())
         }
         Message::BackToMenu => {
-            // Need to access current screen before creating context
-            let current_screen_ref = &state.screen;
             let mut ctx = HandlerContext::new(
                 &mut state.ui,
                 &mut state.game,
                 &mut state.progress,
                 &state.config,
             );
-            let outcome = handlers::handle_back_to_menu(current_screen_ref, &mut ctx)?;
+            let outcome = handlers::handle_back_to_menu(&mut state.screen, &mut ctx)?;
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -601,37 +606,13 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
         // Mini-game messages
         Message::PauseMiniGame => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_pause_minigame(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
+            extract_screen!(state, MiniGame, data => handlers::handle_pause_minigame(data))
         }
         Message::ResumeMiniGame => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_resume_minigame(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
+            extract_screen!(state, MiniGame, data => handlers::handle_resume_minigame(data))
         }
         Message::MiniGameTick => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_minigame_tick(&mut ctx)?;
-            apply_outcome(state, outcome);
-            Ok(())
+            extract_screen!(state, MiniGame, mut data, ctx => handlers::handle_minigame_tick(data, &mut ctx))
         }
         Message::MiniGameCommand { keys, typed } => {
             handlers::handle_minigame_command(state, keys, typed)
@@ -792,35 +773,17 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
         // Profile messages
         Message::ShowProfile => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_show_profile(&mut ctx)?;
+            let outcome = handlers::handle_show_profile(&mut state.screen)?;
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::ShowStatistics => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_show_statistics(&mut ctx)?;
+            let outcome = handlers::handle_show_statistics(&mut state.screen)?;
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::ShowAchievements => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_show_achievements(&mut ctx)?;
+            let outcome = handlers::handle_show_achievements(&mut state.screen)?;
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -846,13 +809,7 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
 
         // Category filters screen messages
         Message::ShowCategoryFilters => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_show_category_filters(&mut ctx)?;
+            let outcome = handlers::handle_show_category_filters(&mut state.screen)?;
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -886,19 +843,15 @@ pub fn update(state: &mut AppState, msg: Message) -> Result<(), UserError> {
                 &state.config,
             );
             let outcome = handlers::handle_start_review_session(&mut ctx)?;
+            if outcome.is_transition() && state.minigame_session().is_some() {
+                // Starting a review leaves a paused arcade run behind for good
+                handlers::handle_minigame_game_over(state)?;
+            }
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::CompleteReviewCommand { success } => {
-            let mut ctx = HandlerContext::new(
-                &mut state.ui,
-                &mut state.game,
-                &mut state.progress,
-                &state.config,
-            );
-            let outcome = handlers::handle_complete_review_command(&mut ctx, success)?;
-            apply_outcome(state, outcome);
-            Ok(())
+            extract_screen!(state, Review, mut data, ctx => handlers::handle_complete_review_command(data, &mut ctx, success))
         }
         Message::AbandonReviewSession => {
             let mut ctx = HandlerContext::new(

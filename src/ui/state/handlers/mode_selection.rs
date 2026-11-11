@@ -96,17 +96,29 @@ pub(in crate::ui::state) fn handle_select_training_mode(
 
 /// Handle selecting Arcade Mode
 ///
-/// Transitions to the mini-game screen with FSRS-weighted scenario selection.
+/// Transitions to the mini-game screen with FSRS-weighted scenario selection, or stays with a
+/// notification when no scenario matches the active filters.
 pub(in crate::ui::state) fn handle_select_arcade_mode(
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    // Use shared session creation with FSRS tracker for weighted selection
-    super::minigame::create_minigame_session(ctx.game, Some(&ctx.progress.performance_tracker));
+    let Some(session) =
+        super::minigame::create_minigame_session(ctx.game, Some(&ctx.progress.performance_tracker))
+    else {
+        notify_no_scenarios(ctx.ui);
+        return Ok(HandlerOutcome::Stay);
+    };
     ctx.ui.show_key_history = false;
 
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
-        MiniGameData::default(),
+        MiniGameData::new(session),
     ))))
+}
+
+fn notify_no_scenarios(ui: &mut crate::ui::state::UIState) {
+    ui.notifications
+        .push(Notification::new(NotificationType::Info {
+            message: t!("minigame.no_scenarios_available").to_string(),
+        }));
 }
 
 /// Handle launching a specific mini-game mode
@@ -138,7 +150,7 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
         .collect();
 
     if scenarios.is_empty() {
-        tracing::warn!("No scenarios available for mini-game");
+        notify_no_scenarios(ctx.ui);
         return Ok(HandlerOutcome::Stay);
     }
 
@@ -156,26 +168,16 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
         }
     }
 
-    // Clone mode for MiniGameData
-    let mode_for_data = mode.clone();
-
     // Clone tracker for session's internal weighted selection
     let tracker_clone = Some(ctx.progress.performance_tracker.clone());
 
     // Create session with the selected mode
     let mut session = MiniGameSession::with_mode(Arc::new(scenarios), tracker_clone, mode);
     session.start(); // Begin countdown
-    ctx.game.minigame_session = Some(session);
     ctx.ui.show_key_history = false;
 
-    // Create MiniGameData with mode info
-    let minigame_data = MiniGameData {
-        mode: Some(mode_for_data),
-        ..MiniGameData::default()
-    };
-
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::MiniGame(
-        minigame_data,
+        MiniGameData::new(session),
     ))))
 }
 
@@ -293,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_select_arcade_mode() {
-        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
         let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
@@ -305,10 +307,24 @@ mod tests {
     }
 
     #[test]
+    fn test_select_arcade_mode_without_scenarios_stays_and_notifies() {
+        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
+
+        let outcome = handle_select_arcade_mode(&mut ctx).unwrap();
+
+        assert!(outcome.is_stay());
+        assert_eq!(
+            ctx.ui.notifications.visible()[0].message(),
+            rust_i18n::t!("minigame.no_scenarios_available").to_string()
+        );
+    }
+
+    #[test]
     fn test_select_arcade_mode_hides_key_history() {
         // Regression test for S1: the handler must reset the flag itself rather than
         // relying on a caller to do it.
-        let (mut ui, mut game, mut progress, config) = create_test_context();
+        let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
         ui.show_key_history = true;
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
@@ -438,20 +454,14 @@ mod tests {
             crate::minigame::MiniGameMode::Survival(crate::minigame::SurvivalConfig::default());
         let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
 
-        assert!(outcome.is_transition());
-        if let HandlerOutcome::Transition(screen) = outcome {
-            assert_matches!(*screen, TypedScreen::MiniGame(_));
-            if let TypedScreen::MiniGame(data) = *screen {
-                assert!(data.mode.as_ref().map(|m| m.is_survival()).unwrap_or(false));
-            }
-        }
-
-        // Verify session is created with 1 life
-        assert!(ctx.game.minigame_session.is_some());
-        assert_eq!(
-            ctx.game.minigame_session.as_ref().unwrap().stats().lives(),
-            1
-        );
+        let HandlerOutcome::Transition(screen) = outcome else {
+            panic!("expected a transition to the mini-game screen");
+        };
+        let TypedScreen::MiniGame(data) = *screen else {
+            panic!("expected the mini-game screen");
+        };
+        assert!(data.session.mode().is_survival());
+        assert_eq!(data.session.stats().lives(), 1);
     }
 
     #[test]
@@ -464,17 +474,13 @@ mod tests {
         );
         let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
 
-        assert!(outcome.is_transition());
-        if let HandlerOutcome::Transition(screen) = outcome {
-            assert_matches!(*screen, TypedScreen::MiniGame(_));
-        }
-
-        // Verify session is created with 3 lives
-        assert!(ctx.game.minigame_session.is_some());
-        assert_eq!(
-            ctx.game.minigame_session.as_ref().unwrap().stats().lives(),
-            3
-        );
+        let HandlerOutcome::Transition(screen) = outcome else {
+            panic!("expected a transition to the mini-game screen");
+        };
+        let TypedScreen::MiniGame(data) = *screen else {
+            panic!("expected the mini-game screen");
+        };
+        assert_eq!(data.session.stats().lives(), 3);
     }
 
     #[test]
@@ -492,13 +498,11 @@ mod tests {
         for _ in 0..CHALLENGE_MAX_ATTEMPTS {
             let outcome = handle_launch_minigame_mode(&mut ctx, mode.clone()).unwrap();
             assert!(outcome.is_transition());
-            ctx.game.minigame_session = None; // simulate returning to mode selection
         }
 
         // One more attempt beyond the cap must be rejected.
         let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
         assert!(outcome.is_stay());
-        assert!(ctx.game.minigame_session.is_none());
         assert_eq!(
             ctx.progress.profile.challenge_progress.attempts_used_today,
             CHALLENGE_MAX_ATTEMPTS
@@ -539,7 +543,6 @@ mod tests {
         );
         for _ in 0..CHALLENGE_MAX_ATTEMPTS {
             handle_launch_minigame_mode(&mut ctx, challenge_mode.clone()).unwrap();
-            ctx.game.minigame_session = None;
         }
         assert!(!ctx.progress.profile.challenge_progress.can_attempt(today));
 
@@ -548,7 +551,6 @@ mod tests {
         let outcome = handle_launch_minigame_mode(&mut ctx, survival_mode).unwrap();
 
         assert!(outcome.is_transition());
-        assert!(ctx.game.minigame_session.is_some());
     }
 
     /// Regression test for critique S1: an attempt must not be consumed when
@@ -572,7 +574,6 @@ mod tests {
         let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
 
         assert!(outcome.is_stay());
-        assert!(ctx.game.minigame_session.is_none());
         assert!(
             !profile_path.exists(),
             "no save should be triggered when the launch never consumes an attempt"
@@ -622,7 +623,6 @@ mod tests {
             );
             for _ in 0..CHALLENGE_MAX_ATTEMPTS {
                 handle_launch_minigame_mode(&mut ctx, mode.clone()).unwrap();
-                ctx.game.minigame_session = None;
             }
             let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
             assert!(outcome.is_stay());
@@ -658,9 +658,9 @@ mod tests {
         let mode = crate::minigame::MiniGameMode::default();
         let outcome = handle_launch_minigame_mode(&mut ctx, mode).unwrap();
 
-        // Should stay on screen when no scenarios available
+        // Should stay on screen and explain why when no scenarios are available
         assert!(outcome.is_stay());
-        assert!(ctx.game.minigame_session.is_none());
+        assert_eq!(ctx.ui.notifications.count(), 1);
     }
 
     // CR-017: Test invalid selection index returns Stay

@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 
-use super::{QuestProgressChange, ReviewSessionState, XPBreakdown};
+use super::{QuestProgressChange, XPBreakdown};
 use crate::ui::notification::NotificationQueue;
 
 /// UI rendering and display state
@@ -110,14 +110,8 @@ pub struct GameState {
     /// All available scenarios with filtering and sorting
     pub scenario_collection: ScenarioCollection,
 
-    /// Active review session (Some if reviewing)
-    pub review_session: Option<ReviewSessionState>,
-
     /// Completed session pending transition to results screen
     pub pending_completed_session: Option<GameSession<crate::game::session::Completed>>,
-
-    /// Active mini-game session (Arcade Mode)
-    pub minigame_session: Option<crate::minigame::MiniGameSession>,
 }
 
 impl GameState {
@@ -125,20 +119,8 @@ impl GameState {
     pub fn new(scenarios: Vec<crate::config::Scenario>) -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(scenarios),
-            review_session: None,
             pending_completed_session: None,
-            minigame_session: None,
         }
-    }
-
-    /// Check if in review session
-    pub fn is_reviewing(&self) -> bool {
-        self.review_session.is_some()
-    }
-
-    /// Check if playing mini-game
-    pub fn is_playing_minigame(&self) -> bool {
-        self.minigame_session.is_some()
     }
 }
 
@@ -146,9 +128,7 @@ impl Default for GameState {
     fn default() -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(vec![]),
-            review_session: None,
             pending_completed_session: None,
-            minigame_session: None,
         }
     }
 }
@@ -157,12 +137,10 @@ impl std::fmt::Debug for GameState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GameState")
             .field("scenario_count", &self.scenario_collection.count())
-            .field("review_session", &self.review_session.is_some())
             .field(
                 "pending_completed_session",
                 &self.pending_completed_session.is_some(),
             )
-            .field("minigame_session", &self.minigame_session.is_some())
             .finish()
     }
 }
@@ -797,16 +775,7 @@ mod tests {
     fn test_game_state_default() {
         let game = GameState::default();
         assert_eq!(game.scenario_collection.count(), 0);
-        assert!(game.review_session.is_none());
         assert!(game.pending_completed_session.is_none());
-        assert!(game.minigame_session.is_none());
-    }
-
-    #[test]
-    fn test_game_state_is_reviewing() {
-        let game = GameState::default();
-        assert!(!game.is_reviewing());
-        // Note: Testing with actual review session requires ReviewSessionState setup
     }
 
     #[test]

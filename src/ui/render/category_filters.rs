@@ -493,9 +493,19 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let mut state = create_test_state_with_categories();
+        let mut session = crate::minigame::MiniGameSession::new(
+            std::sync::Arc::new(vec![create_test_scenario_with_category(
+                "s1",
+                ScenarioCategory::Movement,
+            )]),
+            None,
+        );
+        session.start();
         state.screen = TypedScreen::CategoryFilters(CategoryFiltersData {
             selected_index: 0,
-            return_to: crate::ui::state::ReturnDestination::PausedMiniGame,
+            return_to: crate::ui::state::ReturnDestination::PausedMiniGame(Box::new(
+                crate::ui::state::MiniGameData::new(session),
+            )),
         });
 
         let result = terminal.draw(|f| render_category_filters(f, &state));

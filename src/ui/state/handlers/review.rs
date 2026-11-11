@@ -42,7 +42,6 @@ pub fn handle_start_review_session(
         completed_reviews: Vec::new(),
     };
 
-    ctx.game.review_session = Some(review_session.clone());
     Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Review(
         ReviewData::new(review_session),
     ))))
@@ -55,12 +54,12 @@ pub fn handle_start_review_session(
 /// Note: This handler mutates review session data and then delegates to
 /// handle_next_review_command for screen transitions
 pub fn handle_complete_review_command(
+    data: &mut ReviewData,
     ctx: &mut HandlerContext<'_>,
     success: bool,
 ) -> Result<HandlerOutcome, UserError> {
-    if let Some(session) = &mut ctx.game.review_session
-        && let Some(command) = &session.current_command
-    {
+    let session = &mut data.session;
+    if let Some(command) = &session.current_command {
         let duration = session.session_started_at.elapsed();
 
         // Record result
@@ -82,62 +81,59 @@ pub fn handle_complete_review_command(
     }
 
     // Delegate to next review handler for screen transition logic
-    handle_next_review_command(ctx)
+    handle_next_review_command(data, ctx)
 }
 
 /// Handle NextReviewCommand message
 ///
 /// Advances to next review command or completes session
-pub fn handle_next_review_command(
+fn handle_next_review_command(
+    data: &mut ReviewData,
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    if let Some(session) = &mut ctx.game.review_session {
-        session.current_index += 1;
+    let session = &mut data.session;
+    session.current_index += 1;
 
-        if session.current_index >= session.due_commands.len() {
-            // Session complete - show summary and award XP
-            let completed = session.completed_reviews.len();
-            let success_count = session
-                .completed_reviews
-                .iter()
-                .filter(|r| r.success)
-                .count();
-            let xp = XPCalculator::review_session_xp(completed, success_count);
-            let leveled_up = ctx.progress.profile.add_xp(xp);
-            let new_level = ctx.progress.profile.level;
+    if session.current_index >= session.due_commands.len() {
+        // Session complete - show summary and award XP
+        let completed = session.completed_reviews.len();
+        let success_count = session
+            .completed_reviews
+            .iter()
+            .filter(|r| r.success)
+            .count();
+        let xp = XPCalculator::review_session_xp(completed, success_count);
+        let leveled_up = ctx.progress.profile.add_xp(xp);
+        let new_level = ctx.progress.profile.level;
 
-            // Show session summary notification
+        // Show session summary notification
+        ctx.ui
+            .notifications
+            .push(Notification::new(NotificationType::ReviewSessionComplete {
+                completed,
+                success_count,
+                xp_earned: xp,
+            }));
+
+        if leveled_up {
             ctx.ui
                 .notifications
-                .push(Notification::new(NotificationType::ReviewSessionComplete {
-                    completed,
-                    success_count,
-                    xp_earned: xp,
-                }));
-
-            if leveled_up {
-                ctx.ui
-                    .notifications
-                    .push(Notification::new(NotificationType::LevelUp { new_level }));
-            }
-
-            // Clear review session
-            ctx.game.review_session = None;
-
-            // Persist FSRS state and profile now that the review session has ended
-            // (non-fatal error - log but continue, matches handle_minigame_game_over's policy)
-            if let Err(e) = ctx.progress.save_immediate() {
-                tracing::error!("Failed to save profile after review session: {:?}", e);
-            }
-
-            // Return to menu
-            return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-                MenuData::default(),
-            ))));
-        } else {
-            // Move to next command
-            session.current_command = session.due_commands.get(session.current_index).cloned();
+                .push(Notification::new(NotificationType::LevelUp { new_level }));
         }
+
+        // Persist FSRS state and profile now that the review session has ended
+        // (non-fatal error - log but continue, matches handle_minigame_game_over's policy)
+        if let Err(e) = ctx.progress.save_immediate() {
+            tracing::error!("Failed to save profile after review session: {:?}", e);
+        }
+
+        // Return to menu
+        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
+            MenuData::default(),
+        ))));
+    } else {
+        // Move to next command
+        session.current_command = session.due_commands.get(session.current_index).cloned();
     }
     Ok(HandlerOutcome::Stay)
 }
@@ -148,8 +144,6 @@ pub fn handle_next_review_command(
 pub fn handle_abandon_review_session(
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
-    ctx.game.review_session = None;
-
     // Persist attempts already recorded so far - abandoning mid-session (e.g. Esc)
     // is the likelier interrupted-user path, so it should flush just like completion does
     if let Err(e) = ctx.progress.save_immediate() {

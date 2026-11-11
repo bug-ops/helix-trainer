@@ -99,3 +99,4 @@ fingerprint_mismatch = "Review history was recorded under a different keymap"
 
 [minigame]
 challenge_no_attempts_left = "Daily Challenge: no attempts remaining today. Come back tomorrow!"
+no_scenarios_available = "No scenarios match the current filters. Adjust the filters and try again."

@@ -136,22 +136,10 @@ pub fn handle_menu_select(
         super::review::handle_start_review_session(&mut ctx)
     } else if selected == scenario_count + 1 {
         // View Profile (index = scenario_count + 1)
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-        super::profile::handle_show_profile(&mut ctx)
+        super::profile::handle_show_profile(&mut state.screen)
     } else if selected == scenario_count + 2 {
         // Statistics (index = scenario_count + 2)
-        let mut ctx = HandlerContext::new(
-            &mut state.ui,
-            &mut state.game,
-            &mut state.progress,
-            &state.config,
-        );
-        super::profile::handle_show_statistics(&mut ctx)
+        super::profile::handle_show_statistics(&mut state.screen)
     } else if selected == scenario_count + 3 {
         // Quit (index = scenario_count + 3). Routes through `handle_quit_app`
         // (not a direct `state.ui.running = false`) so a live paused arcade

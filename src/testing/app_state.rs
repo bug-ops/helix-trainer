@@ -5,9 +5,14 @@
 use crate::config::Scenario;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
+use crate::minigame::MiniGameSession;
 use crate::security::UserError;
+use crate::testing::default_test_scenario;
 use crate::time::Clock;
-use crate::ui::state::{AppState, ConfigState, MenuData, Message, TypedScreen, update};
+use crate::ui::state::{
+    AppState, ConfigState, MenuData, Message, MiniGameData, ReturnDestination, ReviewSessionState,
+    TypedScreen, update,
+};
 use std::sync::Arc;
 
 /// Create a test AppState with no scenarios
@@ -128,6 +133,31 @@ pub fn start_scenario_from_menu(state: &mut AppState, index: usize) -> Result<()
         ..MenuData::default()
     });
     update(state, Message::MenuSelect)
+}
+
+/// The review session currently on screen, if the state is on the review screen.
+pub fn review_session(state: &AppState) -> Option<&ReviewSessionState> {
+    match &state.screen {
+        TypedScreen::Review(data) => Some(&data.session),
+        _ => None,
+    }
+}
+
+/// A mini-game screen payload around a freshly started session over the default test scenario.
+pub fn started_minigame_data() -> MiniGameData {
+    let mut session = MiniGameSession::new(Arc::new(vec![default_test_scenario()]), None);
+    session.start();
+    MiniGameData::new(session)
+}
+
+/// Return destination of a detour screen opened from a paused arcade run.
+pub fn paused_minigame_return() -> ReturnDestination {
+    let mut data = started_minigame_data();
+    for _ in 0..3 {
+        data.session.tick_countdown();
+    }
+    data.session.pause();
+    ReturnDestination::PausedMiniGame(Box::new(data))
 }
 
 #[cfg(test)]

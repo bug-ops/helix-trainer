@@ -27,8 +27,8 @@ pub mod scenario;
 
 // Re-export commonly used items
 pub use app_state::{
-    TestAppStateBuilder, empty_test_app_state, start_scenario_from_menu,
-    test_app_state_with_scenarios,
+    TestAppStateBuilder, empty_test_app_state, paused_minigame_return, review_session,
+    start_scenario_from_menu, started_minigame_data, test_app_state_with_scenarios,
 };
 pub use scenario::{
     ScenarioBuilder, default_test_scenario, test_scenario_with_difficulty, test_scenario_with_id,

@@ -1330,6 +1330,7 @@ mod tests {
         use crate::config::Difficulty;
         use crate::minigame::MiniGameSession;
         use crate::testing::ScenarioBuilder;
+        use crate::ui::state::MiniGameData;
         use std::sync::Arc;
 
         let mut state = create_test_app_state();
@@ -1353,7 +1354,7 @@ mod tests {
         session.pause();
 
         // Set the session in game state
-        state.game.minigame_session = Some(session);
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         // Test that 'M' key returns ToggleSound when paused
         let key = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::NONE);
@@ -1911,8 +1912,7 @@ mod tests {
             session.tick_countdown();
             assert!(session.state().is_playing());
 
-            state.game.minigame_session = Some(session);
-            state.screen = TypedScreen::MiniGame(MiniGameData::default());
+            state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
             state
         }
 

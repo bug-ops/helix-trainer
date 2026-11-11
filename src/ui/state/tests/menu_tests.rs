@@ -114,50 +114,53 @@ fn test_menu_select_quit() {
     assert!(!state.ui.running);
 }
 
-/// Regression test for #324 (impl-critic finding S1): `ui.running` has a
-/// second writer besides `QuitApp` - the main-menu "Quit" item - which
-/// previously set it directly and skipped arcade game-over bookkeeping. A
-/// live arcade session reaches this menu without ever passing through
-/// `QuitApp`: pausing arcade and then abandoning a review session (started
-/// as a detour, e.g. via `p` -> Profile -> `r`) unconditionally lands on
-/// `TypedScreen::Menu` without touching `game.minigame_session`. Selecting
-/// Quit from there must still award that session's XP/score.
+fn pause_arcade_with_score(state: &mut crate::ui::state::AppState, score: u64) {
+    update(state, Message::SelectArcadeMode).unwrap();
+    let session = state.minigame_session_mut().unwrap();
+    for _ in 0..3 {
+        session.tick_countdown();
+    }
+    session.stats.score = score;
+    update(state, Message::PauseMiniGame).unwrap();
+}
+
+/// Regression test for #324: quitting while an arcade run is parked behind a detour screen
+/// (here Profile) must still award the run's XP and score. The detour screen owns the run
+/// (#461), so `QuitApp` finds it through the screen.
 #[test]
-fn test_menu_select_quit_awards_live_minigame_session_reached_via_review_detour() {
+fn test_quit_awards_paused_arcade_session_parked_behind_detour_screen() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
+    pause_arcade_with_score(&mut state, 7777);
 
-    update(&mut state, Message::SelectArcadeMode).unwrap();
-    assert!(state.game.minigame_session.is_some());
-    if let Some(ref mut session) = state.game.minigame_session {
-        session.stats.score = 7777;
-    }
-
-    // Abandoning a review session unconditionally lands on Menu, regardless
-    // of whether a review was actually in progress, and never touches
-    // `minigame_session` - reproducing the menu-Quit-reachable-with-a-live-
-    // session path without needing due reviews to be seeded.
-    update(&mut state, Message::AbandonReviewSession).unwrap();
-    assert_matches!(state.screen, TypedScreen::Menu(_));
-    assert!(
-        state.game.minigame_session.is_some(),
-        "the paused arcade session must still be live once the Menu screen is reached"
-    );
-
-    let scenario_count = state.game.scenario_collection.count();
-    if let TypedScreen::Menu(menu_data) = &mut state.screen {
-        menu_data.selected_item = scenario_count + 3; // Quit
-    }
+    update(&mut state, Message::ShowProfile).unwrap();
+    assert_matches!(state.screen, TypedScreen::Profile(_));
     let initial_xp = state.progress.profile.total_xp;
 
-    update(&mut state, Message::MenuSelect).unwrap();
+    update(&mut state, Message::QuitApp).unwrap();
 
     assert!(!state.ui.running);
-    assert!(
-        state.progress.profile.total_xp > initial_xp,
-        "quitting via the main menu's Quit item must award the still-live session's XP too"
-    );
+    assert!(state.progress.profile.total_xp > initial_xp);
     assert_eq!(state.progress.profile.minigame_high_score, 7777);
+}
+
+/// Hopping between detour screens must keep handing the paused run along, so Back still
+/// returns to it.
+#[test]
+fn test_detour_chain_returns_to_paused_arcade_session() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    pause_arcade_with_score(&mut state, 100);
+
+    update(&mut state, Message::ShowProfile).unwrap();
+    update(&mut state, Message::ShowStatistics).unwrap();
+    update(&mut state, Message::ShowAchievements).unwrap();
+    update(&mut state, Message::BackToMenu).unwrap();
+
+    assert_matches!(state.screen, TypedScreen::MiniGame(_));
+    let session = state.minigame_session().unwrap();
+    assert!(session.state().is_paused());
+    assert_eq!(session.stats().score, 100);
 }
 
 #[test]

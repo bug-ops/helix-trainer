@@ -20,18 +20,6 @@ fn test_progress_state_debug_impl() {
 }
 
 #[test]
-fn test_game_state_is_reviewing_false() {
-    let state = create_test_app_state(vec![]);
-    assert!(!state.game.is_reviewing());
-}
-
-#[test]
-fn test_game_state_is_playing_minigame_false() {
-    let state = create_test_app_state(vec![]);
-    assert!(!state.game.is_playing_minigame());
-}
-
-#[test]
 fn test_progress_state_should_save_initial() {
     let state = create_test_app_state(vec![]);
     // Initial state should allow save (no last_save_time)
@@ -70,7 +58,5 @@ fn test_ui_state_initial() {
 fn test_game_state_default() {
     let state = crate::ui::state::GameState::default();
     assert_eq!(state.scenario_collection.count(), 0);
-    assert!(state.review_session.is_none());
     assert!(state.pending_completed_session.is_none());
-    assert!(state.minigame_session.is_none());
 }

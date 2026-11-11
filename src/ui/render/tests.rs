@@ -330,8 +330,8 @@ mod editor_tests {
 mod screen_render_tests {
     use super::*;
     use crate::ui::state::{
-        AchievementsData, MenuData, MiniGameData, ModeSelectionData, ProfileData,
-        ReturnDestination, StatisticsData, TypedScreen,
+        AchievementsData, MenuData, ModeSelectionData, ProfileData, ReturnDestination,
+        StatisticsData, TypedScreen,
     };
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -531,7 +531,7 @@ mod screen_render_tests {
     fn test_render_minigame_screen() {
         let mut terminal = create_terminal();
         let mut state = create_test_app_state(vec![create_test_scenario()]);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(crate::testing::started_minigame_data());
 
         terminal
             .draw(|f| {
@@ -624,7 +624,7 @@ mod screen_render_tests {
         let mut terminal = create_terminal();
         let mut state = create_test_app_state(vec![create_test_scenario()]);
         state.screen = TypedScreen::Profile(ProfileData {
-            return_to: ReturnDestination::PausedMiniGame,
+            return_to: crate::testing::paused_minigame_return(),
         });
 
         terminal
@@ -721,7 +721,6 @@ mod review_tests {
         let mut state = create_test_app_state(vec![create_test_scenario()]);
 
         let session = create_review_session(vec!["h", "j", "k", "l"]);
-        state.game.review_session = Some(session.clone());
         state.screen = TypedScreen::Review(ReviewData { session });
 
         terminal
@@ -737,7 +736,6 @@ mod review_tests {
         let mut state = create_test_app_state(vec![create_test_scenario()]);
 
         let session = create_review_session(vec!["w"]);
-        state.game.review_session = Some(session.clone());
         state.screen = TypedScreen::Review(ReviewData { session });
 
         terminal
@@ -755,7 +753,6 @@ mod review_tests {
         let mut session = create_review_session(vec!["h", "j", "k", "l"]);
         session.current_index = 2; // Midway through
         session.current_command = Some("k".to_string());
-        state.game.review_session = Some(session.clone());
         state.screen = TypedScreen::Review(ReviewData { session });
 
         terminal
@@ -1685,7 +1682,7 @@ mod statistics_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::Statistics(StatisticsData {
-            return_to: ReturnDestination::PausedMiniGame,
+            return_to: crate::testing::paused_minigame_return(),
         });
 
         terminal
@@ -2036,8 +2033,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2060,8 +2056,7 @@ mod minigame_screen_tests {
         }
         session.pause();
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2082,8 +2077,7 @@ mod minigame_screen_tests {
         // Only tick once - still in countdown
         session.tick_countdown();
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2110,8 +2104,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2133,8 +2126,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        let mut minigame_data = MiniGameData::default();
+        let mut minigame_data = MiniGameData::new(session);
         minigame_data.key_history.push("h".to_string());
         minigame_data.key_history.push("j".to_string());
         minigame_data.key_history.push("k".to_string());
@@ -2160,11 +2152,8 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        let minigame_data = MiniGameData {
-            last_xp_earned: Some(75),
-            ..Default::default()
-        };
+        let mut minigame_data = MiniGameData::new(session);
+        minigame_data.last_xp_earned = Some(75);
         state.screen = TypedScreen::MiniGame(minigame_data);
 
         terminal
@@ -2190,8 +2179,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2213,8 +2201,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2237,8 +2224,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2262,8 +2248,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {
@@ -2287,8 +2272,7 @@ mod minigame_screen_tests {
             session.tick_countdown();
         }
 
-        state.game.minigame_session = Some(session);
-        state.screen = TypedScreen::MiniGame(MiniGameData::default());
+        state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
 
         terminal
             .draw(|f| {

@@ -84,7 +84,7 @@ that a sealed-trait `CommandMode` variant would have provided.
 
 | ID | Requirement | Target | Status |
 |----|------------|--------|--------|
-| NFR-004 | `#![forbid(unsafe_code)]` MUST be preserved; no `unsafe` blocks introduced | Zero `unsafe` in new code | **Met** — confirmed via grep across all files touched by the commit. |
+| NFR-004 | `unsafe_code = "forbid"` (Cargo lint) MUST be preserved; no `unsafe` blocks introduced | Zero `unsafe` in new code | **Met** — confirmed via grep across all files touched by the commit. |
 
 ## 4. Maintainability
 

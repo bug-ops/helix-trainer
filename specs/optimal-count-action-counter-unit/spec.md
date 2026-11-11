@@ -93,7 +93,7 @@ THEN  optimal_count equals the number of solution commands
 | ID | Requirement | Priority |
 |----|------------|----------|
 | FR-006 | A scenario MAY declare a completion rule, a closed enum `CompletionRule` with the variants `TargetState` (the default when the key is absent: today's behavior, unchanged for every existing scenario) and `AfterTaughtCommands`, set in the scenario TOML as `completion = "after_taught_commands"` under `[scenarios.metadata]`; an unknown value is a scenario load error | must |
-| FR-007 | WHERE a scenario uses `AfterTaughtCommands` THE SYSTEM SHALL complete it only when the editor state equals the target AND the action that produced that state is itself one of the scenario's `commands_taught`, compared after normalization (a count prefix is stripped, so `2u` matches `u`; argument characters follow the command normalization of the action counter) | must |
+| FR-007 | WHERE a scenario uses `AfterTaughtCommands` THE SYSTEM SHALL complete it only when the editor state equals the target AND the action that produced that state is itself one of the scenario's `commands_taught`, compared after normalization (a count prefix is stripped, so `2u` matches `u`; argument characters follow the command normalization of the action counter) AND the target did not already hold before that last command (`CompletionRule::is_satisfied` checks both), so a no-op taught command on an already-matching state does not complete the scenario | must |
 | FR-008 | THE RULE SHALL be one predicate, taking the target comparison result, the rule and the just-executed command, used by BOTH training completion (`GameSession::finish_action`/`check_completion`) and arcade completion (`ActiveMiniScenario::is_completed`, which calls the shared predicate `Scenario::is_completed_by`; `ScenarioState` is unchanged); the two paths SHALL NOT diverge | must |
 | FR-009 | `undo_redo_001` SHALL use `completion = "after_taught_commands"` so its documented solution finishes with `actions == optimal_count` (FR-002), and its entry in `ACTION_COUNT_EXEMPT_SCENARIO_IDS` SHALL be removed | must |
 | FR-010 | THE SCENARIO VALIDATION SUITE SHALL fail for a scenario with `AfterTaughtCommands` and an empty `commands_taught`, or whose documented solution does not complete exactly at its last command under the rule | must |
@@ -104,6 +104,11 @@ THEN  optimal_count equals the number of solution commands
 GIVEN undo_redo_001 (completion = "after_taught_commands", commands_taught includes u and U)
 WHEN  the solution x d u U is executed in Training mode and again in arcade mode
 THEN  the scenario does not complete after x d, completes after U at action 4, actions == optimal_count, rating Perfect
+```
+```
+GIVEN the same scenario
+WHEN  the commands x d U are executed
+THEN  it does not complete: the target already held before U (a no-op redo); x d U u U completes at action 5
 ```
 ```
 GIVEN the same scenario

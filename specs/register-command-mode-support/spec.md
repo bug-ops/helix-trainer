@@ -148,7 +148,7 @@ each.
 | NFR-001 | Architectural consistency | New register-selection and command-line states MUST use the existing typestate pattern in `src/input/typestate/` |
 | NFR-002 | Architectural consistency | Command-line mode MUST be added to `EditorMode` (`src/helix/simulator/mode.rs`) following the sealed-trait typestate pattern |
 | NFR-003 | Scope discipline | Vim-style marks MUST NOT be introduced under any name — see issue #104 |
-| NFR-004 | Safety | `#![forbid(unsafe_code)]` MUST be preserved |
+| NFR-004 | Safety | `unsafe_code = "forbid"` (Cargo lint) MUST be preserved |
 | NFR-005 | Testability | Both capabilities MUST be covered by scenario TOML fixtures plus unit tests |
 | NFR-006 | Error handling | All new user-facing failure modes MUST route through `UserError`/`SecurityError` |
 | NFR-007 | Documentation | All new `pub` types/functions MUST carry `///` doc comments |

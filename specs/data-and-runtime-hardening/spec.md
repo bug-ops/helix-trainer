@@ -61,6 +61,7 @@ A failed profile load never destroys the file on disk; reads are bounded and rej
 | FR-005 | WHEN the file does not exist THE SYSTEM SHALL create a new default profile and save normally (first launch) | must |
 | FR-006 | WHEN quarantining an unreadable profile and a byte-identical `profile.json.corrupt-*` file already exists THE SYSTEM SHALL NOT create another copy and SHALL report the existing backup path in `QuarantineOutcome` (#518) | must |
 | FR-007 | WHILE the profile is `Quarantined` with a backup that exists on disk THE BANNER SHALL offer one action, **Start fresh** (bound to `Ctrl-N`, shown only for `Quarantined(BackedUp(_))`): the backup is kept, a new default profile is written, and `ProfilePersistence` becomes `Writable`; the action is a state-model message that yields an effect executed by the event loop (no I/O in `update()`); WHEN no backup exists (the copy failed) THE ACTION SHALL NOT be offered, so unreadable data is never overwritten without a copy (#518) | must |
+| FR-008 | THE BACKUP DEDUPE of FR-006 SHALL consider only regular files as existing backups (never symlinks, FIFOs or other special files) and SHALL reject a candidate that is the source file's own inode; temporary files (backup and save) SHALL be created with `O_EXCL` semantics (create-new); the profile lock file SHALL be read through the capped reader of FR-010 | must |
 
 ### 2.2 Bounded reads (#441)
 
@@ -205,7 +206,7 @@ THEN  raw mode is off and the alternate screen is left before the previous hook 
 | SC-003 | Permission test on Unix (`cfg(unix)`) | Pass |
 | SC-004 | Test with `attempts = u32::MAX` | Pass |
 | SC-005 | Hook installed and restore function unit-tested (restore called once, previous hook chained) | Pass |
-| SC-006 | Tests for backup dedupe and Start fresh (FR-006, FR-007), including no-backup case | Pass |
+| SC-006 | Tests for backup dedupe and Start fresh (FR-006, FR-007), including no-backup case and the FR-008 rules (regular files only, own inode rejected, O_EXCL temp files, capped lock read) | Pass |
 | SC-007 | Test that load-time achievement saves go through `save_immediate` and a failing save does not return `Err` (FR-060/061) | Pass |
 | SC-008 | Shared store tests: atomic config save, size cap, permissions for both documents (FR-070..072) | Pass |
 | SC-009 | Migration tests with temporary directories: per-file copy, new-dir-wins, resume after a partial migration, backups and lock not migrated, failed copy leaves no destination (FR-081..084) | Pass |

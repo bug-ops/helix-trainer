@@ -130,7 +130,7 @@ Use EARS notation. Prefix with FR-NNN.
 | ID | Category | Requirement |
 |----|----------|-------------|
 | NFR-001 | Dependency hygiene | The `select_on_matches`/`split_on_matches` implementations come from a new `helix-stdx` dependency, pinned to the same git tag (`25.07.1`) as the existing `helix-core` dependency — no independent version drift |
-| NFR-002 | Safety | `#![forbid(unsafe_code)]` MUST be preserved; regex compilation/matching MUST be guarded against pathological patterns via the length cap and match-count truncation (FR-004) |
+| NFR-002 | Safety | `unsafe_code = "forbid"` (Cargo lint) MUST be preserved; regex compilation/matching MUST be guarded against pathological patterns via the length cap and match-count truncation (FR-004) |
 | NFR-003 | Architectural consistency | The regex prompt reuses the existing command-line typestate prompt-input pattern rather than introducing a parallel one |
 | NFR-004 | Correctness | Macro replay MUST NOT resurface a latent bug in repeat-state restore — `a4efc2e` fixed exactly this class of bug as part of this change |
 

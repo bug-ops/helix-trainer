@@ -160,7 +160,7 @@ every `cargo build`/`cargo clippy` check while `MiniGameModeSelection::
 selected_mode` silently launches `Arcade` under the new mode's menu label —
 a correctness bug that would only surface through manual play-testing, not
 through the type system that the rest of this project relies on
-(`#![forbid(unsafe_code)]`, typestate patterns elsewhere in `src/game/` and
+(`unsafe_code = "forbid"` (Cargo lint), typestate patterns elsewhere in `src/game/` and
 `src/minigame/session.rs`).
 
 ### Suggested Filing

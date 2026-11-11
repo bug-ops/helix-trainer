@@ -83,7 +83,7 @@ Unchanged — TUI via ratatui/crossterm.
 
 ### 2.5 Design and Implementation Constraints
 
-`#![forbid(unsafe_code)]`; must follow the existing typestate pattern
+`unsafe_code = "forbid"` (Cargo lint); must follow the existing typestate pattern
 (NFR-001).
 
 ### 2.6 Assumptions and Dependencies

@@ -342,7 +342,7 @@ THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0
 ## 9. Bug-Fix Batch: Quest Registry, Quest Panic Paths, Session Ownership (#468, #469, #461)
 
 > [!info] Added 2026-11-11 (spec-first update for the P2-P3 bug batch)
-> FR numbers continue after FR-012. `QuestBonus.quest` stays a `String`; the typed `QuestId` belongs to #463, which is outside this batch (#483 narrows other fields only).
+> FR numbers continue after FR-012. `QuestBonus.quest` stays a `String`; the typed `QuestId` belongs to #463, which is outside this batch (#483 narrows other fields only; `MiniGameModeSelection.selected` is now the typed `MiniGameModeKind`, the index-based `mode_name`/`mode_description` were removed).
 
 ### 9.1 Requirements
 
@@ -361,7 +361,7 @@ THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0
 > - #482: the rest of the mailbox removal beyond what #461 delivered.
 > - #480: only the `update()` dispatch dedupe is done.
 > - #481: `update` takes an effects sink; render still clamps the selection.
-> - #483: `Feedback.success`/`is_optimal` and `MiniGameModeSelection.selected_index` stay as they are, because `is_optimal` depends on the tolerance.
+> - #483: only `Feedback.success`/`is_optimal` stay as they are, because `is_optimal` depends on the tolerance; `MiniGameModeSelection.selected` is typed (`MiniGameModeKind`) in this batch.
 
 ### 9.2 Acceptance Criteria
 

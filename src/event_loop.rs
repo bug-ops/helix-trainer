@@ -13,7 +13,10 @@ use helix_trainer::{
     async_state::DataLoadMessage,
     constants::{ANIMATION_TICK_INTERVAL, COUNTDOWN_TICK_INTERVAL, SUCCESS_SCREEN_DELAY},
     security::UserError,
-    ui::{self, AppState, Message, Notification, NotificationType, state::Effect},
+    ui::{
+        self, AppState, Message, Notification, NotificationType,
+        state::{AsyncEffect, Effect},
+    },
 };
 
 use crate::data_handling::handle_data_message;
@@ -50,7 +53,7 @@ fn report_update_error(state: &mut AppState, error: &UserError) {
 }
 
 /// Execute the effects an update requested; those that need the async runtime are returned.
-fn run_effects(state: &mut AppState, effects: Vec<Effect>) -> Vec<Effect> {
+fn run_effects(state: &mut AppState, effects: Vec<Effect>) -> Vec<AsyncEffect> {
     effects
         .into_iter()
         .filter_map(|effect| effect.execute(&mut state.progress))
@@ -82,8 +85,20 @@ fn spawn_start_fresh_profile(state: &AppState, data_tx: &mpsc::Sender<DataLoadMe
 fn apply_update(state: &mut AppState, msg: Message, data_tx: &mpsc::Sender<DataLoadMessage>) {
     let mut effects = Vec::new();
     let result = ui::update(state, msg, &mut effects);
-    if !run_effects(state, effects).is_empty() {
-        spawn_start_fresh_profile(state, data_tx);
+    settle_update(state, result, effects, data_tx);
+}
+
+/// Execute the `effects` of an update and report its `result`, in that order.
+fn settle_update(
+    state: &mut AppState,
+    result: Result<(), UserError>,
+    effects: Vec<Effect>,
+    data_tx: &mpsc::Sender<DataLoadMessage>,
+) {
+    for deferred in run_effects(state, effects) {
+        match deferred {
+            AsyncEffect::StartFreshProfile => spawn_start_fresh_profile(state, data_tx),
+        }
     }
     if let Err(error) = result {
         report_update_error(state, &error);
@@ -315,13 +330,54 @@ mod tests {
             PerformanceTracker::new(),
         );
         state.progress.mark_profile_loaded();
-        state.ui.effects.push(Effect::SaveProfile);
         let (data_tx, _data_rx) = mpsc::channel(1);
 
-        // RetryScenario fails with WrongScreen on the mode-selection screen
-        apply_update(&mut state, Message::RetryScenario, &data_tx);
+        settle_update(
+            &mut state,
+            Err(UserError::WrongScreen),
+            vec![Effect::SaveProfile],
+            &data_tx,
+        );
 
         assert!(path.exists(), "the queued save must run despite the error");
+    }
+
+    /// #518: the start-fresh effect runs the load on the runtime and reports its result.
+    #[tokio::test]
+    async fn test_start_fresh_effect_runs_the_load_and_sends_the_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.json");
+        std::fs::write(&path, "{broken").unwrap();
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            ProfileStorage::with_path(&path),
+            PerformanceTracker::new(),
+        );
+        let (data_tx, mut data_rx) = mpsc::channel(1);
+
+        settle_update(
+            &mut state,
+            Ok(()),
+            vec![Effect::StartFreshProfile],
+            &data_tx,
+        );
+
+        let msg = data_rx.recv().await.expect("a result message");
+        assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
+        assert!(std::fs::read_to_string(&path).unwrap().contains("profile"));
+    }
+
+    /// Effects that need no runtime never spawn a load.
+    #[tokio::test]
+    async fn test_sync_effects_do_not_spawn_a_load() {
+        let mut state = test_state();
+        let (data_tx, mut data_rx) = mpsc::channel(1);
+
+        settle_update(&mut state, Ok(()), vec![Effect::SaveProfile], &data_tx);
+        drop(data_tx);
+
+        assert!(data_rx.recv().await.is_none());
     }
 
     /// Regression test for #466: any other recoverable error becomes a

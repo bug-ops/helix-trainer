@@ -118,3 +118,23 @@ fn test_toggle_sound_works_on_any_screen() {
     update(&mut state, Message::ToggleSound).unwrap();
     assert!(!state.progress.sound_manager.config().enabled);
 }
+
+/// #518: a repeated request while the first start-fresh is in flight is ignored, so the
+/// profile just written is not quarantined and replaced again
+#[test]
+fn test_second_start_fresh_request_is_ignored_while_the_first_is_in_flight() {
+    use crate::gamification::QuarantineOutcome;
+    use crate::ui::state::{Effect, ProfilePersistence};
+
+    let mut state = create_test_app_state(vec![]);
+    state
+        .progress
+        .quarantine_profile(QuarantineOutcome::BackedUp("backup".into()));
+    let mut effects = Vec::new();
+
+    crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
+    crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
+
+    assert_eq!(effects, vec![Effect::StartFreshProfile]);
+    assert_eq!(state.progress.persistence(), &ProfilePersistence::Loading);
+}

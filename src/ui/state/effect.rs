@@ -19,13 +19,22 @@ pub enum Effect {
     StartFreshProfile,
 }
 
+/// An [`Effect`] that needs the async runtime, handed back to the event loop by
+/// [`Effect::execute`]; matching on it there is exhaustive, so a new variant cannot be
+/// silently mistaken for another one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AsyncEffect {
+    /// Replace the quarantined profile with a fresh one (#518)
+    StartFreshProfile,
+}
+
 impl Effect {
     /// Run the effects that only need the in-memory progress state.
     ///
-    /// Returns the effect back when it needs the async runtime ([`Effect::StartFreshProfile`]),
-    /// so the event loop can run it; a failed save is logged, never fatal.
+    /// Returns the [`AsyncEffect`] when the effect needs the async runtime, so the event loop
+    /// can run it; a failed save is logged, never fatal.
     #[must_use = "an unhandled effect is dropped silently"]
-    pub fn execute(self, progress: &mut ProgressState) -> Option<Self> {
+    pub fn execute(self, progress: &mut ProgressState) -> Option<AsyncEffect> {
         match self {
             Self::Play(effect) => progress.sound_manager.play(effect),
             Self::SaveProfile => {
@@ -33,7 +42,7 @@ impl Effect {
                     tracing::error!("Failed to save profile: {:?}", e);
                 }
             }
-            Self::StartFreshProfile => return Some(self),
+            Self::StartFreshProfile => return Some(AsyncEffect::StartFreshProfile),
         }
         None
     }

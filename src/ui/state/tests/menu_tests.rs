@@ -369,3 +369,43 @@ fn test_menu_select_review_no_due() {
     // No reviews due, should stay on menu
     assert_matches!(state.screen, TypedScreen::Menu(_));
 }
+
+/// Starting a review while an arcade run is parked behind a detour screen ends that run for
+/// good: its score and XP are awarded and the screen is the review.
+#[test]
+fn test_starting_review_ends_the_paused_arcade_run_and_awards_it() {
+    use std::time::Duration;
+
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    pause_arcade_with_score(&mut state, 4242);
+    update(&mut state, Message::ShowProfile).unwrap();
+    state.progress.performance_tracker.record_attempt(
+        "x",
+        Duration::from_secs(5),
+        false,
+        Duration::from_secs(1),
+    );
+    let initial_xp = state.progress.profile.total_xp;
+
+    update(&mut state, Message::StartReviewSession).unwrap();
+
+    assert_matches!(state.screen, TypedScreen::Review(_));
+    assert!(state.minigame_session().is_none(), "the run must be gone");
+    assert!(state.progress.profile.total_xp > initial_xp);
+    assert_eq!(state.progress.profile.minigame_high_score, 4242);
+}
+
+/// Without due reviews the paused run is left alone.
+#[test]
+fn test_starting_review_without_due_reviews_keeps_the_paused_run() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    pause_arcade_with_score(&mut state, 100);
+    update(&mut state, Message::ShowProfile).unwrap();
+
+    update(&mut state, Message::StartReviewSession).unwrap();
+
+    assert_matches!(state.screen, TypedScreen::Profile(_));
+    assert!(state.minigame_session().is_some());
+}

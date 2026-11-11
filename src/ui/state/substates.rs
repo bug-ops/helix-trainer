@@ -41,7 +41,7 @@ pub struct UIState {
     pub notifications: NotificationQueue,
 
     /// Side effects queued during one `update`; drained into its `effects` sink at the end
-    pub effects: Vec<super::Effect>,
+    pub(crate) effects: Vec<super::Effect>,
 
     /// Last selected scenario index in menu (session-only, for position persistence)
     pub last_menu_selected: usize,

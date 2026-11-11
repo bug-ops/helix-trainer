@@ -34,7 +34,7 @@ use tokio::sync::mpsc;
 mod handlers;
 
 mod effect;
-pub use effect::Effect;
+pub use effect::{AsyncEffect, Effect};
 
 // Handler infrastructure for type-safe handlers
 mod handler_context;
@@ -956,6 +956,9 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
                 state.progress.persistence(),
                 ProfilePersistence::Quarantined(QuarantineOutcome::BackedUp(_))
             ) {
+                // Leaves `Quarantined` until the result arrives, so a repeated request
+                // cannot queue a second start-fresh over the profile just written
+                state.progress.begin_profile_load();
                 state.ui.effects.push(Effect::StartFreshProfile);
             }
             Ok(())

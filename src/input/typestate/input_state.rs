@@ -6,9 +6,12 @@
 use std::num::NonZeroUsize;
 
 use super::state_types::FindType;
+use crate::helix::commands::{
+    CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD, CMD_SELECT_REGEX, CMD_SPLIT_SELECTION,
+};
 use crate::input::keymap::KeyContext;
 
-/// Which `s`/`S`/`/` command a `RegexPromptPending` buffer is for
+/// Which prompt command a `RegexPromptPending` buffer is for
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegexPromptKind {
     /// `s` - select all regex matches within the current selection
@@ -17,17 +20,44 @@ pub enum RegexPromptKind {
     SplitSelection,
     /// `/` - select the next regex match after the cursor
     Search,
+    /// `?` - select the previous regex match before the cursor
+    SearchBackward,
 }
 
 impl RegexPromptKind {
-    /// The command prefix character this prompt assembles a command for; also
-    /// the prompt character shown in the footer.
+    /// The command id this prompt assembles its `"<id> <pattern>"` command from.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::input::typestate::RegexPromptKind;
+    ///
+    /// assert_eq!(RegexPromptKind::SearchBackward.command_id(), "?");
+    /// assert_eq!(RegexPromptKind::SplitSelection.command_id(), "S");
+    /// ```
+    pub fn command_id(self) -> &'static str {
+        match self {
+            Self::SelectRegex => CMD_SELECT_REGEX,
+            Self::SplitSelection => CMD_SPLIT_SELECTION,
+            Self::Search => CMD_SEARCH_FORWARD,
+            Self::SearchBackward => CMD_SEARCH_BACKWARD,
+        }
+    }
+
+    /// The single prompt character shown in the footer.
     pub fn prefix(self) -> char {
         match self {
             Self::SelectRegex => 's',
             Self::SplitSelection => 'S',
             Self::Search => '/',
+            Self::SearchBackward => '?',
         }
+    }
+
+    /// Whether Enter forwards an invalid pattern to the simulator so its
+    /// `UserError` reaches the user (search prompts); the other prompts cancel.
+    pub fn forwards_invalid_pattern(self) -> bool {
+        matches!(self, Self::Search | Self::SearchBackward)
     }
 }
 
@@ -75,7 +105,7 @@ pub enum InputState {
     RegisterOpPending { register: char },
     /// After ':' - accumulating a command-line buffer
     CommandLinePending { buffer: String },
-    /// After 's'/'S'/'/' - accumulating a regex prompt buffer
+    /// After a regex-prompt key - accumulating the pattern buffer
     RegexPromptPending {
         kind: RegexPromptKind,
         buffer: String,

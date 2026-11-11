@@ -80,6 +80,7 @@ pub(crate) fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> 
 /// - macOS composed chars (Ç, ˝, ...) → base char + ALT modifier
 /// - lowercase + SHIFT → uppercase (SHIFT removed)
 /// - uppercase + SHIFT → uppercase (SHIFT removed, already uppercase)
+/// - Shift-`/` → `?`
 ///
 /// This matches Helix's normalization: "C-S-r and C-R are represented by equal KeyEvents"
 pub fn normalize_key_event(key: KeyEvent) -> KeyEvent {
@@ -94,6 +95,11 @@ pub fn normalize_key_event(key: KeyEvent) -> KeyEvent {
             modifiers.remove(KeyModifiers::SHIFT);
         }
         return KeyEvent::new(KeyCode::Char(base_char), modifiers);
+    }
+
+    // Some terminals report `?` as Shift-`/`
+    if key.code == KeyCode::Char('/') && key.modifiers == KeyModifiers::SHIFT {
+        return KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
     }
 
     // Standard normalization for SHIFT + letter

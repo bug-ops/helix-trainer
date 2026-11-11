@@ -267,6 +267,31 @@ fn test_base_state_alt_bound_commands_still_execute() {
     );
 }
 
+fn prompt_transition(kind: crate::input::typestate::RegexPromptKind) -> HandlerResult {
+    HandlerResult::Transition(InputState::RegexPromptPending {
+        kind,
+        buffer: String::new(),
+    })
+}
+
+/// #513: `?` opens the backward-search prompt (also as Shift-`/`).
+#[test]
+fn test_base_state_question_mark_opens_backward_search_prompt() {
+    use crate::input::typestate::RegexPromptKind::SearchBackward;
+    assert_eq!(
+        base_key('?', KeyModifiers::NONE),
+        prompt_transition(SearchBackward)
+    );
+    assert_eq!(
+        base_key('?', KeyModifiers::SHIFT),
+        prompt_transition(SearchBackward)
+    );
+    assert_eq!(
+        base_key('/', KeyModifiers::SHIFT),
+        prompt_transition(SearchBackward)
+    );
+}
+
 /// #504: `/` opens the search prompt instead of executing a bare command.
 #[test]
 fn test_base_state_slash_opens_search_prompt() {

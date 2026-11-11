@@ -78,6 +78,7 @@ fn plain_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
         KeyCode::Char('s') => regex_prompt(RegexPromptKind::SelectRegex),
         KeyCode::Char('S') => regex_prompt(RegexPromptKind::SplitSelection),
         KeyCode::Char('/') => regex_prompt(RegexPromptKind::Search),
+        KeyCode::Char('?') => regex_prompt(RegexPromptKind::SearchBackward),
 
         // Macro recording ('q') and replay ('Q'). This handler only runs
         // in Normal mode (Insert mode input bypasses the state machine

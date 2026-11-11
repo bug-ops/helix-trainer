@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::numeric::{Rounding, scale_u64};
+
 /// Change event for multiplier animations and notifications
 #[derive(Debug, Clone, PartialEq)]
 pub enum MultiplierChange {
@@ -307,20 +309,8 @@ impl MiniGameStats {
     /// stats.add_score(100);
     /// assert_eq!(stats.score, 200);
     /// ```
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "the multiplied score truncates toward zero by design"
-    )]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
-    )]
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-    )]
     pub fn add_score(&mut self, points: u64) {
-        let multiplied = (points as f64 * self.multiplier_state.current()) as u64;
+        let multiplied = scale_u64(points, self.multiplier_state.current(), Rounding::Floor);
         self.score = self.score.saturating_add(multiplied);
     }
 

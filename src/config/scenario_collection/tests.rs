@@ -44,23 +44,20 @@ fn create_scenario(
             commands: vec!["test".to_string()],
             description: "Test solution".to_string(),
         },
-        alternatives: vec![],
         hints: vec![],
         scoring: ScoringConfig {
             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },
-        metadata: Some(ScenarioMetadata {
+        metadata: ScenarioMetadata {
             category,
             difficulty,
             tags: vec![],
             commands_taught: commands.iter().map(|s| ncmd(s)).collect(),
             prerequisites: vec![],
-            estimated_time_seconds: None,
-            locale: None,
             ..Default::default()
-        }),
+        },
     }
 }
 
@@ -688,14 +685,13 @@ fn test_scenarios_without_metadata() {
             commands: vec!["test".to_string()],
             description: "Test".to_string(),
         },
-        alternatives: vec![],
         hints: vec![],
         scoring: ScoringConfig {
             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },
-        metadata: None, // No metadata
+        metadata: ScenarioMetadata::default(),
     };
 
     let scenarios = vec![

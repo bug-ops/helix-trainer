@@ -12,7 +12,7 @@ fn run_in(language: &str, text: &str, keys: &[&str]) -> String {
     for key in keys {
         sim.execute_command(key).unwrap();
     }
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 fn run(keys: &[&str]) -> String {

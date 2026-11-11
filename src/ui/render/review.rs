@@ -3,7 +3,8 @@
 use crate::helix::commands::CMD_ESCAPE;
 use crate::helix::registry::normal_registry;
 use crate::ids::CommandId;
-use crate::ui::state::{AppState, ReviewData, ReviewSessionState};
+use crate::learning::ReviewSession;
+use crate::ui::state::{AppState, ReviewData};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -11,12 +12,15 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph, Wrap},
 };
+use rust_i18n::t;
+use std::borrow::Cow;
 
 /// Get a human-readable description for a Helix command from registry
-fn get_command_description(command: &str) -> &'static str {
-    normal_registry()
-        .metadata(command)
-        .map_or("Helix command", |m| m.description)
+fn get_command_description(command: &str) -> Cow<'static, str> {
+    normal_registry().metadata(command).map_or_else(
+        || t!("review.default_description"),
+        |m| Cow::Borrowed(m.summary()),
+    )
 }
 
 /// Render the review session screen
@@ -47,13 +51,14 @@ pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState, data: &R
     clippy::cast_precision_loss,
     reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
 )]
-fn render_header(frame: &mut Frame, area: Rect, session: &ReviewSessionState) {
-    let progress = (session.current_index + 1) as f64 / session.due_commands.len() as f64;
-    let progress_text = format!(
-        "Review Session - {}/{}",
-        session.current_index + 1,
-        session.due_commands.len()
-    );
+fn render_header(frame: &mut Frame, area: Rect, session: &ReviewSession) {
+    let progress = session.position() as f64 / session.total() as f64;
+    let progress_text = t!(
+        "review.header",
+        current = session.position(),
+        total = session.total()
+    )
+    .to_string();
 
     let gauge = Gauge::default()
         .block(Block::default().borders(Borders::ALL))
@@ -69,15 +74,8 @@ fn render_header(frame: &mut Frame, area: Rect, session: &ReviewSessionState) {
 }
 
 /// Render the main review content area
-fn render_review_content(
-    frame: &mut Frame,
-    area: Rect,
-    state: &AppState,
-    session: &ReviewSessionState,
-) {
-    let Some(command) = session.current_command() else {
-        return;
-    };
+fn render_review_content(frame: &mut Frame, area: Rect, state: &AppState, session: &ReviewSession) {
+    let command = session.current();
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -108,33 +106,45 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
     let description = get_command_description(command.as_str());
 
     let mastery_text = perf.map_or_else(
-        || "Mastery: New".to_string(),
-        |p| format!("Mastery: {:?} ⭐", p.mastery_level()),
+        || t!("review.mastery_new").to_string(),
+        |p| {
+            t!(
+                "review.mastery",
+                level = format!("{:?} ⭐", p.mastery_level())
+            )
+            .to_string()
+        },
     );
 
     let next_review = perf.map_or_else(
-        || "First time".to_string(),
+        || t!("review.first_time").to_string(),
         |p| {
             // `state: &AppState` is in scope here, so use the injected clock rather than
             // the wall clock directly.
             let now = state.progress.now();
             let days = (p.due() - now).num_days();
             if days > 0 {
-                format!("Next: in {days} days")
+                t!("review.next_in_days", days = days).to_string()
             } else {
-                "Due: Now".to_string()
+                t!("review.due_now").to_string()
             }
         },
     );
 
     let success_rate = perf.map_or_else(
-        || "Success rate: N/A".to_string(),
-        |p| format!("Success rate: {:.0}%", p.success_rate() * 100.0),
+        || t!("review.success_rate_na").to_string(),
+        |p| {
+            t!(
+                "review.success_rate",
+                percent = format!("{:.0}", p.success_rate() * 100.0)
+            )
+            .to_string()
+        },
     );
 
     let text = vec![
         Line::from(vec![
-            Span::styled("Command: ", Style::default().fg(Color::Gray)),
+            Span::styled(t!("review.command_label"), Style::default().fg(Color::Gray)),
             Span::styled(
                 command.as_str(),
                 Style::default()
@@ -161,7 +171,11 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
     ];
 
     let paragraph = Paragraph::new(text)
-        .block(Block::default().borders(Borders::ALL).title("Command Info"))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(t!("review.command_info_title")),
+        )
         .wrap(Wrap { trim: true });
 
     frame.render_widget(paragraph, area);
@@ -171,35 +185,39 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
 fn render_practice_area(frame: &mut Frame, area: Rect) {
     let text = vec![
         Line::from(""),
-        Line::from("Practice the command in your mind or on paper."),
+        Line::from(t!("review.practice_intro")),
         Line::from(""),
-        Line::from("Think about:"),
-        Line::from("  • What does this command do?"),
-        Line::from("  • When would you use it?"),
-        Line::from("  • What are common use cases?"),
+        Line::from(t!("review.practice_think")),
+        Line::from(t!("review.practice_what")),
+        Line::from(t!("review.practice_when")),
+        Line::from(t!("review.practice_cases")),
         Line::from(""),
         Line::from(vec![
-            Span::raw("Press "),
+            Span::raw(t!("review.press")),
             Span::styled(
                 "'s'",
                 Style::default()
                     .fg(Color::Green)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" if you remember it correctly"),
+            Span::raw(t!("review.remembered_suffix")),
         ]),
         Line::from(vec![
-            Span::raw("Press "),
+            Span::raw(t!("review.press")),
             Span::styled(
                 "'f'",
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" if you couldn't remember"),
+            Span::raw(t!("review.forgot_suffix")),
         ]),
     ];
 
     let paragraph = Paragraph::new(text)
-        .block(Block::default().borders(Borders::ALL).title("Practice"))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(t!("review.practice_title")),
+        )
         .alignment(Alignment::Left);
 
     frame.render_widget(paragraph, area);
@@ -208,21 +226,21 @@ fn render_practice_area(frame: &mut Frame, area: Rect) {
 /// Render instruction panel
 fn render_instructions(frame: &mut Frame, area: Rect) {
     let text = Line::from(vec![
-        Span::raw("Controls: "),
+        Span::raw(t!("review.controls")),
         Span::styled(
             "s",
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" = Success  |  "),
+        Span::raw(t!("review.success_label")),
         Span::styled(
             "f",
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" = Failed  |  "),
+        Span::raw(t!("review.failed_label")),
         Span::styled(CMD_ESCAPE, Style::default().fg(Color::Gray)),
-        Span::raw(" = Abandon"),
+        Span::raw(t!("review.abandon_label")),
     ]);
 
     let paragraph = Paragraph::new(text)
@@ -235,7 +253,7 @@ fn render_instructions(frame: &mut Frame, area: Rect) {
 /// Render footer with session info
 fn render_footer(frame: &mut Frame, area: Rect) {
     let text = Line::from(vec![Span::styled(
-        "Review Session Active - Practice each command until you remember it",
+        t!("review.footer"),
         Style::default().fg(Color::Cyan),
     )]);
 
@@ -253,15 +271,16 @@ mod tests {
     #[test]
     fn test_get_command_description_uses_registry() {
         // Verify that known commands return descriptions from registry
+        let fallback = t!("review.default_description");
         let desc = get_command_description("h");
-        assert_ne!(desc, "Helix command");
+        assert_ne!(desc, fallback);
         assert!(!desc.is_empty());
 
         let desc = get_command_description("w");
-        assert_ne!(desc, "Helix command");
+        assert_ne!(desc, fallback);
 
         let desc = get_command_description("d");
-        assert_ne!(desc, "Helix command");
+        assert_ne!(desc, fallback);
     }
 
     #[test]

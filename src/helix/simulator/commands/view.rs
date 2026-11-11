@@ -1,7 +1,7 @@
 //! View commands (z, zt, zb, zm, zj, zk)
 
+use crate::helix::error::SimulatorError;
 use crate::helix::simulator::HelixSimulator;
-use crate::security::UserError;
 
 /// Center viewport on cursor line (z or zz command)
 ///
@@ -11,7 +11,7 @@ use crate::security::UserError;
 /// with the fallible commands that share the registry's function type.
 pub fn view_center<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let cursor_line = sim.doc.char_to_line(head);
     let total_lines = sim.doc.len_lines();
@@ -28,7 +28,7 @@ pub fn view_center<M: crate::helix::simulator::EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn view_align_top<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let cursor_line = sim.doc.char_to_line(head);
     let total_lines = sim.doc.len_lines();
@@ -45,7 +45,7 @@ pub fn view_align_top<M: crate::helix::simulator::EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn view_align_bottom<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let cursor_line = sim.doc.char_to_line(head);
     let total_lines = sim.doc.len_lines();
@@ -62,7 +62,7 @@ pub fn view_align_bottom<M: crate::helix::simulator::EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn view_center_horizontal<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let cursor_line = sim.doc.char_to_line(head);
     let line_start = sim.doc.line_to_char(cursor_line);
@@ -86,7 +86,7 @@ pub fn view_center_horizontal<M: crate::helix::simulator::EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn scroll_down<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let total_lines = sim.doc.len_lines();
     sim.view_state.scroll_down(1, total_lines);
     Ok(())
@@ -100,7 +100,7 @@ pub fn scroll_down<M: crate::helix::simulator::EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn scroll_up<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     sim.view_state.scroll_up(1);
     Ok(())
 }
@@ -114,7 +114,7 @@ pub fn scroll_up<M: crate::helix::simulator::EditorMode>(
 pub fn scroll_down_count<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let total_lines = sim.doc.len_lines();
     sim.view_state.scroll_down(count, total_lines);
     Ok(())
@@ -129,7 +129,7 @@ pub fn scroll_down_count<M: crate::helix::simulator::EditorMode>(
 pub fn scroll_up_count<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     sim.view_state.scroll_up(count);
     Ok(())
 }

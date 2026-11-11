@@ -25,7 +25,7 @@
 //! let registry = normal_registry();
 //!
 //! let meta = registry.metadata("h").expect("`h` is registered");
-//! assert_eq!(meta.name, "move_char_left");
+//! assert_eq!(meta.name().map(|name| name.as_str()), Some("move_char_left"));
 //!
 //! assert!(registry.commands_in_category(Category::Movement).contains(&"h"));
 //! ```
@@ -41,7 +41,10 @@ use crate::helix::simulator::NormalMode;
 
 pub use command_registry::{Command, CommandHandler, CommandRegistry};
 pub use keytrie::{KeyMatch, KeyTrie, MAX_COUNT_PREFIX, parse_counted_command, split_count_prefix};
-pub use metadata::{Category, CommandMetadata, CountBehavior, ModeTransition, NativeCounted};
+pub use metadata::{
+    Binding, Category, CommandMetadata, CountBehavior, HelixName, ModeTransition, NativeCounted,
+    Repeat,
+};
 
 /// Global normal mode command registry
 ///
@@ -101,14 +104,17 @@ mod tests {
         let registry = normal_registry();
 
         let h_meta = registry.metadata("h").unwrap();
-        assert_eq!(h_meta.name, "move_char_left");
-        assert_eq!(h_meta.category, Category::Movement);
-        assert!(!h_meta.repeatable);
+        assert_eq!(h_meta.name().map(HelixName::as_str), Some("move_char_left"));
+        assert_eq!(h_meta.category(), Category::Movement);
+        assert_eq!(h_meta.repeat(), Repeat::NotRepeatable);
 
         let d_meta = registry.metadata("d").unwrap();
-        assert_eq!(d_meta.name, "delete_selection");
-        assert_eq!(d_meta.category, Category::Editing);
-        assert!(d_meta.repeatable);
+        assert_eq!(
+            d_meta.name().map(HelixName::as_str),
+            Some("delete_selection")
+        );
+        assert_eq!(d_meta.category(), Category::Editing);
+        assert_eq!(d_meta.repeat(), Repeat::Repeatable);
     }
 
     #[test]
@@ -148,6 +154,28 @@ mod tests {
         assert_eq!(trie.resolve("fa"), KeyMatch::Complete("fa".to_string()));
     }
 
+    /// #577: the count of `y v i a I A` is ignored, `C` repeats
+    #[test]
+    fn counted_yank_select_and_insert_entries_follow_helix() {
+        let registry = normal_registry();
+        for key in ["y", "v", "i", "a", "I", "A"] {
+            assert_eq!(registry.count_behavior(key), CountBehavior::Ignore, "{key}");
+        }
+        assert_eq!(registry.count_behavior("C"), CountBehavior::Repeat);
+    }
+
+    #[test]
+    fn every_command_has_a_summary_and_help_text() {
+        for meta in normal_registry().all_commands() {
+            assert!(
+                !meta.summary().is_empty(),
+                "`{}` has no summary",
+                meta.key()
+            );
+            assert!(!meta.help().is_empty(), "`{}` has no help text", meta.key());
+        }
+    }
+
     #[test]
     fn test_all_commands_iterator() {
         let registry = normal_registry();
@@ -156,9 +184,9 @@ mod tests {
         assert!(all.len() >= 40);
 
         // Check that we have diverse categories
-        let has_movement = all.iter().any(|m| m.category == Category::Movement);
-        let has_editing = all.iter().any(|m| m.category == Category::Editing);
-        let has_clipboard = all.iter().any(|m| m.category == Category::Clipboard);
+        let has_movement = all.iter().any(|m| m.category() == Category::Movement);
+        let has_editing = all.iter().any(|m| m.category() == Category::Editing);
+        let has_clipboard = all.iter().any(|m| m.category() == Category::Clipboard);
 
         assert!(has_movement);
         assert!(has_editing);

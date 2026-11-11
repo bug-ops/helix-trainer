@@ -20,7 +20,7 @@ related:
 # Feature: One Definition of Level XP Progress on Every Screen
 
 > [!info] Metadata
-> **Issues**: #572 (P2; labels `bug`, `ui`, `gamification`)
+> **Issues**: #572 (P2; labels `bug`, `ui`, `gamification`); #574 (Profile "Active Quests" total)
 > **Status**: Proposed
 > **Depth**: Lightweight bug-fix spec.
 
@@ -83,7 +83,9 @@ THEN  the label reads 50/100 XP and the bar is half full
 | FR-004 | THE percentage and the gauge ratio on every screen SHALL equal `earned / span` of the same helper result | must |
 | FR-005 | WHEN `span` is 0 or `total_xp` is outside the stored level's range THE SYSTEM SHALL render the same clamped, non-panicking values on every screen (numerator never exceeds the denominator; percentage never exceeds 100) | must |
 | FR-006 | THE `UserProfile::xp_for_next_level()` method SHALL NOT be used as a progress denominator; it MAY remain for "XP remaining" wording, or be removed if unused (pre-1.0, no deprecation shim) | should |
-| FR-007 | THE end-game summary label SHALL keep its current content (level and total XP) unless the spec for that screen decides otherwise; only its gauge ratio is bound by FR-003/FR-004 | should |
+| FR-007 | THE end-game summary label SHALL keep its current content (level and total XP); only its gauge ratio is bound by FR-003/FR-004. Decision (2026-11-11): the label stays as is | should |
+| FR-008 | WHEN `span` is 0 THE SYSTEM SHALL render the label `0/0 XP` and a full gauge (ratio 1.0) on every screen that shows the label (decision 2026-11-11) | must |
+| FR-009 | THE Profile screen's "Active Quests" line SHALL show `{active}/{total}` where `total` is the number of quests generated for today (`daily_quests.len()`), the same source as the quest panel title on the menu, instead of a hardcoded `3`; `active` is the number of not-yet-completed quests of that list (#574) | must |
 
 ## 4. Non-Functional Requirements
 
@@ -106,8 +108,9 @@ THEN  the label reads 50/100 XP and the bar is half full
 | `total_xp` below current level's start (inconsistent profile) | earned = 0 |
 | `total_xp` beyond the level's end (stale level, or very high level) | earned = span, 100%, identical on every screen (today: menu shows `901496/1496`, Profile shows `1496/0`) |
 | Level `u32::MAX` / next level saturates | span computed with saturating arithmetic, no panic or overflow (#523 behavior preserved) |
-| span = 0 | ratio 1.0, label `earned/0` avoided: render `0/0 XP` or equivalent consistently [NEEDS CLARIFICATION: exact label for span 0] |
-| Maximum level | No cap exists in the code today; behavior follows the over-range rows above [NEEDS CLARIFICATION: should a MAX marker be introduced if a level cap is ever defined?] |
+| span = 0 | ratio 1.0, label `0/0 XP` on every screen (FR-008) |
+| Maximum level | No cap exists in the code today; behavior follows the over-range rows above (a MAX marker is a decision for whoever introduces a level cap) |
+| Quest list shorter or longer than 3 (config or generation change) | The Profile total follows `daily_quests.len()` (FR-009); no hardcoded value |
 
 ## 7. Success Criteria
 
@@ -125,7 +128,7 @@ THEN  the label reads 50/100 XP and the bar is half full
 - Reuse the existing `level_xp_progress` logic as the starting point for the shared helper (DRY)
 
 ### Ask First
-- Changing the end-game label wording or adding a MAX marker
+- Changing the end-game label wording or adding a MAX marker (both decided: no change)
 - Removing `UserProfile::xp_for_next_level()` if other consumers appear
 
 ### Never
@@ -134,10 +137,10 @@ THEN  the label reads 50/100 XP and the bar is half full
 
 ## 9. Open Questions
 
-> [!question]
-> - [NEEDS CLARIFICATION: exact label when span is 0 (only reachable with a corrupt level)]
-> - [NEEDS CLARIFICATION: if a level cap is introduced later, show a MAX marker or `span/span`? The issue proposes either; neither is built today]
-> - [NEEDS CLARIFICATION: should the end-game gauge label also show `earned/span`? Current label shows level and total XP]
+> [!success] Closed 2026-11-11
+> - Label for span 0: `0/0 XP` with a full gauge (FR-008).
+> - End-game label: stays as is, level and total XP (FR-007).
+> - MAX marker: not needed until a level cap exists; deferred to that change.
 
 ## 10. See Also
 

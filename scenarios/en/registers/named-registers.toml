@@ -43,4 +43,3 @@ category = "registers"
 difficulty = "intermediate"
 tags = ["yank", "paste", "register"]
 commands_taught = ['"y', '"P']
-estimated_time_seconds = 30

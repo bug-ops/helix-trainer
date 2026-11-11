@@ -4,7 +4,9 @@
 
 use crate::helix::commands::{CMD_PASTE_AFTER, CMD_PASTE_BEFORE, CMD_YANK};
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
-use crate::helix::registry::metadata::{Category, CommandMetadata};
+use crate::helix::registry::metadata::{
+    Binding, Category, CommandMetadata, CountBehavior, HelixName, Repeat,
+};
 use crate::helix::simulator::NormalMode;
 use crate::helix::simulator::commands::clipboard;
 
@@ -12,40 +14,37 @@ use crate::helix::simulator::commands::clipboard;
 pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     registry.register(Command::new(
         CommandMetadata::new(
-            "yank",
+            Binding::Helix(HelixName::new("yank")),
             CMD_YANK,
-            "Yank (copy)",
-            "Copy the current selection to the clipboard.",
             Category::Clipboard,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Yank (copy)")
+        .with_help("Copy the current selection to the clipboard.")
+        .with_count_behavior(CountBehavior::Ignore),
         clipboard::yank,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "paste_after",
+            Binding::Helix(HelixName::new("paste_after")),
             CMD_PASTE_AFTER,
-            "Paste after cursor",
-            "Paste clipboard contents after the cursor.",
             Category::Clipboard,
-            true,
-            None,
-        ),
+        )
+        .with_summary("Paste after cursor")
+        .with_help("Paste clipboard contents after the cursor.")
+        .with_repeat(Repeat::Repeatable),
         clipboard::paste_after,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "paste_before",
+            Binding::Helix(HelixName::new("paste_before")),
             CMD_PASTE_BEFORE,
-            "Paste before cursor",
-            "Paste clipboard contents before the cursor.",
             Category::Clipboard,
-            true,
-            None,
-        ),
+        )
+        .with_summary("Paste before cursor")
+        .with_help("Paste clipboard contents before the cursor.")
+        .with_repeat(Repeat::Repeatable),
         clipboard::paste_before,
     ));
 }

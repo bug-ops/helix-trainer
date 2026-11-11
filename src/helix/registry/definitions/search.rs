@@ -7,7 +7,7 @@ use crate::helix::commands::{
     CMD_SEARCH_SELECTION, CMD_SEARCH_WORD,
 };
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
-use crate::helix::registry::metadata::{Category, CommandMetadata};
+use crate::helix::registry::metadata::{Binding, Category, CommandMetadata, HelixName};
 use crate::helix::simulator::NormalMode;
 use crate::helix::simulator::commands::search;
 
@@ -15,79 +15,67 @@ use crate::helix::simulator::commands::search;
 pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     registry.register(Command::new(
         CommandMetadata::new(
-            "search",
+            Binding::Helix(HelixName::new("search")),
             CMD_SEARCH_FORWARD,
-            "Search forward",
-            "Search forward for a regex pattern. Type the pattern and press Enter to find matches.",
             Category::Search,
-            false,
-            None,
+        )
+        .with_summary("Search forward")
+        .with_help(
+            "Search forward for a regex pattern. Type the pattern and press Enter to find matches.",
         ),
         search::search_forward,
     ));
 
     registry.register(Command::new(
-        CommandMetadata::new(
-            "rsearch",
-            CMD_SEARCH_BACKWARD,
-            "Search backward",
-            "Search backward for a regex pattern. Type the pattern and press Enter to find matches.",
-            Category::Search,
-            false,
-            None,
-        ),
+        CommandMetadata::new(Binding::Helix(HelixName::new("rsearch")), CMD_SEARCH_BACKWARD, Category::Search)
+.with_summary("Search backward")
+.with_help("Search backward for a regex pattern. Type the pattern and press Enter to find matches."),
         search::search_backward,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "search_next",
+            Binding::Helix(HelixName::new("search_next")),
             CMD_SEARCH_NEXT,
-            "Next match",
-            "Jump to the next search match. Wraps around at the end of the document.",
             Category::Search,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Next match")
+        .with_help("Jump to the next search match. Wraps around at the end of the document."),
         search::goto_next_match,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "search_prev",
+            Binding::Helix(HelixName::new("search_prev")),
             CMD_SEARCH_PREV,
-            "Previous match",
-            "Jump to the previous search match. Wraps around at the start of the document.",
             Category::Search,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Previous match")
+        .with_help("Jump to the previous search match. Wraps around at the start of the document."),
         search::goto_prev_match,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "search_selection_detect_word_boundaries",
+            Binding::Helix(HelixName::new("search_selection_detect_word_boundaries")),
             CMD_SEARCH_WORD,
-            "Search word",
-            "Search for the word under cursor with word boundaries.",
             Category::Search,
-            false,
-            None,
+        )
+        .with_summary("Search selection as a word")
+        .with_help(
+            "Search for the selection text (escaped), adding word boundaries where the selection starts or ends at a word edge; the selection is unchanged.",
         ),
         search::search_word_under_cursor,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "search_selection",
+            Binding::Helix(HelixName::new("search_selection")),
             CMD_SEARCH_SELECTION,
-            "Search selection",
-            "Search for the current selection text without word boundaries.",
             Category::Search,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Search selection")
+        .with_help("Search for the current selection text without word boundaries."),
         search::search_selection,
     ));
 }

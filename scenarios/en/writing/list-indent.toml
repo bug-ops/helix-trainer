@@ -38,7 +38,6 @@ category = "writing"
 difficulty = "beginner"
 tags = ["indent", "list", "markdown"]
 commands_taught = [">"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "writing_list_outdent_001"
@@ -77,4 +76,3 @@ category = "writing"
 difficulty = "beginner"
 tags = ["dedent", "indent", "list", "markdown"]
 commands_taught = ["<"]
-estimated_time_seconds = 10

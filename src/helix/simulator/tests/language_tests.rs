@@ -12,7 +12,7 @@ fn run_in(language: &str, text: &str, keys: &[&str]) -> String {
     for key in keys {
         sim.execute_command(key).unwrap();
     }
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 const EIGHT_SPACES: &str = "fn a() {\n        let x = 1;\n        let y = 2;\n}\n";

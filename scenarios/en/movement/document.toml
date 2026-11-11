@@ -43,4 +43,3 @@ category = "movement"
 difficulty = "beginner"
 tags = ["document", "navigation"]
 commands_taught = ["gg"]
-estimated_time_seconds = 10

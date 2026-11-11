@@ -113,9 +113,8 @@ tolerance = 0
     #[test]
     fn parse_and_validate_propagates_item_validation_error() {
         let toml = two_scenario_toml();
-        let result = parse_and_validate::<ScenariosFile>(&toml, 2, |_| {
-            Err(SecurityError::InvalidInput("bad item".to_string()))
-        });
+        let result =
+            parse_and_validate::<ScenariosFile>(&toml, 2, |_| Err(SecurityError::InvalidContent));
         assert!(result.is_err());
     }
 }

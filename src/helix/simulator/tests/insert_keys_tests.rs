@@ -13,7 +13,7 @@ fn run(text: &str, cmds: &[&str]) -> String {
     for cmd in cmds {
         sim.execute_command(cmd).unwrap();
     }
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 #[test]
@@ -206,7 +206,7 @@ fn tab_unit_follows_the_language() {
         for cmd in [CMD_INSERT, CMD_INSERT_TAB, "z", CMD_ESCAPE] {
             sim.execute_command(cmd).unwrap();
         }
-        assert_eq!(sim.state().unwrap().content(), expected, "{language}");
+        assert_eq!(sim.display().content(), expected, "{language}");
     }
 }
 

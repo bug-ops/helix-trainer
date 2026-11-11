@@ -37,7 +37,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["brackets", "navigation", "code", "match-mode"]
 commands_taught = ["mm"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "match_brackets_002"
@@ -75,7 +74,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["brackets", "navigation", "code", "match-mode"]
 commands_taught = ["mm"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "match_brackets_003"
@@ -113,7 +111,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["brackets", "nested", "navigation", "match-mode"]
 commands_taught = ["mm"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "match_brackets_004"
@@ -151,4 +148,3 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["brackets", "braces", "navigation", "match-mode"]
 commands_taught = ["mm"]
-estimated_time_seconds = 10

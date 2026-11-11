@@ -52,7 +52,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["selection", "word"]
 commands_taught = ["e"]
-estimated_time_seconds = 15
 
 [[scenarios]]
 id = "replace_char_001"
@@ -104,7 +103,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["replace", "typo"]
 commands_taught = ["r"]
-estimated_time_seconds = 15
 
 [[scenarios]]
 id = "change_selection_001"
@@ -149,4 +147,3 @@ category = "editing"
 difficulty = "beginner"
 tags = ["change", "replace"]
 commands_taught = ["c"]
-estimated_time_seconds = 10

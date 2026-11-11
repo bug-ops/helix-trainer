@@ -3,7 +3,7 @@
 //! Core event loop using `tokio::select`! for non-blocking I/O.
 
 use anyhow::Result;
-use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures::StreamExt;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::future::Future;
@@ -223,11 +223,13 @@ pub async fn run_async_event_loop(
         }
 
         // Check if scenario completed and delay elapsed
-        if state
-            .screen
-            .completed_task()
-            .is_some_and(|task| task.completed_at.elapsed() >= SUCCESS_SCREEN_DELAY)
-        {
+        if state.screen.completed_task().is_some_and(|task| {
+            state
+                .progress
+                .monotonic_now()
+                .duration_since(task.completed_at)
+                >= SUCCESS_SCREEN_DELAY
+        }) {
             tracing::debug!("Success screen delay elapsed, transitioning to results");
             apply_update(state, Message::CompleteScenario, data_tx);
         }
@@ -245,15 +247,6 @@ pub async fn run_async_event_loop(
                         if key.kind != KeyEventKind::Press {
                             continue;
                         }
-                        // Handle global quit shortcut first
-                        if key.code == KeyCode::Char('c')
-                            && key.modifiers.contains(KeyModifiers::CONTROL)
-                        {
-                            tracing::debug!("User pressed Ctrl+C");
-                            apply_update(state, Message::QuitApp, data_tx);
-                            continue;
-                        }
-
                         // Dispatch to screen-specific handlers
                         if let Some(msg) = handle_key_event(key, state) {
                             tracing::debug!("Message: {:?}", msg);
@@ -514,7 +507,6 @@ mod tests {
         assert!(logs.contains(&cause_text), "{logs}");
         let shown = state.ui.notifications.visible();
         let message = shown
-            .iter()
             .map(|n| format!("{:?}", n.notification_type))
             .collect::<Vec<_>>()
             .concat();

@@ -53,4 +53,3 @@ category = "editing"
 difficulty = "beginner"
 tags = ["delete", "line", "basic", "selection"]
 commands_taught = ["x", "d"]
-estimated_time_seconds = 20

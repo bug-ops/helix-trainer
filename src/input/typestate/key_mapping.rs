@@ -17,15 +17,16 @@ use crate::helix::commands::{
     CMD_INSERT_DELETE_TO_LINE_END, CMD_INSERT_DELETE_TO_LINE_START,
     CMD_INSERT_DELETE_WORD_BACKWARD, CMD_INSERT_DELETE_WORD_FORWARD, CMD_INSERT_LINE_START,
     CMD_INSERT_TAB, CMD_JOIN_LINES, CMD_JOIN_SELECTIONS_SPACE, CMD_KEEP_MATCHING,
-    CMD_MERGE_CONSECUTIVE, CMD_MERGE_SELECTIONS, CMD_MOVE_DOWN, CMD_MOVE_LEFT,
-    CMD_MOVE_LONG_WORD_BACKWARD, CMD_MOVE_LONG_WORD_END, CMD_MOVE_LONG_WORD_FORWARD,
+    CMD_KEEP_PRIMARY_SELECTION, CMD_MERGE_CONSECUTIVE, CMD_MERGE_SELECTIONS, CMD_MOVE_DOWN,
+    CMD_MOVE_LEFT, CMD_MOVE_LONG_WORD_BACKWARD, CMD_MOVE_LONG_WORD_END, CMD_MOVE_LONG_WORD_FORWARD,
     CMD_MOVE_RIGHT, CMD_MOVE_UP, CMD_MOVE_WORD_BACKWARD, CMD_MOVE_WORD_END, CMD_MOVE_WORD_FORWARD,
     CMD_OPEN_ABOVE, CMD_OPEN_BELOW, CMD_PAGE_DOWN, CMD_PAGE_UP, CMD_PASTE_AFTER, CMD_PASTE_BEFORE,
     CMD_REDO, CMD_REMOVE_MATCHING, CMD_REMOVE_PRIMARY_SELECTION, CMD_REPEAT,
     CMD_REPEAT_LAST_MOTION, CMD_REPLACE_WITH_YANKED, CMD_SEARCH_BACKWARD, CMD_SEARCH_NEXT,
     CMD_SEARCH_PREV, CMD_SEARCH_SELECTION, CMD_SEARCH_WORD, CMD_SELECT_ALL, CMD_SELECT_LINE,
     CMD_SELECT_MODE, CMD_SHRINK_TO_LINE_BOUNDS, CMD_SPLIT_SELECTION_NEWLINES, CMD_SWITCH_CASE,
-    CMD_SWITCH_CASE_ALT, CMD_SWITCH_TO_UPPERCASE, CMD_TRIM_SELECTIONS, CMD_UNDO, CMD_YANK,
+    CMD_SWITCH_CASE_ALT, CMD_SWITCH_TO_UPPERCASE, CMD_TOGGLE_COMMENTS, CMD_TRIM_SELECTIONS,
+    CMD_UNDO, CMD_YANK,
 };
 
 /// Map macOS composed Unicode characters to Alt + base key
@@ -354,10 +355,11 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
     // arms (e.g. Ctrl-d resolving to plain 'd' / delete_selection).
     if modifiers.contains(KeyModifiers::CONTROL) {
         return match c {
-            'b' => Some(CMD_PAGE_UP),        // Ctrl-b
-            'f' => Some(CMD_PAGE_DOWN),      // Ctrl-f
-            'u' => Some(CMD_HALF_PAGE_UP),   // Ctrl-u
-            'd' => Some(CMD_HALF_PAGE_DOWN), // Ctrl-d
+            'c' => Some(CMD_TOGGLE_COMMENTS), // Ctrl-c
+            'b' => Some(CMD_PAGE_UP),         // Ctrl-b
+            'f' => Some(CMD_PAGE_DOWN),       // Ctrl-f
+            'u' => Some(CMD_HALF_PAGE_UP),    // Ctrl-u
+            'd' => Some(CMD_HALF_PAGE_DOWN),  // Ctrl-d
             _ => None,
         };
     }
@@ -459,22 +461,43 @@ pub fn map_single_key_command(c: char, modifiers: KeyModifiers) -> Option<&'stat
         ('_', _, false) => Some(CMD_TRIM_SELECTIONS),
         ('C', _, false) => Some(CMD_COPY_SELECTION_NEXT),
         ('K', _, false) => Some(CMD_KEEP_MATCHING),
+        (',', false, false) => Some(CMD_KEEP_PRIMARY_SELECTION),
 
         _ => None,
     }
 }
 
-/// Check if a command is compatible with count prefix
+/// Check if a command is compatible with count prefix.
+///
+/// `r` is not listed: a counted `r` opens `ReplaceCharPending` with the count dropped.
+/// A counted `o`/`O` opens one line and swallows the count.
 pub fn is_count_compatible_command(c: char, modifiers: KeyModifiers) -> bool {
     let is_shift = modifiers.contains(KeyModifiers::SHIFT);
 
     matches!(
         (c, is_shift),
-        // Movement commands support count
         (
-            'h' | 'j' | 'k' | 'l' | 'w' | 'b' | 'e' | 'x' | 'd' | 'c' | 'u' | 'n',
+            'h' | 'j'
+                | 'k'
+                | 'l'
+                | 'w'
+                | 'b'
+                | 'e'
+                | 'x'
+                | 'd'
+                | 'c'
+                | 'u'
+                | 'n'
+                | 'y'
+                | 'v'
+                | 'i'
+                | 'a'
+                | 'o',
             false
-        ) | ('W' | 'B' | 'E' | 'X' | 'J' | '>' | '<' | 'U' | 'N', _)
+        ) | (
+            'W' | 'B' | 'E' | 'X' | 'J' | '>' | '<' | 'U' | 'N' | 'I' | 'A' | 'C' | 'O',
+            _
+        )
     )
 }
 
@@ -543,10 +566,10 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
 
 /// Convert a command string to a `KeyEvent` for the input state machine
 ///
-/// This is a helper function to bridge the gap between command strings
-/// coming from the input layer and the KeyEvent-based state machine.
-/// Uses `parse_helix_key_string()` for parsing, which supports modifiers
-/// like Alt-C, Ctrl-w, etc.
+/// Bridges command strings from the input layer to the `KeyEvent`-based
+/// state machine via `parse_helix_key_string()`, which supports modifiers
+/// like Alt-C, Ctrl-w, etc. Returns `None` for a token that is not a key, so
+/// callers drop it instead of feeding the machine a different key.
 ///
 /// # Examples
 ///
@@ -554,22 +577,18 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
 /// use crossterm::event::{KeyCode, KeyModifiers};
 /// use helix_trainer::input::typestate::command_to_key_event;
 ///
-/// let key = command_to_key_event("h");
+/// let key = command_to_key_event("h").unwrap();
 /// assert_eq!(key.code, KeyCode::Char('h'));
 ///
-/// let key = command_to_key_event("Escape");
+/// let key = command_to_key_event("Escape").unwrap();
 /// assert_eq!(key.code, KeyCode::Esc);
 ///
-/// let key = command_to_key_event("Alt-C");
+/// let key = command_to_key_event("Alt-C").unwrap();
 /// assert!(key.modifiers.contains(KeyModifiers::ALT));
 /// assert!(key.modifiers.contains(KeyModifiers::SHIFT));
+///
+/// assert!(command_to_key_event("not-a-key").is_none());
 /// ```
-pub fn command_to_key_event(command: &str) -> KeyEvent {
-    parse_helix_key_string(command).unwrap_or_else(|| {
-        tracing::warn!(
-            command,
-            "Failed to parse key command, falling back to Space"
-        );
-        KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE)
-    })
+pub fn command_to_key_event(command: &str) -> Option<KeyEvent> {
+    parse_helix_key_string(command)
 }

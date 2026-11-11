@@ -1,10 +1,10 @@
 //! Forward-translating keymap overlay
 
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use super::context::KeyContext;
+use super::fingerprint::{Fnv1a64, KeymapFingerprint};
 use super::keys::{CanonicalKeys, PhysicalKey};
 
 /// A forward-only translation table from `(context, physical key)` to the
@@ -70,24 +70,34 @@ impl KeymapOverlay {
         }
     }
 
-    /// Hash over the sorted resolved bindings, order-independent so the
-    /// same keymap always fingerprints the same way regardless of
-    /// `HashMap` iteration order.
+    /// Fingerprint of the resolved bindings, independent of `HashMap`
+    /// iteration order, the toolchain and dependency versions.
+    ///
+    /// FNV-1a 64 over the bindings sorted by (context, key); each binding
+    /// hashes its context name, Helix key string and bound canonical target
+    /// as length-prefixed fields, so remapping a key to another command
+    /// changes the value.
     ///
     /// Stored on [`UserProfile::keymap_fingerprint`](crate::gamification::UserProfile::keymap_fingerprint)
     /// so a mismatch at startup can flag that FSRS review history was
     /// recorded under a different mapping.
-    pub fn fingerprint(&self) -> u64 {
-        let mut entries: Vec<(String, &str)> = self
+    pub fn fingerprint(&self) -> KeymapFingerprint {
+        let mut entries: Vec<(&'static str, String, &str)> = self
             .table
             .iter()
-            .map(|((context, key), canonical)| (format!("{context:?}|{key:?}"), canonical.as_str()))
+            .map(|((context, key), canonical)| {
+                (context.as_str(), key.to_helix_string(), canonical.as_str())
+            })
             .collect();
         entries.sort_unstable();
 
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        entries.hash(&mut hasher);
-        hasher.finish()
+        let mut hasher = Fnv1a64::new();
+        for (context, key, target) in entries {
+            hasher.write_field(context);
+            hasher.write_field(&key);
+            hasher.write_field(target);
+        }
+        KeymapFingerprint::Fnv1a64V1(hasher.finish())
     }
 }
 
@@ -153,6 +163,40 @@ mod tests {
         ]);
         assert_eq!(a.fingerprint(), b.fingerprint());
         assert_ne!(a.fingerprint(), KeymapOverlay::identity().fingerprint());
+    }
+
+    #[test]
+    fn remapping_a_key_to_another_command_changes_the_fingerprint() {
+        let remap = |target| {
+            KeymapOverlay::from_entries([((KeyContext::Base, key('j')), target)]).fingerprint()
+        };
+        assert_ne!(
+            remap(CanonicalKeys::from_static("k")),
+            remap(CanonicalKeys::from_static("l"))
+        );
+    }
+
+    #[test]
+    fn context_and_key_are_part_of_the_fingerprint() {
+        let at = |context, c| {
+            KeymapOverlay::from_entries([((context, key(c)), CanonicalKeys::from_static("k"))])
+                .fingerprint()
+        };
+        assert_ne!(at(KeyContext::Base, 'j'), at(KeyContext::Goto, 'j'));
+        assert_ne!(at(KeyContext::Base, 'j'), at(KeyContext::Base, 'l'));
+    }
+
+    /// Pins the algorithm: a change here invalidates every stored fingerprint.
+    #[test]
+    fn fingerprint_value_is_pinned() {
+        let overlay = KeymapOverlay::from_entries([(
+            (KeyContext::Base, key('j')),
+            CanonicalKeys::from_static("k"),
+        )]);
+        assert_eq!(
+            overlay.fingerprint(),
+            KeymapFingerprint::Fnv1a64V1(0x05aa_d1ba_399a_3e5d)
+        );
     }
 
     #[test]

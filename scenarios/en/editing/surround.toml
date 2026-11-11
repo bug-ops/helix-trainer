@@ -38,7 +38,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "delete", "parentheses"]
 commands_taught = ["md"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "surround_delete_brackets_001"
@@ -72,7 +71,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "delete", "brackets"]
 commands_taught = ["md"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "surround_delete_braces_001"
@@ -106,7 +104,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "delete", "braces"]
 commands_taught = ["md"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "surround_delete_quotes_001"
@@ -140,7 +137,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "delete", "quotes"]
 commands_taught = ["md"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "surround_delete_nested_001"
@@ -174,7 +170,6 @@ category = "editing"
 difficulty = "advanced"
 tags = ["surround", "delete", "nested"]
 commands_taught = ["md"]
-estimated_time_seconds = 15
 
 # ============================================================================
 # REPLACE SURROUND (mr{from}{to})
@@ -212,7 +207,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "replace", "conversion"]
 commands_taught = ["mr"]
-estimated_time_seconds = 15
 
 [[scenarios]]
 id = "surround_replace_brackets_to_braces_001"
@@ -246,7 +240,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "replace", "conversion"]
 commands_taught = ["mr"]
-estimated_time_seconds = 15
 
 [[scenarios]]
 id = "surround_replace_quotes_001"
@@ -280,7 +273,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "replace", "quotes"]
 commands_taught = ["mr"]
-estimated_time_seconds = 15
 
 [[scenarios]]
 id = "surround_replace_braces_to_parens_001"
@@ -314,7 +306,6 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "replace", "conversion"]
 commands_taught = ["mr"]
-estimated_time_seconds = 15
 
 [[scenarios]]
 id = "surround_replace_angle_to_parens_001"
@@ -348,4 +339,3 @@ category = "editing"
 difficulty = "intermediate"
 tags = ["surround", "replace", "generics"]
 commands_taught = ["mr"]
-estimated_time_seconds = 15

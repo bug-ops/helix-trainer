@@ -12,7 +12,7 @@ fn run(text: &str, cmds: &[&str]) -> String {
     for cmd in cmds {
         sim.execute_command(cmd).unwrap();
     }
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 #[test]

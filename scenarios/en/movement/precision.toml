@@ -33,7 +33,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["character", "precision"]
 commands_taught = ["h"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "precision_right_001"
@@ -67,7 +66,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["character", "precision"]
 commands_taught = ["l"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "precision_down_001"
@@ -105,7 +103,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "precision"]
 commands_taught = ["j"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "precision_up_001"
@@ -143,7 +140,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "precision"]
 commands_taught = ["k"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "precision_word_001"
@@ -178,7 +174,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "precision"]
 commands_taught = ["w"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "precision_word_back_001"
@@ -213,7 +208,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "precision"]
 commands_taught = ["b"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "precision_line_start_001"
@@ -247,7 +241,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "start"]
 commands_taught = ["gh"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "precision_doc_start_001"
@@ -285,4 +278,3 @@ category = "movement"
 difficulty = "beginner"
 tags = ["document", "start"]
 commands_taught = ["gg"]
-estimated_time_seconds = 5

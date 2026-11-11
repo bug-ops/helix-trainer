@@ -46,7 +46,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["paragraph", "navigation"]
 commands_taught = ["]p"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "paragraph_next_002"
@@ -93,7 +92,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["paragraph", "navigation", "code"]
 commands_taught = ["]p"]
-estimated_time_seconds = 10
 
 # ============================================================================
 # PREVIOUS PARAGRAPH ([p)
@@ -140,7 +138,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["paragraph", "navigation"]
 commands_taught = ["[p"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "paragraph_prev_002"
@@ -179,4 +176,3 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["paragraph", "navigation"]
 commands_taught = ["[p"]
-estimated_time_seconds = 10

@@ -1,14 +1,19 @@
 //! Insert mode operations
 
-use super::commands::clipboard::yank_to_register;
+use super::commands::{self, clipboard::yank_to_register};
+use super::insert_session::{
+    EntrySelection, InsertEntry, InsertEntryCommand, InsertSession, SessionChange,
+};
 use super::{HelixSimulator, InsertMode, NormalMode};
 use crate::helix::commands::{
     CMD_INSERT_ALT_BACKSPACE, CMD_INSERT_DELETE_CHAR_FORWARD, CMD_INSERT_DELETE_KEY,
     CMD_INSERT_DELETE_TO_LINE_END, CMD_INSERT_DELETE_TO_LINE_START,
     CMD_INSERT_DELETE_WORD_BACKWARD, CMD_INSERT_DELETE_WORD_FORWARD, CMD_INSERT_TAB,
 };
-use crate::helix::newline_indent::{NewLineStart, NewlineIndent, leading_whitespace};
-use crate::security::UserError;
+use crate::helix::error::SimulatorError;
+use crate::helix::newline_indent::{
+    CommentContinuation, NewLineStart, NewlineIndent, leading_whitespace,
+};
 use helix_core::{
     Range, Selection, Transaction, graphemes::next_grapheme_boundary,
     line_ending::line_end_char_index, movement,
@@ -80,7 +85,40 @@ impl InsertCommand {
     }
 }
 
+/// A line opened by [`HelixSimulator::open_above_at`]
+pub(super) struct OpenedLine {
+    /// Where the cursor sits on the new line
+    pub(super) cursor: usize,
+    /// Characters inserted, line break included
+    pub(super) inserted: usize,
+    /// Whether the new line holds nothing but indentation
+    strippable: bool,
+}
+
 impl<M: super::EditorMode> HelixSimulator<M> {
+    /// Open a line above the line holding char `at`, indented by the
+    /// language rule, and put the cursor on it
+    pub(super) fn open_above_at(&mut self, at: usize, comments: CommentContinuation) -> OpenedLine {
+        let line = self.doc.char_to_line(at.min(self.doc.len_chars()));
+        let line_start = self.doc.line_to_char(line);
+        let start = self.newline_rule().above(line, comments);
+        let text = start.text();
+
+        let indent_len = text.chars().count();
+        let cursor = line_start + indent_len;
+        let transaction = Transaction::change(
+            &self.doc,
+            [(line_start, line_start, Some(format!("{text}\n").into()))].into_iter(),
+        )
+        .with_selection(Selection::point(cursor));
+        self.apply_transaction(&transaction);
+        OpenedLine {
+            cursor,
+            inserted: indent_len + 1,
+            strippable: start.comment_token.is_none(),
+        }
+    }
+
     /// Whether the cursor at `head` sits between the two halves of one of
     /// the language's auto-pairs on its own line
     fn between_auto_pair(&self, head: usize, line_start: usize) -> bool {
@@ -109,13 +147,113 @@ impl<M: super::EditorMode> HelixSimulator<M> {
 
 // Operations that prepare for entering insert mode (Normal mode methods)
 impl HelixSimulator<NormalMode> {
+    /// Run an Insert-entering command and open its Insert session.
+    ///
+    /// The command's edit and selection move happen in Normal mode, then the
+    /// selection collapses to one cursor. Everything from here to `Escape`
+    /// (including that edit) becomes one undo step, and the redo history is
+    /// set aside until the session closes.
+    ///
+    /// # Errors
+    ///
+    /// Returns the unchanged Normal-mode simulator together with the
+    /// command's error (boxed: the simulator is large), so the caller keeps
+    /// its state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::HelixSimulator;
+    /// use helix_trainer::helix::simulator::InsertEntryCommand;
+    ///
+    /// let sim = HelixSimulator::new("fn".to_string());
+    /// let mut sim = sim.begin_insert(InsertEntryCommand::Append).map_err(|failed| failed.1)?;
+    /// sim.insert_text("x")?;
+    /// let sim = sim.exit_insert_mode();
+    /// assert_eq!(sim.to_snapshot().content, "fxn");
+    /// # Ok::<(), helix_trainer::helix::error::SimulatorError>(())
+    /// ```
+    pub fn begin_insert(
+        mut self,
+        entry: InsertEntryCommand,
+    ) -> Result<HelixSimulator<InsertMode>, Box<(Self, SimulatorError)>> {
+        let saved_redo = std::mem::take(&mut self.redo_stack);
+        let history_len = self.history.len();
+        let original = self.selection.clone();
+        let appended_from = self.selection.primary().from();
+        let append_restore = self.append_selection();
+
+        let auto_indent = match self.run_entry_edit(entry) {
+            Ok(auto_indent) => auto_indent,
+            Err(error) => {
+                self.redo_stack = saved_redo;
+                return Err(Box::new((self, error)));
+            }
+        };
+        commands::record_insert_entry(&mut self, &entry.command());
+
+        let cursor = self.collapse_to_cursor();
+        let change = match self.history.drain(history_len..).next() {
+            Some(before) => SessionChange::Changed { before },
+            None => SessionChange::Pristine(EntrySelection {
+                restore: match entry {
+                    InsertEntryCommand::Insert => original,
+                    InsertEntryCommand::Append => append_restore,
+                    _ => cursor.clone(),
+                },
+                cursor,
+            }),
+        };
+        let kind = match entry {
+            InsertEntryCommand::Append => InsertEntry::Append {
+                anchor: appended_from,
+            },
+            _ => InsertEntry::Other,
+        };
+        let session = InsertSession::new(history_len, saved_redo, change, kind, auto_indent);
+        Ok(self.into_mode(session))
+    }
+
+    /// The selection Helix holds right after `a`: the primary range from its
+    /// start through the grapheme after its end (a point cursor is one grapheme wide)
+    fn append_selection(&self) -> Selection {
+        let slice = self.doc.slice(..);
+        let range = self.selection.primary();
+        let end = if range.is_empty() {
+            next_grapheme_boundary(slice, range.head)
+        } else {
+            range.to()
+        };
+        Selection::from(Range::new(range.from(), next_grapheme_boundary(slice, end)))
+    }
+
+    /// Run the edit and selection move of `entry`; returns where an unused
+    /// auto-indent would be stripped.
+    fn run_entry_edit(
+        &mut self,
+        entry: InsertEntryCommand,
+    ) -> Result<Option<usize>, SimulatorError> {
+        match entry {
+            InsertEntryCommand::Insert => Ok(None),
+            InsertEntryCommand::Append => self.append().map(|()| None),
+            InsertEntryCommand::InsertLineStart => self.insert_at_line_start().map(|()| None),
+            InsertEntryCommand::AppendLineEnd => self.append_at_line_end().map(|()| None),
+            InsertEntryCommand::OpenBelow => Ok(self.open_line_below()),
+            InsertEntryCommand::OpenAbove => Ok(self.open_line_above()),
+            InsertEntryCommand::Change { register } => {
+                self.change_selection_from_register(register).map(|()| None)
+            }
+            InsertEntryCommand::ChangeNoYank => self.change_selection_noyank().map(|()| None),
+        }
+    }
+
     /// Append: move cursor after current character (prepare for insert mode)
     ///
     /// # Errors
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn append(&mut self) -> Result<(), UserError> {
+    pub fn append(&mut self) -> Result<(), SimulatorError> {
         let range = self.selection.primary();
         let head = range.head;
         let anchor = range.anchor;
@@ -136,18 +274,42 @@ impl HelixSimulator<NormalMode> {
         Ok(())
     }
 
-    /// Insert at line start: move to beginning of line (prepare for insert mode)
+    /// Insert at line start (`I`): move to the first non-whitespace character
+    /// of the line, or to the line start when it has none (prepare for insert
+    /// mode)
+    ///
+    /// On a completely empty line the cursor lands on the indentation `o`
+    /// would give below that line, which is inserted, as Helix's
+    /// `insert_with_indent` does. The line is the one under the primary
+    /// range's block cursor.
     ///
     /// # Errors
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn insert_at_line_start(&mut self) -> Result<(), UserError> {
-        // Move cursor to start of current line
-        let head = self.selection.primary().head;
-        let current_line = self.doc.char_to_line(head);
-        let line_start = self.doc.line_to_char(current_line);
-        self.selection = Selection::point(line_start);
+    pub fn insert_at_line_start(&mut self) -> Result<(), SimulatorError> {
+        let slice = self.doc.slice(..);
+        let line = self
+            .doc
+            .char_to_line(self.selection.primary().cursor(slice));
+        let line_start = self.doc.line_to_char(line);
+
+        if line_end_char_index(&slice, line) == line_start {
+            let indent = self.start_after(line, line_start).indent;
+            let cursor = line_start + indent.chars().count();
+            let transaction = Transaction::change(
+                &self.doc,
+                [(line_start, line_start, Some(indent.into()))].into_iter(),
+            )
+            .with_selection(Selection::point(cursor));
+            self.apply_transaction(&transaction);
+        } else {
+            let first_non_blank = slice
+                .line(line)
+                .first_non_whitespace_char()
+                .map_or(line_start, |offset| line_start + offset);
+            self.selection = Selection::point(first_non_blank);
+        }
         Ok(())
     }
 
@@ -157,7 +319,7 @@ impl HelixSimulator<NormalMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn append_at_line_end(&mut self) -> Result<(), UserError> {
+    pub fn append_at_line_end(&mut self) -> Result<(), SimulatorError> {
         // Move cursor to end of current line
         let head = self.selection.primary().head;
         let current_line = self.doc.char_to_line(head);
@@ -183,7 +345,14 @@ impl HelixSimulator<NormalMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn open_below(&mut self) -> Result<(), UserError> {
+    pub fn open_below(&mut self) -> Result<(), SimulatorError> {
+        self.open_line_below();
+        Ok(())
+    }
+
+    /// Open the line below and return where leaving Insert mode with nothing
+    /// typed strips its indentation, if it is plain indentation.
+    fn open_line_below(&mut self) -> Option<usize> {
         let range = self.selection.primary();
         let last_char = if range.anchor == range.head {
             range.head
@@ -195,16 +364,14 @@ impl HelixSimulator<NormalMode> {
         let start = self.start_after(current_line, line_end);
         let text = start.text();
 
+        let cursor = line_end + 1 + text.chars().count();
         let transaction = Transaction::change(
             &self.doc,
             [(line_end, line_end, Some(format!("\n{text}").into()))].into_iter(),
-        );
+        )
+        .with_selection(Selection::point(cursor));
         self.apply_transaction(&transaction);
-
-        let cursor = line_end + 1 + text.chars().count();
-        self.selection = Selection::point(cursor);
-        self.auto_indent_end = start.comment_token.is_none().then_some(cursor);
-        Ok(())
+        start.comment_token.is_none().then_some(cursor)
     }
 
     /// Open above: insert new line above the selection's first line, indented
@@ -215,23 +382,16 @@ impl HelixSimulator<NormalMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn open_above(&mut self) -> Result<(), UserError> {
-        let head = self.selection.primary().from();
-        let current_line = self.doc.char_to_line(head.min(self.doc.len_chars()));
-        let line_start = self.doc.line_to_char(current_line);
-        let start = self.newline_rule().above(current_line);
-        let text = start.text();
-
-        let transaction = Transaction::change(
-            &self.doc,
-            [(line_start, line_start, Some(format!("{text}\n").into()))].into_iter(),
-        );
-        self.apply_transaction(&transaction);
-
-        let cursor = line_start + text.chars().count();
-        self.selection = Selection::point(cursor);
-        self.auto_indent_end = start.comment_token.is_none().then_some(cursor);
+    pub fn open_above(&mut self) -> Result<(), SimulatorError> {
+        self.open_line_above();
         Ok(())
+    }
+
+    /// Open the line above; returns the strip position like [`Self::open_line_below`].
+    fn open_line_above(&mut self) -> Option<usize> {
+        let from = self.selection.primary().from();
+        let opened = self.open_above_at(from, CommentContinuation::Continue);
+        opened.strippable.then_some(opened.cursor)
     }
 
     /// Replace every character of every selection range with `ch` (Helix `r`)
@@ -244,7 +404,7 @@ impl HelixSimulator<NormalMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn replace_char(&mut self, ch: char) -> Result<(), UserError> {
+    pub fn replace_char(&mut self, ch: char) -> Result<(), SimulatorError> {
         let len_chars = self.doc.len_chars();
         let transaction = Transaction::change_by_selection(&self.doc, &self.selection, |range| {
             let (from, to) = if range.anchor == range.head {
@@ -259,10 +419,10 @@ impl HelixSimulator<NormalMode> {
             (from, to, Some(replacement.into()))
         });
 
-        let mapped = self.selection.clone().map(transaction.changes());
+        let before = self.selection.clone();
         self.apply_transaction(&transaction);
-        if self.doc.len_chars() != len_chars {
-            self.selection = mapped;
+        if self.doc.len_chars() == len_chars {
+            self.selection = before;
         }
         Ok(())
     }
@@ -274,7 +434,7 @@ impl HelixSimulator<NormalMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
     /// fallible commands that share the registry's function type.
-    pub fn change_selection(&mut self) -> Result<(), UserError> {
+    pub fn change_selection(&mut self) -> Result<(), SimulatorError> {
         self.change_selection_from_register(None)
     }
 
@@ -289,7 +449,7 @@ impl HelixSimulator<NormalMode> {
     pub fn change_selection_from_register(
         &mut self,
         register: Option<char>,
-    ) -> Result<(), UserError> {
+    ) -> Result<(), SimulatorError> {
         yank_to_register(self, register)?;
         self.change_selection_impl();
         Ok(())
@@ -302,7 +462,7 @@ impl HelixSimulator<NormalMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn change_selection_noyank(&mut self) -> Result<(), UserError> {
+    pub fn change_selection_noyank(&mut self) -> Result<(), SimulatorError> {
         self.change_selection_impl();
         Ok(())
     }
@@ -323,11 +483,11 @@ impl HelixSimulator<NormalMode> {
     /// `xc` behaves like `O` rather than a plain insert at the deletion
     /// point.
     fn change_selection_impl(&mut self) {
-        self.selection = if super::commands::editing::is_selection_linewise(self) {
-            super::commands::editing::change_selection_linewise(self)
+        if super::commands::editing::is_selection_linewise(self) {
+            super::commands::editing::change_selection_linewise(self);
         } else {
-            super::commands::editing::delete_active_selection(self)
-        };
+            super::commands::editing::delete_active_selection(self);
+        }
     }
 }
 
@@ -344,7 +504,7 @@ impl HelixSimulator<InsertMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn insert_text(&mut self, text: &str) -> Result<(), UserError> {
+    pub fn insert_text(&mut self, text: &str) -> Result<(), SimulatorError> {
         if text == "\n" {
             self.insert_newline();
             return Ok(());
@@ -353,13 +513,9 @@ impl HelixSimulator<InsertMode> {
         let text_len = text.chars().count();
 
         let transaction =
-            Transaction::change(&self.doc, [(head, head, Some(text.into()))].into_iter());
-
+            Transaction::change(&self.doc, [(head, head, Some(text.into()))].into_iter())
+                .with_selection(Selection::point(head + text_len));
         self.apply_transaction(&transaction);
-
-        // Move cursor after inserted text
-        let new_pos = head + text_len;
-        self.selection = Selection::point(new_pos.min(self.doc.len_chars()));
 
         Ok(())
     }
@@ -405,19 +561,19 @@ impl HelixSimulator<InsertMode> {
         };
 
         let transaction =
-            Transaction::change(&self.doc, [(from, to, Some(text.into()))].into_iter());
+            Transaction::change(&self.doc, [(from, to, Some(text.into()))].into_iter())
+                .with_selection(Selection::point(cursor));
         self.apply_transaction(&transaction);
-        self.selection = Selection::point(cursor);
-        self.auto_indent_end = strips_indent.then_some(cursor);
+        self.session.auto_indent = strips_indent.then_some(cursor);
     }
 
     /// Strip the indentation of a line break nothing was typed after, on
     /// leaving Insert mode (Helix `try_restore_indent`).
     ///
-    /// The removal is folded into the session's undo step, so it records no
-    /// history entry of its own.
+    /// The removal is part of the session, so it records no history entry of
+    /// its own.
     pub(super) fn strip_unused_auto_indent(&mut self) {
-        let Some(end) = self.auto_indent_end.take() else {
+        let Some(end) = self.session.auto_indent.take() else {
             return;
         };
         let head = self.selection.primary().head;
@@ -426,9 +582,9 @@ impl HelixSimulator<InsertMode> {
         if head != end || head != line_end_char_index(&self.doc.slice(..), line) {
             return;
         }
-        let transaction = Transaction::change(&self.doc, [(line_start, head, None)].into_iter());
-        transaction.apply(&mut self.doc);
-        self.selection = Selection::point(line_start);
+        let transaction = Transaction::change(&self.doc, [(line_start, head, None)].into_iter())
+            .with_selection(Selection::point(line_start));
+        self.apply_transaction(&transaction);
     }
 
     /// Delete character before cursor (backspace)
@@ -439,7 +595,7 @@ impl HelixSimulator<InsertMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn backspace(&mut self) -> Result<(), UserError> {
+    pub fn backspace(&mut self) -> Result<(), SimulatorError> {
         let head = self.selection.primary().head;
 
         // Can't backspace at position 0
@@ -449,12 +605,9 @@ impl HelixSimulator<InsertMode> {
 
         // Delete character before cursor
         let delete_start = head - 1;
-        let transaction = Transaction::change(&self.doc, [(delete_start, head, None)].into_iter());
-
+        let transaction = Transaction::change(&self.doc, [(delete_start, head, None)].into_iter())
+            .with_selection(Selection::point(delete_start));
         self.apply_transaction(&transaction);
-
-        // Move cursor back one position
-        self.selection = Selection::point(delete_start);
 
         Ok(())
     }
@@ -469,7 +622,7 @@ impl HelixSimulator<InsertMode> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn apply_insert_command(&mut self, command: InsertCommand) -> Result<(), UserError> {
+    pub fn apply_insert_command(&mut self, command: InsertCommand) -> Result<(), SimulatorError> {
         if command == InsertCommand::Indent {
             let unit = self.indent_unit.to_string();
             return self.insert_text(&unit);
@@ -477,9 +630,9 @@ impl HelixSimulator<InsertMode> {
         let head = self.selection.primary().head.min(self.doc.len_chars());
         let (start, end) = self.insert_command_span(command, head);
 
-        let transaction = Transaction::change(&self.doc, [(start, end, None)].into_iter());
+        let transaction = Transaction::change(&self.doc, [(start, end, None)].into_iter())
+            .with_selection(Selection::point(start));
         self.apply_transaction(&transaction);
-        self.selection = Selection::point(start);
 
         Ok(())
     }

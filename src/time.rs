@@ -1,17 +1,19 @@
 //! Clock abstraction for testable time-dependent logic.
 //!
 //! Production code obtains the current time through a [`Clock`] implementation instead of
-//! calling `Utc::now()` directly, so tests can inject [`FakeClock`] to control day-boundary
-//! and scheduling behavior deterministically.
+//! calling `Utc::now()` directly, so tests can inject a controllable clock to drive
+//! day-boundary and scheduling behavior deterministically. The controllable clocks,
+//! `FakeClock` and `FakeMonotonicClock`, exist in unit tests and behind the `test-util` feature.
 
-use chrono::{DateTime, Duration, NaiveDate, Utc};
-use std::sync::Mutex;
-use std::time::{Duration as StdDuration, Instant};
+use chrono::{DateTime, NaiveDate, Utc};
+use std::time::Instant;
+#[cfg(any(test, feature = "test-util"))]
+use {chrono::Duration, std::sync::Mutex, std::time::Duration as StdDuration};
 
 /// Source of monotonic time for elapsed and timeout logic.
 ///
 /// Unlike [`Clock`] (wall-clock, for day boundaries) this never goes backwards, so
-/// sessions measure durations with it; tests inject [`FakeMonotonicClock`] instead of sleeping.
+/// sessions measure durations with it; tests inject a `FakeMonotonicClock` instead of sleeping.
 ///
 /// Implementors must guarantee `now()` is non-decreasing and safe to call from any thread.
 pub trait MonotonicClock: Send + Sync {
@@ -40,6 +42,8 @@ impl MonotonicClock for SystemMonotonicClock {
 
 /// [`MonotonicClock`] that only moves when told to, for deterministic timer tests.
 ///
+/// Available in unit tests and behind the `test-util` feature.
+///
 /// # Examples
 ///
 /// ```
@@ -51,12 +55,15 @@ impl MonotonicClock for SystemMonotonicClock {
 /// clock.advance(Duration::from_secs(5));
 /// assert_eq!(clock.now() - start, Duration::from_secs(5));
 /// ```
+#[cfg(any(test, feature = "test-util"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 #[derive(Debug)]
 pub struct FakeMonotonicClock {
     origin: Instant,
     offset: Mutex<StdDuration>,
 }
 
+#[cfg(any(test, feature = "test-util"))]
 impl FakeMonotonicClock {
     /// Creates a fake clock anchored at the current real instant.
     pub fn new() -> Self {
@@ -75,12 +82,14 @@ impl FakeMonotonicClock {
     }
 }
 
+#[cfg(any(test, feature = "test-util"))]
 impl Default for FakeMonotonicClock {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(any(test, feature = "test-util"))]
 impl MonotonicClock for FakeMonotonicClock {
     fn now(&self) -> Instant {
         self.origin
@@ -127,6 +136,8 @@ impl Clock for SystemClock {
 
 /// [`Clock`] implementation with a manually controlled time, for tests.
 ///
+/// Available in unit tests and behind the `test-util` feature.
+///
 /// # Examples
 ///
 /// ```
@@ -138,11 +149,14 @@ impl Clock for SystemClock {
 /// clock.advance(Duration::days(1));
 /// assert!(clock.now() > before);
 /// ```
+#[cfg(any(test, feature = "test-util"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 #[derive(Debug)]
 pub struct FakeClock {
     now: Mutex<DateTime<Utc>>,
 }
 
+#[cfg(any(test, feature = "test-util"))]
 impl FakeClock {
     /// Creates a fake clock fixed at the given time.
     pub fn new(now: DateTime<Utc>) -> Self {
@@ -187,6 +201,7 @@ impl FakeClock {
     }
 }
 
+#[cfg(any(test, feature = "test-util"))]
 impl Clock for FakeClock {
     fn now(&self) -> DateTime<Utc> {
         *self

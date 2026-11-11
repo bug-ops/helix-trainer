@@ -1,13 +1,16 @@
 //! Search commands (/, ?, n, N, *, Alt-*)
 //!
-//! Note: Helix provides `*` for word search (forward). To search backward
-//! for word under cursor, use `*` followed by `N` to go to previous match.
+//! As in Helix, `n` always searches forward and `N` always backward, whichever
+//! of `/` or `?` set the pattern. `*` turns the current selection into the
+//! pattern without moving it.
 
+use crate::helix::error::SimulatorError;
 use crate::helix::simulator::HelixSimulator;
 use crate::helix::simulator::search_state::SearchDirection;
-use crate::security::UserError;
+use helix_core::chars::char_is_word;
+use helix_core::regex;
 use helix_core::ropey::RopeSlice;
-use helix_core::{Range, Selection};
+use helix_core::{Range, Rope, Selection};
 use std::hash::{Hash, Hasher};
 
 #[inline]
@@ -100,7 +103,7 @@ fn place_match<M: crate::helix::simulator::EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn search_next_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let content = sim.doc.slice(..).to_string();
     let doc_version = compute_doc_version(&sim.doc);
@@ -124,7 +127,7 @@ pub fn search_next_match<M: crate::helix::simulator::EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn search_prev_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let head = sim.selection.primary().head;
     let content = sim.doc.slice(..).to_string();
     let doc_version = compute_doc_version(&sim.doc);
@@ -148,7 +151,7 @@ pub fn search_prev_match<M: crate::helix::simulator::EditorMode>(
 /// fallible commands that share the registry's function type.
 pub fn search_forward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     sim.search_state.set_current_match(None);
     search_next_match(sim)
 }
@@ -161,18 +164,17 @@ pub fn search_forward<M: crate::helix::simulator::EditorMode>(
 ///
 /// # Errors
 ///
-/// Returns a `UserError` if `pattern` is not a valid regex or exceeds the
+/// Returns a [`SimulatorError`] if `pattern` is not a valid regex or exceeds the
 /// maximum pattern length; the selection is left unchanged.
 pub fn search_pattern_forward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     if pattern.is_empty() {
         return Ok(());
     }
     sim.search_state
-        .set_pattern(pattern, SearchDirection::Forward)
-        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+        .set_pattern(pattern, SearchDirection::Forward)?;
     search_forward(sim)
 }
 
@@ -184,18 +186,17 @@ pub fn search_pattern_forward<M: crate::helix::simulator::EditorMode>(
 ///
 /// # Errors
 ///
-/// Returns a `UserError` if `pattern` is not a valid regex or exceeds the
+/// Returns a [`SimulatorError`] if `pattern` is not a valid regex or exceeds the
 /// maximum pattern length; the selection is left unchanged.
 pub fn search_pattern_backward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     if pattern.is_empty() {
         return Ok(());
     }
     sim.search_state
-        .set_pattern(pattern, SearchDirection::Backward)
-        .map_err(|e| UserError::command_failed(format!("invalid regex: {e}")))?;
+        .set_pattern(pattern, SearchDirection::Backward)?;
     search_backward(sim)
 }
 
@@ -207,7 +208,7 @@ pub fn search_pattern_backward<M: crate::helix::simulator::EditorMode>(
 /// fallible commands that share the registry's function type.
 pub fn search_backward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     sim.search_state.set_current_match(None);
     search_prev_match(sim)
 }
@@ -220,15 +221,12 @@ pub fn search_backward<M: crate::helix::simulator::EditorMode>(
 /// fallible commands that share the registry's function type.
 pub fn goto_next_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     if !sim.search_state.has_pattern() {
         return Ok(());
     }
 
-    match sim.search_state.direction() {
-        SearchDirection::Forward => search_next_match(sim),
-        SearchDirection::Backward => search_prev_match(sim),
-    }
+    search_next_match(sim)
 }
 
 /// Go to previous match (N command)
@@ -239,34 +237,86 @@ pub fn goto_next_match<M: crate::helix::simulator::EditorMode>(
 /// fallible commands that share the registry's function type.
 pub fn goto_prev_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     if !sim.search_state.has_pattern() {
         return Ok(());
     }
 
-    match sim.search_state.direction() {
-        SearchDirection::Forward => search_prev_match(sim),
-        SearchDirection::Backward => search_next_match(sim),
-    }
+    search_prev_match(sim)
 }
 
-/// Search word under cursor (* command)
+fn is_at_word_start(text: RopeSlice, index: usize) -> bool {
+    index < text.len_chars()
+        && char_is_word(text.char(index))
+        && (index == 0 || !char_is_word(text.char(index - 1)))
+}
+
+fn is_at_word_end(text: RopeSlice, index: usize) -> bool {
+    index != 0
+        && index < text.len_chars()
+        && char_is_word(text.char(index - 1))
+        && !char_is_word(text.char(index))
+}
+
+/// The pattern `*` searches for: every range's text escaped, with `\b` added
+/// where the range starts or ends at a word boundary, alternatives joined by `|`.
 ///
-/// Sets the word under cursor as search pattern and selects it,
-/// but does NOT jump to next match. Use `n` to navigate to next occurrence.
+/// A point cursor stands for the one character under it, as in Helix.
+fn boundary_pattern(doc: &Rope, selection: &Selection) -> String {
+    let text = doc.slice(..);
+    let mut alternatives: Vec<String> = Vec::new();
+    for range in selection.ranges() {
+        let from = range.from();
+        let to = if range.is_empty() {
+            (from + 1).min(text.len_chars())
+        } else {
+            range.to()
+        };
+        let prefix = if is_at_word_start(text, from) {
+            "\\b"
+        } else {
+            ""
+        };
+        let suffix = if is_at_word_end(text, to) { "\\b" } else { "" };
+        let escaped = regex::escape(&text.slice(from..to).to_string());
+        let alternative = format!("{prefix}{escaped}{suffix}");
+        if !alternatives.contains(&alternative) {
+            alternatives.push(alternative);
+        }
+    }
+    alternatives.join("|")
+}
+
+/// Use the selection as the search pattern (`*`, Helix
+/// `search_selection_detect_word_boundaries`)
+///
+/// The escaped selection becomes the pattern, with `\b` at each end that
+/// sits on a word boundary. The selection does not move; `n` jumps to the
+/// next match. An empty pattern (a cursor past the last character) is ignored.
 ///
 /// # Errors
 ///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
+/// Returns a [`SimulatorError`] if the pattern exceeds the maximum pattern
+/// length; the previous pattern is kept.
 pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
+    let pattern = boundary_pattern(&sim.doc, &sim.selection);
+    if pattern.is_empty() {
+        return Ok(());
+    }
+    sim.search_state
+        .set_pattern(&pattern, SearchDirection::Forward)
+}
+
+/// Select the word under the cursor and make it the search pattern, the
+/// fallback of `Alt-*` on an empty selection. Does not jump to a match.
+fn select_word_as_pattern<M: crate::helix::simulator::EditorMode>(sim: &mut HelixSimulator<M>) {
     let head = sim.selection.primary().head;
     let slice = sim.doc.slice(..);
 
     let Some((start, end)) = extract_word_at_cursor(slice, head) else {
-        return Ok(());
+        return;
     };
 
     let word: String = slice.slice(start..end).chars().collect();
@@ -278,8 +328,6 @@ pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
     {
         sim.selection = Selection::single(start, end);
     }
-
-    Ok(())
 }
 
 /// Search selection text (Alt-* command)
@@ -293,13 +341,14 @@ pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn search_selection<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let range = sim.selection.primary();
     let start = range.from();
     let end = range.to();
 
     if start == end {
-        return search_word_under_cursor(sim);
+        select_word_as_pattern(sim);
+        return Ok(());
     }
 
     let slice = sim.doc.slice(..);
@@ -318,42 +367,83 @@ mod tests {
     use crate::helix::simulator::NormalMode;
 
     #[test]
-    fn test_search_word_under_cursor() {
+    fn star_uses_the_selection_with_word_boundaries_and_keeps_it() {
         let mut sim: HelixSimulator<NormalMode> =
             HelixSimulator::new("hello world hello".to_string());
+        sim.selection = Selection::single(0, 5);
 
-        // Move cursor to "hello"
-        sim.selection = Selection::point(0);
-
-        // Search for word under cursor
         search_word_under_cursor(&mut sim).unwrap();
 
-        // Should have found the word pattern
-        assert!(sim.search_state.has_pattern());
-
-        // Should have selected the CURRENT word (first "hello"), not jumped
-        let range = sim.selection.primary();
-        assert_eq!(range.from(), 0);
-        assert_eq!(range.to(), 5);
+        assert_eq!(sim.search_state.pattern(), Some(r"\bhello\b"));
+        assert_eq!(sim.selection, Selection::single(0, 5));
     }
 
     #[test]
-    fn test_search_word_under_cursor_middle() {
-        let mut sim: HelixSimulator<NormalMode> =
-            HelixSimulator::new("hello world hello".to_string());
+    fn star_adds_boundaries_only_where_the_selection_touches_a_word_edge() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("fn add(a)".to_string());
 
-        // Move cursor to middle of "hello"
-        sim.selection = Selection::point(2);
+        sim.selection = Selection::single(0, 3); // "fn "
+        search_word_under_cursor(&mut sim).unwrap();
+        assert_eq!(sim.search_state.pattern(), Some(r"\bfn "));
+
+        sim.selection = Selection::single(4, 6); // "dd"
+        search_word_under_cursor(&mut sim).unwrap();
+        assert_eq!(sim.search_state.pattern(), Some(r"dd\b"));
+
+        sim.selection = Selection::single(6, 8); // "(a"
+        search_word_under_cursor(&mut sim).unwrap();
+        assert_eq!(sim.search_state.pattern(), Some(r"\(a\b"));
+    }
+
+    #[test]
+    fn star_on_a_point_cursor_searches_the_character_under_it() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("fn fn".to_string());
+        sim.selection = Selection::point(0);
 
         search_word_under_cursor(&mut sim).unwrap();
 
-        // Should find the word and select it (stay on current word)
-        assert!(sim.search_state.has_pattern());
+        assert_eq!(sim.search_state.pattern(), Some(r"\bf"));
+        assert_eq!(sim.selection, Selection::point(0));
+    }
 
-        // Verify cursor stays on current word
-        let range = sim.selection.primary();
-        assert_eq!(range.from(), 0);
-        assert_eq!(range.to(), 5);
+    #[test]
+    fn star_joins_distinct_ranges_and_deduplicates_equal_ones() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("ab cd ab!".to_string());
+        let ranges = vec![Range::new(0, 2), Range::new(3, 5), Range::new(6, 8)];
+        sim.selection = Selection::new(ranges.into(), 0);
+
+        search_word_under_cursor(&mut sim).unwrap();
+
+        assert_eq!(sim.search_state.pattern(), Some(r"\bab\b|\bcd\b"));
+    }
+
+    #[test]
+    fn n_moves_forward_and_wraps_after_a_backward_search() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("a-a-a".to_string());
+        search_pattern_backward(&mut sim, "a").unwrap();
+        assert_eq!(sim.selection, Selection::single(4, 5));
+
+        goto_next_match(&mut sim).unwrap();
+        assert_eq!(sim.selection, Selection::single(0, 1));
+
+        goto_prev_match(&mut sim).unwrap();
+        assert_eq!(sim.selection, Selection::single(4, 5));
+    }
+
+    #[test]
+    fn n_and_big_n_ignore_the_direction_of_the_last_search() {
+        let mut forward: HelixSimulator<NormalMode> = HelixSimulator::new("a-a-a".to_string());
+        search_pattern_forward(&mut forward, "a").unwrap();
+        let mut backward: HelixSimulator<NormalMode> = HelixSimulator::new("a-a-a".to_string());
+        search_pattern_backward(&mut backward, "a").unwrap();
+        for sim in [&mut forward, &mut backward] {
+            sim.selection = Selection::single(2, 3);
+            goto_next_match(sim).unwrap();
+            assert_eq!(sim.selection, Selection::single(4, 5));
+            sim.selection = Selection::single(2, 3);
+            goto_prev_match(sim).unwrap();
+            assert_eq!(sim.selection, Selection::single(0, 1));
+        }
     }
 
     #[test]

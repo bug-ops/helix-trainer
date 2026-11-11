@@ -5,7 +5,7 @@
 //! snapshot is self-contained, which makes this the only screen renderer
 //! unit-testable without constructing a full `AppState`.
 
-use crate::gamification::XPCalculator;
+use crate::gamification::LevelProgress;
 use crate::ui::state::CategoryProgress;
 use crate::ui::state::{EndGameSummaryData, NextStep};
 use ratatui::{
@@ -77,20 +77,8 @@ fn render_content(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
 }
 
 /// Render the level/XP progress gauge, matching the Profile screen's style.
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-)]
 fn render_level_gauge(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
-    let current_level_xp = XPCalculator::xp_for_level(data.level);
-    let next_level_xp = XPCalculator::xp_for_level(data.level.saturating_add(1));
-    let xp_in_level = data.total_xp.saturating_sub(current_level_xp);
-    let xp_needed = next_level_xp.saturating_sub(current_level_xp);
-    let progress = if xp_needed == 0 {
-        1.0
-    } else {
-        xp_in_level as f64 / xp_needed as f64
-    };
+    let progress = LevelProgress::at(data.level, data.total_xp);
 
     let label = t!("end_game.level", level = data.level, xp = data.total_xp).to_string();
     let gauge = Gauge::default()
@@ -102,7 +90,7 @@ fn render_level_gauge(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) 
                 .add_modifier(Modifier::BOLD),
         )
         .label(label)
-        .ratio(progress.clamp(0.0, 1.0));
+        .ratio(progress.ratio());
     frame.render_widget(gauge, area);
 }
 

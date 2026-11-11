@@ -7,6 +7,7 @@
 
 use std::time::Duration;
 
+use super::DifficultyLevel;
 use crate::constants::{
     CHALLENGE_LIVES_PER_ATTEMPT, CHALLENGE_MAX_ATTEMPTS, CHALLENGE_SCENARIO_COUNT,
     CHALLENGE_TIME_PER_SCENARIO, EXTRA_LIFE_SCORE_MILESTONE, SURVIVAL_BASE_TIME, SURVIVAL_MIN_TIME,
@@ -180,26 +181,25 @@ impl SurvivalConfig {
     /// # Examples
     ///
     /// ```
-    /// use helix_trainer::minigame::SurvivalConfig;
+    /// use helix_trainer::minigame::{DifficultyLevel, SurvivalConfig};
     ///
     /// let config = SurvivalConfig::default();
-    /// let time = config.time_limit_for_level(1);
+    /// let time = config.time_limit_for_level(DifficultyLevel::MIN);
     /// assert_eq!(time.as_secs(), 10); // Base time at level 1
     ///
-    /// let time = config.time_limit_for_level(5);
+    /// let time = config.time_limit_for_level(DifficultyLevel::new(5).unwrap());
     /// assert!(time < config.base_time_per_scenario);
     /// ```
-    pub fn time_limit_for_level(&self, level: u8) -> Duration {
+    pub fn time_limit_for_level(&self, level: DifficultyLevel) -> Duration {
+        let steps = level.get().saturating_sub(1);
         match self.decrease_mode {
             TimeDecreaseMode::Linear => {
-                let decrease = self.time_decrease_per_level * u32::from(level.saturating_sub(1));
+                let decrease = self.time_decrease_per_level * u32::from(steps);
                 let time = self.base_time_per_scenario.saturating_sub(decrease);
                 time.max(self.min_time_per_scenario)
             }
             TimeDecreaseMode::Exponential => {
-                // Note: powi() is O(log n) and level is bounded to u8 (max 255),
-                // so precomputation table is not needed. Factor is always positive.
-                let factor = 0.95_f64.powi(i32::from(level.saturating_sub(1)));
+                let factor = 0.95_f64.powi(i32::from(steps));
                 let time_secs = self.base_time_per_scenario.as_secs_f64() * factor;
                 let time = Duration::from_secs_f64(time_secs);
                 time.max(self.min_time_per_scenario)
@@ -267,6 +267,10 @@ impl ChallengeConfig {
 mod tests {
     use super::*;
 
+    fn level(n: u8) -> DifficultyLevel {
+        DifficultyLevel::new(n).unwrap()
+    }
+
     #[test]
     fn test_arcade_mode_defaults() {
         let mode = MiniGameMode::default();
@@ -303,18 +307,18 @@ mod tests {
         let config = SurvivalConfig::default();
 
         // Level 1 should have base time
-        let time = config.time_limit_for_level(1);
+        let time = config.time_limit_for_level(level(1));
         assert_eq!(time, SURVIVAL_BASE_TIME);
 
         // Level 2 should be base - 500ms
-        let time = config.time_limit_for_level(2);
+        let time = config.time_limit_for_level(level(2));
         assert_eq!(
             time,
             SURVIVAL_BASE_TIME.saturating_sub(Duration::from_millis(500))
         );
 
         // Level 3 should be base - 1000ms
-        let time = config.time_limit_for_level(3);
+        let time = config.time_limit_for_level(level(3));
         assert_eq!(
             time,
             SURVIVAL_BASE_TIME.saturating_sub(Duration::from_millis(1000))
@@ -329,36 +333,40 @@ mod tests {
         };
 
         // Level 1 should have base time
-        let time = config.time_limit_for_level(1);
+        let time = config.time_limit_for_level(level(1));
         assert_eq!(time, config.base_time_per_scenario);
 
         // Level 2 should be 95% of base
-        let time = config.time_limit_for_level(2);
+        let time = config.time_limit_for_level(level(2));
         let expected_secs = config.base_time_per_scenario.as_secs_f64() * 0.95;
         assert!((time.as_secs_f64() - expected_secs).abs() < 0.01);
 
         // Higher levels should continue decreasing
-        let time_l5 = config.time_limit_for_level(5);
-        let time_l10 = config.time_limit_for_level(10);
+        let time_l5 = config.time_limit_for_level(level(5));
+        let time_l10 = config.time_limit_for_level(level(10));
         assert!(time_l5 < time);
         assert!(time_l10 < time_l5);
     }
 
     #[test]
     fn test_survival_min_time_clamping() {
-        let config = SurvivalConfig::default();
-
-        // Very high level should clamp to minimum
-        let time = config.time_limit_for_level(100);
-        assert_eq!(time, config.min_time_per_scenario);
-
-        // Exponential mode should also clamp
-        let exp_config = SurvivalConfig {
-            decrease_mode: TimeDecreaseMode::Exponential,
+        let config = SurvivalConfig {
+            min_time_per_scenario: SURVIVAL_BASE_TIME,
             ..SurvivalConfig::default()
         };
-        let time = exp_config.time_limit_for_level(100);
-        assert_eq!(time, exp_config.min_time_per_scenario);
+        assert_eq!(
+            config.time_limit_for_level(DifficultyLevel::MAX),
+            config.min_time_per_scenario
+        );
+
+        let exp_config = SurvivalConfig {
+            decrease_mode: TimeDecreaseMode::Exponential,
+            ..config
+        };
+        assert_eq!(
+            exp_config.time_limit_for_level(DifficultyLevel::MAX),
+            exp_config.min_time_per_scenario
+        );
     }
 
     #[test]
@@ -415,38 +423,17 @@ mod tests {
         assert!(!challenge.description().is_empty());
     }
 
-    // CR-001: Test level 0 edge case
     #[test]
-    fn test_survival_time_decrease_level_zero() {
-        let config = SurvivalConfig::default();
-        let time = config.time_limit_for_level(0);
-        // Level 0 should be treated same as level 1 (saturating_sub(1) -> 0)
-        assert_eq!(time, config.base_time_per_scenario);
-
-        // Also test exponential mode with level 0
-        let exp_config = SurvivalConfig {
-            decrease_mode: TimeDecreaseMode::Exponential,
-            ..SurvivalConfig::default()
-        };
-        let exp_time = exp_config.time_limit_for_level(0);
-        assert_eq!(exp_time, exp_config.base_time_per_scenario);
-    }
-
-    // CR-002: Test u8::MAX level edge case
-    #[test]
-    fn test_survival_time_decrease_max_level() {
-        let config = SurvivalConfig::default();
-        let time = config.time_limit_for_level(u8::MAX);
-        // Should clamp to minimum time
-        assert_eq!(time, config.min_time_per_scenario);
-
-        // Also test exponential mode with u8::MAX
-        let exp_config = SurvivalConfig {
-            decrease_mode: TimeDecreaseMode::Exponential,
-            ..SurvivalConfig::default()
-        };
-        let exp_time = exp_config.time_limit_for_level(u8::MAX);
-        assert_eq!(exp_time, exp_config.min_time_per_scenario);
+    fn test_survival_time_at_max_level_never_below_minimum() {
+        for decrease_mode in [TimeDecreaseMode::Linear, TimeDecreaseMode::Exponential] {
+            let config = SurvivalConfig {
+                decrease_mode,
+                ..SurvivalConfig::default()
+            };
+            let time = config.time_limit_for_level(DifficultyLevel::MAX);
+            assert!(time >= config.min_time_per_scenario);
+            assert!(time < config.time_limit_for_level(DifficultyLevel::MIN));
+        }
     }
 
     // CR-006: Test exact mode name/description return values

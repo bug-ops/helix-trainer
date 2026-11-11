@@ -275,7 +275,9 @@ fn validate_single_command(cmd: &str) -> Result<(), String> {
     let last = cmd.chars().count().saturating_sub(1);
 
     for (i, ch) in cmd.chars().enumerate() {
-        match machine.process_key(command_to_key_event(&ch.to_string())) {
+        let key = command_to_key_event(&ch.to_string())
+            .ok_or_else(|| format!("'{ch}' is not a key at char {i}"))?;
+        match machine.process_key(key) {
             HandlerResult::Execute(resolved) => {
                 if resolved.as_ref() != cmd {
                     return Err(format!(
@@ -334,9 +336,7 @@ fn test_after_taught_commands_scenarios_declare_taught_commands() {
         .load_from_embedded("en")
         .expect("Failed to load embedded scenarios");
     for scenario in scenarios {
-        let Some(metadata) = scenario.metadata.as_ref() else {
-            continue;
-        };
+        let metadata = &scenario.metadata;
         if metadata.completion == CompletionRule::AfterTaughtCommands {
             assert!(
                 !metadata.commands_taught.is_empty(),
@@ -521,4 +521,110 @@ fn test_bundled_commands_taught_are_normalized() {
         }
     }
     assert!(checked > 0, "no commands_taught values found");
+}
+
+/// Outcome of typing keys one by one into a bundled scenario through the UI.
+struct UiRun {
+    optimal: usize,
+    /// Index of the key that completed the scenario and the actions it took.
+    completed: Option<(usize, usize)>,
+}
+
+fn type_through_ui(scenario_id: &str, keys: &[&'static str]) -> UiRun {
+    use helix_trainer::gamification::{ProfileStorage, UserProfile};
+    use helix_trainer::input::keymap::CanonicalKeys;
+    use helix_trainer::learning::PerformanceTracker;
+    use helix_trainer::ui::state::{MenuData, TypedScreen};
+    use helix_trainer::ui::{AppState, Message};
+    use std::borrow::Cow;
+
+    let scenario = ScenarioLoader::new()
+        .load_from_embedded("en")
+        .unwrap()
+        .into_iter()
+        .find(|s| s.id.as_str() == scenario_id)
+        .expect("scenario is bundled");
+    let optimal = scenario.scoring.optimal_count.get();
+
+    let storage = ProfileStorage::with_path(
+        tempfile::tempdir()
+            .expect("create temp dir")
+            .keep()
+            .join("profile.json"),
+    );
+    let mut state = AppState::new(
+        vec![scenario],
+        UserProfile::new(),
+        storage,
+        PerformanceTracker::new(),
+    );
+    let send = |state: &mut AppState, msg: Message| {
+        let mut effects = Vec::new();
+        helix_trainer::ui::update(state, msg, &mut effects).unwrap();
+        for effect in effects {
+            drop(effect.execute(&mut state.progress));
+        }
+    };
+    state.screen = TypedScreen::Menu(MenuData::default());
+    send(&mut state, Message::MenuSelect);
+
+    for (index, key) in keys.iter().enumerate() {
+        send(
+            &mut state,
+            Message::ExecuteCommand {
+                keys: CanonicalKeys::from_static(key),
+                typed: Cow::Borrowed(key),
+            },
+        );
+        if let TypedScreen::Task(task) = &state.screen
+            && let Some(done) = task.session.completed()
+        {
+            return UiRun {
+                optimal,
+                completed: Some((index, done.feedback.actions_taken)),
+            };
+        }
+    }
+    UiRun {
+        optimal,
+        completed: None,
+    }
+}
+
+/// #582: the link scenario, typed key by key through the UI, finishes exactly at its last
+/// command with as many actions as its optimal count.
+#[test]
+fn test_link_scenario_typed_through_the_ui_finishes_at_its_last_command() {
+    let keys = [
+        "m", "i", "w", "m", "s", "[", "a", "(", "u", "r", "l", ")", "Escape",
+    ];
+    let run = type_through_ui("writing_link_construction_001", &keys);
+    assert_eq!(run.optimal, 9, "`a` already appends after the selection");
+    assert_eq!(run.completed, Some((keys.len() - 1, run.optimal)));
+}
+
+/// #581: `*` alone (without selecting the word first) must not finish a search scenario, so
+/// the documented solution stays the shortest one.
+#[test]
+fn test_search_scenarios_need_the_word_selection_before_star() {
+    for (id, tail) in [
+        ("search_word_001", vec!["*", "n"]),
+        ("search_word_002", vec!["*", "n", "n"]),
+        ("search_next_001", vec!["*", "n"]),
+        ("search_prev_001", vec!["*", "N"]),
+    ] {
+        assert_eq!(
+            type_through_ui(id, &tail).completed,
+            None,
+            "{id}: `{tail:?}` without `miw` completes the scenario"
+        );
+        let mut full = vec!["m", "i", "w"];
+        full.extend(tail);
+        let run = type_through_ui(id, &full);
+        assert_eq!(
+            run.completed.map(|(_, actions)| actions),
+            Some(run.optimal),
+            "{id}: documented solution"
+        );
+    }
 }

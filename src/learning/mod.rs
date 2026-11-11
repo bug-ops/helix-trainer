@@ -26,11 +26,12 @@ pub mod urgency;
 
 pub use analytics::{Analytics, MasterySummary};
 pub use performance::{
-    CardState, CommandPerformance, MasteryLevel, PerformanceData, PerformanceTracker,
+    CardState, CommandPerformance, MasteryLevel, PerformanceData, PerformanceTracker, Rating,
+    ReferenceTime,
 };
 pub use scenario_history::{MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery};
 pub use scheduler::{ReviewItem, Scheduler};
-pub use session::{ReviewResult, ReviewSession, SessionSummary};
+pub use session::{ReviewOutcome, ReviewResult, ReviewSession, ReviewStep, SessionSummary};
 pub use traits::{Modifier, ProgressTracker, ProgressionTier};
 pub use urgency::{Urgency, command_urgency};
 
@@ -56,17 +57,13 @@ pub enum LearningError {
         successes: u32,
     },
 
-    /// The review session has no more items.
-    #[error("Review session is already complete")]
-    SessionComplete,
-
     /// No performance record exists for the command.
     #[error("Command not found: {0}")]
     CommandNotFound(String),
 
-    /// The FSRS scheduler rejected an operation.
-    #[error("FSRS error: {0}")]
-    FsrsError(String),
+    /// The FSRS scheduler rejected an operation; the `fsrs` error is the source.
+    #[error("FSRS scheduler rejected the update")]
+    FsrsError(#[source] fsrs::FSRSError),
 }
 
 /// Result alias with [`LearningError`] as the error type.

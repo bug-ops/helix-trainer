@@ -144,11 +144,7 @@ fn execute_minigame_command(
             // Update quest progress for scenario completion (shared function)
             let duration = scenario.elapsed();
             let scenario_id = scenario.scenario.id.clone();
-            let scenario_difficulty = scenario
-                .scenario
-                .metadata
-                .as_ref()
-                .and_then(|m| m.difficulty);
+            let scenario_difficulty = scenario.scenario.metadata.difficulty;
             let optimal_count = scenario.scenario.scoring.optimal_count.get();
             let actual_count = scenario.action_count().max(1);
             // Efficiency-only, matching Training's `is_perfect` definition. This is
@@ -315,7 +311,10 @@ pub(in crate::ui::state) fn handle_minigame_command(
     // Single token - the common, un-remapped-or-simply-remapped path,
     // dispatched exactly as before the keymap overlay existed.
     let was_base = minigame_data.input_state().state().is_base();
-    let key_event = command_to_key_event(keys.as_str());
+    let Some(key_event) = command_to_key_event(keys.as_str()) else {
+        tracing::warn!(keys = keys.as_str(), "unparsable key token; dropping");
+        return Ok(());
+    };
     let handler_result = minigame_data.input_state_mut().process_key(key_event);
 
     match handler_result {
@@ -673,7 +672,7 @@ mod tests {
             "quest XP must be granted immediately, not lost until scenario completion"
         );
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
                 crate::ui::notification::NotificationType::QuestComplete { description, .. }
                     if description == "Use 'h' 1 time"
@@ -722,7 +721,7 @@ mod tests {
             "expected a level-up driven by quest XP"
         );
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { new_level }
                     if new_level == state.progress.profile.level
@@ -746,7 +745,7 @@ mod tests {
         execute_minigame_command(&mut state, "h", "h").unwrap();
 
         assert!(
-            !state.ui.notifications.visible().iter().any(|n| matches!(
+            !state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { .. }
             )),
@@ -783,7 +782,7 @@ mod tests {
             "expected a level-up driven by scenario-completion XP"
         );
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { new_level }
                     if new_level == state.progress.profile.level
@@ -1738,11 +1737,11 @@ mod tests {
                 .has_achievement(&AchievementId::Flash)
         );
 
-        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+        assert!(state.ui.notifications.visible().any(|n| matches!(
             &n.notification_type,
             NotificationType::Achievement { name, .. } if name == "Speed Demon"
         )));
-        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+        assert!(state.ui.notifications.visible().any(|n| matches!(
             &n.notification_type,
             NotificationType::Achievement { name, .. } if name == "Flash"
         )));
@@ -1988,7 +1987,7 @@ mod tests {
             "expected a level-up driven by the end-of-game XP award"
         );
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { new_level }
                     if new_level == state.progress.profile.level
@@ -2072,7 +2071,7 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         assert!(
-            !state.ui.notifications.visible().iter().any(|n| matches!(
+            !state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { .. }
             )),

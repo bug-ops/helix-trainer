@@ -1,10 +1,7 @@
 //! Mini-game screen rendering (Arcade Mode)
 
 use super::editor::render_editor_pair;
-use crate::constants::difficulty::{
-    LEVEL_ADVANCED_MAX, LEVEL_ADVANCED_MIN, LEVEL_BEGINNER_MAX, LEVEL_BEGINNER_MIN,
-    LEVEL_INTERMEDIATE_MAX, LEVEL_INTERMEDIATE_MIN,
-};
+use crate::config::Difficulty;
 use crate::game::PlayableScenario;
 use crate::ui::state::{AppState, MiniGameData};
 use ratatui::{
@@ -14,18 +11,20 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph, Wrap},
 };
+use rust_i18n::t;
 
 /// Combo count threshold for highlighted display (bold + magenta)
 const COMBO_HIGHLIGHT_THRESHOLD: u32 = 5;
 
 /// Return the header title string for the current arcade sub-mode
-fn mode_title(session: &crate::minigame::MiniGameSession) -> &'static str {
+fn mode_title(session: &crate::minigame::MiniGameSession) -> String {
     use crate::minigame::MiniGameMode;
     match session.mode() {
-        MiniGameMode::Survival(_) => "SURVIVAL MODE",
-        MiniGameMode::Challenge(_) => "DAILY CHALLENGE",
-        MiniGameMode::Arcade(_) => "ARCADE MODE",
+        MiniGameMode::Survival(_) => t!("arcade.title_survival"),
+        MiniGameMode::Challenge(_) => t!("arcade.title_challenge"),
+        MiniGameMode::Arcade(_) => t!("arcade.title_arcade"),
     }
+    .to_string()
 }
 
 /// Render the mini-game screen
@@ -93,7 +92,7 @@ fn render_countdown(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     let countdown_text = if remaining > 0 {
         remaining.to_string()
     } else {
-        "GO!".to_string()
+        t!("arcade.go").to_string()
     };
 
     let countdown = Paragraph::new(countdown_text)
@@ -147,7 +146,10 @@ fn render_playing(
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw("        "),
-        Span::styled("[Esc] Pause", Style::default().fg(Color::Gray)),
+        Span::styled(
+            t!("arcade.pause_hint").to_string(),
+            Style::default().fg(Color::Gray),
+        ),
     ];
     if !pending_text.is_empty() {
         title_spans.push(Span::raw("  "));
@@ -161,7 +163,7 @@ fn render_playing(
     if session.is_recording_macro() {
         title_spans.push(Span::raw("  "));
         title_spans.push(Span::styled(
-            "[q: REC]",
+            t!("arcade.recording").to_string(),
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ));
     }
@@ -193,14 +195,14 @@ fn render_playing(
 fn render_queue(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGameSession) {
     let queue = session.queue();
     let queue_text = if queue.is_empty() {
-        "NEXT: [No more scenarios]".to_string()
+        t!("arcade.queue_empty").to_string()
     } else {
         let names: Vec<String> = queue
             .iter()
             .take(3)
             .map(|s| format!("[{}]", s.name))
             .collect();
-        format!("NEXT: {}", names.join(" "))
+        t!("arcade.queue", names = names.join(" ")).to_string()
     };
 
     let paragraph = Paragraph::new(queue_text)
@@ -231,7 +233,7 @@ fn render_scenario_editor<S: PlayableScenario>(
         .split(area);
 
     // Task description
-    let task = Paragraph::new(format!("TASK: {description}"))
+    let task = Paragraph::new(t!("arcade.task", description = description).to_string())
         .style(Style::default().fg(Color::Yellow))
         .wrap(Wrap { trim: true })
         .block(Block::default().borders(Borders::ALL));
@@ -239,7 +241,14 @@ fn render_scenario_editor<S: PlayableScenario>(
 
     // Editor views - reuse common rendering function
     // No preview highlight in arcade mode
-    render_editor_pair(frame, chunks[1], scenario, " Current ", " Target ", None)
+    render_editor_pair(
+        frame,
+        chunks[1],
+        scenario,
+        &t!("arcade.current_title"),
+        &t!("arcade.target_title"),
+        None,
+    )
 }
 
 /// Render timer bar
@@ -257,7 +266,7 @@ fn render_timer_bar(frame: &mut Frame, area: Rect, scenario: &crate::minigame::A
         Color::Red
     };
 
-    let label = format!("TIME: {remaining:.1}s");
+    let label = t!("arcade.time", seconds = format!("{remaining:.1}")).to_string();
 
     // ratio must be in [0.0, 1.0] for Gauge widget
     let ratio = (1.0 - progress).clamp(0.0, 1.0);
@@ -278,12 +287,11 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     let grace = session.grace_remaining();
     let level = session.difficulty_level();
 
-    // Difficulty tier name and color based on level
-    let (tier_name, tier_color) = match level {
-        LEVEL_BEGINNER_MIN..=LEVEL_BEGINNER_MAX => ("Beginner", Color::Green),
-        LEVEL_INTERMEDIATE_MIN..=LEVEL_INTERMEDIATE_MAX => ("Intermediate", Color::Yellow),
-        LEVEL_ADVANCED_MIN..=LEVEL_ADVANCED_MAX => ("Advanced", Color::Red),
-        _ => ("Unknown", Color::Gray),
+    let tier = level.tier();
+    let (tier_name, tier_color) = match tier {
+        Difficulty::Beginner => (t!("mastery.beginner"), Color::Green),
+        Difficulty::Intermediate => (t!("mastery.intermediate"), Color::Yellow),
+        Difficulty::Advanced => (t!("mastery.advanced"), Color::Red),
     };
 
     // Lives as hearts
@@ -305,7 +313,10 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     };
 
     let stats_line = Line::from(vec![
-        Span::styled("SCORE: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            t!("arcade.score").to_string(),
+            Style::default().fg(Color::Gray),
+        ),
         Span::styled(
             format!("{:>6}", stats.score),
             Style::default()
@@ -313,10 +324,16 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
-        Span::styled("LIVES: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            t!("arcade.lives").to_string(),
+            Style::default().fg(Color::Gray),
+        ),
         Span::styled(lives_str, Style::default().fg(Color::Red)),
         Span::raw("  "),
-        Span::styled("MULT: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            t!("arcade.multiplier").to_string(),
+            Style::default().fg(Color::Gray),
+        ),
         Span::styled(
             format!("x{:.1}", stats.multiplier()),
             Style::default().fg(mult_color).add_modifier(Modifier::BOLD),
@@ -325,7 +342,10 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     ]);
 
     let stats_line2 = Line::from(vec![
-        Span::styled("COMBO: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            t!("arcade.combo").to_string(),
+            Style::default().fg(Color::Gray),
+        ),
         Span::styled(
             format!("{combo:>2}"),
             Style::default()
@@ -341,7 +361,10 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
                 }),
         ),
         Span::raw("  "),
-        Span::styled("STREAK: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            t!("arcade.streak").to_string(),
+            Style::default().fg(Color::Gray),
+        ),
         Span::styled(
             format!("{:>2}", stats.streak()),
             Style::default()
@@ -350,12 +373,15 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         ),
         Span::raw("  "),
         Span::styled(
-            format!("Lv.{level} "),
+            t!("arcade.level", level = level.get()).to_string(),
             Style::default().fg(tier_color).add_modifier(Modifier::BOLD),
         ),
         Span::styled(tier_name, Style::default().fg(tier_color)),
         Span::raw("  "),
-        Span::styled("BEST: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            t!("arcade.best").to_string(),
+            Style::default().fg(Color::Gray),
+        ),
         Span::styled(
             format!("{}", stats.best_streak()),
             Style::default().fg(Color::Green),
@@ -384,19 +410,19 @@ fn render_transition(
     let is_success = session.state().transition_success().unwrap_or(true);
     let (title, message, color) = if is_success {
         let xp_msg = match last_xp {
-            Some(xp) if xp > 0 => format!("+{xp} XP"),
-            _ => "Loading next scenario...".to_string(),
+            Some(xp) if xp > 0 => t!("arcade.xp_earned", xp = xp).to_string(),
+            _ => t!("arcade.loading_next").to_string(),
         };
-        ("SUCCESS!", xp_msg, Color::Green)
+        (t!("arcade.success"), xp_msg, Color::Green)
     } else {
         (
-            "TIME'S UP!",
-            "Loading next scenario...".to_string(),
+            t!("arcade.times_up"),
+            t!("arcade.loading_next").to_string(),
             Color::Red,
         )
     };
 
-    super::popups::render_result_popup(frame, title, &message, color);
+    super::popups::render_result_popup(frame, &title, &message, color);
 }
 
 /// Render paused screen
@@ -415,7 +441,7 @@ fn render_paused(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniG
         Line::from(""),
         Line::from(""),
         Line::from(Span::styled(
-            "PAUSED",
+            t!("arcade.paused").to_string(),
             Style::default()
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
@@ -430,19 +456,19 @@ fn render_paused(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniG
     // Controls
     let controls_text = vec![
         Line::from(Span::styled(
-            "Esc - Resume",
+            t!("arcade.resume").to_string(),
             Style::default().fg(Color::Cyan),
         )),
         Line::from(Span::styled(
-            "p - View Profile",
+            t!("arcade.view_profile").to_string(),
             Style::default().fg(Color::Cyan),
         )),
         Line::from(Span::styled(
-            "s - View Statistics",
+            t!("arcade.view_statistics").to_string(),
             Style::default().fg(Color::Cyan),
         )),
         Line::from(Span::styled(
-            "q - Back to Menu",
+            t!("arcade.back_to_menu").to_string(),
             Style::default().fg(Color::Gray),
         )),
     ];
@@ -468,7 +494,7 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         .split(area);
 
     // Game over title
-    let title = Paragraph::new("GAME OVER")
+    let title = Paragraph::new(t!("arcade.game_over").to_string())
         .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
@@ -480,7 +506,10 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     let stats_text = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("Final Score: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                t!("arcade.final_score").to_string(),
+                Style::default().fg(Color::Gray),
+            ),
             Span::styled(
                 format!("{}", stats.score),
                 Style::default()
@@ -490,13 +519,19 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Scenarios Completed: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                t!("arcade.scenarios_completed").to_string(),
+                Style::default().fg(Color::Gray),
+            ),
             Span::styled(
                 format!("{}", stats.scenarios_completed),
                 Style::default().fg(Color::Green),
             ),
             Span::raw("   "),
-            Span::styled("Failed: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                t!("arcade.failed").to_string(),
+                Style::default().fg(Color::Gray),
+            ),
             Span::styled(
                 format!("{}", stats.scenarios_failed),
                 Style::default().fg(Color::Red),
@@ -504,7 +539,10 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Best Streak: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                t!("arcade.best_streak").to_string(),
+                Style::default().fg(Color::Gray),
+            ),
             Span::styled(
                 format!("{}", stats.best_streak()),
                 Style::default()
@@ -512,7 +550,10 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("   "),
-            Span::styled("Best Combo: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                t!("arcade.best_combo").to_string(),
+                Style::default().fg(Color::Gray),
+            ),
             Span::styled(
                 format!("{best_combo}"),
                 Style::default()
@@ -529,10 +570,13 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     // Controls
     let controls = Paragraph::new(vec![
         Line::from(Span::styled(
-            "Esc/m - Back to Menu",
+            t!("arcade.game_over_menu").to_string(),
             Style::default().fg(Color::Gray),
         )),
-        Line::from(Span::styled("q - Quit", Style::default().fg(Color::Gray))),
+        Line::from(Span::styled(
+            t!("arcade.game_over_quit").to_string(),
+            Style::default().fg(Color::Gray),
+        )),
     ])
     .alignment(Alignment::Center)
     .block(Block::default().borders(Borders::ALL));

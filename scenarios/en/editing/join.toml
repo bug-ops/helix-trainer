@@ -38,4 +38,3 @@ category = "editing"
 difficulty = "beginner"
 tags = ["join", "lines"]
 commands_taught = ["J"]
-estimated_time_seconds = 10

@@ -40,7 +40,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "forward"]
 commands_taught = ["w"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "word_forward_basic_002"
@@ -81,7 +80,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "forward"]
 commands_taught = ["w"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "word_backward_basic_001"
@@ -120,7 +118,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "backward"]
 commands_taught = ["b"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "word_backward_basic_002"
@@ -159,7 +156,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "backward"]
 commands_taught = ["b"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "word_combined_001"
@@ -200,7 +196,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "combined"]
 commands_taught = ["w", "b"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "word_code_001"
@@ -239,7 +234,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "code"]
 commands_taught = ["w"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "word_sentence_001"
@@ -276,4 +270,3 @@ category = "movement"
 difficulty = "beginner"
 tags = ["word", "sentence"]
 commands_taught = ["w"]
-estimated_time_seconds = 10

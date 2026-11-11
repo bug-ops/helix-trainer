@@ -36,4 +36,3 @@ category = "writing"
 difficulty = "intermediate"
 tags = ["code-fence", "markdown"]
 commands_taught = ["O", "o"]
-estimated_time_seconds = 20

@@ -6,11 +6,13 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use crate::helix::error::{SimulatorError, bound};
 use crate::helix::simulator::{EditorMode, HelixSimulator};
-use crate::security::UserError;
 
 use super::keytrie::KeyTrie;
-use super::metadata::{Category, CommandMetadata, CountBehavior, ModeTransition, NativeCounted};
+use super::metadata::{
+    Binding, Category, CommandMetadata, CountBehavior, ModeTransition, NativeCounted, Repeat,
+};
 
 /// Check if a key string represents a modifier key command (Alt-*, Ctrl-*)
 fn is_modifier_key(key: &str) -> bool {
@@ -18,26 +20,23 @@ fn is_modifier_key(key: &str) -> bool {
 }
 
 /// Command handler function type
-pub type CommandHandler<M> = fn(&mut HelixSimulator<M>) -> Result<(), UserError>;
+pub type CommandHandler<M> = fn(&mut HelixSimulator<M>) -> Result<(), SimulatorError>;
 
 /// A registered command with metadata and handler
 pub struct Command<M: EditorMode> {
-    /// Command metadata for documentation
-    pub metadata: CommandMetadata,
-    /// Handler function
-    pub handler: CommandHandler<M>,
-    /// Phantom data for mode type
-    _mode: PhantomData<M>,
+    metadata: CommandMetadata,
+    handler: CommandHandler<M>,
 }
 
 impl<M: EditorMode> Command<M> {
     /// Create a new command
     pub fn new(metadata: CommandMetadata, handler: CommandHandler<M>) -> Self {
-        Self {
-            metadata,
-            handler,
-            _mode: PhantomData,
-        }
+        Self { metadata, handler }
+    }
+
+    /// Command metadata for documentation
+    pub fn metadata(&self) -> &CommandMetadata {
+        &self.metadata
     }
 }
 
@@ -51,7 +50,7 @@ pub struct CommandRegistry<M: EditorMode> {
     /// Commands grouped by category
     by_category: HashMap<Category, Vec<&'static str>>,
     /// Reverse index: real Helix 25.07.1 command name -> canonical key
-    /// sequence that triggers it. Excludes `alias_only` entries, which have
+    /// sequence that triggers it. Excludes [`Binding::TrainerAlias`] entries, which have
     /// no corresponding upstream Helix command name to index by.
     by_name: HashMap<&'static str, &'static str>,
     /// `KeyTrie` for multi-key resolution
@@ -74,16 +73,16 @@ impl<M: EditorMode> CommandRegistry<M> {
 
     /// Register a command
     pub fn register(&mut self, cmd: Command<M>) {
-        let key = cmd.metadata.key;
-        let category = cmd.metadata.category;
+        let key = cmd.metadata.key();
+        let category = cmd.metadata.category();
 
         // Add to category grouping
         self.by_category.entry(category).or_default().push(key);
 
         // Add to the name -> key reverse index, unless this is a
         // trainer-internal convenience binding with no real Helix name.
-        if !cmd.metadata.alias_only {
-            self.by_name.insert(cmd.metadata.name, key);
+        if let Binding::Helix(name) = cmd.metadata.binding() {
+            self.by_name.insert(name.as_str(), key);
         }
 
         // Register in KeyTrie for single-key commands (including modifier keys)
@@ -99,7 +98,7 @@ impl<M: EditorMode> CommandRegistry<M> {
     /// Look up the canonical key sequence for a real Helix 25.07.1 command name.
     ///
     /// Returns `None` for unknown names and for names that only exist as
-    /// `alias_only` trainer bindings, which have no upstream Helix command
+    /// `TrainerAlias` bindings, which have no upstream Helix command
     /// name to resolve.
     ///
     /// # Examples
@@ -109,13 +108,13 @@ impl<M: EditorMode> CommandRegistry<M> {
     ///
     /// let registry = normal_registry();
     /// assert_eq!(registry.key_for_name("goto_last_line"), Some("ge"));
-    /// assert_eq!(registry.key_for_name("goto_first_nonblank"), None); // alias_only
+    /// assert_eq!(registry.key_for_name("goto_first_nonblank"), None); // trainer alias
     /// ```
     pub fn key_for_name(&self, name: &str) -> Option<&'static str> {
         self.by_name.get(name).copied()
     }
 
-    /// Iterate the `helix_name -> key` reverse index (excludes `alias_only` entries).
+    /// Iterate the `helix_name -> key` reverse index (excludes trainer aliases).
     pub fn name_index(&self) -> impl Iterator<Item = (&'static str, &'static str)> + '_ {
         self.by_name.iter().map(|(&name, &key)| (name, key))
     }
@@ -129,19 +128,19 @@ impl<M: EditorMode> CommandRegistry<M> {
     ///
     /// # Errors
     ///
-    /// Returns a `UserError` if `key` is not a registered command or its handler fails.
+    /// Returns a [`SimulatorError`] if `key` is not a registered command or its handler fails.
     pub fn execute(
         &self,
         sim: &mut HelixSimulator<M>,
         key: &str,
-    ) -> Result<Option<ModeTransition>, UserError> {
+    ) -> Result<Option<ModeTransition>, SimulatorError> {
         if let Some(cmd) = self.commands.get(key) {
             (cmd.handler)(sim)?;
-            Ok(cmd.metadata.mode_change)
+            Ok(cmd.metadata.mode_change())
         } else {
-            Err(UserError::command_failed(format!(
-                "unknown command '{key}'"
-            )))
+            Err(SimulatorError::UnknownCommand {
+                command: bound(key),
+            })
         }
     }
 
@@ -171,7 +170,7 @@ impl<M: EditorMode> CommandRegistry<M> {
     pub fn is_repeatable(&self, key: &str) -> bool {
         self.commands
             .get(key)
-            .is_some_and(|c| c.metadata.repeatable)
+            .is_some_and(|c| c.metadata.repeat() == Repeat::Repeatable)
     }
 
     /// How a count prefix applies to `base` (a command string without count).
@@ -198,7 +197,7 @@ impl<M: EditorMode> CommandRegistry<M> {
     /// ```
     pub fn count_behavior(&self, base: &str) -> CountBehavior {
         if let Some(cmd) = self.commands.get(base) {
-            return cmd.metadata.count_behavior;
+            return cmd.metadata.count_behavior();
         }
         if NativeCounted::parse(base).is_some() {
             return CountBehavior::Native;
@@ -236,21 +235,29 @@ impl<M: EditorMode> Default for CommandRegistry<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::helix::registry::metadata::HelixName;
     use crate::helix::simulator::NormalMode;
+    use std::assert_matches;
 
     fn create_test_command() -> Command<NormalMode> {
         Command::new(
             CommandMetadata::new(
-                "test_move",
+                Binding::Helix(HelixName::new("test_move")),
                 "h",
-                "Test move",
-                "Test move help",
                 Category::Movement,
-                false,
-                None,
             ),
             |_sim| Ok(()),
         )
+    }
+
+    #[test]
+    fn execute_unknown_key_reports_the_bounded_key() {
+        let registry: CommandRegistry<NormalMode> = CommandRegistry::new();
+        let mut sim = HelixSimulator::<NormalMode>::new("abc".to_string());
+
+        let err = registry.execute(&mut sim, "zz\n").unwrap_err();
+
+        assert_matches!(err, SimulatorError::UnknownCommand { command } if command == "zz");
     }
 
     #[test]
@@ -276,9 +283,9 @@ mod tests {
         registry.register(create_test_command());
 
         let meta = registry.metadata("h").unwrap();
-        assert_eq!(meta.name, "test_move");
-        assert_eq!(meta.key, "h");
-        assert_eq!(meta.category, Category::Movement);
+        assert_eq!(meta.name().map(HelixName::as_str), Some("test_move"));
+        assert_eq!(meta.key(), "h");
+        assert_eq!(meta.category(), Category::Movement);
     }
 
     #[test]
@@ -287,26 +294,23 @@ mod tests {
         registry.register(create_test_command());
         registry.register(Command::new(
             CommandMetadata::new(
-                "test_move2",
+                Binding::Helix(HelixName::new("test_move2")),
                 "l",
-                "Test move 2",
-                "Help",
                 Category::Movement,
-                false,
-                None,
-            ),
+            )
+            .with_summary("Test move 2")
+            .with_help("Help"),
             |_sim| Ok(()),
         ));
         registry.register(Command::new(
             CommandMetadata::new(
-                "test_edit",
+                Binding::Helix(HelixName::new("test_edit")),
                 "d",
-                "Test edit",
-                "Help",
                 Category::Editing,
-                true,
-                None,
-            ),
+            )
+            .with_summary("Test edit")
+            .with_help("Help")
+            .with_repeat(Repeat::Repeatable),
             |_sim| Ok(()),
         ));
 
@@ -326,14 +330,13 @@ mod tests {
         registry.register(create_test_command()); // Not repeatable
         registry.register(Command::new(
             CommandMetadata::new(
-                "test_edit",
+                Binding::Helix(HelixName::new("test_edit")),
                 "d",
-                "Test edit",
-                "Help",
                 Category::Editing,
-                true, // Repeatable
-                None,
-            ),
+            )
+            .with_summary("Test edit")
+            .with_help("Help")
+            .with_repeat(Repeat::Repeatable),
             |_sim| Ok(()),
         ));
 
@@ -348,14 +351,12 @@ mod tests {
         registry.register(create_test_command());
         registry.register(Command::new(
             CommandMetadata::new(
-                "test2",
+                Binding::Helix(HelixName::new("test2")),
                 "j",
-                "Test 2",
-                "Help",
                 Category::Movement,
-                false,
-                None,
-            ),
+            )
+            .with_summary("Test 2")
+            .with_help("Help"),
             |_sim| Ok(()),
         ));
 
@@ -383,7 +384,10 @@ mod tests {
         let mut registry: CommandRegistry<NormalMode> = CommandRegistry::new();
         crate::helix::registry::definitions::register_all(&mut registry);
 
-        let non_alias: Vec<_> = registry.all_commands().filter(|m| !m.alias_only).collect();
+        let non_alias: Vec<_> = registry
+            .all_commands()
+            .filter(|m| m.name().is_some())
+            .collect();
         assert!(!non_alias.is_empty());
 
         // Injective: the index has exactly one entry per non-alias command.
@@ -395,11 +399,11 @@ mod tests {
 
         // Total: every non-alias command's name resolves back to its own key.
         for meta in &non_alias {
+            let name = meta.name().expect("non-alias").as_str();
             assert_eq!(
-                registry.key_for_name(meta.name),
-                Some(meta.key),
-                "reverse index missing or wrong entry for `{}`",
-                meta.name
+                registry.key_for_name(name),
+                Some(meta.key()),
+                "reverse index missing or wrong entry for `{name}`"
             );
         }
     }
@@ -407,7 +411,7 @@ mod tests {
     /// Every non-alias `CommandMetadata.name` must be a real upstream Helix
     /// 25.07.1 command name, checked against the reference list scraped
     /// from `helix-term/src/commands.rs`'s `static_commands!` invocation.
-    /// `alias_only` entries are trainer-internal by definition and are
+    /// `TrainerAlias` entries are trainer-internal by definition and are
     /// exempt.
     #[test]
     fn non_alias_names_are_real_helix_commands() {
@@ -420,11 +424,11 @@ mod tests {
         let mut registry: CommandRegistry<NormalMode> = CommandRegistry::new();
         crate::helix::registry::definitions::register_all(&mut registry);
 
-        for meta in registry.all_commands().filter(|m| !m.alias_only) {
+        for name in registry.all_commands().filter_map(CommandMetadata::name) {
             assert!(
-                known.contains(meta.name),
+                known.contains(name.as_str()),
                 "`{}` is not a real Helix 25.07.1 command name",
-                meta.name
+                name.as_str()
             );
         }
     }

@@ -39,7 +39,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["delete", "selection"]
 commands_taught = ["d"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "delete_selection_002"
@@ -79,7 +78,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["delete", "selection"]
 commands_taught = ["d"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "delete_line_001"
@@ -121,7 +119,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["delete", "line", "selection"]
 commands_taught = ["x", "d"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "delete_line_002"
@@ -160,7 +157,6 @@ category = "editing"
 difficulty = "beginner"
 tags = ["delete", "line", "selection"]
 commands_taught = ["x", "d"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "delete_line_003"
@@ -201,4 +197,3 @@ category = "editing"
 difficulty = "beginner"
 tags = ["delete", "line", "selection"]
 commands_taught = ["x", "d"]
-estimated_time_seconds = 5

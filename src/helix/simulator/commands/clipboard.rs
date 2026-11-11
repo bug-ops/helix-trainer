@@ -1,7 +1,7 @@
 //! Clipboard operations (yank, paste)
 
+use crate::helix::error::SimulatorError;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
-use crate::security::UserError;
 use helix_core::{Range, Selection, Transaction, line_ending::get_line_ending_of_str};
 use std::iter::{Chain, Repeat};
 use std::slice::Iter;
@@ -20,7 +20,7 @@ use std::slice::Iter;
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     yank_to_register(sim, None)
 }
 
@@ -36,7 +36,7 @@ pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError>
 pub fn yank_to_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
     let len_chars = sim.doc.len_chars();
 
@@ -81,7 +81,7 @@ enum PastePlacement {
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     paste_after_from_register(sim, None)
 }
 
@@ -103,7 +103,7 @@ pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 pub fn paste_after_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     paste_from_register(sim, register, PastePlacement::After);
     Ok(())
 }
@@ -116,7 +116,7 @@ pub fn paste_after_from_register<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
     paste_before_from_register(sim, None)
 }
 
@@ -134,7 +134,7 @@ pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Us
 pub fn paste_before_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
-) -> Result<(), UserError> {
+) -> Result<(), SimulatorError> {
     paste_from_register(sim, register, PastePlacement::Before);
     Ok(())
 }
@@ -203,15 +203,15 @@ fn paste_from_register<M: EditorMode>(
         (pos, pos, Some(text.into()))
     });
 
-    let primary = sim.selection.primary_index();
+    let transaction =
+        transaction.with_selection(Selection::new(pasted.into(), sim.selection.primary_index()));
     sim.apply_transaction(&transaction);
-    sim.selection = Selection::new(pasted.into(), primary);
 }
 
 /// The selection a pasted value of `len` chars leaves in a range, keeping
 /// the range's direction. A single char is a plain cursor, matching how the
 /// simulator represents Helix's one-wide cursor range.
-fn select_pasted(start: usize, len: usize, original: &Range) -> Range {
+pub(super) fn select_pasted(start: usize, len: usize, original: &Range) -> Range {
     if len <= 1 {
         Range::point(start)
     } else if original.head < original.anchor {

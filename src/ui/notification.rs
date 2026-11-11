@@ -11,6 +11,9 @@
 use crate::constants::{
     DEFAULT_NOTIFICATION_DURATION, MAX_VISIBLE_NOTIFICATIONS, STREAK_FREEZE_MAX_GAP_DAYS,
 };
+use crate::time::{MonotonicClock, SystemMonotonicClock};
+use std::fmt;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Type of notification to display
@@ -91,28 +94,17 @@ pub enum NotificationType {
 }
 
 /// A notification to display in the UI
-#[derive(Debug, Clone)]
+///
+/// It carries no timestamp: the [`NotificationQueue`] stamps it when it is pushed and decides
+/// when it expires.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Notification {
     /// Type of notification
     pub notification_type: NotificationType,
 
-    /// When the notification was created
-    /// Note: This field is excluded from `PartialEq` comparison
-    pub(crate) created_at: Instant,
-
     /// How long to display the notification (default 3 seconds)
     pub duration: Duration,
 }
-
-// Custom PartialEq that excludes created_at (Instant doesn't implement Eq)
-impl PartialEq for Notification {
-    fn eq(&self, other: &Self) -> bool {
-        self.notification_type == other.notification_type && self.duration == other.duration
-    }
-}
-
-// Implement Eq manually since we have a valid PartialEq
-impl Eq for Notification {}
 
 impl Notification {
     /// Create a new notification with default duration (3 seconds)
@@ -123,14 +115,10 @@ impl Notification {
     /// use helix_trainer::ui::notification::{Notification, NotificationType};
     ///
     /// let notif = Notification::new(NotificationType::LevelUp { new_level: 5 });
-    /// assert!(!notif.is_expired());
+    /// assert_eq!(notif.duration, std::time::Duration::from_secs(3));
     /// ```
     pub fn new(notification_type: NotificationType) -> Self {
-        Self {
-            notification_type,
-            created_at: Instant::now(),
-            duration: DEFAULT_NOTIFICATION_DURATION,
-        }
+        Self::with_duration(notification_type, DEFAULT_NOTIFICATION_DURATION)
     }
 
     /// Create a notification with custom duration
@@ -150,19 +138,8 @@ impl Notification {
     pub fn with_duration(notification_type: NotificationType, duration: Duration) -> Self {
         Self {
             notification_type,
-            created_at: Instant::now(),
             duration,
         }
-    }
-
-    /// Check if the notification has expired
-    pub fn is_expired(&self) -> bool {
-        self.created_at.elapsed() >= self.duration
-    }
-
-    /// Get remaining time before expiration
-    pub fn remaining_time(&self) -> Duration {
-        self.duration.saturating_sub(self.created_at.elapsed())
     }
 
     /// Get title text for this notification
@@ -251,18 +228,38 @@ impl Notification {
     }
 }
 
-/// Queue for managing notifications
+/// A queued notification and the instant it was pushed
 #[derive(Debug, Clone)]
+struct Shown {
+    notification: Notification,
+    shown_at: Instant,
+}
+
+/// Queue for managing notifications
+///
+/// Reads time from an injected [`MonotonicClock`], so expiry is testable without sleeping.
+#[derive(Clone)]
 pub struct NotificationQueue {
     /// Active notifications
-    notifications: Vec<Notification>,
+    notifications: Vec<Shown>,
 
     /// Maximum number of visible notifications
     max_visible: usize,
+
+    clock: Arc<dyn MonotonicClock>,
+}
+
+impl fmt::Debug for NotificationQueue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NotificationQueue")
+            .field("notifications", &self.notifications)
+            .field("max_visible", &self.max_visible)
+            .finish_non_exhaustive()
+    }
 }
 
 impl NotificationQueue {
-    /// Create a new notification queue
+    /// Create a new notification queue that reads time from the system clock
     ///
     /// # Examples
     ///
@@ -274,13 +271,30 @@ impl NotificationQueue {
     /// assert!(queue.is_empty());
     /// ```
     pub fn new() -> Self {
+        Self::with_clock(Arc::new(SystemMonotonicClock))
+    }
+
+    /// Create a new notification queue that reads time from `clock`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::time::SystemMonotonicClock;
+    /// use helix_trainer::ui::notification::NotificationQueue;
+    /// use std::sync::Arc;
+    ///
+    /// let queue = NotificationQueue::with_clock(Arc::new(SystemMonotonicClock));
+    /// assert!(queue.is_empty());
+    /// ```
+    pub fn with_clock(clock: Arc<dyn MonotonicClock>) -> Self {
         Self {
             notifications: Vec::new(),
             max_visible: MAX_VISIBLE_NOTIFICATIONS,
+            clock,
         }
     }
 
-    /// Add a notification to the queue
+    /// Add a notification to the queue, starting its display time now
     ///
     /// # Examples
     ///
@@ -292,24 +306,33 @@ impl NotificationQueue {
     /// assert_eq!(queue.count(), 1);
     /// ```
     pub fn push(&mut self, notification: Notification) {
-        self.notifications.push(notification);
+        self.notifications.push(Shown {
+            notification,
+            shown_at: self.clock.now(),
+        });
     }
 
     /// Remove expired notifications from the queue
     ///
     /// Returns the number of notifications removed.
     pub fn remove_expired(&mut self) -> usize {
+        let now = self.clock.now();
         let before = self.notifications.len();
-        self.notifications.retain(|n| !n.is_expired());
-        before - self.notifications.len()
+        self.notifications.retain(|shown| {
+            now.saturating_duration_since(shown.shown_at) < shown.notification.duration
+        });
+        before.saturating_sub(self.notifications.len())
     }
 
     /// Get visible notifications (up to `max_visible`, oldest first)
     ///
-    /// Returns a slice of the most recent notifications that should be displayed.
-    pub fn visible(&self) -> &[Notification] {
+    /// Yields the most recent notifications that should be displayed.
+    pub fn visible(&self) -> impl ExactSizeIterator<Item = &Notification> {
         let start = self.notifications.len().saturating_sub(self.max_visible);
-        &self.notifications[start..]
+        self.notifications
+            .iter()
+            .skip(start)
+            .map(|shown| &shown.notification)
     }
 
     /// Get number of active notifications
@@ -337,6 +360,7 @@ impl Default for NotificationQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::time::FakeMonotonicClock;
 
     #[test]
     fn test_notification_creation() {
@@ -355,10 +379,59 @@ mod tests {
         assert_eq!(notif.duration, Duration::from_secs(5));
     }
 
+    fn queue_with_fake_clock() -> (NotificationQueue, Arc<FakeMonotonicClock>) {
+        let clock = Arc::new(FakeMonotonicClock::new());
+        (NotificationQueue::with_clock(clock.clone()), clock)
+    }
+
     #[test]
     fn test_notification_not_expired_immediately() {
-        let notif = Notification::new(NotificationType::LevelUp { new_level: 5 });
-        assert!(!notif.is_expired());
+        let (mut queue, _clock) = queue_with_fake_clock();
+        queue.push(Notification::new(NotificationType::LevelUp {
+            new_level: 5,
+        }));
+
+        assert_eq!(queue.remove_expired(), 0);
+        assert_eq!(queue.count(), 1);
+    }
+
+    #[test]
+    fn test_notification_expires_after_its_duration_on_the_injected_clock() {
+        let (mut queue, clock) = queue_with_fake_clock();
+        queue.push(Notification::with_duration(
+            NotificationType::LevelUp { new_level: 5 },
+            Duration::from_secs(3),
+        ));
+
+        clock.advance(Duration::from_millis(2999));
+        assert_eq!(queue.remove_expired(), 0);
+
+        clock.advance(Duration::from_millis(1));
+        assert_eq!(queue.remove_expired(), 1);
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn test_notifications_expire_independently_of_each_other() {
+        let (mut queue, clock) = queue_with_fake_clock();
+        queue.push(Notification::new(NotificationType::LevelUp {
+            new_level: 1,
+        }));
+        clock.advance(Duration::from_secs(2));
+        queue.push(Notification::new(NotificationType::LevelUp {
+            new_level: 2,
+        }));
+
+        clock.advance(Duration::from_secs(1));
+
+        assert_eq!(queue.remove_expired(), 1);
+        assert_eq!(
+            queue
+                .visible()
+                .map(|n| n.notification_type.clone())
+                .collect::<Vec<_>>(),
+            [NotificationType::LevelUp { new_level: 2 }]
+        );
     }
 
     #[test]
@@ -391,16 +464,16 @@ mod tests {
         }
 
         // Should only show last 3 (max_visible)
-        let visible = queue.visible();
-        assert_eq!(visible.len(), 3);
+        let levels: Vec<_> = queue
+            .visible()
+            .map(|n| n.notification_type.clone())
+            .collect();
 
         // Check that we get the most recent 3
-        if let NotificationType::LevelUp { new_level } = visible[0].notification_type {
-            assert_eq!(new_level, 3);
-        }
-        if let NotificationType::LevelUp { new_level } = visible[2].notification_type {
-            assert_eq!(new_level, 5);
-        }
+        assert_eq!(
+            levels,
+            [3, 4, 5].map(|new_level| NotificationType::LevelUp { new_level })
+        );
     }
 
     #[test]
@@ -548,15 +621,6 @@ mod tests {
             new_level: "Advanced".to_string(),
         });
         assert_eq!(mastery_up.color(), Color::Yellow);
-    }
-
-    #[test]
-    fn test_notification_remaining_time() {
-        let notif = Notification::new(NotificationType::LevelUp { new_level: 2 });
-        let remaining = notif.remaining_time();
-        // Should be close to 3 seconds (within 100ms)
-        assert!(remaining >= Duration::from_millis(2900));
-        assert!(remaining <= Duration::from_secs(3));
     }
 
     #[test]

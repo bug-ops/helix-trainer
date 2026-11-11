@@ -30,13 +30,32 @@ pub struct LanguageRules {
     pub newline: Option<NewlineRules>,
 }
 
+/// Whether a string literal may span lines
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StringLines {
+    /// An unterminated string ends with its line
+    Single,
+    /// A string runs until its closing quote, across line breaks
+    Multi,
+}
+
+/// A string literal form beyond the plain quoted one
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StringForm {
+    /// `r"..."` and `r#"..."#`: no escapes, closed by the quote and the same hashes
+    Raw,
+    /// `"""..."""` and `'''...'''`: may span lines
+    TripleQuoted,
+}
+
 /// Language-specific inputs of the new-line indent rule
 ///
 /// Brackets `( ) [ ] { }` open an indented block in every language that has
 /// these rules; the fields carry what differs between languages.
 #[derive(Debug, PartialEq, Eq)]
 pub struct NewlineRules {
-    /// A line whose code ends in one of these characters opens a block
+    /// A line whose code ends in one of these characters opens a block, when
+    /// the line starts with one of `block_keywords`
     pub trailing_openers: &'static [char],
     /// A line starting with one of these words dedents the next line by one unit
     pub dedent_words: &'static [&'static str],
@@ -44,6 +63,16 @@ pub struct NewlineRules {
     pub string_quotes: &'static [char],
     /// Whether `'x'` is a character literal and a lone `'` a lifetime
     pub char_literals: bool,
+    /// Whether an unterminated string literal runs on across line breaks
+    pub string_lines: StringLines,
+    /// String forms beyond the plain quoted one
+    pub string_forms: &'static [StringForm],
+    /// Opening and closing token of block comments, which nest
+    pub block_comment: Option<(&'static str, &'static str)>,
+    /// Words that, as the first word of a line, let a trailing opener
+    /// character open a block (at bracket depth 0); empty for languages
+    /// whose openers are not tied to a statement
+    pub block_keywords: &'static [&'static str],
 }
 
 const DEFAULT_PAIRS: &[(char, char)] =
@@ -77,6 +106,10 @@ impl LanguageRules {
             dedent_words: &[],
             string_quotes: &['"'],
             char_literals: true,
+            string_lines: StringLines::Multi,
+            string_forms: &[StringForm::Raw],
+            block_comment: Some(("/*", "*/")),
+            block_keywords: &[],
         }),
     };
 
@@ -96,6 +129,13 @@ impl LanguageRules {
             dedent_words: &["return", "pass", "break", "continue", "raise"],
             string_quotes: &['"', '\''],
             char_literals: false,
+            string_lines: StringLines::Single,
+            string_forms: &[StringForm::TripleQuoted],
+            block_comment: None,
+            block_keywords: &[
+                "if", "elif", "else", "for", "while", "def", "class", "try", "except", "finally",
+                "with", "match", "case",
+            ],
         }),
     };
 

@@ -213,3 +213,93 @@ fn test_machine_counted_find_is_waiting_for_char() {
     assert!(sm.is_waiting_for_char());
     assert_eq!(sm.state().name(), "COUNTED_FIND_CHAR_PENDING");
 }
+
+// #577: a count before y r v i a I A C runs the command instead of cancelling
+
+fn run_keys(text: &str, keys: &str) -> crate::helix::EditorSnapshot {
+    let mut sim = crate::helix::AnyModeSimulator::new(text.to_string());
+    let mut sm = InputStateMachine::new();
+    for c in keys.chars() {
+        if sim.is_insert_mode() {
+            let cmd = if c == '\u{1b}' {
+                "Escape".to_string()
+            } else {
+                c.to_string()
+            };
+            sim.execute_command(&cmd).expect("insert key");
+        } else if let HandlerResult::Execute(cmd) = sm.process_key(key(c)) {
+            sim.execute_command(&cmd).expect("normal command");
+        }
+    }
+    sim.to_snapshot()
+}
+
+#[test]
+fn test_count_then_y_r_v_i_a_big_i_big_a_big_c_are_not_cancelled() {
+    let state = CountPending { count: nz(2) };
+    for (c, mods) in [
+        ('y', KeyModifiers::NONE),
+        ('v', KeyModifiers::NONE),
+        ('i', KeyModifiers::NONE),
+        ('a', KeyModifiers::NONE),
+        ('I', KeyModifiers::SHIFT),
+        ('A', KeyModifiers::SHIFT),
+        ('C', KeyModifiers::SHIFT),
+    ] {
+        let result = KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Char(c), mods));
+        assert_matches!(result, HandlerResult::Execute(_), "key {c}");
+    }
+    assert_eq!(
+        KeyHandler::handle_key(&state, key('r')),
+        HandlerResult::Transition(InputState::ReplaceCharPending)
+    );
+}
+
+#[test]
+fn test_count_then_o_and_big_o_execute_with_the_count_swallowed_by_the_simulator() {
+    let state = CountPending { count: nz(2) };
+    assert_eq!(
+        KeyHandler::handle_key(&state, key('o')),
+        HandlerResult::Execute("2o".into())
+    );
+    assert_eq!(
+        KeyHandler::handle_key(
+            &state,
+            KeyEvent::new(KeyCode::Char('O'), KeyModifiers::SHIFT)
+        ),
+        HandlerResult::Execute("2O".into())
+    );
+}
+
+/// #577: the keys typed after a counted `o` go into the opened line, not into Normal mode
+#[test]
+fn test_counted_open_line_opens_one_line_and_does_not_leak_the_typed_text() {
+    let counted = run_keys("abc\n", "2ox\u{1b}");
+    assert_eq!(counted.content, "abc\nx\n");
+    assert_eq!(counted, run_keys("abc\n", "ox\u{1b}"));
+    let above = run_keys("abc\n", "2Ox\u{1b}");
+    assert_eq!(above.content, "x\nabc\n");
+}
+
+/// Helix ignores the count for these commands, so `{n}<keys>` equals `<keys>`
+#[test]
+fn test_counted_ignore_commands_match_their_uncounted_form() {
+    let text = "fn add(a: i32) {\n    let sum = a;\n}\n";
+    for keys in [
+        "yp", "rz", "vl", "ix\u{1b}", "ax\u{1b}", "Ix\u{1b}", "Ax\u{1b}",
+    ] {
+        let counted = format!("2{keys}");
+        assert_eq!(run_keys(text, &counted), run_keys(text, keys), "{counted}");
+        assert_ne!(run_keys(text, &counted), run_keys(text, ""), "{counted}");
+    }
+}
+
+#[test]
+fn test_counted_r_does_not_leak_the_argument_as_a_command() {
+    assert_eq!(run_keys("abc\n", "2rzd").content, "bc\n");
+}
+
+#[test]
+fn test_counted_big_c_copies_the_selection_to_the_following_lines() {
+    assert_eq!(run_keys("ab\ncd\nef\n", "2Cd").content, "b\nd\nf\n");
+}

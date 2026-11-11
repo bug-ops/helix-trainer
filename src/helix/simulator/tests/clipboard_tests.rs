@@ -5,8 +5,7 @@
 //! - Paste after: p
 //! - Paste before: P
 
-use crate::game::EditorState;
-use crate::game::editor_state::{CursorPosition, Selection};
+use super::sim_with_selection;
 use crate::helix::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
@@ -23,12 +22,12 @@ fn test_yank_and_paste_after() {
 
     // Move to 'b'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    assert_eq!(sim.state().unwrap().cursor_position().1, 1);
+    assert_eq!(sim.display().cursor_position().1, 1);
 
     // Paste after 'b' - should insert 'a' between 'b' and 'c'
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "abac");
     // In Helix, cursor stays on last pasted character
     assert_eq!(state.cursor_position().1, 2); // Cursor on pasted 'a'
@@ -45,7 +44,7 @@ fn test_yank_and_paste_before() {
     // Move to 'c'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    assert_eq!(sim.state().unwrap().cursor_position().1, 2);
+    assert_eq!(sim.display().cursor_position().1, 2);
 
     // Yank 'c'
     sim.execute_command(CMD_YANK).unwrap();
@@ -53,12 +52,12 @@ fn test_yank_and_paste_before() {
     // Move back to 'a'
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
-    assert_eq!(sim.state().unwrap().cursor_position().1, 0);
+    assert_eq!(sim.display().cursor_position().1, 0);
 
     // Paste before 'a'
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "cabc");
     // In Helix, cursor stays on last pasted character
     assert_eq!(state.cursor_position().1, 0); // Cursor on pasted 'c'
@@ -81,7 +80,7 @@ fn test_paste_before_cursor_scenario() {
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.cursor_position().1,
         2,
@@ -92,14 +91,14 @@ fn test_paste_before_cursor_scenario() {
     sim.execute_command(CMD_YANK).unwrap();
 
     // Check what was yanked
-    let state = sim.state().unwrap();
+    let state = sim.display();
     println!("After yank:");
     println!("  Cursor position: {:?}", state.cursor_position());
 
     // Move left to 'y'
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.cursor_position().1,
         1,
@@ -109,7 +108,7 @@ fn test_paste_before_cursor_scenario() {
     // Paste before
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "xzyz", "Content should be 'xzyz'");
     // In Helix, cursor stays on last pasted character (position 1)
     assert_eq!(
@@ -126,15 +125,11 @@ fn test_paste_before_cursor_scenario() {
 #[test]
 fn test_yank_multichar_forward_selection_round_trips_full_text() {
     // "world" as a forward range (anchor=6 < head=11)
-    let cursor = CursorPosition::new(0, 11).unwrap();
-    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
-    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
-
-    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.content(),
         "hello worldworld",
@@ -145,16 +140,12 @@ fn test_yank_multichar_forward_selection_round_trips_full_text() {
 #[test]
 fn test_yank_multichar_backward_selection_extracts_same_range() {
     // Same "world" range, flipped to a backward selection (anchor=11 > head=6)
-    let cursor = CursorPosition::new(0, 11).unwrap();
-    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
-    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
-
-    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
     sim.execute_command(CMD_FLIP_SELECTIONS).unwrap();
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.content(),
         "hello worldworld",
@@ -167,15 +158,11 @@ fn test_yank_multichar_backward_selection_extracts_same_range() {
 #[test]
 fn test_paste_before_multichar_forward_selection_inserts_at_selection_start() {
     // "world" as a forward range (anchor=6 < head=11)
-    let cursor = CursorPosition::new(0, 11).unwrap();
-    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
-    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
-
-    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.content(),
         "hello worldworld",
@@ -186,16 +173,12 @@ fn test_paste_before_multichar_forward_selection_inserts_at_selection_start() {
 #[test]
 fn test_paste_before_multichar_backward_selection_inserts_at_selection_start() {
     // Same "world" range, flipped to a backward selection (anchor=11 > head=6)
-    let cursor = CursorPosition::new(0, 11).unwrap();
-    let sel = Selection::new(CursorPosition::new(0, 6).unwrap(), cursor);
-    let state = EditorState::new("hello world".to_string(), cursor, Some(sel)).unwrap();
-
-    let mut sim = AnyModeSimulator::from_editor_state(&state);
+    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
     sim.execute_command(CMD_FLIP_SELECTIONS).unwrap();
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.content(),
         "hello worldworld",
@@ -215,7 +198,7 @@ fn test_paste_after_select_line_yank_paste_matches_helix() {
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hello\nhello\nworld\n");
 }
 
@@ -232,7 +215,7 @@ fn test_paste_before_divergent_clipboard_matches_helix() {
     sim.execute_command(CMD_SHRINK_TO_LINE_BOUNDS).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "aab cd");
 }
 
@@ -248,7 +231,7 @@ fn test_yank_select_line_round_trips_full_line() {
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "abc\nXYZ\nabc\n");
 }
 
@@ -261,7 +244,7 @@ fn test_yank_point_selection_still_yanks_single_char() {
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hhello world");
 }
 
@@ -281,12 +264,12 @@ fn test_repeat_yank_and_paste() {
 
     // Paste
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hello\nwhorld");
 
     // Repeat paste
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     // The paste should repeat with the same clipboard content
     assert!(state.content().contains("hello"));
 }

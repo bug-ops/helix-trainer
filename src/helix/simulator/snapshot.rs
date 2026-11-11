@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 /// - Session state persistence (saves)
 /// - Test assertions
 ///
-/// Unlike `EditorState`, this is a thin data container without validation logic.
+/// A thin data container without validation logic.
 /// The actual editor state lives in `HelixSimulator` using helix-core primitives.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EditorSnapshot {

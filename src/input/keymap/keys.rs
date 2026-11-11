@@ -116,6 +116,60 @@ impl PhysicalKey {
     }
 }
 
+impl PhysicalKey {
+    /// Render as a Helix key string that fully identifies the key: every modifier
+    /// as an `S-`, `A-` or `C-` prefix in that order, then the key.
+    ///
+    /// Unlike [`label`](Self::label) it is stable across crossterm versions, because
+    /// it never uses `Debug` output, so it can be persisted (the keymap fingerprint).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::input::keymap::PhysicalKey;
+    ///
+    /// assert_eq!(PhysicalKey::try_from("A-c").unwrap().to_helix_string(), "A-c");
+    /// assert_eq!(PhysicalKey::try_from("G").unwrap().to_helix_string(), "S-G");
+    /// assert_eq!(PhysicalKey::try_from("C-Left").unwrap().to_helix_string(), "C-Left");
+    /// ```
+    pub fn to_helix_string(&self) -> String {
+        let mut out = String::new();
+        for (modifier, prefix) in [
+            (KeyModifiers::SHIFT, "S-"),
+            (KeyModifiers::ALT, "A-"),
+            (KeyModifiers::CONTROL, "C-"),
+        ] {
+            if self.modifiers.contains(modifier) {
+                out.push_str(prefix);
+            }
+        }
+        match self.code {
+            KeyCode::Char(c) => out.push(c),
+            KeyCode::F(n) => {
+                out.push('F');
+                out.push_str(&n.to_string());
+            }
+            KeyCode::Esc => out.push_str("Escape"),
+            KeyCode::Enter => out.push_str("Enter"),
+            KeyCode::Tab => out.push_str("Tab"),
+            KeyCode::Backspace => out.push_str("Backspace"),
+            KeyCode::Left => out.push_str("Left"),
+            KeyCode::Right => out.push_str("Right"),
+            KeyCode::Up => out.push_str("Up"),
+            KeyCode::Down => out.push_str("Down"),
+            KeyCode::Home => out.push_str("Home"),
+            KeyCode::End => out.push_str("End"),
+            KeyCode::PageUp => out.push_str("PageUp"),
+            KeyCode::PageDown => out.push_str("PageDown"),
+            KeyCode::Insert => out.push_str("Insert"),
+            KeyCode::Delete => out.push_str("Delete"),
+            // The keymap parser produces none of the remaining codes, so no overlay entry carries one.
+            _ => out.push_str("Unsupported"),
+        }
+        out
+    }
+}
+
 /// A Helix key string (e.g. `"A-c"`, `"j"`, `"Escape"`) did not parse into a key.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid key string: {0:?}")]
@@ -325,6 +379,27 @@ mod tests {
     }
 
     #[test]
+    fn helix_string_keeps_every_modifier_and_named_key() {
+        for (input, expected) in [
+            ("h", "h"),
+            ("G", "S-G"),
+            ("A-c", "A-c"),
+            ("C-A-x", "A-C-x"),
+            ("S-Left", "S-Left"),
+            ("Escape", "Escape"),
+            ("F5", "F5"),
+            ("PageDown", "PageDown"),
+            ("space", " "),
+        ] {
+            assert_eq!(
+                PhysicalKey::try_from(input).unwrap().to_helix_string(),
+                expected,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
     fn tokens_examples() {
         assert_eq!(CanonicalKeys::from_static("gg").tokens(), vec!["g", "g"]);
         assert_eq!(
@@ -358,12 +433,12 @@ mod tests {
         let mut checked = 0;
         for meta in registry.all_commands() {
             checked += 1;
-            for token in CanonicalKeys::from_static(meta.key).tokens() {
+            for token in CanonicalKeys::from_static(meta.key()).tokens() {
                 assert!(
                     parse_helix_key_string(token).is_some(),
                     "token {:?} of registry key {:?} does not round-trip",
                     token,
-                    meta.key
+                    meta.key()
                 );
             }
         }
@@ -386,7 +461,7 @@ mod tests {
         ];
         let registry = normal_registry();
         for meta in registry.all_commands() {
-            inputs.push(meta.key);
+            inputs.push(meta.key());
         }
         for s in inputs {
             assert_eq!(

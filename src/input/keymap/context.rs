@@ -26,6 +26,18 @@ pub enum KeyContext {
 }
 
 impl KeyContext {
+    /// Stable name of this context, hashed into the keymap fingerprint; never rename a value.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            KeyContext::Base => "base",
+            KeyContext::Goto => "goto",
+            KeyContext::View => "view",
+            KeyContext::Match => "match",
+            KeyContext::UnmatchedPrev => "unmatched_prev",
+            KeyContext::UnmatchedNext => "unmatched_next",
+        }
+    }
+
     /// The physical prefix character that leads into this context from
     /// `Base`, or `None` for [`KeyContext::Base`] itself (which has no
     /// prefix).
@@ -74,6 +86,31 @@ mod tests {
             let prefix = ctx.prefix_char().unwrap();
             assert_eq!(KeyContext::from_prefix_char(prefix), Some(ctx));
         }
+    }
+
+    #[test]
+    fn names_are_stable_and_distinct() {
+        let names: Vec<_> = [
+            KeyContext::Base,
+            KeyContext::Goto,
+            KeyContext::View,
+            KeyContext::Match,
+            KeyContext::UnmatchedPrev,
+            KeyContext::UnmatchedNext,
+        ]
+        .map(KeyContext::as_str)
+        .to_vec();
+        assert_eq!(
+            names,
+            [
+                "base",
+                "goto",
+                "view",
+                "match",
+                "unmatched_prev",
+                "unmatched_next"
+            ]
+        );
     }
 
     #[test]

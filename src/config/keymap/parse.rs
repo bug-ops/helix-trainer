@@ -398,7 +398,7 @@ mod tests {
     fn no_registered_multi_token_key_ends_in_a_prefix() {
         let registry = normal_registry();
         for meta in registry.all_commands() {
-            let canonical = CanonicalKeys::from_static(meta.key);
+            let canonical = CanonicalKeys::from_static(meta.key());
             let tokens = canonical.tokens();
             if tokens.len() < 2 {
                 continue;
@@ -407,7 +407,7 @@ mod tests {
             let mut result = None;
             for token in &tokens {
                 let key_event = parse_helix_key_string(token).unwrap_or_else(|| {
-                    panic!("registry key {:?} token {:?} unparsable", meta.key, token)
+                    panic!("registry key {:?} token {:?} unparsable", meta.key(), token)
                 });
                 result = Some(machine.process_key(key_event));
             }
@@ -415,8 +415,8 @@ mod tests {
                 result,
                 Some(HandlerResult::Execute(_)),
                 "registry key {:?} (name {:?}) is multi-token but its final token doesn't execute: {:?}",
-                meta.key,
-                meta.name,
+                meta.key(),
+                meta.name(),
                 result
             );
         }

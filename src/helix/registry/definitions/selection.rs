@@ -12,7 +12,9 @@ use crate::helix::commands::{
     CMD_TRIM_SELECTIONS,
 };
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
-use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior};
+use crate::helix::registry::metadata::{
+    Binding, Category, CommandMetadata, CountBehavior, HelixName, Repeat,
+};
 use crate::helix::simulator::NormalMode;
 use crate::helix::simulator::commands::editing;
 use crate::helix::simulator::commands::selection;
@@ -22,53 +24,45 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Existing selection commands
     registry.register(Command::new(
         CommandMetadata::new(
-            "extend_line_below",
+            Binding::Helix(HelixName::new("extend_line_below")),
             CMD_SELECT_LINE,
-            "Select line",
-            "Select the current line. Use 'x' then 'd' to delete a line in Helix.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Select line")
+        .with_help("Select the current line. Use 'x' then 'd' to delete a line in Helix."),
         editing::select_line,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "extend_to_line_bounds",
+            Binding::Helix(HelixName::new("extend_to_line_bounds")),
             CMD_EXTEND_LINE,
-            "Extend to line bounds",
-            "Extend the selection to line boundaries.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Extend to line bounds")
+        .with_help("Extend the selection to line boundaries."),
         editing::extend_line,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "select_all",
+            Binding::Helix(HelixName::new("select_all")),
             CMD_SELECT_ALL,
-            "Select all",
-            "Select the entire document.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Select all")
+        .with_help("Select the entire document."),
         editing::select_all,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "collapse_selection",
+            Binding::Helix(HelixName::new("collapse_selection")),
             CMD_COLLAPSE_SELECTION,
-            "Collapse selection",
-            "Collapse the selection to a single cursor at the head position.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Collapse selection")
+        .with_help("Collapse the selection to a single cursor at the head position."),
         editing::collapse_selection,
     ));
 
@@ -76,7 +70,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     //
     // 's'/'S' (select_regex/split_selection) are NOT registered here: both
     // take a regex pattern argument, which `CommandHandler`'s fixed
-    // `fn(&mut HelixSimulator<M>) -> Result<(), UserError>` signature cannot
+    // `fn(&mut HelixSimulator<M>) -> Result<(), SimulatorError>` signature cannot
     // carry. They are dispatched directly from `execute_normal_mode_command_internal`
     // via the atomic `"s <pattern>"` / `"S <pattern>"` command encoding
     // assembled by `RegexPromptPending`, the same way register-scoped ops
@@ -84,131 +78,112 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "split_selection_on_newline",
+            Binding::Helix(HelixName::new("split_selection_on_newline")),
             CMD_SPLIT_SELECTION_NEWLINES,
-            "Split on newlines",
-            "Split the selection on newlines, creating one selection per line.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Split on newlines")
+        .with_help("Split the selection on newlines, creating one selection per line."),
         selection::split_selection_newlines,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "align_selections",
+            Binding::Helix(HelixName::new("align_selections")),
             CMD_ALIGN_SELECTIONS,
-            "Align selections",
-            "Align all selections to the same column by inserting spaces.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Align selections")
+        .with_help("Align all selections to the same column by inserting spaces."),
         selection::align_selections,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "trim_selections",
+            Binding::Helix(HelixName::new("trim_selections")),
             CMD_TRIM_SELECTIONS,
-            "Trim selections",
-            "Trim leading and trailing whitespace from selections.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Trim selections")
+        .with_help("Trim leading and trailing whitespace from selections."),
         selection::trim_selections,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "merge_selections",
+            Binding::Helix(HelixName::new("merge_selections")),
             CMD_MERGE_SELECTIONS,
-            "Merge all selections",
-            "Merge all selections into a single selection spanning from first to last.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Merge all selections")
+        .with_help("Merge all selections into a single selection spanning from first to last."),
         selection::merge_selections,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "merge_consecutive_selections",
+            Binding::Helix(HelixName::new("merge_consecutive_selections")),
             CMD_MERGE_CONSECUTIVE,
-            "Merge consecutive",
-            "Merge only adjacent/consecutive selections.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Merge consecutive")
+        .with_help("Merge only adjacent/consecutive selections."),
         selection::merge_consecutive_selections,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "copy_selection_on_next_line",
+            Binding::Helix(HelixName::new("copy_selection_on_next_line")),
             CMD_COPY_SELECTION_NEXT,
-            "Copy to next line",
-            "Copy the selection to the next line below.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Copy to next line")
+        .with_help("Copy the selection to the next line below."),
         selection::copy_selection_next_line,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "copy_selection_on_prev_line",
+            Binding::Helix(HelixName::new("copy_selection_on_prev_line")),
             CMD_COPY_SELECTION_PREV,
-            "Copy to prev line",
-            "Copy the selection to the previous line above.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Copy to prev line")
+        .with_help("Copy the selection to the previous line above."),
         selection::copy_selection_prev_line,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "keep_selections",
+            Binding::Helix(HelixName::new("keep_selections")),
             CMD_KEEP_MATCHING,
-            "Keep matching",
-            "Keep only selections that match the given regex pattern.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Keep matching")
+        .with_help("Keep only selections that match the given regex pattern."),
         selection::keep_selections_matching,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "remove_selections",
+            Binding::Helix(HelixName::new("remove_selections")),
             CMD_REMOVE_MATCHING,
-            "Remove matching",
-            "Remove selections that match the given regex pattern.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Remove matching")
+        .with_help("Remove selections that match the given regex pattern."),
         selection::remove_selections_matching,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "toggle_comments",
+            Binding::Helix(HelixName::new("toggle_comments")),
             CMD_TOGGLE_COMMENTS,
-            "Toggle comments",
-            "Toggle line comments on selected lines.",
             Category::Selection,
-            true, // repeatable
-            None,
         )
+        .with_summary("Toggle comments")
+        .with_help("Toggle line comments on selected lines.")
+        .with_repeat(Repeat::Repeatable)
         .with_count_behavior(CountBehavior::Ignore),
         selection::toggle_comments,
     ));
@@ -216,41 +191,35 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Primary selection management
     registry.register(Command::new(
         CommandMetadata::new(
-            "keep_primary_selection",
+            Binding::Helix(HelixName::new("keep_primary_selection")),
             CMD_KEEP_PRIMARY_SELECTION,
-            "Keep primary",
-            "Keep only the primary selection, discarding all others.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Keep primary")
+        .with_help("Keep only the primary selection, discarding all others."),
         selection::keep_primary_selection,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "remove_primary_selection",
+            Binding::Helix(HelixName::new("remove_primary_selection")),
             CMD_REMOVE_PRIMARY_SELECTION,
-            "Remove primary",
-            "Remove the primary selection, keeping other selections.",
             Category::Selection,
-            false,
-            None,
         )
+        .with_summary("Remove primary")
+        .with_help("Remove the primary selection, keeping other selections.")
         .with_count_behavior(CountBehavior::Ignore),
         selection::remove_primary_selection,
     ));
 
     registry.register(Command::new(
         CommandMetadata::new(
-            "shrink_to_line_bounds",
+            Binding::Helix(HelixName::new("shrink_to_line_bounds")),
             CMD_SHRINK_TO_LINE_BOUNDS,
-            "Shrink to line",
-            "Shrink selection to line bounds for line-oriented editing.",
             Category::Selection,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Shrink to line")
+        .with_help("Shrink selection to line bounds for line-oriented editing."),
         selection::shrink_to_line_bounds,
     ));
 }

@@ -39,7 +39,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["goto", "line", "navigation"]
 commands_taught = ["gh"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "goto_line_end_001"
@@ -77,7 +76,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["goto", "line", "navigation"]
 commands_taught = ["gl"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "goto_first_nonwhitespace_001"
@@ -117,7 +115,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["goto", "whitespace", "navigation"]
 commands_taught = ["gs"]
-estimated_time_seconds = 10
 
 [[scenarios]]
 id = "goto_last_line_001"
@@ -157,4 +154,3 @@ category = "movement"
 difficulty = "beginner"
 tags = ["goto", "document", "navigation"]
 commands_taught = ["ge"]
-estimated_time_seconds = 5

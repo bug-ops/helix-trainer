@@ -9,7 +9,9 @@ use crate::gamification::{
     Achievement, AchievementEngine, UserProfile, XPCalculator, XPComponents, speed_time_ratio,
 };
 use crate::ids::{CommandId, ScenarioId};
-use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
+use crate::learning::{
+    MasteryLevel, PerformanceTracker, ReferenceTime, ScenarioMastery, Scheduler,
+};
 use crate::ui::notification::{Notification, NotificationType};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
@@ -118,28 +120,19 @@ impl ScenarioCompletionService {
         }
     }
 
-    /// Record commands in FSRS scheduler for spaced repetition
-    pub fn record_fsrs_data(
-        scheduler: &mut Scheduler,
-        tracker: &mut PerformanceTracker,
-        commands: &[CommandId],
-        duration: Duration,
-        success: bool,
-    ) {
-        scheduler.record_scenario_commands(tracker, commands, duration, success);
-    }
-
     /// Record commands and return mastery level changes
     ///
-    /// Returns list of (command, `new_level_name`) for commands that leveled up
+    /// Returns the commands that leveled up with their new level, in first-occurrence order.
     pub fn record_fsrs_data_with_mastery(
         scheduler: &mut Scheduler,
         tracker: &mut PerformanceTracker,
         commands: &[CommandId],
         duration: Duration,
         success: bool,
-    ) -> Vec<(CommandId, String)> {
-        scheduler.record_scenario_commands_with_mastery(tracker, commands, duration, success)
+        reference: ReferenceTime,
+    ) -> Vec<(CommandId, MasteryLevel)> {
+        scheduler
+            .record_scenario_commands_with_mastery(tracker, commands, duration, success, reference)
     }
 
     /// Extract reviewable command ids from feedback

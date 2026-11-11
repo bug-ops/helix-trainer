@@ -3,7 +3,9 @@
 //! These tests verify that the UI layer correctly handles multi-key commands
 //! like 'dd', 'gg', 'r<char>' through the typestate-based `InputStateMachine`.
 
-use helix_trainer::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
+use helix_trainer::config::{
+    CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+};
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::input::keymap::CanonicalKeys;
 use helix_trainer::learning::PerformanceTracker;
@@ -90,14 +92,13 @@ fn create_test_scenario(
             commands: vec!["test".to_string()],
             description: "Test solution".to_string(),
         },
-        alternatives: vec![],
         hints: vec![],
         scoring: ScoringConfig {
             optimal_count: std::num::NonZeroUsize::new(1).unwrap(),
             max_points: 100,
             tolerance: 0,
         },
-        metadata: None,
+        metadata: ScenarioMetadata::default(),
     }
 }
 
@@ -157,6 +158,27 @@ fn test_replace_command_multi_key() {
         }
         _ => panic!("Should be on Task or Results screen"),
     }
+}
+
+/// #556: an unparsable key token is dropped, not replaced by Space (which would
+/// have completed the pending `f` as `f<space>`)
+#[test]
+fn test_unparsable_key_token_is_dropped_and_keeps_the_pending_state() {
+    let scenario = create_test_scenario("test_unparsable", "a b", (0, 0), "a b", (0, 2));
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
+
+    update(&mut state, exec("f")).unwrap();
+    update(&mut state, exec("Alt-nonsense")).unwrap();
+
+    let TypedScreen::Task(task_data) = &state.screen else {
+        panic!("Should be on Task screen");
+    };
+    assert!(
+        task_data.input_state().state().is_find_char_pending(),
+        "got {:?}",
+        task_data.input_state().state()
+    );
 }
 
 #[test]
@@ -531,4 +553,38 @@ fn test_command_line_escape_cancels_buffer() {
     } else {
         panic!("Should be on Task screen");
     }
+}
+
+/// #570 x #569: `Ctrl-c` on a Task screen toggles the comment of a select-all selection that
+/// the edit then shrinks; the next key still runs against a valid selection.
+#[test]
+fn test_ctrl_c_toggle_comments_on_task_screen_keeps_the_selection_valid() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use helix_trainer::input::handle_key_event;
+
+    let scenario = create_test_scenario("test_ctrl_c", "// a\n", (0, 0), "unreachable", (0, 0));
+    let mut state = create_test_app_state(vec![scenario]);
+    start_scenario_from_menu(&mut state, 0).unwrap();
+
+    let press = |state: &mut AppState, key: KeyEvent| {
+        let message = handle_key_event(key, state).expect("key produces a message");
+        update(state, message).unwrap();
+    };
+    press(
+        &mut state,
+        KeyEvent::new(KeyCode::Char('%'), KeyModifiers::NONE),
+    );
+    press(
+        &mut state,
+        KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+    );
+    press(
+        &mut state,
+        KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE),
+    );
+
+    let TypedScreen::Task(task_data) = &state.screen else {
+        panic!("expected the task screen");
+    };
+    assert_eq!(task_data.session.playable().current_content(), "a\n");
 }

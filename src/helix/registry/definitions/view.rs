@@ -7,7 +7,7 @@ use crate::helix::commands::{
     CMD_VIEW_TOP,
 };
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
-use crate::helix::registry::metadata::{Category, CommandMetadata};
+use crate::helix::registry::metadata::{Binding, Category, CommandMetadata, HelixName};
 use crate::helix::simulator::NormalMode;
 use crate::helix::simulator::commands::view;
 
@@ -16,84 +16,72 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // z or zz - center view on cursor
     registry.register(Command::new(
         CommandMetadata::new(
-            "align_view_center",
+            Binding::Helix(HelixName::new("align_view_center")),
             CMD_VIEW_CENTER,
-            "Center view",
-            "Center the viewport vertically on the cursor line.",
             Category::View,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Center view")
+        .with_help("Center the viewport vertically on the cursor line."),
         view::view_center,
     ));
 
     // zt - align cursor to top
     registry.register(Command::new(
         CommandMetadata::new(
-            "align_view_top",
+            Binding::Helix(HelixName::new("align_view_top")),
             CMD_VIEW_TOP,
-            "Align top",
-            "Align the cursor line to the top of the viewport.",
             Category::View,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Align top")
+        .with_help("Align the cursor line to the top of the viewport."),
         view::view_align_top,
     ));
 
     // zb - align cursor to bottom
     registry.register(Command::new(
         CommandMetadata::new(
-            "align_view_bottom",
+            Binding::Helix(HelixName::new("align_view_bottom")),
             CMD_VIEW_BOTTOM,
-            "Align bottom",
-            "Align the cursor line to the bottom of the viewport.",
             Category::View,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Align bottom")
+        .with_help("Align the cursor line to the bottom of the viewport."),
         view::view_align_bottom,
     ));
 
     // zm - center horizontally
     registry.register(Command::new(
         CommandMetadata::new(
-            "align_view_middle",
+            Binding::Helix(HelixName::new("align_view_middle")),
             CMD_VIEW_CENTER_HORIZONTAL,
-            "Center horizontal",
-            "Center the viewport horizontally on the cursor column.",
             Category::View,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Center horizontal")
+        .with_help("Center the viewport horizontally on the cursor column."),
         view::view_center_horizontal,
     ));
 
     // zj - scroll down
     registry.register(Command::new(
         CommandMetadata::new(
-            "scroll_down",
+            Binding::Helix(HelixName::new("scroll_down")),
             CMD_SCROLL_DOWN,
-            "Scroll down",
-            "Scroll the viewport down by one line.",
             Category::View,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Scroll down")
+        .with_help("Scroll the viewport down by one line."),
         view::scroll_down,
     ));
 
     // zk - scroll up
     registry.register(Command::new(
         CommandMetadata::new(
-            "scroll_up",
+            Binding::Helix(HelixName::new("scroll_up")),
             CMD_SCROLL_UP,
-            "Scroll up",
-            "Scroll the viewport up by one line.",
             Category::View,
-            false,
-            None,
-        ),
+        )
+        .with_summary("Scroll up")
+        .with_help("Scroll the viewport up by one line."),
         view::scroll_up,
     ));
 }

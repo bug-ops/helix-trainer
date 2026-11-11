@@ -18,12 +18,12 @@ fn test_repeat_delete_char() {
 
     // Execute delete command
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "ello");
 
     // Repeat delete
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "llo");
 }
 
@@ -34,12 +34,12 @@ fn test_repeat_delete_line() {
     // Delete first line using x+d (Helix way)
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "line 2\nline 3");
 
     // Repeat delete - should execute x+d together
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "line 3");
 }
 
@@ -51,7 +51,7 @@ fn test_repeat_with_empty_buffer() {
     let result = sim.execute_command(".");
     assert!(result.is_ok()); // Should not error
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "test"); // Should be unchanged
 }
 
@@ -61,17 +61,17 @@ fn test_repeat_is_not_recorded() {
 
     // Delete a char
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "bcd");
 
     // Repeat once
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "cd");
 
     // Repeat again - should repeat the ORIGINAL x, not the previous .
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "d");
 
     // Total: 3 deletes (original x + two repeats)
@@ -83,12 +83,12 @@ fn test_repeat_join_lines() {
 
     // Join lines
     sim.execute_command(CMD_JOIN_LINES).unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "line 1 line 2\nline 3");
 
     // Repeat join
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "line 1 line 2 line 3");
 }
 
@@ -98,12 +98,12 @@ fn test_repeat_indent() {
 
     // Indent
     sim.execute_command(CMD_INDENT).unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "    line 1\nline 2");
 
     // Repeat indent
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     // Line should be double-indented
     assert_eq!(state.content(), "        line 1\nline 2");
 }
@@ -114,12 +114,12 @@ fn test_repeat_dedent() {
 
     // Dedent
     sim.execute_command(CMD_DEDENT).unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "    code");
 
     // Repeat dedent
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "code");
 }
 
@@ -129,7 +129,7 @@ fn test_repeat_replace_char() {
 
     // Replace 'h' with 'x'
     sim.execute_command("rx").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "xello");
 
     // Move to next char
@@ -137,7 +137,7 @@ fn test_repeat_replace_char() {
 
     // Repeat replace (should replace 'e' with 'x')
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "xxllo");
 }
 
@@ -150,14 +150,14 @@ fn test_repeat_replace_with_q_argument() {
 
     // Replace 'h' with 'q'
     sim.execute_command("rq").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "qello");
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
 
     // Repeat replace (should replace 'e' with 'q')
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "qqllo");
 }
 
@@ -170,12 +170,12 @@ fn test_repeat_find_char_with_q_argument() {
     // The range extends from the old cursor through the found char, so its
     // head sits one past the char.
     sim.execute_command("fq").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.cursor_position(), (0, 2));
 
     // Repeat find (should move to the next 'q')
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.cursor_position(), (0, 4));
 }
 
@@ -191,7 +191,7 @@ fn test_repeat_multiple_times() {
         sim.execute_command(".").unwrap();
     }
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "x"); // 5 deletes total
 }
 
@@ -208,7 +208,7 @@ fn test_repeat_after_undo() {
     // The repeat buffer should still have 'x'
     // Repeat should still delete
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "est");
 }
 
@@ -226,7 +226,7 @@ fn test_repeat_preserves_action_across_movements() {
 
     // Repeat should still delete
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "llo world");
 }
 
@@ -244,7 +244,7 @@ fn test_repeat_insert_mode() {
     sim.execute_command(CMD_INSERT).unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hiworld");
 
     // `gl` lands on the last character, so `i` inserts before it
@@ -252,7 +252,7 @@ fn test_repeat_insert_mode() {
 
     // Repeat insert
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hiworlhid");
 }
 
@@ -271,7 +271,7 @@ fn test_repeat_append() {
     sim.execute_command("d").unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hello world");
 
     // Move to start (use 'gh' in Helix, not '0')
@@ -279,7 +279,7 @@ fn test_repeat_append() {
 
     // Repeat should append " world" after the first character (using 'a' to append)
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     // Since we used 'a' (append), repeat should place cursor after 'h' and insert " world"
     assert_eq!(state.content(), "h worldello world");
 }
@@ -294,7 +294,7 @@ fn test_repeat_insert_with_movements() {
     sim.execute_command(CMD_ARROW_LEFT).unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hiworld");
     // Cursor should be at position 1 (moved left once from 2)
     assert_eq!(state.cursor_position().1, 1);
@@ -304,7 +304,7 @@ fn test_repeat_insert_with_movements() {
 
     // Repeat insert with movements
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     // Should insert "hi" before the last char, then move left once
     assert_eq!(state.content(), "hiworlhid");
     // Cursor moved left from position 8 to position 7
@@ -320,12 +320,12 @@ fn test_repeat_insert_keeps_movement_between_typed_text() {
     sim.execute_command(CMD_ARROW_LEFT).unwrap();
     sim.execute_command("b").unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
-    assert_eq!(sim.state().unwrap().content(), "baworld");
+    assert_eq!(sim.display().content(), "baworld");
 
     sim.execute_command(CMD_GOTO_LINE_END).unwrap();
     sim.execute_command(".").unwrap();
 
-    assert_eq!(sim.state().unwrap().content(), "baworlbad");
+    assert_eq!(sim.display().content(), "baworlbad");
 }
 
 #[test]
@@ -337,7 +337,7 @@ fn test_repeat_insert_simple() {
     sim.execute_command(CMD_DELETE_SELECTION).unwrap(); // Insert 'd'
     sim.execute_command(CMD_ESCAPE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "dhello");
     // After insert + escape, cursor is at position 1 (after 'd')
 
@@ -347,7 +347,7 @@ fn test_repeat_insert_simple() {
 
     // Repeat - should insert 'd' at position 3
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     // Result: "dhe" + "d" + "llo" = "dhedllo"
     assert_eq!(state.content(), "dhedllo");
 }
@@ -362,7 +362,7 @@ fn test_repeat_insert_at_line_start() {
     sim.execute_command(CMD_INDENT).unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), ">>hello");
 
     // Move somewhere else (use 'gl' in Helix, not '$')
@@ -370,7 +370,7 @@ fn test_repeat_insert_at_line_start() {
 
     // Repeat
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     // Should insert ">>" at cursor position
     assert!(state.content().contains(">>"));
 }
@@ -385,7 +385,7 @@ fn test_repeat_append_at_line_end() {
     sim.execute_command("!").unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.content(), "hello!!");
 
     // Move to start (use 'gh' in Helix, not '0')
@@ -393,7 +393,7 @@ fn test_repeat_append_at_line_end() {
 
     // Repeat - should use 'A' to append at line end
     sim.execute_command(".").unwrap();
-    let state = sim.state().unwrap();
+    let state = sim.display();
     // 'A' moves to end of line and appends, so "!!" should be at the end
     assert_eq!(state.content(), "hello!!!!");
 }
@@ -426,7 +426,7 @@ fn test_scenario_repeat_insert_001() {
     }
     sim.execute_command("Escape").unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.content(),
         "TODO Update docs:\nFIX:\nNOTE:",
@@ -439,13 +439,13 @@ fn test_scenario_repeat_insert_001() {
     sim.execute_command("gh").unwrap();
     sim.execute_command("gl").unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(state.cursor_position().0, 1, "Should be on line 1");
 
     // Repeat the insert
     sim.execute_command(".").unwrap();
 
-    let state = sim.state().unwrap();
+    let state = sim.display();
     assert_eq!(
         state.content(),
         "TODO Update docs:\nFIX Update docs:\nNOTE:",

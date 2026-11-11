@@ -5,7 +5,6 @@
 
 use crate::config::{DEFAULT_LANGUAGE, Scenario};
 use crate::helix::{AnyModeSimulator, EditorSnapshot};
-use crate::security::UserError;
 
 /// Initialized scenario state ready for gameplay
 ///
@@ -29,8 +28,7 @@ impl ScenarioState {
     /// * `scenario` - The scenario configuration to initialize from
     ///
     /// # Returns
-    /// * `Ok(ScenarioState)` - Initialized state ready for gameplay
-    /// * `Err(UserError::scenario_too_complex())` - If state creation fails
+    /// The initialized state, ready for gameplay.
     ///
     /// # Examples
     ///
@@ -38,16 +36,11 @@ impl ScenarioState {
     /// use helix_trainer::config::ScenarioLoader;
     /// use helix_trainer::game::ScenarioState;
     ///
-    /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
-    /// let state = ScenarioState::from_scenario(&scenarios[0])?;
+    /// let scenarios = ScenarioLoader::new().load_from_embedded("en").expect("embedded scenarios load");
+    /// let state = ScenarioState::from_scenario(&scenarios[0]);
     /// assert!(!state.is_completed());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// Never fails: always returns `Ok`.
-    pub fn from_scenario(scenario: &Scenario) -> Result<Self, UserError> {
+    pub fn from_scenario(scenario: &Scenario) -> Self {
         // Create initial snapshot from scenario setup
         let initial_snapshot = EditorSnapshot::from_scenario_config(
             scenario.setup.file_content.clone(),
@@ -75,10 +68,10 @@ impl ScenarioState {
                 .unwrap_or(DEFAULT_LANGUAGE),
         );
 
-        Ok(Self {
+        Self {
             simulator,
             target_snapshot,
-        })
+        }
     }
 
     /// Check if current state matches target state
@@ -119,7 +112,7 @@ mod tests {
     #[test]
     fn test_from_scenario_creates_states() {
         let scenario = create_test_scenario();
-        let state = ScenarioState::from_scenario(&scenario).unwrap();
+        let state = ScenarioState::from_scenario(&scenario);
 
         // Verify simulator has initial content
         assert_eq!(state.simulator.display().content(), "hello");
@@ -130,7 +123,7 @@ mod tests {
     #[test]
     fn test_is_completed_false_initially() {
         let scenario = create_test_scenario();
-        let state = ScenarioState::from_scenario(&scenario).unwrap();
+        let state = ScenarioState::from_scenario(&scenario);
 
         assert!(!state.is_completed());
     }
@@ -138,7 +131,7 @@ mod tests {
     #[test]
     fn test_content_matches() {
         let scenario = create_test_scenario();
-        let state = ScenarioState::from_scenario(&scenario).unwrap();
+        let state = ScenarioState::from_scenario(&scenario);
 
         assert!(!state.content_matches());
     }
@@ -160,7 +153,7 @@ mod tests {
             .command_description("Press 'o' to open line below, then Escape")
             .optimal_count(2)
             .build();
-        let mut state = ScenarioState::from_scenario(&scenario).unwrap();
+        let mut state = ScenarioState::from_scenario(&scenario);
 
         state.simulator.execute_command("o").unwrap();
         assert_eq!(

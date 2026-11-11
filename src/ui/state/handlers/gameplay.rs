@@ -86,7 +86,7 @@ pub fn handle_execute_command(
     // `ensure_scorable` ran while the session was still active, so finishing cannot fail
     // for a scenario that reached here; should it, the placeholder screen stays and the
     // error surfaces.
-    let task_data = match task_data.finish_action() {
+    let task_data = match task_data.finish_action(state.progress.monotonic_now()) {
         Ok(task_data) => task_data,
         Err(e) => {
             tracing::error!(error = %error_chain(&e), "Failed to build the scenario feedback");
@@ -168,10 +168,11 @@ fn execute_on_task(
         // returning `None`, unlike the old `tokens[0]` indexing this
         // replaced, which would have panicked.
         let resolved = if keys.is_single_token() {
-            match task_data
-                .input_state_mut()
-                .process_key(command_to_key_event(keys.as_str()))
-            {
+            let Some(key_event) = command_to_key_event(keys.as_str()) else {
+                tracing::warn!(keys = keys.as_str(), "unparsable key token; dropping");
+                return Ok(None);
+            };
+            match task_data.input_state_mut().process_key(key_event) {
                 HandlerResult::Execute(cmd) => Some(cmd.to_string()),
                 // Waiting for more keys (state machine already updated), or
                 // cancelled / unknown key

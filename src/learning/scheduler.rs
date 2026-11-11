@@ -1,9 +1,9 @@
-use super::performance::{CommandPerformance, PerformanceTracker};
+use super::performance::{CommandPerformance, MasteryLevel, PerformanceTracker, ReferenceTime};
 use super::urgency::{Urgency, command_urgency};
 use crate::ids::CommandId;
 use crate::time::{Clock, SystemClock};
 use chrono::{DateTime, Utc};
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, HashSet};
 use std::sync::Arc;
 
 /// Review item with priority information
@@ -77,78 +77,31 @@ impl Scheduler {
         Self { clock }
     }
 
-    /// Record commands used in a completed scenario
+    /// Record the commands of a finished scenario and report mastery level-ups
     ///
-    /// This method records each unique command from the scenario into the FSRS
-    /// performance tracker, which enables spaced repetition reviews.
-    ///
-    /// # Arguments
-    /// * `tracker` - Mutable reference to performance tracker
-    /// * `commands` - List of commands used in the scenario
-    /// * `total_duration` - Total time taken to complete the scenario
-    /// * `success` - Whether the scenario was completed successfully
-    pub fn record_scenario_commands(
-        &self,
-        tracker: &mut PerformanceTracker,
-        commands: &[CommandId],
-        total_duration: std::time::Duration,
-        success: bool,
-    ) {
-        if commands.is_empty() {
-            return;
-        }
-
-        // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = Self::average_duration(total_duration, commands.len());
-
-        // Optimal time is slightly less than avg (assume user could be 20% faster)
-        let optimal_time = avg_duration.mul_f32(0.8);
-
-        // Record each unique command
-        let unique_commands: std::collections::HashSet<_> = commands.iter().collect();
-
-        for command in unique_commands {
-            tracker.record_attempt(command, avg_duration, success, optimal_time);
-        }
-    }
-
-    /// Record commands and track mastery level changes
-    ///
-    /// Returns list of (command, `new_level_name`) for commands that leveled up
+    /// Each distinct command is recorded once, with the scenario's average time per command,
+    /// rated against `reference` (the expected time per command). Returns the commands whose
+    /// mastery level rose with the new level, in the order they first occur in `commands`.
     pub fn record_scenario_commands_with_mastery(
         &self,
         tracker: &mut PerformanceTracker,
         commands: &[CommandId],
         total_duration: std::time::Duration,
         success: bool,
-    ) -> Vec<(CommandId, String)> {
-        if commands.is_empty() {
-            return Vec::new();
-        }
-
-        // Calculate average time per command (rough estimate for FSRS)
+        reference: ReferenceTime,
+    ) -> Vec<(CommandId, MasteryLevel)> {
         let avg_duration = Self::average_duration(total_duration, commands.len());
+        let mut seen = HashSet::new();
 
-        // Optimal time is slightly less than avg (assume user could be 20% faster)
-        let optimal_time = avg_duration.mul_f32(0.8);
-
-        // Record each unique command and collect mastery changes
-        let unique_commands: std::collections::HashSet<_> = commands.iter().collect();
-        let mut mastery_changes = Vec::new();
-
-        for command in unique_commands {
-            if let Some((cmd, _old, new_level)) = tracker.record_attempt_with_mastery_change(
-                command,
-                avg_duration,
-                success,
-                optimal_time,
-            ) {
-                use super::traits::ProgressionTier;
-                mastery_changes.push((cmd, new_level.name().to_string()));
-            }
-        }
-
-        mastery_changes
+        commands
+            .iter()
+            .filter(|command| seen.insert(*command))
+            .filter_map(|command| {
+                tracker
+                    .record_attempt_with_mastery_change(command, avg_duration, success, reference)
+                    .map(|(command, _old, new_level)| (command, new_level))
+            })
+            .collect()
     }
 
     /// Get commands that are due for review now
@@ -881,5 +834,66 @@ mod tests {
                 prop_assert_eq!(got, all);
             }
         }
+    }
+
+    /// #551: level-ups are typed and listed in first-occurrence order, not hash order.
+    #[test]
+    fn test_scenario_mastery_changes_follow_first_occurrence_order() {
+        let commands: Vec<_> = ["w", "b", "e", "x", "dd", "k", "w", "x"]
+            .into_iter()
+            .map(cid)
+            .collect();
+        let run = || {
+            let mut tracker = PerformanceTracker::new();
+            Scheduler::new().record_scenario_commands_with_mastery(
+                &mut tracker,
+                &commands,
+                Duration::from_secs(4),
+                true,
+                ReferenceTime::new(Duration::from_secs(60)),
+            )
+        };
+
+        let first = run();
+
+        assert!(
+            !first.is_empty(),
+            "a quick first success levels commands up"
+        );
+        let listed: Vec<_> = first.iter().map(|(command, _)| command.clone()).collect();
+        let expected: Vec<_> = ["w", "b", "e", "x", "dd", "k"]
+            .into_iter()
+            .map(cid)
+            .collect();
+        assert_eq!(listed, expected);
+        for _ in 0..20 {
+            assert_eq!(run(), first);
+        }
+    }
+
+    /// #550: the training rating depends on the measured time against an independent reference.
+    #[test]
+    fn test_scenario_rating_depends_on_time_against_reference() {
+        let commands = [cid("w")];
+        let reference = ReferenceTime::for_optimal_actions(std::num::NonZeroUsize::new(2).unwrap());
+        let stability_after = |total: Duration| {
+            let mut tracker = PerformanceTracker::new();
+            Scheduler::new().record_scenario_commands_with_mastery(
+                &mut tracker,
+                &commands,
+                total,
+                true,
+                reference,
+            );
+            tracker.performance(&cid("w")).unwrap().stability()
+        };
+
+        let quick = stability_after(Duration::from_secs(6));
+        let slow = stability_after(Duration::from_secs(120));
+
+        assert!(
+            quick > slow,
+            "quick {quick} should out-stabilise slow {slow}"
+        );
     }
 }

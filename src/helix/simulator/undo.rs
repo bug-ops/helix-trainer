@@ -1,7 +1,12 @@
 //! Undo and redo operations
+//!
+//! One history entry is one undo step: a Normal-mode edit, or a whole Insert
+//! session (see [`InsertSession`](super::InsertSession)). `undo` and `redo`
+//! exist only in Normal mode, so a session that is still open can never be
+//! observed half recorded.
 
-use super::{EditorMode, HelixSimulator};
-use crate::security::UserError;
+use super::{HelixSimulator, NormalMode};
+use crate::helix::error::SimulatorError;
 use helix_core::{Rope, Selection};
 
 /// A document state paired with the selection that went with it.
@@ -9,12 +14,12 @@ use helix_core::{Rope, Selection};
 /// Stored on the undo and redo stacks so restoring a state also restores
 /// where the cursor and selections were, as Helix does.
 #[derive(Debug, Clone)]
-pub(in crate::helix) struct HistoryEntry {
+pub struct HistoryEntry {
     pub(super) doc: Rope,
     pub(super) selection: Selection,
 }
 
-impl<M: EditorMode> HelixSimulator<M> {
+impl HelixSimulator<NormalMode> {
     /// Swap the live document and selection for `entry`, returning the state
     /// that was replaced.
     fn swap_state(&mut self, entry: HistoryEntry) -> HistoryEntry {
@@ -26,15 +31,16 @@ impl<M: EditorMode> HelixSimulator<M> {
 
     /// Undo the last operation
     ///
-    /// Restores the document and the selection from before the change. The
-    /// state being undone away from is moved onto the redo stack, so a
-    /// subsequent `redo` can restore it.
+    /// An Insert session (`i`, `a`, `I`, `A`, `o`, `O`, `c` through `Escape`)
+    /// is one operation. Restores the document and the selection from before
+    /// the change. The state being undone away from is moved onto the redo
+    /// stack, so a subsequent `redo` can restore it.
     ///
     /// # Errors
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn undo(&mut self) -> Result<(), UserError> {
+    pub fn undo(&mut self) -> Result<(), SimulatorError> {
         if let Some(prev) = self.history.pop() {
             let undone = self.swap_state(prev);
             self.redo_stack.push(undone);
@@ -53,7 +59,7 @@ impl<M: EditorMode> HelixSimulator<M> {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn redo(&mut self) -> Result<(), UserError> {
+    pub fn redo(&mut self) -> Result<(), SimulatorError> {
         if let Some(redone) = self.redo_stack.pop() {
             let prev = self.swap_state(redone);
             self.history.push(prev);
@@ -151,6 +157,6 @@ mod tests {
         ] {
             sim.execute_command(cmd).unwrap();
         }
-        assert_eq!(sim.state().unwrap().content(), "    sum\n}\n");
+        assert_eq!(sim.display().content(), "    sum\n}\n");
     }
 }

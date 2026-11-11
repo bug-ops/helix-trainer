@@ -342,7 +342,7 @@ fn render_progression_panel(
     lines.push(Line::from(""));
 
     let profile = &state.progress.profile;
-    let (xp_in_level, xp_needed_for_level) = super::helpers::level_xp_progress(profile);
+    let level_progress = profile.level_progress();
     let level = profile.level;
     let total_xp = profile.total_xp;
     let scenarios = profile.scenarios_completed;
@@ -359,7 +359,11 @@ fn render_progression_panel(
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            format!("  ({xp_in_level}/{xp_needed_for_level} XP)"),
+            format!(
+                "  ({}/{} XP)",
+                level_progress.earned(),
+                level_progress.span()
+            ),
             Style::default().fg(Color::Gray),
         ),
     ]));

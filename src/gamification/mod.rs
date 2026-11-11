@@ -19,7 +19,7 @@ pub mod storage;
 pub mod streak;
 
 pub use achievements::{Achievement, AchievementEngine, AchievementId, speed_time_ratio};
-pub use profile::{UserProfile, XPCalculator, XPComponents};
+pub use profile::{LevelProgress, UserProfile, XPCalculator, XPComponents};
 pub use quests::{
     Quest, QuestDifficulty, QuestGeneration, QuestGenerator, QuestRegistrySlot,
     QuestTemplateRegistry, QuestTracker, QuestType,

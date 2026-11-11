@@ -42,15 +42,8 @@ impl Ratio {
 
     /// The fraction as a whole percentage in `0..=100`, rounded to nearest.
     #[must_use]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "the value is within 0.0..=1.0, so the rounded percentage always fits in u8"
-    )]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
-    )]
     pub fn as_percent(self) -> u8 {
-        (self.0 * 100.0).round() as u8
+        // `round_percent` clamps to 0..=100, so the conversion cannot fail
+        u8::try_from(crate::numeric::round_percent(self.0)).unwrap_or(100)
     }
 }

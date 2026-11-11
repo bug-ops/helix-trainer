@@ -17,6 +17,7 @@
 //!
 //! See [`typestate`] for the state machine implementation.
 
+mod ctrl_c;
 pub mod handlers;
 pub mod keymap;
 pub mod typestate;
@@ -62,6 +63,10 @@ pub fn handle_key_event(key: KeyEvent, state: &AppState) -> Option<Message> {
             }
             _ => {}
         }
+    }
+
+    if ctrl_c::is_ctrl_c(key) {
+        return ctrl_c::message(key, state);
     }
 
     match &state.screen {

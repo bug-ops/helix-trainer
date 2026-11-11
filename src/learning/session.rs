@@ -1,17 +1,30 @@
-use super::LearningError;
-use super::performance::{CommandPerformance, MasteryLevel, PerformanceTracker};
-use super::scheduler::{ReviewItem, Scheduler};
+use super::performance::{CommandPerformance, MasteryLevel, PerformanceTracker, ReferenceTime};
 use crate::ids::CommandId;
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::time::Duration;
+use std::collections::VecDeque;
+use std::time::{Duration, Instant};
+
+/// Whether the player recalled a reviewed command
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewOutcome {
+    /// The command was recalled correctly
+    Recalled,
+    /// The command was not recalled
+    Forgot,
+}
+
+impl ReviewOutcome {
+    /// Whether the command was recalled
+    pub fn is_recalled(self) -> bool {
+        self == Self::Recalled
+    }
+}
 
 /// Result of a single review attempt
 #[derive(Debug, Clone)]
 pub struct ReviewResult {
     /// Reviewed command.
     pub command: CommandId,
-    /// Time the attempt took.
+    /// Time from showing the command to the answer.
     pub duration: Duration,
     /// Whether the attempt succeeded.
     pub success: bool,
@@ -21,7 +34,7 @@ pub struct ReviewResult {
     pub new_mastery: MasteryLevel,
 }
 
-/// Summary of completed review session
+/// Summary of a finished review session
 #[derive(Debug, Clone)]
 pub struct SessionSummary {
     /// Number of reviews performed.
@@ -32,202 +45,28 @@ pub struct SessionSummary {
     pub failed: usize,
     /// Mean time per review.
     pub avg_time: Duration,
-    /// Commands whose mastery level changed, with the old and new level.
+    /// Commands whose mastery level changed, with the old and new level, in review order.
     pub mastery_changes: Vec<(CommandId, MasteryLevel, MasteryLevel)>,
 }
 
-/// Review session for spaced repetition practice
-///
-/// Manages a review session by:
-/// - Loading due review items from scheduler
-/// - Tracking current progress through items
-/// - Recording results to performance tracker
-/// - Providing session summary statistics
-pub struct ReviewSession {
-    items: Vec<ReviewItem>,
-    current_index: usize,
-    results: Vec<ReviewResult>,
-    tracker: Rc<RefCell<PerformanceTracker>>,
-}
-
-impl ReviewSession {
-    /// Create new review session
-    ///
-    /// # Arguments
-    /// * `scheduler` - Scheduler to get review items from
-    /// * `tracker` - Shared performance tracker (with mutable access)
-    /// * `max_items` - Maximum number of items to include in session
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::ids::CommandId;
-    /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
-    /// use std::cell::RefCell;
-    /// use std::rc::Rc;
-    ///
-    /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-    /// let scheduler = Scheduler::new();
-    /// let session = ReviewSession::new(&scheduler, tracker, 10);
-    /// ```
-    pub fn new(
-        scheduler: &Scheduler,
-        tracker: Rc<RefCell<PerformanceTracker>>,
-        max_items: usize,
-    ) -> Self {
-        let items = scheduler.get_review_queue(&tracker.borrow(), max_items);
-
-        Self {
-            items,
-            current_index: 0,
-            results: Vec::new(),
-            tracker,
-        }
-    }
-
-    /// Get current review item
-    ///
-    /// Returns `None` if session is complete.
-    pub fn current_item(&self) -> Option<&ReviewItem> {
-        self.items.get(self.current_index)
-    }
-
-    /// Record result and advance to next item
-    ///
-    /// # Arguments
-    /// * `duration` - Time taken to complete review
-    /// * `success` - Whether review was successful
-    /// * `optimal_time` - Expected optimal completion time
-    ///
-    /// # Errors
-    ///
-    /// Returns [`LearningError::SessionComplete`] when there is no current item; nothing is
-    /// recorded. When only the FSRS update fails, the attempt and the session result are
-    /// still recorded and the session advances before the [`LearningError::FsrsError`] is
-    /// returned, so the caller may log it and carry on.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::ids::CommandId;
-    /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
-    /// use std::cell::RefCell;
-    /// use std::rc::Rc;
-    /// use std::time::Duration;
-    ///
-    /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-    /// let mut tracker_mut = tracker.borrow_mut();
-    /// let x = CommandId::from_card_id("x").unwrap();
-    /// tracker_mut.record_attempt(&x, Duration::from_secs(1), true, Duration::from_secs(1));
-    /// drop(tracker_mut);
-    ///
-    /// let scheduler = Scheduler::new();
-    /// let mut session = ReviewSession::new(&scheduler, tracker, 10);
-    ///
-    /// if session.current_item().is_some() {
-    ///     session
-    ///         .record_and_next(Duration::from_secs(2), true, Duration::from_secs(1))
-    ///         .unwrap();
-    /// }
-    /// assert!(session.is_complete());
-    /// assert!(
-    ///     session
-    ///         .record_and_next(Duration::from_secs(2), true, Duration::from_secs(1))
-    ///         .is_err()
-    /// );
-    /// ```
-    pub fn record_and_next(
-        &mut self,
-        duration: Duration,
-        success: bool,
-        optimal_time: Duration,
-    ) -> Result<(), LearningError> {
-        let item = self
-            .items
-            .get(self.current_index)
-            .ok_or(LearningError::SessionComplete)?;
-
-        let mastery_of = |tracker: &PerformanceTracker| {
-            tracker
-                .performance(&item.id)
-                .map_or(MasteryLevel::Beginner, CommandPerformance::mastery_level)
-        };
-        let old_mastery = mastery_of(&self.tracker.borrow());
-
-        let outcome =
-            self.tracker
-                .borrow_mut()
-                .try_record_attempt(&item.id, duration, success, optimal_time);
-
-        let new_mastery = mastery_of(&self.tracker.borrow());
-
-        self.results.push(ReviewResult {
-            command: item.id.clone(),
-            duration,
-            success,
-            old_mastery,
-            new_mastery,
-        });
-        self.current_index = self.current_index.saturating_add(1);
-
-        outcome
-    }
-
-    /// Check if session is complete
-    pub fn is_complete(&self) -> bool {
-        self.current_index >= self.items.len()
-    }
-
-    /// Get session summary statistics
-    ///
-    /// # Returns
-    /// Summary with total reviews, success/failure counts, average time,
-    /// and mastery level changes.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::ids::CommandId;
-    /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
-    /// use std::cell::RefCell;
-    /// use std::rc::Rc;
-    /// use std::time::Duration;
-    ///
-    /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-    /// let mut tracker_mut = tracker.borrow_mut();
-    /// let x = CommandId::from_card_id("x").unwrap();
-    /// tracker_mut.record_attempt(&x, Duration::from_secs(1), true, Duration::from_secs(1));
-    /// drop(tracker_mut);
-    ///
-    /// let scheduler = Scheduler::new();
-    /// let mut session = ReviewSession::new(&scheduler, tracker, 10);
-    ///
-    /// // Review may or may not be due immediately (FSRS schedules based on performance)
-    /// if let Some(_item) = session.current_item() {
-    ///     session.record_and_next(Duration::from_secs(2), true, Duration::from_secs(1)).unwrap();
-    ///     let summary = session.summary();
-    ///     assert_eq!(summary.total_reviews, 1);
-    ///     assert_eq!(summary.successful, 1);
-    /// }
-    /// ```
-    pub fn summary(&self) -> SessionSummary {
-        let total_reviews = self.results.len();
-        let successful = self.results.iter().filter(|r| r.success).count();
+impl SessionSummary {
+    fn from_results(results: &[ReviewResult]) -> Self {
+        let total_reviews = results.len();
+        let successful = results.iter().filter(|r| r.success).count();
         let failed = total_reviews.saturating_sub(successful);
 
-        let total_time: Duration = self.results.iter().map(|r| r.duration).sum();
+        let total_time: Duration = results.iter().map(|r| r.duration).sum();
         let avg_time = total_time
             .checked_div(u32::try_from(total_reviews).unwrap_or(u32::MAX))
             .unwrap_or(Duration::ZERO);
 
-        let mastery_changes: Vec<_> = self
-            .results
+        let mastery_changes = results
             .iter()
             .filter(|r| r.old_mastery != r.new_mastery)
             .map(|r| (r.command.clone(), r.old_mastery, r.new_mastery))
             .collect();
 
-        SessionSummary {
+        Self {
             total_reviews,
             successful,
             failed,
@@ -237,269 +76,248 @@ impl ReviewSession {
     }
 }
 
+/// What follows an answered review item
+#[derive(Debug, Clone)]
+pub enum ReviewStep {
+    /// More commands are due; the session now shows the next one.
+    Next(ReviewSession),
+    /// The last command was answered.
+    Finished(SessionSummary),
+}
+
+/// An active spaced-repetition review session
+///
+/// Owned by the Review screen. It always has a current command, so an empty or already
+/// finished session cannot be built, and [`ReviewSession::answer`] consumes it: the answer to
+/// the last command yields a [`ReviewStep::Finished`] value instead of an active session.
+/// Each command is timed from the instant it was shown, not from the session start.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::ids::CommandId;
+/// use helix_trainer::learning::{PerformanceTracker, ReviewOutcome, ReviewSession, ReviewStep};
+/// use std::time::{Duration, Instant};
+///
+/// let x = CommandId::from_card_id("x").unwrap();
+/// let t0 = Instant::now();
+/// let session = ReviewSession::start(vec![x.clone()], t0).expect("one command is due");
+/// assert_eq!(session.current(), &x);
+///
+/// let mut tracker = PerformanceTracker::new();
+/// let step = session.answer(
+///     ReviewOutcome::Recalled,
+///     t0 + Duration::from_secs(2),
+///     &mut tracker,
+/// );
+/// assert!(matches!(step, ReviewStep::Finished(summary) if summary.successful == 1));
+/// assert!(ReviewSession::start(Vec::new(), t0).is_none());
+/// ```
+#[derive(Debug, Clone)]
+pub struct ReviewSession {
+    current: CommandId,
+    pending: VecDeque<CommandId>,
+    shown_at: Instant,
+    results: Vec<ReviewResult>,
+}
+
+impl ReviewSession {
+    /// Starts a session over `due`, showing the first command at `now`
+    ///
+    /// Returns `None` when nothing is due.
+    pub fn start(due: Vec<CommandId>, now: Instant) -> Option<Self> {
+        let mut pending = VecDeque::from(due);
+        let current = pending.pop_front()?;
+        Some(Self {
+            current,
+            pending,
+            shown_at: now,
+            results: Vec::new(),
+        })
+    }
+
+    /// The command being reviewed
+    pub fn current(&self) -> &CommandId {
+        &self.current
+    }
+
+    /// One-based position of the current command in the session
+    pub fn position(&self) -> usize {
+        self.results.len().saturating_add(1)
+    }
+
+    /// Number of commands in the session, answered or not
+    pub fn total(&self) -> usize {
+        self.position().saturating_add(self.pending.len())
+    }
+
+    /// Results of the commands answered so far, oldest first
+    pub fn completed(&self) -> &[ReviewResult] {
+        &self.results
+    }
+
+    /// Records the answer to the current command and moves on
+    ///
+    /// The attempt lasted from the moment the command was shown until `now`; the next command
+    /// is shown at `now`. An FSRS update failure is logged and the session carries on.
+    pub fn answer(
+        self,
+        outcome: ReviewOutcome,
+        now: Instant,
+        tracker: &mut PerformanceTracker,
+    ) -> ReviewStep {
+        let Self {
+            current,
+            mut pending,
+            shown_at,
+            mut results,
+        } = self;
+
+        let duration = now.saturating_duration_since(shown_at);
+        let success = outcome.is_recalled();
+        let old_mastery = mastery_of(tracker, &current);
+        tracker.record_attempt_against(&current, duration, success, ReferenceTime::SINGLE_ACTION);
+        let new_mastery = mastery_of(tracker, &current);
+
+        results.push(ReviewResult {
+            command: current,
+            duration,
+            success,
+            old_mastery,
+            new_mastery,
+        });
+
+        match pending.pop_front() {
+            Some(next) => ReviewStep::Next(Self {
+                current: next,
+                pending,
+                shown_at: now,
+                results,
+            }),
+            None => ReviewStep::Finished(SessionSummary::from_results(&results)),
+        }
+    }
+}
+
+fn mastery_of(tracker: &PerformanceTracker, command: &CommandId) -> MasteryLevel {
+    tracker
+        .performance(command)
+        .map_or(MasteryLevel::Beginner, CommandPerformance::mastery_level)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::learning::PerformanceTracker;
     use crate::testing::cid;
-    use std::assert_matches;
 
-    fn create_populated_tracker() -> Rc<RefCell<PerformanceTracker>> {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-
-        // Add some commands that are immediately due
-        let mut tracker_mut = tracker.borrow_mut();
-        tracker_mut.record_attempt(
-            &cid("x"),
-            Duration::from_secs(1),
-            true,
-            Duration::from_secs(1),
-        );
-        tracker_mut.record_attempt(
-            &cid("yy"),
-            Duration::from_secs(2),
-            true,
-            Duration::from_secs(1),
-        );
-        tracker_mut.record_attempt(
-            &cid("p"),
-            Duration::from_secs(1),
-            true,
-            Duration::from_secs(1),
-        );
-        drop(tracker_mut);
-
-        tracker
+    fn secs(n: u64) -> Duration {
+        Duration::from_secs(n)
     }
 
-    #[test]
-    fn test_session_creation() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let session = ReviewSession::new(&scheduler, tracker, 10);
-
-        assert_eq!(session.current_index, 0);
-        assert!(session.results.is_empty());
-        assert!(!session.is_complete() || session.items.is_empty());
-    }
-
-    #[test]
-    fn test_current_item_returns_first_item() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
-
-        assert_eq!(
-            session.current_item().map(|i| &i.id),
-            Some(&session.items[0].id)
-        );
-    }
-
-    #[test]
-    fn test_record_and_next_advances_index() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
-
-        assert!(session.current_item().is_some(), "seeded queue is empty");
-        let old_index = session.current_index;
-        session
-            .record_and_next(Duration::from_secs(2), true, Duration::from_secs(1))
-            .unwrap();
-        assert_eq!(session.current_index, old_index + 1);
-        assert_eq!(session.results.len(), 1);
-    }
-
-    #[test]
-    fn test_record_and_next_stores_result() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
-
-        let command = session
-            .current_item()
-            .expect("seeded queue is empty")
-            .id
-            .clone();
-        session
-            .record_and_next(Duration::from_secs(3), false, Duration::from_secs(1))
-            .unwrap();
-
-        assert_eq!(session.results.len(), 1);
-        let result = &session.results[0];
-        assert_eq!(result.command, command);
-        assert_eq!(result.duration, Duration::from_secs(3));
-        assert!(!result.success);
-    }
-
-    #[test]
-    fn test_record_and_next_tracks_mastery_changes() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
-
-        assert!(session.current_item().is_some(), "seeded queue is empty");
-        session
-            .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
-            .unwrap();
-
-        let result = &session.results[0];
-        assert_matches!(
-            result.old_mastery,
-            MasteryLevel::Beginner
-                | MasteryLevel::Intermediate
-                | MasteryLevel::Advanced
-                | MasteryLevel::Master
-        );
-        assert_matches!(
-            result.new_mastery,
-            MasteryLevel::Beginner
-                | MasteryLevel::Intermediate
-                | MasteryLevel::Advanced
-                | MasteryLevel::Master
-        );
-    }
-
-    #[test]
-    fn test_is_complete_false_initially() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let session = ReviewSession::new(&scheduler, tracker, 10);
-
-        // Session is complete only if there are no items
-        assert_eq!(session.is_complete(), session.items.is_empty());
-    }
-
-    #[test]
-    fn test_is_complete_true_after_all_items() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
-
-        // Complete all items
-        while let Some(_item) = session.current_item() {
-            session
-                .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
-                .unwrap();
+    fn finished(step: ReviewStep) -> SessionSummary {
+        match step {
+            ReviewStep::Finished(summary) => summary,
+            ReviewStep::Next(_) => panic!("session should have finished"),
         }
+    }
 
-        assert!(session.is_complete());
+    fn next(step: ReviewStep) -> ReviewSession {
+        match step {
+            ReviewStep::Next(session) => session,
+            ReviewStep::Finished(_) => panic!("session should continue"),
+        }
     }
 
     #[test]
-    fn test_summary_empty_session() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let scheduler = Scheduler::new();
-        let session = ReviewSession::new(&scheduler, tracker, 10);
-
-        let summary = session.summary();
-        assert_eq!(summary.total_reviews, 0);
-        assert_eq!(summary.successful, 0);
-        assert_eq!(summary.failed, 0);
-        assert_eq!(summary.avg_time, Duration::ZERO);
-        assert!(summary.mastery_changes.is_empty());
+    fn start_with_nothing_due_yields_no_session() {
+        assert!(ReviewSession::start(Vec::new(), Instant::now()).is_none());
     }
 
     #[test]
-    fn test_summary_calculates_statistics() {
-        // Create fresh tracker with new commands (which are immediately due)
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
+    fn start_shows_the_first_command() {
+        let session = ReviewSession::start(vec![cid("x"), cid("w")], Instant::now()).unwrap();
 
-        // Add NEW commands that haven't been practiced yet (these are due immediately)
-        {
-            let mut tracker_mut = tracker.borrow_mut();
-            // Just create the entries without practicing to ensure they're due
-            tracker_mut.record_attempt(
-                &cid("cmd1"),
-                Duration::from_secs(1),
-                true,
-                Duration::from_secs(1),
-            );
-            tracker_mut.record_attempt(
-                &cid("cmd2"),
-                Duration::from_secs(1),
-                true,
-                Duration::from_secs(1),
-            );
-            tracker_mut.record_attempt(
-                &cid("cmd3"),
-                Duration::from_secs(1),
-                true,
-                Duration::from_secs(1),
-            );
-        }
+        assert_eq!(session.current(), &cid("x"));
+        assert_eq!(session.position(), 1);
+        assert_eq!(session.total(), 2);
+    }
 
-        let scheduler = Scheduler::new();
-        let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
+    #[test]
+    fn answer_advances_in_due_order() {
+        let t0 = Instant::now();
+        let mut tracker = PerformanceTracker::new();
+        let session = ReviewSession::start(vec![cid("x"), cid("w")], t0).unwrap();
 
-        assert!(session.items.len() >= 3, "seeded queue is too short");
-        let mut processed = 0;
-        while processed < 3 && session.current_item().is_some() {
-            let success = processed != 1; // Second item fails
-            let duration = match processed {
-                0 => Duration::from_secs(2),
-                1 => Duration::from_secs(4),
-                _ => Duration::from_secs(3),
-            };
-            session
-                .record_and_next(duration, success, Duration::from_secs(1))
-                .unwrap();
-            processed += 1;
-        }
+        let session = next(session.answer(ReviewOutcome::Recalled, t0 + secs(1), &mut tracker));
 
-        let summary = session.summary();
+        assert_eq!(session.current(), &cid("w"));
+        assert_eq!(session.position(), 2);
+        assert_eq!(session.total(), 2);
+    }
+
+    #[test]
+    fn duration_is_measured_from_when_each_command_was_shown() {
+        let t0 = Instant::now();
+        let mut tracker = PerformanceTracker::new();
+        let session = ReviewSession::start(vec![cid("x"), cid("w")], t0).unwrap();
+
+        let session = next(session.answer(ReviewOutcome::Recalled, t0 + secs(10), &mut tracker));
+        let summary =
+            finished(session.answer(ReviewOutcome::Recalled, t0 + secs(12), &mut tracker));
+
+        // 10 s for the first item and 2 s for the second, not 10 s and 12 s
+        assert_eq!(summary.avg_time, secs(6));
+    }
+
+    #[test]
+    fn summary_counts_successes_and_failures() {
+        let t0 = Instant::now();
+        let mut tracker = PerformanceTracker::new();
+        let session = ReviewSession::start(vec![cid("x"), cid("w"), cid("b")], t0).unwrap();
+
+        let session = next(session.answer(ReviewOutcome::Recalled, t0 + secs(1), &mut tracker));
+        let session = next(session.answer(ReviewOutcome::Forgot, t0 + secs(2), &mut tracker));
+        let summary = finished(session.answer(ReviewOutcome::Recalled, t0 + secs(3), &mut tracker));
+
         assert_eq!(summary.total_reviews, 3);
-        assert_eq!(summary.successful, 2); // items 0 and 2 succeeded
-        assert_eq!(summary.failed, 1); // item 1 failed
-        assert_eq!(summary.avg_time, Duration::from_secs(3)); // (2+4+3)/3 = 3
+        assert_eq!(summary.successful, 2);
+        assert_eq!(summary.failed, 1);
     }
 
     #[test]
-    fn test_summary_tracks_mastery_changes() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
+    fn answers_are_recorded_in_the_tracker() {
+        let t0 = Instant::now();
+        let mut tracker = PerformanceTracker::new();
+        let session = ReviewSession::start(vec![cid("x")], t0).unwrap();
 
-        // Complete all reviews
-        while let Some(_item) = session.current_item() {
-            session
-                .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
-                .unwrap();
-        }
+        finished(session.answer(ReviewOutcome::Forgot, t0 + secs(1), &mut tracker));
 
-        let summary = session.summary();
-        // mastery_changes only includes items where mastery actually changed
-        assert!(summary.mastery_changes.len() <= summary.total_reviews);
+        let perf = tracker.performance(&cid("x")).unwrap();
+        assert_eq!(perf.attempts(), 1);
+        assert_eq!(perf.successes(), 0);
     }
 
     #[test]
-    fn test_record_and_next_errors_when_complete() {
-        let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
-        let scheduler = Scheduler::new();
-        let mut session = ReviewSession::new(&scheduler, tracker, 10);
-        session.current_index = session.items.len();
+    fn mastery_changes_follow_review_order() {
+        let t0 = Instant::now();
+        let mut tracker = PerformanceTracker::new();
+        let commands = ["x", "w", "b", "e", "dd"].map(cid).to_vec();
+        let mut session = ReviewSession::start(commands.clone(), t0).unwrap();
+        let mut answered = 0;
+        let summary = loop {
+            answered += 1;
+            match session.answer(ReviewOutcome::Recalled, t0 + secs(answered), &mut tracker) {
+                ReviewStep::Next(s) => session = s,
+                ReviewStep::Finished(summary) => break summary,
+            }
+        };
 
-        let result = session.record_and_next(Duration::from_secs(1), true, Duration::from_secs(1));
-
-        assert_matches!(result, Err(LearningError::SessionComplete));
-        assert!(session.results.is_empty());
-    }
-
-    #[test]
-    fn test_multiple_items_progression() {
-        let tracker = create_populated_tracker();
-        let scheduler = Scheduler::new();
-        let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 3);
-
-        let mut completed = 0;
-        while let Some(_item) = session.current_item() {
-            session
-                .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
-                .unwrap();
-            completed += 1;
-        }
-
-        assert!(session.is_complete());
-        assert_eq!(session.results.len(), completed);
+        let order: Vec<_> = summary
+            .mastery_changes
+            .iter()
+            .map(|(command, _, _)| command)
+            .collect();
+        let expected: Vec<_> = commands.iter().filter(|c| order.contains(c)).collect();
+        assert_eq!(order, expected);
     }
 }

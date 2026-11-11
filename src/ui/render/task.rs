@@ -214,7 +214,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         };
 
         let instructions = Paragraph::new(format!(
-            "{pending_text}{macro_indicator}{hint_indicator}{last_cmd_text}| Ctrl-Q: Abandon | Ctrl-C: Quit"
+            "{pending_text}{macro_indicator}{hint_indicator}{last_cmd_text}| Ctrl-Q: Abandon"
         ))
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)

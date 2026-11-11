@@ -30,6 +30,9 @@ pub const PROFILE_SAVE_QUEUE_CAPACITY: usize = 16;
 /// Timeout for async data loading operations (5 seconds)
 pub const DATA_LOADING_TIMEOUT: Duration = Duration::from_secs(5);
 
-// Review timing
-/// Optimal time for command review (3 seconds)
-pub const OPTIMAL_REVIEW_TIME: Duration = Duration::from_secs(3);
+// FSRS rating
+/// Time budget per optimal action when rating an attempt (3 seconds).
+///
+/// Covers recalling a key and typing it: solving at the expected pace (up to 1.5x) is rated
+/// Easy, up to 3x Good, slower Hard. See the FSRS review rating and session spec.
+pub const PER_ACTION_BUDGET: Duration = Duration::from_secs(3);

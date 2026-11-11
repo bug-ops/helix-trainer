@@ -34,7 +34,6 @@ category = "advanced"
 difficulty = "intermediate"
 tags = ["repeat", "delete"]
 commands_taught = ["."]
-estimated_time_seconds = 25
 
 [[scenarios]]
 id = "repeat_delete_line_001"
@@ -73,16 +72,15 @@ category = "advanced"
 difficulty = "intermediate"
 tags = ["repeat", "delete", "line", "selection"]
 commands_taught = [".", "x", "d"]
-estimated_time_seconds = 30
 
 [[scenarios]]
 id = "repeat_insert_001"
-name = "Repeat append at same position"
+name = "Repeat append"
 description = "Use 'a' to append text, then repeat with '.'"
 
 hints = [
     "The repeat command replays the last insert action",
-    "'.' repeats the last editing action",
+    "After 'a', typing and Escape, the selection covers the typed text, so '.' appends after it",
 ]
 
 [scenarios.setup]
@@ -90,12 +88,12 @@ file_content = """fn f() {}"""
 cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = """fn f(x)x {}"""
-cursor_position = [0, 8]
+file_content = """fn f(xx) {}"""
+cursor_position = [0, 7]
 
 [scenarios.solution]
 commands = ["a", "x", "Escape", "."]
-description = "Append 'x' after '(', then repeat with '.' to add another 'x'"
+description = "Append 'x' after '(', then repeat with '.' to append another 'x' after the selection"
 
 [scenarios.scoring]
 optimal_count = 4
@@ -107,7 +105,6 @@ category = "advanced"
 difficulty = "intermediate"
 tags = ["repeat", "insert"]
 commands_taught = ["."]
-estimated_time_seconds = 10
 
 
 [[scenarios]]
@@ -149,7 +146,6 @@ category = "advanced"
 difficulty = "intermediate"
 tags = ["repeat", "indent"]
 commands_taught = ["."]
-estimated_time_seconds = 35
 
 [[scenarios]]
 id = "repeat_replace_001"
@@ -184,4 +180,3 @@ category = "advanced"
 difficulty = "intermediate"
 tags = ["repeat", "replace"]
 commands_taught = ["."]
-estimated_time_seconds = 30

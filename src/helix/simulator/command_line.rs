@@ -4,8 +4,8 @@
 //! [`CommandLine::parse`] for the exact set. This is intentionally narrow:
 //! the trainer must never teach a command Helix does not have.
 
+use crate::helix::error::{CommandLineError, SimulatorError, bound};
 use crate::helix::simulator::{EditorMode, HelixSimulator};
-use crate::security::UserError;
 
 /// A parsed `:` command-line invocation, ready to execute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,7 +19,7 @@ impl CommandLine {
     ///
     /// Supports exactly `:goto N` and its alias `:g N`. Any other command
     /// name, wrong argument count, or non-numeric argument is a
-    /// [`UserError::CommandFailed`] with a sanitized, bounded message.
+    /// [`CommandLineError`] with a sanitized, bounded message.
     ///
     /// # Examples
     ///
@@ -33,42 +33,33 @@ impl CommandLine {
     ///
     /// # Errors
     ///
-    /// Returns a `UserError` if `input` does not start with `:`, names no command or an unknown
+    /// Returns a [`SimulatorError`] if `input` does not start with `:`, names no command or an unknown
     /// command, or has a missing, surplus or non-numeric argument.
-    pub fn parse(input: &str) -> Result<Self, UserError> {
-        let body = input.strip_prefix(':').ok_or_else(|| {
-            UserError::command_failed(format!("not a command: '{}'", bound(input)))
-        })?;
+    pub fn parse(input: &str) -> Result<Self, CommandLineError> {
+        let body = input
+            .strip_prefix(':')
+            .ok_or_else(|| CommandLineError::NotACommand {
+                input: bound(input),
+            })?;
 
         let mut parts = body.split_whitespace();
-        let name = parts
-            .next()
-            .ok_or_else(|| UserError::command_failed("empty command"))?;
+        let name = parts.next().ok_or(CommandLineError::Empty)?;
 
         match name {
             "goto" | "g" => {
-                let arg = parts.next().ok_or_else(|| {
-                    UserError::command_failed(format!(":{} requires one argument", bound(name)))
-                })?;
+                let arg = parts
+                    .next()
+                    .ok_or_else(|| CommandLineError::MissingArgument { name: bound(name) })?;
                 if parts.next().is_some() {
-                    return Err(UserError::command_failed(format!(
-                        ":{} takes exactly one argument",
-                        bound(name)
-                    )));
+                    return Err(CommandLineError::TooManyArguments { name: bound(name) });
                 }
-                let n: usize = arg.parse().map_err(|_| {
-                    UserError::command_failed(format!(
-                        ":{} {}: not a number",
-                        bound(name),
-                        bound(arg)
-                    ))
+                let n: usize = arg.parse().map_err(|_| CommandLineError::NotANumber {
+                    name: bound(name),
+                    argument: bound(arg),
                 })?;
                 Ok(Self::Goto(n))
             }
-            other => Err(UserError::command_failed(format!(
-                "unknown command ':{}'",
-                bound(other)
-            ))),
+            other => Err(CommandLineError::UnknownCommand { name: bound(other) }),
         }
     }
 
@@ -78,7 +69,10 @@ impl CommandLine {
     ///
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
     /// with the fallible commands that share the registry's function type.
-    pub fn execute<M: EditorMode>(&self, sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+    pub fn execute<M: EditorMode>(
+        &self,
+        sim: &mut HelixSimulator<M>,
+    ) -> Result<(), SimulatorError> {
         match self {
             Self::Goto(n) => {
                 execute_goto(sim, *n);
@@ -99,24 +93,11 @@ fn execute_goto<M: EditorMode>(sim: &mut HelixSimulator<M>, n: usize) {
     }
 }
 
-/// Bound and sanitize text before embedding it in a user-facing error.
-///
-/// `UserError::CommandFailed`'s `Display` impl echoes `context` verbatim, so
-/// anything derived from raw command-line input must be scrubbed here first.
-/// Stricter than `sanitize_terminal_output` (which additionally allows
-/// `\n`/`\t`): this text is embedded in a single-line error message, where a
-/// literal newline or tab has no legitimate use.
-fn bound(s: &str) -> String {
-    s.chars()
-        .filter(|c| c.is_ascii_graphic() || *c == ' ')
-        .take(64)
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::helix::simulator::NormalMode;
+    use std::assert_matches;
 
     #[test]
     fn parses_goto_and_alias() {
@@ -126,25 +107,47 @@ mod tests {
 
     #[test]
     fn rejects_missing_colon() {
-        assert!(CommandLine::parse("goto 3").is_err());
+        assert_matches!(
+            CommandLine::parse("goto 3"),
+            Err(CommandLineError::NotACommand { input }) if input == "goto 3"
+        );
+    }
+
+    #[test]
+    fn rejects_empty_command() {
+        assert_matches!(CommandLine::parse(":"), Err(CommandLineError::Empty));
     }
 
     #[test]
     fn rejects_wrong_arity() {
-        assert!(CommandLine::parse(":goto").is_err());
-        assert!(CommandLine::parse(":goto 1 2").is_err());
+        assert_matches!(
+            CommandLine::parse(":goto"),
+            Err(CommandLineError::MissingArgument { name }) if name == "goto"
+        );
+        assert_matches!(
+            CommandLine::parse(":goto 1 2"),
+            Err(CommandLineError::TooManyArguments { name }) if name == "goto"
+        );
     }
 
     #[test]
     fn rejects_non_numeric_argument() {
-        assert!(CommandLine::parse(":goto abc").is_err());
+        assert_matches!(
+            CommandLine::parse(":goto abc"),
+            Err(CommandLineError::NotANumber { name, argument })
+                if name == "goto" && argument == "abc"
+        );
     }
 
     #[test]
     fn rejects_unknown_command() {
-        assert!(CommandLine::parse(":nope").is_err());
-        assert!(CommandLine::parse(":sort").is_err());
-        assert!(CommandLine::parse(":clear-register a").is_err());
+        for input in [":nope", ":sort", ":clear-register a"] {
+            assert_matches!(
+                CommandLine::parse(input),
+                Err(CommandLineError::UnknownCommand { .. }),
+                "{input}"
+            );
+        }
     }
 
     #[test]

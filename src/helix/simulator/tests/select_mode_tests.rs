@@ -16,7 +16,7 @@ fn run(keys: &[&str]) -> AnyModeSimulator {
 }
 
 fn content(sim: &AnyModeSimulator) -> String {
-    sim.state().unwrap().content().to_string()
+    sim.display().content()
 }
 
 fn deleted(keys: &[&str]) -> String {

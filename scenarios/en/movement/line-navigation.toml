@@ -51,7 +51,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "start"]
 commands_taught = ["gh"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "line_start_basic_002"
@@ -103,7 +102,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "start"]
 commands_taught = ["gh"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "line_start_multiline_001"
@@ -145,7 +143,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "start"]
 commands_taught = ["gh"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "document_start_001"
@@ -197,7 +194,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["document", "start"]
 commands_taught = ["gg"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "document_start_002"
@@ -249,7 +245,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["document", "start"]
 commands_taught = ["gg"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "line_nav_combined_001"
@@ -301,7 +296,6 @@ category = "movement"
 difficulty = "beginner"
 tags = ["line", "combined"]
 commands_taught = ["gh"]
-estimated_time_seconds = 5
 
 [[scenarios]]
 id = "document_nav_combined_001"
@@ -363,4 +357,3 @@ category = "movement"
 difficulty = "beginner"
 tags = ["document", "combined"]
 commands_taught = ["gg"]
-estimated_time_seconds = 5

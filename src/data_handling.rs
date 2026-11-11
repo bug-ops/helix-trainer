@@ -149,7 +149,7 @@ fn warn_if_other_instance_running(state: &mut AppState) {
 fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
     let current = state.config.keymap.fingerprint();
     if let Some(stored) = state.progress.profile.keymap_fingerprint
-        && stored != current
+        && stored.contradicts(current)
     {
         state.ui.notifications.push(Notification::with_duration(
             NotificationType::Info {
@@ -158,7 +158,7 @@ fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
             WARNING_NOTIFICATION_DURATION,
         ));
     }
-    state.progress.profile.keymap_fingerprint = Some(current);
+    state.progress.profile.keymap_fingerprint = Some(current.into());
 }
 
 /// Handle messages from background data loaders
@@ -312,9 +312,12 @@ mod tests {
     use helix_trainer::config::json_store::{Document, StorageError};
     use helix_trainer::gamification::{PreviousCopy, QuarantineError};
     use helix_trainer::ids::{QuestId, ScenarioId};
+    use helix_trainer::input::keymap::{KeymapFingerprint, StoredKeymapFingerprint};
     use helix_trainer::security::UserError;
     use helix_trainer::{
-        config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState},
+        config::{
+            CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+        },
         constants::STREAK_FREEZE_MAX_GAP_DAYS,
         gamification::{ProfileStorage, QuestTemplateRegistry},
     };
@@ -381,14 +384,13 @@ mod tests {
                 commands: vec!["x".to_string(), "d".to_string()],
                 description: "Delete first line".to_string(),
             },
-            alternatives: vec![],
             hints: vec![],
             scoring: ScoringConfig {
                 optimal_count: std::num::NonZeroUsize::new(2).unwrap(),
                 max_points: 100,
                 tolerance: 0,
             },
-            metadata: None,
+            metadata: ScenarioMetadata::default(),
         }
     }
 
@@ -469,6 +471,37 @@ mod tests {
         )
     }
 
+    fn different_from(fingerprint: KeymapFingerprint) -> KeymapFingerprint {
+        let KeymapFingerprint::Fnv1a64V1(value) = fingerprint;
+        KeymapFingerprint::Fnv1a64V1(value.wrapping_add(1))
+    }
+
+    /// A legacy untagged fingerprint (written by the pre-tag hasher) cannot be
+    /// compared: it must not notify and is replaced by the current value.
+    #[test]
+    fn test_handle_profile_ready_replaces_a_legacy_fingerprint_without_notifying() {
+        let mut state = app_state_with_keymap();
+        let mut profile = UserProfile::new();
+        profile.keymap_fingerprint = Some(StoredKeymapFingerprint::Legacy(12345));
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        assert!(
+            !state
+                .ui
+                .notifications
+                .visible()
+                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            "a legacy fingerprint must not raise the mismatch notification"
+        );
+        assert_eq!(
+            state.progress.profile.keymap_fingerprint,
+            Some(StoredKeymapFingerprint::Current(
+                state.config.keymap.fingerprint()
+            ))
+        );
+    }
+
     /// A stale `keymap_fingerprint` (recorded under a different mapping)
     /// must notify when the currently active keymap doesn't match.
     #[test]
@@ -476,7 +509,9 @@ mod tests {
         let mut state = app_state_with_keymap();
         let current_fingerprint = state.config.keymap.fingerprint();
         let mut profile = UserProfile::new();
-        profile.keymap_fingerprint = Some(current_fingerprint.wrapping_add(1));
+        profile.keymap_fingerprint = Some(StoredKeymapFingerprint::Current(different_from(
+            current_fingerprint,
+        )));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
@@ -485,14 +520,13 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(&n.notification_type, NotificationType::Info { message }
                     if message == &helix_trainer::config::keymap::keymap_fingerprint_mismatch_message())),
             "expected a keymap fingerprint mismatch notification"
         );
         assert_eq!(
             state.progress.profile.keymap_fingerprint,
-            Some(current_fingerprint),
+            Some(StoredKeymapFingerprint::Current(current_fingerprint)),
             "fingerprint must converge to the current keymap after notifying"
         );
     }
@@ -506,7 +540,7 @@ mod tests {
         let mut state = app_state_with_keymap();
         let current_fingerprint = state.config.keymap.fingerprint();
         let mut profile = UserProfile::new();
-        profile.keymap_fingerprint = Some(current_fingerprint);
+        profile.keymap_fingerprint = Some(StoredKeymapFingerprint::Current(current_fingerprint));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
@@ -515,13 +549,12 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
             "an unchanged custom keymap must not renotify on every launch"
         );
         assert_eq!(
             state.progress.profile.keymap_fingerprint,
-            Some(current_fingerprint)
+            Some(StoredKeymapFingerprint::Current(current_fingerprint))
         );
     }
 
@@ -541,13 +574,14 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
             "first-time keymap activation must not notify a mismatch"
         );
         assert_eq!(
             state.progress.profile.keymap_fingerprint,
-            Some(state.config.keymap.fingerprint())
+            Some(StoredKeymapFingerprint::Current(
+                state.config.keymap.fingerprint()
+            ))
         );
     }
 
@@ -569,13 +603,14 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
             "first-ever activation (even of the stock keymap) must not notify a mismatch"
         );
         assert_eq!(
             state.progress.profile.keymap_fingerprint,
-            Some(state.config.keymap.fingerprint())
+            Some(StoredKeymapFingerprint::Current(
+                state.config.keymap.fingerprint()
+            ))
         );
     }
 
@@ -596,7 +631,7 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(custom_fingerprint),
+                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(custom_fingerprint)),
                 ..UserProfile::new()
             }),
         );
@@ -606,13 +641,12 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
             "disabling a custom keymap must notify that history now spans a different mapping"
         );
         assert_eq!(
             state.progress.profile.keymap_fingerprint,
-            Some(stock_fingerprint)
+            Some(StoredKeymapFingerprint::Current(stock_fingerprint))
         );
     }
 
@@ -635,7 +669,7 @@ mod tests {
         handle_data_message(
             &mut disabled_state,
             DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(custom_fingerprint),
+                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(custom_fingerprint)),
                 ..UserProfile::new()
             }),
         );
@@ -644,13 +678,12 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
             "disabling a custom keymap must notify that history now spans a different mapping"
         );
         assert_eq!(
             disabled_state.progress.profile.keymap_fingerprint,
-            Some(stock_fingerprint)
+            Some(StoredKeymapFingerprint::Current(stock_fingerprint))
         );
 
         // Step 2: re-enable the same custom keymap. The intervening stock
@@ -669,13 +702,12 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
             "re-enabling after a stock-keymap gap must notify, not silently match a stale fingerprint"
         );
         assert_eq!(
             state.progress.profile.keymap_fingerprint,
-            Some(custom_fingerprint)
+            Some(StoredKeymapFingerprint::Current(custom_fingerprint))
         );
     }
 
@@ -701,7 +733,7 @@ mod tests {
         handle_data_message(
             &mut disabled_state,
             DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(fingerprint_a),
+                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(fingerprint_a)),
                 ..UserProfile::new()
             }),
         );
@@ -718,13 +750,12 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
             "switching to a different custom keymap after a stock gap must still notify"
         );
         assert_eq!(
             state_b.progress.profile.keymap_fingerprint,
-            Some(fingerprint_b)
+            Some(StoredKeymapFingerprint::Current(fingerprint_b))
         );
     }
 
@@ -734,21 +765,22 @@ mod tests {
     #[test]
     fn test_handle_profile_ready_unlocks_streak_achievement() {
         use helix_trainer::gamification::AchievementId;
-        use helix_trainer::time::{Clock, FakeClock};
+        use helix_trainer::time::{Clock, FakeClock, SystemMonotonicClock};
         use helix_trainer::ui::state::{AppState, ConfigState};
         use std::sync::Arc;
 
-        // Construct AppState via with_clock directly (rather than building it with the
+        // Construct AppState via with_clocks directly (rather than building it with the
         // default SystemClock and reassigning `progress.clock` afterward) so the injected
         // clock is shared by every clock-consuming field from the start, not just read back.
         let clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
-        let mut state = AppState::with_clock(
+        let mut state = AppState::with_clocks(
             vec![],
             UserProfile::new(),
             test_profile_storage(),
             PerformanceTracker::new(),
             ConfigState::default(),
             clock.clone(),
+            Arc::new(SystemMonotonicClock),
         );
 
         let mut profile = UserProfile::new_at(clock.now());
@@ -768,7 +800,7 @@ mod tests {
                 .profile
                 .has_achievement(&AchievementId::Streak7Days)
         );
-        assert!(state.ui.notifications.visible().iter().any(|n| matches!(
+        assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
             NotificationType::Achievement { ref name, .. } if name == "7-Day Warrior"
         )));
@@ -809,7 +841,7 @@ mod tests {
         let _ = child.wait();
 
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
                 NotificationType::Info { message } if message.contains(&other_pid.to_string())
             )),
@@ -839,7 +871,6 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| n.notification_type == NotificationType::StreakFreezeUsed),
             "expected a StreakFreezeUsed notification when a freeze protects a missed day"
         );
@@ -859,16 +890,11 @@ mod tests {
 
         assert_eq!(state.progress.profile.current_streak, 0);
         assert!(
-            state
-                .ui
-                .notifications
-                .visible()
-                .iter()
-                .any(|n| n.notification_type
-                    == NotificationType::StreakBroken {
-                        was_streak: 5,
-                        freeze_could_not_cover_gap: false
-                    }),
+            state.ui.notifications.visible().any(|n| n.notification_type
+                == NotificationType::StreakBroken {
+                    was_streak: 5,
+                    freeze_could_not_cover_gap: false
+                }),
             "expected a StreakBroken notification when a streak breaks with no freeze available"
         );
     }
@@ -895,16 +921,11 @@ mod tests {
             "freeze must remain held since it couldn't cover this gap"
         );
         assert!(
-            state
-                .ui
-                .notifications
-                .visible()
-                .iter()
-                .any(|n| n.notification_type
-                    == NotificationType::StreakBroken {
-                        was_streak: 5,
-                        freeze_could_not_cover_gap: true
-                    }),
+            state.ui.notifications.visible().any(|n| n.notification_type
+                == NotificationType::StreakBroken {
+                    was_streak: 5,
+                    freeze_could_not_cover_gap: true
+                }),
             "expected a StreakBroken notification flagging that a freeze was held but insufficient"
         );
     }
@@ -924,7 +945,6 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| matches!(n.notification_type, NotificationType::StreakBroken { .. })),
             "no streak was ever active, so no StreakBroken notification should fire"
         );
@@ -953,7 +973,6 @@ mod tests {
                 .ui
                 .notifications
                 .visible()
-                .iter()
                 .any(|n| n.notification_type == NotificationType::StreakFreezeUsed),
             "no streak was ever active, so no StreakFreezeUsed notification should fire"
         );
@@ -1014,7 +1033,7 @@ mod tests {
         };
         assert_eq!(std::fs::read_to_string(backup_path).unwrap(), "{broken");
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
                 NotificationType::Info { message } if message.contains("Saving is disabled")
             )),
@@ -1078,7 +1097,7 @@ mod tests {
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
                 NotificationType::Info { message } if message.contains("Failed to save progress")
             )),
@@ -1154,7 +1173,7 @@ mod tests {
         let _ = child.wait();
 
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
                 NotificationType::Info { message } if message.contains(&other_pid.to_string())
             )),
@@ -1197,7 +1216,7 @@ mod tests {
             "a failed save must re-dirty the profile so the next save retries"
         );
         assert!(
-            state.ui.notifications.visible().iter().any(|n| matches!(
+            state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
                 NotificationType::Info { message } if message.contains("Failed to save progress")
             )),
@@ -1214,7 +1233,6 @@ mod tests {
             .ui
             .notifications
             .visible()
-            .iter()
             .filter(|n| {
                 matches!(&n.notification_type, NotificationType::Info { message }
                 if message.contains("Daily quests could not be fully generated"))

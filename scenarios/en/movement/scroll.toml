@@ -94,7 +94,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["scroll", "page", "viewport"]
 commands_taught = ["Ctrl-d"]
-estimated_time_seconds = 8
 
 [[scenarios]]
 id = "scroll_half_page_up_001"
@@ -186,7 +185,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["scroll", "page", "viewport"]
 commands_taught = ["Ctrl-u"]
-estimated_time_seconds = 8
 
 [[scenarios]]
 id = "scroll_page_down_001"
@@ -278,7 +276,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["scroll", "page", "viewport"]
 commands_taught = ["Ctrl-f"]
-estimated_time_seconds = 8
 
 [[scenarios]]
 id = "scroll_page_up_001"
@@ -370,7 +367,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["scroll", "page", "viewport"]
 commands_taught = ["Ctrl-b"]
-estimated_time_seconds = 8
 
 [[scenarios]]
 id = "scroll_page_up_clamp_001"
@@ -422,7 +418,6 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["scroll", "page", "viewport", "boundary"]
 commands_taught = ["Ctrl-b"]
-estimated_time_seconds = 8
 
 [[scenarios]]
 id = "scroll_half_page_down_clamp_001"
@@ -514,4 +509,3 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["scroll", "page", "viewport", "boundary"]
 commands_taught = ["Ctrl-d"]
-estimated_time_seconds = 8

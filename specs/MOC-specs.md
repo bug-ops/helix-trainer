@@ -29,15 +29,17 @@ follows these packages. The batch also appends "Bug-Fix Batch" sections to
 [[custom-helix-keymap-support/spec]],
 [[arcade-gamification-session-fixes/spec]],
 [[fsrs-proptest-coverage-gap/spec]] and amends [[constitution]] Section V.
+The 2026-11-11 spec update for the #546-#589 batch further amends [[helix-core-post-25-07-1-upgrade-readiness/spec]] (FR-025, FR-034, FR-039, FR-041..FR-049), [[regex-selection-and-macro-commands/spec]] (FR-126, #576), [[undo-insert-session-granularity/spec]], [[profile-screen-xp-progress-label/spec]], [[custom-helix-keymap-support/spec]] (FR-008 fingerprint, #560), [[multi-language-scenario-content/spec]] (#554) and adds [[fsrs-review-rating-and-session/spec]].
 The 2026-11-11 P2-P3 batch (PR for #509) further extends [[helix-core-post-25-07-1-upgrade-readiness/spec]] (section 3.8), [[regex-selection-and-macro-commands/spec]] (section 11: `?`, `K`/`Alt-K`/`&`, F1 hint), [[register-command-mode-support/spec]] (deferral pointers), [[custom-helix-keymap-support/spec]] (data-directory pointer), [[fsrs-proptest-coverage-gap/spec]] (section 12: #511, #464, #469, #470), [[data-and-runtime-hardening/spec]] (#467, #484, #515, #518), [[optimal-count-action-counter-unit/spec]] (#512) and [[arcade-gamification-session-fixes/spec]] (section 9: #468, #469, #461; section 10: #527, #528, #529, #530).
 
 | Feature | Phase | Status |
 |---------|-------|--------|
-| [[helix-core-post-25-07-1-upgrade-readiness/spec\|Helix Core Upgrade Readiness and Simulator Fidelity at the Pinned Core]] | specify (lightweight) | proposed — upgrade checklist (sections 3.1-3.7) not built; section 3.8 (simulator fidelity, #490-#499, #501; extended 2026-11-11 with #500, #510, #514, #517, #519, #520, #524, #534, #535, #521, #516) specified for the bug batches |
+| [[helix-core-post-25-07-1-upgrade-readiness/spec\|Helix Core Upgrade Readiness and Simulator Fidelity at the Pinned Core]] | specify (lightweight) | proposed — upgrade checklist (sections 3.1-3.7) not built; section 3.8 (simulator fidelity, #490-#499, #501; extended 2026-11-11 with #500, #510, #514, #517, #519, #520, #524, #534, #535, #521, #516; extended 2026-11-11 with #569, #570, #556, #577, #578-#581, #587-#589, #546 amendments) specified for the bug batches |
 | [[cli-version-and-help-flags/spec\|`--version` and `--help` Command-Line Flags]] | specify (lightweight bug-fix spec) | proposed — #452 |
 | [[training-progress-indicator/spec\|Training Progress Indicator Reflects Cursor and Selection]] | specify (lightweight bug-fix spec) | proposed — #451 |
 | [[optimal-count-action-counter-unit/spec\|`optimal_count` and Action Counter Use the Same Unit]] | specify (lightweight bug-fix spec) | proposed — #488; section 7 adds the opt-in `after_taught_commands` completion rule (#512) |
-| [[profile-screen-xp-progress-label/spec\|One Definition of Level XP Progress on Every Screen]] | specify (lightweight bug-fix spec) | proposed — #572; Profile label showed XP remaining instead of level span; shared helper (P2) |
+| [[fsrs-review-rating-and-session/spec\|One Review Session Owner and a Deterministic Rating Mapping]] | specify (lightweight bug-fix spec) | proposed — #550, #551 |
+| [[profile-screen-xp-progress-label/spec\|One Definition of Level XP Progress on Every Screen]] | specify (lightweight bug-fix spec) | proposed — #572; Profile label showed XP remaining instead of level span; shared helper (P2); #574 Profile quest total; span-0 label decided |
 | [[sound-setting-persistence/spec\|Sound Toggle Persists Across Restarts]] | specify (lightweight bug-fix spec) | proposed — #459 |
 | [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444; extended 2026-11-11 with #467, #484, #515, #518, #460, #457, #456, #531, #454, #523, #463 (section 7) |
 
@@ -70,7 +72,7 @@ Not yet built. Drafted for review/prioritization only.
 | [[fsrs-7-crate-migration/spec\|Migrate `fsrs` Crate from 6.6 to 7.0 (FSRS-6 Behavior Preserved)]] | specify (lightweight, per SDD scaling guidance) | proposed — dependency major bump; model change tracked in [[fsrs-7-model-adoption/spec]] |
 | [[fsrs-7-model-adoption/spec\|Evaluate Switching the Scheduler from the FSRS-6 Model to the FSRS-7 Model]] | specify (lightweight, per SDD scaling guidance) | proposed — go/no-go evaluation (research, P4); prerequisite: [[fsrs-7-crate-migration/spec]] |
 | [[mutation-testing-critical-paths/spec\|Adopt Mutation Testing on Scoring, FSRS Scheduling and Quest-Generation Critical Paths]] | specify (lightweight, per SDD scaling guidance) | proposed — non-gating scheduled cargo-mutants run (research, P4); related: #536 |
-| [[undo-insert-session-granularity/spec\|One Undo Step per Insert Session (`u` Undoes the Whole `i ... Escape`)]] | specify (lightweight, per SDD scaling guidance) | proposed — #571; related: #501 |
+| [[undo-insert-session-granularity/spec\|One Undo Step per Insert Session (`u` Undoes the Whole `i ... Escape`)]] | specify (lightweight, per SDD scaling guidance) | proposed — #571, #589; FR-003 amended with the per-command hx table; related: #501 |
 
 ## Project Foundation
 

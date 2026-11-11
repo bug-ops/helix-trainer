@@ -27,6 +27,10 @@
 //! sim.insert_text("x");
 //! ```
 
+use super::insert_session::InsertSession;
+use super::undo::HistoryEntry;
+use helix_core::ChangeSet;
+
 /// Normal mode marker (zero-sized type)
 ///
 /// Represents the editor in Normal mode where commands are executed.
@@ -60,14 +64,38 @@ pub enum ModeKind {
 /// This prevents external crates from implementing `EditorMode`,
 /// allowing us to add methods in the future without breaking changes.
 mod private {
+    use crate::helix::simulator::undo::HistoryEntry;
+    use helix_core::ChangeSet;
+
     pub trait Sealed {}
+
+    /// What a mode remembers between commands, notified of every document change
+    pub trait Session {
+        /// Record that `changes` are about to be applied.
+        ///
+        /// `before` builds the state from before the change; it is only
+        /// called when the session needs it, so typing does not clone per key.
+        fn record_change(
+            &mut self,
+            history: &mut Vec<HistoryEntry>,
+            redo_stack: &mut Vec<HistoryEntry>,
+            changes: &ChangeSet,
+            before: impl FnOnce() -> HistoryEntry,
+        );
+    }
 }
+
+pub(super) use private::Session;
 
 /// Sealed trait for editor modes
 ///
 /// This trait can only be implemented by types in this module,
 /// ensuring all possible modes are known at compile time.
 pub trait EditorMode: private::Sealed {
+    /// State the mode carries between commands: `()` in Normal mode, the
+    /// open [`InsertSession`] in Insert mode
+    type Session: private::Session;
+
     /// Get the display name of this mode
     fn name() -> &'static str;
 }
@@ -76,13 +104,44 @@ pub trait EditorMode: private::Sealed {
 impl private::Sealed for NormalMode {}
 impl private::Sealed for InsertMode {}
 
+impl private::Session for () {
+    /// Normal mode: every change is its own undo step and discards redo history.
+    fn record_change(
+        &mut self,
+        history: &mut Vec<HistoryEntry>,
+        redo_stack: &mut Vec<HistoryEntry>,
+        _changes: &ChangeSet,
+        before: impl FnOnce() -> HistoryEntry,
+    ) {
+        history.push(before());
+        redo_stack.clear();
+    }
+}
+
+impl private::Session for InsertSession {
+    /// Insert mode: the session owns the history entry; nothing is pushed per change.
+    fn record_change(
+        &mut self,
+        _history: &mut Vec<HistoryEntry>,
+        _redo_stack: &mut Vec<HistoryEntry>,
+        changes: &ChangeSet,
+        before: impl FnOnce() -> HistoryEntry,
+    ) {
+        self.on_change(changes, before);
+    }
+}
+
 impl EditorMode for NormalMode {
+    type Session = ();
+
     fn name() -> &'static str {
         "NORMAL"
     }
 }
 
 impl EditorMode for InsertMode {
+    type Session = InsertSession;
+
     fn name() -> &'static str {
         "INSERT"
     }

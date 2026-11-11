@@ -472,3 +472,65 @@ fn enter_in_the_middle_of_a_python_line() {
         "if a:\n    y  # c\n    b\n",
     );
 }
+
+#[test]
+fn python_colon_opens_only_on_compound_statement_lines() {
+    check("py", "f = lambda:\n", &[O, "y"], "f = lambda:\ny\n");
+    check("py", "if x:\n    y\n", &[O, "z"], "if x:\n    z\n    y\n");
+    check("py", "else:\n", &[O, "z"], "else:\n    z\n");
+    check("py", "def f(x):\n", &[O, "z"], "def f(x):\n    z\n");
+}
+
+#[test]
+fn colon_inside_a_string_at_the_cursor_does_not_open() {
+    check(
+        "py",
+        "x = \"a:b\"\n",
+        &["f:", CMD_APPEND, "\n", "y"],
+        "x = \"a:\nyb\"\n",
+    );
+}
+
+#[test]
+fn brackets_in_multi_line_literals_and_block_comments_are_not_counted() {
+    check(
+        "py",
+        "s = '''\n(\nfoo\n)\n'''\nx = 1\n",
+        &["j", O, "y"],
+        "s = '''\n(\ny\nfoo\n)\n'''\nx = 1\n",
+    );
+    check(
+        "py",
+        "def f():\n    s = '''\n    (\n    '''\n    g()\n)\n",
+        &["j", "j", O, "y"],
+        "def f():\n    s = '''\n    (\n    y\n    '''\n    g()\n)\n",
+    );
+    check(
+        "rs",
+        "/* (\n x\n) */\nfn f() {}\n",
+        &[O, "y"],
+        "/* (\ny\n x\n) */\nfn f() {}\n",
+    );
+    check(
+        "rs",
+        "let s = r#\"(\n\"#;\nfoo();\n)\n",
+        &[O, "y"],
+        "let s = r#\"(\ny\n\"#;\nfoo();\n)\n",
+    );
+    check(
+        "rs",
+        "fn f() {\n    let s = \"a\n(\nb\";\n    g();\n}\n",
+        &["j", "j", O, "y"],
+        "fn f() {\n    let s = \"a\n(\ny\nb\";\n    g();\n}\n",
+    );
+}
+
+#[test]
+fn comment_token_comes_from_the_whole_line() {
+    check(
+        "rs",
+        "/// d\n",
+        &["l", CMD_APPEND, "\n", "y"],
+        "//\n/// y/ d\n",
+    );
+}

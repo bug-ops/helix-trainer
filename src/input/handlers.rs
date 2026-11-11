@@ -277,19 +277,14 @@ pub fn handle_menu_keys(key: KeyEvent, state: &mut AppState) -> Option<Message> 
     None
 }
 
-/// Handle special UI keys on task screen (F1, ?, Ctrl+Q)
+/// Handle special UI keys on task screen (F1, Ctrl+Q)
+///
+/// Only non-printable chords live here, so no text a user can type (`?` in
+/// Insert mode, a prompt or a command argument) is ever swallowed (#509).
 fn handle_task_special_keys(key: KeyEvent) -> Option<Message> {
     match (key.code, key.modifiers) {
-        // F1 always shows hint
+        // F1 is the only hint key
         (KeyCode::F(1), _) => Some(Message::ShowHint),
-        // '?' key (might come as Char('?') or Char('/') with SHIFT depending on platform)
-        (KeyCode::Char('?'), _)
-            if !key.modifiers.contains(KeyModifiers::CONTROL)
-                && !key.modifiers.contains(KeyModifiers::ALT) =>
-        {
-            Some(Message::ShowHint)
-        }
-        (KeyCode::Char('/'), KeyModifiers::SHIFT) => Some(Message::ShowHint),
         // Ctrl+Q abandons scenario (Esc is needed for Helix insert mode exit)
         (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Message::AbandonScenario),
         _ => None,
@@ -776,12 +771,20 @@ mod tests {
         assert_eq!(msg, Some(Message::ShowHint));
     }
 
+    /// #513: `?` is a gameplay key (backward search), never the hint key.
     #[test]
-    fn test_task_key_question_shows_hint() {
+    fn test_task_key_question_mark_is_backward_search_not_hint() {
+        use crate::helix::commands::CMD_SEARCH_BACKWARD;
         let key = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
-        assert_eq!(msg, Some(Message::ShowHint));
+        assert_eq!(
+            msg,
+            Some(Message::ExecuteCommand {
+                keys: CanonicalKeys::from_static(CMD_SEARCH_BACKWARD),
+                typed: Cow::Borrowed(CMD_SEARCH_BACKWARD),
+            })
+        );
     }
 
     #[test]
@@ -1118,6 +1121,65 @@ mod tests {
         }
     }
 
+    /// #509: `?` reaches the buffer in Insert mode and every prompt / argument
+    /// state instead of being intercepted as a screen-level key.
+    mod question_mark_typing_tests {
+        use super::*;
+        use crate::helix::commands::CMD_INSERT;
+        use crate::input::typestate::InputState;
+
+        fn question_mark_message(state: &AppState) -> Option<Message> {
+            let key = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
+            handle_task_keys(key, state)
+        }
+
+        fn expected_question_mark() -> Option<Message> {
+            Some(Message::ExecuteCommand {
+                keys: CanonicalKeys::from_static("?"),
+                typed: Cow::Borrowed("?"),
+            })
+        }
+
+        fn insert_mode_state() -> AppState {
+            let mut state = create_test_app_state();
+            let session = match make_active_task_session()
+                .record_action(CMD_INSERT.to_string())
+                .unwrap()
+            {
+                crate::game::SessionAfterAction::StillActive(session) => session,
+                crate::game::SessionAfterAction::Completed(_) => unreachable!(),
+            };
+            state.screen = TypedScreen::Task(TaskData::new(session));
+            state
+        }
+
+        #[test]
+        fn test_question_mark_is_text_in_insert_mode() {
+            let state = insert_mode_state();
+            assert_eq!(question_mark_message(&state), expected_question_mark());
+        }
+
+        #[test]
+        fn test_question_mark_reaches_pending_prompts_and_arguments() {
+            for opening_keys in [":", "/", "s", "S", "f", "t", "r", "ms"] {
+                let mut state = create_test_app_state();
+                let mut task_data = TaskData::new(make_active_task_session());
+                for c in opening_keys.chars() {
+                    task_data
+                        .input_state_mut()
+                        .process_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+                }
+                assert_ne!(*task_data.input_state().state(), InputState::Base);
+                state.screen = TypedScreen::Task(task_data);
+                assert_eq!(
+                    question_mark_message(&state),
+                    expected_question_mark(),
+                    "after {opening_keys}"
+                );
+            }
+        }
+    }
+
     // Regression tests for the hint-panel Escape interaction fixed alongside #283:
     // Escape must exit Insert mode before it dismisses the hint panel.
     mod task_keys_hint_panel_escape_tests {
@@ -1178,9 +1240,13 @@ mod tests {
         }
 
         #[test]
-        fn test_handle_task_special_keys_question_mark() {
-            let key = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
-            assert_eq!(handle_task_special_keys(key), Some(Message::ShowHint));
+        fn test_handle_task_special_keys_ignore_printable_question_marks() {
+            for modifiers in [KeyModifiers::NONE, KeyModifiers::SHIFT] {
+                for c in ['?', '/'] {
+                    let key = KeyEvent::new(KeyCode::Char(c), modifiers);
+                    assert_eq!(handle_task_special_keys(key), None, "{c} {modifiers:?}");
+                }
+            }
         }
 
         #[test]

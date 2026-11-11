@@ -2027,11 +2027,11 @@ mod completion_rule {
         commands.iter().map(ToString::to_string).collect()
     }
 
-    fn action(command: &str, target_held_before: bool) -> Option<LastAction<'_>> {
-        Some(LastAction {
+    fn last(command: &str, target_held_before: bool) -> LastAction<'_> {
+        LastAction {
             command,
             target_held_before,
-        })
+        }
     }
 
     #[test]
@@ -2039,12 +2039,12 @@ mod completion_rule {
         let undo_redo = taught(&["u", "U"]);
         let after = CompletionRule::AfterTaughtCommands;
         let target = CompletionRule::TargetState;
-        let cases: [(&str, CompletionRule, bool, Option<LastAction<'_>>, bool); 10] = [
+        let cases = [
             (
                 "target not reached",
                 after,
                 false,
-                action("u", false),
+                Some(("u", false)),
                 false,
             ),
             ("no last action", after, true, None, false),
@@ -2052,18 +2052,18 @@ mod completion_rule {
                 "unparsable command",
                 after,
                 true,
-                action("???", false),
+                Some(("???", false)),
                 false,
             ),
-            ("untaught command", after, true, action("d", false), false),
-            ("taught u", after, true, action("u", false), true),
-            ("taught U", after, true, action("U", false), true),
-            ("counted taught", after, true, action("2u", false), true),
+            ("untaught command", after, true, Some(("d", false)), false),
+            ("taught u", after, true, Some(("u", false)), true),
+            ("taught U", after, true, Some(("U", false)), true),
+            ("counted taught", after, true, Some(("2u", false)), true),
             (
                 "no-op U (target held before)",
                 after,
                 true,
-                action("U", true),
+                Some(("U", true)),
                 false,
             ),
             ("TargetState ignores last action", target, true, None, true),
@@ -2071,13 +2071,14 @@ mod completion_rule {
                 "TargetState needs target",
                 target,
                 false,
-                action("u", false),
+                Some(("u", false)),
                 false,
             ),
         ];
-        for (name, rule, reached, last, expected) in cases {
+        for (name, rule, reached, action, expected) in cases {
+            let action = action.map(|(command, held)| last(command, held));
             assert_eq!(
-                rule.is_satisfied(reached, &undo_redo, last),
+                rule.is_satisfied(reached, &undo_redo, action),
                 expected,
                 "{name}"
             );
@@ -2087,6 +2088,6 @@ mod completion_rule {
     #[test]
     fn test_u_does_not_match_taught_redo_only() {
         let rule = CompletionRule::AfterTaughtCommands;
-        assert!(!rule.is_satisfied(true, &taught(&["U"]), action("u", false)));
+        assert!(!rule.is_satisfied(true, &taught(&["U"]), Some(last("u", false))));
     }
 }

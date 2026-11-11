@@ -550,3 +550,29 @@ fn test_undo_redo_not_completed_when_target_reached_by_untaught_command() {
 fn test_undo_redo_counted_taught_command_completes() {
     assert_eq!(completion_step(&["x", "d", "2u", "U"]), Some(4));
 }
+
+/// Regression test for #500: a retry must rebuild the simulator with the scenario's language,
+/// so a markdown scenario keeps its 2-space indent unit instead of the default 4.
+#[test]
+fn test_reset_keeps_language_indent_unit() {
+    use crate::game::PlayableScenario;
+    use crate::helix::commands::CMD_INDENT;
+
+    let scenario = ScenarioBuilder::new()
+        .id("md_indent")
+        .setup_language("md")
+        .setup_content("item\n")
+        .setup_cursor(0, 0)
+        .target_content("  item\n")
+        .target_cursor(0, 0)
+        .build();
+    let mut session = GameSession::new(scenario).unwrap();
+
+    session.apply_action(CMD_INDENT.to_string()).unwrap();
+    let first = session.current_content();
+    session.reset().unwrap();
+    session.apply_action(CMD_INDENT.to_string()).unwrap();
+
+    assert!(first.starts_with("  item"), "unexpected indent: {first:?}");
+    assert_eq!(session.current_content(), first);
+}

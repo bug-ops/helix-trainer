@@ -689,15 +689,10 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn reset(&mut self) -> Result<(), SecurityError> {
-        // Recreate initial snapshot from scenario config and reset simulator
-        let initial_snapshot = EditorSnapshot::from_scenario_config(
-            self.scenario.setup.file_content.clone(),
-            self.scenario.setup.cursor.cursor_position,
-            self.scenario.setup.cursor.selection,
-            self.scenario.setup.cursor.cursors.as_deref(),
-            self.scenario.setup.cursor.selections.as_deref(),
-        );
-        self.simulator = AnyModeSimulator::from_snapshot(&initial_snapshot);
+        // Same construction path as `new`, so the scenario's language (indent unit) survives
+        self.simulator = crate::game::ScenarioState::from_scenario(&self.scenario)
+            .map_err(|e| SecurityError::InvalidState(e.to_string()))?
+            .simulator;
         self.user_actions.clear();
         self.started_at = self.clock.now();
         self.completed_at = None;

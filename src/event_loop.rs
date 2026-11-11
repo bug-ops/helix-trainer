@@ -90,19 +90,6 @@ fn apply_update(state: &mut AppState, msg: Message, data_tx: &mpsc::Sender<DataL
     }
 }
 
-/// Apply a background data message; failures are reported, never propagated.
-fn apply_data_message(state: &mut AppState, msg: DataLoadMessage) {
-    if let Err(error) = handle_data_message(state, msg) {
-        tracing::warn!(error = %error, "Handling data message failed");
-        state
-            .ui
-            .notifications
-            .push(Notification::new(NotificationType::Info {
-                message: error.to_string(),
-            }));
-    }
-}
-
 /// Check if mini-game is in countdown state
 fn is_minigame_countdown(state: &AppState) -> bool {
     state
@@ -252,7 +239,7 @@ pub async fn run_async_event_loop(
 
             // Data loading results
             Some(data_msg) = data_rx.recv() => {
-                apply_data_message(state, data_msg);
+                handle_data_message(state, data_msg);
             }
 
             // Countdown tick for mini-game (1 second)

@@ -174,7 +174,7 @@ fn render_stats(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
             Span::styled(
                 t!(
                     "end_game.command_success_rate",
-                    pct = (data.command_success_rate * 100.0).round() as u32
+                    pct = crate::numeric::round_percent(data.command_success_rate)
                 )
                 .to_string(),
                 Style::default().fg(Color::White),

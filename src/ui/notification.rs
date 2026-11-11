@@ -98,7 +98,6 @@ pub struct Notification {
 
     /// When the notification was created
     /// Note: This field is excluded from PartialEq comparison
-    #[cfg_attr(test, allow(dead_code))]
     pub(crate) created_at: Instant,
 
     /// How long to display the notification (default 3 seconds)

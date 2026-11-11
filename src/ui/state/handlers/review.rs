@@ -36,7 +36,7 @@ pub fn handle_start_review_session(
     }
 
     let review_session = ReviewSessionState {
-        due_commands: due_commands.clone(),
+        due_commands,
         current_index: 0,
         session_started_at: Instant::now(),
         completed_reviews: Vec::new(),
@@ -86,7 +86,7 @@ pub fn handle_complete_review_command(
     }
 
     // Delegate to next review handler for screen transition logic
-    handle_next_review_command(data, ctx)
+    Ok(handle_next_review_command(data, ctx))
 }
 
 /// Handle NextReviewCommand message
@@ -95,7 +95,7 @@ pub fn handle_complete_review_command(
 fn handle_next_review_command(
     data: &mut ReviewData,
     ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     let session = &mut data.session;
     session.current_index += 1;
 
@@ -131,13 +131,9 @@ fn handle_next_review_command(
         ctx.ui.effects.push(Effect::SaveProfile);
 
         // Return to menu
-        return Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-            MenuData::default(),
-        ))));
-    } else {
-        // Move to next command
+        return HandlerOutcome::Transition(Box::new(TypedScreen::Menu(MenuData::default())));
     }
-    Ok(HandlerOutcome::Stay)
+    HandlerOutcome::Stay
 }
 
 /// Handle AbandonReviewSession message

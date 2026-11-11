@@ -566,7 +566,6 @@ macro_rules! extract_screen {
     // Handler with context (immutable data)
     ($state:expr, $variant:ident, $data:ident, $ctx:ident => $handler:expr) => {
         if let TypedScreen::$variant(ref $data) = $state.screen {
-            #[allow(unused_mut)]
             let mut $ctx = HandlerContext::new(
                 &mut $state.ui,
                 &mut $state.game,
@@ -583,7 +582,10 @@ macro_rules! extract_screen {
     // Handler with context (mutable data)
     ($state:expr, $variant:ident, mut $data:ident, $ctx:ident => $handler:expr) => {
         if let TypedScreen::$variant(ref mut $data) = $state.screen {
-            #[allow(unused_mut)]
+            #[allow(
+                unused_mut,
+                reason = "handlers differ in whether they take the context by `&` or `&mut`"
+            )]
             let mut $ctx = HandlerContext::new(
                 &mut $state.ui,
                 &mut $state.game,

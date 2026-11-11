@@ -75,7 +75,7 @@ pub trait ProgressTracker {
 
     /// Get progress as percentage (0 to 100)
     fn progress_percent(&self) -> u32 {
-        (self.progress() * 100.0).min(100.0) as u32
+        crate::numeric::floor_percent(self.progress())
     }
 }
 
@@ -104,6 +104,11 @@ pub trait Modifier {
     fn factor(&self) -> f64;
 
     /// Apply modification to a value
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a modifier factor is non-negative and the scaled value stays far below u64::MAX"
+    )]
     fn apply(&self, value: u64) -> u64 {
         (value as f64 * self.factor()).round() as u64
     }
@@ -124,11 +129,9 @@ mod tests {
     use super::*;
 
     // Test implementation for ProgressionTier
-    #[allow(dead_code)]
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum TestTier {
         Low,
-        Mid,
         High,
     }
 
@@ -136,7 +139,6 @@ mod tests {
         fn name(&self) -> &'static str {
             match self {
                 TestTier::Low => "Low",
-                TestTier::Mid => "Mid",
                 TestTier::High => "High",
             }
         }
@@ -144,7 +146,6 @@ mod tests {
         fn emoji(&self) -> &'static str {
             match self {
                 TestTier::Low => "🔰",
-                TestTier::Mid => "⭐",
                 TestTier::High => "🏆",
             }
         }
@@ -152,7 +153,6 @@ mod tests {
         fn tier_level(&self) -> u32 {
             match self {
                 TestTier::Low => 0,
-                TestTier::Mid => 1,
                 TestTier::High => 2,
             }
         }

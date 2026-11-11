@@ -171,7 +171,6 @@ pub fn handle_menu_jump_to(
 ///
 /// Executes action based on currently selected menu item.
 /// Uses HandlerContext to delegate to other handlers and perform transitions.
-#[allow(dead_code)] // Used directly in update() function, not through handlers::
 pub fn handle_menu_select(
     selected: usize,
     state: &mut AppState,

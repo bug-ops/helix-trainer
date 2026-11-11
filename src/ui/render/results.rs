@@ -242,7 +242,7 @@ fn render_progression_panel(
                 "  Mastery: ".to_string()
             };
 
-            let reduction_pct = ((1.0 - xp.mastery_factor) * 100.0) as u32;
+            let reduction_pct = crate::numeric::round_percent(1.0 - xp.mastery_factor);
             lines.push(Line::from(vec![
                 Span::raw(mastery_text),
                 Span::styled(
@@ -254,7 +254,7 @@ fn render_progression_panel(
 
         // Repeat penalty (only show if < 1.0, i.e., 2nd+ attempt today)
         if xp.repeat_penalty < 1.0 {
-            let reduction_pct = ((1.0 - xp.repeat_penalty) * 100.0) as u32;
+            let reduction_pct = crate::numeric::round_percent(1.0 - xp.repeat_penalty);
             lines.push(Line::from(vec![
                 Span::raw("  🔄 Repeat: "),
                 Span::styled(

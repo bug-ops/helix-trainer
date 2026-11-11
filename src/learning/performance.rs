@@ -514,7 +514,13 @@ impl CommandPerformance {
 
         self.stability = stability;
         self.difficulty = difficulty;
-        self.scheduled_days = interval.round().max(1.0) as u32;
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "FSRS clamps intervals to its maximum interval, a few decades of days, and the value is at least 1"
+        )]
+        let scheduled_days = interval.round().max(1.0) as u32;
+        self.scheduled_days = scheduled_days;
         self.last_review = now;
 
         // For first review (reps == 0), make command immediately due
@@ -540,7 +546,7 @@ mod duration_serde {
     where
         S: Serializer,
     {
-        serializer.serialize_u64(duration.as_millis() as u64)
+        serializer.serialize_u64(u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
@@ -675,7 +681,7 @@ impl PerformanceTracker {
         if perf.reps == 0 {
             0
         } else {
-            (now - perf.last_review).num_days().max(0) as u32
+            u32::try_from((now - perf.last_review).num_days().max(0)).unwrap_or(u32::MAX)
         }
     }
 

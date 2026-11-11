@@ -162,11 +162,9 @@ fn render_mastery_bar(
     total: usize,
     color: Color,
 ) {
-    let percentage = if total > 0 {
-        (count as f32 / total as f32 * 100.0) as u32
-    } else {
-        0
-    };
+    let percentage = (count * 100)
+        .checked_div(total)
+        .map_or(0, |pct| u32::try_from(pct).unwrap_or(u32::MAX));
 
     // Create horizontal progress bar
     let filled = (percentage as usize * PROGRESS_BAR_WIDTH / 100).min(PROGRESS_BAR_WIDTH);
@@ -363,11 +361,9 @@ fn render_scenario_mastery_bar(
     total: u32,
     color: Color,
 ) {
-    let percentage = if total > 0 {
-        (count as f32 / total as f32 * 100.0) as u32
-    } else {
-        0
-    };
+    let percentage = (u64::from(count) * 100)
+        .checked_div(u64::from(total))
+        .map_or(0, |pct| u32::try_from(pct).unwrap_or(u32::MAX));
 
     // Create horizontal progress bar
     let filled = (percentage as usize * PROGRESS_BAR_WIDTH / 100).min(PROGRESS_BAR_WIDTH);

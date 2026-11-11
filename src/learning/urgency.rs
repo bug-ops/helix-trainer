@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn overdue_ratio_is_days_past_due_over_the_interval() {
         let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
-        let mut tracker = PerformanceTracker::with_clock(clock.clone());
+        let mut tracker = PerformanceTracker::with_clock(clock);
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
         let perf = tracker.performance("x").unwrap();

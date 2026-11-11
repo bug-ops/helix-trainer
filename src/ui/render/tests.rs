@@ -785,7 +785,7 @@ mod popup_tests {
     fn test_render_hint_popup() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         // Start scenario and show hint
         crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
@@ -1073,6 +1073,11 @@ mod results_tests {
         mastery_factor: f64,
         repeat_penalty: f64,
     ) -> XPBreakdown {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "mirrors the production XP formula with non-negative inputs"
+        )]
         let total =
             ((base + perfect_bonus + first_today) as f64 * mastery_factor * repeat_penalty) as u64;
         XPBreakdown {
@@ -2043,7 +2048,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_playing_state() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2066,7 +2071,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_paused_state() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2089,7 +2094,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_countdown_state() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2110,7 +2115,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_with_queue() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![
             create_minigame_scenario("s1", Difficulty::Beginner),
@@ -2137,7 +2142,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_with_key_history() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2163,7 +2168,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_with_xp_earned() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2187,7 +2192,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_intermediate_difficulty() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario(
             "s1",
@@ -2212,7 +2217,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_advanced_difficulty() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Advanced)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2234,7 +2239,7 @@ mod minigame_screen_tests {
     fn test_render_minigame_empty_queue() {
         let mut terminal = create_terminal();
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         // Single scenario - queue will be empty after first
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
@@ -2259,7 +2264,7 @@ mod minigame_screen_tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);
@@ -2283,7 +2288,7 @@ mod minigame_screen_tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         let scenario = create_test_scenario();
-        let mut state = create_test_app_state(vec![scenario.clone()]);
+        let mut state = create_test_app_state(vec![scenario]);
 
         let scenarios = Arc::new(vec![create_minigame_scenario("s1", Difficulty::Beginner)]);
         let mut session = MiniGameSession::new(scenarios, None);

@@ -140,7 +140,7 @@ fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
         TimeInvested {
             current_minutes, ..
         } => *current_minutes,
-        Exploration { commands_used, .. } => commands_used.len() as u32,
+        Exploration { commands_used, .. } => u32::try_from(commands_used.len()).unwrap_or(u32::MAX),
         SpeedRun { .. } => 0, // Single-attempt quest
     }
 }
@@ -210,7 +210,10 @@ pub fn apply_quest_progress(
     let minutes = duration.as_secs() / 60;
     if minutes > 0 {
         let profile = &mut state.progress.profile;
-        QuestTracker::update_time_progress(&mut profile.daily_quests, minutes as u32);
+        QuestTracker::update_time_progress(
+            &mut profile.daily_quests,
+            u32::try_from(minutes).unwrap_or(u32::MAX),
+        );
     }
 
     // Detect progress changes AFTER updates

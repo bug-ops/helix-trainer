@@ -211,7 +211,7 @@ impl ReviewSession {
 
         let total_time: Duration = self.results.iter().map(|r| r.duration).sum();
         let avg_time = if total_reviews > 0 {
-            total_time / total_reviews as u32
+            total_time / u32::try_from(total_reviews).unwrap_or(u32::MAX)
         } else {
             Duration::ZERO
         };

@@ -1049,7 +1049,7 @@ mod tests {
         // cursor_col - h_off = inner_width - 1, the last visible column.
         let local_col = cursor_col - h_off;
         assert_eq!(local_col, inner_width - 1);
-        let cursor_x = 1 + local_col as u16; // +1 for the left border
+        let cursor_x = 1 + u16::try_from(local_col).expect("column fits in u16"); // +1 for the left border
         let cursor_y = 1u16; // row 0 is the top border, row 1 is the first content line
         assert_eq!(
             buffer[(cursor_x, cursor_y)].symbol(),

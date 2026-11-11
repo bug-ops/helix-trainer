@@ -358,6 +358,11 @@ impl ScenarioHistory {
             .unwrap_or(1.0); // First attempt = full XP
 
         // Round to nearest integer to avoid floating point truncation issues
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "XP formula: the result is non-negative and far below u64::MAX"
+        )]
         let actual_xp = (base_xp as f64 * multiplier).round() as u64;
 
         // Record completion (creates new or updates existing)

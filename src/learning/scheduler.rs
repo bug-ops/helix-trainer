@@ -92,7 +92,7 @@ impl Scheduler {
         }
 
         // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = total_duration / commands.len() as u32;
+        let avg_duration = total_duration / u32::try_from(commands.len()).unwrap_or(u32::MAX);
 
         // Optimal time is slightly less than avg (assume user could be 20% faster)
         let optimal_time = avg_duration.mul_f32(0.8);
@@ -120,7 +120,7 @@ impl Scheduler {
         }
 
         // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = total_duration / commands.len() as u32;
+        let avg_duration = total_duration / u32::try_from(commands.len()).unwrap_or(u32::MAX);
 
         // Optimal time is slightly less than avg (assume user could be 20% faster)
         let optimal_time = avg_duration.mul_f32(0.8);
@@ -244,8 +244,9 @@ impl Scheduler {
         let max_items = duration_minutes / AVG_SCENARIO_TIME_MINUTES;
 
         // Split session: 50% reviews, 50% new/weak content
-        let review_count = (max_items / 2) as usize;
-        let new_content_count = (max_items - review_count as u32) as usize;
+        let review_items = max_items / 2;
+        let review_count = review_items as usize;
+        let new_content_count = (max_items - review_items) as usize;
 
         // Get review items (commands due for practice)
         let review_items = self.get_review_queue(tracker, review_count);
@@ -614,8 +615,8 @@ mod tests {
 
         // Test heap ordering (BinaryHeap is max-heap with our reversed Ord impl)
         let mut heap = BinaryHeap::new();
-        heap.push(item1.clone());
-        heap.push(item2.clone());
+        heap.push(item1);
+        heap.push(item2);
 
         let top = heap.pop().unwrap();
         assert_eq!(top.id, "high"); // Higher priority should come first

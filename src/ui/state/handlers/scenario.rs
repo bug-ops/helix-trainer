@@ -59,7 +59,7 @@ fn record_scenario_completion(
     total_xp: u64,
     quest_leveled_up: bool,
     difficulty: Option<Difficulty>,
-) -> Result<(), UserError> {
+) {
     let is_perfect = feedback.score == feedback.max_points;
 
     // `total_xp` here is scenario XP only (quest XP was already applied separately by
@@ -84,7 +84,7 @@ fn record_scenario_completion(
         .progress
         .profile
         .commands_executed
-        .saturating_add(feedback.user_actions.len() as u32);
+        .saturating_add(u32::try_from(feedback.user_actions.len()).unwrap_or(u32::MAX));
     let commands = ScenarioCompletionService::extract_commands(feedback);
     let mastery_changes = ScenarioCompletionService::record_fsrs_data_with_mastery(
         &mut ctx.progress.scheduler,
@@ -138,8 +138,6 @@ fn record_scenario_completion(
     {
         ctx.ui.notifications.push(notification);
     }
-
-    Ok(())
 }
 
 /// Handle CompleteScenario message
@@ -246,7 +244,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> Result<HandlerOutcome, 
         xp_scaling.actual_xp,
         quest_update.award.leveled_up,
         scenario_difficulty,
-    )?;
+    );
 
     // Create ResultsData with completed session and transition to Results screen
     let Some(session) = completed_session else {
@@ -1095,7 +1093,7 @@ mod tests {
             &mut state.progress,
             &state.config,
         );
-        record_scenario_completion(&mut ctx, &feedback, 1, false, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, false, None);
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert_eq!(ctx.progress.profile.commands_executed, before + 5);
@@ -1131,7 +1129,7 @@ mod tests {
 
         // Small XP amount that should not trigger a level-up, exercising the
         // save_debounced branch.
-        record_scenario_completion(&mut ctx, &feedback, 1, false, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, false, None);
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
@@ -1177,7 +1175,7 @@ mod tests {
 
         // Small XP amount that should not trigger a level-up, exercising the
         // skipped save_debounced branch alongside the achievement-unlock save.
-        record_scenario_completion(&mut ctx, &feedback, 1, false, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, false, None);
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert!(
@@ -1222,7 +1220,7 @@ mod tests {
             &state.config,
         );
 
-        record_scenario_completion(&mut ctx, &feedback, 100, false, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 100, false, None);
 
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
@@ -1290,7 +1288,7 @@ mod tests {
             &state.config,
         );
 
-        record_scenario_completion(&mut ctx, &feedback, 100, false, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 100, false, None);
 
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
         assert!(ctx.progress.profile.level >= 2, "expected a level-up");
@@ -1319,7 +1317,7 @@ mod tests {
         );
 
         // Small XP amount that should not trigger a level-up.
-        record_scenario_completion(&mut ctx, &feedback, 1, false, None).unwrap();
+        record_scenario_completion(&mut ctx, &feedback, 1, false, None);
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
         assert!(

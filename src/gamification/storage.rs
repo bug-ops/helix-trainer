@@ -557,8 +557,9 @@ mod tests {
             profile: UserProfile::new(),
         })
         .unwrap();
-        value["padding"] =
-            serde_json::Value::String("a".repeat(MAX_PROFILE_FILE_SIZE as usize + 1));
+        value["padding"] = serde_json::Value::String(
+            "a".repeat(usize::try_from(MAX_PROFILE_FILE_SIZE).expect("fits in usize") + 1),
+        );
         let oversized = serde_json::to_string(&value).unwrap();
         assert!(oversized.len() as u64 > MAX_PROFILE_FILE_SIZE);
         fs::write(&file_path, &oversized).unwrap();

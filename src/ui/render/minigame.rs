@@ -296,11 +296,11 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     let grace_str = if grace > 0 { " [G]" } else { "" };
 
     // Multiplier color based on value
-    let mult_color = match stats.multiplier() as u32 {
-        0..=1 => Color::Gray,
-        2 => Color::Green,
-        3 => Color::Yellow,
-        4 => Color::Magenta,
+    let mult_color = match stats.multiplier() {
+        m if m < 2.0 => Color::Gray,
+        m if m < 3.0 => Color::Green,
+        m if m < 4.0 => Color::Yellow,
+        m if m < 5.0 => Color::Magenta,
         _ => Color::Cyan,
     };
 

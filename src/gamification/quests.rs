@@ -570,7 +570,7 @@ impl QuestGenerator {
 
     fn create_rng(today: NaiveDate) -> StdRng {
         // Seed with current date for consistency within a day
-        let seed = today.num_days_from_ce() as u64;
+        let seed = u64::from(today.num_days_from_ce().cast_unsigned());
         StdRng::seed_from_u64(seed)
     }
 

@@ -671,9 +671,7 @@ pub mod arithmetic {
             .ok_or(SecurityError::ScoreOverflow)?;
 
         // Ensure result fits in u32 and doesn't exceed max_points
-        let final_score = result.min(max_points as u64) as u32;
-
-        Ok(final_score)
+        u32::try_from(result.min(u64::from(max_points))).map_err(|_| SecurityError::ScoreOverflow)
     }
 
     /// Safely adds two scores with overflow prevention
@@ -694,14 +692,19 @@ pub mod arithmetic {
             return Err(SecurityError::ScoreOverflow);
         }
 
-        let result = (score as f64 * multiplier as f64) as u64;
+        let result = f64::from(score) * f64::from(multiplier);
 
-        // Check if result fits in u32
-        if result > u32::MAX as u64 {
+        if result > f64::from(u32::MAX) {
             return Err(SecurityError::ScoreOverflow);
         }
 
-        Ok(result as u32)
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "0.0 <= result <= u32::MAX is checked above"
+        )]
+        let scaled = result as u32;
+        Ok(scaled)
     }
 
     /// Validates that action counts are within reasonable bounds

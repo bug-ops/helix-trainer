@@ -377,6 +377,11 @@ impl XPCalculator {
     /// assert_eq!(XPCalculator::xp_for_level(2), 100);    // Level 2 starts at 100
     /// assert_eq!(XPCalculator::xp_for_level(3), 283);    // Level 3 starts at 283 (rounded)
     /// ```
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "XP formula: the result is non-negative and far below u64::MAX"
+    )]
     pub fn xp_for_level(level: u32) -> u64 {
         if level <= 1 {
             0
@@ -493,6 +498,11 @@ impl XPCalculator {
     /// // Mastered scenario (20% XP)
     /// assert_eq!(XPCalculator::scenario_xp(100, 0.2), 10); // 50 * 0.2 = 10
     /// ```
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "XP formula: the result is non-negative and far below u64::MAX"
+    )]
     pub fn scenario_xp(score: u32, multiplier: f64) -> u64 {
         // Base XP per 100 points scored
         let base_xp = (score as u64 * SCENARIO_BASE_XP_PER_100_POINTS) / 100;
@@ -564,6 +574,11 @@ impl XPCalculator {
     /// assert_eq!(XPCalculator::review_session_xp(0, 0), 0);
     /// ```
     #[must_use]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "XP formula: the result is non-negative and far below u64::MAX"
+    )]
     pub fn review_session_xp(completed: usize, recalled: usize) -> u64 {
         let success_rate = if completed > 0 {
             recalled as f64 / completed as f64

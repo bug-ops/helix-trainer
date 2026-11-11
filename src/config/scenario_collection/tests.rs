@@ -712,7 +712,7 @@ fn test_scenarios_without_metadata() {
         ..Default::default()
     };
 
-    let mut filtered_collection = collection.clone();
+    let mut filtered_collection = collection;
     filtered_collection.apply_filter(&filter, None);
 
     assert_eq!(filtered_collection.count(), 1);

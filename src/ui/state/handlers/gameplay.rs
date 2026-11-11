@@ -38,7 +38,7 @@ fn process_session_result(
                     return Err(UserError::from(e));
                 }
             };
-            state.ui.last_feedback = Some(feedback.clone());
+            state.ui.last_feedback = Some(feedback);
             // Start success animation - keep Task screen, just mark completion time
             // The event loop will transition to Results after 1.5s delay
             state.ui.completion_time = Some(std::time::Instant::now());
@@ -68,7 +68,7 @@ pub fn handle_show_hint(state: &mut AppState) -> Result<HandlerOutcome, UserErro
 
     // Otherwise, try to show next hint
     if let Some(hint) = task_data.session.hint() {
-        task_data.hint = HintPanel::Shown(hint.clone());
+        task_data.hint = HintPanel::Shown(hint);
     }
     Ok(HandlerOutcome::Stay)
 }

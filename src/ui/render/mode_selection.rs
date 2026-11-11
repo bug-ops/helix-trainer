@@ -150,7 +150,10 @@ fn render_minigame_mode_submenu(
     // Exact inner height needed for MODE_COUNT entries at ENTRY_STRIDE spacing,
     // plus 2 for the top/bottom border. Derived from MODE_COUNT so an added mode
     // grows the submenu instead of silently clipping (see #385).
-    let submenu_height = (MiniGameModeSelection::MODE_COUNT as u16 - 1) * ENTRY_STRIDE + 1 + 2;
+    let submenu_height = (u16::try_from(MiniGameModeSelection::MODE_COUNT).unwrap_or(u16::MAX) - 1)
+        * ENTRY_STRIDE
+        + 1
+        + 2;
     let submenu_x = parent_area.x + 20;
     let submenu_y = parent_area.y + 3;
 
@@ -184,7 +187,7 @@ fn render_minigame_mode_submenu(
 
     for (idx, (mode, icon)) in modes.iter().zip(ICONS.iter()).enumerate() {
         let is_selected = idx == selection.selected_index;
-        let y_offset = idx as u16 * ENTRY_STRIDE;
+        let y_offset = u16::try_from(idx).unwrap_or(u16::MAX) * ENTRY_STRIDE;
 
         if inner.y + y_offset >= inner.bottom() {
             break;

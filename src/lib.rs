@@ -32,6 +32,7 @@ pub mod helix;
 pub mod input;
 pub mod learning;
 pub mod minigame;
+mod numeric;
 pub mod security;
 pub mod sound;
 pub mod time;

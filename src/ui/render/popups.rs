@@ -97,9 +97,11 @@ pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String]
     // PixelSize::HalfHeight only halves the glyph height, not the width - each
     // character (including the space separators) is still BIG_TEXT_CHAR_WIDTH_CELLS wide
     let chars_count = key_text.chars().count();
-    let popup_width =
-        ((chars_count * BIG_TEXT_CHAR_WIDTH_CELLS).max(KEY_HISTORY_MIN_WIDTH as usize) as u16)
-            .min(safe_area.width);
+    let popup_width = u16::try_from(
+        (chars_count * BIG_TEXT_CHAR_WIDTH_CELLS).max(usize::from(KEY_HISTORY_MIN_WIDTH)),
+    )
+    .unwrap_or(u16::MAX)
+    .min(safe_area.width);
 
     // Create BigText widget with large font and cyan color
     let big_text = BigText::builder()
@@ -194,7 +196,8 @@ pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
 
     // Render each visible notification
     for (idx, notification) in visible.iter().enumerate() {
-        let y_offset = base_y + (idx as u16 * (notification_height + spacing));
+        let y_offset =
+            base_y + (u16::try_from(idx).unwrap_or(u16::MAX) * (notification_height + spacing));
 
         // Don't render if it would go off-screen
         if y_offset + notification_height > area.height {

@@ -237,7 +237,7 @@ fn render_scrollbar(
             };
 
             let x = area.x + area.width - 2; // -2 to be inside border
-            let y = area.y + 1 + y as u16; // +1 for top border
+            let y = area.y + 1 + u16::try_from(y).unwrap_or(u16::MAX); // +1 for top border
 
             frame.render_widget(
                 Paragraph::new(symbol).style(style),
@@ -481,7 +481,7 @@ fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: 
     let next_level_xp = XPCalculator::xp_for_level(profile.level + 1);
     let xp_in_level = profile.total_xp.saturating_sub(current_level_xp);
     let xp_needed = next_level_xp.saturating_sub(current_level_xp);
-    let progress_pct = (profile.xp_progress() * 100.0) as u8;
+    let progress_pct = crate::numeric::floor_percent(profile.xp_progress());
 
     let header_text = format!(
         "Level {} ⭐  🔥 {} days   XP: {}/{} ({}%)",

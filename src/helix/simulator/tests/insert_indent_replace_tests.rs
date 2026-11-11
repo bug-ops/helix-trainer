@@ -2,7 +2,7 @@
 //!
 //! Expected buffers match `hx` 25.07.1 on the same text and keys.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
 const SCENARIO_14: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";
@@ -117,7 +117,7 @@ fn escape_keeps_indent_once_text_was_typed() {
 
 #[test]
 fn stripped_auto_indent_is_part_of_the_open_undo_step() {
-    use crate::helix::commands::CMD_UNDO;
+    use crate::grammar::commands::CMD_UNDO;
     let out = run(
         MAIN_FN,
         &[CMD_MOVE_DOWN, CMD_OPEN_BELOW, CMD_ESCAPE, CMD_UNDO],
@@ -163,4 +163,84 @@ fn replace_char_on_plain_cursor_replaces_one_char() {
 #[test]
 fn replace_char_at_document_end_is_a_noop() {
     assert_eq!(run("", &["rz"]), "");
+}
+
+mod insert_with_indent {
+    use crate::helix::simulator::tests::run_keys_in;
+
+    const BLOCK_WITH_EMPTY_LINE: &str = "fn f() {\n    x\n\n}";
+
+    fn rs(text: &str, keys: &[&str]) -> String {
+        run_keys_in("rs", text, keys).display().content()
+    }
+
+    #[test]
+    fn append_on_an_empty_line_auto_indents_like_insert_at_line_start() {
+        let expected = "fn f() {\n    x\n    y\n}";
+        assert_eq!(
+            rs(BLOCK_WITH_EMPTY_LINE, &["j", "j", "A", "y", "Escape"]),
+            expected
+        );
+        assert_eq!(
+            rs(BLOCK_WITH_EMPTY_LINE, &["j", "j", "I", "y", "Escape"]),
+            expected
+        );
+    }
+
+    #[test]
+    fn the_auto_indent_of_an_unused_append_is_kept() {
+        assert_eq!(
+            rs(BLOCK_WITH_EMPTY_LINE, &["j", "j", "A", "Escape"]),
+            "fn f() {\n    x\n    \n}"
+        );
+    }
+
+    #[test]
+    fn append_on_an_empty_line_at_depth_zero_adds_no_indent() {
+        assert_eq!(rs("a\n\nb", &["j", "A", "x", "Escape"]), "a\nx\nb");
+    }
+
+    #[test]
+    fn append_uses_the_block_cursor_line_not_the_head_line() {
+        assert_eq!(
+            rs(
+                "fn f() {\n    x\n\n    y\n}",
+                &["j", "x", "A", "y", "Escape"]
+            ),
+            "fn f() {\n    xy\n\n    y\n}"
+        );
+        assert_eq!(rs("a\n\nb", &["x", "A", "y", "Escape"]), "ay\n\nb");
+        assert_eq!(
+            rs(BLOCK_WITH_EMPTY_LINE, &["j", "v", "j", "A", "y", "Escape"]),
+            "fn f() {\n    x\n    y\n}"
+        );
+        assert_eq!(
+            rs(
+                BLOCK_WITH_EMPTY_LINE,
+                &["j", "j", "v", "k", "A", "y", "Escape"]
+            ),
+            "fn f() {\n    xy\n\n}"
+        );
+    }
+
+    #[test]
+    fn append_keeps_crlf_line_endings() {
+        assert_eq!(rs("ab\r\ncd", &["A", "x", "Escape"]), "abx\r\ncd");
+        assert_eq!(rs("ab\r\ncd", &["j", "A", "x", "Escape"]), "ab\r\ncdx");
+        assert_eq!(
+            rs("ab\r\ncd\r\nef", &["x", "A", "z", "Escape"]),
+            "abz\r\ncd\r\nef"
+        );
+        assert_eq!(
+            rs("ab\r\n\r\ncd", &["j", "A", "x", "Escape"]),
+            "ab\r\nx\r\ncd"
+        );
+        assert_eq!(
+            rs(
+                "fn f() {\r\n    x\r\n\r\n}",
+                &["j", "j", "A", "x", "Escape"]
+            ),
+            "fn f() {\r\n    x\r\n    x\r\n}"
+        );
+    }
 }

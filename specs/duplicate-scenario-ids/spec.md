@@ -222,5 +222,5 @@ Merged in PR #372 (issue #363, commit `7f34268`); recorded in `CHANGELOG.md`.
 - `tests/scenario_validation.rs` — load-bearing scenario validation suite (`cargo nextest run scenario`)
 - `src/config/scenarios.rs` — `ScenarioCollection` / `Scenario` definitions
 - `src/learning/scenario_history.rs` — `ScenarioHistory::completions` map keyed by scenario id
-- `src/config/scenario_collection/mod.rs` — `is_curriculum_complete()`
+- `src/game/scenario_collection/mod.rs` (moved from `src/config/scenario_collection/` by #558) — `is_curriculum_complete()`
 - `src/ui/state/handlers/scenario.rs` — `build_end_game_summary`

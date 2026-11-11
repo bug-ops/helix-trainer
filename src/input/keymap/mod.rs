@@ -2,20 +2,24 @@
 //! keys according to the user's Helix `config.toml`.
 //!
 //! Translation happens once, at the `KeyEvent` boundary in
-//! `src/input/handlers.rs::handle_gameplay_input`, using [`PhysicalKey`] as
+//! `src/ui/key_dispatch/handlers.rs::handle_gameplay_input`, using [`PhysicalKey`] as
 //! the sole lookup key. Everything downstream of that point — the
 //! registry, FSRS card ids, quest matching, scenario `solution` — keeps
 //! working with canonical key strings and needs no awareness of remapping.
 //!
-//! See `src/config/keymap/` for parsing the user's `config.toml` into a
-//! [`KeymapOverlay`].
+//! Parsing the user's `config.toml` into a [`KeymapOverlay`] lives here too
+//! ([`resolve_startup_overlay`], [`load_keymap_file`]).
 
 mod context;
-mod fingerprint;
 mod keys;
+mod load;
 mod overlay;
+mod parse;
 
 pub use context::KeyContext;
-pub use fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
 pub use keys::{CanonicalKeys, ParsePhysicalKeyError, PhysicalKey};
+pub use load::{
+    KeymapLoadError, KeymapReport, KeymapWarning, KeymapWarningReason,
+    keymap_fingerprint_mismatch_message, load_keymap_file, resolve_startup_overlay, resolve_str,
+};
 pub use overlay::KeymapOverlay;

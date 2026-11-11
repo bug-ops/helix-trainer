@@ -6,7 +6,7 @@
 //! - Line movement: gh, gl, gs
 //! - Document navigation: gg, ge
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::error::SimulatorError;
 use crate::helix::simulator::AnyModeSimulator;
 use std::assert_matches;
@@ -324,21 +324,55 @@ fn test_execute_counted_matches_prefixed_string() {
 
 #[test]
 fn test_count_behavior_metadata() {
-    use crate::helix::registry::{CountBehavior, normal_registry};
-    let reg = normal_registry();
-    assert_eq!(reg.count_behavior("x"), CountBehavior::Repeat);
-    assert_eq!(reg.count_behavior(CMD_JOIN_LINES), CountBehavior::Ignore);
+    use crate::helix::registry::{CountBehavior, count_behavior_of};
+    assert_eq!(count_behavior_of("x"), CountBehavior::Repeat);
+    assert_eq!(count_behavior_of(CMD_JOIN_LINES), CountBehavior::Ignore);
     assert_eq!(
-        reg.count_behavior(CMD_JOIN_SELECTIONS_SPACE),
+        count_behavior_of(CMD_JOIN_SELECTIONS_SPACE),
         CountBehavior::Ignore
     );
     assert_eq!(
-        reg.count_behavior(CMD_GOTO_FILE_START),
+        count_behavior_of(CMD_GOTO_FILE_START),
         CountBehavior::Native
     );
-    assert_eq!(reg.count_behavior(CMD_GOTO_LINE), CountBehavior::Native);
-    assert_eq!(reg.count_behavior("fa"), CountBehavior::Native);
-    assert_eq!(reg.count_behavior("Tz"), CountBehavior::Native);
+    // `G`, `f<c>` and `"<r>d` take their count as typed `NormalCommand` fields
+    for cmd in ["3G", "3gg", "3fa", "2Tz"] {
+        assert!(
+            crate::helix::normal_command::NormalCommand::parse(cmd)
+                .unwrap()
+                .count()
+                .is_some(),
+            "{cmd}"
+        );
+    }
+    for cmd in ["3q", "3\"ad"] {
+        assert_eq!(
+            crate::helix::normal_command::NormalCommand::parse(cmd)
+                .unwrap()
+                .count(),
+            None,
+            "{cmd}"
+        );
+    }
+}
+
+/// The `Repeat` loop stops when a command enters Insert mode, so no counted
+/// command may leave the base command typed as text: today none enters it.
+#[test]
+fn test_counted_repeat_commands_never_enter_insert_mode() {
+    use crate::helix::registry::{CountBehavior, normal_registry};
+    for meta in normal_registry()
+        .all_commands()
+        .filter(|meta| meta.count_behavior() == CountBehavior::Repeat)
+    {
+        let mut sim = AnyModeSimulator::new("abc def\nghi".to_string());
+        let _ = sim.execute_command(&format!("2{}", meta.key()));
+        assert!(
+            !sim.is_insert_mode(),
+            "2{} left the simulator in Insert mode",
+            meta.key()
+        );
+    }
 }
 
 #[test]
@@ -499,25 +533,19 @@ fn test_count_is_ignored_by_insert_entry_commands() {
 }
 
 #[test]
-fn test_repeat_loop_stops_when_command_enters_insert_mode() {
-    use crate::helix::registry::{CountBehavior, normal_registry};
+fn test_counted_open_line_enters_insert_mode_once_with_every_line_opened() {
     use std::num::NonZeroUsize;
-    // `o` is not count-Ignore; the loop must still stop once Insert mode is entered.
-    assert_ne!(
-        normal_registry().count_behavior(CMD_OPEN_BELOW),
-        CountBehavior::Ignore
-    );
     let mut sim = AnyModeSimulator::new("abc".to_string());
     sim.execute_counted(CMD_OPEN_BELOW, NonZeroUsize::new(3).unwrap())
         .unwrap();
-    assert_eq!(text_and_ranges(&sim).0, "abc\n");
+    assert_eq!(text_and_ranges(&sim).0, "abc\n\n\n");
+    assert_eq!(text_and_ranges(&sim).1.len(), 3);
     assert_eq!(sim.mode_name(), "INSERT");
 }
 
 #[test]
 fn test_count_behavior_ignore_set() {
-    use crate::helix::registry::{CountBehavior, normal_registry};
-    let reg = normal_registry();
+    use crate::helix::registry::{CountBehavior, count_behavior_of};
     for cmd in [
         CMD_DELETE_SELECTION,
         CMD_DELETE_SELECTION_NOYANK,
@@ -534,11 +562,10 @@ fn test_count_behavior_ignore_set() {
         CMD_FLIP_SELECTIONS,
         CMD_SELECT_MODE,
         CMD_REPEAT,
-        CMD_TOGGLE_MACRO_RECORDING,
         CMD_JOIN_LINES,
         CMD_JOIN_SELECTIONS_SPACE,
     ] {
-        assert_eq!(reg.count_behavior(cmd), CountBehavior::Ignore, "{cmd}");
+        assert_eq!(count_behavior_of(cmd), CountBehavior::Ignore, "{cmd}");
     }
 }
 

@@ -27,7 +27,7 @@ impl Harness {
             handle_insert_mode_input(key).map(std::borrow::Cow::into_owned)
         } else {
             match self.machine.process_key(key) {
-                HandlerResult::Execute(cmd) => Some(cmd.into_owned()),
+                HandlerResult::Execute(cmd) => Some(cmd.to_string()),
                 _ => None,
             }
         };

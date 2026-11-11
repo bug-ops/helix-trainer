@@ -81,7 +81,9 @@ enum PastePlacement {
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+pub(crate) fn paste_after<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     paste_after_from_register(sim, None)
 }
 
@@ -116,7 +118,9 @@ pub fn paste_after_from_register<M: EditorMode>(
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+pub(crate) fn paste_before<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+) -> Result<(), SimulatorError> {
     paste_before_from_register(sim, None)
 }
 

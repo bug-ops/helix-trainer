@@ -92,13 +92,11 @@ hints = [
 file_content = """fn main() {
     println!("Hi");
 }"""
-cursor_position = [0, 0]
 selection = [0, 0, 1, 18]
 
 [scenarios.target]
 file_content = """fn main() { println!("Hi");
 }"""
-cursor_position = [0, 12]
 selection = [0, 11, 0, 12]
 
 [scenarios.solution]
@@ -247,12 +245,10 @@ hints = [
 
 [scenarios.setup]
 file_content = """let msg = "ok";"""
-cursor_position = [0, 11]
 selection = [0, 11, 0, 13]
 
 [scenarios.target]
 file_content = """let msg = "OK";"""
-cursor_position = [0, 13]
 selection = [0, 11, 0, 13]
 
 [scenarios.solution]
@@ -282,12 +278,10 @@ hints = [
 
 [scenarios.setup]
 file_content = """const MAX = 100;"""
-cursor_position = [0, 6]
 selection = [0, 6, 0, 9]
 
 [scenarios.target]
 file_content = """const max = 100;"""
-cursor_position = [0, 9]
 selection = [0, 6, 0, 9]
 
 [scenarios.solution]

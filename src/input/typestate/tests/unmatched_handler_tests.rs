@@ -4,7 +4,7 @@ use std::assert_matches;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::input::typestate::{
     HandlerResult, InputHandler, KeyHandler, UnmatchedNextPending, UnmatchedPrevPending,
 };
@@ -19,7 +19,7 @@ fn test_unmatched_prev_p_goto_prev_paragraph() {
         &UnmatchedPrevPending,
         KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_PREV_PARAGRAPH);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_PREV_PARAGRAPH);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn test_unmatched_next_p_goto_next_paragraph() {
         &UnmatchedNextPending,
         KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_NEXT_PARAGRAPH);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_NEXT_PARAGRAPH);
 }
 
 #[test]

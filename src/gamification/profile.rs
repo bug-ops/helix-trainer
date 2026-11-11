@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 use super::{AchievementId, Quest};
 use crate::config::Difficulty;
+use crate::config::keymap::fingerprint::StoredKeymapFingerprint;
 use crate::constants::{
     MAX_PLAYER_LEVEL, MINIGAME_LEVEL_BONUS_XP, MINIGAME_SCENARIO_BASE_XP,
     MINIGAME_STREAK_BONUS_DIVISOR, MINIGAME_STREAK_BONUS_MAX_XP, MINIGAME_STREAK_XP_MULTIPLIER,
@@ -14,7 +15,6 @@ use crate::constants::{
     XP_LEVEL_FORMULA_BASE, XP_LEVEL_FORMULA_EXPONENT,
 };
 use crate::ids::QuestId;
-use crate::input::keymap::StoredKeymapFingerprint;
 use crate::learning::PerformanceData;
 use crate::learning::ScenarioHistory;
 use crate::numeric::{self, Rounding};
@@ -120,7 +120,7 @@ pub struct UserProfile {
 
     /// Challenge mode progress (daily puzzle tracking)
     #[serde(default)]
-    pub challenge_progress: crate::minigame::ChallengeProgress,
+    pub challenge_progress: crate::gamification::ChallengeProgress,
 
     /// Survival mode best level reached
     #[serde(default)]
@@ -135,14 +135,14 @@ pub struct UserProfile {
     pub performance_data: PerformanceData,
 
     /// Count of scenario completions finished in under
-    /// [`SPEED_DEMON_TIME_RATIO`](crate::constants::SPEED_DEMON_TIME_RATIO) of a
+    /// `SPEED_DEMON_TIME_RATIO` of a
     /// scenario's time budget, in either Training or arcade mode. Powers
     /// `SpeedDemon`/`Speedrunner`.
     #[serde(default)]
     pub speed_run_count: u32,
 
     /// Count of scenario completions finished in under
-    /// [`FLASH_TIME_RATIO`](crate::constants::FLASH_TIME_RATIO) of a scenario's
+    /// `FLASH_TIME_RATIO` of a scenario's
     /// time budget, in either Training or arcade mode. Powers `Flash`.
     #[serde(default)]
     pub flash_run_count: u32,
@@ -212,7 +212,7 @@ impl UserProfile {
             minigame_best_streak: 0,
             minigame_games_played: 0,
             sound_config: SoundConfig::default(),
-            challenge_progress: crate::minigame::ChallengeProgress::default(),
+            challenge_progress: crate::gamification::ChallengeProgress::default(),
             survival_best_level: 0,
             survival_best_scenarios: 0,
             performance_data: PerformanceData::default(),

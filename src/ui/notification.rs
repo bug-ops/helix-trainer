@@ -11,7 +11,9 @@
 use crate::constants::{
     DEFAULT_NOTIFICATION_DURATION, MAX_VISIBLE_NOTIFICATIONS, STREAK_FREEZE_MAX_GAP_DAYS,
 };
+use crate::game::services::CompletionEvent;
 use crate::time::{MonotonicClock, SystemMonotonicClock};
+use rust_i18n::t;
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -93,6 +95,23 @@ pub enum NotificationType {
     },
 }
 
+impl From<CompletionEvent> for NotificationType {
+    fn from(event: CompletionEvent) -> Self {
+        match event {
+            CompletionEvent::AchievementUnlocked { name, description } => {
+                Self::Achievement { name, description }
+            }
+            CompletionEvent::LevelUp { new_level } => Self::LevelUp { new_level },
+        }
+    }
+}
+
+impl From<CompletionEvent> for Notification {
+    fn from(event: CompletionEvent) -> Self {
+        Self::new(event.into())
+    }
+}
+
 /// A notification to display in the UI
 ///
 /// It carries no timestamp: the [`NotificationQueue`] stamps it when it is pushed and decides
@@ -145,17 +164,31 @@ impl Notification {
     /// Get title text for this notification
     pub fn title(&self) -> String {
         match &self.notification_type {
-            NotificationType::LevelUp { new_level } => format!("Level Up! Level {new_level}"),
-            NotificationType::Achievement { name, .. } => format!("Achievement Unlocked: {name}"),
-            NotificationType::QuestComplete { .. } => "Quest Complete!".to_string(),
-            NotificationType::StreakMilestone { streak } => format!("{streak} Day Streak!"),
-            NotificationType::StreakFreezeGranted => "Streak Freeze Earned!".to_string(),
-            NotificationType::StreakFreezeUsed => "Streak Freeze Used".to_string(),
-            NotificationType::StreakBroken { .. } => "Streak Broken".to_string(),
-            NotificationType::Info { .. } => "Info".to_string(),
-            NotificationType::ReviewSessionComplete { .. } => "Review Complete!".to_string(),
+            NotificationType::LevelUp { new_level } => {
+                t!("notification.level_up_title", level = new_level).to_string()
+            }
+            NotificationType::Achievement { name, .. } => {
+                t!("notification.achievement_title", name = name).to_string()
+            }
+            NotificationType::QuestComplete { .. } => t!("notification.quest_title").to_string(),
+            NotificationType::StreakMilestone { streak } => {
+                t!("notification.streak_milestone_title", streak = streak).to_string()
+            }
+            NotificationType::StreakFreezeGranted => {
+                t!("notification.streak_freeze_granted_title").to_string()
+            }
+            NotificationType::StreakFreezeUsed => {
+                t!("notification.streak_freeze_used_title").to_string()
+            }
+            NotificationType::StreakBroken { .. } => {
+                t!("notification.streak_broken_title").to_string()
+            }
+            NotificationType::Info { .. } => t!("notification.info_title").to_string(),
+            NotificationType::ReviewSessionComplete { .. } => {
+                t!("notification.review_complete_title").to_string()
+            }
             NotificationType::MasteryLevelUp { command, .. } => {
-                format!("Mastery Up: {command}")
+                t!("notification.mastery_title", command = command).to_string()
             }
         }
     }
@@ -164,48 +197,55 @@ impl Notification {
     pub fn message(&self) -> String {
         match &self.notification_type {
             NotificationType::LevelUp { new_level } => {
-                format!("You've reached level {new_level}!")
+                t!("notification.level_up_message", level = new_level).to_string()
             }
             NotificationType::Achievement { description, .. } => description.clone(),
             NotificationType::QuestComplete {
                 description,
                 xp_reward,
-            } => {
-                format!("{description} (+{xp_reward} XP)")
-            }
+            } => t!(
+                "notification.quest_message",
+                description = description,
+                xp = xp_reward
+            )
+            .to_string(),
             NotificationType::StreakMilestone { streak } => {
-                format!("Keep it up! {streak} days in a row")
+                t!("notification.streak_milestone_message", streak = streak).to_string()
             }
-            NotificationType::StreakFreezeGranted => {
-                format!(
-                    "Away for up to {STREAK_FREEZE_MAX_GAP_DAYS} days without breaking your streak"
-                )
-            }
+            NotificationType::StreakFreezeGranted => t!(
+                "notification.streak_freeze_granted_message",
+                days = STREAK_FREEZE_MAX_GAP_DAYS
+            )
+            .to_string(),
             NotificationType::StreakFreezeUsed => {
-                "Your streak was protected while you were away".to_string()
+                t!("notification.streak_freeze_used_message").to_string()
             }
             NotificationType::StreakBroken {
                 was_streak,
-                freeze_could_not_cover_gap,
-            } => {
-                if *freeze_could_not_cover_gap {
-                    format!(
-                        "Your {was_streak} day streak was reset - you were away longer than your freeze covers ({STREAK_FREEZE_MAX_GAP_DAYS} days max)"
-                    )
-                } else {
-                    format!("Your {was_streak} day streak was reset after a missed day")
-                }
+                freeze_could_not_cover_gap: true,
+            } => t!(
+                "notification.streak_broken_freeze_message",
+                streak = was_streak,
+                days = STREAK_FREEZE_MAX_GAP_DAYS
+            )
+            .to_string(),
+            NotificationType::StreakBroken { was_streak, .. } => {
+                t!("notification.streak_broken_message", streak = was_streak).to_string()
             }
             NotificationType::Info { message } => message.clone(),
             NotificationType::ReviewSessionComplete {
                 completed,
                 success_count,
                 xp_earned,
-            } => {
-                format!("{success_count}/{completed} correct (+{xp_earned} XP)")
-            }
+            } => t!(
+                "notification.review_complete_message",
+                success = success_count,
+                completed = completed,
+                xp = xp_earned
+            )
+            .to_string(),
             NotificationType::MasteryLevelUp { new_level, .. } => {
-                format!("Reached {new_level} level!")
+                t!("notification.mastery_message", level = new_level).to_string()
             }
         }
     }

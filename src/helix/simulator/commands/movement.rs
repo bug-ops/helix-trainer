@@ -1,7 +1,8 @@
 //! Movement commands
 
+use crate::grammar::find::{FindDirection, FindKind};
 use crate::helix::error::SimulatorError;
-use crate::helix::simulator::{EditorMode, FindDirection, FindType, HelixSimulator};
+use crate::helix::simulator::{EditorMode, HelixSimulator};
 use helix_core::{
     Range, RopeSlice, Selection,
     doc_formatter::TextFormat,
@@ -304,18 +305,6 @@ pub fn move_document_start<M: EditorMode>(
     Ok(())
 }
 
-/// Move to end of document
-///
-/// # Errors
-///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
-pub fn move_document_end<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
-    let end = sim.doc.len_chars();
-    sim.selection = Selection::point(end);
-    Ok(())
-}
-
 /// Port of helix-term 25.07.1 `find_next_char_impl` / `find_prev_char_impl`
 /// (`find_char_impl`'s `search_fn`): the head position for the new range.
 fn find_target(
@@ -323,15 +312,15 @@ fn find_target(
     ch: char,
     search_start: usize,
     count: usize,
-    find_type: FindType,
+    find_type: FindKind,
     direction: FindDirection,
 ) -> Option<usize> {
     match (direction, find_type) {
-        (FindDirection::Forward, FindType::Find) => {
+        (FindDirection::Forward, FindKind::Find) => {
             let start = (search_start + 1).min(text.len_chars());
             find_nth_next(text, ch, start, count)
         }
-        (FindDirection::Forward, FindType::Till) => {
+        (FindDirection::Forward, FindKind::Till) => {
             let start = (search_start + 1).min(text.len_chars());
             let n = if text.get_char(start) == Some(ch) {
                 count + 1
@@ -340,8 +329,8 @@ fn find_target(
             };
             find_nth_next(text, ch, start, n).map(|found| found.saturating_sub(1))
         }
-        (FindDirection::Backward, FindType::Find) => find_nth_prev(text, ch, search_start, count),
-        (FindDirection::Backward, FindType::Till) => {
+        (FindDirection::Backward, FindKind::Find) => find_nth_prev(text, ch, search_start, count),
+        (FindDirection::Backward, FindKind::Till) => {
             let n = if text.get_char(search_start.saturating_sub(1)) == Some(ch) {
                 count + 1
             } else {
@@ -360,7 +349,7 @@ fn find_target(
 fn find_char<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     ch: char,
-    find_type: FindType,
+    find_type: FindKind,
     direction: FindDirection,
     count: usize,
 ) {
@@ -390,7 +379,7 @@ pub fn find_next_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), SimulatorError> {
-    find_char(sim, ch, FindType::Find, FindDirection::Forward, count);
+    find_char(sim, ch, FindKind::Find, FindDirection::Forward, count);
     Ok(())
 }
 
@@ -405,7 +394,7 @@ pub fn find_prev_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), SimulatorError> {
-    find_char(sim, ch, FindType::Find, FindDirection::Backward, count);
+    find_char(sim, ch, FindKind::Find, FindDirection::Backward, count);
     Ok(())
 }
 
@@ -420,7 +409,7 @@ pub fn till_next_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), SimulatorError> {
-    find_char(sim, ch, FindType::Till, FindDirection::Forward, count);
+    find_char(sim, ch, FindKind::Till, FindDirection::Forward, count);
     Ok(())
 }
 
@@ -435,7 +424,7 @@ pub fn till_prev_char<M: EditorMode>(
     ch: char,
     count: usize,
 ) -> Result<(), SimulatorError> {
-    find_char(sim, ch, FindType::Till, FindDirection::Backward, count);
+    find_char(sim, ch, FindKind::Till, FindDirection::Backward, count);
     Ok(())
 }
 
@@ -444,7 +433,7 @@ pub fn till_prev_char<M: EditorMode>(
 /// A trailing empty line produced by a final newline is not a target, matching
 /// helix-term 25.07.1 `goto_line_without_jumplist`. Bare `G`/`gg` without a
 /// count never reach this function.
-pub fn goto_line<M: EditorMode>(sim: &mut HelixSimulator<M>, count: NonZeroUsize) {
+pub(crate) fn goto_line<M: EditorMode>(sim: &mut HelixSimulator<M>, count: NonZeroUsize) {
     let text = sim.doc.slice(..);
     let len_lines = text.len_lines();
     let max_line = if text.line(len_lines - 1).len_chars() == 0 {
@@ -769,7 +758,7 @@ mod tests {
         // Check that find state was recorded
         let (ch, ft, dir) = sim.find_state.get().unwrap();
         assert_eq!(ch, 'o');
-        assert_eq!(ft, FindType::Find);
+        assert_eq!(ft, FindKind::Find);
         assert_eq!(dir, FindDirection::Forward);
     }
 
@@ -782,7 +771,7 @@ mod tests {
 
         let (ch, ft, dir) = sim.find_state.get().unwrap();
         assert_eq!(ch, 'l');
-        assert_eq!(ft, FindType::Find);
+        assert_eq!(ft, FindKind::Find);
         assert_eq!(dir, FindDirection::Backward);
     }
 
@@ -793,7 +782,7 @@ mod tests {
 
         let (ch, ft, dir) = sim.find_state.get().unwrap();
         assert_eq!(ch, 'o');
-        assert_eq!(ft, FindType::Till);
+        assert_eq!(ft, FindKind::Till);
         assert_eq!(dir, FindDirection::Forward);
     }
 
@@ -849,7 +838,7 @@ mod tests {
 
         let (ch, ft, dir) = sim.find_state.get().unwrap();
         assert_eq!(ch, 'l');
-        assert_eq!(ft, FindType::Till);
+        assert_eq!(ft, FindKind::Till);
         assert_eq!(dir, FindDirection::Backward);
     }
 

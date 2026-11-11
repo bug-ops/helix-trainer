@@ -939,7 +939,7 @@ mod tests {
     #[test]
     fn test_task_data_key_history() {
         use crate::config::{
-            CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+            Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
         };
 
         let scenario = Scenario {
@@ -949,21 +949,11 @@ mod tests {
             setup: Setup {
                 file_content: "test".to_string(),
                 language: None,
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             target: TargetState {
                 file_content: "test".to_string(),
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             solution: Solution {
                 commands: vec!["x".to_string(), "d".to_string()],
@@ -998,7 +988,7 @@ mod tests {
     #[test]
     fn test_task_data_key_history_max_5() {
         use crate::config::{
-            CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+            Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
         };
 
         let scenario = Scenario {
@@ -1008,21 +998,11 @@ mod tests {
             setup: Setup {
                 file_content: "test".to_string(),
                 language: None,
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             target: TargetState {
                 file_content: "test".to_string(),
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             solution: Solution {
                 commands: vec!["x".to_string(), "d".to_string()],
@@ -1053,7 +1033,7 @@ mod tests {
     #[test]
     fn test_completed_or_abandoned_helpers() {
         use crate::config::{
-            CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+            Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
         };
 
         let scenario = Scenario {
@@ -1063,21 +1043,11 @@ mod tests {
             setup: Setup {
                 file_content: "test".to_string(),
                 language: None,
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             target: TargetState {
                 file_content: "test".to_string(),
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             solution: Solution {
                 commands: vec!["x".to_string(), "d".to_string()],

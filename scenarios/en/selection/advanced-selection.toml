@@ -18,12 +18,10 @@ hints = [
 
 [scenarios.setup]
 file_content = """   let x = 1;   """
-cursor_position = [0, 0]
 selection = [0, 0, 0, 17]
 
 [scenarios.target]
 file_content = """   let x = 1;   """
-cursor_position = [0, 13]
 selection = [0, 3, 0, 13]
 
 [scenarios.solution]
@@ -53,12 +51,10 @@ hints = [
 
 [scenarios.setup]
 file_content = """    fn main() {}"""
-cursor_position = [0, 0]
 selection = [0, 0, 0, 16]
 
 [scenarios.target]
 file_content = """    fn main() {}"""
-cursor_position = [0, 3]
 selection = [0, 4, 0, 16]
 
 [scenarios.solution]
@@ -190,7 +186,6 @@ hints = [
 file_content = """let a = 1;
 let b = 2;
 let c = 3;"""
-cursor_position = [0, 0]
 selection = [0, 0, 2, 10]
 [scenarios.target]
 file_content = """let a = 1;

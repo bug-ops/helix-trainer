@@ -36,9 +36,47 @@ pub use scenario::{
     ScenarioBuilder, default_test_scenario, test_scenario_with_difficulty, test_scenario_with_id,
 };
 
-use crate::gamification::{PreviousCopy, QuarantineError, QuarantineOutcome};
+use crate::config::json_store::QuarantineError;
+use crate::config::{CursorRange, CursorSpec, Pos};
+use crate::gamification::{PreviousCopy, QuarantineOutcome};
 use crate::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
 use crate::ui::state::Quarantine;
+
+/// A single-cursor [`CursorSpec`] at `(row, col)`, panicking on an out-of-range fixture.
+///
+/// # Panics
+///
+/// Panics if a coordinate exceeds the scenario position limit.
+#[must_use]
+pub fn point(row: usize, col: usize) -> CursorSpec {
+    CursorSpec::Point(pos(row, col))
+}
+
+/// A single-selection [`CursorSpec`] from `anchor` to `head`, panicking on an out-of-range fixture.
+///
+/// # Panics
+///
+/// Panics if a coordinate exceeds the scenario position limit.
+#[must_use]
+pub fn selection(anchor: (usize, usize), head: (usize, usize)) -> CursorSpec {
+    CursorSpec::Range(
+        CursorRange::try_from([anchor.0, anchor.1, head.0, head.1]).expect("valid range fixture"),
+    )
+}
+
+fn pos(row: usize, col: usize) -> Pos {
+    Pos::try_from([row, col]).expect("valid position fixture")
+}
+
+/// Parse a canonical Normal-mode command string, panicking on a bad fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a command.
+#[must_use]
+pub fn normal(raw: &str) -> crate::helix::normal_command::NormalCommand {
+    crate::helix::normal_command::NormalCommand::parse(raw).expect("valid command fixture")
+}
 
 /// A quarantined profile with `backup` and no restorable previous copy.
 #[must_use]

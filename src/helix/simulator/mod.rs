@@ -32,8 +32,9 @@ use crate::helix::indent::IndentUnit;
 use crate::helix::language::LanguageRules;
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
+use helix_core::auto_pairs::AutoPairs;
 use helix_core::graphemes::next_grapheme_boundary;
-use helix_core::{Range, Rope, Selection, Transaction};
+use helix_core::{ChangeSet, Range, Rope, Selection, Transaction};
 use mode::Session;
 
 // Re-export mode typestate markers
@@ -41,7 +42,7 @@ pub use mode::{EditorMode, InsertMode, ModeKind, NormalMode};
 
 // Re-export state types
 pub use command_line::CommandLine;
-pub use find_state::{FindDirection, FindState, FindType};
+pub use find_state::FindState;
 pub use insert_mode::InsertCommand;
 pub use insert_session::{InsertEntryCommand, InsertSession};
 pub use register_file::RegisterFile;
@@ -125,6 +126,9 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Language rules for `J` comment tokens and the `o`/`O`/Enter indent rule
     pub(super) language: &'static LanguageRules,
 
+    /// The language's auto-pairs as the Helix hook consumes them
+    pub(super) auto_pairs: AutoPairs,
+
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
 
@@ -139,6 +143,10 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
 
     /// Find state for f/F/t/T and Alt-. commands
     pub(super) find_state: FindState,
+
+    /// Composition of the edits made while an Insert-entering command runs,
+    /// so the Insert session can start from them; `None` the rest of the time.
+    pub(super) entry_changes: Option<ChangeSet>,
 
     /// What the mode carries between commands: nothing in Normal mode, the
     /// open Insert session in Insert mode
@@ -208,6 +216,7 @@ impl<M: EditorMode> HelixSimulator<M> {
     /// reveals one and from the language table otherwise
     pub(super) fn set_language(&mut self, language: &'static LanguageRules) {
         self.language = language;
+        self.auto_pairs = AutoPairs::new(language.auto_pairs);
         self.indent_unit = IndentUnit::detect(&self.doc).unwrap_or(language.indent_unit);
     }
 
@@ -236,6 +245,10 @@ impl<M: EditorMode> HelixSimulator<M> {
                     selection: self.selection.clone(),
                 },
             );
+            if let Some(entry_changes) = &mut self.entry_changes {
+                let before = std::mem::replace(entry_changes, ChangeSet::with_capacity(0));
+                *entry_changes = before.compose(transaction.changes().clone());
+            }
             transaction.apply(&mut self.doc);
         }
         self.selection = selection;
@@ -272,12 +285,14 @@ impl<M: EditorMode> HelixSimulator<M> {
             select_mode: false,
             indent_unit: self.indent_unit,
             language: self.language,
+            auto_pairs: self.auto_pairs,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
             view_state: self.view_state,
             find_state: self.find_state,
             macro_recorder: self.macro_recorder,
+            entry_changes: None,
             session,
         }
     }
@@ -306,12 +321,14 @@ impl HelixSimulator<NormalMode> {
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
             language: &LanguageRules::UNLISTED,
+            auto_pairs: AutoPairs::new(LanguageRules::UNLISTED.auto_pairs),
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
             view_state: ViewState::new(),
             find_state: FindState::new(),
             macro_recorder: MacroRecorder::new(),
+            entry_changes: None,
             session: (),
         }
     }
@@ -342,39 +359,31 @@ impl HelixSimulator<NormalMode> {
 
     /// Transition to Insert mode without running an entering command
     ///
-    /// Collapses the selection to a single cursor at the primary range's
-    /// head, discarding every other range, and opens an Insert session (see
-    /// [`InsertSession`]) whose edits form one undo step. Commands that enter
-    /// Insert mode go through [`Self::begin_insert`] instead.
-    ///
-    /// Known limitation: real Helix keeps every cursor active through
-    /// Insert mode (typing/backspacing at each one), but this simulator's
-    /// Insert-mode commands (`insert_text`, `backspace`, the arrow-key
-    /// handlers) all read/write only `selection.primary()` and overwrite the
-    /// whole selection with a single point, not just at entry. Preserving
-    /// the full selection here would still leave every secondary cursor
-    /// frozen (or panicking on stale offsets) as soon as the user typed, so
-    /// the collapse happens up front instead. Fixing this for real means
-    /// reworking Insert mode's commands to operate over every range, not
-    /// just entry - out of scope for a single-method change.
+    /// Collapses every range to a point cursor at its head and opens an
+    /// Insert session (see [`InsertSession`]) whose edits form one undo step.
+    /// Commands that enter Insert mode go through [`Self::begin_insert`]
+    /// instead.
     pub fn enter_insert_mode(mut self) -> HelixSimulator<InsertMode> {
         let saved_redo = std::mem::take(&mut self.redo_stack);
         let session = InsertSession::new(
             self.history.len(),
             saved_redo,
             insert_session::SessionChange::Pristine(insert_session::EntrySelection {
-                cursor: self.collapse_to_cursor(),
+                cursor: self.collapse_to_points(),
                 restore: self.selection.clone(),
             }),
             insert_session::InsertEntry::Other,
-            None,
+            ChangeSet::new(self.doc.slice(..)),
         );
         self.into_mode(session)
     }
 
-    /// Collapse the selection to a point at the primary range's head and return it
-    fn collapse_to_cursor(&mut self) -> Selection {
-        self.selection = Selection::point(self.selection.primary().head);
+    /// Collapse every range to a point at its head and return the selection
+    fn collapse_to_points(&mut self) -> Selection {
+        self.selection = self
+            .selection
+            .clone()
+            .transform(|range| Range::point(range.head));
         self.selection.clone()
     }
 
@@ -412,21 +421,42 @@ impl HelixSimulator<InsertMode> {
         let entry = self
             .session
             .close(&self.doc, &mut self.history, &mut self.redo_stack);
-        if let insert_session::InsertEntry::Append { anchor } = entry {
-            self.select_inserted_text(anchor);
+        if let insert_session::InsertEntry::Append { anchors } = entry {
+            self.select_inserted_text(&anchors);
         }
         self.into_mode(())
     }
 
-    /// Select from `anchor` to the cursor; a single grapheme is a plain cursor
-    fn select_inserted_text(&mut self, anchor: usize) {
-        let head = self.selection.primary().head;
-        let one_wide = head == next_grapheme_boundary(self.doc.slice(..), anchor);
-        self.selection = Selection::from(if one_wide {
-            Range::point(anchor)
-        } else {
-            Range::new(anchor, head)
-        });
+    /// Select, per range, from its anchor to the cursor; a single grapheme is
+    /// a plain cursor
+    fn select_inserted_text(&mut self, anchors: &[usize]) {
+        let slice = self.doc.slice(..);
+        // Cursors that merged during the session leave fewer ranges than
+        // anchors: each cursor takes the first anchor not past it.
+        let mut pending = anchors.iter().copied().peekable();
+        let ranges: Vec<Range> = self
+            .selection
+            .ranges()
+            .iter()
+            .map(|range| {
+                let anchor = pending
+                    .peek()
+                    .copied()
+                    .filter(|&anchor| anchor <= range.head)
+                    .unwrap_or(range.head);
+                while pending.next_if(|&past| past <= range.head).is_some() {}
+                if range.head == next_grapheme_boundary(slice, anchor) {
+                    Range::point(anchor)
+                } else {
+                    Range::new(anchor, range.head)
+                }
+            })
+            .collect();
+        let primary = self
+            .selection
+            .primary_index()
+            .min(ranges.len().saturating_sub(1));
+        self.selection = Selection::new(ranges.into(), primary);
     }
 }
 
@@ -522,6 +552,21 @@ impl AnyModeSimulator {
         commands::execute_command_any_mode(self, cmd)
     }
 
+    /// Execute a parsed Normal-mode command, handling mode transitions.
+    ///
+    /// The typed counterpart of [`AnyModeSimulator::execute_command`]: a
+    /// simulator that is in Insert mode takes the command as typed text.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SimulatorError`] if the command fails.
+    pub(crate) fn execute_normal(
+        &mut self,
+        command: &crate::helix::normal_command::NormalCommand,
+    ) -> Result<(), SimulatorError> {
+        commands::execute_normal_any_mode(self, command)
+    }
+
     /// Execute `base` with a count prefix, as `{count}{base}` would.
     ///
     /// The single counted-execution mechanism: the command's
@@ -537,7 +582,7 @@ impl AnyModeSimulator {
         base: &str,
         count: std::num::NonZeroUsize,
     ) -> Result<(), SimulatorError> {
-        commands::execute_counted_any_mode(self, base, count)
+        commands::execute_command_any_mode(self, &format!("{count}{base}"))
     }
 
     /// Get reference to repeat buffer
@@ -663,7 +708,7 @@ impl AnyModeSimulator {
                 keys,
             } => {
                 // Execute insert sequence through wrapper
-                use crate::helix::commands::{CMD_ESCAPE, CMD_INSERT};
+                use crate::grammar::commands::{CMD_ESCAPE, CMD_INSERT};
 
                 // Enter insert mode with the same command that was used originally
                 let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
@@ -755,7 +800,7 @@ fn execute_key_sequence(
     sim: &mut AnyModeSimulator,
     keys: &[crossterm::event::KeyEvent],
 ) -> Result<(), SimulatorError> {
-    use crate::helix::commands::{
+    use crate::grammar::commands::{
         CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
         CMD_GOTO_FILE_START, CMD_SELECT_REGISTER,
     };

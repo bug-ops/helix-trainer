@@ -51,8 +51,9 @@ Scenarios are defined in TOML files under `scenarios/<locale>/`. Each file conta
 ```toml
 [scenarios.setup]
 file_content = "hello world"      # Initial buffer content
-cursor_position = [0, 0]          # [row, col] - 0-indexed
-selection = [0, 0, 0, 5]          # Optional: [start_row, start_col, end_row, end_col]
+cursor_position = [0, 0]          # [row, col] - 0-indexed; exactly ONE of cursor_position,
+                                   # selection = [r0, c0, r1, c1], cursors = [[row, col], ...]
+                                   # or selections = [[r0, c0, r1, c1], ...] is allowed
 language = "rs"                   # Optional: file-extension-style token for syntax highlighting
                                    # (e.g. "rs", "md", "py"); defaults to "rs" when omitted;
                                    # unrecognized values fall back to plain text, never crash
@@ -63,8 +64,7 @@ language = "rs"                   # Optional: file-extension-style token for syn
 ```toml
 [scenarios.target]
 file_content = "hello world"      # Expected final content
-cursor_position = [0, 5]          # Expected cursor position
-selection = [0, 0, 0, 5]          # Optional: expected selection
+cursor_position = [0, 5]          # Expected cursor; same exactly-one rule as the setup table
 ```
 
 #### Solution table
@@ -205,7 +205,6 @@ cursor_position = [1, 0]
 
 [scenarios.target]
 file_content = "line 1\nline 2\nline 3"
-cursor_position = [1, 0]
 selection = [1, 0, 2, 0]
 
 [scenarios.solution]
@@ -246,7 +245,6 @@ cursor_position = [0, 6]
 
 [scenarios.target]
 file_content = "hello beautiful world"
-cursor_position = [0, 6]
 selection = [0, 6, 0, 15]
 
 [scenarios.solution]
@@ -326,7 +324,6 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "hello world hello there"
-cursor_position = [0, 12]
 selection = [0, 12, 0, 17]
 
 [scenarios.solution]

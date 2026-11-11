@@ -9,11 +9,11 @@
 
 use helix_trainer::config::{QuestLoader, QuestSpec, ScenarioLoader};
 use helix_trainer::game::{GameSession, PlayableScenario};
-use helix_trainer::helix::commands::{
+use helix_trainer::grammar::commands::{
     CMD_REPLAY_MACRO, CMD_SELECT_REGEX, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
 };
 use helix_trainer::helix::simulator::command_line::CommandLine;
-use helix_trainer::input::typestate::{HandlerResult, InputStateMachine, command_to_key_event};
+use helix_trainer::input::typestate::{HandlerResult, InputStateMachine, parse_helix_key_string};
 
 #[test]
 fn test_all_scenarios_load_successfully() {
@@ -156,6 +156,7 @@ fn test_quest_scenario_references_exist() {
 const SPECIAL_KEY_COMMANDS: &[&str] = &[
     "Escape",     // Exit insert mode
     "Backspace",  // Delete character in insert mode
+    "Delete",     // Delete the character after the cursor in insert mode
     "ArrowLeft",  // Cursor movement in insert mode
     "ArrowRight", // Cursor movement in insert mode
     "ArrowUp",    // Cursor movement in insert mode
@@ -275,11 +276,11 @@ fn validate_single_command(cmd: &str) -> Result<(), String> {
     let last = cmd.chars().count().saturating_sub(1);
 
     for (i, ch) in cmd.chars().enumerate() {
-        let key = command_to_key_event(&ch.to_string())
+        let key = parse_helix_key_string(&ch.to_string())
             .ok_or_else(|| format!("'{ch}' is not a key at char {i}"))?;
         match machine.process_key(key) {
             HandlerResult::Execute(resolved) => {
-                if resolved.as_ref() != cmd {
+                if resolved.to_string() != cmd {
                     return Err(format!(
                         "Input resolved to '{resolved}' but expected '{cmd}' at char {i} ('{ch}')"
                     ));
@@ -511,7 +512,7 @@ fn test_bundled_commands_taught_are_normalized() {
             let taught = scenario["metadata"]["commands_taught"].as_array();
             for command in taught.into_iter().flatten().filter_map(toml::Value::as_str) {
                 assert_eq!(
-                    helix_trainer::helix::commands::normalize_command_id(command),
+                    helix_trainer::grammar::commands::normalize_command_id(command),
                     command,
                     "{}: commands_taught value is not normalized",
                     entry.path().display()

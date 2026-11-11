@@ -41,7 +41,7 @@ impl NewLineStart {
 
     /// Text the new line starts with: the indent, then `token ` when the line
     /// continues a comment
-    pub fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         match self.comment_token {
             Some(token) => format!("{}{token} ", self.indent),
             None => self.indent.clone(),
@@ -120,7 +120,7 @@ impl NewlineIndent<'_> {
 
     /// Start of the line `o` opens below `line`; `text_end` is the char index
     /// where the line's text ends for this purpose (the cursor for Enter)
-    pub fn below(&self, line: usize, text_end: usize) -> NewLineStart {
+    pub(crate) fn below(&self, line: usize, text_end: usize) -> NewLineStart {
         let text = self.line_text(line);
         let own_indent = self.leading_whitespace(line);
         let cut = text_end.saturating_sub(self.doc.line_to_char(line));
@@ -162,12 +162,19 @@ impl NewlineIndent<'_> {
         let opens_by_ending = last_code.is_some_and(|(col, last, _)| {
             rules.trailing_openers.contains(&last) && self.starts_block(&lexed, line, col, rules)
         });
-        // An unclosed trailing bracket still opens: approximates hx auto-pair inserting the closer.
-        let ends_with_opener =
-            last_code.is_some_and(|(_, last, _)| matches!(classify(last), Some((_, Side::Open))));
+        // An opener right before a closer of another shape (`x(]`) is still split
+        // onto its own line, as Enter between a pair is.
+        let before_closer = last_code
+            .is_some_and(|(_, last, _)| matches!(classify(last), Some((_, Side::Open))))
+            && self
+                .line_text(line)
+                .chars()
+                .nth(cut)
+                .and_then(classify)
+                .is_some_and(|(_, side)| side == Side::Close);
 
         let base = self.leading_whitespace(base_line);
-        if opens_bracket || opens_by_ending || ends_with_opener {
+        if opens_bracket || opens_by_ending || before_closer {
             return format!("{base}{}", self.unit);
         }
         let base_text = self.line_text(base_line);
@@ -267,7 +274,7 @@ impl NewlineIndent<'_> {
     /// comment; otherwise the new line takes what `o` would give below the
     /// previous line (the line's own indent for the first line and for
     /// languages without a rule).
-    pub fn above(&self, line: usize, comments: CommentContinuation) -> NewLineStart {
+    pub(crate) fn above(&self, line: usize, comments: CommentContinuation) -> NewLineStart {
         let own_indent = self.leading_whitespace(line);
         if comments == CommentContinuation::Continue
             && let Some(token) = self.language.leading_comment_token(&self.line_text(line))

@@ -5,12 +5,13 @@
 //! configuration on scenario 14, each sequence followed by the probe
 //! `c @ Escape` that exposes the selection a command leaves behind.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::registry::{ModeTransition, normal_registry};
 use crate::helix::simulator::{
     AnyModeSimulator, HelixSimulator, InsertEntryCommand, NormalMode,
     tests::{SCENARIO_14, ranges_of, run_keys},
 };
+use std::num::NonZeroUsize;
 
 /// Content after `keys` and the probe `c @ Escape`.
 fn probed(keys: &[&str]) -> String {
@@ -205,22 +206,22 @@ fn dot_repeat_of_a_session_is_one_undo_step() {
 
 #[test]
 fn auto_indent_is_kept_once_text_is_typed_after_it() {
-    let mut sim = AnyModeSimulator::new("foo {".to_string()).with_language("rs");
+    let mut sim = AnyModeSimulator::new("foo {\n}".to_string()).with_language("rs");
     for key in [CMD_OPEN_BELOW, "x", CMD_ESCAPE] {
         sim.execute_command(key).unwrap();
     }
-    assert_eq!(sim.display().content(), "foo {\n    x");
+    assert_eq!(sim.display().content(), "foo {\n    x\n}");
 }
 
 #[test]
 fn unused_auto_indent_is_stripped_inside_the_same_undo_step() {
-    let mut sim = AnyModeSimulator::new("foo {".to_string()).with_language("rs");
+    let mut sim = AnyModeSimulator::new("foo {\n".to_string()).with_language("rs");
     for key in [CMD_OPEN_BELOW, CMD_ESCAPE] {
         sim.execute_command(key).unwrap();
     }
-    assert_eq!(sim.display().content(), "foo {\n");
+    assert_eq!(sim.display().content(), "foo {\n\n");
     sim.execute_command(CMD_UNDO).unwrap();
-    assert_eq!(sim.display().content(), "foo {");
+    assert_eq!(sim.display().content(), "foo {\n");
 }
 
 #[test]
@@ -247,6 +248,9 @@ fn append_without_typing_leaves_a_plain_cursor() {
     assert_eq!(ranges_of(&sim), vec![(0, 0)]);
 }
 
+const ONCE: NonZeroUsize = NonZeroUsize::MIN;
+const THRICE: NonZeroUsize = NonZeroUsize::new(3).unwrap();
+
 #[test]
 fn insert_entry_commands_round_trip_through_parse() {
     let all = [
@@ -254,8 +258,10 @@ fn insert_entry_commands_round_trip_through_parse() {
         InsertEntryCommand::Append,
         InsertEntryCommand::InsertLineStart,
         InsertEntryCommand::AppendLineEnd,
-        InsertEntryCommand::OpenBelow,
-        InsertEntryCommand::OpenAbove,
+        InsertEntryCommand::OpenBelow { count: ONCE },
+        InsertEntryCommand::OpenAbove { count: ONCE },
+        InsertEntryCommand::OpenBelow { count: THRICE },
+        InsertEntryCommand::OpenAbove { count: THRICE },
         InsertEntryCommand::Change { register: None },
         InsertEntryCommand::Change {
             register: Some('a'),
@@ -310,8 +316,8 @@ fn registry_insert_entries_equal_what_parse_accepts() {
         InsertEntryCommand::Append,
         InsertEntryCommand::InsertLineStart,
         InsertEntryCommand::AppendLineEnd,
-        InsertEntryCommand::OpenBelow,
-        InsertEntryCommand::OpenAbove,
+        InsertEntryCommand::OpenBelow { count: ONCE },
+        InsertEntryCommand::OpenAbove { count: ONCE },
         InsertEntryCommand::Change { register: None },
         InsertEntryCommand::ChangeNoYank,
     ]

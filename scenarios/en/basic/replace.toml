@@ -35,7 +35,6 @@ file_content = """fn process_data(input: &str) -> Result<i32, Error> {
 
     Ok(counter)
 }"""
-cursor_position = [1, 12]
 selection = [1, 12, 1, 19]
 
 [scenarios.solution]

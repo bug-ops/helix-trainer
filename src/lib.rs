@@ -16,6 +16,8 @@
 //! - `learning`: Spaced repetition learning system with FSRS algorithm
 //! - `gamification`: Daily quests, XP, streaks, and achievements
 
+#![warn(unreachable_pub)]
+
 // Initialize rust-i18n with compile-time codegen
 // Translations are loaded from locales/ directory at compile time
 rust_i18n::i18n!("locales", fallback = "en");
@@ -26,10 +28,12 @@ pub mod constants;
 pub mod data_loader;
 pub mod game;
 pub mod gamification;
+pub mod grammar;
 pub mod helix;
 pub mod ids;
 pub mod input;
 pub mod learning;
+pub mod limits;
 pub mod minigame;
 mod numeric;
 pub mod security;
@@ -38,5 +42,8 @@ pub mod time;
 pub mod ui;
 
 // Test utilities - only compiled in test builds
+#[cfg(test)]
+mod layering_tests;
+
 #[cfg(test)]
 pub mod testing;

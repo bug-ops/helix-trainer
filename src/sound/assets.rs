@@ -4,28 +4,28 @@
 //! All files are OGG Vorbis format for good compression and cross-platform support.
 
 /// Complete/success sound (0.3s chime)
-pub const SOUND_COMPLETE: &[u8] = include_bytes!("../../assets/sounds/complete.ogg");
+pub(crate) const SOUND_COMPLETE: &[u8] = include_bytes!("../../assets/sounds/complete.ogg");
 
 /// Failed/timeout sound (0.3s buzz)
-pub const SOUND_FAILED: &[u8] = include_bytes!("../../assets/sounds/failed.ogg");
+pub(crate) const SOUND_FAILED: &[u8] = include_bytes!("../../assets/sounds/failed.ogg");
 
 /// Multiplier increase sound (0.2s rising tone)
-pub const SOUND_MULTIPLIER: &[u8] = include_bytes!("../../assets/sounds/multiplier.ogg");
+pub(crate) const SOUND_MULTIPLIER: &[u8] = include_bytes!("../../assets/sounds/multiplier.ogg");
 
 /// Level up sound (0.5s fanfare)
-pub const SOUND_LEVELUP: &[u8] = include_bytes!("../../assets/sounds/levelup.ogg");
+pub(crate) const SOUND_LEVELUP: &[u8] = include_bytes!("../../assets/sounds/levelup.ogg");
 
 /// Life lost sound (0.3s alert)
-pub const SOUND_LIFELOST: &[u8] = include_bytes!("../../assets/sounds/lifelost.ogg");
+pub(crate) const SOUND_LIFELOST: &[u8] = include_bytes!("../../assets/sounds/lifelost.ogg");
 
 /// Game over sound (1.0s jingle)
-pub const SOUND_GAMEOVER: &[u8] = include_bytes!("../../assets/sounds/gameover.ogg");
+pub(crate) const SOUND_GAMEOVER: &[u8] = include_bytes!("../../assets/sounds/gameover.ogg");
 
 /// Countdown tick sound (0.1s tick)
-pub const SOUND_COUNTDOWN: &[u8] = include_bytes!("../../assets/sounds/countdown.ogg");
+pub(crate) const SOUND_COUNTDOWN: &[u8] = include_bytes!("../../assets/sounds/countdown.ogg");
 
 /// Timer warning sound (0.2s alert)
-pub const SOUND_WARNING: &[u8] = include_bytes!("../../assets/sounds/warning.ogg");
+pub(crate) const SOUND_WARNING: &[u8] = include_bytes!("../../assets/sounds/warning.ogg");
 
 #[cfg(test)]
 mod tests {

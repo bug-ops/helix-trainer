@@ -33,11 +33,13 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+pub mod key_dispatch;
 pub mod layout;
 pub mod notification;
 pub mod render;
 pub mod state;
 
+pub use key_dispatch::handle_key_event;
 pub use layout::Viewport;
 pub use notification::{Notification, NotificationQueue, NotificationType};
 pub use render::render;

@@ -1,6 +1,6 @@
 //! Tests for `HandlerResult` enum
 
-use std::borrow::Cow;
+use crate::testing::normal;
 
 use crate::input::typestate::{HandlerResult, InputState};
 
@@ -10,13 +10,9 @@ fn test_handler_result_predicates() {
     assert!(!HandlerResult::Stay.is_transition());
 
     assert!(HandlerResult::Transition(InputState::GotoPending).is_transition());
-    assert!(!HandlerResult::Transition(InputState::GotoPending).is_execute());
 
-    assert!(HandlerResult::Execute(Cow::Borrowed("gg")).is_execute());
     assert_eq!(
-        HandlerResult::Execute(Cow::Borrowed("gg")).command(),
-        Some("gg")
+        HandlerResult::Execute(normal("gg")).command(),
+        Some(&normal("gg"))
     );
-
-    assert!(HandlerResult::Cancel.is_cancel());
 }

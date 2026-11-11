@@ -2,7 +2,7 @@
 //!
 //! Registers all editing commands (d, c, J, >, <, ~, etc.)
 
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_APPEND, CMD_APPEND_LINE_END, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_CTRL_R,
     CMD_DEDENT, CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK, CMD_ESCAPE, CMD_INDENT,
     CMD_INSERT, CMD_INSERT_LINE_START, CMD_JOIN_LINES, CMD_JOIN_SELECTIONS_SPACE, CMD_OPEN_ABOVE,
@@ -257,7 +257,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         .with_summary("Open line below")
         .with_help("Insert a new line below and enter insert mode.")
         .with_repeat(Repeat::Repeatable)
-        .with_mode_change(ModeTransition::ToInsert),
+        .with_mode_change(ModeTransition::ToInsert)
+        .with_count_behavior(CountBehavior::Native),
         HelixSimulator::open_below,
     ));
 
@@ -270,7 +271,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         .with_summary("Open line above")
         .with_help("Insert a new line above and enter insert mode.")
         .with_repeat(Repeat::Repeatable)
-        .with_mode_change(ModeTransition::ToInsert),
+        .with_mode_change(ModeTransition::ToInsert)
+        .with_count_behavior(CountBehavior::Native),
         HelixSimulator::open_above,
     ));
 

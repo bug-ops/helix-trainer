@@ -21,7 +21,7 @@ related:
 
 > [!info] Metadata
 > **Issues**: #571 (P2; labels `bug`, `helix-core`; found by live testing); #589 (selection after `a`, typing and Escape; see [[helix-core-post-25-07-1-upgrade-readiness/spec]] FR-048)
-> **Related**: #501 (selection restore on undo, already specified as FR-022 in [[helix-core-post-25-07-1-upgrade-readiness/spec]])
+> **Related**: #501 (selection restore on undo, already specified as FR-022 in [[helix-core-post-25-07-1-upgrade-readiness/spec]]); #596 (multi-cursor Insert mode and counted `o`/`O`, 2026-11-11: FR-013 and FR-014 below; behavior in [[helix-core-post-25-07-1-upgrade-readiness/spec]] FR-053 and FR-054)
 > **Status**: Proposed
 > **Depth**: Lightweight bug-fix spec.
 
@@ -57,7 +57,7 @@ Everything from the command that enters Insert mode (`i`, `a`, `I`, `A`, `o`, `O
 
 - Selection restore for single-step changes (#501, already specified)
 - Changing how the action counter or scoring counts Insert-mode commands
-- Multi-cursor Insert mode (the simulator's Insert mode is single-cursor by design, see `enter_insert_mode`)
+- Cursor-movement session splits and `Ctrl-s` (`commit_undo_checkpoint`), see FR-012
 - Undo tree / `Alt-u` / `Alt-U` (earlier/later) semantics; the simulator keeps linear undo and redo stacks
 - Changing the `HistoryEntry` snapshot representation for reasons other than this fix
 
@@ -115,13 +115,15 @@ THEN  the first line is `abfn add(...` and the selection equals the one after th
 | FR-010 | WHEN a session is closed THE SIMULATOR SHALL clear the redo stack exactly once, as any new edit does today | must |
 | FR-011 | THE FIX SHALL NOT change the undo behavior of Normal-mode commands that do not enter Insert mode (`d`, `p`, `r`, `>`, and so on): each remains one entry | must |
 | FR-012 | WHERE Helix 25.07.1 ends a session before Escape THE SIMULATOR SHALL end the undo step at the same points; for 25.07.1 there are none (section 3.1: Insert-mode cursor movement does not split a session) | should |
+| FR-013 | WHEN an Insert session runs with several cursors (multi-cursor `i`, `a`, `I`, `A`, `o`, `O`, or counted `No`/`NO`, which open N lines with N cursors, #596) THE SIMULATOR SHALL record ONE undo entry for the whole session across ALL cursors, and `u` SHALL restore the document and ALL ranges that existed before the session (`j C o x Escape u` restores the original text and both ranges; recorded in `hx` 25.07.1) | must |
+| FR-014 | WHEN `.` replays a recorded multi-cursor Insert session THE SIMULATOR SHALL replay it once per replay at every cursor as one undo step (`j C o x Escape gg .` on `fn f() {` / `    a` / `    b` / `}` replays `o x` at every cursor, with the buffer recorded in [[helix-core-post-25-07-1-upgrade-readiness/spec]] 3.8.6 table C) | must |
 
 ### 3.1 Resolved clarifications (2026-11-11, evidence)
 
 | Question | Resolution | Evidence |
 |----------|-----------|----------|
 | FR-012: does hx split a session on Insert-mode cursor movement? | No split. History is committed after a key only when the mode is not Insert; `commit_undo_checkpoint` (`C-s`) is the only explicit split and the simulator does not simulate it, so arrow keys in Insert mode do NOT split a session and FR-012 has no split points | helix-term `ui/editor.rs` 1449-1453 |
-| Counted or dot-repeated Insert commands | `.` and macro replays (`Q`) each run the recorded Insert sequence including its final Escape, so each replay is exactly one undo step; a counted `3o` opens one line in the simulator (single cursor, see the gap in [[helix-core-post-25-07-1-upgrade-readiness/spec]] FR-025) and is one session | helix-term `ui/editor.rs` 1449-1453; replay ends with Escape |
+| Counted or dot-repeated Insert commands | `.` and macro replays (`Q`) each run the recorded Insert sequence including its final Escape, so each replay is exactly one undo step; a counted `3o` opens three lines with three cursors ([[helix-core-post-25-07-1-upgrade-readiness/spec]] FR-053, #596) and is one session | helix-term `ui/editor.rs` 1449-1453; replay ends with Escape |
 | `I`, `A`, `O` and `s`-style changes | `I`, `A` and `O` share the entry path of `i`, `a` and `o`; `c` covers the change case. Note: `C` in hx is `copy_selection_on_next_line` and does not enter Insert | local `hx` 25.07.1 runs below |
 | Bundled scenarios that depend on per-keystroke undo | None: `undo_redo_001` (`x d u U`) has no Insert session and no other bundled solution uses `u` as a command (the `u` in `writing/links.toml` is typed text). No scenario solution changes; `cargo nextest run scenario` confirms | grep of `scenarios/en` |
 

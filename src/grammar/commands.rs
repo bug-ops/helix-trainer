@@ -5,181 +5,169 @@
 
 // Multi-key commands
 /// Jump to the first line of the file. Key: `gg`.
-pub const CMD_GOTO_FILE_START: &str = "gg";
+pub(crate) const CMD_GOTO_FILE_START: &str = "gg";
 
 // Single character commands - Movement
 /// Move one character left. Key: `h`.
-pub const CMD_MOVE_LEFT: &str = "h";
+pub(crate) const CMD_MOVE_LEFT: &str = "h";
 /// Move one line down. Key: `j`.
-pub const CMD_MOVE_DOWN: &str = "j";
+pub(crate) const CMD_MOVE_DOWN: &str = "j";
 /// Move one line up. Key: `k`.
-pub const CMD_MOVE_UP: &str = "k";
+pub(crate) const CMD_MOVE_UP: &str = "k";
 /// Move one character right. Key: `l`.
-pub const CMD_MOVE_RIGHT: &str = "l";
+pub(crate) const CMD_MOVE_RIGHT: &str = "l";
 /// Select to the start of the next word. Key: `w`.
-pub const CMD_MOVE_WORD_FORWARD: &str = "w";
+pub(crate) const CMD_MOVE_WORD_FORWARD: &str = "w";
 /// Select to the start of the previous word. Key: `b`.
-pub const CMD_MOVE_WORD_BACKWARD: &str = "b";
+pub(crate) const CMD_MOVE_WORD_BACKWARD: &str = "b";
 /// Select to the end of the next word. Key: `e`.
-pub const CMD_MOVE_WORD_END: &str = "e";
+pub(crate) const CMD_MOVE_WORD_END: &str = "e";
 /// Like the word motion, but words are whitespace-delimited (WORD). Key: `W`.
-pub const CMD_MOVE_LONG_WORD_FORWARD: &str = "W";
+pub(crate) const CMD_MOVE_LONG_WORD_FORWARD: &str = "W";
 /// Backward counterpart of the whitespace-delimited WORD motion. Key: `B`.
-pub const CMD_MOVE_LONG_WORD_BACKWARD: &str = "B";
+pub(crate) const CMD_MOVE_LONG_WORD_BACKWARD: &str = "B";
 /// End-of-word counterpart of the whitespace-delimited WORD motion. Key: `E`.
-pub const CMD_MOVE_LONG_WORD_END: &str = "E";
-/// Move to the first column of the line. Key: `0`.
-pub const CMD_MOVE_LINE_START: &str = "0";
-/// Move to the end of the line. Key: `$`.
-pub const CMD_MOVE_LINE_END: &str = "$";
+pub(crate) const CMD_MOVE_LONG_WORD_END: &str = "E";
 /// Scroll one full page up. Key: `Ctrl-b`.
-pub const CMD_PAGE_UP: &str = "Ctrl-b";
+pub(crate) const CMD_PAGE_UP: &str = "Ctrl-b";
 /// Scroll one full page down. Key: `Ctrl-f`.
-pub const CMD_PAGE_DOWN: &str = "Ctrl-f";
+pub(crate) const CMD_PAGE_DOWN: &str = "Ctrl-f";
 /// Scroll half a page up. Key: `Ctrl-u`.
-pub const CMD_HALF_PAGE_UP: &str = "Ctrl-u";
+pub(crate) const CMD_HALF_PAGE_UP: &str = "Ctrl-u";
 /// Scroll half a page down. Key: `Ctrl-d`.
-pub const CMD_HALF_PAGE_DOWN: &str = "Ctrl-d";
+pub(crate) const CMD_HALF_PAGE_DOWN: &str = "Ctrl-d";
 /// Jump to the previous paragraph. Key: `[p`.
-pub const CMD_GOTO_PREV_PARAGRAPH: &str = "[p";
+pub(crate) const CMD_GOTO_PREV_PARAGRAPH: &str = "[p";
 /// Jump to the next paragraph. Key: `]p`.
-pub const CMD_GOTO_NEXT_PARAGRAPH: &str = "]p";
+pub(crate) const CMD_GOTO_NEXT_PARAGRAPH: &str = "]p";
 /// Move to the first non-blank character of the line. Key: `^`.
-pub const CMD_GOTO_FIRST_NONBLANK: &str = "^";
+pub(crate) const CMD_GOTO_FIRST_NONBLANK: &str = "^";
 
 // Editing commands
 /// Delete the selection, copying it to the default register. Key: `d`.
-pub const CMD_DELETE_SELECTION: &str = "d";
+pub(crate) const CMD_DELETE_SELECTION: &str = "d";
 /// Delete the selection without touching the default register. Key: `Alt-d`.
-pub const CMD_DELETE_SELECTION_NOYANK: &str = "Alt-d";
+pub(crate) const CMD_DELETE_SELECTION_NOYANK: &str = "Alt-d";
 /// Enter Insert mode before the selection. Key: `i`.
-pub const CMD_INSERT: &str = "i";
+pub(crate) const CMD_INSERT: &str = "i";
 /// Enter Insert mode after the selection. Key: `a`.
-pub const CMD_APPEND: &str = "a";
+pub(crate) const CMD_APPEND: &str = "a";
 /// Enter Insert mode at the start of the line. Key: `I`.
-pub const CMD_INSERT_LINE_START: &str = "I";
+pub(crate) const CMD_INSERT_LINE_START: &str = "I";
 /// Enter Insert mode at the end of the line. Key: `A`.
-pub const CMD_APPEND_LINE_END: &str = "A";
+pub(crate) const CMD_APPEND_LINE_END: &str = "A";
 /// Open a new line below and enter Insert mode. Key: `o`.
-pub const CMD_OPEN_BELOW: &str = "o";
+pub(crate) const CMD_OPEN_BELOW: &str = "o";
 /// Open a new line above and enter Insert mode. Key: `O`.
-pub const CMD_OPEN_ABOVE: &str = "O";
+pub(crate) const CMD_OPEN_ABOVE: &str = "O";
 /// Delete the selection to the default register and enter Insert mode. Key: `c`.
-pub const CMD_CHANGE: &str = "c";
+pub(crate) const CMD_CHANGE: &str = "c";
 /// Change the selection without touching the default register. Key: `Alt-c`.
-pub const CMD_CHANGE_SELECTION_NOYANK: &str = "Alt-c";
+pub(crate) const CMD_CHANGE_SELECTION_NOYANK: &str = "Alt-c";
 /// Join the selected lines into one. Key: `J`.
-pub const CMD_JOIN_LINES: &str = "J";
+pub(crate) const CMD_JOIN_LINES: &str = "J";
 /// Join the selected lines and select the inserted spaces. Key: `Alt-J`.
-pub const CMD_JOIN_SELECTIONS_SPACE: &str = "Alt-J";
+pub(crate) const CMD_JOIN_SELECTIONS_SPACE: &str = "Alt-J";
 /// Indent the selected lines. Key: `>`.
-pub const CMD_INDENT: &str = ">";
+pub(crate) const CMD_INDENT: &str = ">";
 /// Dedent the selected lines. Key: `<`.
-pub const CMD_DEDENT: &str = "<";
+pub(crate) const CMD_DEDENT: &str = "<";
 /// Toggle the case of the selected characters. Key: `~`.
-pub const CMD_SWITCH_CASE: &str = "~";
+pub(crate) const CMD_SWITCH_CASE: &str = "~";
 /// Convert the selection to lowercase. Key: `` ` ``.
-pub const CMD_SWITCH_CASE_ALT: &str = "`";
+pub(crate) const CMD_SWITCH_CASE_ALT: &str = "`";
 /// Convert the selection to uppercase. Key: `` Alt-` ``.
-pub const CMD_SWITCH_TO_UPPERCASE: &str = "Alt-`";
+pub(crate) const CMD_SWITCH_TO_UPPERCASE: &str = "Alt-`";
 /// Replace the selection with the yanked text. Key: `R`.
-pub const CMD_REPLACE_WITH_YANKED: &str = "R";
+pub(crate) const CMD_REPLACE_WITH_YANKED: &str = "R";
 /// Shrink the selection to the line bounds. Key: `Alt-x`.
-pub const CMD_SHRINK_TO_LINE_BOUNDS: &str = "Alt-x";
+pub(crate) const CMD_SHRINK_TO_LINE_BOUNDS: &str = "Alt-x";
 
 // Clipboard commands
 /// Copy the selection to the default register. Key: `y`.
-pub const CMD_YANK: &str = "y";
+pub(crate) const CMD_YANK: &str = "y";
 /// Paste the register contents after the selection. Key: `p`.
-pub const CMD_PASTE_AFTER: &str = "p";
+pub(crate) const CMD_PASTE_AFTER: &str = "p";
 /// Paste the register contents before the selection. Key: `P`.
-pub const CMD_PASTE_BEFORE: &str = "P";
+pub(crate) const CMD_PASTE_BEFORE: &str = "P";
 
 // Undo/Redo
 /// Undo the last change. Key: `u`.
-pub const CMD_UNDO: &str = "u";
+pub(crate) const CMD_UNDO: &str = "u";
 /// Redo the last undone change. Key: `U`.
-pub const CMD_REDO: &str = "U";
+pub(crate) const CMD_REDO: &str = "U";
 /// Insert mode: insert the contents of a register. Key: `Ctrl-r`.
-pub const CMD_CTRL_R: &str = "Ctrl-r";
+pub(crate) const CMD_CTRL_R: &str = "Ctrl-r";
 
 // Selection commands
 /// Select the current line, extending on repeat. Key: `x`.
-pub const CMD_SELECT_LINE: &str = "x";
+pub(crate) const CMD_SELECT_LINE: &str = "x";
 /// Extend the selection to whole lines. Key: `X`.
-pub const CMD_EXTEND_LINE: &str = "X";
+pub(crate) const CMD_EXTEND_LINE: &str = "X";
 /// Select the entire buffer. Key: `%`.
-pub const CMD_SELECT_ALL: &str = "%";
+pub(crate) const CMD_SELECT_ALL: &str = "%";
 /// Collapse each selection to a single cursor. Key: `;`.
-pub const CMD_COLLAPSE_SELECTION: &str = ";";
+pub(crate) const CMD_COLLAPSE_SELECTION: &str = ";";
 
 // Find/till commands (followed by character)
 /// Select up to and including the next occurrence of a character (takes a character argument). Key: `f`.
-pub const CMD_FIND_CHAR: &str = "f";
+pub(crate) const CMD_FIND_CHAR: &str = "f";
 /// Backward counterpart of the find motion (takes a character argument). Key: `F`.
-pub const CMD_FIND_CHAR_REVERSE: &str = "F";
+pub(crate) const CMD_FIND_CHAR_REVERSE: &str = "F";
 /// Select up to, excluding, the next occurrence of a character (takes a character argument). Key: `t`.
-pub const CMD_TILL_CHAR: &str = "t";
+pub(crate) const CMD_TILL_CHAR: &str = "t";
 /// Backward counterpart of the till motion (takes a character argument). Key: `T`.
-pub const CMD_TILL_CHAR_REVERSE: &str = "T";
+pub(crate) const CMD_TILL_CHAR_REVERSE: &str = "T";
 /// Repeat the last find or till motion. Key: `Alt-.`.
-pub const CMD_REPEAT_LAST_MOTION: &str = "Alt-.";
+pub(crate) const CMD_REPEAT_LAST_MOTION: &str = "Alt-.";
 
 // Selection management commands
 /// Keep only the primary selection. Key: `,`.
-pub const CMD_KEEP_PRIMARY_SELECTION: &str = ",";
+pub(crate) const CMD_KEEP_PRIMARY_SELECTION: &str = ",";
 /// Remove the primary selection, keeping the others. Key: `Alt-,`.
-pub const CMD_REMOVE_PRIMARY_SELECTION: &str = "Alt-,";
+pub(crate) const CMD_REMOVE_PRIMARY_SELECTION: &str = "Alt-,";
 
 // Selection mode
 /// Toggle Select mode. Key: `v`.
-pub const CMD_SELECT_MODE: &str = "v";
+pub(crate) const CMD_SELECT_MODE: &str = "v";
 
 // Flip selection direction
 /// Swap the anchor and head of each selection. Key: `Alt-;`.
-pub const CMD_FLIP_SELECTIONS: &str = "Alt-;";
+pub(crate) const CMD_FLIP_SELECTIONS: &str = "Alt-;";
 
 // Match mode (prefix for match commands)
-/// Prefix that opens Match mode. Key: `m`.
-pub const CMD_MATCH_MODE: &str = "m";
 /// Jump to the bracket matching the one under the cursor. Key: `mm`.
-pub const CMD_MATCH_BRACKETS: &str = "mm";
+pub(crate) const CMD_MATCH_BRACKETS: &str = "mm";
 
 // Named register selection (prefix for register-scoped yank/paste: "<reg><op>)
 /// Prefix that selects a named register for the next yank, paste or delete. Key: `"`.
-pub const CMD_SELECT_REGISTER: &str = "\"";
+pub(crate) const CMD_SELECT_REGISTER: &str = "\"";
 
 // Command-line mode (prefix for `:`-typed commands, e.g. ":goto 3")
 /// Prefix that opens the `:` command line. Key: `:`.
-pub const CMD_COMMAND_LINE: &str = ":";
+pub(crate) const CMD_COMMAND_LINE: &str = ":";
 
 // Match mode surround commands (ms{char}, mr{from}{to}, md{char})
 /// Match-mode prefix that surrounds the selection with a character pair. Key: `ms`.
 pub const CMD_SURROUND_ADD_PREFIX: &str = "ms";
-/// Match-mode prefix that replaces one surrounding pair with another. Key: `mr`.
-pub const CMD_SURROUND_REPLACE_PREFIX: &str = "mr";
-/// Match-mode prefix that deletes a surrounding pair. Key: `md`.
-pub const CMD_SURROUND_DELETE_PREFIX: &str = "md";
 
 // Goto mode (prefix for goto commands)
-/// Prefix that opens Goto mode. Key: `g`.
-pub const CMD_GOTO_MODE: &str = "g";
 /// Jump to the start of the line. Key: `gh`.
-pub const CMD_GOTO_LINE_START: &str = "gh";
+pub(crate) const CMD_GOTO_LINE_START: &str = "gh";
 /// Jump to the end of the line. Key: `gl`.
-pub const CMD_GOTO_LINE_END: &str = "gl";
+pub(crate) const CMD_GOTO_LINE_END: &str = "gl";
 /// Jump to the first non-whitespace character of the line. Key: `gs`.
-pub const CMD_GOTO_FIRST_NONWHITESPACE: &str = "gs";
+pub(crate) const CMD_GOTO_FIRST_NONWHITESPACE: &str = "gs";
 /// Jump to the last line of the file. Key: `ge`.
-pub const CMD_GOTO_LAST_LINE: &str = "ge";
+pub(crate) const CMD_GOTO_LAST_LINE: &str = "ge";
 /// Jump to the line given by the count prefix. Key: `G`.
-pub const CMD_GOTO_LINE: &str = "G";
+pub(crate) const CMD_GOTO_LINE: &str = "G";
 
 // Special commands
 /// Leave the current mode or cancel a pending command. Key: `Escape`.
-pub const CMD_ESCAPE: &str = "Escape";
+pub(crate) const CMD_ESCAPE: &str = "Escape";
 /// Repeat the last insert or change. Key: `.`.
-pub const CMD_REPEAT: &str = ".";
+pub(crate) const CMD_REPEAT: &str = ".";
 
 // Macro recording and replay
 /// Start or stop recording a macro. Key: `q`.
@@ -189,37 +177,37 @@ pub const CMD_REPLAY_MACRO: &str = "Q";
 
 // Replace command prefix (used with character, e.g., "rx")
 /// Replace each selected character with the next typed one (takes a character argument). Key: `r`.
-pub const CMD_REPLACE: &str = "r";
+pub(crate) const CMD_REPLACE: &str = "r";
 
 // Special keys (used in insert mode and command conversion)
 /// Delete the character before the cursor. Key: `Backspace`.
-pub const CMD_BACKSPACE: &str = "Backspace";
+pub(crate) const CMD_BACKSPACE: &str = "Backspace";
 /// Left arrow key. Key: `Left`.
-pub const CMD_ARROW_LEFT: &str = "Left";
+pub(crate) const CMD_ARROW_LEFT: &str = "Left";
 /// Right arrow key. Key: `Right`.
-pub const CMD_ARROW_RIGHT: &str = "Right";
+pub(crate) const CMD_ARROW_RIGHT: &str = "Right";
 /// Up arrow key. Key: `Up`.
-pub const CMD_ARROW_UP: &str = "Up";
+pub(crate) const CMD_ARROW_UP: &str = "Up";
 /// Down arrow key. Key: `Down`.
-pub const CMD_ARROW_DOWN: &str = "Down";
+pub(crate) const CMD_ARROW_DOWN: &str = "Down";
 
 // Insert-mode editing keys (Helix 25.07.1 defaults)
 /// Insert mode: delete the previous word. Key: `Ctrl-w`.
-pub const CMD_INSERT_DELETE_WORD_BACKWARD: &str = "Ctrl-w";
+pub(crate) const CMD_INSERT_DELETE_WORD_BACKWARD: &str = "Ctrl-w";
 /// Insert mode: delete back to the start of the line. Key: `Ctrl-u`.
-pub const CMD_INSERT_DELETE_TO_LINE_START: &str = "Ctrl-u";
+pub(crate) const CMD_INSERT_DELETE_TO_LINE_START: &str = "Ctrl-u";
 /// Insert mode: delete to the end of the line. Key: `Ctrl-k`.
-pub const CMD_INSERT_DELETE_TO_LINE_END: &str = "Ctrl-k";
+pub(crate) const CMD_INSERT_DELETE_TO_LINE_END: &str = "Ctrl-k";
 /// Insert mode: delete the character under the cursor. Key: `Ctrl-d`.
-pub const CMD_INSERT_DELETE_CHAR_FORWARD: &str = "Ctrl-d";
+pub(crate) const CMD_INSERT_DELETE_CHAR_FORWARD: &str = "Ctrl-d";
 /// Insert mode: delete the next word. Key: `Alt-d`.
-pub const CMD_INSERT_DELETE_WORD_FORWARD: &str = "Alt-d";
+pub(crate) const CMD_INSERT_DELETE_WORD_FORWARD: &str = "Alt-d";
 /// Insert mode: delete the previous word (Alt-Backspace spelling). Key: `Alt-Backspace`.
-pub const CMD_INSERT_ALT_BACKSPACE: &str = "Alt-Backspace";
+pub(crate) const CMD_INSERT_ALT_BACKSPACE: &str = "Alt-Backspace";
 /// Insert mode: Delete key, removes the character under the cursor. Key: `Delete`.
-pub const CMD_INSERT_DELETE_KEY: &str = "Delete";
+pub(crate) const CMD_INSERT_DELETE_KEY: &str = "Delete";
 /// Insert mode: Tab key, inserts indentation. Key: `Tab`.
-pub const CMD_INSERT_TAB: &str = "\t";
+pub(crate) const CMD_INSERT_TAB: &str = "\t";
 
 // Selection commands
 /// Select every regex match inside the current selection. Key: `s`.
@@ -227,55 +215,53 @@ pub const CMD_SELECT_REGEX: &str = "s";
 /// Split the selection on every regex match. Key: `S`.
 pub const CMD_SPLIT_SELECTION: &str = "S";
 /// Split the selection into one selection per line. Key: `Alt-s`.
-pub const CMD_SPLIT_SELECTION_NEWLINES: &str = "Alt-s";
+pub(crate) const CMD_SPLIT_SELECTION_NEWLINES: &str = "Alt-s";
 /// Align the selections in columns. Key: `&`.
-pub const CMD_ALIGN_SELECTIONS: &str = "&";
+pub(crate) const CMD_ALIGN_SELECTIONS: &str = "&";
 /// Trim leading and trailing whitespace from each selection. Key: `_`.
-pub const CMD_TRIM_SELECTIONS: &str = "_";
+pub(crate) const CMD_TRIM_SELECTIONS: &str = "_";
 /// Merge all selections into one. Key: `Alt--`.
-pub const CMD_MERGE_SELECTIONS: &str = "Alt--";
+pub(crate) const CMD_MERGE_SELECTIONS: &str = "Alt--";
 /// Merge adjacent selections. Key: `Alt-_`.
-pub const CMD_MERGE_CONSECUTIVE: &str = "Alt-_";
+pub(crate) const CMD_MERGE_CONSECUTIVE: &str = "Alt-_";
 /// Duplicate the selection onto the next line. Key: `C`.
-pub const CMD_COPY_SELECTION_NEXT: &str = "C";
+pub(crate) const CMD_COPY_SELECTION_NEXT: &str = "C";
 /// Duplicate the selection onto the previous line. Key: `Alt-C`.
-pub const CMD_COPY_SELECTION_PREV: &str = "Alt-C";
+pub(crate) const CMD_COPY_SELECTION_PREV: &str = "Alt-C";
 /// Keep only the selections that match a regex. Key: `K`.
-pub const CMD_KEEP_MATCHING: &str = "K";
+pub(crate) const CMD_KEEP_MATCHING: &str = "K";
 /// Remove the selections that match a regex. Key: `Alt-K`.
-pub const CMD_REMOVE_MATCHING: &str = "Alt-K";
+pub(crate) const CMD_REMOVE_MATCHING: &str = "Alt-K";
 /// Comment or uncomment the selected lines. Key: `Ctrl-c`.
-pub const CMD_TOGGLE_COMMENTS: &str = "Ctrl-c";
+pub(crate) const CMD_TOGGLE_COMMENTS: &str = "Ctrl-c";
 
 // Search commands
 /// Open the forward search prompt. Key: `/`.
-pub const CMD_SEARCH_FORWARD: &str = "/";
+pub(crate) const CMD_SEARCH_FORWARD: &str = "/";
 /// Open the backward search prompt. Key: `?`.
-pub const CMD_SEARCH_BACKWARD: &str = "?";
+pub(crate) const CMD_SEARCH_BACKWARD: &str = "?";
 /// Jump to the next search match. Key: `n`.
-pub const CMD_SEARCH_NEXT: &str = "n";
+pub(crate) const CMD_SEARCH_NEXT: &str = "n";
 /// Jump to the previous search match. Key: `N`.
-pub const CMD_SEARCH_PREV: &str = "N";
+pub(crate) const CMD_SEARCH_PREV: &str = "N";
 /// Search for the word under the cursor. Key: `*`.
-pub const CMD_SEARCH_WORD: &str = "*";
+pub(crate) const CMD_SEARCH_WORD: &str = "*";
 /// Search for the selection as a literal string. Key: `Alt-*`.
-pub const CMD_SEARCH_SELECTION: &str = "Alt-*";
+pub(crate) const CMD_SEARCH_SELECTION: &str = "Alt-*";
 
 // View mode commands
-/// Prefix that opens View mode. Key: `z`.
-pub const CMD_VIEW_MODE: &str = "z";
 /// Scroll so the cursor line is vertically centered. Key: `zz`.
-pub const CMD_VIEW_CENTER: &str = "zz";
+pub(crate) const CMD_VIEW_CENTER: &str = "zz";
 /// Scroll so the cursor line is at the top. Key: `zt`.
-pub const CMD_VIEW_TOP: &str = "zt";
+pub(crate) const CMD_VIEW_TOP: &str = "zt";
 /// Scroll so the cursor line is at the bottom. Key: `zb`.
-pub const CMD_VIEW_BOTTOM: &str = "zb";
+pub(crate) const CMD_VIEW_BOTTOM: &str = "zb";
 /// Scroll so the cursor column is horizontally centered. Key: `zm`.
-pub const CMD_VIEW_CENTER_HORIZONTAL: &str = "zm";
+pub(crate) const CMD_VIEW_CENTER_HORIZONTAL: &str = "zm";
 /// Scroll the view down without moving the cursor. Key: `zj`.
-pub const CMD_SCROLL_DOWN: &str = "zj";
+pub(crate) const CMD_SCROLL_DOWN: &str = "zj";
 /// Scroll the view up without moving the cursor. Key: `zk`.
-pub const CMD_SCROLL_UP: &str = "zk";
+pub(crate) const CMD_SCROLL_UP: &str = "zk";
 
 /// Canonicalize a raw executed command string to a stable FSRS/quest card id.
 ///
@@ -297,7 +283,7 @@ pub const CMD_SCROLL_UP: &str = "zk";
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::helix::commands::normalize_command_id;
+/// use helix_trainer::grammar::commands::normalize_command_id;
 ///
 /// assert_eq!(normalize_command_id("\"ay"), "\"y");
 /// assert_eq!(normalize_command_id(":goto 3"), ":goto");

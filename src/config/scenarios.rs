@@ -2,10 +2,11 @@
 //!
 //! This module handles loading TOML scenario files with security validations.
 
+use crate::constants::{ADVANCED_TIME_LIMIT, BEGINNER_TIME_LIMIT, INTERMEDIATE_TIME_LIMIT};
 use crate::ids::{CommandId, NormalizedCommand, ScenarioId};
-use crate::security::limits::{
-    MAX_COMMAND_SEQUENCE_LENGTH, MAX_CURSORS_PER_SCENARIO, MAX_FILE_CONTENT_LENGTH, MAX_HINTS,
-    MAX_SCENARIO_FILE_SIZE, MAX_SCENARIOS_PER_FILE, MAX_SELECTIONS_PER_SCENARIO,
+use crate::limits::{
+    MAX_COMMAND_SEQUENCE_LENGTH, MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE,
+    MAX_SCENARIOS_PER_FILE,
 };
 use crate::security::validators::validate_language_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
@@ -14,6 +15,10 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
+
+mod cursor;
+
+pub use cursor::{BoundError, Bounded, CursorField, CursorRange, CursorSpec, Pos};
 
 /// Why a scenario's cursor setup or target was rejected.
 ///
@@ -30,9 +35,32 @@ use std::path::{Path, PathBuf};
 /// ```
 #[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
 pub enum ScenarioValidationError {
-    /// Neither `cursor_position`, `cursors` nor `selections` is set.
-    #[error("must specify cursor_position, cursors, or selections")]
+    /// None of `cursor_position`, `selection`, `cursors` and `selections` is set.
+    #[error("must specify one of cursor_position, selection, cursors, or selections")]
     NoCursorSpecified,
+
+    /// Two or more cursor keys are set; exactly one is allowed.
+    #[error("ambiguous cursor: {}; specify exactly one", join_fields(.fields))]
+    AmbiguousCursorSpec {
+        /// The keys that were set.
+        fields: Vec<CursorField>,
+    },
+
+    /// `cursors` or `selections` is an empty list.
+    #[error("{field} must not be empty")]
+    EmptyCursorList {
+        /// The empty key.
+        field: CursorField,
+    },
+
+    /// A row or column is beyond the supported range.
+    #[error("cursor position out of range (max {max}, got {actual})")]
+    PositionOutOfRange {
+        /// Largest accepted coordinate.
+        max: usize,
+        /// Observed coordinate.
+        actual: usize,
+    },
 
     /// More cursors than allowed.
     #[error("too many cursors (max {max}, got {actual})")]
@@ -51,6 +79,14 @@ pub enum ScenarioValidationError {
         /// Observed count.
         actual: usize,
     },
+}
+
+fn join_fields(fields: &[CursorField]) -> String {
+    fields
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Wrapper for scenarios array in TOML file
@@ -216,6 +252,29 @@ impl Difficulty {
         Difficulty::Intermediate,
         Difficulty::Advanced,
     ];
+
+    /// Base per-difficulty time budget, independent of arcade's adaptive level scaling.
+    ///
+    /// The arcade difficulty controller scales this by its current level; callers
+    /// with no controller (Training mode) use it directly as the "speed" reference
+    /// budget for achievement thresholds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::config::Difficulty;
+    /// use std::time::Duration;
+    ///
+    /// assert_eq!(Difficulty::Beginner.base_time_limit(), Duration::from_secs(10));
+    /// ```
+    #[must_use]
+    pub fn base_time_limit(self) -> std::time::Duration {
+        match self {
+            Self::Beginner => BEGINNER_TIME_LIMIT,
+            Self::Intermediate => INTERMEDIATE_TIME_LIMIT,
+            Self::Advanced => ADVANCED_TIME_LIMIT,
+        }
+    }
 }
 
 /// Scenario definition
@@ -266,33 +325,6 @@ impl Scenario {
             last_action,
         )
     }
-}
-
-/// Cursor and selection configuration shared by [`Setup`] and [`TargetState`]
-///
-/// Supports two formats:
-/// - Single cursor: `cursor_position = [row, col]` with optional `selection`
-/// - Multi-cursor: `cursors = [[row, col], ...]` or `selections = [[start_row, start_col, end_row, end_col], ...]`
-///
-/// INVARIANT: at least one of `cursor_position/cursors/selections` must be set,
-/// checked by `ScenarioLoader::validate_setup_or_target_config`.
-#[derive(Deserialize, Debug, Clone)]
-pub struct CursorSpec {
-    /// Single cursor position [row, col] - for simple scenarios
-    #[serde(default)]
-    pub cursor_position: Option<(usize, usize)>,
-
-    /// Single selection range [`start_row`, `start_col`, `end_row`, `end_col`]
-    #[serde(default)]
-    pub selection: Option<[usize; 4]>,
-
-    /// Multiple cursor positions [[row, col], ...] - for multi-cursor scenarios
-    #[serde(default)]
-    pub cursors: Option<Vec<[usize; 2]>>,
-
-    /// Multiple selection ranges [[`start_row`, `start_col`, `end_row`, `end_col`], ...]
-    #[serde(default)]
-    pub selections: Option<Vec<[usize; 4]>>,
 }
 
 /// Effective content language used when a scenario's [`Setup::language`] is `None`.
@@ -350,87 +382,6 @@ pub struct ScoringConfig {
     pub max_points: u32,
     /// Extra commands allowed beyond the optimum before the score drops.
     pub tolerance: usize,
-}
-
-impl CursorSpec {
-    /// Get effective cursor position (single cursor or first of multi-cursor).
-    ///
-    /// Prefers `cursor_position` for backward compatibility, but falls back to
-    /// first element of `cursors` if available.
-    pub fn effective_cursor_position(&self) -> (usize, usize) {
-        if let Some(pos) = self.cursor_position {
-            return pos;
-        }
-        if let Some(cursors) = &self.cursors
-            && let Some(first) = cursors.first()
-        {
-            return (first[0], first[1]);
-        }
-        if let Some(selections) = &self.selections
-            && let Some(first) = selections.first()
-        {
-            // For selections, cursor is at the end position (head)
-            return (first[2], first[3]);
-        }
-        // Default to (0, 0) if nothing specified
-        (0, 0)
-    }
-
-    /// Get all cursor positions for multi-cursor scenarios.
-    ///
-    /// Returns `cursors` if present, otherwise derives from `selections` or `cursor_position`.
-    pub fn all_cursors(&self) -> Vec<[usize; 2]> {
-        if let Some(cursors) = &self.cursors {
-            return cursors.clone();
-        }
-        if let Some(selections) = &self.selections {
-            // Each selection's end (head) position is a cursor
-            return selections.iter().map(|s| [s[2], s[3]]).collect();
-        }
-        // Single cursor fallback
-        let pos = self.effective_cursor_position();
-        vec![[pos.0, pos.1]]
-    }
-
-    /// Get all selections for multi-selection scenarios.
-    ///
-    /// Returns `selections` if present, otherwise derives from `selection`,
-    /// `cursors`, or `cursor_position`.
-    pub fn all_selections(&self) -> Option<Vec<[usize; 4]>> {
-        if let Some(selections) = &self.selections {
-            return Some(selections.clone());
-        }
-        if let Some(selection) = &self.selection {
-            return Some(vec![*selection]);
-        }
-        if let Some(cursors) = &self.cursors {
-            // Point selections from cursors
-            return Some(cursors.iter().map(|c| [c[0], c[1], c[0], c[1]]).collect());
-        }
-        // No selection
-        None
-    }
-
-    /// Check if this spec uses multi-cursor format.
-    pub fn is_multi_cursor(&self) -> bool {
-        self.cursors.is_some() || self.selections.is_some()
-    }
-
-    /// Get raw cursors reference without derivation.
-    ///
-    /// Returns the raw `cursors` field as a slice reference, or None if not set.
-    /// Use `all_cursors()` if you need derived values.
-    pub fn cursors_ref(&self) -> Option<&[[usize; 2]]> {
-        self.cursors.as_deref()
-    }
-
-    /// Get raw selections reference without derivation.
-    ///
-    /// Returns the raw `selections` field as a slice reference, or None if not set.
-    /// Use `all_selections()` if you need derived values.
-    pub fn selections_ref(&self) -> Option<&[[usize; 4]]> {
-        self.selections.as_deref()
-    }
 }
 
 /// Secure scenario loader with path validation and content verification
@@ -742,12 +693,6 @@ impl ScenarioLoader {
         Self::validate_content_size(&scenario.setup.file_content)?;
         Self::validate_content_size(&scenario.target.file_content)?;
 
-        // Validate setup cursor/selection configuration
-        Self::validate_setup_or_target_config(&scenario.setup.cursor)?;
-
-        // Validate target cursor/selection configuration
-        Self::validate_setup_or_target_config(&scenario.target.cursor)?;
-
         // Validate collection sizes
         if scenario.hints.len() > MAX_HINTS {
             return Err(SecurityError::TooManyHints { max: MAX_HINTS });
@@ -755,69 +700,6 @@ impl ScenarioLoader {
 
         // Validate command sequences
         Self::validate_command_sequence(&scenario.solution.commands)?;
-
-        Ok(())
-    }
-
-    /// Validate cursor position bounds for a single position
-    fn validate_cursor_position(pos: (usize, usize)) -> Result<(), SecurityError> {
-        const MAX_POSITION: usize = 10000;
-        if pos.0 > MAX_POSITION || pos.1 > MAX_POSITION {
-            return Err(SecurityError::InvalidCursorPosition);
-        }
-        Ok(())
-    }
-
-    /// Validate setup or target configuration
-    ///
-    /// Ensures that:
-    /// - At least `cursor_position`, cursors, or selections is specified
-    /// - All cursor positions are within bounds
-    fn validate_setup_or_target_config(spec: &CursorSpec) -> Result<(), SecurityError> {
-        // Must have at least one cursor specification
-        if spec.cursor_position.is_none() && spec.cursors.is_none() && spec.selections.is_none() {
-            return Err(ScenarioValidationError::NoCursorSpecified.into());
-        }
-
-        // Validate single cursor_position
-        if let Some(pos) = spec.cursor_position {
-            Self::validate_cursor_position(pos)?;
-        }
-
-        // Validate single selection
-        if let Some(sel) = &spec.selection {
-            Self::validate_cursor_position((sel[0], sel[1]))?;
-            Self::validate_cursor_position((sel[2], sel[3]))?;
-        }
-
-        // Validate multi-cursor positions (with array length limit check)
-        if let Some(positions) = &spec.cursors {
-            if positions.len() > MAX_CURSORS_PER_SCENARIO {
-                return Err(ScenarioValidationError::TooManyCursors {
-                    max: MAX_CURSORS_PER_SCENARIO,
-                    actual: positions.len(),
-                }
-                .into());
-            }
-            for pos in positions {
-                Self::validate_cursor_position((pos[0], pos[1]))?;
-            }
-        }
-
-        // Validate multi-selection ranges (with array length limit check)
-        if let Some(sels) = &spec.selections {
-            if sels.len() > MAX_SELECTIONS_PER_SCENARIO {
-                return Err(ScenarioValidationError::TooManySelections {
-                    max: MAX_SELECTIONS_PER_SCENARIO,
-                    actual: sels.len(),
-                }
-                .into());
-            }
-            for sel in sels {
-                Self::validate_cursor_position((sel[0], sel[1]))?;
-                Self::validate_cursor_position((sel[2], sel[3]))?;
-            }
-        }
 
         Ok(())
     }
@@ -834,61 +716,3 @@ pub mod embedded;
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod cursor_validation_tests {
-    use super::*;
-    use std::assert_matches;
-
-    fn spec() -> CursorSpec {
-        CursorSpec {
-            cursor_position: Some((0, 0)),
-            selection: None,
-            cursors: None,
-            selections: None,
-        }
-    }
-
-    fn rejects(spec: &CursorSpec) -> ScenarioValidationError {
-        match ScenarioLoader::validate_setup_or_target_config(spec) {
-            Err(SecurityError::Scenario(err)) => err,
-            other => panic!("expected a scenario validation error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn a_spec_without_any_cursor_is_rejected() {
-        let empty = CursorSpec {
-            cursor_position: None,
-            ..spec()
-        };
-        assert_eq!(rejects(&empty), ScenarioValidationError::NoCursorSpecified);
-    }
-
-    #[test]
-    fn too_many_cursors_and_selections_are_typed() {
-        let cursors = CursorSpec {
-            cursors: Some(vec![[0, 0]; MAX_CURSORS_PER_SCENARIO + 1]),
-            ..spec()
-        };
-        assert_matches!(
-            rejects(&cursors),
-            ScenarioValidationError::TooManyCursors { max, actual }
-                if max == MAX_CURSORS_PER_SCENARIO && actual == max + 1
-        );
-
-        let selections = CursorSpec {
-            selections: Some(vec![[0, 0, 0, 0]; MAX_SELECTIONS_PER_SCENARIO + 1]),
-            ..spec()
-        };
-        assert_matches!(
-            rejects(&selections),
-            ScenarioValidationError::TooManySelections { .. }
-        );
-    }
-
-    #[test]
-    fn a_valid_spec_passes() {
-        assert!(ScenarioLoader::validate_setup_or_target_config(&spec()).is_ok());
-    }
-}

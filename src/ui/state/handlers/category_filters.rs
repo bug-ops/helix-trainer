@@ -7,7 +7,7 @@ use crate::ui::state::{CategoryFiltersData, HandlerContext, HandlerOutcome, Type
 /// Handle `ShowCategoryFilters` message
 ///
 /// Navigates to the category filters screen, tracking where to return
-pub fn handle_show_category_filters(screen: &mut TypedScreen) -> HandlerOutcome {
+pub(crate) fn handle_show_category_filters(screen: &mut TypedScreen) -> HandlerOutcome {
     let return_to = screen.detour_return_destination();
     HandlerOutcome::Transition(Box::new(TypedScreen::CategoryFilters(
         CategoryFiltersData {
@@ -20,7 +20,7 @@ pub fn handle_show_category_filters(screen: &mut TypedScreen) -> HandlerOutcome 
 /// Handle `CategoryFilterUp` message
 ///
 /// Moves selection up in the category list with wraparound
-pub fn handle_category_filter_up(
+pub(crate) fn handle_category_filter_up(
     data: &mut CategoryFiltersData,
     ctx: &HandlerContext<'_>,
 ) -> HandlerOutcome {
@@ -48,7 +48,7 @@ pub fn handle_category_filter_up(
 /// Handle `CategoryFilterDown` message
 ///
 /// Moves selection down in the category list with wraparound
-pub fn handle_category_filter_down(
+pub(crate) fn handle_category_filter_down(
     data: &mut CategoryFiltersData,
     ctx: &HandlerContext<'_>,
 ) -> HandlerOutcome {
@@ -73,7 +73,7 @@ pub fn handle_category_filter_down(
 /// Handle `CategoryFilterToggle` message
 ///
 /// Toggles the selected category filter on/off
-pub fn handle_category_filter_toggle(
+pub(crate) fn handle_category_filter_toggle(
     data: &CategoryFiltersData,
     ctx: &mut HandlerContext<'_>,
 ) -> HandlerOutcome {
@@ -109,7 +109,7 @@ pub fn handle_category_filter_toggle(
 /// Handle `CategoryFilterSelectAll` message
 ///
 /// Resets category filters to show all categories (clears category filter)
-pub fn handle_category_filter_select_all(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
+pub(crate) fn handle_category_filter_select_all(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
     let profile = &ctx.progress.profile;
     let current_filter = ctx.game.scenario_collection.active_filter();
     let mut new_filter = current_filter.clone();

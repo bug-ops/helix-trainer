@@ -34,7 +34,6 @@ file_content = """def process_data(items, config):
         total += value
 
     return total"""
-cursor_position = [1, 18]
 selection = [1, 12, 1, 18]
 
 [scenarios.solution]

@@ -2,7 +2,7 @@
 //!
 //! Registers all movement commands (h, j, k, l, w, b, e, etc.)
 
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_FIND_CHAR, CMD_FIND_CHAR_REVERSE, CMD_FLIP_SELECTIONS, CMD_GOTO_FILE_START,
     CMD_GOTO_FIRST_NONBLANK, CMD_GOTO_FIRST_NONWHITESPACE, CMD_GOTO_LAST_LINE, CMD_GOTO_LINE_END,
     CMD_GOTO_LINE_START, CMD_GOTO_NEXT_PARAGRAPH, CMD_GOTO_PREV_PARAGRAPH, CMD_HALF_PAGE_DOWN,
@@ -240,7 +240,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 ///
 /// These commands require a target character and are handled specially
 /// by the dispatcher. This function registers metadata only.
-pub fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) {
+pub(crate) fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) {
     // Find char commands - metadata only, handlers are in dispatcher
     registry.register(Command::new(
         CommandMetadata::new(

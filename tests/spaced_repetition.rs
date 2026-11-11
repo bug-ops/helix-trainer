@@ -164,9 +164,6 @@ fn test_analytics_empty_tracker() {
     let progress = Analytics::get_progress_over_time(&tracker, 7, chrono::Utc::now());
     // Returns placeholder data even for empty tracker (for UI consistency)
     assert!(progress.len() <= 8);
-
-    let plateaus = Analytics::identify_plateaus(&tracker);
-    assert_eq!(plateaus, [] as [std::string::String; 0]);
 }
 
 #[test]
@@ -221,10 +218,6 @@ fn test_scheduler_prioritization() {
     // Get review queue (priority-ordered)
     let queue = scheduler.get_review_queue(&tracker, 10);
     assert!(queue.len() <= 10);
-
-    // Get practice session recommendations (may be empty if nothing due)
-    let session = scheduler.recommend_practice_session(&tracker, 15);
-    assert!(session.len() <= 5); // 15 mins / 3 mins per scenario = 5 max
 }
 
 #[test]
@@ -307,26 +300,4 @@ fn test_analytics_commands_by_mastery() {
     // Check average success rate
     let avg_rate = Analytics::avg_success_rate(&tracker);
     assert!(avg_rate > 0.0 && avg_rate <= 1.0);
-}
-
-#[test]
-fn test_analytics_plateau_detection() {
-    let mut tracker = PerformanceTracker::new();
-
-    // Create a command that has plateaued (many attempts, low stability)
-    // Many attempts with mixed results (creates plateau)
-    for i in 0..10 {
-        let success = i % 2 == 0; // Alternating success/failure
-        tracker.record_attempt(
-            &cid("plateau_cmd"),
-            Duration::from_secs(3),
-            success,
-            Duration::from_secs(1),
-        );
-    }
-
-    let plateaus = Analytics::identify_plateaus(&tracker);
-
-    // Should identify commands that need different practice approach
-    assert_ne!(plateaus, [] as [std::string::String; 0]);
 }

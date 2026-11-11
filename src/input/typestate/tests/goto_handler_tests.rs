@@ -4,7 +4,7 @@ use std::assert_matches;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::input::typestate::{GotoPending, HandlerResult, InputHandler, KeyHandler};
 
 #[test]
@@ -13,7 +13,7 @@ fn test_goto_pending_gg() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_FILE_START);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_FILE_START);
 }
 
 #[test]
@@ -22,7 +22,7 @@ fn test_goto_pending_gh() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LINE_START);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_LINE_START);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn test_goto_pending_gl() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LINE_END);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_LINE_END);
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn test_goto_pending_gs() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_FIRST_NONWHITESPACE);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_FIRST_NONWHITESPACE);
 }
 
 #[test]
@@ -67,5 +67,5 @@ fn test_goto_pending_ge() {
         &GotoPending,
         KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_GOTO_LAST_LINE);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_GOTO_LAST_LINE);
 }

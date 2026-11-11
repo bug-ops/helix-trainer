@@ -23,7 +23,6 @@ file_content = """fn main() {
     let value = 42;
     println!("{}", value);
 }"""
-cursor_position = [1, 8]
 selection = [1, 4, 1, 8]
 
 [scenarios.solution]
@@ -63,7 +62,6 @@ file_content = """struct Point {
     x: i32,
     y: i32,
 }"""
-cursor_position = [1, 10]
 selection = [1, 7, 1, 10]
 
 [scenarios.solution]
@@ -101,7 +99,6 @@ cursor_position = [1, 6]
 file_content = """fn add(a: i32, b: i32) -> i32 {
     a + b
 }"""
-cursor_position = [1, 4]
 selection = [1, 4, 1, 6]
 
 [scenarios.solution]
@@ -139,7 +136,6 @@ cursor_position = [1, 15]
 file_content = """fn main() {
     let result = 0;
 }"""
-cursor_position = [1, 4]
 selection = [1, 4, 1, 8]
 
 [scenarios.solution]
@@ -179,7 +175,6 @@ file_content = """struct Config {
     name: String,
     value: i32,
 }"""
-cursor_position = [1, 8]
 selection = [1, 4, 1, 8]
 
 [scenarios.solution]
@@ -217,7 +212,6 @@ cursor_position = [0, 0]
 file_content = """fn test() {
     return true;
 }"""
-cursor_position = [0, 3]
 selection = [0, 0, 0, 3]
 
 [scenarios.solution]
@@ -253,7 +247,6 @@ cursor_position = [0, 4]
 [scenarios.target]
 file_content = """let x = 1;
 let y = 2;"""
-cursor_position = [0, 8]
 selection = [0, 6, 0, 8]
 
 [scenarios.solution]

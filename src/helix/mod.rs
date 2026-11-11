@@ -15,17 +15,16 @@
 //! # Ok::<(), helix_trainer::security::UserError>(())
 //! ```
 
-pub mod commands;
 pub mod error;
 pub mod indent;
 pub mod language;
 pub mod macro_recorder;
 mod newline_indent;
+pub mod normal_command;
 pub mod registry;
 pub mod repeat;
 pub mod simulator;
 
-pub use commands::*;
 pub use indent::IndentUnit;
 pub use language::LanguageRules;
 pub use repeat::{

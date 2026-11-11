@@ -4,7 +4,7 @@
 //! - Command recording: Verify editing commands are captured
 //! - Insert mode recording: Verify text and movements are captured
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::repeat::{InsertAction, InsertKey, Mode, Movement, RepeatableAction};
 use crate::helix::simulator::AnyModeSimulator;
 

@@ -18,7 +18,7 @@ fn test_text_object_around_word() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "maw");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "maw");
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn test_text_object_around_word_big() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "maW");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "maW");
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn test_text_object_around_parens() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ma(");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "ma(");
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn test_text_object_around_quotes() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "ma\"");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "ma\"");
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn test_text_object_around_paragraph() {
         &TextObjectAroundPending,
         KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "map");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "map");
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn test_text_object_inside_word() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "miw");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "miw");
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn test_text_object_inside_brackets() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi[");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "mi[");
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn test_text_object_inside_braces() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi{");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "mi{");
 }
 
 #[test]
@@ -112,7 +112,7 @@ fn test_text_object_inside_angle_brackets() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('<'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi<");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "mi<");
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn test_text_object_inside_single_quote() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('\''), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi'");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "mi'");
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn test_text_object_inside_backtick() {
         &TextObjectInsidePending,
         KeyEvent::new(KeyCode::Char('`'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == "mi`");
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == "mi`");
 }
 
 #[test]

@@ -5,71 +5,9 @@
 
 use std::num::NonZeroUsize;
 
-use super::state_types::FindType;
-use crate::helix::commands::{
-    CMD_KEEP_MATCHING, CMD_REMOVE_MATCHING, CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD,
-    CMD_SELECT_REGEX, CMD_SPLIT_SELECTION,
-};
+use crate::grammar::find::FindMotion;
+use crate::helix::normal_command::PromptKind;
 use crate::input::keymap::KeyContext;
-
-/// Which prompt command a `RegexPromptPending` buffer is for
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RegexPromptKind {
-    /// `s` - select all regex matches within the current selection
-    SelectRegex,
-    /// `S` - split the current selection on a regex delimiter
-    SplitSelection,
-    /// `/` - select the next regex match after the cursor
-    Search,
-    /// `?` - select the previous regex match before the cursor
-    SearchBackward,
-    /// `K` - keep the selections whose text matches a regex
-    KeepSelections,
-    /// `Alt-K` - remove the selections whose text matches a regex
-    RemoveSelections,
-}
-
-impl RegexPromptKind {
-    /// The command id this prompt assembles its `"<id> <pattern>"` command from.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::input::typestate::RegexPromptKind;
-    ///
-    /// assert_eq!(RegexPromptKind::SearchBackward.command_id(), "?");
-    /// assert_eq!(RegexPromptKind::RemoveSelections.command_id(), "Alt-K");
-    /// ```
-    pub fn command_id(self) -> &'static str {
-        match self {
-            Self::SelectRegex => CMD_SELECT_REGEX,
-            Self::SplitSelection => CMD_SPLIT_SELECTION,
-            Self::Search => CMD_SEARCH_FORWARD,
-            Self::SearchBackward => CMD_SEARCH_BACKWARD,
-            Self::KeepSelections => CMD_KEEP_MATCHING,
-            Self::RemoveSelections => CMD_REMOVE_MATCHING,
-        }
-    }
-
-    /// The single prompt character shown in the footer; `Alt-K` shows `!`
-    /// (negated keep) to stay distinguishable from `K`.
-    pub fn prefix(self) -> char {
-        match self {
-            Self::SelectRegex => 's',
-            Self::SplitSelection => 'S',
-            Self::Search => '/',
-            Self::SearchBackward => '?',
-            Self::KeepSelections => 'K',
-            Self::RemoveSelections => '!',
-        }
-    }
-
-    /// Whether Enter forwards an invalid pattern to the simulator so its
-    /// `UserError` reaches the user (search prompts); the other prompts cancel.
-    pub fn forwards_invalid_pattern(self) -> bool {
-        matches!(self, Self::Search | Self::SearchBackward)
-    }
-}
 
 /// Runtime representation of input state
 ///
@@ -104,12 +42,12 @@ pub enum InputState {
     /// After 'f'/'F'/'t'/'T' - waiting for character
     FindCharPending {
         /// Which of `f`/`F`/`t`/`T` started the sequence.
-        find_type: FindType,
+        motion: FindMotion,
     },
     /// After `{n}f`/`{n}F`/`{n}t`/`{n}T` - waiting for character
     CountedFindCharPending {
         /// Which of `f`/`F`/`t`/`T` started the sequence.
-        find_type: FindType,
+        motion: FindMotion,
         /// Repeat count typed before the command.
         count: NonZeroUsize,
     },
@@ -135,7 +73,7 @@ pub enum InputState {
     /// After a regex-prompt key - accumulating the pattern buffer
     RegexPromptPending {
         /// Which regex-taking command opened the prompt.
-        kind: RegexPromptKind,
+        kind: PromptKind,
         /// Pattern typed so far.
         buffer: String,
     },
@@ -154,41 +92,6 @@ impl InputState {
     /// Check if this is the base state
     pub fn is_base(&self) -> bool {
         matches!(self, Self::Base)
-    }
-
-    /// Check if this is goto pending state
-    pub fn is_goto_pending(&self) -> bool {
-        matches!(self, Self::GotoPending)
-    }
-
-    /// Check if this is view pending state
-    pub fn is_view_pending(&self) -> bool {
-        matches!(self, Self::ViewPending)
-    }
-
-    /// Check if this is match pending state
-    pub fn is_match_pending(&self) -> bool {
-        matches!(self, Self::MatchPending)
-    }
-
-    /// Check if this is find char pending state
-    pub fn is_find_char_pending(&self) -> bool {
-        matches!(self, Self::FindCharPending { .. })
-    }
-
-    /// Check if this is replace char pending state
-    pub fn is_replace_char_pending(&self) -> bool {
-        matches!(self, Self::ReplaceCharPending)
-    }
-
-    /// Check if this is count pending state
-    pub fn is_count_pending(&self) -> bool {
-        matches!(self, Self::CountPending { .. })
-    }
-
-    /// Check if this is a regex-selection prompt pending state
-    pub fn is_regex_prompt_pending(&self) -> bool {
-        matches!(self, Self::RegexPromptPending { .. })
     }
 
     /// Check if this state is waiting for a character argument
@@ -210,35 +113,6 @@ impl InputState {
     /// Check if this state is a prefix state (waiting for more input)
     pub fn is_prefix_state(&self) -> bool {
         !matches!(self, Self::Base)
-    }
-
-    /// Check if this is a surround pending state
-    pub fn is_surround_pending(&self) -> bool {
-        matches!(
-            self,
-            Self::SurroundAddPending
-                | Self::SurroundDeletePending
-                | Self::SurroundReplaceFromPending
-                | Self::SurroundReplaceToPending { .. }
-        )
-    }
-
-    /// Check if this is a text object pending state (waiting for text object type)
-    pub fn is_text_object_pending(&self) -> bool {
-        matches!(
-            self,
-            Self::TextObjectAroundPending | Self::TextObjectInsidePending
-        )
-    }
-
-    /// Check if this is unmatched prev pending state
-    pub fn is_unmatched_prev_pending(&self) -> bool {
-        matches!(self, Self::UnmatchedPrevPending)
-    }
-
-    /// Check if this is unmatched next pending state
-    pub fn is_unmatched_next_pending(&self) -> bool {
-        matches!(self, Self::UnmatchedNextPending)
     }
 
     /// Which [`KeyContext`] this state's next keypress should be translated
@@ -360,7 +234,7 @@ mod key_context_tests {
             InputState::TextObjectAroundPending,
             InputState::TextObjectInsidePending,
             InputState::FindCharPending {
-                find_type: FindType::FindForward,
+                motion: FindMotion::FIND_FORWARD,
             },
             InputState::ReplaceCharPending,
             InputState::RegisterPending,

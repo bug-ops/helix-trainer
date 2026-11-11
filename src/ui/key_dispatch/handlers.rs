@@ -26,12 +26,12 @@ use crate::input::keymap::{CanonicalKeys, PhysicalKey};
 use crate::ui::state::InputStateAccess;
 use crate::ui::{AppState, Message, NavTarget, state::TypedScreen};
 
-use super::typestate::{
+use crate::input::typestate::{
     InputStateMachine, handle_insert_mode_input, map_key_to_helix_command, normalize_key_event,
 };
 
 /// Handle keyboard events on profile and statistics screens
-pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+pub(crate) fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Ctrl-Q returns to menu (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::BackToMenu);
@@ -92,7 +92,7 @@ pub fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Mess
 /// - gg: jump to first item
 /// - G: jump to last item
 /// - 15G/15gg: jump to item 15
-pub fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+pub(crate) fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Ctrl-Q exits application from anywhere
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::QuitApp);
@@ -169,7 +169,7 @@ pub(super) fn gameplay_input_state(state: &AppState) -> Option<&InputStateMachin
 /// Returns the corresponding movement command if the key is an arrow key,
 /// None otherwise.
 fn map_arrow_to_movement(key_code: KeyCode) -> Option<&'static str> {
-    use crate::helix::commands::{CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP};
+    use crate::grammar::commands::{CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP};
     match key_code {
         KeyCode::Left => Some(CMD_MOVE_LEFT),   // "h"
         KeyCode::Right => Some(CMD_MOVE_RIGHT), // "l"
@@ -310,7 +310,7 @@ fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
 }
 
 /// Handle keyboard events on the task screen
-pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+pub(crate) fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Check special UI keys first
     if let Some(msg) = handle_task_special_keys(key) {
         return Some(msg);
@@ -344,7 +344,7 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
 /// - `p` - Show profile
 /// - `q` - Quit application
 /// - `Ctrl-Q` - Return to mode selection
-pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_results_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q returns to menu (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::BackToMenu);
@@ -375,7 +375,7 @@ pub fn handle_results_keys(key: KeyEvent) -> Option<Message> {
 /// No `p` (profile) key: this screen is reached only via the Results `(n)`
 /// key and has no `ReturnDestination` variant to return to, so a Profile
 /// detour would strand the user - see `ReturnDestination` in `ui::state::screen`.
-pub fn handle_end_game_summary_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_end_game_summary_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q returns to menu (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::BackToMenu);
@@ -393,7 +393,7 @@ pub fn handle_end_game_summary_keys(key: KeyEvent) -> Option<Message> {
 }
 
 /// Handle keyboard events on the review session screen
-pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_review_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q abandons review session (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::AbandonReviewSession);
@@ -421,7 +421,7 @@ pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
 /// - `a` - Select all (clear filters) (`CategoryFilterSelectAll`)
 /// - `Esc` or `q` - Return to previous screen (`BackToMenu`)
 /// - `Ctrl-Q` - Return to previous screen (`BackToMenu`)
-pub fn handle_category_filters_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_category_filters_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q returns to previous screen (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::BackToMenu);
@@ -438,7 +438,7 @@ pub fn handle_category_filters_keys(key: KeyEvent) -> Option<Message> {
 }
 
 /// Handle keyboard events on mode selection screen
-pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
+pub(crate) fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q exits application (unified exit key - mode selection is root screen)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Message::QuitApp);
@@ -460,7 +460,7 @@ pub fn handle_mode_selection_keys(key: KeyEvent) -> Option<Message> {
 }
 
 /// Handle keyboard events on mini-game screen
-pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
+pub(crate) fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Check if game over or paused
     let session = state.minigame_session()?;
 
@@ -551,9 +551,7 @@ mod tests {
     /// Build an `Active` `GameSession` for a minimal scenario, used to exercise
     /// insert/normal mode transitions in task-screen key handling tests.
     fn make_active_task_session() -> GameSession<crate::game::Active> {
-        use crate::config::{
-            CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-        };
+        use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
             id: sid("test"),
@@ -562,21 +560,11 @@ mod tests {
             setup: Setup {
                 file_content: "test".to_string(),
                 language: None,
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             target: TargetState {
                 file_content: "test2".to_string(),
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             solution: Solution {
                 commands: vec!["x".to_string()],
@@ -641,7 +629,7 @@ mod tests {
     /// #513: `?` is a gameplay key (backward search), never the hint key.
     #[test]
     fn test_task_key_question_mark_is_backward_search_not_hint() {
-        use crate::helix::commands::CMD_SEARCH_BACKWARD;
+        use crate::grammar::commands::CMD_SEARCH_BACKWARD;
         let key = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
@@ -656,7 +644,7 @@ mod tests {
 
     #[test]
     fn test_task_key_h_moves_left() {
-        use crate::helix::commands::CMD_MOVE_LEFT;
+        use crate::grammar::commands::CMD_MOVE_LEFT;
         let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
         let state = create_test_app_state();
         let msg = handle_task_keys(key, &state);
@@ -988,7 +976,7 @@ mod tests {
     /// state instead of being intercepted as a screen-level key.
     mod question_mark_typing_tests {
         use super::*;
-        use crate::helix::commands::CMD_INSERT;
+        use crate::grammar::commands::CMD_INSERT;
         use crate::input::typestate::InputState;
 
         fn question_mark_message(state: &AppState) -> Option<Message> {
@@ -1049,8 +1037,8 @@ mod tests {
     /// #570: `Ctrl-c` never quits a gameplay screen; each input state follows Helix
     mod ctrl_c_tests {
         use super::*;
-        use crate::helix::commands::{CMD_ESCAPE, CMD_INSERT, CMD_TOGGLE_COMMENTS};
-        use crate::input::handle_key_event;
+        use crate::grammar::commands::{CMD_ESCAPE, CMD_TOGGLE_COMMENTS};
+        use crate::ui::key_dispatch::handle_key_event;
 
         fn ctrl_c() -> KeyEvent {
             KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
@@ -1081,7 +1069,7 @@ mod tests {
 
         #[test]
         fn test_base_and_count_forward_ctrl_c_as_toggle_comments() {
-            for opening in ["", "3"] {
+            for opening in ["", "2"] {
                 let state = task_state_after(&plain(opening));
                 let message = handle_key_event(ctrl_c(), &state);
                 assert!(
@@ -1094,7 +1082,7 @@ mod tests {
         #[test]
         fn test_argument_pending_states_take_ctrl_c_as_the_plain_char() {
             for opening in [
-                "f", "t", "F", "T", "r", "ms", "md", "mr", "mi", "ma", "\"", "3f",
+                "f", "t", "F", "T", "r", "ms", "md", "mr", "mi", "ma", "\"", "3f", "mra",
             ] {
                 let state = task_state_after(&plain(opening));
                 assert_eq!(
@@ -1108,7 +1096,8 @@ mod tests {
         #[test]
         fn test_leader_and_prompt_states_cancel_on_ctrl_c() {
             for opening in [
-                "g", "z", "m", "[", "]", "2g", "\"a", ":", "/", "?", "s", "S", "K",
+                "g", "z", "m", "[", "]", "2g", ":", "/", "?", "s", "S", "K", "/a", ":w", "?a",
+                "sa", "Sa", "Ka",
             ] {
                 let state = task_state_after(&plain(opening));
                 assert_eq!(
@@ -1125,18 +1114,100 @@ mod tests {
             );
         }
 
-        #[test]
-        fn test_insert_mode_ignores_ctrl_c() {
-            let mut state = create_test_app_state();
-            let session = match make_active_task_session()
-                .record_action(CMD_INSERT.to_string())
-                .unwrap()
-            {
-                crate::game::SessionAfterAction::StillActive(session) => session,
-                crate::game::SessionAfterAction::Completed(_) => unreachable!(),
+        fn press(state: &mut AppState, key: KeyEvent) {
+            use crate::testing::update_executing_effects as update;
+            if let Some(msg) = handle_key_event(key, state) {
+                update(state, msg).unwrap();
+            }
+        }
+
+        fn task_content(state: &AppState) -> String {
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
             };
-            state.screen = TypedScreen::Task(TaskData::new(session));
-            assert_eq!(handle_key_event(ctrl_c(), &state), None);
+            task_data.session.playable().current_content()
+        }
+
+        fn task_mode(state: &AppState) -> crate::helix::simulator::ModeKind {
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
+            };
+            task_data.session.playable().mode_kind()
+        }
+
+        fn fresh_task() -> AppState {
+            task_state_after(&[])
+        }
+
+        /// A counted `Ctrl-c` toggles once (the count is ignored) and leaves the
+        /// input state at its base
+        #[test]
+        fn test_counted_ctrl_c_toggles_once_and_returns_to_base() {
+            let mut state = task_state_after(&plain("2"));
+            press(&mut state, ctrl_c());
+            assert_eq!(task_content(&state), "// test");
+            assert!(gameplay_input_state(&state).is_some_and(|m| m.state().is_base()));
+        }
+
+        /// A typed prompt cancelled by `Ctrl-c` leaves the buffer untouched and
+        /// the next key a plain command
+        #[test]
+        fn test_ctrl_c_cancels_a_typed_prompt_and_the_next_key_is_plain() {
+            for opening in ["/a", ":w", "?a", "sa", "Ka"] {
+                let mut state = task_state_after(&plain(opening));
+                press(&mut state, ctrl_c());
+                assert_eq!(task_content(&state), "test", "after {opening:?}");
+                assert!(
+                    gameplay_input_state(&state).is_some_and(|m| m.state().is_base()),
+                    "after {opening:?}"
+                );
+                for key in plain("d") {
+                    press(&mut state, key);
+                }
+                assert_eq!(task_content(&state), "est", "after {opening:?}");
+            }
+        }
+
+        /// #599: hx inserts the character `c` for `Ctrl-c` in Insert mode and stays in it
+        #[test]
+        fn test_insert_mode_types_c_on_ctrl_c() {
+            let mut state = fresh_task();
+            for key in plain("i") {
+                press(&mut state, key);
+            }
+            press(&mut state, ctrl_c());
+            assert_eq!(task_content(&state), "ctest");
+            assert_eq!(task_mode(&state), crate::helix::simulator::ModeKind::Insert);
+        }
+
+        /// #599: a selected register awaiting a command forwards `Ctrl-c`
+        /// (`toggle_comments`) and drops the register
+        #[test]
+        fn test_register_op_pending_forwards_ctrl_c_and_drops_the_register() {
+            let state = task_state_after(&plain("\"a"));
+            let message = handle_key_event(ctrl_c(), &state);
+            assert!(
+                matches!(&message, Some(Message::ExecuteCommand { keys, .. }) if keys.as_str() == CMD_TOGGLE_COMMENTS),
+                "{message:?}"
+            );
+
+            let mut state = task_state_after(&plain("\"a"));
+            press(&mut state, ctrl_c());
+            assert_eq!(task_content(&state), "// test");
+            assert!(gameplay_input_state(&state).is_some_and(|m| m.state().is_base()));
+        }
+
+        /// #599: in Select mode `Ctrl-c` toggles comments and returns to Normal mode
+        #[test]
+        fn test_select_mode_ctrl_c_toggles_comments_and_leaves_select_mode() {
+            let mut state = fresh_task();
+            for key in plain("v") {
+                press(&mut state, key);
+            }
+            assert_eq!(task_mode(&state), crate::helix::simulator::ModeKind::Select);
+            press(&mut state, ctrl_c());
+            assert_eq!(task_content(&state), "// test");
+            assert_eq!(task_mode(&state), crate::helix::simulator::ModeKind::Normal);
         }
 
         #[test]
@@ -1205,7 +1276,7 @@ mod tests {
     // Escape must exit Insert mode before it dismisses the hint panel.
     mod task_keys_hint_panel_escape_tests {
         use super::*;
-        use crate::helix::commands::CMD_INSERT;
+        use crate::grammar::commands::CMD_INSERT;
 
         #[test]
         fn test_escape_exits_insert_mode_even_with_hint_panel_open() {
@@ -1230,8 +1301,8 @@ mod tests {
             assert_eq!(
                 msg,
                 Some(Message::ExecuteCommand {
-                    keys: CanonicalKeys::from_static(crate::helix::commands::CMD_ESCAPE),
-                    typed: Cow::Borrowed(crate::helix::commands::CMD_ESCAPE),
+                    keys: CanonicalKeys::from_static(crate::grammar::commands::CMD_ESCAPE),
+                    typed: Cow::Borrowed(crate::grammar::commands::CMD_ESCAPE),
                 })
             );
         }
@@ -1439,7 +1510,7 @@ mod tests {
 
         #[test]
         fn test_map_arrow_to_movement() {
-            use crate::helix::commands::{
+            use crate::grammar::commands::{
                 CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
             };
 
@@ -1452,9 +1523,7 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_ignored_by_default() {
-            use crate::config::{
-                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-            };
+            use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
             use crate::ui::state::{ConfigState, screen::TaskData};
 
             let mut state = create_test_app_state();
@@ -1468,21 +1537,11 @@ mod tests {
                 setup: Setup {
                     file_content: "test".to_string(),
                     language: None,
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 solution: Solution {
                     commands: vec!["x".to_string()],
@@ -1517,10 +1576,8 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_mapped_when_enabled() {
-            use crate::config::{
-                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-            };
-            use crate::helix::commands::{
+            use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
+            use crate::grammar::commands::{
                 CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
             };
             use crate::ui::state::screen::TaskData;
@@ -1536,21 +1593,11 @@ mod tests {
                 setup: Setup {
                     file_content: "test".to_string(),
                     language: None,
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 solution: Solution {
                     commands: vec!["x".to_string()],
@@ -1622,9 +1669,7 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_with_modifiers_not_mapped() {
-            use crate::config::{
-                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-            };
+            use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
             use crate::ui::state::screen::TaskData;
 
             let mut state = create_test_app_state();
@@ -1638,21 +1683,11 @@ mod tests {
                 setup: Setup {
                     file_content: "test".to_string(),
                     language: None,
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 solution: Solution {
                     commands: vec!["x".to_string()],
@@ -2008,8 +2043,8 @@ mod tests {
     /// `handle_gameplay_input` doc comment on the guard this exercises).
     mod multi_token_remap_outside_base_tests {
         use super::*;
-        use crate::config::keymap::resolve_str;
         use crate::input::keymap::CanonicalKeys;
+        use crate::input::keymap::resolve_str;
         use crate::testing::update_executing_effects as update;
         use crate::ui::state::{ConfigState, TaskData};
 
@@ -2086,7 +2121,10 @@ mod tests {
                 &mut state,
                 KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
             );
-            assert!(input_state(&state).is_count_pending());
+            assert_matches!(
+                input_state(&state),
+                crate::input::typestate::InputState::CountPending { .. }
+            );
 
             // Must not panic (this is the regression under test) and must
             // fall through to the stock key: "3" + "G" is the counted
@@ -2126,6 +2164,90 @@ mod tests {
 
             assert!(input_state(&state).is_base());
             assert_eq!(action_count(&state), 0);
+        }
+    }
+
+    /// #592: `Ctrl-r` is redo on the task screen, not a dropped key.
+    mod redo_key_tests {
+        use super::*;
+        use crate::testing::update_executing_effects as update;
+        use crate::ui::key_dispatch::handle_key_event;
+
+        fn press(state: &mut AppState, key: KeyEvent) {
+            if let Some(msg) = handle_key_event(key, state) {
+                update(state, msg).unwrap();
+            }
+        }
+
+        fn content(state: &AppState) -> String {
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
+            };
+            task_data.session.playable().current_content()
+        }
+
+        #[test]
+        fn ctrl_r_redoes_an_undone_edit_through_the_key_dispatch() {
+            let mut state = create_test_app_state();
+            state.screen = TypedScreen::Task(TaskData::new(make_active_task_session()));
+            let plain = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+
+            press(&mut state, plain('x'));
+            press(&mut state, plain('d'));
+            let edited = content(&state);
+            assert_ne!(edited, "test");
+
+            press(&mut state, plain('u'));
+            assert_eq!(content(&state), "test");
+
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
+            );
+            assert_eq!(content(&state), edited);
+        }
+
+        #[test]
+        fn ctrl_r_redoes_an_undone_edit_in_the_arcade() {
+            use crate::game::PlayableScenario;
+            use crate::minigame::MiniGameSession;
+            use crate::testing::ScenarioBuilder;
+            use crate::ui::state::MiniGameData;
+            use std::sync::Arc;
+
+            let scenario = ScenarioBuilder::new()
+                .id("s1")
+                .setup_content("test")
+                .build();
+            let mut session = MiniGameSession::new(Arc::new(vec![scenario]), None);
+            session.start();
+            for _ in 0..4 {
+                session.tick_countdown();
+            }
+            let mut state = create_test_app_state();
+            state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
+            let arcade_content = |state: &AppState| {
+                state
+                    .minigame_session()
+                    .and_then(crate::minigame::MiniGameSession::current_scenario)
+                    .map(PlayableScenario::current_content)
+                    .expect("an active arcade scenario")
+            };
+            let plain = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+
+            press(&mut state, plain('x'));
+            press(&mut state, plain('d'));
+            let edited = arcade_content(&state);
+            assert_ne!(edited, "test");
+
+            press(&mut state, plain('u'));
+            assert_eq!(arcade_content(&state), "test");
+
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
+            );
+            assert_eq!(arcade_content(&state), edited);
         }
     }
 

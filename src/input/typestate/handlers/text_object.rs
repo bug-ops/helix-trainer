@@ -2,11 +2,10 @@
 //!
 //! Processes text object types like 'w' (word), '(' (parentheses), etc.
 
-use std::borrow::Cow;
-
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::{InputHandler, KeyHandler};
+use crate::helix::normal_command::{NormalCommand, TextObjectScope};
 use crate::input::typestate::{
     handler_result::HandlerResult,
     state_types::{TextObjectAroundPending, TextObjectInsidePending},
@@ -23,10 +22,10 @@ impl InputHandler<TextObjectAroundPending> for KeyHandler {
             KeyCode::Char(
                 c @ ('w' | 'W' | '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | '`'
                 | 'p'),
-            ) => {
-                let cmd = format!("ma{c}");
-                HandlerResult::Execute(Cow::Owned(cmd))
-            }
+            ) => HandlerResult::Execute(NormalCommand::TextObject {
+                scope: TextObjectScope::Around,
+                object: c,
+            }),
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
             // Invalid text object - cancel
@@ -46,10 +45,10 @@ impl InputHandler<TextObjectInsidePending> for KeyHandler {
             KeyCode::Char(
                 c @ ('w' | 'W' | '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | '`'
                 | 'p'),
-            ) => {
-                let cmd = format!("mi{c}");
-                HandlerResult::Execute(Cow::Owned(cmd))
-            }
+            ) => HandlerResult::Execute(NormalCommand::TextObject {
+                scope: TextObjectScope::Inside,
+                object: c,
+            }),
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
             // Invalid text object - cancel

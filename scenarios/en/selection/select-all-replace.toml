@@ -22,7 +22,6 @@ cursor_position = [1, 8]
 file_content = """fn main() {
     let x = 1;
 }"""
-cursor_position = [2, 1]
 selection = [0, 0, 2, 1]
 
 [scenarios.solution]
@@ -61,7 +60,6 @@ cursor_position = [0, 0]
 file_content = """AAAA
 AAAA
 CCCC"""
-cursor_position = [1, 0]
 selection = [1, 0, 2, 0]
 
 [scenarios.solution]
@@ -95,12 +93,10 @@ hints = [
 
 [scenarios.setup]
 file_content = """foo bar foo baz foo"""
-cursor_position = [0, 0]
 selection = [0, 0, 0, 19]
 
 [scenarios.target]
 file_content = """foo bar foo baz foo"""
-cursor_position = [0, 19]
 selections = [[0, 0, 0, 3], [0, 8, 0, 11], [0, 16, 0, 19]]
 
 [scenarios.solution]
@@ -134,12 +130,10 @@ hints = [
 
 [scenarios.setup]
 file_content = """foo,bar,baz"""
-cursor_position = [0, 0]
 selection = [0, 0, 0, 11]
 
 [scenarios.target]
 file_content = """foo,bar,baz"""
-cursor_position = [0, 11]
 selections = [[0, 0, 0, 3], [0, 4, 0, 7], [0, 8, 0, 11]]
 
 [scenarios.solution]

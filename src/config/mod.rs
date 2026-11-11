@@ -19,7 +19,6 @@ pub mod json_store;
 pub mod keymap;
 mod loader;
 pub mod quests;
-pub mod scenario_collection;
 pub mod scenarios;
 
 pub use app_config::{AppConfig, ConfigStorage};
@@ -27,11 +26,8 @@ pub use quests::{
     QuestConditions, QuestDifficulty, QuestLoader, QuestSpec, QuestTemplate, QuestsFile,
     QuestsMetadata, XpConfig,
 };
-pub use scenario_collection::{
-    CompletionFilter, CurriculumStats, ScenarioCollection, ScenarioFilter, SortMode,
-};
 pub use scenarios::{
-    CompletionRule, CursorSpec, DEFAULT_LANGUAGE, Difficulty, LastAction, Scenario,
-    ScenarioCategory, ScenarioLoader, ScenarioMetadata, ScenariosFile, ScoringConfig, Setup,
-    Solution, TargetState,
+    BoundError, Bounded, CompletionRule, CursorField, CursorRange, CursorSpec, DEFAULT_LANGUAGE,
+    Difficulty, LastAction, Pos, Scenario, ScenarioCategory, ScenarioLoader, ScenarioMetadata,
+    ScenariosFile, ScoringConfig, Setup, Solution, TargetState,
 };

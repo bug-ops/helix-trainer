@@ -14,25 +14,23 @@ pub const SUCCESS_SCREEN_DELAY: Duration = Duration::from_millis(1500);
 
 // Notification timing
 /// Default duration for notification display (3 seconds)
-pub const DEFAULT_NOTIFICATION_DURATION: Duration = Duration::from_secs(3);
+pub(crate) const DEFAULT_NOTIFICATION_DURATION: Duration = Duration::from_secs(3);
 
 // Profile/data saving
 /// Debounce interval for profile saves (5 seconds)
-pub const PROFILE_SAVE_DEBOUNCE: Duration = Duration::from_secs(5);
+pub(crate) const PROFILE_SAVE_DEBOUNCE: Duration = Duration::from_secs(5);
 /// Capacity of the serialized profile-save writer's request queue.
 ///
 /// Saves are infrequent (debounced) relative to this capacity; a full
 /// queue would mean the writer is pathologically behind, in which case
 /// callers fall back to a synchronous write rather than blocking.
-pub const PROFILE_SAVE_QUEUE_CAPACITY: usize = 16;
+pub(crate) const PROFILE_SAVE_QUEUE_CAPACITY: usize = 16;
 
 // Data loading
-/// Timeout for async data loading operations (5 seconds)
-pub const DATA_LOADING_TIMEOUT: Duration = Duration::from_secs(5);
 
 // FSRS rating
 /// Time budget per optimal action when rating an attempt (3 seconds).
 ///
 /// Covers recalling a key and typing it: solving at the expected pace (up to 1.5x) is rated
 /// Easy, up to 3x Good, slower Hard. See the FSRS review rating and session spec.
-pub const PER_ACTION_BUDGET: Duration = Duration::from_secs(3);
+pub(crate) const PER_ACTION_BUDGET: Duration = Duration::from_secs(3);

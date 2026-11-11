@@ -6,7 +6,7 @@
 //! of `d` is written out as the resulting text.
 
 use super::{SCENARIO_14, probed, run_keys, run_keys_in};
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 
 fn line(content: &str, index: usize) -> &str {
     content.lines().nth(index).unwrap_or_default()
@@ -316,4 +316,35 @@ fn changing_a_whole_line_is_one_undo_step() {
     .display()
     .content();
     assert_eq!(content, SCENARIO_14);
+}
+
+fn typed_a_after(entry: &[&str], language: &str) -> String {
+    let keys: Vec<&str> = entry.iter().copied().chain(["a", CMD_ESCAPE]).collect();
+    run_keys_in(language, SCENARIO_14, &keys)
+        .display()
+        .content()
+}
+
+/// #593: `i` inserts at the selection start whatever the range direction.
+#[test]
+fn insert_on_a_forward_selection_inserts_at_its_start() {
+    let content = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_INSERT], "rs");
+    assert_eq!(line(&content, 0), "afn add(a: i32, b: i32) -> i32 {");
+    assert_eq!(content.lines().count(), SCENARIO_14.lines().count());
+}
+
+#[test]
+fn insert_on_a_flipped_selection_matches_the_forward_one() {
+    let forward = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_INSERT], "rs");
+    let flipped = typed_a_after(
+        &[CMD_MOVE_WORD_FORWARD, CMD_FLIP_SELECTIONS, CMD_INSERT],
+        "rs",
+    );
+    assert_eq!(flipped, forward);
+}
+
+#[test]
+fn append_on_a_selection_still_inserts_at_its_end() {
+    let content = typed_a_after(&[CMD_MOVE_WORD_FORWARD, CMD_APPEND], "rs");
+    assert_eq!(line(&content, 0), "fn aadd(a: i32, b: i32) -> i32 {");
 }

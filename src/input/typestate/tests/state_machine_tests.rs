@@ -1,11 +1,12 @@
 //! Tests for `InputStateMachine`
 
+use crate::testing::normal;
 use std::assert_matches;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
-use crate::input::typestate::{InputState, InputStateMachine};
+use crate::grammar::commands::*;
+use crate::input::typestate::{HandlerResult, InputState, InputStateMachine};
 
 #[test]
 fn test_state_machine_initial_state() {
@@ -20,12 +21,12 @@ fn test_state_machine_goto_sequence() {
     // Press 'g' - transition to GotoPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(sm.state().is_goto_pending());
+    assert_matches!(sm.state(), InputState::GotoPending);
 
     // Press 'g' again - execute "gg"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
-    assert!(result.is_execute());
-    assert_eq!(result.command(), Some(CMD_GOTO_FILE_START));
+    assert_matches!(result, HandlerResult::Execute(_));
+    assert_eq!(result.command(), Some(&normal(CMD_GOTO_FILE_START)));
     assert!(sm.state().is_base());
 }
 
@@ -36,12 +37,12 @@ fn test_state_machine_find_sequence() {
     // Press 'f' - transition to FindCharPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(sm.state().is_find_char_pending());
+    assert_matches!(sm.state(), InputState::FindCharPending { .. });
 
     // Press 'a' - execute "fa"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
-    assert!(result.is_execute());
-    assert_eq!(result.command(), Some("fa"));
+    assert_matches!(result, HandlerResult::Execute(_));
+    assert_eq!(result.command(), Some(&normal("fa")));
     assert!(sm.state().is_base());
 }
 
@@ -52,7 +53,7 @@ fn test_state_machine_count_sequence() {
     // Press '1' - transition to CountPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(sm.state().is_count_pending());
+    assert_matches!(sm.state(), InputState::CountPending { .. });
     assert_eq!(sm.pending_count(), Some(1));
 
     // Press '2' - continue building count
@@ -62,8 +63,8 @@ fn test_state_machine_count_sequence() {
 
     // Press 'j' - execute "12j"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
-    assert!(result.is_execute());
-    assert_eq!(result.command(), Some("12j"));
+    assert_matches!(result, HandlerResult::Execute(_));
+    assert_eq!(result.command(), Some(&normal("12j")));
     assert!(sm.state().is_base());
 }
 
@@ -73,11 +74,11 @@ fn test_state_machine_cancel_returns_to_base() {
 
     // Press 'g' - transition to GotoPending
     sm.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
-    assert!(sm.state().is_goto_pending());
+    assert_matches!(sm.state(), InputState::GotoPending);
 
     // Press Escape - cancel
     let result = sm.process_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(result.is_cancel());
+    assert_matches!(result, HandlerResult::Cancel);
     assert!(sm.state().is_base());
 }
 
@@ -88,16 +89,16 @@ fn test_state_machine_count_then_register_cancels_to_base() {
     let mut sm = InputStateMachine::new();
 
     sm.process_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
-    assert!(sm.state().is_count_pending());
+    assert_matches!(sm.state(), InputState::CountPending { .. });
 
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('"'), KeyModifiers::NONE));
-    assert!(result.is_cancel());
+    assert_matches!(result, HandlerResult::Cancel);
     assert!(sm.state().is_base());
 
     // The register/op characters that would have followed are now plain
     // Base-state input, not part of a leaked pending sequence.
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
-    assert!(result.is_execute());
+    assert_matches!(result, HandlerResult::Execute(_));
 }
 
 /// M4: `"a3y` cancels at the register-op boundary (a digit is not a
@@ -111,7 +112,7 @@ fn test_state_machine_register_then_digit_cancels_to_base() {
     assert!(sm.state().is_waiting_for_char()); // RegisterOpPending
 
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
-    assert!(result.is_cancel());
+    assert_matches!(result, HandlerResult::Cancel);
     assert!(sm.state().is_base());
 }
 
@@ -120,7 +121,7 @@ fn test_state_machine_reset() {
     let mut sm = InputStateMachine::new();
 
     sm.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
-    assert!(sm.state().is_goto_pending());
+    assert_matches!(sm.state(), InputState::GotoPending);
 
     sm.reset();
     assert!(sm.state().is_base());
@@ -133,7 +134,7 @@ fn test_state_machine_surround_add_sequence() {
     // Press 'm' - transition to MatchPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(sm.state().is_match_pending());
+    assert_matches!(sm.state(), InputState::MatchPending);
 
     // Press 's' - transition to SurroundAddPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
@@ -142,8 +143,8 @@ fn test_state_machine_surround_add_sequence() {
 
     // Press '(' - execute "ms("
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
-    assert!(result.is_execute());
-    assert_eq!(result.command(), Some("ms("));
+    assert_matches!(result, HandlerResult::Execute(_));
+    assert_eq!(result.command(), Some(&normal("ms(")));
     assert!(sm.state().is_base());
 }
 
@@ -153,7 +154,7 @@ fn test_state_machine_surround_delete_sequence() {
 
     // Press 'm' - transition to MatchPending
     sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
-    assert!(sm.state().is_match_pending());
+    assert_matches!(sm.state(), InputState::MatchPending);
 
     // Press 'd' - transition to SurroundDeletePending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
@@ -162,8 +163,8 @@ fn test_state_machine_surround_delete_sequence() {
 
     // Press '{' - execute "md{"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('{'), KeyModifiers::NONE));
-    assert!(result.is_execute());
-    assert_eq!(result.command(), Some("md{"));
+    assert_matches!(result, HandlerResult::Execute(_));
+    assert_eq!(result.command(), Some(&normal("md{")));
     assert!(sm.state().is_base());
 }
 
@@ -173,7 +174,7 @@ fn test_state_machine_surround_replace_sequence() {
 
     // Press 'm' - transition to MatchPending
     sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
-    assert!(sm.state().is_match_pending());
+    assert_matches!(sm.state(), InputState::MatchPending);
 
     // Press 'r' - transition to SurroundReplaceFromPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
@@ -190,8 +191,8 @@ fn test_state_machine_surround_replace_sequence() {
 
     // Press '[' - execute "mr(["
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE));
-    assert!(result.is_execute());
-    assert_eq!(result.command(), Some("mr(["));
+    assert_matches!(result, HandlerResult::Execute(_));
+    assert_eq!(result.command(), Some(&normal("mr([")));
     assert!(sm.state().is_base());
 }
 
@@ -206,18 +207,8 @@ fn test_state_machine_surround_escape_cancels() {
 
     // Press Escape - should cancel
     let result = sm.process_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(result.is_cancel());
+    assert_matches!(result, HandlerResult::Cancel);
     assert!(sm.state().is_base());
-}
-
-#[test]
-fn test_surround_pending_predicates() {
-    assert!(InputState::SurroundAddPending.is_surround_pending());
-    assert!(InputState::SurroundDeletePending.is_surround_pending());
-    assert!(InputState::SurroundReplaceFromPending.is_surround_pending());
-    assert!(InputState::SurroundReplaceToPending { from_char: '(' }.is_surround_pending());
-    assert!(!InputState::Base.is_surround_pending());
-    assert!(!InputState::MatchPending.is_surround_pending());
 }
 
 #[test]
@@ -227,7 +218,7 @@ fn test_state_machine_text_object_around_sequence() {
     // Press 'm' - transition to MatchPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
     assert!(result.is_transition());
-    assert!(sm.state().is_match_pending());
+    assert_matches!(sm.state(), InputState::MatchPending);
 
     // Press 'a' - transition to TextObjectAroundPending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
@@ -236,8 +227,8 @@ fn test_state_machine_text_object_around_sequence() {
 
     // Press 'w' - execute "maw"
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE));
-    assert!(result.is_execute());
-    assert_eq!(result.command(), Some("maw"));
+    assert_matches!(result, HandlerResult::Execute(_));
+    assert_eq!(result.command(), Some(&normal("maw")));
     assert!(sm.state().is_base());
 }
 
@@ -247,7 +238,7 @@ fn test_state_machine_text_object_inside_sequence() {
 
     // Press 'm' - transition to MatchPending
     sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
-    assert!(sm.state().is_match_pending());
+    assert_matches!(sm.state(), InputState::MatchPending);
 
     // Press 'i' - transition to TextObjectInsidePending
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
@@ -256,8 +247,8 @@ fn test_state_machine_text_object_inside_sequence() {
 
     // Press '(' - execute "mi("
     let result = sm.process_key(KeyEvent::new(KeyCode::Char('('), KeyModifiers::NONE));
-    assert!(result.is_execute());
-    assert_eq!(result.command(), Some("mi("));
+    assert_matches!(result, HandlerResult::Execute(_));
+    assert_eq!(result.command(), Some(&normal("mi(")));
     assert!(sm.state().is_base());
 }
 
@@ -272,17 +263,8 @@ fn test_state_machine_text_object_escape_cancels() {
 
     // Press Escape - should cancel
     let result = sm.process_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert!(result.is_cancel());
+    assert_matches!(result, HandlerResult::Cancel);
     assert!(sm.state().is_base());
-}
-
-#[test]
-fn test_text_object_pending_predicates() {
-    assert!(InputState::TextObjectAroundPending.is_text_object_pending());
-    assert!(InputState::TextObjectInsidePending.is_text_object_pending());
-    assert!(!InputState::Base.is_text_object_pending());
-    assert!(!InputState::MatchPending.is_text_object_pending());
-    assert!(!InputState::SurroundAddPending.is_text_object_pending());
 }
 
 // ==================== Surround preview accessor tests ====================
@@ -299,7 +281,7 @@ fn test_pending_surround_preview_none_in_match_pending() {
     let mut sm = InputStateMachine::new();
     // Transition to MatchPending
     sm.process_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
-    assert!(sm.state().is_match_pending());
+    assert_matches!(sm.state(), InputState::MatchPending);
     // Still no preview in MatchPending
     assert!(sm.pending_surround_preview().is_none());
 }
@@ -375,7 +357,7 @@ fn test_pending_surround_replace_char_various_brackets() {
 fn test_apply_canonical_expansion_multi_token_commits_and_resolves() {
     let mut sm = InputStateMachine::new();
     let resolved = sm.apply_canonical_expansion(&["g", "e"]);
-    assert_eq!(resolved, Some(CMD_GOTO_LAST_LINE.to_string()));
+    assert_eq!(resolved, Some(normal(CMD_GOTO_LAST_LINE)));
     assert!(sm.state().is_base());
 }
 

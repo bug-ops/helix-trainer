@@ -97,21 +97,10 @@ pub trait ProgressTracker {
 /// }
 ///
 /// assert_eq!(Double.factor(), 2.0);
-/// assert!(Double.is_beneficial());
 /// ```
 pub trait Modifier {
     /// Get modification factor (1.0 = no change, 2.0 = double, 0.5 = half)
     fn factor(&self) -> f64;
-
-    /// Check if this is a beneficial modifier (factor > 1.0)
-    fn is_beneficial(&self) -> bool {
-        self.factor() > 1.0
-    }
-
-    /// Check if this is a penalty modifier (factor < 1.0)
-    fn is_penalty(&self) -> bool {
-        self.factor() < 1.0
-    }
 }
 
 #[cfg(test)]
@@ -227,32 +216,5 @@ mod tests {
         // Progress should be clamped to 1.0
         assert!((over.progress() - 1.0).abs() < f64::EPSILON);
         assert_eq!(over.progress_percent(), 100);
-    }
-
-    // Test implementation for Modifier
-    struct TestModifier {
-        factor: f64,
-    }
-
-    impl Modifier for TestModifier {
-        fn factor(&self) -> f64 {
-            self.factor
-        }
-    }
-
-    #[test]
-    fn test_modifier_classification() {
-        let bonus = TestModifier { factor: 1.5 };
-        let penalty = TestModifier { factor: 0.8 };
-        let neutral = TestModifier { factor: 1.0 };
-
-        assert!(bonus.is_beneficial());
-        assert!(!bonus.is_penalty());
-
-        assert!(penalty.is_penalty());
-        assert!(!penalty.is_beneficial());
-
-        assert!(!neutral.is_beneficial());
-        assert!(!neutral.is_penalty());
     }
 }

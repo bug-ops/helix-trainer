@@ -4,7 +4,7 @@ use std::assert_matches;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::input::typestate::{HandlerResult, InputHandler, KeyHandler, ViewPending};
 
 #[test]
@@ -13,7 +13,7 @@ fn test_view_pending_zz() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_CENTER);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_VIEW_CENTER);
 }
 
 #[test]
@@ -22,7 +22,7 @@ fn test_view_pending_zt() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_TOP);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_VIEW_TOP);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn test_view_pending_zb() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_BOTTOM);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_VIEW_BOTTOM);
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn test_view_pending_zm() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_VIEW_CENTER_HORIZONTAL);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_VIEW_CENTER_HORIZONTAL);
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn test_view_pending_zj() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_SCROLL_DOWN);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_SCROLL_DOWN);
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn test_view_pending_zk() {
         &ViewPending,
         KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_SCROLL_UP);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_SCROLL_UP);
 }
 
 #[test]

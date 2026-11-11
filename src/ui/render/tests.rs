@@ -2661,26 +2661,113 @@ mod shared_definitions {
     }
 }
 
+fn rust_sources_below(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            rust_sources_below(&path, out);
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            out.push(path);
+        }
+    }
+}
+
 #[test]
-fn localized_screens_use_only_existing_locale_keys() {
-    let sources = [
-        include_str!("statistics.rs"),
-        include_str!("category_filters.rs"),
-        include_str!("minigame.rs"),
-        include_str!("mode_selection.rs"),
-        include_str!("end_game.rs"),
-    ];
+fn localized_ui_code_uses_only_existing_locale_keys() {
+    let mut files = Vec::new();
+    rust_sources_below(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui"),
+        &mut files,
+    );
     let mut checked = 0;
-    for source in sources {
+    for file in files {
+        let source = std::fs::read_to_string(&file).unwrap();
         for (at, _) in source.match_indices("t!(\"") {
             if source[..at].ends_with(|c: char| c.is_alphanumeric()) {
                 continue;
             }
             let rest = &source[at + 4..];
             let key = &rest[..rest.find('"').unwrap()];
-            assert_ne!(rust_i18n::t!(key), key, "missing locale key {key}");
+            assert_ne!(
+                rust_i18n::t!(key),
+                key,
+                "missing locale key {key} in {}",
+                file.display()
+            );
             checked += 1;
         }
     }
-    assert!(checked > 80, "only {checked} keys found");
+    assert!(checked > 200, "only {checked} keys found");
+}
+
+mod english_text {
+    use super::create_test_app_state;
+    use crate::gamification::AchievementEngine;
+    use crate::ui::state::{
+        AchievementsData, AppState, ProfileData, ReturnDestination, TypedScreen,
+    };
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn screen_text(state: &AppState, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(140, height)).unwrap();
+        terminal.draw(|f| super::super::render(f, state)).unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect()
+    }
+
+    #[test]
+    fn profile_screen_keeps_its_english_text() {
+        let mut state = create_test_app_state(vec![]);
+        state.screen = TypedScreen::Profile(ProfileData {
+            return_to: ReturnDestination::Menu,
+        });
+        let text = screen_text(&state, 40);
+        for expected in [
+            "PLAYER PROFILE",
+            "Press 's' for detailed statistics | Press 'a' for achievements | Press 'm' to return to menu",
+            "Level 1 ",
+            "Statistics:",
+            "Total Scenarios: ",
+            "Perfect Runs: ",
+            "Total XP: ",
+            "Daily Quests:",
+            "Active Quests: ",
+            "Completed Today: ",
+            "Learning Progress:",
+            "Commands Learned: ",
+            "Commands Mastered: ",
+            "All caught up!",
+        ] {
+            assert!(text.contains(expected), "missing {expected:?} in {text}");
+        }
+    }
+
+    #[test]
+    fn achievements_screen_keeps_its_english_text() {
+        let mut state = create_test_app_state(vec![]);
+        state.screen = TypedScreen::Achievements(AchievementsData {
+            return_to: ReturnDestination::Menu,
+            scroll_offset: 0,
+        });
+        let total = AchievementEngine::all_achievements().len();
+
+        let tall = screen_text(&state, 80);
+        assert!(
+            tall.contains(&format!("ACHIEVEMENTS (0/{total})")),
+            "{tall}"
+        );
+        assert!(
+            tall.contains("'p': profile | 's': statistics | 'j'/'k': scroll | 'm': menu"),
+            "{tall}"
+        );
+
+        let short = screen_text(&state, 24);
+        assert!(short.contains("'m': menu | 1-"), "{short}");
+        assert!(short.contains(&format!("/{total}")), "{short}");
+    }
 }

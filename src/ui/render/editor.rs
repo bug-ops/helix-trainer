@@ -13,7 +13,7 @@ use ratatui::{
 
 /// Type of preview highlight
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PreviewType {
+pub(crate) enum PreviewType {
     /// Surround replace - yellow highlight for brackets to be replaced
     Replace,
     /// Surround delete - red highlight for brackets to be deleted
@@ -24,7 +24,7 @@ pub enum PreviewType {
 ///
 /// Encapsulates cursor position and primary/secondary status for style differentiation.
 #[derive(Debug, Clone, Copy)]
-pub struct CursorInfo {
+pub(crate) struct CursorInfo {
     /// Row position (0-indexed)
     pub row: usize,
     /// Column position (0-indexed)
@@ -38,7 +38,7 @@ impl CursorInfo {
     ///
     /// Primary cursor: white background, black foreground
     /// Secondary cursor: cyan background, black foreground
-    pub fn style(&self) -> Style {
+    pub(crate) fn style(&self) -> Style {
         if self.is_primary {
             Style::default()
                 .bg(Color::White)
@@ -57,7 +57,7 @@ impl CursorInfo {
 ///
 /// Contains positions of brackets that will be modified and the operation type
 #[derive(Debug, Clone, Copy)]
-pub struct PreviewHighlight {
+pub(crate) struct PreviewHighlight {
     pub open_row: usize,
     pub open_col: usize,
     pub close_row: usize,
@@ -67,7 +67,7 @@ pub struct PreviewHighlight {
 
 impl PreviewHighlight {
     /// Create preview highlight by finding surrounding brackets
-    pub fn from_surround_char(
+    pub(crate) fn from_surround_char(
         content: &str,
         cursor_row: usize,
         cursor_col: usize,
@@ -86,7 +86,7 @@ impl PreviewHighlight {
     }
 
     /// Get the highlight color for this preview type
-    pub fn color(&self) -> Color {
+    pub(crate) fn color(&self) -> Color {
         match self.preview_type {
             PreviewType::Replace => Color::Yellow,
             PreviewType::Delete => Color::Red,

@@ -150,7 +150,7 @@ fn render_minigame_mode_submenu(
     parent_area: Rect,
     selection: &MiniGameModeSelection,
     today: chrono::NaiveDate,
-    challenge_progress: &crate::minigame::ChallengeProgress,
+    challenge_progress: &crate::gamification::ChallengeProgress,
 ) {
     const ICONS: [&str; MiniGameModeSelection::MODE_COUNT] = ["🎮", "💀", "📅"];
     // Vertical stride per entry (1 content row + 1 blank spacer row); also used

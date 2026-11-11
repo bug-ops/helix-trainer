@@ -23,7 +23,7 @@ use std::num::NonZeroUsize;
 /// Handle `StartScenario` message
 ///
 /// Initializes a new game session with the selected scenario
-pub fn handle_start_scenario(
+pub(crate) fn handle_start_scenario(
     ctx: &mut HandlerContext<'_>,
     index: usize,
 ) -> Result<HandlerOutcome, UserError> {
@@ -127,8 +127,8 @@ fn record_scenario_completion(
         &ctx.progress.performance_tracker,
     );
     if !newly_unlocked_notifications.is_empty() {
-        for notification in newly_unlocked_notifications {
-            ctx.ui.notifications.push(notification);
+        for event in newly_unlocked_notifications {
+            ctx.ui.notifications.push(event.into());
         }
         // Persist through the shared save path (non-fatal, matches the policy
         // above) instead of a raw `storage.save`, which would skip the FSRS
@@ -143,7 +143,7 @@ fn record_scenario_completion(
     if let Some(notification) =
         ScenarioCompletionService::level_up_notification(leveled_up, ctx.progress.profile.level)
     {
-        ctx.ui.notifications.push(notification);
+        ctx.ui.notifications.push(notification.into());
     }
 }
 
@@ -152,7 +152,7 @@ fn record_scenario_completion(
 /// Processes scenario completion: awards XP, updates quests, records FSRS data
 ///
 /// Note: This handler needs full `AppState` access to call `update()` for quest progress
-pub fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
+pub(crate) fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
     let menu = || {
         TypedScreen::Menu(MenuData {
             selected_item: state.ui.last_menu_selected,
@@ -256,7 +256,7 @@ pub fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
 /// Marks the session as abandoned and shows results
 ///
 /// Takes ownership of `TaskData` to consume the session
-pub fn handle_abandon_scenario(task_data: TaskData) -> TypedScreen {
+pub(crate) fn handle_abandon_scenario(task_data: TaskData) -> TypedScreen {
     // A finished task has nothing left to abandon: it keeps its success animation
     let TaskSession::Active(session) = task_data.session else {
         return TypedScreen::Task(task_data);
@@ -276,7 +276,7 @@ pub fn handle_abandon_scenario(task_data: TaskData) -> TypedScreen {
 /// Resets the current scenario to initial state
 ///
 /// Takes ownership of `ResultsData` to extract scenario
-pub fn handle_retry_scenario(
+pub(crate) fn handle_retry_scenario(
     results_data: ResultsData,
     ctx: &mut HandlerContext<'_>,
 ) -> Result<TypedScreen, UserError> {
@@ -305,7 +305,7 @@ pub fn handle_retry_scenario(
 /// Navigates to the next scenario in the filtered list.
 /// If at the end of the list, stays on Results screen.
 /// If no `scenario_index` is available, returns to Menu screen with restored position.
-pub fn handle_next_lesson(
+pub(crate) fn handle_next_lesson(
     results_data: &ResultsData,
     ctx: &mut HandlerContext<'_>,
 ) -> Result<HandlerOutcome, UserError> {
@@ -450,7 +450,7 @@ fn next_steps(ctx: &HandlerContext<'_>, imperfect: usize) -> Vec<NextStep> {
 ///
 /// Auto-advance behavior: If the scenario was completed successfully, the cursor
 /// moves to the next scenario in the list. Otherwise, it stays at the current position.
-pub fn handle_go_to_scenario_list(
+pub(crate) fn handle_go_to_scenario_list(
     results_data: &ResultsData,
     ctx: &mut HandlerContext<'_>,
 ) -> HandlerOutcome {

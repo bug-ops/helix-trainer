@@ -18,7 +18,7 @@ use std::time::Duration;
 /// Normalizes register ops (`"ay` -> `"y`) and command-line invocations
 /// (`:g 3` -> `:goto`) before tracking, so quest matching (exact equality)
 /// and FSRS see the same command id for the same skill.
-pub fn track_command_for_quests(state: &mut AppState, command: &str) {
+pub(crate) fn track_command_for_quests(state: &mut AppState, command: &str) {
     let Ok(normalized) = NormalizedCommand::from_raw(command) else {
         return;
     };
@@ -38,7 +38,7 @@ pub fn track_command_for_quests(state: &mut AppState, command: &str) {
 ///
 /// Shared between training and arcade modes.
 /// Updates scenario completion and speed run quests.
-pub fn track_scenario_completion_for_quests(
+pub(crate) fn track_scenario_completion_for_quests(
     state: &mut AppState,
     scenario_id: &ScenarioId,
     duration: Duration,
@@ -49,7 +49,7 @@ pub fn track_scenario_completion_for_quests(
 
 /// Result of [`award_quest_completion_xp`]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct QuestXpAward {
+pub(crate) struct QuestXpAward {
     /// (description, xp) pairs for each quest newly completed by this call
     pub bonuses: Vec<QuestBonus>,
     /// Whether the XP granted here alone crossed an account level-up threshold.
@@ -66,7 +66,10 @@ pub struct QuestXpAward {
 /// for today is completed, and returns the (description, xp) pairs for each quest newly
 /// completed by this call, for the caller to display or total up. This is the only place
 /// quest-completion XP is applied to `profile.xp` - callers must not re-add it.
-pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -> QuestXpAward {
+pub(crate) fn award_quest_completion_xp(
+    state: &mut AppState,
+    was_completed: &[bool],
+) -> QuestXpAward {
     let newly_completed: Vec<(QuestId, String, u32)> = {
         let profile = &state.progress.profile;
         profile
@@ -131,7 +134,7 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
 }
 
 /// Snapshot quest completion status before updates
-pub fn snapshot_quest_completion(state: &AppState) -> Vec<bool> {
+pub(crate) fn snapshot_quest_completion(state: &AppState) -> Vec<bool> {
     let profile = &state.progress.profile;
     profile.daily_quests.iter().map(|q| q.completed).collect()
 }
@@ -153,7 +156,7 @@ fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
 
 /// What one quest-progress update changed
 #[derive(Debug)]
-pub struct QuestUpdate {
+pub(crate) struct QuestUpdate {
     /// Quests whose progress moved, for the results display
     pub changes: Vec<QuestProgressChange>,
     /// XP granted for quests completed by this update
@@ -164,7 +167,7 @@ pub struct QuestUpdate {
 ///
 /// Updates quest progress after a command; the per-update outcome is only needed at
 /// scenario completion, which calls [`apply_quest_progress`] directly.
-pub fn handle_update_quest_progress(
+pub(crate) fn handle_update_quest_progress(
     state: &mut AppState,
     command: Option<&str>,
     scenario_completed: bool,
@@ -176,7 +179,7 @@ pub fn handle_update_quest_progress(
 
 /// Update quest progress based on commands, scenario completions, or time, and return what
 /// changed so callers can hand it on by value.
-pub fn apply_quest_progress(
+pub(crate) fn apply_quest_progress(
     state: &mut AppState,
     command: Option<&str>,
     scenario_completed: bool,
@@ -243,7 +246,7 @@ pub fn apply_quest_progress(
 }
 
 /// Format quest type as readable description
-pub fn format_quest_description(quest_type: &QuestType) -> String {
+pub(crate) fn format_quest_description(quest_type: &QuestType) -> String {
     match quest_type {
         QuestType::CommandPractice {
             command, target, ..

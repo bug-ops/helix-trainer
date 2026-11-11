@@ -8,13 +8,12 @@
 //! - 'ma' - text object around
 //! - 'mi' - text object inside
 
-use std::borrow::Cow;
-
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::CMD_MATCH_BRACKETS;
+use crate::grammar::commands::CMD_MATCH_BRACKETS;
 
-use super::{InputHandler, KeyHandler};
+use super::{InputHandler, KeyHandler, execute_registered};
+use crate::helix::normal_command::{NormalCommand, SurroundOp};
 use crate::input::typestate::{
     handler_result::HandlerResult,
     input_state::InputState,
@@ -32,7 +31,7 @@ impl InputHandler<MatchPending> for KeyHandler {
     fn handle_key(_state: &MatchPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // 'mm' - match brackets
-            KeyCode::Char('m') => HandlerResult::Execute(Cow::Borrowed(CMD_MATCH_BRACKETS)),
+            KeyCode::Char('m') => execute_registered(CMD_MATCH_BRACKETS),
             // 'ms' - surround add (transition to SurroundAddPending)
             KeyCode::Char('s') => HandlerResult::Transition(InputState::SurroundAddPending),
             // 'md' - surround delete (transition to SurroundDeletePending)
@@ -59,10 +58,7 @@ impl InputHandler<SurroundAddPending> for KeyHandler {
     fn handle_key(_state: &SurroundAddPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any printable character for surrounding
-            KeyCode::Char(c) => {
-                let cmd = format!("ms{c}");
-                HandlerResult::Execute(Cow::Owned(cmd))
-            }
+            KeyCode::Char(c) => HandlerResult::Execute(NormalCommand::Surround(SurroundOp::Add(c))),
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
             // Other keys - cancel
@@ -80,8 +76,7 @@ impl InputHandler<SurroundDeletePending> for KeyHandler {
         match key.code {
             // Accept any printable character for deletion target
             KeyCode::Char(c) => {
-                let cmd = format!("md{c}");
-                HandlerResult::Execute(Cow::Owned(cmd))
+                HandlerResult::Execute(NormalCommand::Surround(SurroundOp::Delete(c)))
             }
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
@@ -119,8 +114,10 @@ impl InputHandler<SurroundReplaceToPending> for KeyHandler {
         match key.code {
             // Accept any printable character as "to" character
             KeyCode::Char(c) => {
-                let cmd = format!("mr{}{}", state.from_char, c);
-                HandlerResult::Execute(Cow::Owned(cmd))
+                HandlerResult::Execute(NormalCommand::Surround(SurroundOp::Replace {
+                    from: state.from_char,
+                    to: c,
+                }))
             }
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,

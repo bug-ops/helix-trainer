@@ -3,8 +3,40 @@
 //! Provides shared functionality for initializing scenario states,
 //! reducing code duplication between training and arcade modes.
 
-use crate::config::{DEFAULT_LANGUAGE, Scenario};
+use crate::config::{CursorSpec, DEFAULT_LANGUAGE, Pos, Scenario};
 use crate::helix::{AnyModeSimulator, EditorSnapshot};
+
+fn snapshot_of(content: String, cursor: &CursorSpec) -> EditorSnapshot {
+    let point = |p: &Pos| [p.row(), p.col()];
+    match cursor {
+        CursorSpec::Point(p) => EditorSnapshot::from_row_col(content, p.row(), p.col()),
+        CursorSpec::Range(r) => EditorSnapshot::from_row_col_selection(
+            content,
+            [
+                r.anchor().row(),
+                r.anchor().col(),
+                r.head().row(),
+                r.head().col(),
+            ],
+        ),
+        CursorSpec::Points(ps) => {
+            let points: Vec<[usize; 2]> = ps.as_slice().iter().map(point).collect();
+            EditorSnapshot::from_multi_cursor(content, &points)
+        }
+        CursorSpec::Ranges(rs) => {
+            let ranges: Vec<[usize; 4]> = rs
+                .as_slice()
+                .iter()
+                .map(|r| {
+                    let [ar, ac] = point(&r.anchor());
+                    let [hr, hc] = point(&r.head());
+                    [ar, ac, hr, hc]
+                })
+                .collect();
+            EditorSnapshot::from_multi_selection(content, &ranges)
+        }
+    }
+}
 
 /// Initialized scenario state ready for gameplay
 ///
@@ -41,22 +73,11 @@ impl ScenarioState {
     /// assert!(!state.is_completed());
     /// ```
     pub fn from_scenario(scenario: &Scenario) -> Self {
-        // Create initial snapshot from scenario setup
-        let initial_snapshot = EditorSnapshot::from_scenario_config(
-            scenario.setup.file_content.clone(),
-            scenario.setup.cursor.cursor_position,
-            scenario.setup.cursor.selection,
-            scenario.setup.cursor.cursors.as_deref(),
-            scenario.setup.cursor.selections.as_deref(),
-        );
-
-        // Create target snapshot for completion checking
-        let target_snapshot = EditorSnapshot::from_scenario_config(
+        let initial_snapshot =
+            snapshot_of(scenario.setup.file_content.clone(), &scenario.setup.cursor);
+        let target_snapshot = snapshot_of(
             scenario.target.file_content.clone(),
-            scenario.target.cursor.cursor_position,
-            scenario.target.cursor.selection,
-            scenario.target.cursor.cursors.as_deref(),
-            scenario.target.cursor.selections.as_deref(),
+            &scenario.target.cursor,
         );
 
         // Initialize Helix simulator from initial snapshot
@@ -94,7 +115,8 @@ impl ScenarioState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::ScenarioBuilder;
+    use crate::config::CursorRange;
+    use crate::testing::{ScenarioBuilder, point, selection};
 
     fn create_test_scenario() -> Scenario {
         ScenarioBuilder::new()
@@ -169,6 +191,45 @@ mod tests {
         assert!(
             state.is_completed(),
             "scenario must complete once back in Normal mode"
+        );
+    }
+
+    fn pos(row: usize, col: usize) -> Pos {
+        Pos::try_from([row, col]).unwrap()
+    }
+
+    #[test]
+    fn test_snapshot_of_each_cursor_form() {
+        let content = "hello world\nsecond";
+
+        let at = snapshot_of(content.to_string(), &point(0, 2));
+        assert_eq!(at.selections.len(), 1);
+        assert_eq!(at.cursor_offset(), 2);
+
+        let range = snapshot_of(content.to_string(), &selection((0, 0), (0, 5)));
+        assert_eq!(
+            (range.selections[0].anchor, range.selections[0].head),
+            (0, 5)
+        );
+
+        let points = CursorSpec::Points(vec![pos(0, 1), pos(1, 1)].try_into().unwrap());
+        let snap = snapshot_of(content.to_string(), &points);
+        assert_eq!(snap.selections.len(), 2);
+        assert_eq!(snap.selections[1].head, 13);
+
+        let ranges = CursorSpec::Ranges(
+            vec![
+                CursorRange::try_from([0, 0, 0, 5]).unwrap(),
+                CursorRange::try_from([0, 6, 0, 11]).unwrap(),
+            ]
+            .try_into()
+            .unwrap(),
+        );
+        let snap = snapshot_of(content.to_string(), &ranges);
+        assert_eq!(snap.selections.len(), 2);
+        assert_eq!(
+            (snap.selections[1].anchor, snap.selections[1].head),
+            (6, 11)
         );
     }
 }

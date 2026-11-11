@@ -23,7 +23,6 @@ file_content = """fn main() {
     let x = 1;
     let y = 2;
 }"""
-cursor_position = [1, 0]
 selection = [1, 0, 2, 0]
 
 [scenarios.solution]
@@ -63,7 +62,6 @@ file_content = """use std::io;
 fn main() {
     println!("Hello");
 }"""
-cursor_position = [0, 0]
 selection = [0, 0, 1, 0]
 
 [scenarios.solution]
@@ -96,7 +94,6 @@ file_content = """struct Config {
     name: String,
     value: i32,
 }"""
-cursor_position = [1, 6]
 selection = [1, 6, 1, 10]
 
 [scenarios.target]
@@ -104,7 +101,6 @@ file_content = """struct Config {
     name: String,
     value: i32,
 }"""
-cursor_position = [1, 0]
 selection = [1, 0, 2, 0]
 
 [scenarios.solution]

@@ -874,7 +874,7 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
             Ok(())
         }
         Message::ExecuteCommand { keys, typed } => {
-            let outcome = handlers::handle_execute_command(state, keys, &typed)?;
+            let outcome = handlers::handle_execute_command(state, &keys, &typed)?;
             apply_outcome(state, outcome);
             Ok(())
         }

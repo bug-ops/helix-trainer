@@ -8,12 +8,16 @@ use std::time::Duration;
 use crate::helix::{ModeKind, SelectionBounds};
 
 pub mod command_context;
+pub mod scenario_collection;
 pub mod scenario_state;
 pub mod scorer;
 pub mod services;
 pub mod session;
 
 pub use command_context::{CommandExecutor, format_key_for_display};
+pub use scenario_collection::{
+    CompletionFilter, CurriculumStats, ScenarioCollection, ScenarioFilter, SortMode,
+};
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};
 pub use session::{

@@ -5,7 +5,7 @@
 //! mis-threading of the `macro_recorder` field through the Normal<->Insert
 //! struct-literal sites: a macro spanning an insert excursion.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 
 #[test]

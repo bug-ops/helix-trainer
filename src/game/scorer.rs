@@ -135,40 +135,6 @@ impl Scorer {
         )
     }
 
-    /// Calculate score with alternative solution multiplier
-    ///
-    /// Used when user completes scenario using an alternative approach.
-    /// Applies a multiplier to reduce the base score when an alternative
-    /// solution is used instead of the optimal one.
-    ///
-    /// # Arguments
-    /// * `base_score` - Base score before multiplier
-    /// * `multiplier` - Points multiplier from alternative solution (0.0 - 2.0)
-    ///
-    /// # Returns
-    /// Adjusted score with multiplier applied
-    ///
-    /// # Errors
-    /// Returns `SecurityError::ScoreOverflow` if:
-    /// - Multiplier is not in range [0.0, 2.0]
-    /// - Result would overflow u32
-    ///
-    /// # Examples
-    /// ```
-    /// use helix_trainer::game::Scorer;
-    ///
-    /// // Alternative solution with 0.8x multiplier
-    /// let score = Scorer::apply_multiplier(100, 0.8).unwrap();
-    /// assert_eq!(score, 80);
-    ///
-    /// // Perfect alternative
-    /// let score = Scorer::apply_multiplier(100, 1.0).unwrap();
-    /// assert_eq!(score, 100);
-    /// ```
-    pub fn apply_multiplier(base_score: u32, multiplier: f32) -> Result<u32, SecurityError> {
-        security::arithmetic::checked_score_multiply(base_score, multiplier)
-    }
-
     /// Get performance rating based on score percentage
     ///
     /// Maps a numeric score to a human-readable performance level.
@@ -229,36 +195,6 @@ impl Scorer {
         }
 
         Ok(total)
-    }
-
-    /// Calculate average score from multiple scores
-    ///
-    /// Returns the arithmetic mean of provided scores.
-    /// Empty score list returns 0.
-    ///
-    /// # Errors
-    /// Returns `SecurityError::ScoreOverflow` if sum would overflow u32
-    ///
-    /// # Examples
-    /// ```
-    /// use helix_trainer::game::Scorer;
-    ///
-    /// let scores = vec![100, 80, 90];
-    /// let avg = Scorer::calculate_average_score(&scores).unwrap();
-    /// assert_eq!(avg, 90);
-    ///
-    /// // Empty list
-    /// let scores = vec![];
-    /// let avg = Scorer::calculate_average_score(&scores).unwrap();
-    /// assert_eq!(avg, 0);
-    /// ```
-    pub fn calculate_average_score(scores: &[u32]) -> Result<u32, SecurityError> {
-        if scores.is_empty() {
-            return Ok(0);
-        }
-
-        let total = Self::calculate_total_score(scores)?;
-        Ok(total / u32::try_from(scores.len()).unwrap_or(u32::MAX))
     }
 }
 
@@ -380,24 +316,6 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_multiplier() {
-        let score = Scorer::apply_multiplier(100, 0.8).unwrap();
-        assert_eq!(score, 80);
-    }
-
-    #[test]
-    fn test_invalid_multiplier_low() {
-        let result = Scorer::apply_multiplier(100, -0.5);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_invalid_multiplier_high() {
-        let result = Scorer::apply_multiplier(100, 3.0);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_rating_perfect() {
         assert_eq!(Scorer::rating(100, 100), PerformanceRating::Perfect);
     }
@@ -442,20 +360,6 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_average_score() {
-        let scores = vec![100, 80, 90];
-        let avg = Scorer::calculate_average_score(&scores).unwrap();
-        assert_eq!(avg, 90);
-    }
-
-    #[test]
-    fn test_empty_scores_average() {
-        let scores = vec![];
-        let avg = Scorer::calculate_average_score(&scores).unwrap();
-        assert_eq!(avg, 0);
-    }
-
-    #[test]
     fn test_performance_rating_descriptions() {
         assert_eq!(
             PerformanceRating::Perfect.description(),
@@ -487,46 +391,11 @@ mod tests {
     }
 
     #[test]
-    fn test_multiplier_at_bounds() {
-        // Test at 0.0 and 2.0 boundaries
-        let score_zero = Scorer::apply_multiplier(100, 0.0).unwrap();
-        assert_eq!(score_zero, 0);
-
-        let score_two = Scorer::apply_multiplier(100, 2.0).unwrap();
-        assert_eq!(score_two, 200);
-    }
-
-    #[test]
-    fn test_fractional_multiplier() {
-        // Test with various fractional values
-        let score = Scorer::apply_multiplier(100, 0.5).unwrap();
-        assert_eq!(score, 50);
-
-        let score = Scorer::apply_multiplier(100, 1.5).unwrap();
-        assert_eq!(score, 150);
-    }
-
-    #[test]
     fn test_total_score_overflow_prevention() {
         // Test that overflow is properly prevented
         let scores = vec![u32::MAX, u32::MAX];
         let result = Scorer::calculate_total_score(&scores);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_average_score_rounding_down() {
-        // Average with odd result should round down
-        let scores = vec![100, 100, 99];
-        let avg = Scorer::calculate_average_score(&scores).unwrap();
-        assert_eq!(avg, 99); // (100 + 100 + 99) / 3 = 299 / 3 = 99
-    }
-
-    #[test]
-    fn test_single_score_average() {
-        let scores = vec![75];
-        let avg = Scorer::calculate_average_score(&scores).unwrap();
-        assert_eq!(avg, 75);
     }
 
     #[test]

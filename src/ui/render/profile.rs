@@ -10,6 +10,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph},
 };
+use rust_i18n::t;
 
 /// Render the profile screen showing user level, XP, and statistics
 pub(super) fn render_profile_screen(frame: &mut Frame, state: &AppState) {
@@ -27,7 +28,7 @@ pub(super) fn render_profile_screen(frame: &mut Frame, state: &AppState) {
         .split(area);
 
     // Title
-    let title = Paragraph::new("PLAYER PROFILE")
+    let title = Paragraph::new(t!("profile.screen_title").to_string())
         .style(
             Style::default()
                 .fg(Color::Cyan)
@@ -41,12 +42,10 @@ pub(super) fn render_profile_screen(frame: &mut Frame, state: &AppState) {
     render_profile_content(frame, state, chunks[1]);
 
     // Instructions
-    let instructions = Paragraph::new(
-        "Press 's' for detailed statistics | Press 'a' for achievements | Press 'm' to return to menu",
-    )
-    .style(Style::default().fg(Color::Gray))
-    .alignment(Alignment::Center)
-    .block(Block::default().borders(Borders::ALL));
+    let instructions = Paragraph::new(t!("profile.instructions").to_string())
+        .style(Style::default().fg(Color::Gray))
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
     frame.render_widget(instructions, chunks[2]);
 }
 
@@ -103,7 +102,7 @@ fn render_level_section(
     // Level text
     let level_text = Paragraph::new(Line::from(vec![
         Span::styled(
-            format!("Level {level} "),
+            t!("profile.level", level = level).to_string(),
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -114,7 +113,12 @@ fn render_level_section(
     frame.render_widget(level_text, level_chunks[0]);
 
     // XP progress bar
-    let xp_label = format!("{}/{} XP", progress.earned(), progress.span());
+    let xp_label = t!(
+        "profile.xp_label",
+        earned = progress.earned(),
+        span = progress.span()
+    )
+    .to_string();
     let gauge = Gauge::default()
         .block(Block::default())
         .gauge_style(
@@ -141,7 +145,7 @@ fn render_stats_section(
 
     // Statistics section
     lines.push(Line::from(vec![Span::styled(
-        "📊 Statistics:",
+        t!("profile.statistics_heading").to_string(),
         Style::default()
             .fg(Color::White)
             .add_modifier(Modifier::BOLD),
@@ -149,7 +153,7 @@ fn render_stats_section(
     lines.push(Line::from(""));
 
     lines.push(Line::from(vec![
-        Span::raw("  Total Scenarios: "),
+        Span::raw(t!("profile.total_scenarios").to_string()),
         Span::styled(
             format!("{scenarios_completed}"),
             Style::default().fg(Color::Cyan),
@@ -157,7 +161,7 @@ fn render_stats_section(
     ]));
 
     lines.push(Line::from(vec![
-        Span::raw("  Perfect Runs: "),
+        Span::raw(t!("profile.perfect_runs").to_string()),
         Span::styled(
             format!("{perfect_scenarios}"),
             Style::default().fg(Color::Green),
@@ -165,7 +169,7 @@ fn render_stats_section(
     ]));
 
     lines.push(Line::from(vec![
-        Span::raw("  Total XP: "),
+        Span::raw(t!("profile.total_xp").to_string()),
         Span::styled(format!("{total_xp}"), Style::default().fg(Color::Yellow)),
     ]));
 
@@ -182,7 +186,7 @@ fn render_stats_section(
     let active_quests = total_quests.saturating_sub(completed_today);
 
     lines.push(Line::from(vec![Span::styled(
-        "🎯 Daily Quests:",
+        t!("profile.daily_quests_heading").to_string(),
         Style::default()
             .fg(Color::Magenta)
             .add_modifier(Modifier::BOLD),
@@ -190,7 +194,7 @@ fn render_stats_section(
     lines.push(Line::from(""));
 
     lines.push(Line::from(vec![
-        Span::raw("  Active Quests: "),
+        Span::raw(t!("profile.active_quests").to_string()),
         Span::styled(
             format!("{active_quests}/{total_quests}"),
             Style::default().fg(Color::Cyan),
@@ -198,7 +202,7 @@ fn render_stats_section(
     ]));
 
     lines.push(Line::from(vec![
-        Span::raw("  Completed Today: "),
+        Span::raw(t!("profile.completed_today").to_string()),
         Span::styled(
             format!("{completed_today}"),
             Style::default().fg(Color::Green),
@@ -214,7 +218,7 @@ fn render_stats_section(
     let due_count = scheduler.get_due_reviews(tracker).len();
 
     lines.push(Line::from(vec![Span::styled(
-        "Learning Progress:",
+        t!("profile.learning_heading").to_string(),
         Style::default()
             .fg(Color::Blue)
             .add_modifier(Modifier::BOLD),
@@ -222,7 +226,7 @@ fn render_stats_section(
     lines.push(Line::from(""));
 
     lines.push(Line::from(vec![
-        Span::raw("  Commands Learned: "),
+        Span::raw(t!("profile.commands_learned").to_string()),
         Span::styled(
             format!("{}", summary.total_commands),
             Style::default().fg(Color::Cyan),
@@ -230,7 +234,7 @@ fn render_stats_section(
     ]));
 
     lines.push(Line::from(vec![
-        Span::raw("  Commands Mastered: "),
+        Span::raw(t!("profile.commands_mastered").to_string()),
         Span::styled(
             format!("{}", summary.master),
             Style::default().fg(Color::Yellow),
@@ -239,13 +243,16 @@ fn render_stats_section(
 
     if due_count > 0 {
         lines.push(Line::from(vec![
-            Span::raw("  Due for Review: "),
+            Span::raw(t!("profile.due_for_review").to_string()),
             Span::styled(format!("{due_count}"), Style::default().fg(Color::Yellow)),
-            Span::styled(" (press 'r' in menu)", Style::default().fg(Color::Gray)),
+            Span::styled(
+                t!("profile.due_hint").to_string(),
+                Style::default().fg(Color::Gray),
+            ),
         ]));
     } else {
         lines.push(Line::from(vec![Span::styled(
-            "  All caught up!",
+            t!("profile.all_caught_up").to_string(),
             Style::default().fg(Color::Green),
         )]));
     }

@@ -41,6 +41,26 @@ pub(super) use scenario::{
     handle_next_lesson, handle_retry_scenario,
 };
 
+/// What a resolved key feeds the active session: typed Insert-mode text or a
+/// parsed Normal-mode command.
+#[derive(Clone, Copy)]
+pub(super) enum SessionInput<'a> {
+    /// Text typed (or an Insert-mode key name) in Insert mode
+    Text(&'a str),
+    /// A parsed Normal-mode command, count included
+    Command(&'a crate::helix::normal_command::NormalCommand),
+}
+
+impl SessionInput<'_> {
+    /// The input as the string quest tracking works with.
+    fn text(&self) -> std::borrow::Cow<'_, str> {
+        match self {
+            Self::Text(text) => std::borrow::Cow::Borrowed(text),
+            Self::Command(command) => std::borrow::Cow::Owned(command.to_string()),
+        }
+    }
+}
+
 mod category_filters;
 mod gameplay;
 pub(super) mod menu;

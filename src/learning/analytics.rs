@@ -140,42 +140,6 @@ impl Analytics {
             .collect()
     }
 
-    /// Identify commands that have plateaued (many attempts but low stability)
-    ///
-    /// A plateau is defined as:
-    /// - High number of attempts (>= 5)
-    /// - Low stability relative to attempts (stability < attempts / 2.0)
-    /// - Not at Master level
-    ///
-    /// # Arguments
-    /// * `tracker` - Reference to performance tracker
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
-    )]
-    pub fn identify_plateaus(tracker: &PerformanceTracker) -> Vec<String> {
-        const MIN_ATTEMPTS: u32 = 5;
-
-        tracker
-            .all_commands()
-            .iter()
-            .filter_map(|&cmd| {
-                tracker.performance(cmd).and_then(|perf| {
-                    let expected_stability = perf.attempts() as f32 / 2.0;
-
-                    if perf.attempts() >= MIN_ATTEMPTS
-                        && perf.stability() < expected_stability
-                        && perf.mastery_level() != MasteryLevel::Master
-                    {
-                        Some(cmd.to_string())
-                    } else {
-                        None
-                    }
-                })
-            })
-            .collect()
-    }
-
     /// Get total number of tracked commands
     ///
     /// # Arguments
@@ -366,64 +330,6 @@ mod tests {
         for window in progress.windows(2) {
             assert!(window[0].1 <= window[1].1);
         }
-    }
-
-    #[test]
-    fn test_identify_plateaus_no_plateaus() {
-        let tracker = PerformanceTracker::new();
-
-        let plateaus = Analytics::identify_plateaus(&tracker);
-        assert!(plateaus.is_empty());
-    }
-
-    #[test]
-    fn test_identify_plateaus_detects_stuck_commands() {
-        let mut tracker = PerformanceTracker::new();
-
-        // Create a plateau: many attempts but low stability
-        for _ in 0..10 {
-            tracker.record_attempt(
-                &cid("plateau_cmd"),
-                Duration::from_secs(4), // Hard rating
-                true,
-                Duration::from_secs(1),
-            );
-        }
-
-        // Create a good command: many attempts with high stability
-        for _ in 0..10 {
-            tracker.record_attempt(
-                &cid("good_cmd"),
-                Duration::from_secs(1), // Easy rating
-                true,
-                Duration::from_secs(1),
-            );
-        }
-
-        let plateaus = Analytics::identify_plateaus(&tracker);
-
-        // plateau_cmd should be detected (struggling despite attempts)
-        assert!(plateaus.contains(&"plateau_cmd".to_string()));
-    }
-
-    #[test]
-    fn test_identify_plateaus_min_attempts() {
-        let mut tracker = PerformanceTracker::new();
-
-        // Command with < 5 attempts should not be considered plateau
-        for _ in 0..3 {
-            tracker.record_attempt(
-                &cid("xfew_attempts"),
-                Duration::from_secs(10),
-                false,
-                Duration::from_secs(1),
-            );
-        }
-
-        let plateaus = Analytics::identify_plateaus(&tracker);
-
-        // Should not be detected (too few attempts)
-        assert!(plateaus.is_empty());
     }
 
     #[test]

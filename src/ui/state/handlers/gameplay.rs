@@ -4,9 +4,10 @@
 
 use std::time::Duration;
 
+use super::SessionInput;
 use crate::game::format_key_for_display;
-use crate::helix::commands::CMD_ESCAPE;
-use crate::input::typestate::{HandlerResult, command_to_key_event};
+use crate::grammar::commands::CMD_ESCAPE;
+use crate::input::resolve::{Resolution, resolve_keys};
 use crate::security::{UserError, error_chain};
 use crate::ui::state::{
     AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, dispatch,
@@ -17,7 +18,7 @@ use crate::ui::state::{
 /// Toggles hint panel visibility and fetches next hint
 ///
 /// Note: This handler operates on `TaskData` screen, so it uses `AppState` to access the screen
-pub fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
+pub(crate) fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
     // Only handle if we're on Task screen
     let TypedScreen::Task(task_data) = &mut state.screen else {
         return HandlerOutcome::Stay; // Not on task screen
@@ -54,9 +55,9 @@ pub fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
 ///
 /// Note: This handler operates on `TaskData` screen and calls `update()` for quest progress,
 /// so it requires full `AppState` access
-pub fn handle_execute_command(
+pub(crate) fn handle_execute_command(
     state: &mut AppState,
-    keys: crate::input::keymap::CanonicalKeys,
+    keys: &crate::input::keymap::CanonicalKeys,
     typed: &str,
 ) -> Result<HandlerOutcome, UserError> {
     // Only handle if we're on Task screen
@@ -124,7 +125,7 @@ struct ExecutedCommand {
 fn execute_on_task(
     state: &mut AppState,
     task_data: &mut crate::ui::state::TaskData,
-    keys: crate::input::keymap::CanonicalKeys,
+    keys: &crate::input::keymap::CanonicalKeys,
     typed: &str,
 ) -> Result<Option<ExecutedCommand>, UserError> {
     // A finished task shows its success animation; it takes no more input
@@ -142,69 +143,29 @@ fn execute_on_task(
     // Show key history popup after first keypress
     state.ui.show_key_history = true;
 
-    let is_insert_mode = task_data.session.playable().is_insert_mode();
+    let mode = task_data.session.playable().mode_kind();
+    match resolve_keys(task_data.input_state_mut(), mode, keys) {
+        Resolution::Insert(cmd) => {
+            let is_escape = cmd == CMD_ESCAPE;
+            apply_to_session(task_data, SessionInput::Text(&cmd))?;
 
-    if is_insert_mode {
-        // R1: never translated in insert mode - `keys` is a single token
-        // identical to `typed`. Execute directly (bypass input state machine).
-        let cmd = keys.into_cow().into_owned();
-
-        let is_escape = cmd == CMD_ESCAPE;
-        apply_to_session(task_data, cmd)?;
-
-        // Store last command for display (only for Escape), once it was accepted
-        if is_escape {
-            task_data.last_command = Some(CMD_ESCAPE.to_string());
-        }
-        Ok(None)
-    } else {
-        // Normal mode - use InputStateMachine for multi-key command handling.
-        // Single-token keys (the overwhelmingly common case) are dispatched
-        // directly to avoid the `Vec` allocation `tokens()` would incur.
-        //
-        // An empty `keys` (never produced today - the keymap parser rejects
-        // empty bindings at config-load time) would take this branch with
-        // an empty `tokens`; `apply_canonical_expansion` handles that by
-        // returning `None`, unlike the old `tokens[0]` indexing this
-        // replaced, which would have panicked.
-        let resolved = if keys.is_single_token() {
-            let Some(key_event) = command_to_key_event(keys.as_str()) else {
-                tracing::warn!(keys = keys.as_str(), "unparsable key token; dropping");
-                return Ok(None);
-            };
-            match task_data.input_state_mut().process_key(key_event) {
-                HandlerResult::Execute(cmd) => Some(cmd.to_string()),
-                // Waiting for more keys (state machine already updated), or
-                // cancelled / unknown key
-                HandlerResult::Transition(_) | HandlerResult::Cancel | HandlerResult::Stay => {
-                    return Ok(None);
-                }
+            // Store last command for display (only for Escape), once it was accepted
+            if is_escape {
+                task_data.last_command = Some(CMD_ESCAPE.to_string());
             }
-        } else {
-            let tokens = keys.tokens();
-            task_data
-                .input_state_mut()
-                .apply_canonical_expansion(&tokens)
-        };
+            Ok(None)
+        }
+        Resolution::Execute { command, .. } => {
+            // The simulator applies any count prefix; records as ONE action
+            apply_to_session(task_data, SessionInput::Command(&command))?;
 
-        let Some(cmd_str) = resolved else {
-            // Multi-token expansion didn't resolve cleanly (see
-            // `apply_canonical_expansion`'s doc comment) - discard, leave
-            // state untouched.
-            tracing::warn!(
-                keys = keys.as_str(),
-                "keymap expansion did not resolve; discarding"
-            );
-            return Ok(None);
-        };
+            // Store last command for display only once the simulator accepted it
+            let command = command.to_string();
+            task_data.last_command = Some(command.clone());
 
-        // The simulator applies any count prefix; records as ONE action
-        apply_to_session(task_data, cmd_str.clone())?;
-
-        // Store last command for display only once the simulator accepted it
-        task_data.last_command = Some(cmd_str.clone());
-
-        Ok(Some(ExecutedCommand { command: cmd_str }))
+            Ok(Some(ExecutedCommand { command }))
+        }
+        Resolution::Pending | Resolution::Discarded => Ok(None),
     }
 }
 
@@ -218,17 +179,27 @@ fn ensure_scorable(
         .map_err(UserError::from)
 }
 
-/// Apply `cmd` to the Task screen's active session.
+/// Apply `input` to the Task screen's active session.
 ///
-/// The failing step (`apply_action`) borrows the session, so an error leaves it in place.
+/// The failing step borrows the session, so an error leaves it in place.
 fn apply_to_session(
     task_data: &mut crate::ui::state::TaskData,
-    cmd: String,
+    input: SessionInput<'_>,
+) -> Result<(), UserError> {
+    apply_with(task_data, |session| match input {
+        SessionInput::Text(text) => session.apply_action(text.to_owned()),
+        SessionInput::Command(command) => session.apply_command(command),
+    })
+}
+
+fn apply_with(
+    task_data: &mut crate::ui::state::TaskData,
+    apply: impl FnOnce(&mut crate::game::GameSession<crate::game::Active>) -> Result<(), UserError>,
 ) -> Result<(), UserError> {
     let Some(session) = task_data.session.active_mut() else {
         return Ok(());
     };
-    session.apply_action(cmd)?;
+    apply(session)?;
 
     // Everything that can fail when finishing a scenario (the score, hence the feedback) is
     // checked while the session is still in place, so the transition to Completed cannot fail
@@ -265,7 +236,7 @@ mod tests {
             unreachable!()
         };
 
-        let result = apply_to_session(&mut task_data, "not_a_command".to_string());
+        let result = apply_to_session(&mut task_data, SessionInput::Text("not_a_command"));
 
         assert!(result.is_err());
         assert_eq!(task_data.session.playable().action_count(), 0);
@@ -294,10 +265,10 @@ mod tests {
         // `a(` is an invalid search regex: Enter is rejected by the simulator.
         for c in "/a(".chars() {
             let key = crate::input::keymap::CanonicalKeys::from_owned(c.to_string());
-            handle_execute_command(&mut state, key, &c.to_string()).unwrap();
+            handle_execute_command(&mut state, &key, &c.to_string()).unwrap();
         }
         let enter = crate::input::keymap::CanonicalKeys::from_static("Enter");
-        let result = handle_execute_command(&mut state, enter, "Enter");
+        let result = handle_execute_command(&mut state, &enter, "Enter");
 
         assert!(result.is_err());
         let TypedScreen::Task(task_data) = &state.screen else {

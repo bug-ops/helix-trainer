@@ -30,7 +30,6 @@ file_content = """fn main() {
     }
     println!("{}", count);
 }"""
-cursor_position = [3, 8]
 selection = [3, 8, 3, 13]
 
 [scenarios.solution]
@@ -71,7 +70,6 @@ file_content = """fn process(data: &str) {
     let data = data.trim();
     println!("{}", data);
 }"""
-cursor_position = [1, 19]
 selection = [1, 15, 1, 19]
 
 [scenarios.solution]
@@ -115,7 +113,6 @@ file_content = """fn add(val: i32, b: i32) -> i32 {
 fn sub(val: i32, b: i32) -> i32 {
     val - b
 }"""
-cursor_position = [1, 7]
 selection = [1, 4, 1, 7]
 
 [scenarios.solution]
@@ -162,7 +159,6 @@ file_content = """fn main() {
     }
     println!("{}", count);
 }"""
-cursor_position = [5, 24]
 selection = [5, 19, 5, 24]
 
 [scenarios.solution]

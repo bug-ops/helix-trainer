@@ -4,8 +4,9 @@
 //! from `AppState`, improving code organization and maintainability.
 
 use crate::async_state::SaveRequest;
-use crate::config::{AppConfig, ScenarioCollection};
+use crate::config::AppConfig;
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
+use crate::game::ScenarioCollection;
 use crate::gamification::{
     PreviousCopy, ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile,
 };
@@ -394,7 +395,7 @@ impl ProgressState {
     /// (`DataLoadMessage::ProfileSaveError`): the optimistic
     /// [`ProgressState::mark_saved`] call made at dispatch time was wrong,
     /// so the debounce gate must be reset — otherwise the next attempt
-    /// would be skipped for up to [`PROFILE_SAVE_DEBOUNCE`] as if the
+    /// would be skipped for up to `PROFILE_SAVE_DEBOUNCE` as if the
     /// failed write had actually succeeded.
     pub fn mark_unsaved(&mut self) {
         self.last_save_time = None;
@@ -565,14 +566,14 @@ pub struct ConfigState {
     /// (not just the auto-dismissing startup toast built from it) so a
     /// future status screen can render it, and so it survives past
     /// whatever `tracing` line accompanied it at startup.
-    pub keymap_report: crate::config::keymap::KeymapReport,
+    pub keymap_report: crate::input::keymap::KeymapReport,
 }
 
 impl Default for ConfigState {
     fn default() -> Self {
         Self {
             persistent: AppConfig::default(),
-            keymap_report: crate::config::keymap::KeymapReport::default(),
+            keymap_report: crate::input::keymap::KeymapReport::default(),
             keymap: KeymapOverlay::identity(),
         }
     }

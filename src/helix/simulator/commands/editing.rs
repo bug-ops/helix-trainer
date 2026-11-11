@@ -200,7 +200,7 @@ pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 /// # Errors
 ///
 /// Returns the error of yanking to `register`; the yank currently never fails.
-pub fn delete_selection_from_register<M: EditorMode>(
+pub(crate) fn delete_selection_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
 ) -> Result<(), SimulatorError> {
@@ -486,7 +486,7 @@ fn map_selected_text<M: EditorMode>(sim: &mut HelixSimulator<M>, map: fn(&str) -
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
-pub fn replace_with_yanked<M: EditorMode>(
+pub(crate) fn replace_with_yanked<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     replace_with_yanked_from_register(sim, None)
@@ -494,7 +494,7 @@ pub fn replace_with_yanked<M: EditorMode>(
 
 /// Replace selection with a named register's content (Helix 'R' command)
 ///
-/// `register: None` addresses the unnamed register. See [`replace_with_yanked`].
+/// `register: None` addresses the unnamed register. See `replace_with_yanked`.
 ///
 /// # Errors
 ///

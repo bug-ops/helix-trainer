@@ -2,34 +2,7 @@
 //!
 //! Tracks the last find/till motion to enable repeating with Alt-.
 
-/// Type of find motion
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FindType {
-    /// Find character (f/F commands)
-    Find,
-    /// Till character (t/T commands)
-    Till,
-}
-
-/// Direction of find motion
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FindDirection {
-    /// Forward search (f/t commands)
-    Forward,
-    /// Backward search (F/T commands)
-    Backward,
-}
-
-impl FindDirection {
-    /// Return the opposite direction
-    #[must_use]
-    pub fn reverse(&self) -> Self {
-        match self {
-            FindDirection::Forward => FindDirection::Backward,
-            FindDirection::Backward => FindDirection::Forward,
-        }
-    }
-}
+use crate::grammar::find::{FindDirection, FindKind};
 
 /// State for the last find/till motion
 #[derive(Debug, Clone, Default)]
@@ -37,7 +10,7 @@ pub struct FindState {
     /// Last searched character
     ch: Option<char>,
     /// Type of last motion (find or till)
-    find_type: Option<FindType>,
+    find_kind: Option<FindKind>,
     /// Direction of last motion
     direction: Option<FindDirection>,
 }
@@ -50,16 +23,16 @@ impl FindState {
     }
 
     /// Record a find/till motion
-    pub fn set(&mut self, ch: char, find_type: FindType, direction: FindDirection) {
+    pub fn set(&mut self, ch: char, find_kind: FindKind, direction: FindDirection) {
         self.ch = Some(ch);
-        self.find_type = Some(find_type);
+        self.find_kind = Some(find_kind);
         self.direction = Some(direction);
     }
 
     /// Get the last motion if available
     #[must_use]
-    pub fn get(&self) -> Option<(char, FindType, FindDirection)> {
-        match (self.ch, self.find_type, self.direction) {
+    pub fn get(&self) -> Option<(char, FindKind, FindDirection)> {
+        match (self.ch, self.find_kind, self.direction) {
             (Some(ch), Some(ft), Some(dir)) => Some((ch, ft, dir)),
             _ => None,
         }
@@ -74,7 +47,7 @@ impl FindState {
     /// Clear the stored motion
     pub fn clear(&mut self) {
         self.ch = None;
-        self.find_type = None;
+        self.find_kind = None;
         self.direction = None;
     }
 }
@@ -93,30 +66,30 @@ mod tests {
     #[test]
     fn test_find_state_set_and_get() {
         let mut state = FindState::new();
-        state.set('x', FindType::Find, FindDirection::Forward);
+        state.set('x', FindKind::Find, FindDirection::Forward);
 
         assert!(state.has_motion());
         let (ch, ft, dir) = state.get().unwrap();
         assert_eq!(ch, 'x');
-        assert_eq!(ft, FindType::Find);
+        assert_eq!(ft, FindKind::Find);
         assert_eq!(dir, FindDirection::Forward);
     }
 
     #[test]
     fn test_find_state_till_backward() {
         let mut state = FindState::new();
-        state.set('(', FindType::Till, FindDirection::Backward);
+        state.set('(', FindKind::Till, FindDirection::Backward);
 
         let (ch, ft, dir) = state.get().unwrap();
         assert_eq!(ch, '(');
-        assert_eq!(ft, FindType::Till);
+        assert_eq!(ft, FindKind::Till);
         assert_eq!(dir, FindDirection::Backward);
     }
 
     #[test]
     fn test_find_state_clear() {
         let mut state = FindState::new();
-        state.set('a', FindType::Find, FindDirection::Forward);
+        state.set('a', FindKind::Find, FindDirection::Forward);
         assert!(state.has_motion());
 
         state.clear();
@@ -133,12 +106,12 @@ mod tests {
     #[test]
     fn test_find_state_overwrite() {
         let mut state = FindState::new();
-        state.set('a', FindType::Find, FindDirection::Forward);
-        state.set('b', FindType::Till, FindDirection::Backward);
+        state.set('a', FindKind::Find, FindDirection::Forward);
+        state.set('b', FindKind::Till, FindDirection::Backward);
 
         let (ch, ft, dir) = state.get().unwrap();
         assert_eq!(ch, 'b');
-        assert_eq!(ft, FindType::Till);
+        assert_eq!(ft, FindKind::Till);
         assert_eq!(dir, FindDirection::Backward);
     }
 }

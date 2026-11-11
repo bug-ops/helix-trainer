@@ -44,7 +44,7 @@ impl KeyContext {
     ///
     /// Used to validate minor-mode remaps: a `[keys.normal.g]` binding may
     /// only retarget a command whose canonical key is exactly this prefix
-    /// followed by one more token (see `src/config/keymap/parse.rs`).
+    /// followed by one more token (see `src/input/keymap/parse.rs`).
     pub fn prefix_char(self) -> Option<&'static str> {
         match self {
             KeyContext::Base => None,

@@ -3,7 +3,7 @@
 //!
 //! Expected buffers were captured from `hx` 25.07.1 on the same text and keys.
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, InsertCommand};
 
 const SCENARIO_14: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";
@@ -227,4 +227,102 @@ fn dot_replays_tab_in_its_original_position() {
         ),
         "    zx\n    zy\n"
     );
+}
+
+/// #595: Insert-mode deletions around line breaks, with CRLF counted as one break.
+mod insert_deletion_at_line_ends {
+    use crate::grammar::commands::*;
+    use crate::helix::simulator::tests::run_keys;
+
+    fn typed(text: &str, keys: &[&str]) -> String {
+        let keys: Vec<&str> = keys.iter().copied().chain([CMD_ESCAPE]).collect();
+        run_keys(text, &keys).display().content()
+    }
+
+    #[test]
+    fn delete_to_line_end_at_the_end_of_a_line_joins_the_next_line() {
+        for text in ["ab\r\ncd", "ab\ncd"] {
+            assert_eq!(
+                typed(text, &["A", CMD_INSERT_DELETE_TO_LINE_END]),
+                "abcd",
+                "{text:?}"
+            );
+        }
+        assert_eq!(
+            typed("ab\r\ncd", &["l", "A", CMD_INSERT_DELETE_TO_LINE_END]),
+            "abcd"
+        );
+        assert_eq!(
+            typed(
+                "ab\r\ncd\r\nef",
+                &[
+                    "A",
+                    CMD_INSERT_DELETE_TO_LINE_END,
+                    CMD_INSERT_DELETE_TO_LINE_END
+                ]
+            ),
+            "ab\r\nef"
+        );
+    }
+
+    #[test]
+    fn delete_to_line_end_on_the_last_line_is_a_no_op() {
+        assert_eq!(
+            typed("ab\r\ncd", &["j", "A", CMD_INSERT_DELETE_TO_LINE_END]),
+            "ab\r\ncd"
+        );
+    }
+
+    #[test]
+    fn delete_to_line_end_before_the_line_end_keeps_the_line_break() {
+        assert_eq!(
+            typed("ab\r\ncd", &["l", "i", CMD_INSERT_DELETE_TO_LINE_END]),
+            "a\r\ncd"
+        );
+        assert_eq!(
+            typed("ab\ncd", &["l", "i", CMD_INSERT_DELETE_TO_LINE_END]),
+            "a\ncd"
+        );
+    }
+
+    #[test]
+    fn forward_deletes_at_the_end_of_a_line_join_like_hx() {
+        for key in [CMD_INSERT_DELETE_CHAR_FORWARD, CMD_INSERT_DELETE_KEY] {
+            assert_eq!(typed("ab\r\ncd", &["A", key]), "abcd", "{key}");
+            assert_eq!(typed("ab\ncd", &["A", key]), "abcd", "{key}");
+        }
+    }
+
+    #[test]
+    fn backspace_after_a_character_deletes_one_character() {
+        assert_eq!(typed("ab\r\ncd", &["A", CMD_BACKSPACE]), "a\r\ncd");
+    }
+
+    #[test]
+    fn backspace_at_a_line_start_removes_the_whole_line_break() {
+        assert_eq!(typed("ab\r\ncd", &["j", "i", CMD_BACKSPACE]), "abcd");
+        assert_eq!(typed("ab\ncd", &["j", "i", CMD_BACKSPACE]), "abcd");
+    }
+
+    #[test]
+    fn delete_to_line_start_and_word_backward_keep_the_line_break() {
+        assert_eq!(
+            typed("ab\r\ncd", &["A", CMD_INSERT_DELETE_TO_LINE_START]),
+            "\r\ncd"
+        );
+        assert_eq!(
+            typed("ab\r\ncd", &["A", CMD_INSERT_DELETE_WORD_BACKWARD]),
+            "\r\ncd"
+        );
+    }
+
+    /// A lone `\r` typed in front of the line break forms a CRLF with it and
+    /// leaves the cursor inside the pair; Ctrl-k there must not panic.
+    #[test]
+    fn delete_to_line_end_inside_a_crlf_pair_is_a_no_op() {
+        let keys = ["O", "\r", CMD_INSERT_DELETE_TO_LINE_END];
+        let sim = run_keys("", &keys);
+        assert_eq!(sim.display().content(), "\r\n");
+        assert_eq!(typed("\r\n", &["a", CMD_INSERT_DELETE_TO_LINE_END]), "\r\n");
+    }
 }

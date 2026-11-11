@@ -2,7 +2,7 @@
 //!
 //! Expected buffers match `hx` 25.07.1 on the same keys (probe: `d` or `c`).
 
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::{AnyModeSimulator, ModeKind};
 
 const TEXT: &str = "hello world foo\nline two\nthree\n";

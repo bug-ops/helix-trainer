@@ -4,7 +4,7 @@
 //! the document must leave the selection mapped or replaced, never stale.
 
 use super::{ranges_of, selection_in_bounds};
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 use proptest::prelude::*;
 
@@ -220,6 +220,7 @@ fn command_alphabet() -> Vec<String> {
             "u",
             "U",
             "\n",
+            "\r",
             "q",
             "\u{e9}",
             "\u{1f600}",
@@ -252,6 +253,16 @@ fn command_alphabet() -> Vec<String> {
             "3x",
             "2d",
             "4O",
+            "2o",
+            "3o",
+            "(",
+            ")",
+            "{",
+            "}",
+            "[",
+            "\"",
+            "'",
+            "`",
             "100G",
             "2gg",
         ]
@@ -267,6 +278,8 @@ fn arbitrary_text() -> impl Strategy<Value = String> {
             "b",
             " ",
             "\n",
+            "\r",
+            "\r\n",
             "(",
             ")",
             "\"",

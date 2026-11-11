@@ -5,7 +5,7 @@
 //! `:<buffer>` string is executed atomically once, on Enter.
 //!
 //! Character input is read directly from the crossterm `KeyEvent` rather
-//! than round-tripping through `command_to_key_event`/`parse_key_code`,
+//! than round-tripping through `parse_helix_key_string`/`parse_key_code`,
 //! since that helper's single-byte gate silently turns any non-ASCII
 //! character (and macOS Option-compositions) into a literal space.
 //!
@@ -17,16 +17,15 @@
 //! loop -> `main`'s return value, terminating the whole application on a
 //! simple typo.
 
-use std::borrow::Cow;
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{InputHandler, KeyHandler};
+use crate::helix::normal_command::NormalCommand;
 use crate::helix::simulator::command_line::CommandLine;
 use crate::input::typestate::{
     handler_result::HandlerResult, input_state::InputState, state_types::CommandLinePending,
 };
-use crate::security::limits::MAX_COMMAND_LINE_LEN;
+use crate::limits::MAX_COMMAND_LINE_LEN;
 
 impl InputHandler<CommandLinePending> for KeyHandler {
     fn handle_key(state: &CommandLinePending, key: KeyEvent) -> HandlerResult {
@@ -47,9 +46,10 @@ impl InputHandler<CommandLinePending> for KeyHandler {
                 if state.buffer.is_empty() {
                     HandlerResult::Cancel
                 } else {
-                    let cmd = format!(":{}", state.buffer);
-                    match CommandLine::parse(&cmd) {
-                        Ok(_) => HandlerResult::Execute(Cow::Owned(cmd)),
+                    match CommandLine::parse(&format!(":{}", state.buffer)) {
+                        Ok(command_line) => {
+                            HandlerResult::Execute(NormalCommand::CommandLine(command_line))
+                        }
                         // Invalid command (unknown name, bad arity, non-numeric
                         // argument, ...): cancel rather than handing an `Err`
                         // to the executor, which has no recovery path for it.
@@ -79,6 +79,7 @@ impl InputHandler<CommandLinePending> for KeyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::normal;
 
     fn state(buffer: &str) -> CommandLinePending {
         CommandLinePending {
@@ -139,7 +140,7 @@ mod tests {
             &state("goto 3"),
             KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         );
-        assert_eq!(result, HandlerResult::Execute(Cow::Borrowed(":goto 3")));
+        assert_eq!(result, HandlerResult::Execute(normal(":goto 3")));
     }
 
     /// Regression test: an invalid command must cancel, not `Execute`. Before

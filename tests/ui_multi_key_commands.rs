@@ -4,10 +4,11 @@
 //! like 'dd', 'gg', 'r<char>' through the typestate-based `InputStateMachine`.
 
 use helix_trainer::config::{
-    CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+    CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
 };
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::input::keymap::CanonicalKeys;
+use helix_trainer::input::typestate::InputState;
 use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::security::UserError;
 use helix_trainer::ui::state::{InputStateAccess, MenuData, TypedScreen};
@@ -57,6 +58,10 @@ fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
     AppState::new(scenarios, profile, storage, tracker)
 }
 
+fn cursor_at(row: usize, col: usize) -> CursorSpec {
+    CursorSpec::Point(Pos::try_from([row, col]).expect("valid position fixture"))
+}
+
 /// Helper to create a simple test scenario
 fn create_test_scenario(
     id: &str,
@@ -72,21 +77,11 @@ fn create_test_scenario(
         setup: Setup {
             file_content: setup_content.to_string(),
             language: None,
-            cursor: CursorSpec {
-                cursor_position: Some(setup_cursor),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: cursor_at(setup_cursor.0, setup_cursor.1),
         },
         target: TargetState {
             file_content: target_content.to_string(),
-            cursor: CursorSpec {
-                cursor_position: Some(target_cursor),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: cursor_at(target_cursor.0, target_cursor.1),
         },
         solution: Solution {
             commands: vec!["test".to_string()],
@@ -123,8 +118,9 @@ fn test_replace_command_multi_key() {
 
     // Check that input state is ReplaceCharPending and command hasn't executed yet
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(
-            task_data.input_state().state().is_replace_char_pending(),
+        assert_matches!(
+            task_data.input_state().state(),
+            InputState::ReplaceCharPending,
             "Expected ReplaceCharPending state after 'r', got {:?}",
             task_data.input_state().state()
         );
@@ -174,8 +170,9 @@ fn test_unparsable_key_token_is_dropped_and_keeps_the_pending_state() {
     let TypedScreen::Task(task_data) = &state.screen else {
         panic!("Should be on Task screen");
     };
-    assert!(
-        task_data.input_state().state().is_find_char_pending(),
+    assert_matches!(
+        task_data.input_state().state(),
+        InputState::FindCharPending { .. },
         "got {:?}",
         task_data.input_state().state()
     );
@@ -249,8 +246,9 @@ fn test_gg_command_multi_key() {
     update(&mut state, exec("g")).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(
-            task_data.input_state().state().is_goto_pending(),
+        assert_matches!(
+            task_data.input_state().state(),
+            InputState::GotoPending,
             "Expected GotoPending state after 'g', got {:?}",
             task_data.input_state().state()
         );
@@ -284,8 +282,9 @@ fn test_replace_command_valid_sequence() {
     update(&mut state, exec("r")).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(
-            task_data.input_state().state().is_replace_char_pending(),
+        assert_matches!(
+            task_data.input_state().state(),
+            InputState::ReplaceCharPending,
             "Expected ReplaceCharPending state after 'r', got {:?}",
             task_data.input_state().state()
         );
@@ -560,7 +559,7 @@ fn test_command_line_escape_cancels_buffer() {
 #[test]
 fn test_ctrl_c_toggle_comments_on_task_screen_keeps_the_selection_valid() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use helix_trainer::input::handle_key_event;
+    use helix_trainer::ui::handle_key_event;
 
     let scenario = create_test_scenario("test_ctrl_c", "// a\n", (0, 0), "unreachable", (0, 0));
     let mut state = create_test_app_state(vec![scenario]);

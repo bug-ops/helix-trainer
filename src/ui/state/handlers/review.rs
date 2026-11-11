@@ -13,7 +13,7 @@ use rust_i18n::t;
 /// Handle `StartReviewSession` message
 ///
 /// Initializes a new review session with due commands
-pub fn handle_start_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
+pub(crate) fn handle_start_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
     let due_commands = ctx
         .progress
         .scheduler
@@ -36,7 +36,7 @@ pub fn handle_start_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutco
 /// Records the answer for the current command and either shows the next one or, after the
 /// last, awards XP and returns to the menu. Always transitions: the session is consumed by
 /// the answer.
-pub fn handle_complete_review_command(
+pub(crate) fn handle_complete_review_command(
     data: ReviewData,
     ctx: &mut HandlerContext<'_>,
     outcome: ReviewOutcome,
@@ -94,7 +94,7 @@ fn finish_review_session(summary: &SessionSummary, ctx: &mut HandlerContext<'_>)
 /// Handle `AbandonReviewSession` message
 ///
 /// Cancels the current review session
-pub fn handle_abandon_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
+pub(crate) fn handle_abandon_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
     // Persist attempts already recorded so far - abandoning mid-session (e.g. Esc)
     // is the likelier interrupted-user path, so it should flush just like completion does
     ctx.ui.effects.push(Effect::SaveProfile);

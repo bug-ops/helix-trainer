@@ -5,6 +5,8 @@
 
 use std::num::NonZeroUsize;
 
+use crate::grammar::find::FindMotion;
+
 // ============================================================================
 // Handler state marker types (zero-sized)
 // ============================================================================
@@ -56,59 +58,14 @@ pub struct TextObjectInsidePending;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FindCharPending {
     /// The direction and type of find operation
-    pub find_type: FindType,
-}
-
-/// Type of find/till operation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FindType {
-    /// Find forward ('f')
-    FindForward,
-    /// Find backward ('F')
-    FindBackward,
-    /// Till forward ('t')
-    TillForward,
-    /// Till backward ('T')
-    TillBackward,
-}
-
-impl FindType {
-    /// The find type bound to `key` in Normal mode (`f`, `F`, `t`, `T`).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::input::typestate::FindType;
-    ///
-    /// assert_eq!(FindType::from_key('t'), Some(FindType::TillForward));
-    /// assert_eq!(FindType::from_key('x'), None);
-    /// ```
-    pub fn from_key(key: char) -> Option<Self> {
-        match key {
-            'f' => Some(Self::FindForward),
-            'F' => Some(Self::FindBackward),
-            't' => Some(Self::TillForward),
-            'T' => Some(Self::TillBackward),
-            _ => None,
-        }
-    }
-
-    /// Get the command prefix for this find type
-    pub fn prefix(&self) -> &'static str {
-        match self {
-            Self::FindForward => "f",
-            Self::FindBackward => "F",
-            Self::TillForward => "t",
-            Self::TillBackward => "T",
-        }
-    }
+    pub motion: FindMotion,
 }
 
 /// Waiting for character after a counted `f`/`F`/`t`/`T` (e.g. `3f`)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CountedFindCharPending {
     /// The direction and type of find operation
-    pub find_type: FindType,
+    pub motion: FindMotion,
     /// The occurrence to find
     pub count: NonZeroUsize,
 }
@@ -146,7 +103,7 @@ pub struct CommandLinePending {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegexPromptPending {
     /// Which command (`s`, `S` or `/`) this prompt was opened for
-    pub kind: super::input_state::RegexPromptKind,
+    pub kind: crate::helix::normal_command::PromptKind,
     /// Buffer contents typed after the leading 's'/'S'/'/'
     pub buffer: String,
 }

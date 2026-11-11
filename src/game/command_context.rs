@@ -8,7 +8,7 @@
 //!
 //! - [`CommandExecutor`]: Execute commands with count prefix support
 
-use crate::helix::commands::{
+use crate::grammar::commands::{
     CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
 };
 use crate::security::UserError;

@@ -3,8 +3,6 @@
 //! Provides rich metadata for each command including category,
 //! documentation, and mode transition information.
 
-use crate::helix::simulator::{FindDirection, FindType};
-
 /// Command category for grouping and documentation of registry commands
 ///
 /// Independent of [`ScenarioCategory`](crate::config::ScenarioCategory): that
@@ -74,53 +72,6 @@ pub enum CountBehavior {
     Ignore,
     /// Pass the count into the command (`G`, `gg`, `f`, `t`, `F`, `T`).
     Native,
-}
-
-/// A `Native` counted command that is dispatched outside the registry
-/// because it carries an argument or a count of its own.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NativeCounted {
-    /// `{n}G` / `{n}gg`: go to line `n`.
-    GotoLine,
-    /// `{n}f<c>`, `{n}t<c>`, `{n}F<c>`, `{n}T<c>`: the `n`th match of `ch`.
-    Find {
-        /// Find or till.
-        find_type: FindType,
-        /// Search direction.
-        direction: FindDirection,
-        /// Character to search for.
-        ch: char,
-    },
-}
-
-impl NativeCounted {
-    /// Parse a command string without its count prefix.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::helix::registry::NativeCounted;
-    ///
-    /// assert_eq!(NativeCounted::parse("G"), Some(NativeCounted::GotoLine));
-    /// assert!(NativeCounted::parse("fa").is_some());
-    /// assert!(NativeCounted::parse("x").is_none());
-    /// ```
-    pub fn parse(base: &str) -> Option<Self> {
-        let mut chars = base.chars();
-        let find = |find_type, direction, ch| Self::Find {
-            find_type,
-            direction,
-            ch,
-        };
-        match (chars.next()?, chars.next(), chars.next()) {
-            ('G', None, _) | ('g', Some('g'), None) => Some(Self::GotoLine),
-            ('f', Some(ch), None) => Some(find(FindType::Find, FindDirection::Forward, ch)),
-            ('F', Some(ch), None) => Some(find(FindType::Find, FindDirection::Backward, ch)),
-            ('t', Some(ch), None) => Some(find(FindType::Till, FindDirection::Forward, ch)),
-            ('T', Some(ch), None) => Some(find(FindType::Till, FindDirection::Backward, ch)),
-            _ => None,
-        }
-    }
 }
 
 /// Whether the `.` command replays a command.

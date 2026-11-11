@@ -45,6 +45,39 @@ status: permanent
   state from a background task directly.
 - Rendering (`src/ui/render/`) is pure: no side effects, no state
   mutation, computed entirely from `AppState`.
+- **Module layer order (#558).** Library modules are ranked, and a module
+  may depend (`use crate::...`, in code or macro bodies; `#[cfg(test)]`
+  items, doc comments and `src/testing/` excepted) only on a STRICTLY lower
+  rank. A cycle is fixed by moving code, never by a back edge or a forwarding
+  re-export shim. The ONLY exception is a fixed allow-list of four edges,
+  `security -> {config, gamification, helix, learning}`, which exist because
+  `UserError` (the public error type of about 32 files) lives in
+  `src/security.rs` (#606); the layering test fails when an allow-listed
+  edge disappears, so the list can only shrink.
+
+  | Rank | Modules |
+  |------|---------|
+  | 0 | `grammar`, `limits`, `constants`, `numeric`, `time` |
+  | 1 | `ids`, `security` |
+  | 2 | `helix` |
+  | 3 | `config` |
+  | 4 | `learning`, `sound` |
+  | 5 | `gamification` |
+  | 6 | `game` |
+  | 7 | `minigame` |
+  | 8 | `error` (reserved for the user-facing error hub, #606; no module yet) |
+  | 9 | `input` |
+  | 10 | `async_state` |
+  | 11 | `ui` |
+  | 12 | `data_loader` |
+
+  `input` sits BELOW `ui`: key-event dispatch (`handle_key_event` and the
+  screen handlers) is part of `ui` (`src/ui/key_dispatch/`), while `input`
+  keeps only the typestate machine, keymap overlay and key resolution. A
+  permanent test (`src/layering_tests.rs`, run by `cargo nextest` locally
+  and in CI) parses the sources and fails on any upward or same-rank edge or
+  on a module missing from the table; new modules MUST be added to the
+  table. Details: [[module-layering-and-typed-commands/spec]].
 
 ## II. Technology Stack
 
@@ -134,8 +167,8 @@ status: permanent
   external services/API keys in scope today; if any are ever introduced,
   they must go through the vault mechanism described in the user's global
   tooling conventions, never `.env` files or shell profiles.
-- Bound untrusted input length explicitly (e.g. `security::limits::
-  MAX_COMMAND_LINE_LEN`) rather than relying on incidental limits.
+- Bound untrusted input length explicitly (e.g. `limits::
+  MAX_COMMAND_LINE_LEN`, `src/limits.rs`) rather than relying on incidental limits.
 
 ## VI. Performance
 

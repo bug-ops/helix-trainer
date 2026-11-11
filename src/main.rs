@@ -6,12 +6,10 @@
 use anyhow::Result;
 use helix_trainer::{
     async_state::SaveWriterOutcome,
-    config::{
-        AppConfig, ConfigStorage, app_config::config_load_failed_message, data_dir::DataDir,
-        keymap::resolve_startup_overlay,
-    },
+    config::{AppConfig, ConfigStorage, app_config::config_load_failed_message, data_dir::DataDir},
     data_loader::{spawn_data_loaders, spawn_save_writer},
     gamification::ProfileStorage,
+    input::keymap::resolve_startup_overlay,
     learning::PerformanceTracker,
     security::error_chain,
     ui::{self, AppState, Notification, NotificationType},

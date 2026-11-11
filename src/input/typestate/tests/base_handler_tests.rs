@@ -1,13 +1,13 @@
 //! Tests for `BaseState` handler
 
+use crate::grammar::find::FindMotion;
+use crate::testing::normal;
 use std::assert_matches;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
-use crate::input::typestate::{
-    BaseState, FindType, HandlerResult, InputHandler, InputState, KeyHandler,
-};
+use crate::grammar::commands::*;
+use crate::input::typestate::{BaseState, HandlerResult, InputHandler, InputState, KeyHandler};
 
 #[test]
 fn test_base_state_goto_prefix() {
@@ -45,7 +45,7 @@ fn test_base_state_find_prefix() {
     assert_matches!(
         result,
         HandlerResult::Transition(InputState::FindCharPending {
-            find_type: FindType::FindForward
+            motion: FindMotion::FIND_FORWARD
         })
     );
 }
@@ -82,14 +82,14 @@ fn test_base_state_single_key_command() {
         &BaseState,
         KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_MOVE_LEFT);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_MOVE_LEFT);
 }
 
 #[test]
 fn test_base_state_escape() {
     let result =
         KeyHandler::handle_key(&BaseState, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_ESCAPE);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_ESCAPE);
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn test_base_state_find_backward_prefix() {
     assert_matches!(
         result,
         HandlerResult::Transition(InputState::FindCharPending {
-            find_type: FindType::FindBackward
+            motion: FindMotion::FIND_BACKWARD
         })
     );
 }
@@ -115,7 +115,7 @@ fn test_base_state_till_backward_prefix() {
     assert_matches!(
         result,
         HandlerResult::Transition(InputState::FindCharPending {
-            find_type: FindType::TillBackward
+            motion: FindMotion::TILL_BACKWARD
         })
     );
 }
@@ -140,7 +140,7 @@ fn test_base_state_macro_toggle_executes() {
     );
     assert_eq!(
         result,
-        HandlerResult::Execute(std::borrow::Cow::Borrowed(CMD_TOGGLE_MACRO_RECORDING))
+        HandlerResult::Execute(normal(CMD_TOGGLE_MACRO_RECORDING))
     );
 }
 
@@ -150,10 +150,7 @@ fn test_base_state_macro_replay_executes() {
         &BaseState,
         KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT),
     );
-    assert_eq!(
-        result,
-        HandlerResult::Execute(std::borrow::Cow::Borrowed(CMD_REPLAY_MACRO))
-    );
+    assert_eq!(result, HandlerResult::Execute(normal(CMD_REPLAY_MACRO)));
 }
 
 #[test]
@@ -165,7 +162,7 @@ fn test_base_state_select_regex_prompt_transitions() {
     assert_eq!(
         result,
         HandlerResult::Transition(InputState::RegexPromptPending {
-            kind: crate::input::typestate::RegexPromptKind::SelectRegex,
+            kind: crate::helix::normal_command::PromptKind::SelectRegex,
             buffer: String::new(),
         })
     );
@@ -180,7 +177,7 @@ fn test_base_state_split_selection_prompt_transitions() {
     assert_eq!(
         result,
         HandlerResult::Transition(InputState::RegexPromptPending {
-            kind: crate::input::typestate::RegexPromptKind::SplitSelection,
+            kind: crate::helix::normal_command::PromptKind::SplitSelection,
             buffer: String::new(),
         })
     );
@@ -195,25 +192,25 @@ fn test_base_state_page_movement_commands() {
         &BaseState,
         KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_PAGE_UP);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_PAGE_UP);
 
     let result = KeyHandler::handle_key(
         &BaseState,
         KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_PAGE_DOWN);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_PAGE_DOWN);
 
     let result = KeyHandler::handle_key(
         &BaseState,
         KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_HALF_PAGE_UP);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_HALF_PAGE_UP);
 
     let result = KeyHandler::handle_key(
         &BaseState,
         KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_HALF_PAGE_DOWN);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_HALF_PAGE_DOWN);
 }
 
 #[test]
@@ -224,7 +221,7 @@ fn test_base_state_replace_with_yanked() {
         &BaseState,
         KeyEvent::new(KeyCode::Char('R'), KeyModifiers::SHIFT),
     );
-    assert_matches!(result, HandlerResult::Execute(cmd) if cmd == CMD_REPLACE_WITH_YANKED);
+    assert_matches!(result, HandlerResult::Execute(cmd) if cmd.to_string() == CMD_REPLACE_WITH_YANKED);
 }
 
 fn base_key(c: char, modifiers: KeyModifiers) -> HandlerResult {
@@ -236,7 +233,7 @@ fn base_key(c: char, modifiers: KeyModifiers) -> HandlerResult {
 fn test_base_state_alt_s_executes_split_selection_on_newline() {
     assert_eq!(
         base_key('s', KeyModifiers::ALT),
-        HandlerResult::Execute(std::borrow::Cow::Borrowed(CMD_SPLIT_SELECTION_NEWLINES))
+        HandlerResult::Execute(normal(CMD_SPLIT_SELECTION_NEWLINES))
     );
 }
 
@@ -259,15 +256,15 @@ fn test_base_state_alt_chords_never_open_pending_state() {
 fn test_base_state_alt_bound_commands_still_execute() {
     assert_matches!(
         base_key('c', KeyModifiers::ALT),
-        HandlerResult::Execute(cmd) if cmd == CMD_CHANGE_SELECTION_NOYANK
+        HandlerResult::Execute(cmd) if cmd.to_string() == CMD_CHANGE_SELECTION_NOYANK
     );
     assert_matches!(
         base_key('C', KeyModifiers::ALT | KeyModifiers::SHIFT),
-        HandlerResult::Execute(cmd) if cmd == CMD_COPY_SELECTION_PREV
+        HandlerResult::Execute(cmd) if cmd.to_string() == CMD_COPY_SELECTION_PREV
     );
 }
 
-fn prompt_transition(kind: crate::input::typestate::RegexPromptKind) -> HandlerResult {
+fn prompt_transition(kind: crate::helix::normal_command::PromptKind) -> HandlerResult {
     HandlerResult::Transition(InputState::RegexPromptPending {
         kind,
         buffer: String::new(),
@@ -277,7 +274,7 @@ fn prompt_transition(kind: crate::input::typestate::RegexPromptKind) -> HandlerR
 /// #513: `?` opens the backward-search prompt (also as Shift-`/`).
 #[test]
 fn test_base_state_question_mark_opens_backward_search_prompt() {
-    use crate::input::typestate::RegexPromptKind::SearchBackward;
+    use crate::helix::normal_command::PromptKind::SearchBackward;
     assert_eq!(
         base_key('?', KeyModifiers::NONE),
         prompt_transition(SearchBackward)
@@ -295,7 +292,7 @@ fn test_base_state_question_mark_opens_backward_search_prompt() {
 /// #510: `K` and `Alt-K` open the keep/remove prompts; `&` runs immediately.
 #[test]
 fn test_base_state_keep_remove_prompts_and_align() {
-    use crate::input::typestate::RegexPromptKind::{KeepSelections, RemoveSelections};
+    use crate::helix::normal_command::PromptKind::{KeepSelections, RemoveSelections};
     assert_eq!(
         base_key('K', KeyModifiers::SHIFT),
         prompt_transition(KeepSelections)
@@ -306,7 +303,7 @@ fn test_base_state_keep_remove_prompts_and_align() {
     );
     assert_eq!(
         base_key('&', KeyModifiers::SHIFT),
-        HandlerResult::Execute(std::borrow::Cow::Borrowed(CMD_ALIGN_SELECTIONS))
+        HandlerResult::Execute(normal(CMD_ALIGN_SELECTIONS))
     );
 }
 
@@ -316,7 +313,7 @@ fn test_base_state_slash_opens_search_prompt() {
     assert_eq!(
         base_key('/', KeyModifiers::NONE),
         HandlerResult::Transition(InputState::RegexPromptPending {
-            kind: crate::input::typestate::RegexPromptKind::Search,
+            kind: crate::helix::normal_command::PromptKind::Search,
             buffer: String::new(),
         })
     );

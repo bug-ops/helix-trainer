@@ -6,7 +6,7 @@
 //! - Selection + delete workflows: x+d
 
 use super::sim_at_cursor;
-use crate::helix::commands::*;
+use crate::grammar::commands::*;
 use crate::helix::error::SimulatorError;
 use crate::helix::simulator::AnyModeSimulator;
 use std::assert_matches;

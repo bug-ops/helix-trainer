@@ -13,13 +13,13 @@ use std::collections::HashMap;
 ///
 /// Matches Helix, where the unnamed register is itself addressable as `"`
 /// (so `""y` and `y` are equivalent).
-pub const UNNAMED_REGISTER: char = '"';
+pub(crate) const UNNAMED_REGISTER: char = '"';
 
 /// The blackhole register: writes addressed to it are discarded.
 ///
 /// Matches Helix's `"_`, used to delete/change text without touching any
 /// register (e.g. `"_d`, `"_c`).
-pub const BLACKHOLE_REGISTER: char = '_';
+pub(crate) const BLACKHOLE_REGISTER: char = '_';
 
 /// Storage for all named registers, including the unnamed default register.
 ///
@@ -79,7 +79,7 @@ impl RegisterFile {
     /// content.
     ///
     /// `None` addresses the unnamed register, so plain `y` writes there.
-    /// Writes to the blackhole register ([`BLACKHOLE_REGISTER`]) are silently
+    /// Writes to the blackhole register (`BLACKHOLE_REGISTER`) are silently
     /// discarded, matching Helix's `"_`.
     pub fn set_values(&mut self, register: Option<char>, values: Vec<String>) {
         let key = register.unwrap_or(UNNAMED_REGISTER);

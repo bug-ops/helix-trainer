@@ -1,7 +1,8 @@
 //! Tests for `InputState` enum
 
 use super::nz;
-use crate::input::typestate::{FindType, InputState};
+use crate::grammar::find::FindMotion;
+use crate::input::typestate::InputState;
 
 #[test]
 fn test_input_state_default_is_base() {
@@ -10,28 +11,12 @@ fn test_input_state_default_is_base() {
 }
 
 #[test]
-fn test_input_state_predicates() {
-    assert!(InputState::Base.is_base());
-    assert!(InputState::GotoPending.is_goto_pending());
-    assert!(InputState::ViewPending.is_view_pending());
-    assert!(InputState::MatchPending.is_match_pending());
-    assert!(
-        InputState::FindCharPending {
-            find_type: FindType::FindForward
-        }
-        .is_find_char_pending()
-    );
-    assert!(InputState::ReplaceCharPending.is_replace_char_pending());
-    assert!(InputState::CountPending { count: nz(5) }.is_count_pending());
-}
-
-#[test]
 fn test_is_waiting_for_char() {
     assert!(!InputState::Base.is_waiting_for_char());
     assert!(!InputState::GotoPending.is_waiting_for_char());
     assert!(
         InputState::FindCharPending {
-            find_type: FindType::FindForward
+            motion: FindMotion::FIND_FORWARD
         }
         .is_waiting_for_char()
     );
@@ -51,67 +36,12 @@ fn test_is_prefix_state() {
 // ============================================================================
 
 #[test]
-fn test_is_surround_pending() {
-    assert!(!InputState::Base.is_surround_pending());
-    assert!(!InputState::GotoPending.is_surround_pending());
-    assert!(InputState::SurroundAddPending.is_surround_pending());
-    assert!(InputState::SurroundDeletePending.is_surround_pending());
-    assert!(InputState::SurroundReplaceFromPending.is_surround_pending());
-    assert!(InputState::SurroundReplaceToPending { from_char: '(' }.is_surround_pending());
-}
-
-#[test]
-fn test_is_text_object_pending() {
-    assert!(!InputState::Base.is_text_object_pending());
-    assert!(!InputState::GotoPending.is_text_object_pending());
-    assert!(InputState::TextObjectAroundPending.is_text_object_pending());
-    assert!(InputState::TextObjectInsidePending.is_text_object_pending());
-}
-
-#[test]
-fn test_is_unmatched_pending() {
-    assert!(!InputState::Base.is_unmatched_prev_pending());
-    assert!(!InputState::Base.is_unmatched_next_pending());
-    assert!(InputState::UnmatchedPrevPending.is_unmatched_prev_pending());
-    assert!(InputState::UnmatchedNextPending.is_unmatched_next_pending());
-}
-
-#[test]
 fn test_surround_waiting_for_char() {
     // Surround states should also be waiting for char
     assert!(InputState::SurroundAddPending.is_waiting_for_char());
     assert!(InputState::SurroundDeletePending.is_waiting_for_char());
     assert!(InputState::SurroundReplaceFromPending.is_waiting_for_char());
     assert!(InputState::SurroundReplaceToPending { from_char: '[' }.is_waiting_for_char());
-}
-
-#[test]
-fn test_find_type_all_variants() {
-    // Test all FindType variants
-    assert!(
-        InputState::FindCharPending {
-            find_type: FindType::FindForward
-        }
-        .is_find_char_pending()
-    );
-    assert!(
-        InputState::FindCharPending {
-            find_type: FindType::FindBackward
-        }
-        .is_find_char_pending()
-    );
-    assert!(
-        InputState::FindCharPending {
-            find_type: FindType::TillForward
-        }
-        .is_find_char_pending()
-    );
-    assert!(
-        InputState::FindCharPending {
-            find_type: FindType::TillBackward
-        }
-        .is_find_char_pending()
-    );
 }
 
 #[test]
@@ -146,7 +76,7 @@ fn test_name_returns_correct_strings() {
     );
     assert_eq!(
         InputState::FindCharPending {
-            find_type: FindType::FindForward
+            motion: FindMotion::FIND_FORWARD
         }
         .name(),
         "FIND_CHAR_PENDING"

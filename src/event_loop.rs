@@ -21,7 +21,7 @@ use helix_trainer::{
 
 use crate::data_handling::handle_data_message;
 use helix_trainer::data_loader::{restore_previous_profile_message, start_fresh_profile_message};
-use helix_trainer::input::handle_key_event;
+use helix_trainer::ui::handle_key_event;
 
 /// Consecutive terminal input errors tolerated before the event loop gives up.
 ///

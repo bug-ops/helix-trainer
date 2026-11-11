@@ -1,7 +1,8 @@
 //! Tests for scenario loading and validation
 
 use super::*;
-use crate::testing::{ncmd, sid};
+use crate::testing::{ncmd, point, sid};
+use std::assert_matches;
 use std::fmt::Write as _;
 use std::io::Write;
 use tempfile::NamedTempFile;
@@ -106,7 +107,7 @@ fn test_scenario_with_empty_language_field_accepted() {
 
 #[test]
 fn test_scenario_with_oversized_language_rejected() {
-    let oversized = "a".repeat(crate::security::limits::MAX_LANGUAGE_LENGTH + 1);
+    let oversized = "a".repeat(crate::limits::MAX_LANGUAGE_LENGTH + 1);
     let toml = format!(
         "{}\n",
         create_test_scenario_toml().replace(
@@ -602,8 +603,8 @@ fn test_repeat_insert_scenario_loads_correctly() {
         .expect("Should find repeat_insert_001");
 
     // Verify cursor positions are within bounds
-    assert_eq!(scenario.setup.cursor.cursor_position, Some((0, 4)));
-    assert_eq!(scenario.target.cursor.cursor_position, Some((0, 7)));
+    assert_eq!(scenario.setup.cursor, point(0, 4));
+    assert_eq!(scenario.target.cursor, point(0, 7));
 
     // Verify content - realistic Rust code
     assert_eq!(scenario.setup.file_content, "fn f() {}");
@@ -766,7 +767,6 @@ description = "Test with selection"
 
 [scenarios.setup]
 file_content = "Hello World"
-cursor_position = [0, 0]
 selection = [0, 0, 0, 5]
 
 [scenarios.target]
@@ -800,7 +800,7 @@ tolerance = 0
 
     let scenarios = result.unwrap();
     assert_eq!(scenarios.len(), 1);
-    assert!(scenarios[0].setup.cursor.selection.is_some());
+    assert_matches!(scenarios[0].setup.cursor, CursorSpec::Range(_));
 }
 
 #[test]
@@ -1058,10 +1058,9 @@ tolerance = 0
 
     let scenarios = result.unwrap();
     assert_eq!(scenarios.len(), 1);
-    assert!(scenarios[0].target.cursor.cursors.is_some());
-    assert_eq!(
-        scenarios[0].target.cursor.cursors.as_ref().unwrap().len(),
-        3
+    assert_matches!(
+        &scenarios[0].target.cursor,
+        CursorSpec::Points(p) if p.as_slice().len() == 3
     );
 }
 
@@ -1077,7 +1076,6 @@ description = "Test with multiple selections"
 file_content = """let a = 1;
 let b = 2;
 let c = 3;"""
-cursor_position = [0, 0]
 selection = [0, 0, 2, 10]
 
 [scenarios.target]
@@ -1113,140 +1111,10 @@ tolerance = 0
 
     let scenarios = result.unwrap();
     assert_eq!(scenarios.len(), 1);
-    assert!(scenarios[0].target.cursor.selections.is_some());
-    assert_eq!(
-        scenarios[0]
-            .target
-            .cursor
-            .selections
-            .as_ref()
-            .unwrap()
-            .len(),
-        3
+    assert_matches!(
+        &scenarios[0].target.cursor,
+        CursorSpec::Ranges(r) if r.as_slice().len() == 3
     );
-}
-
-#[test]
-fn test_setup_effective_cursor_position() {
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: Some((1, 5)),
-            selection: None,
-            cursors: None,
-            selections: None,
-        },
-    };
-    assert_eq!(setup.cursor.effective_cursor_position(), (1, 5));
-
-    let setup_multi = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: Some(vec![[2, 3], [4, 5]]),
-            selections: None,
-        },
-    };
-    assert_eq!(setup_multi.cursor.effective_cursor_position(), (2, 3));
-}
-
-#[test]
-fn test_setup_all_cursors() {
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: Some((1, 5)),
-            selection: None,
-            cursors: None,
-            selections: None,
-        },
-    };
-    assert_eq!(setup.cursor.all_cursors(), vec![[1, 5]]);
-
-    let setup_multi = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: Some(vec![[2, 3], [4, 5]]),
-            selections: None,
-        },
-    };
-    assert_eq!(setup_multi.cursor.all_cursors(), vec![[2, 3], [4, 5]]);
-}
-
-#[test]
-fn test_setup_all_selections() {
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: Some((0, 0)),
-            selection: Some([0, 0, 0, 5]),
-            cursors: None,
-            selections: None,
-        },
-    };
-    assert_eq!(setup.cursor.all_selections(), Some(vec![[0, 0, 0, 5]]));
-
-    let setup_multi = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: None,
-            selections: Some(vec![[0, 0, 0, 5], [1, 0, 1, 5]]),
-        },
-    };
-    assert_eq!(
-        setup_multi.cursor.all_selections(),
-        Some(vec![[0, 0, 0, 5], [1, 0, 1, 5]])
-    );
-}
-
-#[test]
-fn test_setup_is_multi_cursor() {
-    let single = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: Some((0, 0)),
-            selection: None,
-            cursors: None,
-            selections: None,
-        },
-    };
-    assert!(!single.cursor.is_multi_cursor());
-
-    let multi_cursors = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: Some(vec![[0, 0], [1, 0]]),
-            selections: None,
-        },
-    };
-    assert!(multi_cursors.cursor.is_multi_cursor());
-
-    let multi_selections = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: None,
-            selections: Some(vec![[0, 0, 0, 5]]),
-        },
-    };
-    assert!(multi_selections.cursor.is_multi_cursor());
 }
 
 #[test]
@@ -1326,198 +1194,6 @@ tolerance = 0
         result.is_err(),
         "Should reject scenario with invalid multi-cursor position"
     );
-}
-
-// ============================================================================
-// TESTING-003: Edge case tests for Setup/TargetState helpers
-// ============================================================================
-
-#[test]
-fn test_setup_effective_cursor_from_selections() {
-    // When only selections are present, cursor is at first selection's head
-    let setup = Setup {
-        file_content: "test content".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: None,
-            selections: Some(vec![[0, 2, 0, 5], [0, 8, 0, 12]]),
-        },
-    };
-    // First selection's end (head) is at (0, 5)
-    assert_eq!(setup.cursor.effective_cursor_position(), (0, 5));
-}
-
-#[test]
-fn test_setup_all_cursors_derived_from_selections() {
-    // all_cursors should derive from selections when cursors is None
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: None,
-            selections: Some(vec![[0, 0, 0, 3], [0, 5, 0, 8]]),
-        },
-    };
-    // Cursors are at selection ends (heads)
-    let cursors = setup.cursor.all_cursors();
-    assert_eq!(cursors.len(), 2);
-    assert_eq!(cursors[0], [0, 3]);
-    assert_eq!(cursors[1], [0, 8]);
-}
-
-#[test]
-fn test_setup_all_selections_derived_from_cursors() {
-    // all_selections should create point selections from cursors
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: Some(vec![[0, 2], [0, 5]]),
-            selections: None,
-        },
-    };
-    let selections = setup.cursor.all_selections().unwrap();
-    assert_eq!(selections.len(), 2);
-    // Point selections: start == end
-    assert_eq!(selections[0], [0, 2, 0, 2]);
-    assert_eq!(selections[1], [0, 5, 0, 5]);
-}
-
-#[test]
-fn test_setup_all_selections_none_when_no_selection_info() {
-    // When no selection/selections/cursors, all_selections returns None
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: Some((0, 0)),
-            selection: None,
-            cursors: None,
-            selections: None,
-        },
-    };
-    assert!(setup.cursor.all_selections().is_none());
-}
-
-#[test]
-fn test_setup_empty_cursors_array() {
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: Some((0, 2)),
-            selection: None,
-            cursors: Some(vec![]),
-            selections: None,
-        },
-    };
-    // Empty cursors array: effective_cursor_position falls back to cursor_position
-    assert_eq!(setup.cursor.effective_cursor_position(), (0, 2));
-    // all_cursors returns empty vec
-    assert!(setup.cursor.all_cursors().is_empty());
-}
-
-#[test]
-fn test_setup_empty_selections_array() {
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: Some((0, 2)),
-            selection: None,
-            cursors: None,
-            selections: Some(vec![]),
-        },
-    };
-    // Empty selections array: effective_cursor_position falls back to cursor_position
-    assert_eq!(setup.cursor.effective_cursor_position(), (0, 2));
-    // all_selections returns Some(empty vec)
-    assert_eq!(setup.cursor.all_selections(), Some(vec![]));
-}
-
-#[test]
-fn test_target_effective_cursor_from_selections() {
-    let target = TargetState {
-        file_content: "test content".to_string(),
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: None,
-            selections: Some(vec![[0, 0, 0, 7]]),
-        },
-    };
-    assert_eq!(target.cursor.effective_cursor_position(), (0, 7));
-}
-
-#[test]
-fn test_target_all_cursors_derived_from_selections() {
-    let target = TargetState {
-        file_content: "test".to_string(),
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: None,
-            selections: Some(vec![[0, 0, 0, 4]]),
-        },
-    };
-    let cursors = target.cursor.all_cursors();
-    assert_eq!(cursors.len(), 1);
-    assert_eq!(cursors[0], [0, 4]); // Head of selection
-}
-
-#[test]
-fn test_cursors_ref_returns_reference() {
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: Some(vec![[0, 1], [0, 2]]),
-            selections: None,
-        },
-    };
-    let ref_slice = setup.cursor.cursors_ref();
-    assert!(ref_slice.is_some());
-    assert_eq!(ref_slice.unwrap().len(), 2);
-}
-
-#[test]
-fn test_selections_ref_returns_reference() {
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: None,
-            selection: None,
-            cursors: None,
-            selections: Some(vec![[0, 0, 0, 5]]),
-        },
-    };
-    let ref_slice = setup.cursor.selections_ref();
-    assert!(ref_slice.is_some());
-    assert_eq!(ref_slice.unwrap().len(), 1);
-}
-
-#[test]
-fn test_cursors_ref_none_when_not_set() {
-    let setup = Setup {
-        file_content: "test".to_string(),
-        language: None,
-        cursor: CursorSpec {
-            cursor_position: Some((0, 0)),
-            selection: None,
-            cursors: None,
-            selections: None,
-        },
-    };
-    assert!(setup.cursor.cursors_ref().is_none());
 }
 
 // ============================================================================
@@ -1855,84 +1531,6 @@ tolerance = 0
     );
 }
 
-#[test]
-fn test_empty_cursors_array_valid() {
-    // Empty cursors array should be valid (falls back to cursor_position)
-    let toml = r#"
-[[scenarios]]
-id = "empty_cursors_001"
-name = "Empty Cursors Test"
-description = "Test empty cursors array"
-
-[scenarios.setup]
-file_content = "test"
-cursor_position = [0, 0]
-
-[scenarios.target]
-file_content = "test"
-cursor_position = [0, 0]
-cursors = []
-
-[scenarios.solution]
-commands = ["nop"]
-description = "No operation"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-        "#;
-
-    let mut temp_file = NamedTempFile::new().unwrap();
-    temp_file.write_all(toml.as_bytes()).unwrap();
-    temp_file.flush().unwrap();
-
-    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
-    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
-
-    let result = loader.load(temp_file.path());
-    assert!(result.is_ok(), "Should accept empty cursors array");
-}
-
-#[test]
-fn test_empty_selections_array_valid() {
-    // Empty selections array should be valid
-    let toml = r#"
-[[scenarios]]
-id = "empty_selections_001"
-name = "Empty Selections Test"
-description = "Test empty selections array"
-
-[scenarios.setup]
-file_content = "test"
-cursor_position = [0, 0]
-
-[scenarios.target]
-file_content = "test"
-cursor_position = [0, 0]
-selections = []
-
-[scenarios.solution]
-commands = ["nop"]
-description = "No operation"
-
-[scenarios.scoring]
-optimal_count = 1
-max_points = 100
-tolerance = 0
-        "#;
-
-    let mut temp_file = NamedTempFile::new().unwrap();
-    temp_file.write_all(toml.as_bytes()).unwrap();
-    temp_file.flush().unwrap();
-
-    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
-    let loader = ScenarioLoader::with_allowed_paths(vec![parent_dir]);
-
-    let result = loader.load(temp_file.path());
-    assert!(result.is_ok(), "Should accept empty selections array");
-}
-
 mod completion_rule {
     use super::*;
 
@@ -2003,4 +1601,85 @@ mod completion_rule {
         let rule = CompletionRule::AfterTaughtCommands;
         assert!(!rule.is_satisfied(true, &taught(&["U"]), Some(last("u", false))));
     }
+}
+
+fn load_toml(toml: &str) -> Result<Vec<Scenario>, crate::security::UserError> {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file.write_all(toml.as_bytes()).unwrap();
+    temp_file.flush().unwrap();
+    let parent_dir = temp_file.path().parent().unwrap().canonicalize().unwrap();
+    ScenarioLoader::with_allowed_paths(vec![parent_dir]).load(temp_file.path())
+}
+
+fn scenario_toml_with_setup_cursor(setup_cursor: &str) -> String {
+    scenario_toml_with_cursors(setup_cursor, "cursor_position = [0, 0]")
+}
+
+fn scenario_toml_with_cursors(setup_cursor: &str, target_cursor: &str) -> String {
+    format!(
+        r#"
+[[scenarios]]
+id = "cursor_spec_001"
+name = "Cursor spec"
+description = "Cursor spec test"
+
+[scenarios.setup]
+file_content = "hello world"
+{setup_cursor}
+
+[scenarios.target]
+file_content = "hello world"
+{target_cursor}
+
+[scenarios.solution]
+commands = ["nop"]
+description = "No operation"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+"#
+    )
+}
+
+#[test]
+fn test_setup_with_two_cursor_fields_is_rejected_naming_both() {
+    let toml =
+        scenario_toml_with_setup_cursor("cursor_position = [0, 0]\nselection = [0, 0, 0, 3]");
+    let err = load_toml(&toml).unwrap_err();
+    let cause = format!("{err:?}");
+    assert!(
+        cause.contains("cursor_position, selection"),
+        "error should name both fields: {cause}"
+    );
+}
+
+#[test]
+fn test_target_with_two_cursor_fields_is_rejected_naming_both() {
+    let toml = scenario_toml_with_cursors(
+        "cursor_position = [0, 0]",
+        "cursor_position = [0, 0]\nselection = [0, 0, 0, 3]",
+    );
+    let err = load_toml(&toml).unwrap_err();
+    let cause = format!("{err:?}");
+    assert!(
+        cause.contains("cursor_position, selection"),
+        "error should name both fields: {cause}"
+    );
+}
+
+#[test]
+fn test_setup_with_only_selections_is_a_ranges_spec() {
+    let toml = scenario_toml_with_setup_cursor("selections = [[0, 0, 0, 3], [0, 6, 0, 9]]");
+    let scenarios = load_toml(&toml).unwrap();
+    assert_matches!(
+        &scenarios[0].setup.cursor,
+        CursorSpec::Ranges(r) if r.as_slice().len() == 2
+    );
+}
+
+#[test]
+fn test_setup_with_an_empty_cursor_list_is_rejected() {
+    assert!(load_toml(&scenario_toml_with_setup_cursor("cursors = []")).is_err());
 }

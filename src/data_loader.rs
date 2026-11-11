@@ -13,8 +13,7 @@ use crate::config::json_store::{Document, StorageError};
 use crate::config::{Scenario, ScenarioLoader};
 use crate::constants::PROFILE_SAVE_QUEUE_CAPACITY;
 use crate::gamification::{
-    PreviousCopy, ProfileStorage, QuarantineError, QuarantineOutcome, QuestTemplateRegistry,
-    UserProfile,
+    PreviousCopy, ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile,
 };
 use crate::security::CappedReadError;
 use std::sync::Arc;
@@ -191,7 +190,7 @@ pub fn spawn_save_writer(
 ///
 /// Returns [`LoaderError::Scenarios`] if scenarios cannot be loaded from embedded data and
 /// [`LoaderError::Task`] if the blocking task fails.
-pub async fn load_scenarios_async() -> Result<Vec<Scenario>, LoaderError> {
+pub(crate) async fn load_scenarios_async() -> Result<Vec<Scenario>, LoaderError> {
     tokio::task::spawn_blocking(move || {
         let current_locale = rust_i18n::locale();
         let locale_str: &str = current_locale.as_ref();
@@ -215,7 +214,9 @@ pub async fn load_scenarios_async() -> Result<Vec<Scenario>, LoaderError> {
 ///
 /// Returns an error only if the blocking task itself panics or is cancelled;
 /// load failures are reported as [`DataLoadMessage::ProfileError`].
-pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage, JoinError> {
+pub(crate) async fn load_profile_message(
+    storage: ProfileStorage,
+) -> Result<DataLoadMessage, JoinError> {
     tokio::task::spawn_blocking(move || match storage.load() {
         Ok(profile) => DataLoadMessage::ProfileReady(profile),
         Err(error) => profile_refused(&storage, error),
@@ -245,9 +246,11 @@ fn profile_task_failed(storage: &ProfileStorage, error: JoinError) -> DataLoadMe
             source: CappedReadError::Io(std::io::Error::other(error)),
         },
         fallback: UserProfile::new(),
-        backup: QuarantineOutcome::Failed(Arc::new(QuarantineError::Copy {
-            source: std::io::Error::other("the profile task failed"),
-        })),
+        backup: QuarantineOutcome::Failed(Arc::new(
+            crate::config::json_store::QuarantineError::Copy {
+                source: std::io::Error::other("the profile task failed"),
+            },
+        )),
         previous: PreviousCopy::Unavailable,
     }
 }
@@ -350,7 +353,9 @@ const FALLBACK_QUEST_LOCALE: &str = "en";
 ///
 /// Returns [`LoaderError::QuestRegistry`] if neither `locale` nor the fallback locale yields a
 /// valid registry, and [`LoaderError::Task`] if the blocking task fails.
-pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegistry, LoaderError> {
+pub(crate) async fn load_quest_registry_async(
+    locale: &str,
+) -> Result<QuestTemplateRegistry, LoaderError> {
     let locale = locale.to_string();
     tokio::task::spawn_blocking(move || {
         QuestTemplateRegistry::from_embedded(&locale)
@@ -369,7 +374,9 @@ pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::DATA_LOADING_TIMEOUT;
+    use std::time::Duration;
+
+    const DATA_LOADING_TIMEOUT: Duration = Duration::from_secs(5);
 
     #[test]
     #[cfg_attr(miri, ignore)]

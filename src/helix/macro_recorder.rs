@@ -12,7 +12,7 @@
 //! shapes for real reasons: `.`-repeat stores `KeyEvent`s (needed to
 //! faithfully replay count prefixes and mode-specific insert sequences),
 //! while macros store resolved command *strings*, since the `KeyEvent`
-//! conversion (`cmd_to_key_events`) is lossy for parameterised commands like
+//! conversion (`NormalCommand::keys`) is lossy for parameterised commands like
 //! `:goto 3` or `s <pattern>`. Unifying them is deferred; see the `TODO`
 //! below.
 //!
@@ -27,7 +27,7 @@
 //!
 //! `Q` pressed while recording is, by contrast, a deliberate no-op rather
 //! than a nested replay: replayed commands run with `is_replaying == true`,
-//! which is exactly what makes [`MacroRecorder::record`] skip them, so a
+//! which is exactly what makes `MacroRecorder::record` skip them, so a
 //! `Q`-triggered replay's effects would apply to the document while not
 //! being captured into the macro currently being recorded - the resulting
 //! macro would silently not match what the user watched happen on screen.
@@ -40,7 +40,7 @@
 //! Macro state lives on the simulator, not the screen. Bare `q` is consumed
 //! by the Task/MiniGame screens themselves in a few states (`MiniGame`
 //! game-over -> `QuitApp`, `MiniGame` paused -> `MiniGameBackToMenu`; see
-//! `input/handlers.rs`), so pausing or ending a session mid-recording
+//! `ui/key_dispatch/handlers.rs`), so pausing or ending a session mid-recording
 //! silently drops the in-progress recording along with the rest of the
 //! simulator state. Not addressed here - out of scope for this change.
 //!
@@ -52,7 +52,7 @@
 //! - TODO: unifying `.`-repeat's recorder with this one - see "Relationship
 //!   to `.`-repeat" above; tracked as a follow-up, not attempted here.
 
-use crate::security::limits::MAX_MACRO_LENGTH;
+use crate::limits::MAX_MACRO_LENGTH;
 
 /// Maximum macro-replay recursion depth
 ///
@@ -67,7 +67,7 @@ const MAX_MACRO_DEPTH: usize = 10;
 
 /// Records and replays a single unnamed `q`/`Q` macro
 #[derive(Debug, Default)]
-pub struct MacroRecorder {
+pub(crate) struct MacroRecorder {
     /// `Some` while recording; accumulates command strings as they execute
     recording: Option<Vec<String>>,
     /// The last macro stopped-and-stored by `q`, ready for `Q` to replay
@@ -81,17 +81,18 @@ pub struct MacroRecorder {
 
 impl MacroRecorder {
     /// Create a new, empty recorder (nothing recorded, nothing stored)
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Whether a macro is currently being recorded
-    pub fn is_recording(&self) -> bool {
+    pub(crate) fn is_recording(&self) -> bool {
         self.recording.is_some()
     }
 
     /// Whether a macro replay (`Q`) is currently in progress
-    pub fn is_replaying(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_replaying(&self) -> bool {
         self.is_replaying
     }
 
@@ -102,7 +103,7 @@ impl MacroRecorder {
     /// with the empty recording, discarding any previously-stored macro.
     /// This matches real Helix's `q`/`Q` parity - there is no separate
     /// "cancel recording without saving" gesture.
-    pub fn toggle(&mut self) {
+    pub(crate) fn toggle(&mut self) {
         match self.recording.take() {
             Some(commands) => self.stored = commands,
             None => self.recording = Some(Vec::new()),
@@ -115,7 +116,7 @@ impl MacroRecorder {
     /// Silently stops accepting further commands once `MAX_MACRO_LENGTH` is
     /// reached, keeping what was already captured rather than failing or
     /// panicking.
-    pub fn record(&mut self, cmd: &str) {
+    pub(crate) fn record(&mut self, cmd: &str) {
         if self.is_replaying {
             return;
         }
@@ -127,7 +128,7 @@ impl MacroRecorder {
     }
 
     /// The commands stored by the last completed recording
-    pub fn stored(&self) -> &[String] {
+    pub(crate) fn stored(&self) -> &[String] {
         &self.stored
     }
 
@@ -136,7 +137,7 @@ impl MacroRecorder {
     /// Returns `false` (and changes nothing) if there is nothing stored, a
     /// replay is already in progress, or the depth budget is exhausted.
     /// Callers must pair a successful `begin_replay` with [`Self::end_replay`].
-    pub fn begin_replay(&mut self) -> bool {
+    pub(crate) fn begin_replay(&mut self) -> bool {
         if self.is_replaying || self.stored.is_empty() || self.replay_depth >= MAX_MACRO_DEPTH {
             return false;
         }
@@ -146,7 +147,7 @@ impl MacroRecorder {
     }
 
     /// End a replay started by a successful [`Self::begin_replay`]
-    pub fn end_replay(&mut self) {
+    pub(crate) fn end_replay(&mut self) {
         self.is_replaying = false;
         self.replay_depth = self.replay_depth.saturating_sub(1);
     }

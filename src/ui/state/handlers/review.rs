@@ -59,7 +59,7 @@ pub fn handle_complete_review_command(
     outcome: ReviewOutcome,
 ) -> Result<HandlerOutcome, UserError> {
     let session = &mut data.session;
-    if let Some(command) = session.current_command().map(str::to_owned) {
+    if let Some(command) = session.current_command().cloned() {
         let duration = session.session_started_at.elapsed();
 
         // Record result

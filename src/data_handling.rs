@@ -295,6 +295,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use helix_trainer::ids::{QuestId, ScenarioId};
     use helix_trainer::{
         config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState},
         constants::STREAK_FREEZE_MAX_GAP_DAYS,
@@ -325,7 +326,7 @@ mod tests {
 
     fn default_test_scenario() -> Scenario {
         Scenario {
-            id: "test_scenario".to_string(),
+            id: ScenarioId::parse("test_scenario").unwrap(),
             name: "Test Scenario".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -721,7 +722,9 @@ mod tests {
 
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 6;
-        profile.completed_quests_today.insert("quest_0".to_string());
+        profile
+            .completed_quests_today
+            .insert(QuestId::parse("quest_0").unwrap());
         clock.advance_days(1);
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));

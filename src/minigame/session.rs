@@ -1137,12 +1137,10 @@ impl<R: Rng> MiniGameSession<R> {
             // Same card ids as training mode, so arcade and training practice of one
             // skill share a card; typed text and arguments never become cards.
             let mut recorded_commands = std::collections::HashSet::new();
-            for command in
-                crate::learning::ReviewableCommand::from_actions(actions.iter().map(String::as_str))
-            {
+            for command in crate::ids::CommandId::from_actions(actions.iter().map(String::as_str)) {
                 if recorded_commands.insert(command.clone()) {
                     tracker.record_attempt(
-                        command.as_str(),
+                        &command,
                         time_per_command,
                         success,
                         optimal_time_per_command,
@@ -1301,6 +1299,7 @@ mod tests {
     use crate::game::PlayableScenario;
     use crate::minigame::{ArcadeConfig, ChallengeConfig, SurvivalConfig};
     use crate::testing::ScenarioBuilder;
+    use crate::testing::cid;
     use crate::time::FakeMonotonicClock;
 
     fn seeded_session(
@@ -1651,16 +1650,13 @@ mod tests {
         session.record_to_fsrs(&mut tracker, true);
 
         assert!(
-            tracker.performance("\"y").is_some(),
+            tracker.performance(&cid("\"y")).is_some(),
             "expected the normalized '\"y' card to exist"
         );
-        assert!(
-            tracker.performance("\"ay").is_none(),
-            "raw '\"ay' must not exist as its own card"
-        );
-        assert!(
-            tracker.performance("\"by").is_none(),
-            "raw '\"by' must not exist as its own card"
+        assert_eq!(
+            tracker.all_commands().len(),
+            1,
+            "raw register ops must not become their own cards"
         );
     }
 
@@ -1689,7 +1685,11 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
         session.record_to_fsrs(&mut tracker, true);
 
-        let mut cards: Vec<&str> = tracker.all_commands();
+        let mut cards: Vec<&str> = tracker
+            .all_commands()
+            .into_iter()
+            .map(crate::ids::CommandId::as_str)
+            .collect();
         cards.sort_unstable();
         assert_eq!(cards, ["f", "i", "l"]);
     }

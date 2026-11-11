@@ -2,6 +2,7 @@
 
 use crate::helix::commands::CMD_ESCAPE;
 use crate::helix::registry::normal_registry;
+use crate::ids::CommandId;
 use crate::ui::state::{AppState, ReviewData, ReviewSessionState};
 use ratatui::{
     Frame,
@@ -96,12 +97,12 @@ fn render_review_content(
 }
 
 /// Render command information panel
-fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command: &str) {
+fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command: &CommandId) {
     let tracker = &state.progress.performance_tracker;
     let perf = tracker.performance(command);
 
     // Get command description
-    let description = get_command_description(command);
+    let description = get_command_description(command.as_str());
 
     let mastery_text = if let Some(p) = perf {
         format!("Mastery: {:?} ⭐", p.mastery_level())
@@ -133,7 +134,7 @@ fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command:
         Line::from(vec![
             Span::styled("Command: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                command,
+                command.as_str(),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),

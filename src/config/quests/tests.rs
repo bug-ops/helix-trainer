@@ -1,6 +1,8 @@
 //! Tests for quest template loading
 
 use super::*;
+use crate::testing::{ncmd, qid, sid};
+use serde::Deserialize;
 use std::assert_matches;
 use std::path::PathBuf;
 
@@ -18,60 +20,17 @@ fn test_quest_loader_with_custom_paths() {
 }
 
 #[test]
-fn test_validate_id_field_valid() {
-    use serde::Deserialize;
-
-    #[expect(
-        dead_code,
-        reason = "the field exists only to run its deserialize validator"
-    )]
+fn quest_id_is_validated_when_loading_toml() {
     #[derive(Deserialize)]
     struct Test {
-        #[serde(deserialize_with = "validate_id_field")]
-        id: String,
+        id: QuestId,
     }
 
-    let valid = r#"id = "cmd_x_easy""#;
-    let result: Result<Test, _> = toml::from_str(valid);
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_validate_id_field_invalid_too_long() {
-    use serde::Deserialize;
-
-    #[expect(
-        dead_code,
-        reason = "the field exists only to run its deserialize validator"
-    )]
-    #[derive(Deserialize)]
-    struct Test {
-        #[serde(deserialize_with = "validate_id_field")]
-        id: String,
-    }
-
-    let invalid = r#"id = "a_very_long_id_that_exceeds_the_maximum_allowed_length_of_64_characters_and_should_fail""#;
-    let result: Result<Test, _> = toml::from_str(invalid);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_validate_id_field_invalid_characters() {
-    use serde::Deserialize;
-
-    #[expect(
-        dead_code,
-        reason = "the field exists only to run its deserialize validator"
-    )]
-    #[derive(Deserialize)]
-    struct Test {
-        #[serde(deserialize_with = "validate_id_field")]
-        id: String,
-    }
-
-    let invalid = r#"id = "invalid-id-with-hyphens""#;
-    let result: Result<Test, _> = toml::from_str(invalid);
-    assert!(result.is_err());
+    let parse = |id: &str| toml::from_str::<Test>(&format!("id = {id:?}"));
+    assert_eq!(parse("cmd_x_easy").unwrap().id.as_str(), "cmd_x_easy");
+    assert!(parse(&"a".repeat(65)).is_err());
+    assert!(parse("invalid-id-with-hyphens").is_err());
+    assert!(parse("").is_err(), "Empty ID should be rejected");
 }
 
 #[test]
@@ -126,7 +85,7 @@ target = 3
     let spec: QuestSpec = toml::from_str(toml_str).unwrap();
     match spec {
         QuestSpec::CommandPractice { command, target } => {
-            assert_eq!(command, "x");
+            assert_eq!(command.as_str(), "x");
             assert_eq!(target, 3);
         }
         other => panic!("Wrong variant: {:?}", other),
@@ -163,7 +122,7 @@ time_limit_seconds = 5
             scenario_id,
             time_limit_seconds,
         } => {
-            assert_eq!(scenario_id, "delete_line_001");
+            assert_eq!(scenario_id.as_str(), "delete_line_001");
             assert_eq!(time_limit_seconds, 5);
         }
         other => panic!("Wrong variant: {:?}", other),
@@ -258,12 +217,12 @@ fn test_load_daily_quests_toml() {
 #[test]
 fn test_quest_template_to_quest_conversion() {
     let template = QuestTemplate {
-        id: "test_quest".to_string(),
+        id: qid("test_quest"),
         name: "Test Quest".to_string(),
         description: "Delete 3 lines".to_string(),
         difficulty: QuestDifficulty::Easy,
         spec: QuestSpec::CommandPractice {
-            command: "x".to_string(),
+            command: ncmd("x"),
             target: 3,
         },
         xp: None,
@@ -271,28 +230,9 @@ fn test_quest_template_to_quest_conversion() {
     };
 
     let quest = template.to_quest();
-    assert_eq!(quest.id, "test_quest");
+    assert_eq!(quest.id.as_str(), "test_quest");
     assert_eq!(quest.description, "Delete 3 lines");
     assert!(!quest.completed);
-}
-
-#[test]
-fn test_validate_id_field_empty() {
-    use serde::Deserialize;
-
-    #[expect(
-        dead_code,
-        reason = "the field exists only to run its deserialize validator"
-    )]
-    #[derive(Deserialize)]
-    struct Test {
-        #[serde(deserialize_with = "validate_id_field")]
-        id: String,
-    }
-
-    let invalid = r#"id = """#;
-    let result: Result<Test, _> = toml::from_str(invalid);
-    assert!(result.is_err(), "Empty ID should be rejected");
 }
 
 #[test]
@@ -483,17 +423,7 @@ fn test_validate_all_quest_templates() {
             template.id
         );
 
-        // 2. Validate ID format (alphanumeric + underscores, max 64 chars)
-        assert!(
-            template.id.len() <= 64,
-            "Quest ID too long (max 64): {}",
-            template.id
-        );
-        assert!(
-            template.id.chars().all(|c| c.is_alphanumeric() || c == '_'),
-            "Quest ID contains invalid characters: {}",
-            template.id
-        );
+        // 2. ID format is guaranteed by the `QuestId` type
 
         // 3. Validate name and description are non-empty and within limits
         assert!(
@@ -521,9 +451,8 @@ fn test_validate_all_quest_templates() {
         //    at the type level, so no wildcard arm is needed here)
         match &template.spec {
             QuestSpec::CommandPractice { command, target } => {
-                assert!(!command.is_empty(), "Empty command for ID: {}", template.id);
                 assert!(
-                    command.len() <= 10,
+                    command.as_str().len() <= 10,
                     "Command name too long for ID: {}",
                     template.id
                 );
@@ -547,16 +476,6 @@ fn test_validate_all_quest_templates() {
                 scenario_id,
                 time_limit_seconds,
             } => {
-                assert!(
-                    !scenario_id.is_empty(),
-                    "Empty scenario_id for ID: {}",
-                    template.id
-                );
-                assert!(
-                    scenario_id.len() <= 64,
-                    "Scenario ID too long for ID: {}",
-                    template.id
-                );
                 assert!(
                     *time_limit_seconds > 0,
                     "Time limit must be > 0 for ID: {}",
@@ -620,10 +539,10 @@ fn test_validate_all_quest_templates() {
 
         // Spot-check that `conditions` (a sibling of the flattened `spec` field)
         // deserializes correctly and isn't swallowed by the adjacent tagging.
-        if template.id == "speed_delete_hard" {
+        if template.id.as_str() == "speed_delete_hard" {
             assert_eq!(
                 template.conditions.requires_scenarios,
-                vec!["delete_line_001".to_string()],
+                vec![sid("delete_line_001")],
                 "requires_scenarios did not survive deserialization for ID: {}",
                 template.id
             );
@@ -662,7 +581,8 @@ fn test_validate_all_quest_templates() {
 
     for command in &commands_used {
         // Check if command is valid or is a replace command (rx, ry, etc.)
-        let is_valid = valid_commands.contains(command.as_str())
+        let command = command.as_str();
+        let is_valid = valid_commands.contains(command)
             || (command.starts_with('r')
                 && command.len() == 2
                 && command.chars().nth(1).unwrap().is_alphanumeric());
@@ -671,23 +591,6 @@ fn test_validate_all_quest_templates() {
             is_valid,
             "Quest references invalid/unknown Helix command: {}",
             command
-        );
-    }
-
-    // 9. Validate referenced scenario IDs exist in scenario files
-    // Note: We only check if the format is valid; actual existence check would
-    // require loading all scenario files which is better done in integration tests
-    for scenario_id in &scenario_ids_used {
-        // Scenario IDs should follow same format as quest IDs
-        assert!(
-            scenario_id.len() <= 64,
-            "Referenced scenario ID too long: {}",
-            scenario_id
-        );
-        assert!(
-            scenario_id.chars().all(|c| c.is_alphanumeric() || c == '_'),
-            "Referenced scenario ID contains invalid characters: {}",
-            scenario_id
         );
     }
 

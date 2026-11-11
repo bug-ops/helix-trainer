@@ -247,7 +247,7 @@ impl ScenarioBuilder {
             };
 
         Scenario {
-            id: self.id,
+            id: crate::testing::sid(&self.id),
             name,
             description: self.description,
             setup: Setup {
@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn test_default_scenario_helper() {
         let scenario = default_test_scenario();
-        assert_eq!(scenario.id, "test_scenario");
+        assert_eq!(scenario.id.as_str(), "test_scenario");
         assert_eq!(scenario.name, "Test Scenario test_scenario");
         assert!(scenario.metadata.is_none());
     }
@@ -322,14 +322,14 @@ mod tests {
     #[test]
     fn test_scenario_with_id_helper() {
         let scenario = test_scenario_with_id("custom_001");
-        assert_eq!(scenario.id, "custom_001");
+        assert_eq!(scenario.id.as_str(), "custom_001");
         assert_eq!(scenario.name, "Test Scenario custom_001");
     }
 
     #[test]
     fn test_scenario_with_difficulty_helper() {
         let scenario = test_scenario_with_difficulty("s1", Difficulty::Beginner);
-        assert_eq!(scenario.id, "s1");
+        assert_eq!(scenario.id.as_str(), "s1");
         assert!(scenario.metadata.is_some());
         assert_eq!(
             scenario.metadata.as_ref().unwrap().difficulty,
@@ -353,7 +353,7 @@ mod tests {
             .optimal_count(3)
             .build();
 
-        assert_eq!(scenario.id, "full_test");
+        assert_eq!(scenario.id.as_str(), "full_test");
         assert_eq!(scenario.name, "Full Test Scenario");
         assert_eq!(scenario.setup.file_content, "hello");
         assert_eq!(scenario.target.file_content, "world");

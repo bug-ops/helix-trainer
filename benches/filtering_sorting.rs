@@ -11,6 +11,7 @@ use helix_trainer::config::{
     ScenarioFilter, ScenarioMetadata, ScoringConfig, Setup, Solution, SortMode, TargetState,
 };
 use helix_trainer::gamification::UserProfile;
+use helix_trainer::ids::{NormalizedCommand, ScenarioId};
 use std::collections::HashSet;
 use std::hint::black_box;
 
@@ -22,7 +23,7 @@ fn create_scenario(
     difficulty: Option<Difficulty>,
 ) -> Scenario {
     Scenario {
-        id: id.to_string(),
+        id: ScenarioId::parse(id).expect("valid scenario id"),
         name: name.to_string(),
         description: "Test scenario".to_string(),
         setup: Setup {
@@ -58,7 +59,7 @@ fn create_scenario(
         metadata: Some(ScenarioMetadata {
             category,
             difficulty,
-            commands_taught: vec!["x".to_string()],
+            commands_taught: vec![NormalizedCommand::from_raw("x").expect("valid command")],
             prerequisites: vec![],
             tags: vec![],
             estimated_time_seconds: Some(30),
@@ -101,7 +102,7 @@ fn generate_scenarios(count: usize) -> Vec<Scenario> {
 }
 
 // Helper: Create a profile with some scenario completions
-fn create_profile_with_completions(scenario_ids: &[String]) -> UserProfile {
+fn create_profile_with_completions(scenario_ids: &[ScenarioId]) -> UserProfile {
     let mut profile = UserProfile::new();
 
     // Record completions for some scenarios
@@ -214,7 +215,7 @@ fn bench_filter_by_completion(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
 
@@ -247,7 +248,7 @@ fn bench_filter_multi_criteria(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
 
@@ -359,7 +360,7 @@ fn bench_sort_by_progress(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
                     let collection = ScenarioCollection::new(scenarios);
@@ -411,7 +412,7 @@ fn bench_sort_by_mastery(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
                     let collection = ScenarioCollection::new(scenarios);
@@ -462,7 +463,9 @@ fn bench_filter_no_matches(c: &mut Criterion) {
 
                 // Filter by commands that don't exist in any scenario
                 let mut filter_commands = HashSet::new();
-                filter_commands.insert("NonExistentCommand".to_string());
+                filter_commands.insert(
+                    NormalizedCommand::from_raw("NonExistentCommand").expect("valid command"),
+                );
 
                 let filter = ScenarioFilter {
                     commands: Some(filter_commands),
@@ -565,7 +568,7 @@ fn bench_menu_render_simulation(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
                     let collection = ScenarioCollection::new(scenarios);
@@ -607,7 +610,8 @@ fn bench_filter_sort_access_workflow(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let scenarios = generate_scenarios(100);
-                let scenario_ids: Vec<String> = scenarios.iter().map(|s| s.id.clone()).collect();
+                let scenario_ids: Vec<ScenarioId> =
+                    scenarios.iter().map(|s| s.id.clone()).collect();
                 let profile = create_profile_with_completions(&scenario_ids);
 
                 let collection = ScenarioCollection::new(scenarios);

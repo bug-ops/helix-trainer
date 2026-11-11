@@ -3,12 +3,12 @@
 //! Loads quest definitions from TOML files, following the same
 //! security patterns as scenario loading.
 
+use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::security::limits::{
     MAX_CUSTOM_XP_REWARD, MAX_LOCALE_LENGTH, MAX_QUEST_DESCRIPTION_LENGTH, MAX_QUEST_NAME_LENGTH,
     MAX_QUEST_TARGET, MAX_QUEST_TEMPLATES_PER_FILE, MAX_REQUIRED_CONDITIONS,
     MAX_SCENARIO_FILE_SIZE, MAX_SPEED_RUN_TIME_SECONDS, MAX_VERSION_LENGTH,
 };
-use crate::security::validators::validate_id_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -41,8 +41,7 @@ pub struct QuestsMetadata {
 #[serde(deny_unknown_fields)]
 pub struct QuestTemplate {
     /// Unique identifier, validated as a safe id.
-    #[serde(deserialize_with = "validate_id_field")]
-    pub id: String,
+    pub id: QuestId,
     /// Display name shown on the quest card.
     pub name: String,
     /// One-line goal description shown to the player.
@@ -88,7 +87,7 @@ pub enum QuestSpec {
     /// Execute one command a number of times.
     CommandPractice {
         /// Command whose executions are counted.
-        command: String,
+        command: NormalizedCommand,
         /// Number of executions required.
         target: u32,
     },
@@ -100,7 +99,7 @@ pub enum QuestSpec {
     /// Finish one specific scenario within a time limit.
     SpeedRun {
         /// Scenario that must be completed.
-        scenario_id: String,
+        scenario_id: ScenarioId,
         /// Time limit in seconds.
         time_limit_seconds: u64,
     },
@@ -140,10 +139,10 @@ pub struct QuestConditions {
     pub max_level: Option<u32>,
     /// Commands the player must already have practiced.
     #[serde(default)]
-    pub requires_commands: Vec<String>,
+    pub requires_commands: Vec<NormalizedCommand>,
     /// Scenarios the player must already have completed.
     #[serde(default)]
-    pub requires_scenarios: Vec<String>,
+    pub requires_scenarios: Vec<ScenarioId>,
 }
 
 /// Custom deserialization for version field to validate format
@@ -401,7 +400,7 @@ impl QuestLoader {
     fn validate_spec(&self, quest: &QuestTemplate) -> Result<(), SecurityError> {
         match &quest.spec {
             QuestSpec::CommandPractice { command, target } => {
-                if command.is_empty() || command.len() > 10 {
+                if command.as_str().len() > 10 {
                     return Err(SecurityError::InvalidInput("Invalid command name".into()));
                 }
                 if *target == 0 || *target > MAX_QUEST_TARGET {
@@ -418,12 +417,8 @@ impl QuestLoader {
                 }
             }
             QuestSpec::SpeedRun {
-                scenario_id,
-                time_limit_seconds,
+                time_limit_seconds, ..
             } => {
-                if scenario_id.is_empty() || scenario_id.len() > 64 {
-                    return Err(SecurityError::InvalidInput("Invalid scenario ID".into()));
-                }
                 if *time_limit_seconds == 0 || *time_limit_seconds > MAX_SPEED_RUN_TIME_SECONDS {
                     return Err(SecurityError::InvalidInput(
                         "Invalid speed run time limit".into(),

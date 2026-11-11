@@ -515,6 +515,7 @@ mod tests {
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
+    use crate::testing::{cid, ncmd, qid};
     use crate::ui::state::handlers::mode_selection::handle_select_arcade_mode;
     use crate::ui::state::{ConfigState, GameState, MiniGameData, ProgressState, UIState};
     use std::assert_matches;
@@ -655,9 +656,9 @@ mod tests {
 
         let mut state = create_test_state();
         state.progress.profile.daily_quests = vec![Quest {
-            id: "cmd_practice_h".to_string(),
+            id: qid("cmd_practice_h"),
             quest_type: QuestType::CommandPractice {
-                command: "h".to_string(),
+                command: ncmd("h"),
                 target: 1,
                 current: 0,
             },
@@ -714,9 +715,9 @@ mod tests {
         state.progress.profile.total_xp = xp_for_level_2 - 1;
         state.progress.profile.level = 1;
         state.progress.profile.daily_quests = vec![Quest {
-            id: "cmd_practice_h".to_string(),
+            id: qid("cmd_practice_h"),
             quest_type: QuestType::CommandPractice {
-                command: "h".to_string(),
+                command: ncmd("h"),
                 target: 1,
                 current: 0,
             },
@@ -1081,7 +1082,7 @@ mod tests {
 
         // Seed tracker state as if reviews happened earlier in the session.
         state.progress.performance_tracker.record_attempt(
-            "j",
+            &cid("j"),
             Duration::from_millis(500),
             true,
             Duration::from_millis(500),
@@ -1093,7 +1094,7 @@ mod tests {
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(!persisted.performance_data.is_empty());
-        assert!(persisted.performance_data.contains_key("j"));
+        assert!(persisted.performance_data.contains_key(&cid("j")));
     }
 
     #[test]
@@ -1106,9 +1107,9 @@ mod tests {
         {
             let profile = &mut state.progress.profile;
             profile.daily_quests = vec![Quest {
-                id: "cmd_practice".to_string(),
+                id: qid("cmd_practice"),
                 quest_type: QuestType::CommandPractice {
-                    command: "j".to_string(),
+                    command: ncmd("j"),
                     target: 5,
                     current: 0,
                 },

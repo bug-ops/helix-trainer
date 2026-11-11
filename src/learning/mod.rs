@@ -6,7 +6,6 @@
 pub mod analytics;
 /// Per-command FSRS state and the tracker that updates it.
 pub mod performance;
-pub mod reviewable;
 pub mod scenario_history;
 /// Shared traits for progress tracking and tiered ranks.
 pub mod scheduler;
@@ -19,10 +18,7 @@ pub use analytics::{Analytics, MasterySummary};
 pub use performance::{
     CardState, CommandPerformance, MasteryLevel, PerformanceData, PerformanceTracker,
 };
-pub use reviewable::ReviewableCommand;
-pub use scenario_history::{
-    MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery, is_valid_scenario_id,
-};
+pub use scenario_history::{MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery};
 pub use scheduler::{ReviewItem, Scheduler};
 pub use session::{ReviewResult, ReviewSession, SessionSummary};
 pub use traits::{Modifier, ProgressTracker, ProgressionTier};

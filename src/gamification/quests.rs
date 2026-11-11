@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::config::quests::{QuestLoader, QuestTemplate};
+use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::security::UserError;
 
 use super::{UserProfile, XPCalculator};
@@ -60,7 +61,7 @@ pub enum QuestType {
     /// Practice a specific command N times
     CommandPractice {
         /// Command whose executions are counted.
-        command: String,
+        command: NormalizedCommand,
         /// Executions required.
         target: u32,
         /// Executions recorded so far.
@@ -78,7 +79,7 @@ pub enum QuestType {
     /// Complete scenario within time limit
     SpeedRun {
         /// Scenario that must be completed.
-        scenario_id: String,
+        scenario_id: ScenarioId,
         /// Time limit for the run, persisted as whole seconds.
         #[serde(with = "duration_serde")]
         time_limit: Duration,
@@ -97,7 +98,7 @@ pub enum QuestType {
         /// Distinct commands required.
         target_commands: u32,
         /// Distinct commands seen so far.
-        commands_used: HashSet<String>,
+        commands_used: HashSet<NormalizedCommand>,
     },
 }
 
@@ -186,7 +187,7 @@ impl crate::learning::ProgressTracker for QuestType {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quest {
     /// Unique quest identifier, stable across the day.
-    pub id: String,
+    pub id: QuestId,
     /// Quest type with its progress.
     pub quest_type: QuestType,
     /// Text shown to the player.
@@ -202,7 +203,7 @@ pub struct Quest {
 impl Quest {
     /// Create a new quest
     pub fn new(
-        id: String,
+        id: QuestId,
         quest_type: QuestType,
         description: String,
         difficulty: QuestDifficulty,
@@ -444,8 +445,8 @@ impl QuestTemplateRegistry {
     }
 
     /// Get a template by its ID
-    pub fn get_by_id(&self, id: &str) -> Option<&QuestTemplate> {
-        self.templates.iter().find(|t| t.id == id)
+    pub fn get_by_id(&self, id: &QuestId) -> Option<&QuestTemplate> {
+        self.templates.iter().find(|t| &t.id == id)
     }
 
     /// Get all eligible quests based on user conditions
@@ -457,8 +458,8 @@ impl QuestTemplateRegistry {
     pub fn get_eligible_quests(
         &self,
         user_level: u32,
-        commands_used: &HashSet<String>,
-        scenarios_completed: &HashSet<String>,
+        commands_used: &HashSet<NormalizedCommand>,
+        scenarios_completed: &HashSet<ScenarioId>,
     ) -> Vec<&QuestTemplate> {
         self.templates
             .iter()
@@ -619,7 +620,7 @@ pub struct QuestTracker;
 
 impl QuestTracker {
     /// Update quest progress based on command execution
-    pub fn update_command_progress(quests: &mut [Quest], command: &str) {
+    pub fn update_command_progress(quests: &mut [Quest], command: &NormalizedCommand) {
         for quest in quests.iter_mut() {
             if quest.completed {
                 continue;
@@ -640,7 +641,7 @@ impl QuestTracker {
                     target_commands,
                     commands_used,
                 } => {
-                    commands_used.insert(command.to_string());
+                    commands_used.insert(command.clone());
                     if commands_used.len() >= *target_commands as usize {
                         quest.completed = true;
                     }
@@ -651,7 +652,11 @@ impl QuestTracker {
     }
 
     /// Update quest progress for scenario completion
-    pub fn update_scenario_progress(quests: &mut [Quest], scenario_id: &str, duration: Duration) {
+    pub fn update_scenario_progress(
+        quests: &mut [Quest],
+        scenario_id: &ScenarioId,
+        duration: Duration,
+    ) {
         for quest in quests.iter_mut() {
             if quest.completed {
                 continue;
@@ -696,7 +701,7 @@ impl QuestTracker {
     }
 
     /// Check if any quests were newly completed and return their XP rewards
-    pub fn check_completions(quests: &[Quest]) -> Vec<(String, u32)> {
+    pub fn check_completions(quests: &[Quest]) -> Vec<(QuestId, u32)> {
         quests
             .iter()
             .filter(|q| q.is_completed())
@@ -709,6 +714,7 @@ impl QuestTracker {
 mod tests {
     use super::*;
     use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_YANK};
+    use crate::testing::{ncmd, qid, sid};
 
     /// Helper to create a registry for tests
     fn test_registry() -> QuestTemplateRegistry {
@@ -719,14 +725,14 @@ mod tests {
     #[test]
     fn test_quest_type_completion() {
         let mut quest_type = QuestType::CommandPractice {
-            command: CMD_DELETE_SELECTION.to_string(),
+            command: ncmd(CMD_DELETE_SELECTION),
             target: 5,
             current: 3,
         };
         assert!(!quest_type.is_completed());
 
         quest_type = QuestType::CommandPractice {
-            command: CMD_DELETE_SELECTION.to_string(),
+            command: ncmd(CMD_DELETE_SELECTION),
             target: 5,
             current: 5,
         };
@@ -745,18 +751,18 @@ mod tests {
     #[test]
     fn test_quest_creation() {
         let quest_type = QuestType::CommandPractice {
-            command: CMD_DELETE_SELECTION.to_string(),
+            command: ncmd(CMD_DELETE_SELECTION),
             target: 5,
             current: 0,
         };
         let quest = Quest::new(
-            "test_quest".to_string(),
+            qid("test_quest"),
             quest_type,
             "Test quest".to_string(),
             QuestDifficulty::Easy,
         );
 
-        assert_eq!(quest.id, "test_quest");
+        assert_eq!(quest.id.as_str(), "test_quest");
         assert_eq!(quest.xp_reward, 25); // Easy command practice
         assert!(!quest.completed);
     }
@@ -822,9 +828,9 @@ mod tests {
     #[test]
     fn test_quest_tracker_command_progress() {
         let mut quests = vec![Quest::new(
-            "test".to_string(),
+            qid("test"),
             QuestType::CommandPractice {
-                command: CMD_DELETE_SELECTION.to_string(),
+                command: ncmd(CMD_DELETE_SELECTION),
                 target: 3,
                 current: 0,
             },
@@ -832,18 +838,18 @@ mod tests {
             QuestDifficulty::Easy,
         )];
 
-        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_SELECTION);
+        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_DELETE_SELECTION));
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_SELECTION);
-        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_SELECTION);
+        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_DELETE_SELECTION));
+        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_DELETE_SELECTION));
         assert!(quests[0].is_completed());
     }
 
     #[test]
     fn test_quest_tracker_scenario_progress() {
         let mut quests = vec![Quest::new(
-            "test".to_string(),
+            qid("test"),
             QuestType::ScenarioCompletion {
                 target: 2,
                 current: 0,
@@ -852,19 +858,27 @@ mod tests {
             QuestDifficulty::Medium,
         )];
 
-        QuestTracker::update_scenario_progress(&mut quests, "any_scenario", Duration::from_secs(1));
+        QuestTracker::update_scenario_progress(
+            &mut quests,
+            &sid("any_scenario"),
+            Duration::from_secs(1),
+        );
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_scenario_progress(&mut quests, "any_scenario", Duration::from_secs(1));
+        QuestTracker::update_scenario_progress(
+            &mut quests,
+            &sid("any_scenario"),
+            Duration::from_secs(1),
+        );
         assert!(quests[0].is_completed());
     }
 
     #[test]
     fn test_quest_tracker_speed_run() {
         let mut quests = vec![Quest::new(
-            "test".to_string(),
+            qid("test"),
             QuestType::SpeedRun {
-                scenario_id: "delete_line_001".to_string(),
+                scenario_id: sid("delete_line_001"),
                 time_limit: Duration::from_secs(5),
             },
             "Test".to_string(),
@@ -874,7 +888,7 @@ mod tests {
         // Too slow
         QuestTracker::update_scenario_progress(
             &mut quests,
-            "delete_line_001",
+            &sid("delete_line_001"),
             Duration::from_secs(10),
         );
         assert!(!quests[0].is_completed());
@@ -882,7 +896,7 @@ mod tests {
         // Fast enough
         QuestTracker::update_scenario_progress(
             &mut quests,
-            "delete_line_001",
+            &sid("delete_line_001"),
             Duration::from_secs(3),
         );
         assert!(quests[0].is_completed());
@@ -891,7 +905,7 @@ mod tests {
     #[test]
     fn test_quest_tracker_exploration() {
         let mut quests = vec![Quest::new(
-            "test".to_string(),
+            qid("test"),
             QuestType::Exploration {
                 target_commands: 3,
                 commands_used: HashSet::new(),
@@ -900,18 +914,21 @@ mod tests {
             QuestDifficulty::Hard,
         )];
 
-        QuestTracker::update_command_progress(&mut quests, CMD_DELETE_SELECTION);
-        QuestTracker::update_command_progress(&mut quests, CMD_YANK);
+        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_DELETE_SELECTION));
+        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_YANK));
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_command_progress(&mut quests, crate::helix::commands::CMD_PASTE_AFTER);
+        QuestTracker::update_command_progress(
+            &mut quests,
+            &ncmd(crate::helix::commands::CMD_PASTE_AFTER),
+        );
         assert!(quests[0].is_completed());
     }
 
     #[test]
     fn test_quest_tracker_time_invested() {
         let mut quests = vec![Quest::new(
-            "test".to_string(),
+            qid("test"),
             QuestType::TimeInvested {
                 target_minutes: 10,
                 current_minutes: 0,
@@ -931,9 +948,9 @@ mod tests {
     fn test_check_completions() {
         let quests = vec![
             Quest {
-                id: "completed".to_string(),
+                id: qid("completed"),
                 quest_type: QuestType::CommandPractice {
-                    command: CMD_DELETE_SELECTION.to_string(),
+                    command: ncmd(CMD_DELETE_SELECTION),
                     target: 1,
                     current: 1,
                 },
@@ -943,9 +960,9 @@ mod tests {
                 completed: true,
             },
             Quest {
-                id: "incomplete".to_string(),
+                id: qid("incomplete"),
                 quest_type: QuestType::CommandPractice {
-                    command: CMD_YANK.to_string(),
+                    command: ncmd(CMD_YANK),
                     target: 5,
                     current: 2,
                 },
@@ -958,7 +975,7 @@ mod tests {
 
         let completions = QuestTracker::check_completions(&quests);
         assert_eq!(completions.len(), 1);
-        assert_eq!(completions[0].0, "completed");
+        assert_eq!(completions[0].0.as_str(), "completed");
         assert_eq!(completions[0].1, 25);
     }
 

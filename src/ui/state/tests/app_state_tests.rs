@@ -35,7 +35,7 @@ fn test_scenario_valid_index() {
 
     let fetched = state.scenario(0);
     assert!(fetched.is_some());
-    assert_eq!(fetched.unwrap().id, "test_001");
+    assert_eq!(fetched.unwrap().id.as_str(), "test_001");
 }
 
 #[test]

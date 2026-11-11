@@ -3,6 +3,7 @@
 //! Handles quest progress updates and tracking
 
 use crate::gamification::{QuestTracker, QuestType, StreakManager};
+use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::QuestBonus;
@@ -19,13 +20,15 @@ use std::time::Duration;
 /// (`:g 3` -> `:goto`) before tracking, so quest matching (exact equality)
 /// and FSRS see the same command id for the same skill.
 pub fn track_command_for_quests(state: &mut AppState, command: &str) {
-    let normalized = crate::helix::commands::normalize_command_id(command);
+    let Ok(normalized) = NormalizedCommand::from_raw(command) else {
+        return;
+    };
 
     // Track for exploration quests
     state
         .progress
         .commands_used_today
-        .insert(normalized.to_string());
+        .insert(normalized.clone());
 
     // Update command progress in quests
     let profile = &mut state.progress.profile;
@@ -38,7 +41,7 @@ pub fn track_command_for_quests(state: &mut AppState, command: &str) {
 /// Updates scenario completion and speed run quests.
 pub fn track_scenario_completion_for_quests(
     state: &mut AppState,
-    scenario_id: &str,
+    scenario_id: &ScenarioId,
     duration: Duration,
 ) {
     let profile = &mut state.progress.profile;
@@ -65,7 +68,7 @@ pub struct QuestXpAward {
 /// completed by this call, for the caller to display or total up. This is the only place
 /// quest-completion XP is applied to `profile.xp` - callers must not re-add it.
 pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -> QuestXpAward {
-    let newly_completed: Vec<(String, String, u32)> = {
+    let newly_completed: Vec<(QuestId, String, u32)> = {
         let profile = &state.progress.profile;
         profile
             .daily_quests
@@ -162,7 +165,7 @@ pub fn handle_update_quest_progress(
     state: &mut AppState,
     command: Option<String>,
     scenario_completed: bool,
-    scenario_id: Option<String>,
+    scenario_id: Option<ScenarioId>,
     duration: Duration,
 ) -> Result<(), UserError> {
     apply_quest_progress(state, command, scenario_completed, scenario_id, duration);
@@ -175,13 +178,13 @@ pub fn apply_quest_progress(
     state: &mut AppState,
     command: Option<String>,
     scenario_completed: bool,
-    scenario_id: Option<String>,
+    scenario_id: Option<ScenarioId>,
     duration: Duration,
 ) -> QuestUpdate {
     let mut changes = Vec::new();
 
     // Snapshot progress BEFORE updates
-    let progress_before: HashMap<String, u32> = {
+    let progress_before: HashMap<QuestId, u32> = {
         let profile = &state.progress.profile;
         profile
             .daily_quests
@@ -199,10 +202,7 @@ pub fn apply_quest_progress(
     }
 
     // Update scenario completion quests and speed run quests
-    if scenario_completed
-        && let Some(id) = scenario_id
-        && crate::learning::is_valid_scenario_id(&id)
-    {
+    if scenario_completed && let Some(id) = scenario_id {
         track_scenario_completion_for_quests(state, &id, duration);
     }
 

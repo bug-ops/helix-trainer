@@ -34,3 +34,29 @@ pub use app_state::{
 pub use scenario::{
     ScenarioBuilder, default_test_scenario, test_scenario_with_difficulty, test_scenario_with_id,
 };
+
+use crate::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
+
+/// Build a [`ScenarioId`] from a literal, panicking on an invalid test fixture.
+#[must_use]
+pub fn sid(raw: &str) -> ScenarioId {
+    ScenarioId::parse(raw).expect("valid scenario id fixture")
+}
+
+/// Build a [`QuestId`] from a literal, panicking on an invalid test fixture.
+#[must_use]
+pub fn qid(raw: &str) -> QuestId {
+    QuestId::parse(raw).expect("valid quest id fixture")
+}
+
+/// Build a [`CommandId`] from a canonical card id literal.
+#[must_use]
+pub fn cid(raw: &str) -> CommandId {
+    CommandId::from_card_id(raw).expect("canonical card id fixture")
+}
+
+/// Build a [`NormalizedCommand`] from a literal, panicking on an invalid test fixture.
+#[must_use]
+pub fn ncmd(raw: &str) -> NormalizedCommand {
+    NormalizedCommand::from_raw(raw).expect("valid command fixture")
+}

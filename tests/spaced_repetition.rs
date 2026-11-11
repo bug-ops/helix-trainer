@@ -15,6 +15,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
+fn cid(raw: &str) -> helix_trainer::ids::CommandId {
+    helix_trainer::ids::CommandId::from_card_id(raw).expect("canonical card id fixture")
+}
+
 #[test]
 fn test_complete_learning_workflow() {
     // 1. Create performance tracker
@@ -23,19 +27,19 @@ fn test_complete_learning_workflow() {
     // 2. Record some command attempts (with optimal_time parameter)
     // Record successful x (delete line) - 3 times
     tracker.record_attempt(
-        "x",
+        &cid("x"),
         Duration::from_millis(500),
         true,
         Duration::from_millis(400),
     );
     tracker.record_attempt(
-        "x",
+        &cid("x"),
         Duration::from_millis(450),
         true,
         Duration::from_millis(400),
     );
     tracker.record_attempt(
-        "x",
+        &cid("x"),
         Duration::from_millis(400),
         true,
         Duration::from_millis(400),
@@ -43,19 +47,19 @@ fn test_complete_learning_workflow() {
 
     // Record yy (yank line) - 2 successes, 1 failure
     tracker.record_attempt(
-        "yy",
+        &cid("yy"),
         Duration::from_millis(600),
         true,
         Duration::from_millis(500),
     );
     tracker.record_attempt(
-        "yy",
+        &cid("yy"),
         Duration::from_millis(700),
         false,
         Duration::from_millis(500),
     );
     tracker.record_attempt(
-        "yy",
+        &cid("yy"),
         Duration::from_millis(550),
         true,
         Duration::from_millis(500),
@@ -64,7 +68,7 @@ fn test_complete_learning_workflow() {
     // Record w (next word) - perfect performance
     for _ in 0..5 {
         tracker.record_attempt(
-            "w",
+            &cid("w"),
             Duration::from_millis(200),
             true,
             Duration::from_millis(200),
@@ -72,7 +76,7 @@ fn test_complete_learning_workflow() {
     }
 
     // Verify initial state
-    let x_perf = tracker.performance("x").unwrap();
+    let x_perf = tracker.performance(&cid("x")).unwrap();
     assert_eq!(x_perf.attempts(), 3);
     assert_eq!(x_perf.successes(), 3);
     // Mastery level is calculated by FSRS, don't assert specific level
@@ -84,11 +88,11 @@ fn test_complete_learning_workflow() {
             | MasteryLevel::Master
     );
 
-    let yy_perf = tracker.performance("yy").unwrap();
+    let yy_perf = tracker.performance(&cid("yy")).unwrap();
     assert_eq!(yy_perf.attempts(), 3);
     assert_eq!(yy_perf.successes(), 2);
 
-    let w_perf = tracker.performance("w").unwrap();
+    let w_perf = tracker.performance(&cid("w")).unwrap();
     assert_eq!(w_perf.attempts(), 5);
     assert_eq!(w_perf.successes(), 5);
 
@@ -126,14 +130,14 @@ fn test_mastery_progression() {
     // Perfect performance over time should increase mastery
     for _ in 0..20 {
         tracker.record_attempt(
-            "x",
+            &cid("x"),
             Duration::from_millis(300),
             true,
             Duration::from_millis(500),
         );
     }
 
-    let perf = tracker.performance("x").unwrap();
+    let perf = tracker.performance(&cid("x")).unwrap();
 
     // With 20 successful attempts, should have valid mastery level
     assert_matches!(
@@ -174,7 +178,7 @@ fn test_scheduler_prioritization() {
     // Command 1: High success rate
     for _ in 0..5 {
         tracker.record_attempt(
-            "high_success",
+            &cid("high_success"),
             Duration::from_millis(200),
             true,
             Duration::from_millis(300),
@@ -183,19 +187,19 @@ fn test_scheduler_prioritization() {
 
     // Command 2: Low success rate, needs more practice
     tracker.record_attempt(
-        "low_success",
+        &cid("low_success"),
         Duration::from_millis(500),
         true,
         Duration::from_millis(400),
     );
     tracker.record_attempt(
-        "low_success",
+        &cid("low_success"),
         Duration::from_millis(600),
         false,
         Duration::from_millis(400),
     );
     tracker.record_attempt(
-        "low_success",
+        &cid("low_success"),
         Duration::from_millis(700),
         false,
         Duration::from_millis(400),
@@ -203,7 +207,7 @@ fn test_scheduler_prioritization() {
 
     // Command 3: New command
     tracker.record_attempt(
-        "new_command",
+        &cid("new_command"),
         Duration::from_millis(400),
         true,
         Duration::from_millis(500),
@@ -247,7 +251,7 @@ fn test_analytics_commands_by_mastery() {
     // Create commands at different mastery levels
     // Beginner command
     tracker.record_attempt(
-        "beginner_cmd",
+        &cid("beginner_cmd"),
         Duration::from_secs(5),
         false,
         Duration::from_secs(1),
@@ -256,7 +260,7 @@ fn test_analytics_commands_by_mastery() {
     // Intermediate command (moderate success)
     for _ in 0..3 {
         tracker.record_attempt(
-            "intermediate_cmd",
+            &cid("intermediate_cmd"),
             Duration::from_secs(2),
             true,
             Duration::from_secs(1),
@@ -284,7 +288,7 @@ fn test_analytics_plateau_detection() {
     for i in 0..10 {
         let success = i % 2 == 0; // Alternating success/failure
         tracker.record_attempt(
-            "plateau_cmd",
+            &cid("plateau_cmd"),
             Duration::from_secs(3),
             success,
             Duration::from_secs(1),

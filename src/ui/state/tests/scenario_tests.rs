@@ -1,5 +1,6 @@
 //! Tests for scenario lifecycle (start, complete, abandon, retry)
 
+use crate::testing::{ncmd, qid};
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario, exec};
@@ -147,9 +148,9 @@ fn test_previously_completed_quests_tracking() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_quest".to_string(),
+            qid("test_quest"),
             QuestType::CommandPractice {
-                command: "x".to_string(),
+                command: ncmd("x"),
                 target: 1,
                 current: 0,
             },

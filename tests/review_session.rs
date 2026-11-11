@@ -14,6 +14,10 @@ use helix_trainer::ui::state::{AppState, Message, ReviewSessionState, TypedScree
 use std::assert_matches;
 use std::time::Duration;
 
+fn cid(raw: &str) -> helix_trainer::ids::CommandId {
+    helix_trainer::ids::CommandId::from_card_id(raw).expect("canonical card id fixture")
+}
+
 /// Run `update` and execute the effects it requests, as the event loop does
 fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
     let mut effects = Vec::new();
@@ -45,7 +49,7 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
             let command = format!("cmd_{}", i);
             // Record failed attempts to make reviews due immediately
             tracker.record_attempt(
-                &command,
+                &cid(&command),
                 Duration::from_secs(5),
                 false,
                 Duration::from_secs(1),
@@ -207,7 +211,7 @@ fn test_complete_review_idempotency() {
     assert_eq!(session.current_index, 1);
 
     // Try to complete again (should safely handle if called twice)
-    let _current_command = session.current_command().map(str::to_owned);
+    let _current_command = session.current_command().cloned();
     update(
         &mut state,
         Message::CompleteReviewCommand {
@@ -235,7 +239,7 @@ fn test_complete_review_command_success() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     let session_before = review_session(&state).unwrap();
-    let command = session_before.current_command().map(str::to_owned).unwrap();
+    let command = session_before.current_command().cloned().unwrap();
 
     // Complete review as success
     update(
@@ -265,7 +269,7 @@ fn test_complete_review_command_failure() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     let session_before = review_session(&state).unwrap();
-    let command = session_before.current_command().map(str::to_owned).unwrap();
+    let command = session_before.current_command().cloned().unwrap();
 
     // Complete review as failure
     update(
@@ -316,7 +320,7 @@ fn test_performance_tracker_updated() {
 
     let command = {
         let session = review_session(&state).unwrap();
-        session.current_command().map(str::to_owned).unwrap()
+        session.current_command().cloned().unwrap()
     };
 
     let attempts_before = state

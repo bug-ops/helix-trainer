@@ -1,5 +1,6 @@
 //! Tests for menu navigation and selection
 
+use crate::testing::cid;
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
@@ -381,7 +382,7 @@ fn test_starting_review_ends_the_paused_arcade_run_and_awards_it() {
     pause_arcade_with_score(&mut state, 4242);
     update(&mut state, Message::ShowProfile).unwrap();
     state.progress.performance_tracker.record_attempt(
-        "x",
+        &cid("x"),
         Duration::from_secs(5),
         false,
         Duration::from_secs(1),

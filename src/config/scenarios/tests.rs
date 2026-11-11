@@ -1,6 +1,7 @@
 //! Tests for scenario loading and validation
 
 use super::*;
+use crate::testing::{ncmd, sid};
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -59,7 +60,7 @@ fn test_valid_scenario_loading() {
 
     let scenarios = result.unwrap();
     assert_eq!(scenarios.len(), 1);
-    assert_eq!(scenarios[0].id, "test_001");
+    assert_eq!(scenarios[0].id.as_str(), "test_001");
 }
 
 #[test]
@@ -343,8 +344,8 @@ tolerance = 0
 
     let scenarios = result.unwrap();
     assert_eq!(scenarios.len(), 2);
-    assert_eq!(scenarios[0].id, "test_001");
-    assert_eq!(scenarios[1].id, "test_002");
+    assert_eq!(scenarios[0].id.as_str(), "test_001");
+    assert_eq!(scenarios[1].id.as_str(), "test_002");
 }
 
 #[test]
@@ -629,7 +630,7 @@ tolerance = 1
     assert_eq!(scenarios.len(), 1);
 
     let scenario = &scenarios[0];
-    assert_eq!(scenario.id, "comprehensive_test_001");
+    assert_eq!(scenario.id.as_str(), "comprehensive_test_001");
     assert_eq!(scenario.alternatives.len(), 2);
     assert_eq!(scenario.hints.len(), 2);
     assert_eq!(scenario.solution.commands.len(), 2);
@@ -678,7 +679,7 @@ fn test_repeat_insert_scenario_loads_correctly() {
     // Find repeat_insert_001 scenario
     let scenario = scenarios
         .iter()
-        .find(|s| s.id == "repeat_insert_001")
+        .find(|s| s.id.as_str() == "repeat_insert_001")
         .expect("Should find repeat_insert_001");
 
     // Verify cursor positions are within bounds
@@ -986,8 +987,11 @@ locale = "en"
     assert_eq!(metadata.category, Some(ScenarioCategory::Movement));
     assert_eq!(metadata.difficulty, Some(Difficulty::Intermediate));
     assert_eq!(metadata.tags, vec!["test", "metadata"]);
-    assert_eq!(metadata.commands_taught, vec!["h", "j", "k", "l"]);
-    assert_eq!(metadata.prerequisites, vec!["basic_001"]);
+    assert_eq!(
+        metadata.commands_taught,
+        vec![ncmd("h"), ncmd("j"), ncmd("k"), ncmd("l")]
+    );
+    assert_eq!(metadata.prerequisites, vec![sid("basic_001")]);
     assert_eq!(metadata.estimated_time_seconds, Some(30));
     assert_eq!(metadata.locale, Some("en".to_string()));
 }
@@ -2023,8 +2027,8 @@ tolerance = 0
 mod completion_rule {
     use super::*;
 
-    fn taught(commands: &[&str]) -> Vec<String> {
-        commands.iter().map(ToString::to_string).collect()
+    fn taught(commands: &[&str]) -> Vec<NormalizedCommand> {
+        commands.iter().map(|c| ncmd(c)).collect()
     }
 
     fn last(command: &str, target_held_before: bool) -> LastAction<'_> {

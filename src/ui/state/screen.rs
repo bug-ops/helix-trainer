@@ -7,6 +7,7 @@
 
 use crate::config::ScenarioCategory;
 use crate::game::{Abandoned, Active, Completed, Feedback, GameSession};
+use crate::ids::ScenarioId;
 use crate::input::typestate::InputStateMachine;
 use crate::learning::ScenarioMastery;
 use crate::minigame::MiniGameSession;
@@ -386,7 +387,7 @@ impl CompletedOrAbandoned {
     }
 
     /// Get the scenario ID from either variant
-    pub fn scenario_id(&self) -> &str {
+    pub fn scenario_id(&self) -> &ScenarioId {
         match self {
             Self::Completed(session) => &session.scenario().id,
             Self::Abandoned(session) => &session.scenario().id,
@@ -782,6 +783,7 @@ impl InputStateAccess for MiniGameData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::sid;
 
     #[test]
     fn test_menu_data_default() {
@@ -804,7 +806,7 @@ mod tests {
         use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
-            id: "test".to_string(),
+            id: sid("test"),
             name: "Test".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -862,7 +864,7 @@ mod tests {
         use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
-            id: "test".to_string(),
+            id: sid("test"),
             name: "Test".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -916,7 +918,7 @@ mod tests {
         use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
-            id: "test_123".to_string(),
+            id: sid("test_123"),
             name: "Test".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -958,7 +960,7 @@ mod tests {
         let coa = CompletedOrAbandoned::Abandoned(abandoned);
         assert!(coa.is_abandoned());
         assert!(!coa.is_completed());
-        assert_eq!(coa.scenario_id(), "test_123");
+        assert_eq!(coa.scenario_id().as_str(), "test_123");
     }
 
     #[test]

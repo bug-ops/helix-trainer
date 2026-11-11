@@ -6,8 +6,8 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use super::LearningError;
-use super::reviewable::ReviewableCommand;
 use super::traits::ProgressionTier;
+use crate::ids::CommandId;
 use crate::time::{Clock, SystemClock};
 
 const DEFAULT_DIFFICULTY: f32 = 5.0; // Mixle difficulty (0-10 scale)
@@ -37,16 +37,16 @@ pub enum CardState {
     Relearning,
 }
 
-/// Persisted per-command FSRS data, keyed by command string.
+/// Persisted per-command FSRS data, keyed by review-card id.
 ///
 /// The profile and the tracker exchange this named type instead of a bare `HashMap`, and
 /// the on-disk JSON shape stays a plain object. Deserialization drops, rather than fails
-/// on, cards whose id is not a canonical [`ReviewableCommand`] (saved before typed text
+/// on, cards whose id is not a canonical [`CommandId`] (saved before typed text
 /// and arguments were excluded) and cards that fail validation (non-finite or
 /// out-of-range FSRS values, `successes > attempts`); the dropped count is logged.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(transparent)]
-pub struct PerformanceData(HashMap<String, CommandPerformance>);
+pub struct PerformanceData(HashMap<CommandId, CommandPerformance>);
 
 impl<'de> Deserialize<'de> for PerformanceData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -57,16 +57,15 @@ impl<'de> Deserialize<'de> for PerformanceData {
         let mut cards = HashMap::with_capacity(raw.len());
         let mut not_reviewable = 0_usize;
         let mut invalid = Vec::new();
-        for (command, value) in raw {
-            if ReviewableCommand::from_card_id(&command).is_none() {
+        for (key, value) in raw {
+            let Some(command) = CommandId::from_card_id(&key) else {
                 not_reviewable += 1;
                 continue;
-            }
+            };
             let card = CardRecord::deserialize(value)
                 .map_err(|e| e.to_string())
                 .and_then(|record| {
-                    CommandPerformance::from_record(command.clone(), record)
-                        .map_err(|e| e.to_string())
+                    CommandPerformance::from_record(record).map_err(|e| e.to_string())
                 });
             match card {
                 Ok(card) => {
@@ -91,13 +90,13 @@ impl<'de> Deserialize<'de> for PerformanceData {
 impl PerformanceData {
     /// Look up the record for `command`.
     #[must_use]
-    pub fn get(&self, command: &str) -> Option<&CommandPerformance> {
+    pub fn get(&self, command: &CommandId) -> Option<&CommandPerformance> {
         self.0.get(command)
     }
 
     /// Whether a record exists for `command`.
     #[must_use]
-    pub fn contains_key(&self, command: &str) -> bool {
+    pub fn contains_key(&self, command: &CommandId) -> bool {
         self.0.contains_key(command)
     }
 
@@ -114,18 +113,18 @@ impl PerformanceData {
     }
 
     /// Iterate over `(command, record)` pairs in arbitrary order.
-    pub fn iter(&self) -> impl Iterator<Item = (&String, &CommandPerformance)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&CommandId, &CommandPerformance)> {
         self.0.iter()
     }
 }
 
-impl From<HashMap<String, CommandPerformance>> for PerformanceData {
-    fn from(map: HashMap<String, CommandPerformance>) -> Self {
+impl From<HashMap<CommandId, CommandPerformance>> for PerformanceData {
+    fn from(map: HashMap<CommandId, CommandPerformance>) -> Self {
         Self(map)
     }
 }
 
-impl From<PerformanceData> for HashMap<String, CommandPerformance> {
+impl From<PerformanceData> for HashMap<CommandId, CommandPerformance> {
     fn from(data: PerformanceData) -> Self {
         data.0
     }
@@ -170,7 +169,6 @@ impl Difficulty {
 /// deserializer, which validates them.
 #[derive(Debug, Clone)]
 pub struct CommandPerformance {
-    command: String,
     stability: Stability,
     difficulty: Difficulty,
     state: CardState,
@@ -185,8 +183,8 @@ pub struct CommandPerformance {
 }
 
 /// On-disk shape of a [`CommandPerformance`]. Keys that are derivable (`avg_time`,
-/// `mastery_level`, `retrievability`) or redundant (`command`) are neither written nor
-/// required; older files that still carry them load with those keys ignored.
+/// `mastery_level`, `retrievability`) or redundant (`command`, the map key) are neither
+/// written nor required; older files that still carry them load with those keys ignored.
 #[derive(Serialize, Deserialize)]
 struct CardRecord {
     stability: f32,
@@ -278,9 +276,8 @@ impl super::traits::ProgressionTier for MasteryLevel {
 
 impl CommandPerformance {
     /// Creates a record for a command seen for the first time at `now`.
-    pub fn new(command: String, now: DateTime<Utc>) -> Self {
+    pub fn new(now: DateTime<Utc>) -> Self {
         Self {
-            command,
             stability: Stability(0.0),
             difficulty: Difficulty::DEFAULT,
             state: CardState::New,
@@ -295,7 +292,7 @@ impl CommandPerformance {
         }
     }
 
-    fn from_record(command: String, record: CardRecord) -> Result<Self, LearningError> {
+    fn from_record(record: CardRecord) -> Result<Self, LearningError> {
         if record.successes > record.attempts {
             return Err(LearningError::InvalidCounters {
                 attempts: record.attempts,
@@ -303,7 +300,6 @@ impl CommandPerformance {
             });
         }
         Ok(Self {
-            command,
             stability: Stability::new(record.stability)?,
             difficulty: Difficulty::new(record.difficulty)?,
             state: record.state,
@@ -316,12 +312,6 @@ impl CommandPerformance {
             due: record.due,
             scheduled_days: record.scheduled_days,
         })
-    }
-
-    /// Command text this record tracks.
-    #[must_use]
-    pub fn command(&self) -> &str {
-        &self.command
     }
 
     /// FSRS memory stability in days.
@@ -560,7 +550,7 @@ mod duration_serde {
 /// and determines command mastery levels.
 #[derive(Clone)]
 pub struct PerformanceTracker {
-    stats: HashMap<String, CommandPerformance>,
+    stats: HashMap<CommandId, CommandPerformance>,
     fsrs: FSRS, // FSRS scheduler instance
     clock: Arc<dyn Clock>,
 }
@@ -603,14 +593,14 @@ impl PerformanceTracker {
     /// stays unchanged. See [`Self::try_record_attempt`] to observe the error.
     pub fn record_attempt(
         &mut self,
-        command: &str,
+        command: &CommandId,
         duration: Duration,
         success: bool,
         optimal_time: Duration,
     ) {
         if let Err(error) = self.try_record_attempt(command, duration, success, optimal_time) {
             tracing::error!(
-                command,
+                %command,
                 %error,
                 "FSRS update failed; attempt recorded without a schedule change"
             );
@@ -626,7 +616,7 @@ impl PerformanceTracker {
     /// card's schedule, memory state and review count are not.
     pub fn try_record_attempt(
         &mut self,
-        command: &str,
+        command: &CommandId,
         duration: Duration,
         success: bool,
         optimal_time: Duration,
@@ -637,8 +627,8 @@ impl PerformanceTracker {
 
         let perf = self
             .stats
-            .entry(command.to_string())
-            .or_insert_with(|| CommandPerformance::new(command.to_string(), now));
+            .entry(command.clone())
+            .or_insert_with(|| CommandPerformance::new(now));
 
         perf.attempts = perf.attempts.saturating_add(1);
         if success {
@@ -716,7 +706,7 @@ impl PerformanceTracker {
     }
 
     /// Looks up the record of a command, if it was ever attempted.
-    pub fn performance(&self, command: &str) -> Option<&CommandPerformance> {
+    pub fn performance(&self, command: &CommandId) -> Option<&CommandPerformance> {
         self.stats.get(command)
     }
 
@@ -725,11 +715,11 @@ impl PerformanceTracker {
     /// Returns Some((command, old_level, new_level)) if mastery level changed
     pub fn record_attempt_with_mastery_change(
         &mut self,
-        command: &str,
+        command: &CommandId,
         duration: Duration,
         success: bool,
         optimal_time: Duration,
-    ) -> Option<(String, MasteryLevel, MasteryLevel)> {
+    ) -> Option<(CommandId, MasteryLevel, MasteryLevel)> {
         // Get old mastery level (Beginner if new command)
         let old_level = self
             .stats
@@ -745,14 +735,14 @@ impl PerformanceTracker {
 
         // Return change if level improved
         if new_level.tier_level() > old_level.tier_level() {
-            Some((command.to_string(), old_level, new_level))
+            Some((command.clone(), old_level, new_level))
         } else {
             None
         }
     }
 
     /// Commands that are hard, unreliable, still at beginner level or have many lapses.
-    pub fn weak_commands(&self) -> Vec<String> {
+    pub fn weak_commands(&self) -> Vec<CommandId> {
         self.stats
             .iter()
             .filter(|(_, perf)| {
@@ -766,8 +756,8 @@ impl PerformanceTracker {
     }
 
     /// Every command that has a record, in unspecified order.
-    pub fn all_commands(&self) -> Vec<&str> {
-        self.stats.keys().map(String::as_str).collect()
+    pub fn all_commands(&self) -> Vec<&CommandId> {
+        self.stats.keys().collect()
     }
 }
 
@@ -782,6 +772,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::testing::cid;
     use crate::time::FakeClock;
     use std::assert_matches;
 
@@ -814,7 +805,7 @@ mod tests {
     #[test]
     fn test_new_command_defaults() {
         let now = Utc::now();
-        let perf = CommandPerformance::new("x".to_string(), now);
+        let perf = CommandPerformance::new(now);
         assert_eq!(perf.stability(), 0.0);
         assert_eq!(perf.difficulty(), DEFAULT_DIFFICULTY);
         assert_eq!(perf.reps(), 0);
@@ -847,8 +838,7 @@ mod tests {
 
         let data = load(&[("x", legacy.to_string())]);
 
-        let perf = data.get("x").expect("legacy card loads");
-        assert_eq!(perf.command(), "x");
+        let perf = data.get(&cid("x")).expect("legacy card loads");
         assert_eq!(perf.avg_time(), Duration::from_millis(1000));
         assert_eq!(perf.mastery_level(), MasteryLevel::Intermediate);
     }
@@ -856,7 +846,12 @@ mod tests {
     #[test]
     fn derived_values_are_not_persisted() {
         let mut tracker = PerformanceTracker::new();
-        tracker.record_attempt("h", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("h"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
         let json = serde_json::to_value(tracker.stats_clone()).unwrap();
 
@@ -874,16 +869,25 @@ mod tests {
     #[test]
     fn persisted_cards_round_trip() {
         let mut tracker = PerformanceTracker::new();
-        tracker.record_attempt("h", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("dd", Duration::from_secs(9), false, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("h"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("dd"),
+            Duration::from_secs(9),
+            false,
+            Duration::from_secs(1),
+        );
 
         let json = serde_json::to_string(&tracker.stats_clone()).unwrap();
         let data: PerformanceData = serde_json::from_str(&json).unwrap();
 
-        for command in ["h", "dd"] {
-            let before = tracker.performance(command).unwrap();
-            let after = data.get(command).unwrap();
-            assert_eq!(after.command(), command);
+        for command in ["h", "dd"].map(cid) {
+            let before = tracker.performance(&command).unwrap();
+            let after = data.get(&command).unwrap();
             assert_eq!(after.stability(), before.stability());
             assert_eq!(after.difficulty(), before.difficulty());
             assert_eq!(after.attempts(), before.attempts());
@@ -904,7 +908,7 @@ mod tests {
         ]);
 
         assert_eq!(data.len(), 1);
-        assert!(data.contains_key("h"));
+        assert!(data.contains_key(&cid("h")));
     }
 
     #[test]
@@ -915,18 +919,28 @@ mod tests {
         ]);
         let mut tracker = PerformanceTracker::from_stats(data);
 
-        tracker.record_attempt("h", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("j", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("h"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("j"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
-        assert_eq!(tracker.performance("h").unwrap().attempts(), 4);
-        assert_eq!(tracker.performance("j").unwrap().attempts(), 1);
+        assert_eq!(tracker.performance(&cid("h")).unwrap().attempts(), 4);
+        assert_eq!(tracker.performance(&cid("j")).unwrap().attempts(), 1);
     }
 
     #[test]
     fn mastery_avg_time_and_retrievability_are_derived_on_read() {
         let now: DateTime<Utc> = "2026-01-15T12:00:00Z".parse().unwrap();
         let data = load(&[("h", card_json("40.0", "4.0", 4, 4))]);
-        let perf = data.get("h").unwrap();
+        let perf = data.get(&cid("h")).unwrap();
 
         assert_eq!(perf.avg_time(), Duration::from_millis(750));
         assert_eq!(perf.mastery_level(), MasteryLevel::Master);
@@ -937,18 +951,22 @@ mod tests {
 
     #[test]
     fn failed_fsrs_update_counts_the_attempt_and_keeps_the_schedule() {
-        let mut broken = CommandPerformance::new("x".to_string(), Utc::now());
+        let mut broken = CommandPerformance::new(Utc::now());
         broken.reps = 2;
         broken.state = CardState::Review;
         broken.stability = Stability(f32::NAN);
         let mut tracker =
-            PerformanceTracker::from_stats(HashMap::from([("x".into(), broken)]).into());
+            PerformanceTracker::from_stats(HashMap::from([(cid("x"), broken)]).into());
 
-        let result =
-            tracker.try_record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        let result = tracker.try_record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
         assert_matches!(result, Err(LearningError::FsrsError(_)));
-        let perf = tracker.performance("x").unwrap();
+        let perf = tracker.performance(&cid("x")).unwrap();
         assert_eq!(perf.attempts(), 1);
         assert_eq!(perf.successes(), 1);
         assert_eq!(perf.reps(), 2);
@@ -958,7 +976,7 @@ mod tests {
     #[test]
     fn out_of_domain_memory_leaves_the_card_unchanged() {
         let now = Utc::now();
-        let mut perf = CommandPerformance::new("x".to_string(), now);
+        let mut perf = CommandPerformance::new(now);
         let memory = MemoryState {
             stability: f32::INFINITY,
             difficulty: 5.0,
@@ -975,7 +993,12 @@ mod tests {
     #[test]
     fn deserialize_drops_non_reviewable_cards_and_keeps_valid_history() {
         let mut tracker = PerformanceTracker::new();
-        tracker.record_attempt("h", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("h"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
         let mut json = serde_json::to_value(tracker.stats_clone()).unwrap();
         let card = json["h"].clone();
         for junk in ["Escape", "3h", "f=", "!"] {
@@ -985,7 +1008,7 @@ mod tests {
         let data: PerformanceData = serde_json::from_value(json).unwrap();
 
         assert_eq!(data.len(), 1);
-        let kept = data.get("h").expect("valid card survives");
+        let kept = data.get(&cid("h")).expect("valid card survives");
         assert_eq!(kept.attempts, 1);
         assert_eq!(kept.reps, 1);
     }
@@ -995,9 +1018,14 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
 
         // First attempt (perfect)
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
-        let perf = tracker.performance("x").unwrap();
+        let perf = tracker.performance(&cid("x")).unwrap();
         assert!(perf.stability() > 0.0);
         assert_eq!(perf.reps, 1);
         assert_matches!(perf.state, CardState::Learning | CardState::Review);
@@ -1005,9 +1033,14 @@ mod tests {
         let first_stability = perf.stability();
 
         // Second attempt (perfect)
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
-        let perf = tracker.performance("x").unwrap();
+        let perf = tracker.performance(&cid("x")).unwrap();
         assert!(perf.stability() > first_stability); // FSRS increases stability
         assert_eq!(perf.reps, 2);
     }
@@ -1017,15 +1050,30 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
 
         // Build up some stability
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
-        let lapses_before = tracker.performance("x").unwrap().lapses;
+        let lapses_before = tracker.performance(&cid("x")).unwrap().lapses;
 
         // Fail
-        tracker.record_attempt("x", Duration::from_secs(10), false, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(10),
+            false,
+            Duration::from_secs(1),
+        );
 
-        let perf = tracker.performance("x").unwrap();
+        let perf = tracker.performance(&cid("x")).unwrap();
         // Lapse count increases when failing
         assert_eq!(perf.lapses, lapses_before + 1);
         assert_matches!(perf.state, CardState::Relearning | CardState::Learning);
@@ -1037,10 +1085,15 @@ mod tests {
 
         // Spam failures - difficulty should stay within 0-10
         for _ in 0..100 {
-            tracker.record_attempt("x", Duration::from_secs(10), false, Duration::from_secs(1));
+            tracker.record_attempt(
+                &cid("x"),
+                Duration::from_secs(10),
+                false,
+                Duration::from_secs(1),
+            );
         }
 
-        let perf = tracker.performance("x").unwrap();
+        let perf = tracker.performance(&cid("x")).unwrap();
         assert!(perf.difficulty() >= 0.0);
         assert!(perf.difficulty() <= 10.0);
     }
@@ -1087,7 +1140,7 @@ mod tests {
 
     #[test]
     fn test_memory_state_conversion() {
-        let mut perf = CommandPerformance::new("x".to_string(), Utc::now());
+        let mut perf = CommandPerformance::new(Utc::now());
         assert!(perf.memory_state().is_none());
 
         perf.stability = Stability(5.0);
@@ -1102,7 +1155,7 @@ mod tests {
 
     #[test]
     fn test_mastery_level_progression() {
-        let mut perf = CommandPerformance::new("x".to_string(), Utc::now());
+        let mut perf = CommandPerformance::new(Utc::now());
         assert_eq!(perf.mastery_level(), MasteryLevel::Beginner);
 
         // Simulate progression through states
@@ -1125,7 +1178,7 @@ mod tests {
         // Add a weak command (low success rate)
         for _ in 0..10 {
             tracker.record_attempt(
-                "weak",
+                &cid("weak"),
                 Duration::from_secs(10),
                 false,
                 Duration::from_secs(1),
@@ -1135,7 +1188,7 @@ mod tests {
         // Add a strong command
         for _ in 0..10 {
             tracker.record_attempt(
-                "strong",
+                &cid("strong"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),
@@ -1143,7 +1196,7 @@ mod tests {
         }
 
         let weak = tracker.weak_commands();
-        assert!(weak.contains(&"weak".to_string()));
+        assert!(weak.contains(&cid("weak")));
         // "strong" might still be beginner mastery level initially, so don't assert it's not weak
     }
 
@@ -1152,13 +1205,23 @@ mod tests {
         let clock = Arc::new(FakeClock::at("2026-01-15T12:00:00Z"));
         let mut tracker = PerformanceTracker::with_clock(clock.clone());
 
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        let first_last_review = tracker.performance("x").unwrap().last_review;
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        let first_last_review = tracker.performance(&cid("x")).unwrap().last_review;
         assert_eq!(first_last_review, clock.now());
 
         clock.advance_days(3);
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        let second_last_review = tracker.performance("x").unwrap().last_review;
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        let second_last_review = tracker.performance(&cid("x")).unwrap().last_review;
         assert_eq!(second_last_review, clock.now());
         assert_eq!(
             (second_last_review - first_last_review).num_days(),
@@ -1171,15 +1234,30 @@ mod tests {
     fn test_all_commands() {
         let mut tracker = PerformanceTracker::new();
 
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("yy", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("p", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("yy"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("p"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
         let all = tracker.all_commands();
         assert_eq!(all.len(), 3);
-        assert!(all.contains(&"x"));
-        assert!(all.contains(&"yy"));
-        assert!(all.contains(&"p"));
+        assert!(all.contains(&&cid("x")));
+        assert!(all.contains(&&cid("yy")));
+        assert!(all.contains(&&cid("p")));
     }
 
     /// Strategy for one simulated review: (success, duration, optimal duration, days
@@ -1200,14 +1278,13 @@ mod tests {
                 let mut tracker = PerformanceTracker::with_clock(clock.clone());
                 for &(success, duration_secs, optimal_secs, elapsed_days) in &attempts {
                     clock.advance_days(elapsed_days);
-                    tracker.record_attempt(
-                        "x",
+                    tracker.record_attempt(&cid("x"),
                         Duration::from_secs(duration_secs),
                         success,
                         Duration::from_secs(optimal_secs),
                     );
                 }
-                tracker.performance("x").unwrap().clone()
+                tracker.performance(&cid("x")).unwrap().clone()
             };
 
             let first = run();
@@ -1243,14 +1320,13 @@ mod tests {
 
             for &(success, duration_secs, optimal_secs, elapsed_days) in &attempts {
                 clock.advance_days(elapsed_days);
-                tracker.record_attempt(
-                    "x",
+                tracker.record_attempt(&cid("x"),
                     Duration::from_secs(duration_secs),
                     success,
                     Duration::from_secs(optimal_secs),
                 );
 
-                let perf = tracker.performance("x").unwrap();
+                let perf = tracker.performance(&cid("x")).unwrap();
                 // FSRS's own difficulty domain (fsrs::simulation::{D_MIN, D_MAX}).
                 prop_assert!(
                     (1.0..=10.0).contains(&perf.difficulty()),
@@ -1275,21 +1351,20 @@ mod tests {
 
     #[test]
     fn test_record_attempt_with_saturated_counters_does_not_panic() {
-        let mut perf = CommandPerformance::new("x".to_string(), Utc::now());
+        let mut perf = CommandPerformance::new(Utc::now());
         perf.attempts = u32::MAX;
         perf.successes = u32::MAX;
         perf.reps = u32::MAX;
-        let mut tracker =
-            PerformanceTracker::from_stats(HashMap::from([("x".to_string(), perf)]).into());
+        let mut tracker = PerformanceTracker::from_stats(HashMap::from([(cid("x"), perf)]).into());
 
         tracker.record_attempt(
-            "x",
+            &cid("x"),
             std::time::Duration::from_secs(1),
             true,
             std::time::Duration::from_secs(1),
         );
 
-        let perf = tracker.performance("x").expect("entry exists");
+        let perf = tracker.performance(&cid("x")).expect("entry exists");
         assert_eq!(perf.attempts, u32::MAX);
         assert_eq!(perf.successes, u32::MAX);
     }

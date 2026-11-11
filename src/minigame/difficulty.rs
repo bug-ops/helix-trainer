@@ -950,7 +950,7 @@ impl Default for DifficultyController {
 mod tests {
     use super::*;
     use crate::config::{Difficulty, Scenario};
-    use crate::testing::ScenarioBuilder;
+    use crate::testing::{ScenarioBuilder, cid, sid};
     use rand::{SeedableRng, rngs::StdRng};
 
     fn create_test_scenario(difficulty: Difficulty, id: &str) -> Scenario {
@@ -1605,7 +1605,7 @@ mod tests {
             // Master the "h" command with many successful attempts
             for _ in 0..10 {
                 tracker.record_attempt(
-                    "h",
+                    &cid("h"),
                     StdDuration::from_secs(1),
                     true,
                     StdDuration::from_secs(1),
@@ -1613,7 +1613,7 @@ mod tests {
             }
 
             // Count selections over many iterations
-            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let mut selection_counts: HashMap<crate::ids::ScenarioId, u32> = HashMap::new();
             let iterations = 1000;
             let mut rng = StdRng::seed_from_u64(42);
 
@@ -1627,8 +1627,8 @@ mod tests {
 
             // Novel scenario (dd) should be selected more often than mastered (h)
             // because novel commands have FSRS_NOVELTY_WEIGHT (0.2) > mastered (nearly 0)
-            let novel_count = selection_counts.get("novel").copied().unwrap_or(0);
-            let mastered_count = selection_counts.get("mastered").copied().unwrap_or(0);
+            let novel_count = selection_counts.get(&sid("novel")).copied().unwrap_or(0);
+            let mastered_count = selection_counts.get(&sid("mastered")).copied().unwrap_or(0);
 
             assert!(
                 novel_count > mastered_count,
@@ -1654,7 +1654,7 @@ mod tests {
             let scenarios = vec![scenario1, scenario2, scenario3];
 
             // Without tracker, should use random selection (backward compatibility)
-            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let mut selection_counts: HashMap<crate::ids::ScenarioId, u32> = HashMap::new();
             let mut rng = StdRng::seed_from_u64(42);
 
             for _ in 0..300 {
@@ -1665,15 +1665,15 @@ mod tests {
 
             // All scenarios should be selected (random distribution)
             assert!(
-                selection_counts.get("s1").copied().unwrap_or(0) > 0,
+                selection_counts.get(&sid("s1")).copied().unwrap_or(0) > 0,
                 "s1 should be selected"
             );
             assert!(
-                selection_counts.get("s2").copied().unwrap_or(0) > 0,
+                selection_counts.get(&sid("s2")).copied().unwrap_or(0) > 0,
                 "s2 should be selected"
             );
             assert!(
-                selection_counts.get("s3").copied().unwrap_or(0) > 0,
+                selection_counts.get(&sid("s3")).copied().unwrap_or(0) > 0,
                 "s3 should be selected"
             );
 
@@ -1703,7 +1703,7 @@ mod tests {
             // Heavily master "h" command
             for _ in 0..50 {
                 tracker.record_attempt(
-                    "h",
+                    &cid("h"),
                     StdDuration::from_secs(1),
                     true,
                     StdDuration::from_secs(1),
@@ -1749,7 +1749,7 @@ mod tests {
             let scenarios = vec![scenario1, scenario2, scenario3];
 
             // With empty tracker, all commands are novel and should have equal weight
-            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let mut selection_counts: HashMap<crate::ids::ScenarioId, u32> = HashMap::new();
             let mut rng = StdRng::seed_from_u64(42);
 
             for _ in 0..300 {
@@ -1786,7 +1786,7 @@ mod tests {
             for _ in 0..10 {
                 let result = controller.next_scenario(&scenarios, Some(&tracker), &mut rand::rng());
                 assert!(result.is_some());
-                assert_eq!(result.unwrap().id, "single");
+                assert_eq!(result.unwrap().id.as_str(), "single");
             }
         }
 
@@ -1838,7 +1838,8 @@ mod tests {
                     controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
                 {
                     assert_eq!(
-                        scenario.id, "beginner",
+                        scenario.id.as_str(),
+                        "beginner",
                         "At level 1, only beginner scenarios should be selected"
                     );
                 }
@@ -1852,7 +1853,7 @@ mod tests {
             for _ in 0..20 {
                 if let Some(scenario) =
                     controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
-                    && scenario.id == "advanced"
+                    && scenario.id.as_str() == "advanced"
                 {
                     found_advanced = true;
                     break;

@@ -1,7 +1,7 @@
 //! Tests for rendering functions
 
 use crate::config::Scenario;
-use crate::testing::{ScenarioBuilder, test_app_state_with_scenarios};
+use crate::testing::{ScenarioBuilder, cid, test_app_state_with_scenarios};
 use crate::ui::state::AppState;
 
 fn create_test_scenario() -> Scenario {
@@ -710,7 +710,7 @@ mod review_tests {
 
     fn create_review_session(commands: Vec<&str>) -> ReviewSessionState {
         ReviewSessionState {
-            due_commands: commands.into_iter().map(String::from).collect(),
+            due_commands: commands.into_iter().map(cid).collect(),
             current_index: 0,
             session_started_at: Instant::now(),
             completed_reviews: vec![],
@@ -1520,19 +1520,19 @@ mod statistics_tests {
         state
             .progress
             .performance_tracker
-            .record_attempt("h", dur, true, optimal);
+            .record_attempt(&cid("h"), dur, true, optimal);
         state
             .progress
             .performance_tracker
-            .record_attempt("j", dur, true, optimal);
+            .record_attempt(&cid("j"), dur, true, optimal);
         state
             .progress
             .performance_tracker
-            .record_attempt("k", dur, true, optimal);
+            .record_attempt(&cid("k"), dur, true, optimal);
         state
             .progress
             .performance_tracker
-            .record_attempt("l", dur, true, optimal);
+            .record_attempt(&cid("l"), dur, true, optimal);
 
         state.screen = TypedScreen::Statistics(StatisticsData {
             return_to: ReturnDestination::Menu,
@@ -1559,12 +1559,12 @@ mod statistics_tests {
             state
                 .progress
                 .performance_tracker
-                .record_attempt("dd", dur, false, optimal);
+                .record_attempt(&cid("dd"), dur, false, optimal);
         }
         state
             .progress
             .performance_tracker
-            .record_attempt("dd", dur, true, optimal);
+            .record_attempt(&cid("dd"), dur, true, optimal);
 
         state.screen = TypedScreen::Statistics(StatisticsData {
             return_to: ReturnDestination::Menu,
@@ -1593,7 +1593,7 @@ mod statistics_tests {
                 state
                     .progress
                     .performance_tracker
-                    .record_attempt(cmd, dur, false, optimal);
+                    .record_attempt(&cid(cmd), dur, false, optimal);
             }
         }
 
@@ -1622,7 +1622,7 @@ mod statistics_tests {
             state
                 .progress
                 .performance_tracker
-                .record_attempt("h", dur, true, optimal);
+                .record_attempt(&cid("h"), dur, true, optimal);
         }
 
         state.screen = TypedScreen::Statistics(StatisticsData {
@@ -1731,7 +1731,7 @@ mod statistics_tests {
             state
                 .progress
                 .performance_tracker
-                .record_attempt("h", dur, true, optimal);
+                .record_attempt(&cid("h"), dur, true, optimal);
         }
 
         // Medium success rate command
@@ -1739,13 +1739,13 @@ mod statistics_tests {
             state
                 .progress
                 .performance_tracker
-                .record_attempt("j", dur, true, optimal);
+                .record_attempt(&cid("j"), dur, true, optimal);
         }
         for _ in 0..3 {
             state
                 .progress
                 .performance_tracker
-                .record_attempt("j", dur, false, optimal);
+                .record_attempt(&cid("j"), dur, false, optimal);
         }
 
         // Low success rate command
@@ -1753,13 +1753,13 @@ mod statistics_tests {
             state
                 .progress
                 .performance_tracker
-                .record_attempt("dd", dur, true, optimal);
+                .record_attempt(&cid("dd"), dur, true, optimal);
         }
         for _ in 0..8 {
             state
                 .progress
                 .performance_tracker
-                .record_attempt("dd", dur, false, optimal);
+                .record_attempt(&cid("dd"), dur, false, optimal);
         }
 
         state.screen = TypedScreen::Statistics(StatisticsData {

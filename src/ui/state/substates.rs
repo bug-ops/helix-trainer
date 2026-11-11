@@ -8,6 +8,7 @@ use crate::config::{AppConfig, ScenarioCollection};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
 use crate::game::GameSession;
 use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile};
+use crate::ids::NormalizedCommand;
 use crate::input::keymap::KeymapOverlay;
 use crate::learning::{PerformanceTracker, Scheduler};
 use crate::sound::{SoundConfig, SoundManager};
@@ -162,7 +163,7 @@ pub struct ProgressState {
     pub scenarios_completed_today: usize,
 
     /// Commands used today (for exploration quests)
-    pub commands_used_today: HashSet<String>,
+    pub commands_used_today: HashSet<NormalizedCommand>,
 
     /// Session start time
     pub session_start_time: Instant,
@@ -549,6 +550,7 @@ impl Default for ConfigState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::cid;
     use std::assert_matches;
 
     fn writable_progress() -> ProgressState {
@@ -736,7 +738,7 @@ mod tests {
         .loaded();
 
         progress.performance_tracker.record_attempt(
-            "x",
+            &cid("x"),
             std::time::Duration::from_secs(1),
             true,
             std::time::Duration::from_secs(1),
@@ -744,7 +746,7 @@ mod tests {
 
         // If the tracker still used SystemClock, `last_review` would be wall-clock "now",
         // not the fake clock's fixed instant.
-        let perf = progress.performance_tracker.performance("x").unwrap();
+        let perf = progress.performance_tracker.performance(&cid("x")).unwrap();
         assert_eq!(perf.last_review(), clock.now());
 
         // The scheduler must observe the same fake "now" the tracker recorded against, so
@@ -752,7 +754,7 @@ mod tests {
         let due = progress
             .scheduler
             .get_due_reviews(&progress.performance_tracker);
-        assert!(due.contains(&"x".to_string()));
+        assert!(due.contains(&cid("x")));
     }
 
     #[test]
@@ -788,7 +790,6 @@ mod tests {
                     other.attempts() == v.attempts()
                         && other.successes() == v.successes()
                         && other.reps() == v.reps()
-                        && other.command() == v.command()
                 })
             })
     }
@@ -811,7 +812,7 @@ mod tests {
         .loaded();
 
         progress.performance_tracker.record_attempt(
-            "x",
+            &cid("x"),
             Duration::from_millis(500),
             true,
             Duration::from_millis(500),
@@ -851,7 +852,7 @@ mod tests {
         // Mutate the tracker after the save; a debounced save within the window
         // must not pick this up.
         progress.performance_tracker.record_attempt(
-            "d",
+            &cid("d"),
             Duration::from_millis(500),
             true,
             Duration::from_millis(500),
@@ -888,7 +889,7 @@ mod tests {
             Some(Instant::now() - PROFILE_SAVE_DEBOUNCE - Duration::from_secs(1));
 
         progress.performance_tracker.record_attempt(
-            "j",
+            &cid("j"),
             Duration::from_millis(500),
             true,
             Duration::from_millis(500),

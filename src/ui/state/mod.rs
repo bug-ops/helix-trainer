@@ -21,6 +21,7 @@
 use crate::async_state::SaveRequest;
 use crate::config::Scenario;
 use crate::gamification::{ProfileStorage, QuarantineOutcome, UserProfile};
+use crate::ids::{CommandId, ScenarioId};
 use crate::learning::PerformanceTracker;
 use crate::security::UserError;
 use crate::sound::SoundEffect;
@@ -99,7 +100,7 @@ pub struct QuestProgressChange {
 #[derive(Debug, Clone)]
 pub struct ReviewSessionState {
     /// Commands due for review, in review order.
-    pub due_commands: Vec<String>,
+    pub due_commands: Vec<CommandId>,
     /// Index of the command being reviewed.
     pub current_index: usize,
     /// When the session started.
@@ -110,10 +111,8 @@ pub struct ReviewSessionState {
 
 impl ReviewSessionState {
     /// The command currently being reviewed, `None` once every command is done
-    pub fn current_command(&self) -> Option<&str> {
-        self.due_commands
-            .get(self.current_index)
-            .map(String::as_str)
+    pub fn current_command(&self) -> Option<&CommandId> {
+        self.due_commands.get(self.current_index)
     }
 }
 
@@ -137,7 +136,7 @@ impl ReviewOutcome {
 #[derive(Debug, Clone)]
 pub struct ReviewResult {
     /// Reviewed command.
-    pub command: String,
+    pub command: CommandId,
     /// How the review ended.
     pub outcome: ReviewOutcome,
     /// Time the review took.
@@ -306,7 +305,7 @@ pub enum Message {
         /// Whether the run completed its scenario.
         scenario_completed: bool,
         /// Scenario the update refers to.
-        scenario_id: Option<String>,
+        scenario_id: Option<ScenarioId>,
         /// Time the run took.
         duration: Duration,
     },

@@ -1,6 +1,7 @@
 use super::LearningError;
 use super::performance::{CommandPerformance, MasteryLevel, PerformanceTracker};
 use super::scheduler::{ReviewItem, Scheduler};
+use crate::ids::CommandId;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -9,7 +10,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct ReviewResult {
     /// Reviewed command.
-    pub command: String,
+    pub command: CommandId,
     /// Time the attempt took.
     pub duration: Duration,
     /// Whether the attempt succeeded.
@@ -32,7 +33,7 @@ pub struct SessionSummary {
     /// Mean time per review.
     pub avg_time: Duration,
     /// Commands whose mastery level changed, with the old and new level.
-    pub mastery_changes: Vec<(String, MasteryLevel, MasteryLevel)>,
+    pub mastery_changes: Vec<(CommandId, MasteryLevel, MasteryLevel)>,
 }
 
 /// Review session for spaced repetition practice
@@ -60,6 +61,7 @@ impl ReviewSession {
     /// # Examples
     ///
     /// ```
+    /// use helix_trainer::ids::CommandId;
     /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
     /// use std::cell::RefCell;
     /// use std::rc::Rc;
@@ -107,6 +109,7 @@ impl ReviewSession {
     /// # Examples
     ///
     /// ```
+    /// use helix_trainer::ids::CommandId;
     /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
     /// use std::cell::RefCell;
     /// use std::rc::Rc;
@@ -114,7 +117,8 @@ impl ReviewSession {
     ///
     /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
     /// let mut tracker_mut = tracker.borrow_mut();
-    /// tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+    /// let x = CommandId::from_card_id("x").unwrap();
+    /// tracker_mut.record_attempt(&x, Duration::from_secs(1), true, Duration::from_secs(1));
     /// drop(tracker_mut);
     ///
     /// let scheduler = Scheduler::new();
@@ -183,6 +187,7 @@ impl ReviewSession {
     /// # Examples
     ///
     /// ```
+    /// use helix_trainer::ids::CommandId;
     /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
     /// use std::cell::RefCell;
     /// use std::rc::Rc;
@@ -190,7 +195,8 @@ impl ReviewSession {
     ///
     /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
     /// let mut tracker_mut = tracker.borrow_mut();
-    /// tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+    /// let x = CommandId::from_card_id("x").unwrap();
+    /// tracker_mut.record_attempt(&x, Duration::from_secs(1), true, Duration::from_secs(1));
     /// drop(tracker_mut);
     ///
     /// let scheduler = Scheduler::new();
@@ -237,6 +243,7 @@ impl ReviewSession {
 mod tests {
     use super::*;
     use crate::learning::PerformanceTracker;
+    use crate::testing::cid;
     use std::assert_matches;
 
     fn create_populated_tracker() -> Rc<RefCell<PerformanceTracker>> {
@@ -244,9 +251,24 @@ mod tests {
 
         // Add some commands that are immediately due
         let mut tracker_mut = tracker.borrow_mut();
-        tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker_mut.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
-        tracker_mut.record_attempt("p", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker_mut.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker_mut.record_attempt(
+            &cid("yy"),
+            Duration::from_secs(2),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker_mut.record_attempt(
+            &cid("p"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
         drop(tracker_mut);
 
         tracker
@@ -391,19 +413,19 @@ mod tests {
             let mut tracker_mut = tracker.borrow_mut();
             // Just create the entries without practicing to ensure they're due
             tracker_mut.record_attempt(
-                "cmd1",
+                &cid("cmd1"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),
             );
             tracker_mut.record_attempt(
-                "cmd2",
+                &cid("cmd2"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),
             );
             tracker_mut.record_attempt(
-                "cmd3",
+                &cid("cmd3"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),

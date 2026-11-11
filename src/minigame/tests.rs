@@ -6,11 +6,12 @@ use super::*;
 use crate::config::{
     CursorSpec, Difficulty, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
 };
+use crate::testing::sid;
 use std::sync::Arc;
 
 fn create_simple_scenario(id: &str) -> Scenario {
     Scenario {
-        id: id.to_string(),
+        id: sid(id),
         name: format!("Test {}", id),
         description: "Test scenario".to_string(),
         setup: Setup {
@@ -365,7 +366,7 @@ fn arcade_completion_step(commands: &[&str]) -> Option<usize> {
         .load_from_embedded("en")
         .unwrap()
         .into_iter()
-        .find(|s| s.id == "undo_redo_001")
+        .find(|s| s.id.as_str() == "undo_redo_001")
         .unwrap();
     let mut session = MiniGameSession::new(Arc::new(vec![undo_redo]), None);
     session.start();
@@ -373,7 +374,7 @@ fn arcade_completion_step(commands: &[&str]) -> Option<usize> {
         session.tick_countdown();
     }
     assert_eq!(
-        session.current_scenario().unwrap().scenario.id,
+        session.current_scenario().unwrap().scenario.id.as_str(),
         "undo_redo_001"
     );
     for (i, cmd) in commands.iter().enumerate() {

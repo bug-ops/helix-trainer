@@ -82,7 +82,7 @@ fn test_all_scenario_ids_are_unique() {
         .load_from_embedded("en")
         .expect("Failed to load embedded scenarios");
 
-    let mut seen: HashMap<String, Vec<String>> = HashMap::new();
+    let mut seen: HashMap<helix_trainer::ids::ScenarioId, Vec<String>> = HashMap::new();
     for scenario in &scenarios {
         seen.entry(scenario.id.clone())
             .or_default()
@@ -111,7 +111,7 @@ fn test_all_scenario_ids_are_unique() {
 fn test_quest_scenario_references_exist() {
     use std::collections::HashSet;
 
-    let scenario_ids: HashSet<String> = ScenarioLoader::new()
+    let scenario_ids: HashSet<helix_trainer::ids::ScenarioId> = ScenarioLoader::new()
         .load_from_embedded("en")
         .expect("Failed to load embedded scenarios")
         .into_iter()
@@ -497,4 +497,32 @@ fn test_all_scenarios_execute_solution() {
     }
 
     println!("\n✓ All scenario solutions execute successfully!");
+}
+
+/// SC-014 / FR-153: deserialization canonicalizes `commands_taught`, so a bundled value that is
+/// not already in normalized form would silently change meaning. Reads the raw TOML.
+#[test]
+fn test_bundled_commands_taught_are_normalized() {
+    let mut checked = 0;
+    for entry in walkdir::WalkDir::new("scenarios")
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "toml"))
+    {
+        let raw = std::fs::read_to_string(entry.path()).unwrap();
+        let file: toml::Value = toml::from_str(&raw).unwrap();
+        for scenario in file["scenarios"].as_array().into_iter().flatten() {
+            let taught = scenario["metadata"]["commands_taught"].as_array();
+            for command in taught.into_iter().flatten().filter_map(toml::Value::as_str) {
+                assert_eq!(
+                    helix_trainer::helix::commands::normalize_command_id(command),
+                    command,
+                    "{}: commands_taught value is not normalized",
+                    entry.path().display()
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 0, "no commands_taught values found");
 }

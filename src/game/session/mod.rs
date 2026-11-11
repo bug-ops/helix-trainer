@@ -32,6 +32,7 @@
 use crate::config::{LastAction, Scenario};
 use crate::game::{CommandExecutor, PerformanceRating, Scorer};
 use crate::helix::{AnyModeSimulator, EditorSnapshot, Mode};
+use crate::ids::ScenarioId;
 use crate::security::{self, SecurityError, UserError};
 use crate::time::{MonotonicClock, SystemMonotonicClock};
 use serde::{Deserialize, Serialize};
@@ -99,7 +100,7 @@ impl UserAction {
 #[derive(Debug, Clone)]
 pub struct Feedback {
     /// ID of the scenario that was completed
-    pub scenario_id: String,
+    pub scenario_id: ScenarioId,
     /// Whether the scenario was completed successfully
     pub success: bool,
     /// Score earned (0 to max_points)
@@ -132,6 +133,7 @@ impl Feedback {
     ///
     /// ```
     /// use helix_trainer::game::{Feedback, PerformanceRating};
+    /// use helix_trainer::ids::ScenarioId;
     /// use std::time::Duration;
     ///
     /// let feedback = Feedback {
@@ -144,12 +146,12 @@ impl Feedback {
     ///     duration: Duration::from_secs(5),
     ///     hint: None,
     ///     is_optimal: true,
-    ///     scenario_id: "delete-line".to_string(),
+    ///     scenario_id: ScenarioId::parse("delete_line")?,
     ///     user_actions: Vec::new(),
     /// };
     /// let summary = feedback.summary();
     /// assert!(summary.contains("100/100"));
-    /// # Ok::<(), helix_trainer::security::SecurityError>(())
+    /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
     pub fn summary(&self) -> String {
         if self.success {

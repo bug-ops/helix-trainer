@@ -11,6 +11,10 @@ use helix_trainer::learning::{PerformanceData, PerformanceTracker, Scheduler};
 use helix_trainer::time::FakeClock;
 use serde::{Deserialize, Serialize};
 
+fn cid(raw: &str) -> helix_trainer::ids::CommandId {
+    helix_trainer::ids::CommandId::from_card_id(raw).expect("canonical card id fixture")
+}
+
 const REL_TOLERANCE: f32 = 1e-6;
 const ABS_TOLERANCE: f32 = 1e-6;
 const START: &str = "2026-01-15T12:00:00Z";
@@ -98,15 +102,17 @@ fn play(ratings: &[Rating], gaps_days: &[i64]) -> SequenceGolden {
         }
         label.push(rating.tag());
         let (duration, success) = rating.attempt();
-        tracker.record_attempt("x", duration, success, OPTIMAL);
-        let card = tracker.performance("x").expect("card exists after attempt");
+        tracker.record_attempt(&cid("x"), duration, success, OPTIMAL);
+        let card = tracker
+            .performance(&cid("x"))
+            .expect("card exists after attempt");
         steps.push(StepGolden {
             stability: card.stability(),
             difficulty: card.difficulty(),
             scheduled_days: card.scheduled_days(),
         });
     }
-    let card = tracker.performance("x").expect("card exists");
+    let card = tracker.performance(&cid("x")).expect("card exists");
     let last_review = card.last_review();
     let retrievability = RETRIEVABILITY_GRID_DAYS
         .iter()
@@ -146,12 +152,12 @@ fn profile_observations() -> Vec<ProfileGolden> {
     let tracker = PerformanceTracker::from_stats(data);
     let scheduler = Scheduler::with_clock(Arc::new(FakeClock::new(now)));
     let due = scheduler.get_due_reviews(&tracker);
-    let mut commands: Vec<&str> = tracker.all_commands();
+    let mut commands = tracker.all_commands();
     commands.sort_unstable();
     commands
         .into_iter()
         .map(|command| ProfileGolden {
-            command: command.to_owned(),
+            command: command.as_str().to_owned(),
             retrievability: tracker
                 .performance(command)
                 .expect("listed command has a card")

@@ -198,6 +198,7 @@ impl Analytics {
 mod tests {
     use super::*;
     use crate::learning::performance::PerformanceTracker;
+    use crate::testing::cid;
     use std::time::Duration;
 
     fn setup_tracker_with_varied_mastery() -> PerformanceTracker {
@@ -205,7 +206,7 @@ mod tests {
 
         // Beginner: new command, no practice
         tracker.record_attempt(
-            "beginner1",
+            &cid("beginner1"),
             Duration::from_secs(5),
             false,
             Duration::from_secs(1),
@@ -214,7 +215,7 @@ mod tests {
         // Intermediate: moderate stability
         for _ in 0..3 {
             tracker.record_attempt(
-                "intermediate1",
+                &cid("intermediate1"),
                 Duration::from_secs(2),
                 true,
                 Duration::from_secs(1),
@@ -224,7 +225,7 @@ mod tests {
         // Advanced: high stability
         for _ in 0..10 {
             tracker.record_attempt(
-                "advanced1",
+                &cid("advanced1"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),
@@ -368,7 +369,7 @@ mod tests {
         // Create a plateau: many attempts but low stability
         for _ in 0..10 {
             tracker.record_attempt(
-                "plateau_cmd",
+                &cid("plateau_cmd"),
                 Duration::from_secs(4), // Hard rating
                 true,
                 Duration::from_secs(1),
@@ -378,7 +379,7 @@ mod tests {
         // Create a good command: many attempts with high stability
         for _ in 0..10 {
             tracker.record_attempt(
-                "good_cmd",
+                &cid("good_cmd"),
                 Duration::from_secs(1), // Easy rating
                 true,
                 Duration::from_secs(1),
@@ -398,7 +399,7 @@ mod tests {
         // Command with < 5 attempts should not be considered plateau
         for _ in 0..3 {
             tracker.record_attempt(
-                "few_attempts",
+                &cid("xfew_attempts"),
                 Duration::from_secs(10),
                 false,
                 Duration::from_secs(1),

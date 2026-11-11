@@ -1,10 +1,16 @@
 //! Typed review-card identity: which recorded keystrokes are Helix commands worth practicing.
 //!
 //! A scenario solution records every keystroke, including text typed in Insert mode and
-//! command arguments. [`ReviewableCommand`] is the only way to mint a review-card id from
+//! command arguments. [`CommandId`] is the only way to mint a review-card id from
 //! such a recording, so typed text, `Escape` and argument characters can never become cards.
 //! It is separate from [`crate::helix::commands::normalize_command_id`], whose contract
-//! (quests, minigame scorer) is unchanged.
+//! (quests, minigame scorer) is unchanged; see [`super::NormalizedCommand`] for that form.
+
+use super::IdError;
+use crate::security::limits::MAX_ID_LENGTH;
+use serde::{Deserialize, Serialize, Serializer};
+use std::borrow::Borrow;
+use std::fmt;
 
 use crate::helix::commands::{
     CMD_APPEND, CMD_APPEND_LINE_END, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_ESCAPE,
@@ -28,23 +34,28 @@ const CHAR_ARGUMENT_COMMANDS: [char; 5] = ['f', 'F', 't', 'T', 'r'];
 /// Single non-alphanumeric characters that are Helix normal-mode commands.
 const PUNCTUATION_COMMANDS: &str = "$^%;,.<>~`&_*/?()=";
 
-/// A Helix command that may become an FSRS review card.
+/// An FSRS review-card id: a Helix command that may become a card.
+///
+/// The only constructors are [`CommandId::from_action`] (canonical derivation from a raw
+/// recorded action) and [`CommandId::from_card_id`] (re-validation of a stored id), so every
+/// value is canonical and at most 64 bytes. Deserialization goes through `from_card_id`.
 ///
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::learning::ReviewableCommand;
+/// use helix_trainer::ids::CommandId;
 ///
-/// let ids: Vec<String> = ReviewableCommand::from_actions(["3h", "f=", "/ sum", "Escape", "!"])
+/// let ids: Vec<String> = CommandId::from_actions(["3h", "f=", "/ sum", "Escape", "!"])
 ///     .into_iter()
-///     .map(ReviewableCommand::into_string)
+///     .map(CommandId::into_string)
 ///     .collect();
 /// assert_eq!(ids, ["h", "f", "/"]);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ReviewableCommand(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[serde(try_from = "String")]
+pub struct CommandId(String);
 
-impl ReviewableCommand {
+impl CommandId {
     /// Card id of this command.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -62,9 +73,15 @@ impl ReviewableCommand {
     /// Returns `None` for blank input, `Escape`, a bare count, and single characters that
     /// are not Helix commands. Strips a count prefix (`3h` -> `h`), drops the argument of
     /// find/till/replace (`f=` -> `f`) and of searches (`/ sum` -> `/`), keeps surround
-    /// forms (`ma(`), and applies [`normalize_command_id`] to the rest.
+    /// forms (`ma(`), and applies [`normalize_command_id`] to the rest. Also returns `None`
+    /// when the resulting id exceeds 64 bytes (an overlong `:name` invocation), so such a
+    /// command never becomes a card.
     #[must_use]
-    pub fn parse(raw: &str) -> Option<Self> {
+    pub fn from_action(raw: &str) -> Option<Self> {
+        Self::mint(raw).filter(|command| command.0.len() <= MAX_ID_LENGTH)
+    }
+
+    fn mint(raw: &str) -> Option<Self> {
         let rest = if raw.starts_with(|c: char| ('1'..='9').contains(&c)) {
             raw.trim_start_matches(|c: char| c.is_ascii_digit())
         } else {
@@ -88,21 +105,21 @@ impl ReviewableCommand {
     /// Accept an id already stored on a card, only if it is in canonical form.
     ///
     /// `3h`, `f=`, `Escape` and `!` are rejected: they are raw recordings that
-    /// [`ReviewableCommand::parse`] would map to a different id or to nothing, so a card
+    /// [`CommandId::from_action`] would map to a different id or to nothing, so a card
     /// keyed by them predates the reviewable-command filter.
     ///
     /// # Examples
     ///
     /// ```
-    /// use helix_trainer::learning::ReviewableCommand;
+    /// use helix_trainer::ids::CommandId;
     ///
-    /// assert!(ReviewableCommand::from_card_id("h").is_some());
-    /// assert!(ReviewableCommand::from_card_id("3h").is_none());
-    /// assert!(ReviewableCommand::from_card_id("Escape").is_none());
+    /// assert!(CommandId::from_card_id("h").is_some());
+    /// assert!(CommandId::from_card_id("3h").is_none());
+    /// assert!(CommandId::from_card_id("Escape").is_none());
     /// ```
     #[must_use]
     pub fn from_card_id(id: &str) -> Option<Self> {
-        Self::parse(id).filter(|command| command.as_str() == id)
+        Self::from_action(id).filter(|command| command.as_str() == id)
     }
 
     /// Mint card ids from a whole recorded solution, dropping Insert-mode typing.
@@ -118,13 +135,39 @@ impl ReviewableCommand {
                 in_insert = raw != CMD_ESCAPE;
                 continue;
             }
-            let Some(command) = Self::parse(raw) else {
+            let Some(command) = Self::from_action(raw) else {
                 continue;
             };
             in_insert = enters_insert(command.as_str());
             commands.push(command);
         }
         commands
+    }
+}
+
+impl TryFrom<String> for CommandId {
+    type Error = IdError;
+
+    fn try_from(id: String) -> Result<Self, IdError> {
+        Self::from_card_id(&id).ok_or(IdError::NotCanonical)
+    }
+}
+
+impl fmt::Display for CommandId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl Borrow<str> for CommandId {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Serialize for CommandId {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
     }
 }
 
@@ -148,9 +191,9 @@ mod tests {
     use super::*;
 
     fn ids(actions: &[&str]) -> Vec<String> {
-        ReviewableCommand::from_actions(actions.iter().copied())
+        CommandId::from_actions(actions.iter().copied())
             .into_iter()
-            .map(ReviewableCommand::into_string)
+            .map(CommandId::into_string)
             .collect()
     }
 
@@ -210,9 +253,7 @@ mod tests {
         ];
         for id in actions {
             assert_eq!(
-                ReviewableCommand::from_card_id(id)
-                    .as_ref()
-                    .map(ReviewableCommand::as_str),
+                CommandId::from_card_id(id).as_ref().map(CommandId::as_str),
                 Some(id),
                 "{id}"
             );
@@ -222,8 +263,29 @@ mod tests {
     #[test]
     fn card_ids_rejects_raw_recordings() {
         for id in ["3h", "f=", "Escape", "!", " ", "", "/ sum", "12w"] {
-            assert!(ReviewableCommand::from_card_id(id).is_none(), "{id:?}");
+            assert!(CommandId::from_card_id(id).is_none(), "{id:?}");
         }
+    }
+
+    #[test]
+    fn overlong_command_line_mints_no_card() {
+        let long = format!(":{}", "n".repeat(MAX_ID_LENGTH));
+        assert!(CommandId::from_action(&long).is_none());
+        assert!(CommandId::from_card_id(&long).is_none());
+        let fits = format!(":{}", "n".repeat(MAX_ID_LENGTH - 1));
+        assert!(CommandId::from_action(&fits).is_some());
+    }
+
+    #[test]
+    fn deserialization_requires_canonical_form() {
+        assert_eq!(
+            serde_json::from_str::<CommandId>("\"gg\"")
+                .unwrap()
+                .as_str(),
+            "gg"
+        );
+        assert!(serde_json::from_str::<CommandId>("\"3h\"").is_err());
+        assert!(serde_json::from_str::<CommandId>("\"Escape\"").is_err());
     }
 
     #[test]

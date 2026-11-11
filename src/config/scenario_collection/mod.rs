@@ -7,6 +7,7 @@
 
 use super::scenarios::{Difficulty, Scenario, ScenarioCategory};
 use crate::gamification::UserProfile;
+use crate::ids::NormalizedCommand;
 use std::collections::HashSet;
 
 /// Collection of scenarios with filtering and sorting support
@@ -35,7 +36,7 @@ pub struct ScenarioFilter {
     pub difficulties: Option<HashSet<Difficulty>>,
 
     /// Include only scenarios teaching these commands (None = no filter)
-    pub commands: Option<HashSet<String>>,
+    pub commands: Option<HashSet<NormalizedCommand>>,
 
     /// Completion-status criterion (defaults to [`CompletionFilter::Any`])
     pub completion: CompletionFilter,
@@ -393,6 +394,7 @@ impl ScenarioCollection {
     ///     CursorSpec, Scenario, ScenarioCollection, ScoringConfig, Setup, Solution, TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
+    /// use helix_trainer::ids::ScenarioId;
     ///
     /// fn minimal_scenario(id: &str) -> Scenario {
     ///     let cursor = CursorSpec {
@@ -402,7 +404,7 @@ impl ScenarioCollection {
     ///         selections: None,
     ///     };
     ///     Scenario {
-    ///         id: id.to_string(),
+    ///         id: ScenarioId::parse(id).unwrap(),
     ///         name: "Test".to_string(),
     ///         description: "Test".to_string(),
     ///         setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
@@ -423,7 +425,7 @@ impl ScenarioCollection {
     /// let mut profile = UserProfile::new();
     /// assert_eq!(collection.completed_count(&profile), 0);
     ///
-    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     /// assert_eq!(collection.completed_count(&profile), 1);
     /// ```
     pub fn completed_count(&self, profile: &UserProfile) -> usize {
@@ -446,6 +448,7 @@ impl ScenarioCollection {
     ///     CursorSpec, Scenario, ScenarioCollection, ScoringConfig, Setup, Solution, TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
+    /// use helix_trainer::ids::ScenarioId;
     ///
     /// fn minimal_scenario(id: &str) -> Scenario {
     ///     let cursor = CursorSpec {
@@ -455,7 +458,7 @@ impl ScenarioCollection {
     ///         selections: None,
     ///     };
     ///     Scenario {
-    ///         id: id.to_string(),
+    ///         id: ScenarioId::parse(id).unwrap(),
     ///         name: "Test".to_string(),
     ///         description: "Test".to_string(),
     ///         setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
@@ -476,7 +479,7 @@ impl ScenarioCollection {
     /// let mut profile = UserProfile::new();
     /// assert!(!collection.is_curriculum_complete(&profile));
     ///
-    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     /// assert!(collection.is_curriculum_complete(&profile));
     ///
     /// // An empty collection is never complete, even with no scenarios to finish.
@@ -504,6 +507,7 @@ impl ScenarioCollection {
     ///     ScoringConfig, Setup, Solution, TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
+    /// use helix_trainer::ids::ScenarioId;
     ///
     /// let cursor = CursorSpec {
     ///     cursor_position: Some((0, 0)),
@@ -512,7 +516,7 @@ impl ScenarioCollection {
     ///     selections: None,
     /// };
     /// let scenario = Scenario {
-    ///     id: "s1".to_string(),
+    ///     id: ScenarioId::parse("s1").unwrap(),
     ///     name: "Test".to_string(),
     ///     description: "Test".to_string(),
     ///     setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
@@ -533,7 +537,7 @@ impl ScenarioCollection {
     ///
     /// let collection = ScenarioCollection::new(vec![scenario]);
     /// let mut profile = UserProfile::new();
-    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     ///
     /// let stats = collection.curriculum_stats(&profile);
     /// assert_eq!(stats.total, 1);

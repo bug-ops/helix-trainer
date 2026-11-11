@@ -108,7 +108,7 @@ fn record_scenario_completion(
         ctx.ui
             .notifications
             .push(Notification::new(NotificationType::MasteryLevelUp {
-                command,
+                command: command.into_string(),
                 new_level,
             }));
     }
@@ -507,6 +507,7 @@ mod tests {
     use crate::gamification::{ProfileStorage, Quest, QuestDifficulty, QuestType, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
+    use crate::testing::{cid, qid, sid};
     use crate::ui::state::{
         AppState, ConfigState, GameState, ProgressState, TaskData, TypedScreen, UIState,
     };
@@ -667,7 +668,7 @@ mod tests {
 
         let mut state = create_test_state();
         state.progress.profile.daily_quests = vec![Quest {
-            id: "quest_scenario_completion".to_string(),
+            id: qid("quest_scenario_completion"),
             quest_type: QuestType::ScenarioCompletion {
                 target: 1,
                 current: 0,
@@ -719,7 +720,7 @@ mod tests {
 
         let mut state = create_test_state();
         state.progress.profile.daily_quests = vec![Quest {
-            id: "quest_already_done".to_string(),
+            id: qid("quest_already_done"),
             quest_type: QuestType::ScenarioCompletion {
                 target: 1,
                 current: 1,
@@ -1045,7 +1046,6 @@ mod tests {
                     other.attempts() == v.attempts()
                         && other.successes() == v.successes()
                         && other.reps() == v.reps()
-                        && other.command() == v.command()
                 })
             })
     }
@@ -1099,7 +1099,7 @@ mod tests {
         assert_eq!(ctx.progress.profile.commands_executed, before + 5);
         let mut cards = ctx.progress.performance_tracker.all_commands();
         cards.sort_unstable();
-        assert_eq!(cards, ["f", "h", "i"]);
+        assert_eq!(cards, [&cid("f"), &cid("h"), &cid("i")]);
     }
 
     /// Regression test for #273: the FSRS-recording step in `record_scenario_completion`
@@ -1252,7 +1252,7 @@ mod tests {
     fn minimal_feedback() -> crate::game::Feedback {
         use crate::game::PerformanceRating;
         crate::game::Feedback {
-            scenario_id: "test_scenario".to_string(),
+            scenario_id: sid("test_scenario"),
             success: true,
             score: 1,
             max_points: 2,
@@ -1351,7 +1351,7 @@ mod tests {
         state.progress.profile.total_xp = xp_for_level_2 - 1;
         state.progress.profile.level = 1;
         state.progress.profile.daily_quests = vec![Quest {
-            id: "quest_scenario_completion".to_string(),
+            id: qid("quest_scenario_completion"),
             quest_type: QuestType::ScenarioCompletion {
                 target: 1,
                 current: 0,
@@ -1410,7 +1410,7 @@ mod tests {
         state.progress.storage = ProfileStorage::with_path(quest_dir.path().join("profile.json"));
         let quest_xp_reward = 100u32;
         state.progress.profile.daily_quests = vec![Quest {
-            id: "quest_scenario_completion".to_string(),
+            id: qid("quest_scenario_completion"),
             quest_type: QuestType::ScenarioCompletion {
                 target: 1,
                 current: 0,
@@ -1921,7 +1921,7 @@ mod tests {
         let mut state = create_multi_scenario_state();
         for id in ["scenario_1", "scenario_2", "scenario_3"] {
             state.progress.profile.scenario_history.record_completion(
-                id,
+                &sid(id),
                 100,
                 50,
                 chrono::Utc::now(),
@@ -1957,7 +1957,7 @@ mod tests {
         // Only 2 of 3 scenarios completed - curriculum is not complete.
         for id in ["scenario_1", "scenario_2"] {
             state.progress.profile.scenario_history.record_completion(
-                id,
+                &sid(id),
                 100,
                 50,
                 chrono::Utc::now(),
@@ -1990,13 +1990,13 @@ mod tests {
 
         let mut state = create_test_state();
         state.progress.performance_tracker.record_attempt(
-            "x",
+            &cid("x"),
             std::time::Duration::from_secs(1),
             true,
             std::time::Duration::from_secs(1),
         );
         state.progress.profile.daily_quests = vec![Quest {
-            id: "quest_1".to_string(),
+            id: qid("quest_1"),
             quest_type: QuestType::ScenarioCompletion {
                 target: 1,
                 current: 0,
@@ -2032,7 +2032,7 @@ mod tests {
     fn test_next_steps_partial_conditions_true_keeps_only_those_plus_arcade() {
         let mut state = create_test_state();
         state.progress.performance_tracker.record_attempt(
-            "x",
+            &cid("x"),
             std::time::Duration::from_secs(1),
             true,
             std::time::Duration::from_secs(1),
@@ -2078,7 +2078,7 @@ mod tests {
         let now = chrono::Utc::now();
         profile
             .scenario_history
-            .record_completion("a", 100, 50, now);
+            .record_completion(&sid("a"), 100, 50, now);
         assert_eq!(journey_days(&profile), 0);
     }
 
@@ -2096,11 +2096,11 @@ mod tests {
         let day_one = day_ten - chrono::Duration::days(9);
         profile
             .scenario_history
-            .record_completion("a", 100, 50, day_ten);
+            .record_completion(&sid("a"), 100, 50, day_ten);
         // Clock jumped backwards for the second attempt on the same scenario.
         profile
             .scenario_history
-            .record_completion("a", 100, 50, day_one);
+            .record_completion(&sid("a"), 100, 50, day_one);
         assert_eq!(journey_days(&profile), 0);
     }
 
@@ -2113,10 +2113,10 @@ mod tests {
         let day_four = day_one + chrono::Duration::days(3);
         profile
             .scenario_history
-            .record_completion("a", 100, 50, day_one);
+            .record_completion(&sid("a"), 100, 50, day_one);
         profile
             .scenario_history
-            .record_completion("b", 100, 50, day_four);
+            .record_completion(&sid("b"), 100, 50, day_four);
         assert_eq!(journey_days(&profile), 3);
     }
 }

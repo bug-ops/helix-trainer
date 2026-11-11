@@ -598,7 +598,7 @@ mod tests {
                 ChallengeConfig::for_date(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap());
             config.scenario_count = scenario_count;
 
-            let outcomes: HashSet<Vec<String>> = seeds
+            let outcomes: HashSet<Vec<crate::ids::ScenarioId>> = seeds
                 .into_iter()
                 .map(|seed| {
                     config.seed = seed;

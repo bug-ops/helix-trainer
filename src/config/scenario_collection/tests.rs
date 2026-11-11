@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::config::{CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
+use crate::testing::{ncmd, sid};
 use chrono::Utc;
 
 /// Helper to create a test scenario with metadata
@@ -13,7 +14,7 @@ fn create_scenario(
     commands: Vec<&str>,
 ) -> Scenario {
     Scenario {
-        id: id.to_string(),
+        id: sid(id),
         name: name.to_string(),
         description: "Test scenario".to_string(),
         setup: Setup {
@@ -50,7 +51,7 @@ fn create_scenario(
             category,
             difficulty,
             tags: vec![],
-            commands_taught: commands.iter().map(|s| s.to_string()).collect(),
+            commands_taught: commands.iter().map(|s| ncmd(s)).collect(),
             prerequisites: vec![],
             estimated_time_seconds: None,
             locale: None,
@@ -192,7 +193,7 @@ fn test_filter_by_command() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        commands: Some(["d".to_string()].iter().cloned().collect()),
+        commands: Some([ncmd("d")].into_iter().collect()),
         ..Default::default()
     };
 
@@ -273,10 +274,10 @@ fn test_filter_by_completion_status() {
     let mut profile = UserProfile::new();
     profile
         .scenario_history
-        .record_completion("001", 100, 50, Utc::now());
+        .record_completion(&sid("001"), 100, 50, Utc::now());
     profile
         .scenario_history
-        .record_completion("003", 100, 50, Utc::now());
+        .record_completion(&sid("003"), 100, 50, Utc::now());
 
     let mut collection = ScenarioCollection::new(scenarios);
 
@@ -657,7 +658,7 @@ fn test_filter_empty_result() {
 fn test_scenarios_without_metadata() {
     // Scenario without metadata
     let scenario_no_meta = Scenario {
-        id: "no_meta".to_string(),
+        id: sid("no_meta"),
         name: "No Metadata".to_string(),
         description: "Test".to_string(),
         setup: Setup {
@@ -787,13 +788,13 @@ mod curriculum_stats_tests {
         // Three attempts on "001": two perfect, one not.
         profile
             .scenario_history
-            .record_completion("001", 100, 50, Utc::now());
+            .record_completion(&sid("001"), 100, 50, Utc::now());
         profile
             .scenario_history
-            .record_completion("001", 80, 40, Utc::now());
+            .record_completion(&sid("001"), 80, 40, Utc::now());
         profile
             .scenario_history
-            .record_completion("001", 100, 50, Utc::now());
+            .record_completion(&sid("001"), 100, 50, Utc::now());
 
         let stats = collection.curriculum_stats(&profile);
 
@@ -830,10 +831,10 @@ mod curriculum_stats_tests {
         let mut profile = UserProfile::new();
         profile
             .scenario_history
-            .record_completion("001", 100, 50, Utc::now());
+            .record_completion(&sid("001"), 100, 50, Utc::now());
         profile
             .scenario_history
-            .record_completion("002", 50, 25, Utc::now());
+            .record_completion(&sid("002"), 50, 25, Utc::now());
 
         let stats = collection.curriculum_stats(&profile);
 
@@ -883,7 +884,7 @@ mod curriculum_stats_tests {
         let mut profile = UserProfile::new();
         profile
             .scenario_history
-            .record_completion("001", 100, 50, Utc::now());
+            .record_completion(&sid("001"), 100, 50, Utc::now());
 
         assert_eq!(
             collection.completed_count(&profile),
@@ -904,10 +905,10 @@ mod curriculum_stats_tests {
         let mut profile = UserProfile::new();
         profile
             .scenario_history
-            .record_completion("001", 100, 50, Utc::now());
+            .record_completion(&sid("001"), 100, 50, Utc::now());
         profile
             .scenario_history
-            .record_completion("002", 100, 50, Utc::now());
+            .record_completion(&sid("002"), 100, 50, Utc::now());
 
         assert!(!collection.is_curriculum_complete(&profile));
     }
@@ -918,13 +919,13 @@ mod curriculum_stats_tests {
         let mut profile = UserProfile::new();
         profile
             .scenario_history
-            .record_completion("001", 100, 50, Utc::now());
+            .record_completion(&sid("001"), 100, 50, Utc::now());
         profile
             .scenario_history
-            .record_completion("002", 100, 50, Utc::now());
+            .record_completion(&sid("002"), 100, 50, Utc::now());
         profile
             .scenario_history
-            .record_completion("003", 100, 50, Utc::now());
+            .record_completion(&sid("003"), 100, 50, Utc::now());
 
         assert!(collection.is_curriculum_complete(&profile));
     }

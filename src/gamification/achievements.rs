@@ -386,6 +386,7 @@ impl AchievementEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::cid;
 
     #[test]
     fn test_achievement_creation() {
@@ -508,7 +509,7 @@ mod tests {
         for i in 0..20 {
             let cmd = format!("cmd{}", i);
             tracker.record_attempt(
-                &cmd,
+                &cid(&cmd),
                 std::time::Duration::from_secs(1),
                 true,
                 std::time::Duration::from_secs(1),

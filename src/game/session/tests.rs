@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::testing::ScenarioBuilder;
+use crate::testing::sid;
 use crate::time::FakeMonotonicClock;
 use std::assert_matches;
 
@@ -285,7 +286,7 @@ fn test_elapsed_time() {
 #[test]
 fn test_feedback_summary() {
     let feedback = Feedback {
-        scenario_id: "test_001".to_string(),
+        scenario_id: sid("test_001"),
         success: true,
         score: 100,
         max_points: 100,
@@ -501,7 +502,7 @@ fn test_no_bundled_scenario_starts_complete() {
     let scenarios = crate::config::ScenarioLoader::new()
         .load_from_embedded("en")
         .unwrap();
-    let started_complete: Vec<String> = scenarios
+    let started_complete: Vec<ScenarioId> = scenarios
         .into_iter()
         .filter_map(|s| {
             let id = s.id.clone();
@@ -520,7 +521,7 @@ fn undo_redo_scenario() -> Scenario {
         .load_from_embedded("en")
         .unwrap()
         .into_iter()
-        .find(|s| s.id == "undo_redo_001")
+        .find(|s| s.id.as_str() == "undo_redo_001")
         .unwrap()
 }
 

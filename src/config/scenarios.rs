@@ -2,13 +2,13 @@
 //!
 //! This module handles loading TOML scenario files with security validations.
 
-use crate::learning::ReviewableCommand;
+use crate::ids::{CommandId, NormalizedCommand, ScenarioId};
 use crate::security::limits::{
     MAX_ALTERNATIVES, MAX_COMMAND_SEQUENCE_LENGTH, MAX_CURSORS_PER_SCENARIO,
     MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE, MAX_SCENARIOS_PER_FILE,
     MAX_SELECTIONS_PER_SCENARIO,
 };
-use crate::security::validators::{validate_id_field, validate_language_field};
+use crate::security::validators::validate_language_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -63,8 +63,9 @@ impl CompletionRule {
     ///
     /// ```
     /// use helix_trainer::config::{CompletionRule, LastAction};
+    /// use helix_trainer::ids::NormalizedCommand;
     ///
-    /// let taught = ["u".to_string()];
+    /// let taught = [NormalizedCommand::from_raw("u").unwrap()];
     /// let rule = CompletionRule::AfterTaughtCommands;
     /// let action = |command, target_held_before| {
     ///     Some(LastAction { command, target_held_before })
@@ -78,7 +79,7 @@ impl CompletionRule {
     pub fn is_satisfied(
         self,
         target_reached: bool,
-        commands_taught: &[String],
+        commands_taught: &[NormalizedCommand],
         last_action: Option<LastAction<'_>>,
     ) -> bool {
         if !target_reached {
@@ -90,12 +91,12 @@ impl CompletionRule {
                 let Some(last_action) = last_action.filter(|a| !a.target_held_before) else {
                     return false;
                 };
-                let Some(last) = ReviewableCommand::parse(last_action.command) else {
+                let Some(last) = CommandId::from_action(last_action.command) else {
                     return false;
                 };
                 commands_taught
                     .iter()
-                    .filter_map(|taught| ReviewableCommand::parse(taught))
+                    .filter_map(|taught| CommandId::from_action(taught.as_str()))
                     .any(|taught| taught == last)
             }
         }
@@ -123,11 +124,11 @@ pub struct ScenarioMetadata {
 
     /// Commands taught in this scenario (e.g., ["d", "w"])
     #[serde(default)]
-    pub commands_taught: Vec<String>,
+    pub commands_taught: Vec<NormalizedCommand>,
 
     /// Prerequisite scenario IDs that should be completed first
     #[serde(default)]
-    pub prerequisites: Vec<String>,
+    pub prerequisites: Vec<ScenarioId>,
 
     /// Estimated time to complete scenario in seconds
     #[serde(default)]
@@ -193,8 +194,7 @@ impl Difficulty {
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
     /// Unique identifier, validated as a safe id.
-    #[serde(deserialize_with = "validate_id_field")]
-    pub id: String,
+    pub id: ScenarioId,
 
     /// Display name.
     pub name: String,

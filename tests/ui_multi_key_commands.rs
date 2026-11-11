@@ -60,7 +60,7 @@ fn create_test_scenario(
     target_cursor: (usize, usize),
 ) -> Scenario {
     Scenario {
-        id: id.to_string(),
+        id: helix_trainer::ids::ScenarioId::parse(id).expect("valid scenario id fixture"),
         name: "Test Scenario".to_string(),
         description: "Test scenario for integration testing".to_string(),
         setup: Setup {

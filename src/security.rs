@@ -512,35 +512,12 @@ pub mod private_fs {
 
 /// Shared serde validators for scenario/quest configuration fields
 pub mod validators {
-    use super::limits::{MAX_ID_LENGTH, MAX_LANGUAGE_LENGTH};
+    use super::limits::MAX_LANGUAGE_LENGTH;
     use serde::Deserialize;
-
-    /// Custom deserialization for ID field to validate format
-    pub fn validate_id_field<'de, D>(deserializer: D) -> Result<String, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-
-        // Validate ID is not empty
-        if s.is_empty() {
-            return Err(serde::de::Error::custom("Invalid ID: cannot be empty"));
-        }
-
-        // Validate ID format: alphanumeric with underscores, max MAX_ID_LENGTH chars
-        if s.len() > MAX_ID_LENGTH || !s.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            return Err(serde::de::Error::custom(format!(
-                "Invalid ID: must be alphanumeric with underscores, max {} chars",
-                MAX_ID_LENGTH
-            )));
-        }
-
-        Ok(s)
-    }
 
     /// Custom deserialization for `Setup.language` to validate format
     ///
-    /// Unlike [`validate_id_field`], an explicit empty string is accepted rather than
+    /// Unlike a content id, an explicit empty string is accepted rather than
     /// rejected: it is a valid "unsupported language" value that the syntax highlighter
     /// resolves to plain-text rendering rather than a load-time error (see
     /// `specs/language-aware-syntax-highlighting/spec.md` edge cases). The character set is

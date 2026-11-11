@@ -521,6 +521,7 @@ mod tests {
     use std::assert_matches;
 
     use super::*;
+    use crate::testing::sid;
     use crate::{
         config::Scenario,
         game::GameSession,
@@ -538,7 +539,7 @@ mod tests {
         use crate::config::{CursorSpec, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
-            id: "test".to_string(),
+            id: sid("test"),
             name: "Test".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -1288,7 +1289,7 @@ mod tests {
 
             // Create a simple scenario
             let scenario = Scenario {
-                id: "test".to_string(),
+                id: sid("test"),
                 name: "Test".to_string(),
                 description: "Test scenario".to_string(),
                 setup: Setup {
@@ -1355,7 +1356,7 @@ mod tests {
 
             // Create a simple scenario
             let scenario = Scenario {
-                id: "test".to_string(),
+                id: sid("test"),
                 name: "Test".to_string(),
                 description: "Test scenario".to_string(),
                 setup: Setup {
@@ -1456,7 +1457,7 @@ mod tests {
 
             // Create a simple scenario
             let scenario = Scenario {
-                id: "test".to_string(),
+                id: sid("test"),
                 name: "Test".to_string(),
                 description: "Test scenario".to_string(),
                 setup: Setup {

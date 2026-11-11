@@ -13,6 +13,7 @@ use crate::constants::{
     SCENARIO_BASE_XP_PER_100_POINTS, SCENARIO_FIRST_TODAY_BONUS_XP, SCENARIO_PERFECT_BONUS_DIVISOR,
     XP_LEVEL_FORMULA_BASE, XP_LEVEL_FORMULA_EXPONENT,
 };
+use crate::ids::QuestId;
 use crate::learning::PerformanceData;
 use crate::learning::ScenarioHistory;
 use crate::sound::SoundConfig;
@@ -81,7 +82,7 @@ pub struct UserProfile {
     pub last_quest_refresh: DateTime<Utc>,
 
     /// Completed quest IDs today
-    pub completed_quests_today: HashSet<String>,
+    pub completed_quests_today: HashSet<QuestId>,
 
     /// Streak freeze available (protects from one missed day)
     pub streak_freeze_available: bool,
@@ -306,12 +307,12 @@ impl UserProfile {
     }
 
     /// Check if quest is completed today
-    pub fn is_quest_completed(&self, quest_id: &str) -> bool {
+    pub fn is_quest_completed(&self, quest_id: &QuestId) -> bool {
         self.completed_quests_today.contains(quest_id)
     }
 
     /// Mark quest as completed
-    pub fn complete_quest(&mut self, quest_id: String) {
+    pub fn complete_quest(&mut self, quest_id: QuestId) {
         self.completed_quests_today.insert(quest_id);
     }
 
@@ -428,9 +429,10 @@ impl XPCalculator {
     ///
     /// ```
     /// use helix_trainer::gamification::{QuestDifficulty, QuestType, XPCalculator};
+    /// use helix_trainer::ids::NormalizedCommand;
     ///
     /// let easy_practice = QuestType::CommandPractice {
-    ///     command: "w".to_string(),
+    ///     command: NormalizedCommand::from_raw("w").unwrap(),
     ///     target: 5,
     ///     current: 0,
     /// };
@@ -634,6 +636,7 @@ impl XPCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::qid;
 
     /// Golden values derived from the pre-#485 inline formulas; they pin current
     /// behavior so the move into `XPCalculator` cannot change any award.
@@ -819,21 +822,21 @@ mod tests {
     fn test_quest_completion_tracking() {
         let mut profile = UserProfile::new();
 
-        assert!(!profile.is_quest_completed("quest_1"));
+        assert!(!profile.is_quest_completed(&qid("quest_1")));
 
-        profile.complete_quest("quest_1".to_string());
-        assert!(profile.is_quest_completed("quest_1"));
+        profile.complete_quest(qid("quest_1"));
+        assert!(profile.is_quest_completed(&qid("quest_1")));
     }
 
     #[test]
     fn test_reset_daily_quests() {
         let mut profile = UserProfile::new();
 
-        profile.complete_quest("quest_1".to_string());
-        assert!(profile.is_quest_completed("quest_1"));
+        profile.complete_quest(qid("quest_1"));
+        assert!(profile.is_quest_completed(&qid("quest_1")));
 
         profile.reset_daily_quests(Utc::now());
-        assert!(!profile.is_quest_completed("quest_1"));
+        assert!(!profile.is_quest_completed(&qid("quest_1")));
         assert!(profile.daily_quests.is_empty());
     }
 

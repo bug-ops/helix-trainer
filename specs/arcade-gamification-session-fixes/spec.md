@@ -356,7 +356,7 @@ THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0
 | FR-018 | WHEN starting an arcade session finds no scenarios THE SYSTEM SHALL stay on the current screen and raise a notification instead of navigating to an inert MiniGame screen; this applies to `StartMiniGame`, arcade mode selection and `NavigateTo(MiniGame)` | #461 | must |
 
 > [!success] Deferred items delivered (updated 2026-11-11)
-> The parts originally deferred from this batch (#461 remainder and #482, #480, #481, #483) are specified in section 10 and delivered by the issues #527, #528, #529 and #530 (see the mapping there). The typed `QuestId` of #463 is delivered in [[data-and-runtime-hardening/spec#13.7 Command, scenario and quest identifiers (#463)|data-and-runtime-hardening section 13.7]]; `QuestBonus.quest` becomes that type.
+> The parts originally deferred from this batch (#461 remainder and #482, #480, #481, #483) are specified in section 10 and delivered by the issues #527, #528, #529 and #530 (see the mapping there; #529 delivered the typed viewport and the single post-update `AppState::normalize_view`). The typed `QuestId` of #463 is delivered in [[data-and-runtime-hardening/spec#13.7 Command, scenario and quest identifiers (#463)|data-and-runtime-hardening section 13.7]]; `QuestBonus.quest` becomes that type.
 
 ### 9.2 Acceptance Criteria
 
@@ -438,6 +438,7 @@ THEN  the feedback outcome is Completed, success is true and is_optimal is false
 | Zero-height viewport | Visible rows saturate to 0; selection stays valid, no panic |
 | Data message arrives while the menu is open | Normalized after handling (FR-022) |
 | Completed task whose feedback can be derived from its session | Derived, not stored twice |
+| Commands or `AbandonScenario` arrive during the command-success animation | Ignored (previously they acted on a placeholder session) |
 
 ### 11.4 Success Criteria
 

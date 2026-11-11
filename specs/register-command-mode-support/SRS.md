@@ -46,7 +46,7 @@ under issue #198).
 | `RegisterPending` / `RegisterOpPending` | Typestate marker states for `"` and `"<reg>` respectively, `src/input/typestate/state_types.rs` |
 | `CommandLinePending` | Typestate marker state for an open `:` prompt |
 | `CommandLine::Goto(usize)` | The sole implemented command-line command |
-| `normalize_command_id` | canonicalizes raw command strings before FSRS/quest tracking, `src/grammar/commands.rs` (originally `src/grammar/commands.rs:153-175`; moved by #558) |
+| `normalize_command_id` | Canonicalizes raw command strings before FSRS/quest tracking, `src/grammar/commands.rs` (originally `src/helix/commands.rs:153-175`; moved by #558) |
 
 ### 1.4 References
 
@@ -197,7 +197,7 @@ valid taught command for FSRS tracking.
 - *Priority*: should
 - *Verdict*: **Implemented differently.** No changes to a `src/learning/`
   command-mapping table. Instead, a new `grammar::commands::
-  normalize_command_id()` (`src/grammar/commands.rs`, originally `helix::commands`, `src/grammar/commands.rs:153-175`; moved by #558) canonicalizes
+  normalize_command_id()` (`src/grammar/commands.rs`, originally `helix::commands`, `src/helix/commands.rs:153-175`; moved by #558) canonicalizes
   raw command strings (e.g. `"ay` → `"y`, `:g 3` → `:goto`) at three call
   sites before they reach FSRS/quest tracking: `scenario_completion.rs:163`,
   `minigame/session.rs:848`, `ui/state/handlers/quests.rs:21`. This means
@@ -263,7 +263,7 @@ TOML files.
 | What is Helix's default `:s` scope? | Moot — `:s` was never implemented |
 | Should `:g` (global) be included alongside `:s`? | Resolved as an alias, not the real command: `:g N` is an alias for `:goto N`, not Helix's real global-command-with-subcommand |
 | Should registers be one FSRS skill or per-letter? | Resolved as one skill per operation family via `normalize_command_id` |
-| Does `RepeatBuffer` need to record register/command-line input for `.`? | Resolved as explicitly non-repeatable — `cmd_to_key_events` has no arm for these shapes; `.` after either is a documented no-op, covered by `test_cmd_to_key_events_register_op_and_command_line_are_not_repeatable` |
+| Does `RepeatBuffer` need to record register/command-line input for `.`? | Resolved as explicitly non-repeatable — the key-event conversion for `.` replay has no arm for these shapes (originally `cmd_to_key_events`, replaced by the typed `NormalCommand::keys()` in #555; the old test `test_cmd_to_key_events_register_op_and_command_line_are_not_repeatable` was replaced by `keys_match_the_keystrokes_dot_replays`); `.` after either is a documented no-op |
 
 ### 5.2 BRD/SRS/NFR Traceability Matrix
 

@@ -38,9 +38,9 @@ app's own key-canonicalization layer — it is not merely a downstream keymap-ma
 quirk.
 
 The Helix simulator binds a bare backtick to `switch_case`'s alternative form
-(`pub const CMD_SWITCH_CASE_ALT: &str = "`";`, `src/grammar/commands.rs:45`, now `src/grammar/commands.rs` after #558), and a
+(`pub const CMD_SWITCH_CASE_ALT: &str = "`";`, `src/helix/commands.rs:45`, now `src/grammar/commands.rs` after #558), and a
 genuine `Alt-`` ` `` chord is separately bound to `switch_to_uppercase`
-(`pub const CMD_SWITCH_TO_UPPERCASE: &str = "Alt-`";`, `src/grammar/commands.rs:46`, now `src/grammar/commands.rs`,
+(`pub const CMD_SWITCH_TO_UPPERCASE: &str = "Alt-`";`, `src/helix/commands.rs:46`, now `src/grammar/commands.rs`,
 mapped in `src/input/typestate/key_mapping.rs:287`). Because a plain backtick keypress
 is being reported as if `Alt` were held, it never reaches the `CMD_SWITCH_CASE_ALT`
 binding (`src/input/typestate/key_mapping.rs:331`) — it is silently swallowed instead
@@ -208,7 +208,7 @@ Measurable metrics that prove the feature works:
 
 Merged in PR #380 (issue #377, commit `45bbd1f`); recorded in `CHANGELOG.md`.
 
-- **Root cause**: app-level, not crossterm, tmux or terminal. `map_macos_composed_char` (`src/input/typestate/key_mapping.rs`), which rewrites macOS Option-key composition artifacts (e.g. `ç` -> Alt-c) into `(base char, ALT)`, had an arm that unconditionally rewrote every plain `` ` `` to Alt-`` ` ``. Unlike its other entries, backtick is also a directly-typeable ASCII key, so real unmodified keystrokes were rewritten. The function is used by both the live per-keystroke path and the custom-keymap overlay path (`src/input/keymap/keys.rs`, `src/config/keymap/parse.rs`).
+- **Root cause**: app-level, not crossterm, tmux or terminal. `map_macos_composed_char` (`src/input/typestate/key_mapping.rs`), which rewrites macOS Option-key composition artifacts (e.g. `ç` -> Alt-c) into `(base char, ALT)`, had an arm that unconditionally rewrote every plain `` ` `` to Alt-`` ` ``. Unlike its other entries, backtick is also a directly-typeable ASCII key, so real unmodified keystrokes were rewritten. The function is used by both the live per-keystroke path and the custom-keymap overlay path (`src/input/keymap/keys.rs`, `src/input/keymap/parse.rs` (moved from `src/config/keymap/parse.rs` by #558)).
 - **Fix** (FR-001/FR-005): the backtick arm was removed, at the layer where the phantom modifier was introduced. A bare `` ` `` now resolves to `CMD_SWITCH_CASE_ALT` (FR-002) and a real Alt-`` ` `` still resolves to `CMD_SWITCH_TO_UPPERCASE` (FR-004).
 - **Tests** (FR-006, NFR-001): `test_map_key_plain_backtick_resolves_to_switch_case_alt`, `test_map_key_alt_backtick_resolves_to_switch_to_uppercase`, `test_normalize_key_event_does_not_touch_plain_backtick` in `src/input/typestate/tests/key_mapping_tests.rs`. `switch_case_alt_001` and `writing_code_fence_001` stay covered by `cargo nextest run scenario` (FR-007).
 - **Accepted trade-off (unverified)**: if a terminal ever delivers a bare backtick for a released Option-`` ` `` dead key, it now reads as plain `` ` `` (`switch_case_alt`) instead of the former `switch_to_uppercase` guess. The same class of collision was later fixed for `ç`/`ß` (#381) and tracked for other table entries (#382, #386).
@@ -222,7 +222,7 @@ Merged in PR #380 (issue #377, commit `45bbd1f`); recorded in `CHANGELOG.md`.
 ## 11. See Also
 
 - [[MOC-specs]] — all specifications
-- `src/grammar/commands.rs` (moved from `src/grammar/commands.rs` by #558) — `CMD_SWITCH_CASE_ALT`, `CMD_SWITCH_TO_UPPERCASE` constants
+- `src/grammar/commands.rs` (moved from `src/helix/commands.rs` by #558) — `CMD_SWITCH_CASE_ALT`, `CMD_SWITCH_TO_UPPERCASE` constants
 - `src/input/typestate/key_mapping.rs` — `map_macos_composed_char` (root cause) and the canonical-key-to-command mapping
 - `scenarios/en/editing/advanced-editing.toml` — `switch_case_alt_001` scenario
 - `scenarios/en/writing/code-fence.toml` — `writing_code_fence_001` scenario

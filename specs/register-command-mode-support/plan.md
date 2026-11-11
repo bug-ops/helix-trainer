@@ -169,7 +169,7 @@ primitives underneath.
 - Input validation: `CommandLine::parse` rejects non-digit and
   out-of-range input via `UserError::CommandFailed`; register-name
   characters validated as part of the `RegisterOpPending` transition.
-- New bound: `limits::MAX_COMMAND_LINE_LEN = 256` (`src/limits.rs`, originally `limits`; moved by #558) caps
+- New bound: `limits::MAX_COMMAND_LINE_LEN = 256` (`src/limits.rs`, originally `security::limits`; moved by #558) caps
   command-line buffer growth.
 - Sensitive data: not applicable — registers hold only in-session buffer
   text, never persisted or exposed externally.

@@ -128,7 +128,7 @@ execution, never a bespoke coordinate-comparison shortcut.
   untested in production since nothing was built
 - *Evidence*: `ActiveMiniScenario::execute_single` (`src/minigame/session.rs:
   220`) already routes every key through `AnyModeSimulator::execute_command`
-  for every existing mode; `src/input/handlers.rs:533,541` already emits
+  for every existing mode; `src/input/handlers.rs:533,541` (now `src/ui/key_dispatch/handlers.rs`, moved by #558) already emits
   `Message::MiniGameCommand` for the arcade screen. Any mode expressed as a
   `Scenario` (cheap variant) inherits this automatically. The continuous
   variant would need to preserve this property explicitly when bypassing

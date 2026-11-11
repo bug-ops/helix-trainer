@@ -1612,6 +1612,10 @@ fn load_toml(toml: &str) -> Result<Vec<Scenario>, crate::security::UserError> {
 }
 
 fn scenario_toml_with_setup_cursor(setup_cursor: &str) -> String {
+    scenario_toml_with_cursors(setup_cursor, "cursor_position = [0, 0]")
+}
+
+fn scenario_toml_with_cursors(setup_cursor: &str, target_cursor: &str) -> String {
     format!(
         r#"
 [[scenarios]]
@@ -1625,7 +1629,7 @@ file_content = "hello world"
 
 [scenarios.target]
 file_content = "hello world"
-cursor_position = [0, 0]
+{target_cursor}
 
 [scenarios.solution]
 commands = ["nop"]
@@ -1643,6 +1647,20 @@ tolerance = 0
 fn test_setup_with_two_cursor_fields_is_rejected_naming_both() {
     let toml =
         scenario_toml_with_setup_cursor("cursor_position = [0, 0]\nselection = [0, 0, 0, 3]");
+    let err = load_toml(&toml).unwrap_err();
+    let cause = format!("{err:?}");
+    assert!(
+        cause.contains("cursor_position, selection"),
+        "error should name both fields: {cause}"
+    );
+}
+
+#[test]
+fn test_target_with_two_cursor_fields_is_rejected_naming_both() {
+    let toml = scenario_toml_with_cursors(
+        "cursor_position = [0, 0]",
+        "cursor_position = [0, 0]\nselection = [0, 0, 0, 3]",
+    );
     let err = load_toml(&toml).unwrap_err();
     let cause = format!("{err:?}");
     assert!(

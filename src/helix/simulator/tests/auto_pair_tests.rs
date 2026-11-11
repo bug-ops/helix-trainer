@@ -42,11 +42,18 @@ fn a_python_block_opener_still_indents() {
 
 #[test]
 fn backspace_between_a_pair_deletes_both_halves() {
-    for opener in ["(", "[", "\""] {
+    for opener in ["(", "[", "{", "\"", "`"] {
         assert_eq!(
             typed("rs", "", &["i", opener, CMD_BACKSPACE]),
             "",
             "{opener}"
+        );
+    }
+    for language in ["md", "py", "rs"] {
+        assert_eq!(
+            typed(language, "", &["i", "'", CMD_BACKSPACE]),
+            "",
+            "{language}"
         );
     }
 }

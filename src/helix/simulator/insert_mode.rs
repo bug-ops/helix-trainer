@@ -398,13 +398,13 @@ impl HelixSimulator<NormalMode> {
                 while let Some(member) = members
                     .next_if(|member| member.from() < group.to() || member.from() == group.from())
                 {
-                    // In Helix, when head > anchor (forward selection), the visual cursor
-                    // is on head-1, so appending after it inserts at head; a point or
-                    // backward range has its visual cursor on head, so one more to the right.
-                    at = if member.head > member.anchor {
-                        member.head
-                    } else {
+                    // A point cursor is visually one character wide, so appending
+                    // goes one past it; a range appends after its last character,
+                    // whichever way it points.
+                    at = if member.is_empty() {
                         member.head + 1
+                    } else {
+                        member.to()
                     };
                 }
                 Range::point(at.min(len))

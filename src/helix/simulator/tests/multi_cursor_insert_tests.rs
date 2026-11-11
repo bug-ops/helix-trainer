@@ -108,6 +108,21 @@ fn one_undo_restores_the_text_and_every_range_of_a_multi_cursor_session() {
 }
 
 #[test]
+fn one_undo_restores_a_counted_open_and_an_open_whose_indent_was_stripped() {
+    for keys in [
+        &["j", "2o", "x", CMD_ESCAPE][..],
+        &["j", "2o", CMD_ESCAPE],
+        &["j", "o", CMD_ESCAPE],
+        &["j", "O", CMD_ESCAPE],
+    ] {
+        let mut sim = run_keys_in("rs", I1, keys);
+        assert_ne!(sim.display().content(), I1, "{keys:?}");
+        sim.execute_command(CMD_UNDO).unwrap();
+        assert_eq!(sim.display().content(), I1, "{keys:?}");
+    }
+}
+
+#[test]
 fn dot_replays_a_multi_cursor_session_and_ignores_the_count() {
     expect_i1(
         &["j", "C", "o", "x", CMD_ESCAPE, "gg", CMD_REPEAT],
@@ -177,6 +192,15 @@ fn append_on_separated_ranges_keeps_one_cursor_per_range() {
     );
     assert_eq!(sim.display().content(), "acef");
     assert_eq!(ranges_of(&sim).len(), 2);
+}
+
+#[test]
+fn append_on_a_flipped_selection_inserts_after_its_last_character() {
+    let sim = run_keys(
+        "abcd",
+        &["v", "l", CMD_FLIP_SELECTIONS, "a", "x", CMD_ESCAPE],
+    );
+    assert_eq!(sim.display().content(), "abxcd");
 }
 
 #[test]

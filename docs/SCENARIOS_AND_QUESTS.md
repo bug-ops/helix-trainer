@@ -324,7 +324,6 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "hello world hello there"
-cursor_position = [0, 12]
 selection = [0, 12, 0, 17]
 
 [scenarios.solution]

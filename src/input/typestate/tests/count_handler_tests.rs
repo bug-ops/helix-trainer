@@ -249,7 +249,7 @@ fn test_count_then_y_r_v_i_a_big_i_big_a_big_c_are_not_cancelled() {
 }
 
 #[test]
-fn test_count_then_o_and_big_o_execute_with_the_count_swallowed_by_the_simulator() {
+fn test_count_then_o_and_big_o_execute_with_the_count() {
     let state = CountPending { count: nz(2) };
     assert_eq!(
         KeyHandler::handle_key(&state, key('o')),

@@ -1069,7 +1069,7 @@ mod tests {
 
         #[test]
         fn test_base_and_count_forward_ctrl_c_as_toggle_comments() {
-            for opening in ["", "3"] {
+            for opening in ["", "2"] {
                 let state = task_state_after(&plain(opening));
                 let message = handle_key_event(ctrl_c(), &state);
                 assert!(
@@ -1082,7 +1082,7 @@ mod tests {
         #[test]
         fn test_argument_pending_states_take_ctrl_c_as_the_plain_char() {
             for opening in [
-                "f", "t", "F", "T", "r", "ms", "md", "mr", "mi", "ma", "\"", "3f",
+                "f", "t", "F", "T", "r", "ms", "md", "mr", "mi", "ma", "\"", "3f", "mra",
             ] {
                 let state = task_state_after(&plain(opening));
                 assert_eq!(
@@ -1095,7 +1095,10 @@ mod tests {
 
         #[test]
         fn test_leader_and_prompt_states_cancel_on_ctrl_c() {
-            for opening in ["g", "z", "m", "[", "]", "2g", ":", "/", "?", "s", "S", "K"] {
+            for opening in [
+                "g", "z", "m", "[", "]", "2g", ":", "/", "?", "s", "S", "K", "/a", ":w", "?a",
+                "sa", "Sa", "Ka",
+            ] {
                 let state = task_state_after(&plain(opening));
                 assert_eq!(
                     handle_key_event(ctrl_c(), &state),
@@ -1134,6 +1137,35 @@ mod tests {
 
         fn fresh_task() -> AppState {
             task_state_after(&[])
+        }
+
+        /// A counted `Ctrl-c` toggles once (the count is ignored) and leaves the
+        /// input state at its base
+        #[test]
+        fn test_counted_ctrl_c_toggles_once_and_returns_to_base() {
+            let mut state = task_state_after(&plain("2"));
+            press(&mut state, ctrl_c());
+            assert_eq!(task_content(&state), "// test");
+            assert!(gameplay_input_state(&state).is_some_and(|m| m.state().is_base()));
+        }
+
+        /// A typed prompt cancelled by `Ctrl-c` leaves the buffer untouched and
+        /// the next key a plain command
+        #[test]
+        fn test_ctrl_c_cancels_a_typed_prompt_and_the_next_key_is_plain() {
+            for opening in ["/a", ":w", "?a", "sa", "Ka"] {
+                let mut state = task_state_after(&plain(opening));
+                press(&mut state, ctrl_c());
+                assert_eq!(task_content(&state), "test", "after {opening:?}");
+                assert!(
+                    gameplay_input_state(&state).is_some_and(|m| m.state().is_base()),
+                    "after {opening:?}"
+                );
+                for key in plain("d") {
+                    press(&mut state, key);
+                }
+                assert_eq!(task_content(&state), "est", "after {opening:?}");
+            }
         }
 
         /// #599: hx inserts the character `c` for `Ctrl-c` in Insert mode and stays in it
@@ -2173,6 +2205,49 @@ mod tests {
                 KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
             );
             assert_eq!(content(&state), edited);
+        }
+
+        #[test]
+        fn ctrl_r_redoes_an_undone_edit_in_the_arcade() {
+            use crate::game::PlayableScenario;
+            use crate::minigame::MiniGameSession;
+            use crate::testing::ScenarioBuilder;
+            use crate::ui::state::MiniGameData;
+            use std::sync::Arc;
+
+            let scenario = ScenarioBuilder::new()
+                .id("s1")
+                .setup_content("test")
+                .build();
+            let mut session = MiniGameSession::new(Arc::new(vec![scenario]), None);
+            session.start();
+            for _ in 0..4 {
+                session.tick_countdown();
+            }
+            let mut state = create_test_app_state();
+            state.screen = TypedScreen::MiniGame(MiniGameData::new(session));
+            let arcade_content = |state: &AppState| {
+                state
+                    .minigame_session()
+                    .and_then(crate::minigame::MiniGameSession::current_scenario)
+                    .map(PlayableScenario::current_content)
+                    .expect("an active arcade scenario")
+            };
+            let plain = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+
+            press(&mut state, plain('x'));
+            press(&mut state, plain('d'));
+            let edited = arcade_content(&state);
+            assert_ne!(edited, "test");
+
+            press(&mut state, plain('u'));
+            assert_eq!(arcade_content(&state), "test");
+
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
+            );
+            assert_eq!(arcade_content(&state), edited);
         }
     }
 

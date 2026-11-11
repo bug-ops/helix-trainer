@@ -746,7 +746,34 @@ mod tests {
         ]
     }
 
+    fn replayable_forms() -> impl Strategy<Value = NormalCommand> {
+        let fixed = prop::sample::select(vec![
+            "i", "a", "I", "A", "o", "O", "c", "\"ac", "\"_c", ".", "q", "Q", "Alt-;", "Escape",
+        ]);
+        prop_oneof![
+            command(),
+            fixed.prop_map(|text| NormalCommand::parse(text).unwrap())
+        ]
+    }
+
     proptest! {
+        /// Every replayed key is a plain character, so a command that `.`
+        /// replays types its own canonical spelling.
+        #[test]
+        fn plain_keys_spell_the_display_text(command in replayable_forms()) {
+            let keys = command.keys();
+            let plain: Option<String> = keys
+                .iter()
+                .map(|key| match (key.code, key.modifiers) {
+                    (KeyCode::Char(ch), KeyModifiers::NONE) => Some(ch),
+                    _ => None,
+                })
+                .collect();
+            if let Some(typed) = plain.filter(|typed| !typed.is_empty()) {
+                prop_assert_eq!(typed, command.to_string());
+            }
+        }
+
         /// Canonical spellings only (`:g 3` or `3gg` are not canonical): the
         /// string is a rendering of the value and parses back to it.
         #[test]

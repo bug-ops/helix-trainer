@@ -357,6 +357,25 @@ fn test_count_behavior_metadata() {
     }
 }
 
+/// The `Repeat` loop stops when a command enters Insert mode, so no counted
+/// command may leave the base command typed as text: today none enters it.
+#[test]
+fn test_counted_repeat_commands_never_enter_insert_mode() {
+    use crate::helix::registry::{CountBehavior, normal_registry};
+    for meta in normal_registry()
+        .all_commands()
+        .filter(|meta| meta.count_behavior() == CountBehavior::Repeat)
+    {
+        let mut sim = AnyModeSimulator::new("abc def\nghi".to_string());
+        let _ = sim.execute_command(&format!("2{}", meta.key()));
+        assert!(
+            !sim.is_insert_mode(),
+            "2{} left the simulator in Insert mode",
+            meta.key()
+        );
+    }
+}
+
 #[test]
 fn test_goto_line_end_lands_on_last_character() {
     let mut sim = AnyModeSimulator::new(SCENARIO_14.to_string());

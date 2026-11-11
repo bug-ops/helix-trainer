@@ -2661,28 +2661,43 @@ mod shared_definitions {
     }
 }
 
+fn rust_sources_below(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            rust_sources_below(&path, out);
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            out.push(path);
+        }
+    }
+}
+
 #[test]
-fn localized_screens_use_only_existing_locale_keys() {
-    let sources = [
-        include_str!("statistics.rs"),
-        include_str!("category_filters.rs"),
-        include_str!("minigame.rs"),
-        include_str!("mode_selection.rs"),
-        include_str!("end_game.rs"),
-    ];
+fn localized_ui_code_uses_only_existing_locale_keys() {
+    let mut files = Vec::new();
+    rust_sources_below(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui"),
+        &mut files,
+    );
     let mut checked = 0;
-    for source in sources {
+    for file in files {
+        let source = std::fs::read_to_string(&file).unwrap();
         for (at, _) in source.match_indices("t!(\"") {
             if source[..at].ends_with(|c: char| c.is_alphanumeric()) {
                 continue;
             }
             let rest = &source[at + 4..];
             let key = &rest[..rest.find('"').unwrap()];
-            assert_ne!(rust_i18n::t!(key), key, "missing locale key {key}");
+            assert_ne!(
+                rust_i18n::t!(key),
+                key,
+                "missing locale key {key} in {}",
+                file.display()
+            );
             checked += 1;
         }
     }
-    assert!(checked > 80, "only {checked} keys found");
+    assert!(checked > 200, "only {checked} keys found");
 }
 
 mod english_text {

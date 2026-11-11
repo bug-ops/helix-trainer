@@ -182,7 +182,7 @@ mod tests {
     use crate::gamification::{ProfileStorage, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
-    use crate::ui::state::{ConfigState, GameState, ProgressState, UIState};
+    use crate::ui::state::{ConfigState, GameState, MiniGameModeKind, ProgressState, UIState};
     use std::assert_matches;
 
     fn create_test_scenario(id: &str) -> crate::config::Scenario {
@@ -379,51 +379,36 @@ mod tests {
 
         // Start at 0 (Arcade)
         assert_eq!(
-            data.minigame_mode_selection
-                .as_ref()
-                .unwrap()
-                .selected_index,
-            0
+            data.minigame_mode_selection.as_ref().unwrap().selected,
+            MiniGameModeKind::Arcade
         );
 
         // Move down to Survival
         handle_mode_selection_down(&mut data).unwrap();
         assert_eq!(
-            data.minigame_mode_selection
-                .as_ref()
-                .unwrap()
-                .selected_index,
-            1
+            data.minigame_mode_selection.as_ref().unwrap().selected,
+            MiniGameModeKind::Survival
         );
 
         // Move down to Challenge
         handle_mode_selection_down(&mut data).unwrap();
         assert_eq!(
-            data.minigame_mode_selection
-                .as_ref()
-                .unwrap()
-                .selected_index,
-            2
+            data.minigame_mode_selection.as_ref().unwrap().selected,
+            MiniGameModeKind::Challenge
         );
 
         // Wrap to Arcade
         handle_mode_selection_down(&mut data).unwrap();
         assert_eq!(
-            data.minigame_mode_selection
-                .as_ref()
-                .unwrap()
-                .selected_index,
-            0
+            data.minigame_mode_selection.as_ref().unwrap().selected,
+            MiniGameModeKind::Arcade
         );
 
         // Move up to Challenge (wrap)
         handle_mode_selection_up(&mut data).unwrap();
         assert_eq!(
-            data.minigame_mode_selection
-                .as_ref()
-                .unwrap()
-                .selected_index,
-            2
+            data.minigame_mode_selection.as_ref().unwrap().selected,
+            MiniGameModeKind::Challenge
         );
     }
 

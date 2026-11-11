@@ -1,6 +1,6 @@
 //! Mode selection screen rendering
 
-use crate::ui::state::{AppState, MiniGameModeSelection, TypedScreen};
+use crate::ui::state::{AppState, MiniGameModeKind, MiniGameModeSelection, TypedScreen};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -185,8 +185,13 @@ fn render_minigame_mode_submenu(
     const ICONS: [&str; MiniGameModeSelection::MODE_COUNT] = ["🎮", "💀", "📅"];
     let modes = MiniGameModeSelection::all_modes(today);
 
-    for (idx, (mode, icon)) in modes.iter().zip(ICONS.iter()).enumerate() {
-        let is_selected = idx == selection.selected_index;
+    for (idx, ((mode, kind), icon)) in modes
+        .iter()
+        .zip(MiniGameModeKind::ALL)
+        .zip(ICONS.iter())
+        .enumerate()
+    {
+        let is_selected = kind == selection.selected;
         let y_offset = u16::try_from(idx).unwrap_or(u16::MAX) * ENTRY_STRIDE;
 
         if inner.y + y_offset >= inner.bottom() {

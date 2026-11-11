@@ -542,6 +542,52 @@ pub struct ModeSelectionData {
     pub minigame_mode_selection: Option<MiniGameModeSelection>,
 }
 
+/// A mini-game mode offered in the mode submenu, in menu order
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MiniGameModeKind {
+    /// Timed arcade run
+    #[default]
+    Arcade,
+    /// Lives-based survival run
+    Survival,
+    /// Daily challenge
+    Challenge,
+}
+
+impl MiniGameModeKind {
+    /// Every mode, in menu order
+    pub const ALL: [Self; 3] = [Self::Arcade, Self::Survival, Self::Challenge];
+
+    /// The mode above this one, wrapping from the first to the last
+    pub fn previous(self) -> Self {
+        match self {
+            Self::Arcade => Self::Challenge,
+            Self::Survival => Self::Arcade,
+            Self::Challenge => Self::Survival,
+        }
+    }
+
+    /// The mode below this one, wrapping from the last to the first
+    pub fn next(self) -> Self {
+        match self {
+            Self::Arcade => Self::Survival,
+            Self::Survival => Self::Challenge,
+            Self::Challenge => Self::Arcade,
+        }
+    }
+
+    /// The default configuration of this mode; the challenge is seeded from `today`
+    pub fn mode(self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
+        use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
+
+        match self {
+            Self::Arcade => MiniGameMode::Arcade(ArcadeConfig::default()),
+            Self::Survival => MiniGameMode::Survival(SurvivalConfig::default()),
+            Self::Challenge => MiniGameMode::Challenge(ChallengeConfig::for_date(today)),
+        }
+    }
+}
+
 /// Selection state for mini-game mode menu
 ///
 /// Used when the player selects Arcade from the main mode selection
@@ -552,76 +598,44 @@ pub struct ModeSelectionData {
 /// - `None` = menu is hidden
 #[derive(Debug, Clone, Default)]
 pub struct MiniGameModeSelection {
-    /// Currently highlighted mode (0 = Arcade, 1 = Survival, 2 = Challenge)
-    pub selected_index: usize,
+    /// Currently highlighted mode
+    pub selected: MiniGameModeKind,
 }
 
 impl MiniGameModeSelection {
     /// Available mode count
-    pub const MODE_COUNT: usize = 3;
+    pub const MODE_COUNT: usize = MiniGameModeKind::ALL.len();
 
-    /// Create a new mode selection starting at Arcade (index 0)
+    /// Create a new mode selection starting at Arcade
     pub fn new() -> Self {
-        Self { selected_index: 0 }
+        Self::default()
     }
 
     /// Move selection up (wraps around)
     pub fn select_previous(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-        } else {
-            self.selected_index = Self::MODE_COUNT - 1;
-        }
+        self.selected = self.selected.previous();
     }
 
     /// Move selection down (wraps around)
     pub fn select_next(&mut self) {
-        self.selected_index = (self.selected_index + 1) % Self::MODE_COUNT;
+        self.selected = self.selected.next();
     }
 
     /// All selectable modes, in menu order.
     ///
-    /// Single source of truth for index <-> mode mapping, shared by
-    /// `selected_mode`, `mode_name`, `mode_description`, and the mode-selection
-    /// submenu renderer so none of them can drift out of sync with each other.
-    /// Name/description text itself comes from `MiniGameMode`'s own exhaustive
-    /// match, so a new mode variant only needs adding here to appear correctly
-    /// everywhere.
+    /// Single source of truth for the mode list, shared by `selected_mode`
+    /// and the mode-selection submenu renderer so they cannot drift out of
+    /// sync. Name/description text comes from `MiniGameMode`'s own exhaustive
+    /// match.
     pub(crate) fn all_modes(
         today: chrono::NaiveDate,
     ) -> [crate::minigame::MiniGameMode; Self::MODE_COUNT] {
-        use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
-
-        [
-            MiniGameMode::Arcade(ArcadeConfig::default()),
-            MiniGameMode::Survival(SurvivalConfig::default()),
-            MiniGameMode::Challenge(ChallengeConfig::for_date(today)),
-        ]
+        MiniGameModeKind::ALL.map(|kind| kind.mode(today))
     }
 
     /// Get the selected mode configuration
     pub fn selected_mode(&self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
-        Self::all_modes(today)
-            .get(self.selected_index)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get the name for each mode by index
-    pub fn mode_name(index: usize) -> &'static str {
-        // Name text does not depend on the date, so any placeholder date works.
-        Self::all_modes(chrono::NaiveDate::default())
-            .get(index)
-            .map(crate::minigame::MiniGameMode::name)
-            .unwrap_or("Unknown")
-    }
-
-    /// Get the description for each mode by index
-    pub fn mode_description(index: usize) -> &'static str {
-        Self::all_modes(chrono::NaiveDate::default())
-            .get(index)
-            .map(crate::minigame::MiniGameMode::description)
-            .unwrap_or("")
+        self.selected.mode(today)
     }
 }
 
@@ -947,81 +961,51 @@ mod tests {
         assert_eq!(coa.scenario_id(), "test_123");
     }
 
-    // CR-007: Test MiniGameModeSelection invalid index handling
     #[test]
-    fn test_mode_name_invalid_index() {
-        assert_eq!(MiniGameModeSelection::mode_name(3), "Unknown");
-        assert_eq!(MiniGameModeSelection::mode_name(100), "Unknown");
-        assert_eq!(MiniGameModeSelection::mode_name(usize::MAX), "Unknown");
-    }
-
-    #[test]
-    fn test_mode_description_invalid_index() {
-        assert_eq!(MiniGameModeSelection::mode_description(3), "");
-        assert_eq!(MiniGameModeSelection::mode_description(100), "");
-        assert_eq!(MiniGameModeSelection::mode_description(usize::MAX), "");
-    }
-
-    #[test]
-    fn test_selected_mode_invalid_index() {
+    fn test_mode_selection_cycles_through_every_mode_and_wraps() {
         let mut selection = MiniGameModeSelection::new();
-        selection.selected_index = 99;
-        let mode = selection.selected_mode(chrono::Utc::now().date_naive());
-        // Should fall back to default Arcade mode
-        assert!(mode.is_arcade());
+        let mut seen = vec![selection.selected];
+        for _ in 1..MiniGameModeSelection::MODE_COUNT {
+            selection.select_next();
+            seen.push(selection.selected);
+        }
+        assert_eq!(seen, MiniGameModeKind::ALL);
+
+        selection.select_next();
+        assert_eq!(selection.selected, MiniGameModeKind::Arcade);
+        selection.select_previous();
+        assert_eq!(selection.selected, MiniGameModeKind::Challenge);
     }
 
     #[test]
-    fn test_minigame_mode_selection_valid_indices() {
-        // Test valid mode names
-        assert_eq!(MiniGameModeSelection::mode_name(0), "Arcade");
-        assert_eq!(MiniGameModeSelection::mode_name(1), "Survival");
-        assert_eq!(MiniGameModeSelection::mode_name(2), "Daily Challenge");
-
-        // Test valid mode descriptions
-        assert!(!MiniGameModeSelection::mode_description(0).is_empty());
-        assert!(!MiniGameModeSelection::mode_description(1).is_empty());
-        assert!(!MiniGameModeSelection::mode_description(2).is_empty());
-
-        // Test valid selected modes
+    fn test_minigame_mode_selection_valid_modes() {
         let today = chrono::Utc::now().date_naive();
         let mut selection = MiniGameModeSelection::new();
-        selection.selected_index = 0;
         assert!(selection.selected_mode(today).is_arcade());
 
-        selection.selected_index = 1;
+        selection.selected = MiniGameModeKind::Survival;
         assert!(selection.selected_mode(today).is_survival());
 
-        selection.selected_index = 2;
+        selection.selected = MiniGameModeKind::Challenge;
         assert!(selection.selected_mode(today).is_challenge());
     }
 
-    /// Regression test for #328: `selected_mode`, `mode_name`, and
-    /// `mode_description` must never disagree with each other, since all
-    /// three are now derived from the single `all_modes` array. If a future
-    /// mode variant is added to `all_modes` this loop automatically covers
-    /// it too.
+    /// `all_modes` must stay in lockstep with `MiniGameModeKind::ALL`, and each
+    /// mode must have a name and description.
     #[test]
-    fn test_mode_selection_helpers_agree_with_each_other() {
+    fn test_all_modes_follow_the_kind_order() {
         let today = chrono::Utc::now().date_naive();
-        let mut selection = MiniGameModeSelection::new();
+        let modes = MiniGameModeSelection::all_modes(today);
 
-        for index in 0..MiniGameModeSelection::MODE_COUNT {
-            selection.selected_index = index;
-            let mode = selection.selected_mode(today);
-
-            assert_eq!(MiniGameModeSelection::mode_name(index), mode.name());
-            assert_eq!(
-                MiniGameModeSelection::mode_description(index),
-                mode.description()
-            );
+        for (kind, mode) in MiniGameModeKind::ALL.into_iter().zip(&modes) {
+            assert_eq!(kind.mode(today).name(), mode.name());
+            assert!(!mode.name().is_empty());
+            assert!(!mode.description().is_empty());
         }
     }
 
     /// Structural backstop for #328: every currently-defined `MiniGameMode`
-    /// variant must appear exactly once in `all_modes`. This does not force a
-    /// compile error if a future variant is forgotten, but it does fail this
-    /// test rather than silently leaving the new mode unselectable.
+    /// variant must appear exactly once in `all_modes`.
     #[test]
     fn test_all_modes_covers_every_known_variant_exactly_once() {
         let today = chrono::Utc::now().date_naive();

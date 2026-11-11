@@ -49,8 +49,9 @@ pub mod screen;
 pub use screen::{
     AchievementsData, CategoryFiltersData, CategoryProgress, CompletedOrAbandoned,
     EndGameSummaryData, HintPanel, InputStateAccess, KeyHistory, MasteryInfo, MenuData,
-    MiniGameData, MiniGameModeSelection, ModeSelectionData, NextStep, ProfileData, ResultsData,
-    ReturnDestination, ReviewData, StatisticsData, TaskData, TopMode, TypedScreen,
+    MiniGameData, MiniGameModeKind, MiniGameModeSelection, ModeSelectionData, NextStep,
+    ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData, TopMode,
+    TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario

@@ -1800,7 +1800,9 @@ mod statistics_tests {
 
 mod mode_selection_extended_tests {
     use super::*;
-    use crate::ui::state::{MiniGameModeSelection, ModeSelectionData, TypedScreen};
+    use crate::ui::state::{
+        MiniGameModeKind, MiniGameModeSelection, ModeSelectionData, TypedScreen,
+    };
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -1853,7 +1855,9 @@ mod mode_selection_extended_tests {
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
             selected_mode: crate::ui::state::TopMode::Arcade,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 0 }),
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Arcade,
+            }),
         });
 
         terminal
@@ -1871,7 +1875,9 @@ mod mode_selection_extended_tests {
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
             selected_mode: crate::ui::state::TopMode::Arcade,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 1 }),
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Survival,
+            }),
         });
 
         terminal
@@ -1889,7 +1895,9 @@ mod mode_selection_extended_tests {
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
             selected_mode: crate::ui::state::TopMode::Arcade,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Challenge,
+            }),
         });
 
         terminal
@@ -1914,7 +1922,9 @@ mod mode_selection_extended_tests {
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
             selected_mode: crate::ui::state::TopMode::Arcade,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Challenge,
+            }),
         });
 
         terminal
@@ -1925,8 +1935,8 @@ mod mode_selection_extended_tests {
 
         let buffer: Buffer = terminal.backend().buffer().clone();
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        for index in 0..MiniGameModeSelection::MODE_COUNT {
-            let mode_name = MiniGameModeSelection::mode_name(index);
+        for mode in MiniGameModeSelection::all_modes(chrono::Utc::now().date_naive()) {
+            let mode_name = mode.name();
             assert!(
                 text.contains(mode_name),
                 "submenu entry '{mode_name}' must be visible at 80x24, got buffer text: {text}"
@@ -1955,7 +1965,9 @@ mod mode_selection_extended_tests {
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
             selected_mode: crate::ui::state::TopMode::Arcade,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Challenge,
+            }),
         });
 
         terminal
@@ -1982,7 +1994,9 @@ mod mode_selection_extended_tests {
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
             selected_mode: crate::ui::state::TopMode::Arcade,
-            minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 0 }),
+            minigame_mode_selection: Some(MiniGameModeSelection {
+                selected: MiniGameModeKind::Arcade,
+            }),
         });
 
         terminal

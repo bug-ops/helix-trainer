@@ -9,7 +9,9 @@ use crate::game::format_key_for_display;
 use crate::helix::commands::CMD_ESCAPE;
 use crate::input::typestate::{HandlerResult, command_to_key_event};
 use crate::security::UserError;
-use crate::ui::state::{AppState, HandlerOutcome, InputStateAccess, Message, TypedScreen, update};
+use crate::ui::state::{
+    AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, update,
+};
 
 /// Process session result and update state accordingly
 ///
@@ -59,16 +61,14 @@ pub fn handle_show_hint(state: &mut AppState) -> Result<HandlerOutcome, UserErro
     };
 
     // If hint panel is already visible, close it (toggle behavior)
-    if task_data.show_hint_panel {
-        task_data.show_hint_panel = false;
-        task_data.current_hint = None;
+    if task_data.hint.is_shown() {
+        task_data.hint = HintPanel::Hidden;
         return Ok(HandlerOutcome::Stay);
     }
 
     // Otherwise, try to show next hint
     if let Some(hint) = task_data.session.hint() {
-        task_data.current_hint = Some(hint.clone());
-        task_data.show_hint_panel = true;
+        task_data.hint = HintPanel::Shown(hint.clone());
     }
     Ok(HandlerOutcome::Stay)
 }

@@ -1811,7 +1811,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 0,
+            selected_mode: crate::ui::state::TopMode::Training,
             minigame_mode_selection: None,
         });
 
@@ -1829,7 +1829,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: None,
         });
 
@@ -1847,7 +1847,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 0 }),
         });
 
@@ -1865,7 +1865,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 1 }),
         });
 
@@ -1883,7 +1883,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
         });
 
@@ -1908,7 +1908,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
         });
 
@@ -1949,7 +1949,7 @@ mod mode_selection_extended_tests {
             .start_attempt(today);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 2 }),
         });
 
@@ -1976,7 +1976,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: Some(MiniGameModeSelection { selected_index: 0 }),
         });
 
@@ -1996,7 +1996,7 @@ mod mode_selection_extended_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
-            selected_mode: 0,
+            selected_mode: crate::ui::state::TopMode::Training,
             minigame_mode_selection: None,
         });
 

@@ -8,7 +8,7 @@ use crate::security::UserError;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::{
     HandlerContext, HandlerOutcome, MenuData, MiniGameData, MiniGameModeSelection,
-    ModeSelectionData, TypedScreen,
+    ModeSelectionData, TopMode, TypedScreen,
 };
 use rust_i18n::t;
 use std::sync::Arc;
@@ -23,8 +23,8 @@ pub(in crate::ui::state) fn handle_mode_selection_up(
     // Check if mini-game mode selection is active
     if let Some(ref mut selection) = data.minigame_mode_selection {
         selection.select_previous();
-    } else if data.selected_mode > 0 {
-        data.selected_mode -= 1;
+    } else {
+        data.selected_mode = data.selected_mode.previous();
     }
     Ok(HandlerOutcome::Stay)
 }
@@ -38,9 +38,8 @@ pub(in crate::ui::state) fn handle_mode_selection_down(
     // Check if mini-game mode selection is active
     if let Some(ref mut selection) = data.minigame_mode_selection {
         selection.select_next();
-    } else if data.selected_mode < 1 {
-        // Only 2 modes: Training (0) and Arcade (1)
-        data.selected_mode += 1;
+    } else {
+        data.selected_mode = data.selected_mode.next();
     }
     Ok(HandlerOutcome::Stay)
 }
@@ -61,13 +60,12 @@ pub(in crate::ui::state) fn handle_mode_selection_select(
     }
 
     match data.selected_mode {
-        0 => handle_select_training_mode(ctx),
-        1 => {
+        TopMode::Training => handle_select_training_mode(ctx),
+        TopMode::Arcade => {
             // Show mini-game mode selection instead of immediately starting arcade
             data.minigame_mode_selection = Some(MiniGameModeSelection::new());
             Ok(HandlerOutcome::Stay)
         }
-        _ => Ok(HandlerOutcome::Stay), // Invalid selection, do nothing
     }
 }
 
@@ -237,14 +235,14 @@ mod tests {
     #[test]
     fn test_mode_selection_up() {
         let mut data = ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: None,
         };
 
         let outcome = handle_mode_selection_up(&mut data).unwrap();
 
         assert!(outcome.is_stay());
-        assert_eq!(data.selected_mode, 0); // Should move to Training
+        assert_eq!(data.selected_mode, crate::ui::state::TopMode::Training); // Should move to Training
     }
 
     #[test]
@@ -254,7 +252,7 @@ mod tests {
         let outcome = handle_mode_selection_up(&mut data).unwrap();
 
         assert!(outcome.is_stay());
-        assert_eq!(data.selected_mode, 0); // Should stay at 0
+        assert_eq!(data.selected_mode, crate::ui::state::TopMode::Training); // Should stay at 0
     }
 
     #[test]
@@ -264,20 +262,20 @@ mod tests {
         let outcome = handle_mode_selection_down(&mut data).unwrap();
 
         assert!(outcome.is_stay());
-        assert_eq!(data.selected_mode, 1); // Should move to Arcade
+        assert_eq!(data.selected_mode, crate::ui::state::TopMode::Arcade); // Should move to Arcade
     }
 
     #[test]
     fn test_mode_selection_down_at_bottom() {
         let mut data = ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: None,
         };
 
         let outcome = handle_mode_selection_down(&mut data).unwrap();
 
         assert!(outcome.is_stay());
-        assert_eq!(data.selected_mode, 1); // Should stay at 1
+        assert_eq!(data.selected_mode, crate::ui::state::TopMode::Arcade); // Should stay at 1
     }
 
     #[test]
@@ -363,7 +361,7 @@ mod tests {
     #[test]
     fn test_mode_selection_select_arcade_opens_mode_menu() {
         let mut data = ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: None,
         };
         let (mut ui, mut game, mut progress, config) = create_test_context_with_scenarios();
@@ -379,7 +377,7 @@ mod tests {
     #[test]
     fn test_minigame_mode_selection_navigation() {
         let mut data = ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: Some(MiniGameModeSelection::new()),
         };
 
@@ -436,7 +434,7 @@ mod tests {
     #[test]
     fn test_minigame_mode_selection_back_closes_menu() {
         let mut data = ModeSelectionData {
-            selected_mode: 1,
+            selected_mode: crate::ui::state::TopMode::Arcade,
             minigame_mode_selection: Some(MiniGameModeSelection::new()),
         };
 
@@ -661,21 +659,5 @@ mod tests {
         // Should stay on screen and explain why when no scenarios are available
         assert!(outcome.is_stay());
         assert_eq!(ctx.ui.notifications.count(), 1);
-    }
-
-    // CR-017: Test invalid selection index returns Stay
-    #[test]
-    fn test_mode_selection_select_invalid_index() {
-        let mut data = ModeSelectionData {
-            selected_mode: 99, // Invalid index
-            minigame_mode_selection: None,
-        };
-        let (mut ui, mut game, mut progress, config) = create_test_context();
-        let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
-
-        let outcome = handle_mode_selection_select(&mut data, &mut ctx).unwrap();
-
-        // Invalid index should stay on screen (do nothing)
-        assert!(outcome.is_stay());
     }
 }

@@ -89,15 +89,15 @@ fn test_show_hint() {
 
     crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(!task_data.show_hint_panel);
+        assert!(!task_data.hint.is_shown());
     } else {
         panic!("Should be on Task screen");
     }
 
     update(&mut state, Message::ShowHint).unwrap();
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(task_data.show_hint_panel);
-        assert!(task_data.current_hint.is_some());
+        assert!(task_data.hint.is_shown());
+        assert!(task_data.hint.text().is_some());
     } else {
         panic!("Should be on Task screen");
     }

@@ -200,7 +200,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         frame.render_widget(stats, chunks[3]);
 
         // Instructions with hint indicator and last command
-        let hint_indicator = if task_data.show_hint_panel && task_data.current_hint.is_some() {
+        let hint_indicator = if task_data.hint.is_shown() {
             " [F1: Next Hint] "
         } else {
             " [F1: Hint] "
@@ -242,7 +242,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         }
 
         // Render hint panel if visible
-        if task_data.show_hint_panel {
+        if task_data.hint.is_shown() {
             render_hint_popup(frame, state);
         }
 

@@ -60,7 +60,7 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
         Rect::new(inner.x, inner.y + 1, inner.width, 2),
         "Training Mode",
         "Manual scenario selection with detailed feedback",
-        mode_data.selected_mode == 0,
+        mode_data.selected_mode == crate::ui::state::TopMode::Training,
         "📚",
     );
 
@@ -69,7 +69,8 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
         Rect::new(inner.x, inner.y + 4, inner.width, 2),
         "Arcade Mode",
         "Fast-paced mini-games with time pressure",
-        mode_data.selected_mode == 1 && mode_data.minigame_mode_selection.is_none(),
+        mode_data.selected_mode == crate::ui::state::TopMode::Arcade
+            && mode_data.minigame_mode_selection.is_none(),
         "🎮",
     );
 

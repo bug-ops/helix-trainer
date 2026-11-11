@@ -203,6 +203,31 @@ pub struct MenuData {
     pub command_buffer: String,
 }
 
+/// Whether the hint panel is open, and the hint it shows
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum HintPanel {
+    /// No hint panel
+    #[default]
+    Hidden,
+    /// Panel open with this hint text
+    Shown(String),
+}
+
+impl HintPanel {
+    /// The hint text while the panel is open
+    pub fn text(&self) -> Option<&str> {
+        match self {
+            Self::Hidden => None,
+            Self::Shown(text) => Some(text),
+        }
+    }
+
+    /// Whether the panel is open
+    pub fn is_shown(&self) -> bool {
+        matches!(self, Self::Shown(_))
+    }
+}
+
 /// Data required for task screen (contains active session)
 #[derive(Debug)]
 pub struct TaskData {
@@ -218,11 +243,8 @@ pub struct TaskData {
     /// History of recent keypresses (shared KeyHistory struct)
     pub key_history: KeyHistory,
 
-    /// Current hint being displayed
-    pub current_hint: Option<String>,
-
-    /// Whether to show hint panel
-    pub show_hint_panel: bool,
+    /// Hint panel state
+    pub hint: HintPanel,
 
     /// Last command executed (for display)
     pub last_command: Option<String>,
@@ -242,8 +264,7 @@ impl TaskData {
             session,
             input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
-            current_hint: None,
-            show_hint_panel: false,
+            hint: HintPanel::Hidden,
             last_command: None,
             scenario_index: None,
         }
@@ -259,8 +280,7 @@ impl TaskData {
             session,
             input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
-            current_hint: None,
-            show_hint_panel: false,
+            hint: HintPanel::Hidden,
             last_command: None,
             scenario_index: Some(index),
         }
@@ -490,11 +510,33 @@ pub enum NextStep {
     ArcadeMode,
 }
 
+/// Top-level mode choice on the mode selection screen
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TopMode {
+    /// Manual scenario selection
+    #[default]
+    Training,
+    /// Arcade mini-games
+    Arcade,
+}
+
+impl TopMode {
+    /// The mode above this one, or itself at the top
+    pub fn previous(self) -> Self {
+        Self::Training
+    }
+
+    /// The mode below this one, or itself at the bottom
+    pub fn next(self) -> Self {
+        Self::Arcade
+    }
+}
+
 /// Data required for mode selection screen
 #[derive(Debug, Clone, Default)]
 pub struct ModeSelectionData {
     /// Index of selected mode (0 = Training, 1 = Arcade)
-    pub selected_mode: usize,
+    pub selected_mode: TopMode,
 
     /// Mini-game mode selection state (when arcade is chosen)
     pub minigame_mode_selection: Option<MiniGameModeSelection>,

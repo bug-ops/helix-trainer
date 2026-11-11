@@ -39,10 +39,10 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
     frame.render_widget(&background, popup_area);
 
     // Render hint text inside popup
-    if let Some(hint) = &task_data.current_hint {
+    if let Some(hint) = task_data.hint.text() {
         let inner = inner_rect(popup_area);
 
-        let hint_text = Paragraph::new(hint.as_str())
+        let hint_text = Paragraph::new(hint)
             .wrap(Wrap { trim: true })
             .style(Style::default().fg(Color::Yellow))
             .alignment(Alignment::Center);

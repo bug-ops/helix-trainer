@@ -458,7 +458,7 @@ pub fn handle_task_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // arcade path); a second Escape then closes the panel.
     if key.code == KeyCode::Esc
         && let TypedScreen::Task(task_data) = &state.screen
-        && task_data.show_hint_panel
+        && task_data.hint.is_shown()
         && !is_gameplay_insert_mode(state)
     {
         return Some(Message::ShowHint);
@@ -1203,7 +1203,7 @@ mod tests {
             assert!(session.is_insert_mode());
 
             let mut task_data = TaskData::new(session);
-            task_data.show_hint_panel = true;
+            task_data.hint = crate::ui::state::HintPanel::Shown("hint".to_string());
             state.screen = TypedScreen::Task(task_data);
 
             let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
@@ -1223,7 +1223,7 @@ mod tests {
         fn test_escape_dismisses_hint_panel_in_normal_mode() {
             let mut state = create_test_app_state();
             let mut task_data = TaskData::new(make_active_task_session());
-            task_data.show_hint_panel = true;
+            task_data.hint = crate::ui::state::HintPanel::Shown("hint".to_string());
             state.screen = TypedScreen::Task(task_data);
 
             let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);

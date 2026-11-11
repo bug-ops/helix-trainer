@@ -10,7 +10,7 @@ use crate::ui::state::{Message, NavTarget, TypedScreen, update};
 fn test_new_state() {
     let state = create_test_app_state(vec![]);
     if let TypedScreen::ModeSelection(mode_data) = &state.screen {
-        assert_eq!(mode_data.selected_mode, 0);
+        assert_eq!(mode_data.selected_mode, crate::ui::state::TopMode::Training);
     } else {
         panic!("Should be on ModeSelection screen");
     }

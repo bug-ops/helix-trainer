@@ -24,7 +24,9 @@ pub(super) use profile::{
     handle_scroll_achievements, handle_show_achievements, handle_show_profile,
     handle_show_statistics,
 };
-pub(super) use quests::{format_quest_description, handle_update_quest_progress};
+pub(super) use quests::{
+    apply_quest_progress, format_quest_description, handle_update_quest_progress,
+};
 // Shared quest tracking functions for both training and arcade modes
 pub(super) use notifications::handle_cleanup_notifications;
 pub(super) use quests::{

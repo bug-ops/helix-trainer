@@ -145,10 +145,19 @@ fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
     }
 }
 
+/// What one quest-progress update changed
+#[derive(Debug)]
+pub struct QuestUpdate {
+    /// Quests whose progress moved, for the results display
+    pub changes: Vec<QuestProgressChange>,
+    /// XP granted for quests completed by this update
+    pub award: QuestXpAward,
+}
+
 /// Handle UpdateQuestProgress message
 ///
-/// Updates quest progress based on commands, scenario completions, or time.
-/// This is used by training mode through the Message system.
+/// Updates quest progress after a command; the per-update outcome is only needed at
+/// scenario completion, which calls [`apply_quest_progress`] directly.
 pub fn handle_update_quest_progress(
     state: &mut AppState,
     command: Option<String>,
@@ -156,8 +165,20 @@ pub fn handle_update_quest_progress(
     scenario_id: Option<String>,
     duration: Duration,
 ) -> Result<(), UserError> {
-    // Clear previous progress changes
-    state.ui.quest_progress_changes.clear();
+    apply_quest_progress(state, command, scenario_completed, scenario_id, duration);
+    Ok(())
+}
+
+/// Update quest progress based on commands, scenario completions, or time, and return what
+/// changed so callers can hand it on by value.
+pub fn apply_quest_progress(
+    state: &mut AppState,
+    command: Option<String>,
+    scenario_completed: bool,
+    scenario_id: Option<String>,
+    duration: Duration,
+) -> QuestUpdate {
+    let mut changes = Vec::new();
 
     // Snapshot progress BEFORE updates
     let progress_before: HashMap<String, u32> = {
@@ -200,7 +221,7 @@ pub fn handle_update_quest_progress(
             let new = get_quest_current_progress(&quest.quest_type);
 
             if new > old {
-                state.ui.quest_progress_changes.push(QuestProgressChange {
+                changes.push(QuestProgressChange {
                     quest_description: super::format_quest_description(&quest.quest_type),
                     old_progress: old,
                     new_progress: new,
@@ -212,10 +233,8 @@ pub fn handle_update_quest_progress(
     // Award XP for newly completed quests, keeping the breakdown and level-up outcome
     // for the caller (results display, level-up notification/save)
     let award = award_quest_completion_xp(state, &was_completed);
-    state.ui.quest_xp_bonuses = award.bonuses;
-    state.ui.quest_leveled_up = award.leveled_up;
 
-    Ok(())
+    QuestUpdate { changes, award }
 }
 
 /// Format quest type as readable description

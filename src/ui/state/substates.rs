@@ -17,7 +17,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 
-use super::{MasteryInfo, QuestBonus, QuestProgressChange, XPBreakdown};
 use crate::ui::notification::NotificationQueue;
 
 /// UI rendering and display state
@@ -38,27 +37,6 @@ pub struct UIState {
     /// Feedback storage for transition to results screen
     pub last_feedback: Option<crate::game::Feedback>,
 
-    /// XP breakdown for results display
-    pub xp_breakdown: Option<XPBreakdown>,
-
-    /// Quest progress changes for results display
-    pub quest_progress_changes: Vec<QuestProgressChange>,
-
-    /// Quest XP bonuses awarded by the most recent `award_quest_completion_xp` call
-    /// (description, xp), for results display. Sourced directly from the function that
-    /// actually applies the XP to the profile, so this can never diverge from
-    /// `profile.total_xp` the way a separately re-derived "newly completed" detector can.
-    pub quest_xp_bonuses: Vec<QuestBonus>,
-
-    /// Whether the most recent `award_quest_completion_xp` call, on its own, crossed an
-    /// account level-up threshold. Callers that also add other XP in the same operation
-    /// (e.g. scenario completion) must OR this into their own `add_xp` level-up check,
-    /// since quest XP and scenario XP are applied via separate `add_xp` calls.
-    pub quest_leveled_up: bool,
-
-    /// Scenario mastery info for results display
-    pub scenario_mastery: Option<MasteryInfo>,
-
     /// Notification queue for transient messages (level-up, achievements, etc.)
     pub notifications: NotificationQueue,
 
@@ -77,11 +55,6 @@ impl UIState {
             show_key_history: true,
             completion_time: None,
             last_feedback: None,
-            xp_breakdown: None,
-            quest_progress_changes: Vec::new(),
-            quest_xp_bonuses: Vec::new(),
-            quest_leveled_up: false,
-            scenario_mastery: None,
             notifications: NotificationQueue::new(),
             last_menu_selected: 0,
             last_menu_scroll: 0,
@@ -91,11 +64,6 @@ impl UIState {
     /// Clear results data after transitioning away from results screen
     pub fn clear_temp_results(&mut self) {
         self.last_feedback = None;
-        self.xp_breakdown = None;
-        self.quest_progress_changes.clear();
-        self.quest_xp_bonuses.clear();
-        self.quest_leveled_up = false;
-        self.scenario_mastery = None;
     }
 }
 

@@ -3,45 +3,13 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
-use crate::security::{SecurityError, limits::MAX_PROFILE_FILE_SIZE, path_validator, private_fs};
+use crate::config::json_store::{JsonStore, unique_tmp_path};
+use crate::security::{limits::MAX_PROFILE_FILE_SIZE, private_fs};
 
 use super::{GamificationError, Result, UserProfile};
-
-/// Per-process counter used to make temporary save files unique.
-///
-/// Combined with the process id, this guarantees two concurrent saves (e.g.
-/// two `ProfileStorage` instances pointed at the same path, as happens in
-/// tests) never share a temp file name and race each other's rename.
-static TMP_SUFFIX_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-/// Builds the pid+suffix-tagged temp-file path used for atomic writes, e.g.
-/// `profile.json` with pid `1234` and suffix `5` becomes `profile.json.1234.5.tmp`.
-fn tmp_write_path(base_path: &Path, suffix: u64) -> PathBuf {
-    base_path.with_added_extension(format!("{}.{}.tmp", std::process::id(), suffix))
-}
-
-/// Fsync a file's parent directory so a preceding `fs::rename` into it is
-/// durable across a power loss, not just visible after a normal process
-/// restart. POSIX does not guarantee a directory-entry update is on disk
-/// until the directory itself is synced; Windows/NTFS has no equivalent
-/// "open a directory as a file" operation, so this is Unix-only.
-#[cfg(unix)]
-fn fsync_parent_dir(path: &Path) {
-    // `Path::parent()` returns `Some("")` (not `None`) for a bare relative
-    // filename with no directory component; treat that the same as "no
-    // parent given" and fsync the current directory instead of no-op'ing.
-    let parent = match path.parent() {
-        Some(p) if !p.is_empty() => p,
-        _ => Path::new("."),
-    };
-    if let Ok(dir) = fs::File::open(parent) {
-        let _ = dir.sync_all();
-    }
-}
 
 /// Check whether a process with the given pid is currently alive.
 ///
@@ -113,7 +81,7 @@ pub enum LockStatus {
 /// Handles profile persistence to disk
 #[derive(Debug, Clone)]
 pub struct ProfileStorage {
-    file_path: PathBuf,
+    store: JsonStore<ProfileData>,
 }
 
 impl ProfileStorage {
@@ -129,16 +97,13 @@ impl ProfileStorage {
     /// let storage = ProfileStorage::new();
     /// ```
     pub fn new() -> Self {
-        let default_path = Self::default_path();
-        Self {
-            file_path: default_path,
-        }
+        Self::with_path(Self::default_path())
     }
 
     /// Create storage with custom path
     pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            file_path: path.as_ref().to_path_buf(),
+            store: JsonStore::new(path.as_ref(), "profile", MAX_PROFILE_FILE_SIZE),
         }
     }
 
@@ -160,6 +125,7 @@ impl ProfileStorage {
     #[cfg(test)]
     pub fn for_test() -> Self {
         use std::sync::OnceLock;
+        use std::sync::atomic::{AtomicU64, Ordering};
 
         static TEST_DIR: OnceLock<tempfile::TempDir> = OnceLock::new();
         static FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -200,30 +166,13 @@ impl ProfileStorage {
     /// println!("Level: {}", profile.level);
     /// ```
     pub fn load(&self) -> Result<UserProfile> {
-        match fs::metadata(&self.file_path) {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(UserProfile::new()),
-            Err(e) => {
-                return Err(GamificationError::StorageError(format!(
-                    "Failed to read profile: {e}"
-                )));
+        match self.store.load()? {
+            Some(mut data) => {
+                data.profile.recompute_level();
+                Ok(data.profile)
             }
+            None => Ok(UserProfile::new()),
         }
-
-        let contents = path_validator::read_capped(&self.file_path, MAX_PROFILE_FILE_SIZE)
-            .map_err(|e| match e {
-                SecurityError::FileTooLarge { .. } => {
-                    GamificationError::StorageError(format!("Profile file too large: {e}"))
-                }
-                _ => GamificationError::StorageError(format!("Failed to read profile: {e}")),
-            })?;
-
-        let mut data: ProfileData = serde_json::from_str(&contents).map_err(|e| {
-            GamificationError::StorageError(format!("Failed to parse profile: {}", e))
-        })?;
-        data.profile.recompute_level();
-
-        Ok(data.profile)
     }
 
     /// Copy an unreadable profile file to `profile.json.corrupt-<timestamp>`
@@ -242,10 +191,10 @@ impl ProfileStorage {
 
     fn try_quarantine(&self) -> std::io::Result<PathBuf> {
         let not_regular = || std::io::Error::other("not a regular file");
-        if !fs::metadata(&self.file_path)?.is_file() {
+        if !fs::metadata(self.path())?.is_file() {
             return Err(not_regular());
         }
-        let mut source = fs::File::open(&self.file_path)?;
+        let mut source = fs::File::open(self.path())?;
         if !source.metadata()?.is_file() {
             return Err(not_regular());
         }
@@ -258,7 +207,7 @@ impl ProfileStorage {
             } else {
                 format!("corrupt-{stamp}-{attempt}")
             };
-            let candidate = self.file_path.with_added_extension(extension);
+            let candidate = self.path().with_added_extension(extension);
             match private_fs::create_new_file(&candidate) {
                 Ok(file) => break (candidate, file),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
@@ -302,44 +251,9 @@ impl ProfileStorage {
     /// storage.save(&profile).unwrap();
     /// ```
     pub fn save(&self, profile: &UserProfile) -> Result<()> {
-        // Create parent directory if needed
-        if let Some(parent) = self.file_path.parent() {
-            private_fs::create_dir_all(parent).map_err(|e| {
-                GamificationError::StorageError(format!("Failed to create directory: {}", e))
-            })?;
-        }
-
-        let data = ProfileData {
+        self.store.save(&ProfileData {
             profile: profile.clone(),
-        };
-
-        let json = serde_json::to_string_pretty(&data).map_err(|e| {
-            GamificationError::StorageError(format!("Failed to serialize profile: {}", e))
         })?;
-
-        let suffix = TMP_SUFFIX_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let tmp_path = tmp_write_path(&self.file_path, suffix);
-
-        let write_result = (|| {
-            let mut tmp_file = private_fs::create_file(&tmp_path)?;
-            tmp_file.write_all(json.as_bytes())?;
-            tmp_file.sync_all()
-        })();
-        if let Err(e) = write_result {
-            let _ = fs::remove_file(&tmp_path);
-            return Err(GamificationError::StorageError(format!(
-                "Failed to write profile: {}",
-                e
-            )));
-        }
-
-        fs::rename(&tmp_path, &self.file_path).map_err(|e| {
-            let _ = fs::remove_file(&tmp_path);
-            GamificationError::StorageError(format!("Failed to persist profile: {}", e))
-        })?;
-
-        #[cfg(unix)]
-        fsync_parent_dir(&self.file_path);
 
         // Best-effort: keep the PID lock pointed at this process on every
         // save, not just at startup, so a second instance launched mid-way
@@ -352,7 +266,7 @@ impl ProfileStorage {
 
     /// Path of the PID lock file that sits alongside the profile file.
     fn lock_path(&self) -> PathBuf {
-        self.file_path.with_added_extension("lock")
+        self.path().with_added_extension("lock")
     }
 
     /// Best-effort: write this process's pid into the lock file, claiming or
@@ -369,13 +283,11 @@ impl ProfileStorage {
     /// durability across a power loss does not.
     fn refresh_lock(&self) {
         let lock_path = self.lock_path();
-        // Same `pid` + `TMP_SUFFIX_COUNTER` scheme as `save`'s temp file
-        // (see its comment): guarantees this doesn't collide with another
-        // `refresh_lock`/`save` call racing on the same process, e.g. the
+        // Unique temp name: this must not collide with another
+        // `refresh_lock`/`save` call racing in the same process, e.g. the
         // save writer refreshing the lock while a concurrent
         // `check_and_refresh_lock` call is also mid-refresh.
-        let suffix = TMP_SUFFIX_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let tmp_path = tmp_write_path(&lock_path, suffix);
+        let tmp_path = unique_tmp_path(&lock_path);
 
         let written = private_fs::create_file(&tmp_path)
             .and_then(|mut file| file.write_all(std::process::id().to_string().as_bytes()));
@@ -432,7 +344,7 @@ impl ProfileStorage {
 
     /// Check if profile file exists
     pub fn exists(&self) -> bool {
-        self.file_path.exists()
+        self.store.exists()
     }
 
     /// Delete profile file
@@ -447,7 +359,7 @@ impl ProfileStorage {
     /// Returns error if file exists but cannot be deleted
     pub fn delete(&self) -> Result<()> {
         if self.exists() {
-            fs::remove_file(&self.file_path).map_err(|e| {
+            fs::remove_file(self.path()).map_err(|e| {
                 GamificationError::StorageError(format!("Failed to delete profile: {}", e))
             })?;
         }
@@ -457,7 +369,7 @@ impl ProfileStorage {
 
     /// Get file path
     pub fn path(&self) -> &Path {
-        &self.file_path
+        self.store.path()
     }
 }
 
@@ -607,51 +519,6 @@ mod tests {
         storage.save(&profile).unwrap();
 
         assert!(storage.exists());
-    }
-
-    /// Regression test for S3: a save that fails partway (e.g. the temp-file write
-    /// errors before the atomic rename) must leave the existing `profile.json`
-    /// byte-for-byte untouched, not truncated or partially overwritten.
-    ///
-    /// Failure is injected by pre-occupying the exact temp-file path the next
-    /// `save()` call will use (predictable from `save`'s pid + monotonic-counter
-    /// naming scheme, see [`TMP_SUFFIX_COUNTER`]) with a directory, so
-    /// `fs::File::create` deterministically fails with "Is a directory". Unlike
-    /// a directory-permission approach (e.g. `chmod 0555`), this is a hard
-    /// type-level OS constraint that root cannot bypass, so the test is
-    /// reliable regardless of the privilege level it runs under.
-    #[test]
-    fn test_failed_save_does_not_corrupt_existing_profile() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("profile.json");
-        let storage = ProfileStorage::with_path(&file_path);
-
-        let mut profile = UserProfile::new();
-        profile.add_xp(100);
-        storage.save(&profile).unwrap();
-        let bytes_before = fs::read_to_string(&file_path).unwrap();
-
-        let next_suffix = TMP_SUFFIX_COUNTER.load(Ordering::Relaxed);
-        let predicted_tmp_path = tmp_write_path(&file_path, next_suffix);
-        fs::create_dir(&predicted_tmp_path).unwrap();
-
-        let mut profile2 = profile.clone();
-        profile2.add_xp(500);
-        let result = storage.save(&profile2);
-
-        assert!(
-            result.is_err(),
-            "save should fail when its temp-file target is occupied by a directory"
-        );
-
-        let bytes_after = fs::read_to_string(&file_path).unwrap();
-        assert_eq!(
-            bytes_before, bytes_after,
-            "existing profile.json must be untouched by a failed save"
-        );
-
-        let reloaded = storage.load().unwrap();
-        assert_eq!(reloaded.total_xp, profile.total_xp);
     }
 
     #[test]

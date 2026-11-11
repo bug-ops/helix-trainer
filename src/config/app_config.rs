@@ -5,13 +5,13 @@
 //! directory (`dirs::config_dir()`: `~/.config` on Linux,
 //! `~/Library/Application Support` on macOS, `%AppData%` on Windows).
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::security::{limits::MAX_CONFIG_FILE_SIZE, path_validator, private_fs};
+use super::json_store::JsonStore;
+use crate::security::limits::MAX_CONFIG_FILE_SIZE;
 
 /// Application configuration
 ///
@@ -58,8 +58,9 @@ struct ConfigData {
 }
 
 /// Handles configuration persistence to disk
+#[derive(Debug, Clone)]
 pub struct ConfigStorage {
-    file_path: PathBuf,
+    store: JsonStore<ConfigData>,
 }
 
 impl ConfigStorage {
@@ -75,16 +76,13 @@ impl ConfigStorage {
     /// let storage = ConfigStorage::new();
     /// ```
     pub fn new() -> Self {
-        let default_path = Self::default_path();
-        Self {
-            file_path: default_path,
-        }
+        Self::with_path(Self::default_path())
     }
 
     /// Create storage with custom path
     pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            file_path: path.as_ref().to_path_buf(),
+            store: JsonStore::new(path.as_ref(), "config", MAX_CONFIG_FILE_SIZE),
         }
     }
 
@@ -115,22 +113,17 @@ impl ConfigStorage {
     /// let config = storage.load().unwrap();
     /// ```
     pub fn load(&self) -> Result<AppConfig> {
-        if !self.file_path.exists() {
-            return Ok(AppConfig::default());
-        }
-
-        let contents = path_validator::read_capped(&self.file_path, MAX_CONFIG_FILE_SIZE)
-            .map_err(|e| anyhow::anyhow!("Failed to read config file: {e}"))?;
-
-        let data: ConfigData =
-            serde_json::from_str(&contents).context("Failed to parse config JSON")?;
-
-        Ok(data.config)
+        Ok(self
+            .store
+            .load()?
+            .map(|data| data.config)
+            .unwrap_or_default())
     }
 
     /// Save configuration to disk
     ///
-    /// Creates parent directory if needed
+    /// Atomically replaces the file (temporary file, `fsync`, rename) and
+    /// creates the parent directory if needed.
     ///
     /// # Errors
     ///
@@ -146,32 +139,19 @@ impl ConfigStorage {
     /// storage.save(&config).unwrap();
     /// ```
     pub fn save(&self, config: &AppConfig) -> Result<()> {
-        // Create parent directory if needed
-        if let Some(parent) = self.file_path.parent() {
-            private_fs::create_dir_all(parent).context("Failed to create config directory")?;
-        }
-
-        let data = ConfigData {
+        Ok(self.store.save(&ConfigData {
             config: config.clone(),
-        };
-
-        let json = serde_json::to_string_pretty(&data).context("Failed to serialize config")?;
-
-        private_fs::create_file(&self.file_path)
-            .and_then(|mut file| file.write_all(json.as_bytes()))
-            .context("Failed to write config file")?;
-
-        Ok(())
+        })?)
     }
 
     /// Check if config file exists
     pub fn exists(&self) -> bool {
-        self.file_path.exists()
+        self.store.exists()
     }
 
     /// Get file path
     pub fn path(&self) -> &Path {
-        &self.file_path
+        self.store.path()
     }
 }
 

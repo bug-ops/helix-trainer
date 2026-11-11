@@ -48,4 +48,10 @@ pub enum GamificationError {
     AchievementAlreadyUnlocked(AchievementId),
 }
 
+impl From<crate::config::json_store::JsonStoreError> for GamificationError {
+    fn from(e: crate::config::json_store::JsonStoreError) -> Self {
+        Self::StorageError(e.to_string())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, GamificationError>;

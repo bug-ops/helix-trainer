@@ -684,15 +684,25 @@ impl ProfileStorage {
                 source,
             })?;
         }
-        let _ = fs::remove_file(self.previous_path());
+        remove_companion_file(&self.previous_path(), "previous profile copy");
         *self.held_last_valid() = None;
-        let _ = fs::remove_file(self.lock_path());
+        remove_companion_file(&self.lock_path(), "lock file");
         Ok(())
     }
 
     /// Get file path
     pub fn path(&self) -> &Path {
         self.store.path()
+    }
+}
+
+/// Best-effort removal of a file kept next to the profile: a missing file is fine, any other
+/// failure is logged (the I/O message carries no path) and does not fail the caller.
+fn remove_companion_file(path: &Path, what: &str) {
+    if let Err(e) = fs::remove_file(path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!(error = %crate::security::error_chain(&e), "Failed to remove the {what}");
     }
 }
 
@@ -1668,6 +1678,20 @@ mod tests {
 
         assert!(!previous_exists(&storage));
         assert!(!storage.exists());
+    }
+
+    #[test]
+    fn delete_survives_an_unremovable_companion_file() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        let previous = storage.path().with_added_extension("prev");
+        fs::create_dir(&previous).unwrap();
+
+        storage.delete().unwrap();
+
+        assert!(!storage.exists());
+        assert!(previous.is_dir(), "the unremovable entry is left alone");
     }
 
     #[test]

@@ -19,14 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Breaking**: the app exits with code 1 without an absolute config directory instead of falling back to the current directory; `ProfileStorage::new`, `ConfigStorage::new` and their `Default` are removed and `DataDir::resolve` returns `Option` (#PR)
-- **Breaking**: typed `StorageError`, `LoaderError` and `SaveFailure` replace `JsonStoreError`, `GamificationError::StorageError` and string/anyhow errors in the library API; `UserError` keeps a typed `ErrorCause` and `spawn_data_loaders` takes the app's `ProfileStorage` (#PR)
+- **Breaking**: persistence and loader errors are typed (`StorageError`, `LoaderError`, `SaveFailure`) and `UserError` keeps its `ErrorCause` (#PR)
 - **Breaking**: `ReviewableCommand` is now `CommandId` (card ids only), scenario, quest and command ids are newtypes, `CommandPerformance.command` is removed and `ScenarioHistory` ids follow the `ScenarioId` rule (#PR)
 - Command names longer than 64 bytes no longer create FSRS cards (#PR)
 - Arcade prioritization keys scenario commands by real FSRS cards, so Insert-mode text and raw tokens such as `3h` no longer count as commands (#PR)
-- fsrs is bumped to 7 (FSRS-6 parameters kept, results within 1e-6 of 6.6) and syntect uses the pure-Rust `regex-fancy` backend; the first highlight of a language is slower (about 30 ms, markdown about 150 ms) (#PR)
+- fsrs is bumped to 7 and syntect uses the pure-Rust `regex-fancy` backend, which makes the first highlight of a language slower (#PR)
 - Failed-save notifications no longer include the error text; details go to the log (#PR)
 - Commands and abandon are ignored during the success animation; render no longer mutates state and list selection is normalized after every update (#PR)
-- Helix simulator: Select mode extends for search and paragraph motions, indent unit is auto-detected, `&` aligns by display width, `J` strips comment tokens and `o`/`O`/Enter derive indent per language (#PR)
+- Helix simulator follows Helix 25.07.1 for Select-mode extension, indent unit detection, `&`, `J` and newline indent (#PR)
 - `[lints.clippy]` allow-list reduced to six entries with reasons; `assert_is_empty`, `match_same_arms`, `similar_names` and `too_many_lines` remain as a deferred residual (#PR)
 - CI: dependabot auto-merge gates on the PR author; cargo-deny config cleaned up (#PR)
 - **Breaking**: F1 is the only hint key and `?` is no longer reserved; typed `?` reaches Insert mode and prompts (#526)

@@ -8,7 +8,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::handlers::{gameplay_input_state, handle_gameplay_key, is_gameplay_insert_mode};
-use super::typestate::InputState;
+use crate::input::typestate::InputState;
 use crate::ui::state::TypedScreen;
 use crate::ui::{AppState, Message};
 

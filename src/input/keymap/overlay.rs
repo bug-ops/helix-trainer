@@ -12,7 +12,7 @@ use super::keys::{CanonicalKeys, PhysicalKey};
 ///
 /// Built once at startup by `src/config/keymap/parse.rs` from the user's
 /// Helix `config.toml`, then consulted on every gameplay keypress in
-/// `src/input/handlers.rs::handle_gameplay_input`. The overlay *overrides*,
+/// `src/ui/key_dispatch/handlers.rs::handle_gameplay_input`. The overlay *overrides*,
 /// it never removes: a miss simply falls through to the stock keymap, so
 /// unbound stock keys keep working exactly as before (this is Helix's own
 /// layering behavior).

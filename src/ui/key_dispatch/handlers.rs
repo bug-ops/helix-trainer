@@ -26,7 +26,7 @@ use crate::input::keymap::{CanonicalKeys, PhysicalKey};
 use crate::ui::state::InputStateAccess;
 use crate::ui::{AppState, Message, NavTarget, state::TypedScreen};
 
-use super::typestate::{
+use crate::input::typestate::{
     InputStateMachine, handle_insert_mode_input, map_key_to_helix_command, normalize_key_event,
 };
 
@@ -1050,7 +1050,7 @@ mod tests {
     mod ctrl_c_tests {
         use super::*;
         use crate::helix::commands::{CMD_ESCAPE, CMD_INSERT, CMD_TOGGLE_COMMENTS};
-        use crate::input::handle_key_event;
+        use crate::ui::key_dispatch::handle_key_event;
 
         fn ctrl_c() -> KeyEvent {
             KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)

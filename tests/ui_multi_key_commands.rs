@@ -560,7 +560,7 @@ fn test_command_line_escape_cancels_buffer() {
 #[test]
 fn test_ctrl_c_toggle_comments_on_task_screen_keeps_the_selection_valid() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use helix_trainer::input::handle_key_event;
+    use helix_trainer::ui::handle_key_event;
 
     let scenario = create_test_scenario("test_ctrl_c", "// a\n", (0, 0), "unreachable", (0, 0));
     let mut state = create_test_app_state(vec![scenario]);

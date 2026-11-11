@@ -2,7 +2,7 @@
 //! keys according to the user's Helix `config.toml`.
 //!
 //! Translation happens once, at the `KeyEvent` boundary in
-//! `src/input/handlers.rs::handle_gameplay_input`, using [`PhysicalKey`] as
+//! `src/ui/key_dispatch/handlers.rs::handle_gameplay_input`, using [`PhysicalKey`] as
 //! the sole lookup key. Everything downstream of that point — the
 //! registry, FSRS card ids, quest matching, scenario `solution` — keeps
 //! working with canonical key strings and needs no awareness of remapping.

@@ -136,7 +136,7 @@ fn render_playing(
 
     // Title + controls, with live feedback for an in-progress '"'-register
     // selection or ':'-command-line buffer (both live in Arcade mode too -
-    // see the Esc-cancel and reset_input_state wiring in input/handlers.rs).
+    // see the Esc-cancel and reset_input_state wiring in ui/key_dispatch/handlers.rs).
     let pending_text = super::helpers::pending_input_indicator(input_state);
     let mut title_spans = vec![
         Span::styled(

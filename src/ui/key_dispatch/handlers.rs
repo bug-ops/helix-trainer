@@ -2089,7 +2089,10 @@ mod tests {
                 &mut state,
                 KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
             );
-            assert!(input_state(&state).is_count_pending());
+            assert_matches!(
+                input_state(&state),
+                crate::input::typestate::InputState::CountPending { .. }
+            );
 
             // Must not panic (this is the regression under test) and must
             // fall through to the stock key: "3" + "G" is the counted

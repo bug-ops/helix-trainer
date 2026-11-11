@@ -33,16 +33,6 @@ impl HandlerResult {
         matches!(self, Self::Transition(_))
     }
 
-    /// Check if this result indicates command execution
-    pub fn is_execute(&self) -> bool {
-        matches!(self, Self::Execute(_))
-    }
-
-    /// Check if this result indicates cancellation
-    pub fn is_cancel(&self) -> bool {
-        matches!(self, Self::Cancel)
-    }
-
     /// Get the command to execute, if any
     pub fn command(&self) -> Option<&NormalCommand> {
         match self {

@@ -277,27 +277,15 @@ fn violations_in(module: &str, source: &str) -> Result<Vec<String>, String> {
     Ok(found)
 }
 
-/// Declared `mod` items of `source` that are not test-only, with their `#[path]`.
-fn declared_modules(source: &str) -> Result<Vec<(String, Option<String>)>, String> {
+/// Declared `mod` items of `source` that are not test-only.
+fn declared_modules(source: &str) -> Result<Vec<String>, String> {
     let file = syn::parse_file(source).map_err(|e| format!("cannot parse source: {e}"))?;
     Ok(file
         .items
         .iter()
         .filter_map(|item| match item {
             Item::Mod(item_mod) if item_mod.content.is_none() && !has_cfg_test(&item_mod.attrs) => {
-                let path = item_mod.attrs.iter().find_map(|attr| {
-                    attr.path().is_ident("path").then(|| match &attr.meta {
-                        Meta::NameValue(nv) => match &nv.value {
-                            Expr::Lit(lit) => match &lit.lit {
-                                syn::Lit::Str(s) => Some(s.value()),
-                                _ => None,
-                            },
-                            _ => None,
-                        },
-                        _ => None,
-                    })?
-                });
-                Some((item_mod.ident.to_string(), path))
+                Some(item_mod.ident.to_string())
             }
             _ => None,
         })
@@ -336,8 +324,7 @@ fn child_file(parent: &Path, name: &str) -> PathBuf {
 fn module_tree(file: &Path, out: &mut Vec<PathBuf>) {
     out.push(file.to_path_buf());
     let source = read(file);
-    for (name, _) in declared_modules(&source).unwrap_or_else(|e| panic!("{}: {e}", file.display()))
-    {
+    for name in declared_modules(&source).unwrap_or_else(|e| panic!("{}: {e}", file.display())) {
         let child = child_file(file, &name);
         assert!(
             child.exists(),
@@ -354,7 +341,6 @@ fn bin_modules() -> BTreeSet<String> {
     declared_modules(&read(&main))
         .unwrap_or_else(|e| panic!("main.rs: {e}"))
         .into_iter()
-        .map(|(name, _)| name)
         .collect()
 }
 
@@ -366,7 +352,7 @@ fn the_library_obeys_the_layer_order() {
 
     let mut broken = Vec::new();
     let mut seen_allowed = BTreeSet::new();
-    for (module, _) in lib_modules {
+    for module in lib_modules {
         if bin.contains(&module) {
             continue;
         }
@@ -402,7 +388,7 @@ fn the_library_obeys_the_layer_order() {
 fn every_library_module_has_a_rank() {
     let lib = read(&src_dir().join("lib.rs"));
     let bin = bin_modules();
-    for (module, _) in declared_modules(&lib).expect("lib.rs parses") {
+    for module in declared_modules(&lib).expect("lib.rs parses") {
         assert!(
             bin.contains(&module) || rank_of(&module).is_some(),
             "module `{module}` has no rank in layering_tests.rs"

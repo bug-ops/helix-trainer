@@ -10,13 +10,9 @@ fn test_handler_result_predicates() {
     assert!(!HandlerResult::Stay.is_transition());
 
     assert!(HandlerResult::Transition(InputState::GotoPending).is_transition());
-    assert!(!HandlerResult::Transition(InputState::GotoPending).is_execute());
 
-    assert!(HandlerResult::Execute(normal("gg")).is_execute());
     assert_eq!(
         HandlerResult::Execute(normal("gg")).command(),
         Some(&normal("gg"))
     );
-
-    assert!(HandlerResult::Cancel.is_cancel());
 }

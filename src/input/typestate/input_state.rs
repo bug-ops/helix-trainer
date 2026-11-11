@@ -94,41 +94,6 @@ impl InputState {
         matches!(self, Self::Base)
     }
 
-    /// Check if this is goto pending state
-    pub fn is_goto_pending(&self) -> bool {
-        matches!(self, Self::GotoPending)
-    }
-
-    /// Check if this is view pending state
-    pub fn is_view_pending(&self) -> bool {
-        matches!(self, Self::ViewPending)
-    }
-
-    /// Check if this is match pending state
-    pub fn is_match_pending(&self) -> bool {
-        matches!(self, Self::MatchPending)
-    }
-
-    /// Check if this is find char pending state
-    pub fn is_find_char_pending(&self) -> bool {
-        matches!(self, Self::FindCharPending { .. })
-    }
-
-    /// Check if this is replace char pending state
-    pub fn is_replace_char_pending(&self) -> bool {
-        matches!(self, Self::ReplaceCharPending)
-    }
-
-    /// Check if this is count pending state
-    pub fn is_count_pending(&self) -> bool {
-        matches!(self, Self::CountPending { .. })
-    }
-
-    /// Check if this is a regex-selection prompt pending state
-    pub fn is_regex_prompt_pending(&self) -> bool {
-        matches!(self, Self::RegexPromptPending { .. })
-    }
-
     /// Check if this state is waiting for a character argument
     pub fn is_waiting_for_char(&self) -> bool {
         matches!(
@@ -148,35 +113,6 @@ impl InputState {
     /// Check if this state is a prefix state (waiting for more input)
     pub fn is_prefix_state(&self) -> bool {
         !matches!(self, Self::Base)
-    }
-
-    /// Check if this is a surround pending state
-    pub fn is_surround_pending(&self) -> bool {
-        matches!(
-            self,
-            Self::SurroundAddPending
-                | Self::SurroundDeletePending
-                | Self::SurroundReplaceFromPending
-                | Self::SurroundReplaceToPending { .. }
-        )
-    }
-
-    /// Check if this is a text object pending state (waiting for text object type)
-    pub fn is_text_object_pending(&self) -> bool {
-        matches!(
-            self,
-            Self::TextObjectAroundPending | Self::TextObjectInsidePending
-        )
-    }
-
-    /// Check if this is unmatched prev pending state
-    pub fn is_unmatched_prev_pending(&self) -> bool {
-        matches!(self, Self::UnmatchedPrevPending)
-    }
-
-    /// Check if this is unmatched next pending state
-    pub fn is_unmatched_next_pending(&self) -> bool {
-        matches!(self, Self::UnmatchedNextPending)
     }
 
     /// Which [`KeyContext`] this state's next keypress should be translated

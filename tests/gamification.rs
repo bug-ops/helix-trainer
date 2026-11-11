@@ -42,10 +42,9 @@ fn test_complete_user_flow() {
     QuestTracker::update_command_progress(&mut quests, &ncmd("x"));
 
     // Check if any quests completed
-    let completions = QuestTracker::check_completions(&quests);
-    if let Some((quest_id, xp_reward)) = completions.first() {
-        profile.add_xp(u64::from(*xp_reward));
-        profile.complete_quest(quest_id.clone());
+    if let Some(quest) = quests.iter().find(|quest| quest.is_completed()) {
+        profile.add_xp(u64::from(quest.xp_reward));
+        profile.complete_quest(quest.id.clone());
     }
 
     // Update streak

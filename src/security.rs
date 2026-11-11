@@ -615,8 +615,6 @@ pub mod validators {
 
 /// Content sanitization utilities
 pub mod sanitizer {
-    use super::SecurityError;
-    use crate::limits;
     use std::path::Path;
 
     /// Sanitizes string for terminal output
@@ -627,43 +625,12 @@ pub mod sanitizer {
             .collect()
     }
 
-    /// Sanitizes file content
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SecurityError::InvalidContent`] if `content` contains a null byte,
-    /// [`SecurityError::ContentTooLarge`] if it exceeds the size limit, or
-    /// [`SecurityError::InvalidEncoding`] if it is not valid UTF-8.
-    pub fn sanitize_content(content: &str) -> Result<String, SecurityError> {
-        // Check for null bytes
-        if content.contains('\0') {
-            return Err(SecurityError::InvalidContent);
-        }
-
-        // Check for excessive size
-        if content.len() > limits::MAX_FILE_CONTENT_LENGTH {
-            return Err(SecurityError::ContentTooLarge {
-                max: limits::MAX_FILE_CONTENT_LENGTH,
-                actual: content.len(),
-            });
-        }
-
-        // Validate UTF-8
-        String::from_utf8(content.as_bytes().to_vec()).map_err(|_| SecurityError::InvalidEncoding)
-    }
-
     /// Sanitizes path for logging (only shows filename)
     pub fn sanitize_path_for_logging(path: &Path) -> String {
         path.file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("[redacted]")
             .to_string()
-    }
-
-    /// Removes ANSI escape sequences
-    pub fn remove_ansi_codes(input: &str) -> String {
-        // Simple implementation - for production use regex crate
-        input.chars().filter(|c| *c != '\x1b').collect()
     }
 }
 
@@ -809,26 +776,6 @@ mod tests {
     }
 
     #[test]
-    fn test_content_sanitization() {
-        // Valid content
-        assert!(sanitizer::sanitize_content("Hello, World!").is_ok());
-
-        // Null bytes
-        assert!(sanitizer::sanitize_content("Hello\0World").is_err());
-
-        // Too large
-        let huge = "A".repeat(200_000);
-        assert!(sanitizer::sanitize_content(&huge).is_err());
-    }
-
-    #[test]
-    fn test_content_sanitization_valid_unicode() {
-        // Valid Unicode should pass
-        assert!(sanitizer::sanitize_content("Hello, Welt!").is_ok());
-        assert!(sanitizer::sanitize_content("fn main() {}").is_ok());
-    }
-
-    #[test]
     fn test_terminal_output_sanitization() {
         let input = "Hello\x1b[31mWorld\x1b[0m";
         let output = sanitizer::sanitize_terminal_output(input);
@@ -858,15 +805,6 @@ mod tests {
         let path = Path::new("/");
         let sanitized = sanitizer::sanitize_path_for_logging(path);
         assert_eq!(sanitized, "[redacted]");
-    }
-
-    #[test]
-    fn test_remove_ansi_codes() {
-        let input = "Hello\x1bWorld";
-        let output = sanitizer::remove_ansi_codes(input);
-        assert!(!output.contains('\x1b'));
-        assert!(output.contains("Hello"));
-        assert!(output.contains("World"));
     }
 
     #[test]

@@ -8,6 +8,7 @@ use helix_trainer::config::{
 };
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::input::keymap::CanonicalKeys;
+use helix_trainer::input::typestate::InputState;
 use helix_trainer::learning::PerformanceTracker;
 use helix_trainer::security::UserError;
 use helix_trainer::ui::state::{InputStateAccess, MenuData, TypedScreen};
@@ -117,8 +118,9 @@ fn test_replace_command_multi_key() {
 
     // Check that input state is ReplaceCharPending and command hasn't executed yet
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(
-            task_data.input_state().state().is_replace_char_pending(),
+        assert_matches!(
+            task_data.input_state().state(),
+            InputState::ReplaceCharPending,
             "Expected ReplaceCharPending state after 'r', got {:?}",
             task_data.input_state().state()
         );
@@ -168,8 +170,9 @@ fn test_unparsable_key_token_is_dropped_and_keeps_the_pending_state() {
     let TypedScreen::Task(task_data) = &state.screen else {
         panic!("Should be on Task screen");
     };
-    assert!(
-        task_data.input_state().state().is_find_char_pending(),
+    assert_matches!(
+        task_data.input_state().state(),
+        InputState::FindCharPending { .. },
         "got {:?}",
         task_data.input_state().state()
     );
@@ -243,8 +246,9 @@ fn test_gg_command_multi_key() {
     update(&mut state, exec("g")).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(
-            task_data.input_state().state().is_goto_pending(),
+        assert_matches!(
+            task_data.input_state().state(),
+            InputState::GotoPending,
             "Expected GotoPending state after 'g', got {:?}",
             task_data.input_state().state()
         );
@@ -278,8 +282,9 @@ fn test_replace_command_valid_sequence() {
     update(&mut state, exec("r")).unwrap();
 
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert!(
-            task_data.input_state().state().is_replace_char_pending(),
+        assert_matches!(
+            task_data.input_state().state(),
+            InputState::ReplaceCharPending,
             "Expected ReplaceCharPending state after 'r', got {:?}",
             task_data.input_state().state()
         );

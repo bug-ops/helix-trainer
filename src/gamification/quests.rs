@@ -528,64 +528,6 @@ impl QuestTemplateRegistry {
         self.templates.iter().find(|t| &t.id == id)
     }
 
-    /// Get all eligible quests based on user conditions
-    ///
-    /// Filters quests by:
-    /// - Level requirements (`min_level`, `max_level`)
-    /// - Required commands (user must have used these)
-    /// - Required scenarios (user must have completed these)
-    pub fn get_eligible_quests(
-        &self,
-        user_level: u32,
-        commands_used: &HashSet<NormalizedCommand>,
-        scenarios_completed: &HashSet<ScenarioId>,
-    ) -> Vec<&QuestTemplate> {
-        self.templates
-            .iter()
-            .filter(|template| {
-                // Check min_level
-                if let Some(min) = template.conditions.min_level
-                    && user_level < min
-                {
-                    return false;
-                }
-
-                // Check max_level
-                if let Some(max) = template.conditions.max_level
-                    && user_level > max
-                {
-                    return false;
-                }
-
-                // Check required commands
-                if !template.conditions.requires_commands.is_empty() {
-                    let has_all_commands = template
-                        .conditions
-                        .requires_commands
-                        .iter()
-                        .all(|cmd| commands_used.contains(cmd));
-                    if !has_all_commands {
-                        return false;
-                    }
-                }
-
-                // Check required scenarios
-                if !template.conditions.requires_scenarios.is_empty() {
-                    let has_all_scenarios = template
-                        .conditions
-                        .requires_scenarios
-                        .iter()
-                        .all(|scenario| scenarios_completed.contains(scenario));
-                    if !has_all_scenarios {
-                        return false;
-                    }
-                }
-
-                true
-            })
-            .collect()
-    }
-
     /// Get count of loaded templates
     pub fn len(&self) -> usize {
         self.templates.len()
@@ -800,15 +742,6 @@ impl QuestTracker {
                 }
             }
         }
-    }
-
-    /// Check if any quests were newly completed and return their XP rewards
-    pub fn check_completions(quests: &[Quest]) -> Vec<(QuestId, u32)> {
-        quests
-            .iter()
-            .filter(|q| q.is_completed())
-            .map(|q| (q.id.clone(), q.xp_reward))
-            .collect()
     }
 }
 
@@ -1077,41 +1010,6 @@ mod tests {
     }
 
     #[test]
-    fn test_check_completions() {
-        let quests = vec![
-            Quest {
-                id: qid("completed"),
-                quest_type: QuestType::CommandPractice {
-                    command: ncmd(CMD_DELETE_SELECTION),
-                    target: 1,
-                    current: 1,
-                },
-                description: "Test".to_string(),
-                difficulty: QuestDifficulty::Easy,
-                xp_reward: 25,
-                completed: true,
-            },
-            Quest {
-                id: qid("incomplete"),
-                quest_type: QuestType::CommandPractice {
-                    command: ncmd(CMD_YANK),
-                    target: 5,
-                    current: 2,
-                },
-                description: "Test".to_string(),
-                difficulty: QuestDifficulty::Easy,
-                xp_reward: 25,
-                completed: false,
-            },
-        ];
-
-        let completions = QuestTracker::check_completions(&quests);
-        assert_eq!(completions.len(), 1);
-        assert_eq!(completions[0].0.as_str(), "completed");
-        assert_eq!(completions[0].1, 25);
-    }
-
-    #[test]
     fn test_quest_difficulty_progression_tier() {
         use crate::learning::ProgressionTier;
 
@@ -1145,23 +1043,5 @@ mod tests {
     fn test_quest_template_registry_default() {
         let registry = QuestTemplateRegistry::default();
         assert!(registry.is_empty());
-    }
-
-    #[test]
-    fn test_get_eligible_quests_level_filter() {
-        let registry = test_registry();
-        let commands_used = HashSet::new();
-        let scenarios_completed = HashSet::new();
-
-        // Low level user should get some quests
-        let eligible = registry.get_eligible_quests(1, &commands_used, &scenarios_completed);
-        let low_level_count = eligible.len();
-
-        // Higher level user should get different quests
-        let eligible = registry.get_eligible_quests(15, &commands_used, &scenarios_completed);
-        let high_level_count = eligible.len();
-
-        // Both should get some quests (counts may differ)
-        assert!(low_level_count > 0 || high_level_count > 0);
     }
 }

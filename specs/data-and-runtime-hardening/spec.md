@@ -60,7 +60,7 @@ A failed profile load never destroys the file on disk; reads are bounded and rej
 | FR-004 | WHEN `achievements_unlocked` contains an unknown `AchievementId` (downgrade) THE SYSTEM SHALL ignore the unknown entries and load the rest of the profile rather than fail the whole file | must |
 | FR-005 | WHEN the file does not exist THE SYSTEM SHALL create a new default profile and save normally (first launch) | must |
 | FR-006 | WHEN quarantining an unreadable profile and a byte-identical `profile.json.corrupt-*` file already exists THE SYSTEM SHALL NOT create another copy and SHALL report the existing backup path in `QuarantineOutcome` (#518) | must |
-| FR-007 | WHILE the profile is `Quarantined` with a backup that exists on disk THE BANNER SHALL offer one action, **Start fresh**: the backup is kept, a new default profile is written, and `ProfilePersistence` becomes `Writable`; the action is a state-model message that yields an effect executed by the event loop (no I/O in `update()`); WHEN no backup exists (the copy failed) THE ACTION SHALL NOT be offered, so unreadable data is never overwritten without a copy (#518) | must |
+| FR-007 | WHILE the profile is `Quarantined` with a backup that exists on disk THE BANNER SHALL offer one action, **Start fresh** (bound to `Ctrl-N`, shown only for `Quarantined(BackedUp(_))`): the backup is kept, a new default profile is written, and `ProfilePersistence` becomes `Writable`; the action is a state-model message that yields an effect executed by the event loop (no I/O in `update()`); WHEN no backup exists (the copy failed) THE ACTION SHALL NOT be offered, so unreadable data is never overwritten without a copy (#518) | must |
 
 ### 2.2 Bounded reads (#441)
 

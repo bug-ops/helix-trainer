@@ -287,16 +287,16 @@ THEN  line 2 is `let sumum = a + b;` and line 3 is `    sumum`
 ## 11. Bug-Fix Batch: Backward Search, Keep/Remove Selections, Hint Key (#509, #510, #513)
 
 > [!info] Added 2026-11-11 (spec-first update for the P2-P3 bug batch)
-> Reference behavior is `hx` 25.07.1. FR numbers continue the scoped series of section 10. Product decision (#513): the hint key on the Task and arcade screens is `F1` only, and `?` is released for backward search and for typing.
+> Reference behavior is `hx` 25.07.1. FR numbers continue the scoped series of section 10. Product decision (#513): the hint key on the Task screen is `F1` only (the arcade has no hint), and `?` is released for backward search and for typing.
 
 ### 11.1 Requirements
 
 | ID | Requirement | Issue | Priority |
 |----|------------|-------|----------|
-| FR-120 | THE HINT SHALL be opened and closed by `F1` only, on both the Task and the arcade (MiniGame) screens; no other key, and in particular not `?`, SHALL toggle it; the user-visible footer/help text SHALL read `Press F1 for hint` | #513, #509 | must |
+| FR-120 | THE HINT SHALL be opened and closed by `F1` only on the Task screen (the arcade has no hint feature, so `F1` is ignored there); no other key, and in particular not `?`, SHALL toggle it; the user-visible footer/help text SHALL read `Press F1 for hint` | #513, #509 | must |
 | FR-121 | WHEN the user presses `?` in Normal mode THE SYSTEM SHALL enter a backward-search prompt (a backward variant of the search-prompt pending state of [[../register-command-mode-support/spec#12.1 Search prompt (`/`) (#504, `/` only)\|register spec 12.1]], same typestate pattern, same pattern-length cap and invalid-regex `UserError` handling); WHEN confirmed with a non-empty pattern THE SYSTEM SHALL select the previous match before the cursor (wrapping at the start of the buffer), execute it as one command carrying the pattern under the command id `?` (the shared constant), and count one action; `n`/`N` continue from the stored pattern with `hx` 25.07.1 semantics | #513 | must |
-| FR-122 | WHEN a printable character `?` arrives in Insert mode, in any prompt (`/`, `?`, `s`, `S`, `K`, `Alt-K`, `:`) or as the argument character of a pending command (`f`, `t`, `F`, `T`, `r`, `m`) THE SYSTEM SHALL treat it as text or argument and SHALL NOT trigger any screen-level special key; special-key handling (hint, help) SHALL run only while the input state machine is in its Base state, after Insert-mode and prompt states have had the chance to consume the key | #509 | must |
-| FR-123 | WHEN the user presses `K` (`keep_selections`) or `Alt-K` (`remove_selections`) in Normal mode with an active selection THE SYSTEM SHALL open a regex prompt (same typestate pattern, caps and error handling as `s`/`S`, FR-001..FR-004) and on confirm keep (`K`) or remove (`Alt-K`) the selection ranges whose text matches the pattern; when no range would remain `hx` behavior applies and is asserted by a differential test | #510 | must |
+| FR-122 | WHEN a printable character `?` arrives in Insert mode, in any prompt (`/`, `?`, `s`, `S`, `K`, `Alt-K`, `:`) or as the argument character of a pending command (`f`, `t`, `F`, `T`, `r`, `m`) THE SYSTEM SHALL treat it as text or argument and SHALL NOT trigger any screen-level special key; special keys that are printable (`?`) SHALL be handled only while the input state machine is in its Base state, after Insert-mode and prompt states had the chance to consume the key; non-printable special keys (`F1`, `Ctrl-Q`) stay active in every input state; `Shift-/` is normalized to `?` | #509 | must |
+| FR-123 | WHEN the user presses `K` (`keep_selections`) or `Alt-K` (`remove_selections`) in Normal mode with an active selection THE SYSTEM SHALL open a regex prompt (same typestate pattern, caps and error handling as `s`/`S`, FR-001..FR-004) and on confirm keep (`K`) or remove (`Alt-K`) the selection ranges whose text matches the pattern; when no range would remain `hx` behavior applies and is asserted by a differential test Bare `K`/`Alt-K` with no pattern SHALL return a `UserError`; the prompts emit the command strings `? <pat>`, `K <pat>` and `Alt-K <pat>` | #510 | must |
 | FR-124 | WHEN the user presses `&` (`align_selections`) THE SYSTEM SHALL execute it immediately as one command and one action, without a prompt, with `hx` 25.07.1 alignment semantics | #510 | must |
 | FR-125 | WHEN `K`/`Alt-K` completions are recorded for review THE SYSTEM SHALL normalize the typed-pattern forms to the skill ids `keep_selections` and `remove_selections` (as FR-009 does for `s`/`S`), and `? sum` to the command `?` (as `/ sum` to `/`, see [[../fsrs-proptest-coverage-gap/spec#11. Follow-Up Requirements: Review Queue Ordering, Eq/Ord Agreement, Reviewable Commands (#433, #434, #505)\|FSRS spec FR-015]]) | #510, #513 | must |
 
@@ -308,9 +308,9 @@ WHEN  the user presses i, ?, Escape
 THEN  `?` is inserted into the buffer and the hint stays closed
 ```
 ```
-GIVEN the Training screen or an arcade screen
+GIVEN the Training screen
 WHEN  the user presses F1
-THEN  the hint toggles; pressing ? in Normal mode opens the backward-search prompt instead
+THEN  on the Task screen the hint toggles (on arcade screens F1 is ignored); pressing ? in Normal mode opens the backward-search prompt instead
 ```
 ```
 GIVEN a buffer with two occurrences of `sum` and the cursor after the second
@@ -336,7 +336,7 @@ WHEN  Alt-K, a, Enter are pressed  THEN only the range without `a` remains
 
 | ID | Metric | Target |
 |----|--------|--------|
-| SC-111 | Input-layer tests: `?` in Insert, in each prompt and as an argument is text; `F1` is the only hint key on both screens | Pass |
+| SC-111 | Input-layer tests: `?` in Insert, in each prompt and as an argument is text; `F1` is the only hint key (Task screen; ignored in the arcade) | Pass |
 | SC-112 | Simulator tests for `?`, `K`, `Alt-K`, `&` assert buffer and selection against `hx` 25.07.1 | Pass |
 
 ## 12. See Also

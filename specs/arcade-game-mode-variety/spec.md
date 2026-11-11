@@ -36,7 +36,7 @@ related:
 `src/minigame/` offers three named modes — `Arcade`, `Survival`, `Challenge`
 (`src/minigame/modes.rs`, `MiniGameMode` enum) — that share one mechanic:
 complete a scenario from `scenarios/en/<category>/*.toml` under time/lives
-pressure, scored by `ScenarioScorer`/`ScoreCalculator`. They differ only in
+pressure, scored by `ScenarioPrioritizer` (module `minigame::prioritizer`)/`ScoreCalculator`. They differ only in
 pacing (session timer, lives count, escalation curve), not in what the player
 does moment to moment.
 

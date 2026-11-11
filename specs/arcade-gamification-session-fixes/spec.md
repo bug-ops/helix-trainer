@@ -352,8 +352,16 @@ THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0
 | FR-014 | THE DEAD async plumbing (`QuestRegistryReady`/`QuestRegistryError` handled but never sent, the unused async loader) SHALL be wired to the single loader or removed; the loader constructor is named for what it reads (embedded data, `from_embedded(locale)`) | #468 | must |
 | FR-015 | `QuestGenerator::generate_quests` SHALL take only the inputs that affect its result (profile, registry, date); the unused `PerformanceTracker` and per-quest index parameters are dropped until a spec requires performance-aware quests | #468 | must |
 | FR-016 | WHEN the registry slot is `Pending` at profile-ready time THE SYSTEM SHALL defer quest generation until it is `Ready`; WHEN it is `Unavailable` or has no template for a difficulty THE SYSTEM SHALL generate no quest for that slot and raise one warning notification, and SHALL NOT panic (`assert!` on an empty template list is removed) | #469 | must |
-| FR-017 | THE MINIGAME and review sessions SHALL be owned by their screen data (`MiniGameData.session`, `ReviewData.session` as the single owner read by the renderer), so a MiniGame screen cannot exist without a session; `GameState.minigame_session`, `GameState.review_session` and `pending_completed_session` are removed in favor of values carried by the screen/transition | #461 | must |
+| FR-017 | THE MINIGAME and review sessions SHALL be owned by their screen data (`MiniGameData` owns the arcade session, `ReviewData` is the single owner of the review session read by the renderer), so a MiniGame screen cannot exist without a session; `GameState.minigame_session` and `GameState.review_session` are removed; a paused arcade run travels via `ReturnDestination::PausedMiniGame` | #461 | must |
 | FR-018 | WHEN starting an arcade session finds no scenarios THE SYSTEM SHALL stay on the current screen and raise a notification instead of navigating to an inert MiniGame screen; this applies to `StartMiniGame`, arcade mode selection and `NavigateTo(MiniGame)` | #461 | must |
+
+> [!danger] Explicitly deferred (out of scope of this batch)
+> The following parts of the session-ownership refactor are not implemented here; follow-up issues will be filed for them.
+> - #461: removal of the `pending_completed_session` / `UIState.last_feedback` / completion-time mailbox (the `TaskSession` active/completed enum).
+> - #482: the rest of the mailbox removal beyond what #461 delivered.
+> - #480: only the `update()` dispatch dedupe is done.
+> - #481: `update` takes an effects sink; render still clamps the selection.
+> - #483: `Feedback.success`/`is_optimal` and `MiniGameModeSelection.selected_index` stay as they are, because `is_optimal` depends on the tolerance.
 
 ### 9.2 Acceptance Criteria
 
@@ -387,7 +395,7 @@ THEN  the user stays on the selection screen and sees a notification
 |----|--------|--------|
 | SC-011 | Tests: empty/failed registry produces no panic and one warning; `Pending` defers generation | Pass |
 | SC-012 | Handler tests: empty scenario set for each of the three arcade entry points keeps the screen | Pass |
-| SC-013 | `GameState` no longer holds the session `Option` fields (compile-time guarantee) | Pass |
+| SC-013 | `GameState` no longer holds the minigame and review session `Option` fields (compile-time guarantee) | Pass |
 
 ## 10. See Also
 

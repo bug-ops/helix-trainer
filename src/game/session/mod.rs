@@ -359,11 +359,8 @@ impl<S: SessionState> GameSession<S> {
         // target while still in Insert mode (e.g. right after `o`), but the
         // scenario isn't actually complete until Escape returns to Normal
         // mode, so don't report 100% until then.
-        if self.mode() != Mode::Normal {
-            percentage.min(99) as u8
-        } else {
-            percentage.min(100) as u8
-        }
+        let cap = if self.mode() != Mode::Normal { 99 } else { 100 };
+        u8::try_from(percentage.min(cap)).unwrap_or(100)
     }
 
     /// Progress once the text is on target: 100 only when cursor/selection

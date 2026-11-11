@@ -175,7 +175,8 @@ pub fn delete_selection_from_register<M: EditorMode>(
     register: Option<char>,
 ) -> Result<(), UserError> {
     yank_to_register(sim, register)?;
-    delete_selection_impl(sim)
+    delete_selection_impl(sim);
+    Ok(())
 }
 
 /// Delete selection without yanking (Helix 'Alt-d'): deletes the full
@@ -185,15 +186,14 @@ pub fn delete_selection_from_register<M: EditorMode>(
 pub fn delete_selection_noyank<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
-    delete_selection_impl(sim)
+    delete_selection_impl(sim);
+    Ok(())
 }
 
-fn delete_selection_impl<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+fn delete_selection_impl<M: EditorMode>(sim: &mut HelixSimulator<M>) {
     let mapped = delete_active_selection(sim);
     let last_valid_pos = sim.doc.len_chars().saturating_sub(1);
     sim.selection = mapped.transform(|range| Range::point(range.head.min(last_valid_pos)));
-
-    Ok(())
 }
 
 /// True when every range of the active selection spans one or more whole
@@ -243,12 +243,15 @@ pub(crate) fn change_selection_linewise<M: EditorMode>(sim: &mut HelixSimulator<
         (range.from(), range.to(), Some("\n".into()))
     });
 
-    let mut delta: i64 = 0;
+    let mut inserted = 0usize;
+    let mut removed = 0usize;
     let new_ranges: Vec<Range> = ranges
         .iter()
         .map(|range| {
-            let pos = (range.from() as i64 + delta) as usize;
-            delta += 1 - (range.to() as i64 - range.from() as i64);
+            // Ranges are sorted and disjoint, so `removed <= range.from()` always holds.
+            let pos = range.from() + inserted - removed;
+            inserted += 1;
+            removed += range.to() - range.from();
             Range::point(pos)
         })
         .collect();
@@ -563,8 +566,9 @@ pub fn select_around_textobject<M: EditorMode>(
         '\'' => select_around_quote(sim, '\''),
         '`' => select_around_quote(sim, '`'),
         'p' => select_around_paragraph(sim),
-        _ => Ok(()),
-    }
+        _ => {}
+    };
+    Ok(())
 }
 
 /// Select inside text object (Helix 'mi{obj}' command)
@@ -583,16 +587,14 @@ pub fn select_inside_textobject<M: EditorMode>(
         '\'' => select_inside_quote(sim, '\''),
         '`' => select_inside_quote(sim, '`'),
         'p' => select_inside_paragraph(sim),
-        _ => Ok(()),
-    }
+        _ => {}
+    };
+    Ok(())
 }
 
-fn select_around_word<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    big_word: bool,
-) -> Result<(), UserError> {
+fn select_around_word<M: EditorMode>(sim: &mut HelixSimulator<M>, big_word: bool) {
     if sim.doc.len_chars() == 0 {
-        return Ok(());
+        return;
     }
 
     let slice = sim.doc.slice(..);
@@ -601,15 +603,11 @@ fn select_around_word<M: EditorMode>(
     let new_range = textobject_word(slice, range, TextObject::Around, 1, big_word);
 
     sim.selection = Selection::single(new_range.anchor, new_range.head);
-    Ok(())
 }
 
-fn select_inside_word<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    big_word: bool,
-) -> Result<(), UserError> {
+fn select_inside_word<M: EditorMode>(sim: &mut HelixSimulator<M>, big_word: bool) {
     if sim.doc.len_chars() == 0 {
-        return Ok(());
+        return;
     }
 
     let slice = sim.doc.slice(..);
@@ -618,33 +616,23 @@ fn select_inside_word<M: EditorMode>(
     let new_range = textobject_word(slice, range, TextObject::Inside, 1, big_word);
 
     sim.selection = Selection::single(new_range.anchor, new_range.head);
-    Ok(())
 }
 
-fn select_around_bracket<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    open: char,
-    close: char,
-) -> Result<(), UserError> {
+fn select_around_bracket<M: EditorMode>(sim: &mut HelixSimulator<M>, open: char, close: char) {
     let head = sim.selection.primary().head;
 
     let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, open, close) else {
-        return Ok(());
+        return;
     };
 
     sim.selection = Selection::single(open_pos, close_pos + 1);
-    Ok(())
 }
 
-fn select_inside_bracket<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    open: char,
-    close: char,
-) -> Result<(), UserError> {
+fn select_inside_bracket<M: EditorMode>(sim: &mut HelixSimulator<M>, open: char, close: char) {
     let head = sim.selection.primary().head;
 
     let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, open, close) else {
-        return Ok(());
+        return;
     };
 
     if open_pos + 1 < close_pos {
@@ -652,31 +640,23 @@ fn select_inside_bracket<M: EditorMode>(
     } else {
         sim.selection = Selection::point(open_pos + 1);
     }
-    Ok(())
 }
 
-fn select_around_quote<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    quote: char,
-) -> Result<(), UserError> {
+fn select_around_quote<M: EditorMode>(sim: &mut HelixSimulator<M>, quote: char) {
     let head = sim.selection.primary().head;
 
     let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, quote, quote) else {
-        return Ok(());
+        return;
     };
 
     sim.selection = Selection::single(open_pos, close_pos + 1);
-    Ok(())
 }
 
-fn select_inside_quote<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    quote: char,
-) -> Result<(), UserError> {
+fn select_inside_quote<M: EditorMode>(sim: &mut HelixSimulator<M>, quote: char) {
     let head = sim.selection.primary().head;
 
     let Some((open_pos, close_pos)) = find_surrounding_pair(sim, head, quote, quote) else {
-        return Ok(());
+        return;
     };
 
     if open_pos + 1 < close_pos {
@@ -684,12 +664,11 @@ fn select_inside_quote<M: EditorMode>(
     } else {
         sim.selection = Selection::point(open_pos + 1);
     }
-    Ok(())
 }
 
-fn select_around_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+fn select_around_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) {
     if sim.doc.len_chars() == 0 {
-        return Ok(());
+        return;
     }
 
     let slice = sim.doc.slice(..);
@@ -698,12 +677,11 @@ fn select_around_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
     let new_range = textobject_paragraph(slice, range, TextObject::Around, 1);
 
     sim.selection = Selection::single(new_range.anchor, new_range.head);
-    Ok(())
 }
 
-fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
+fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) {
     if sim.doc.len_chars() == 0 {
-        return Ok(());
+        return;
     }
 
     let slice = sim.doc.slice(..);
@@ -712,7 +690,6 @@ fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
     let new_range = textobject_paragraph(slice, range, TextObject::Inside, 1);
 
     sim.selection = Selection::single(new_range.anchor, new_range.head);
-    Ok(())
 }
 
 /// Join lines like [`join_lines`] and select every inserted space

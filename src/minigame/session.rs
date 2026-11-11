@@ -1067,12 +1067,13 @@ impl<R: Rng> MiniGameSession<R> {
             }
 
             // Estimate time per command (divide total time by number of actions)
-            let time_per_command = elapsed / action_count as u32;
+            let time_per_command = elapsed / u32::try_from(action_count).unwrap_or(u32::MAX);
 
             // Optimal time estimate: time_limit / action_count would be "perfect"
             // We'll use optimal_count from scenario as reference
             let optimal_count = scenario.scenario.scoring.optimal_count.get();
-            let optimal_time_per_command = scenario.time_limit / optimal_count as u32;
+            let optimal_time_per_command =
+                scenario.time_limit / u32::try_from(optimal_count).unwrap_or(u32::MAX);
 
             // Same card ids as training mode, so arcade and training practice of one
             // skill share a card; typed text and arguments never become cards.
@@ -1206,8 +1207,7 @@ impl<R: Rng> MiniGameSession<R> {
             }
             MiniGameMode::Challenge(config) => {
                 // Lives depleted or all scenarios completed
-                self.stats.is_game_over()
-                    || self.stats.scenarios_completed >= config.scenario_count as u32
+                self.stats.is_game_over() || self.challenge_target_met(config.scenario_count)
             }
         }
     }
@@ -1215,10 +1215,14 @@ impl<R: Rng> MiniGameSession<R> {
     /// Check if Challenge mode is complete (all scenarios done)
     pub fn is_challenge_complete(&self) -> bool {
         if let MiniGameMode::Challenge(config) = &self.mode {
-            self.stats.scenarios_completed >= config.scenario_count as u32
+            self.challenge_target_met(config.scenario_count)
         } else {
             false
         }
+    }
+
+    fn challenge_target_met(&self, scenario_count: usize) -> bool {
+        u32::try_from(scenario_count).is_ok_and(|target| self.stats.scenarios_completed >= target)
     }
 
     /// Get scenarios completed count for Challenge mode progress display

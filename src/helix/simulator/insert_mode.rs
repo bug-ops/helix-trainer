@@ -228,13 +228,15 @@ impl HelixSimulator<NormalMode> {
         register: Option<char>,
     ) -> Result<(), UserError> {
         yank_to_register(self, register)?;
-        self.change_selection_impl()
+        self.change_selection_impl();
+        Ok(())
     }
 
     /// Change selection without yanking: delete the full selection, leaving
     /// registers untouched (prepare for insert mode; Helix 'Alt-c').
     pub fn change_selection_noyank(&mut self) -> Result<(), UserError> {
-        self.change_selection_impl()
+        self.change_selection_impl();
+        Ok(())
     }
 
     /// Delete the full active selection (respecting multi-range selections,
@@ -252,13 +254,12 @@ impl HelixSimulator<NormalMode> {
     /// with a blank line and the cursor lands on it (`Open::Above`), so
     /// `xc` behaves like `O` rather than a plain insert at the deletion
     /// point.
-    fn change_selection_impl(&mut self) -> Result<(), UserError> {
+    fn change_selection_impl(&mut self) {
         self.selection = if super::commands::editing::is_selection_linewise(self) {
             super::commands::editing::change_selection_linewise(self)
         } else {
             super::commands::editing::delete_active_selection(self)
         };
-        Ok(())
     }
 }
 
@@ -272,7 +273,8 @@ impl HelixSimulator<InsertMode> {
     /// mode entry.
     pub fn insert_text(&mut self, text: &str) -> Result<(), UserError> {
         if text == "\n" {
-            return self.insert_newline();
+            self.insert_newline();
+            return Ok(());
         }
         let head = self.selection.primary().head;
         let text_len = text.chars().count();
@@ -295,7 +297,7 @@ impl HelixSimulator<InsertMode> {
     /// the cursor is dropped and the new line copies the line's indentation.
     /// When only whitespace precedes the cursor, the line break goes at the
     /// line start so the old line, indentation included, moves down intact.
-    fn insert_newline(&mut self) -> Result<(), UserError> {
+    fn insert_newline(&mut self) {
         let head = self.selection.primary().head.min(self.doc.len_chars());
         let line = self.doc.char_to_line(head);
         let line_start = self.doc.line_to_char(line);
@@ -316,7 +318,6 @@ impl HelixSimulator<InsertMode> {
         self.apply_transaction(transaction);
         self.selection = Selection::point(cursor);
         self.auto_indent_end = strips_indent.then_some(cursor);
-        Ok(())
     }
 
     /// Strip the indentation of a line break nothing was typed after, on

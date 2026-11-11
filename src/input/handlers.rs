@@ -517,7 +517,6 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
 }
 
 #[cfg(test)]
-#[allow(unused_variables)]
 mod tests {
     use std::assert_matches;
 
@@ -980,11 +979,11 @@ mod tests {
             handle_task_keys(key, state)
         }
 
-        fn expected_question_mark() -> Option<Message> {
-            Some(Message::ExecuteCommand {
+        fn expected_question_mark() -> Message {
+            Message::ExecuteCommand {
                 keys: CanonicalKeys::from_static("?"),
                 typed: Cow::Borrowed("?"),
-            })
+            }
         }
 
         fn insert_mode_state() -> AppState {
@@ -1003,7 +1002,10 @@ mod tests {
         #[test]
         fn test_question_mark_is_text_in_insert_mode() {
             let state = insert_mode_state();
-            assert_eq!(question_mark_message(&state), expected_question_mark());
+            assert_eq!(
+                question_mark_message(&state),
+                Some(expected_question_mark())
+            );
         }
 
         #[test]
@@ -1020,7 +1022,7 @@ mod tests {
                 state.screen = TypedScreen::Task(task_data);
                 assert_eq!(
                     question_mark_message(&state),
-                    expected_question_mark(),
+                    Some(expected_question_mark()),
                     "after {opening_keys}"
                 );
             }

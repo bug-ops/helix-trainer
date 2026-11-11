@@ -108,7 +108,7 @@ fn test_replace_command_multi_key() {
         (0, 1),
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
 
     // Start the scenario
     start_scenario_from_menu(&mut state, 0).unwrap();
@@ -176,7 +176,7 @@ fn test_xd_command_line_delete() {
         (1, 0),
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     // 'x' - selects current line (executes immediately)
@@ -219,7 +219,7 @@ fn test_gg_command_multi_key() {
         (0, 2), // cursor at different position - won't auto-complete on gg
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     // First 'g' - should transition to GotoPending state
@@ -254,7 +254,7 @@ fn test_replace_command_valid_sequence() {
     // Target is different to avoid auto-complete
     let scenario = create_test_scenario("test", "test", (0, 0), "best", (0, 0));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Press 'r' - should transition to ReplaceCharPending state
@@ -295,7 +295,7 @@ fn test_single_key_command_immediate_execution() {
         (0, 2), // Different target position - won't auto-complete on 'l'
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Press 'l' (move right) - should execute immediately
@@ -317,7 +317,7 @@ fn test_replace_with_special_chars() {
     // Target is different to avoid auto-complete
     let scenario = create_test_scenario("test_special", "x", (0, 0), "!!", (0, 0));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Replace with '!'
@@ -343,7 +343,7 @@ fn test_undo_integration() {
         (0, 0),
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     // Delete line using Helix idiom: xd (select line + delete selection)
@@ -377,7 +377,7 @@ fn test_register_yank_paste_multi_key() {
     let scenario =
         create_test_scenario("test_register", "alpha beta", (0, 0), "aalpha beta", (0, 1));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     // '"' - transitions to RegisterPending
@@ -439,7 +439,7 @@ fn test_register_op_cancels_on_out_of_scope_operator() {
     // back to Base rather than executing a bare command.
     let scenario = create_test_scenario("test_register_cancel", "hello", (0, 0), "world", (0, 0));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     update(&mut state, exec("\"")).unwrap();
@@ -466,7 +466,7 @@ fn test_command_line_goto_multi_key() {
         (2, 0),
     );
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     update(&mut state, exec(":")).unwrap();
@@ -521,7 +521,7 @@ fn test_command_line_goto_multi_key() {
 fn test_command_line_escape_cancels_buffer() {
     let scenario = create_test_scenario("test_cmdline_cancel", "hello", (0, 0), "world", (0, 0));
 
-    let mut state = create_test_app_state(vec![scenario.clone()]);
+    let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     update(&mut state, exec(":")).unwrap();

@@ -144,6 +144,10 @@ impl ScoreCalculator {
     /// # Returns
     ///
     /// Detailed score breakdown with all bonus components.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "score components truncate toward zero by design"
+    )]
     pub fn calculate(
         &mut self,
         base_points: u64,
@@ -461,6 +465,10 @@ mod tests {
         }
 
         #[test]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "mirrors the production score truncation"
+        )]
         fn test_total_with_difficulty_multiplier() {
             let mut calc = ScoreCalculator::new();
             let breakdown = calc.calculate(100, 0.8, 0.5, Difficulty::Advanced, 1.0);

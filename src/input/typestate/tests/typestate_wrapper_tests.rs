@@ -296,7 +296,7 @@ fn test_typestate_handler_escape_returns_to_base() {
 fn test_typestate_handler_clone() {
     let state = TypestateHandlerState::new();
     let cloned = state.clone();
-    assert!(cloned.is_base());
+    assert_eq!(cloned.is_base(), state.is_base());
 }
 
 #[test]

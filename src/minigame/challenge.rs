@@ -120,7 +120,7 @@ impl ChallengeProgress {
         }
 
         // Track completions
-        if scenarios_completed >= CHALLENGE_SCENARIO_COUNT as u8 {
+        if usize::from(scenarios_completed) >= CHALLENGE_SCENARIO_COUNT {
             self.total_challenges_completed = self.total_challenges_completed.saturating_add(1);
         }
     }

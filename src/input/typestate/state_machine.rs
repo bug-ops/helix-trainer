@@ -9,7 +9,13 @@ use super::handler_result::HandlerResult;
 use super::handlers::{InputHandler, KeyHandler};
 use super::input_state::InputState;
 use super::key_mapping::parse_helix_key_string;
-use super::state_types::*;
+use super::state_types::{
+    BaseState, CommandLinePending, CountPending, CountedFindCharPending, CountedGotoPending,
+    FindCharPending, GotoPending, MatchPending, RegexPromptPending, RegisterOpPending,
+    RegisterPending, ReplaceCharPending, SurroundAddPending, SurroundDeletePending,
+    SurroundReplaceFromPending, SurroundReplaceToPending, TextObjectAroundPending,
+    TextObjectInsidePending, UnmatchedNextPending, UnmatchedPrevPending, ViewPending,
+};
 
 /// State machine for input handling
 ///
@@ -226,7 +232,7 @@ impl InputStateMachine {
                     *self = clone;
                     return Some(resolved);
                 }
-                HandlerResult::Transition(_) if i != last => continue,
+                HandlerResult::Transition(_) if i != last => {}
                 _ => return None,
             }
         }

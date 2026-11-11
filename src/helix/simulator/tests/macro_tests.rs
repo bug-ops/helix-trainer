@@ -1,4 +1,4 @@
-//! Macro record/replay (`q`/`Q`) integration tests for HelixSimulator
+//! Macro record/replay (`q`/`Q`) integration tests for `HelixSimulator`
 //!
 //! Verifies recording/replay through the real dispatch path
 //! (`AnyModeSimulator::execute_command`), including the case that catches

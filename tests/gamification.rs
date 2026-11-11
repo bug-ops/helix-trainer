@@ -6,6 +6,18 @@ use std::assert_matches;
 use std::time::Duration;
 use tempfile::TempDir;
 
+fn ncmd(raw: &str) -> helix_trainer::ids::NormalizedCommand {
+    helix_trainer::ids::NormalizedCommand::from_raw(raw).expect("valid command fixture")
+}
+
+fn qid(raw: &str) -> helix_trainer::ids::QuestId {
+    helix_trainer::ids::QuestId::parse(raw).expect("valid quest id fixture")
+}
+
+fn sid(raw: &str) -> helix_trainer::ids::ScenarioId {
+    helix_trainer::ids::ScenarioId::parse(raw).expect("valid scenario id fixture")
+}
+
 /// Helper to create a registry for tests
 fn test_registry() -> QuestTemplateRegistry {
     QuestTemplateRegistry::from_embedded("en").expect("Failed to load quest templates for tests")
@@ -25,14 +37,14 @@ fn test_complete_user_flow() {
     assert_eq!(quests.len(), 3); // Beginner gets 3 quests
 
     // Complete a command quest
-    QuestTracker::update_command_progress(&mut quests, "x");
-    QuestTracker::update_command_progress(&mut quests, "x");
-    QuestTracker::update_command_progress(&mut quests, "x");
+    QuestTracker::update_command_progress(&mut quests, &ncmd("x"));
+    QuestTracker::update_command_progress(&mut quests, &ncmd("x"));
+    QuestTracker::update_command_progress(&mut quests, &ncmd("x"));
 
     // Check if any quests completed
     let completions = QuestTracker::check_completions(&quests);
     if let Some((quest_id, xp_reward)) = completions.first() {
-        profile.add_xp(*xp_reward as u64);
+        profile.add_xp(u64::from(*xp_reward));
         profile.complete_quest(quest_id.clone());
     }
 
@@ -141,7 +153,10 @@ fn test_achievement_progression() {
 
     // No achievements initially
     let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
-    assert!(unlocked.is_empty());
+    assert_eq!(
+        unlocked,
+        [] as [helix_trainer::gamification::AchievementId; 0]
+    );
 
     // Unlock FirstPerfect
     profile.perfect_scenarios = 1;
@@ -182,9 +197,9 @@ fn test_streak_freeze_mechanics() {
 #[test]
 fn test_quest_progress_tracking() {
     let mut quests = vec![Quest::new(
-        "test".to_string(),
+        qid("test"),
         QuestType::CommandPractice {
-            command: "x".to_string(),
+            command: ncmd("x"),
             target: 5,
             current: 0,
         },
@@ -194,7 +209,7 @@ fn test_quest_progress_tracking() {
 
     // Progress through quest
     for i in 1..=5 {
-        QuestTracker::update_command_progress(&mut quests, "x");
+        QuestTracker::update_command_progress(&mut quests, &ncmd("x"));
         if i < 5 {
             assert!(!quests[0].is_completed());
         }
@@ -219,7 +234,7 @@ fn test_xp_calculator_formulas() {
 
     // Test quest XP rewards
     let easy_command = QuestType::CommandPractice {
-        command: "x".to_string(),
+        command: ncmd("x"),
         target: 5,
         current: 0,
     };
@@ -250,7 +265,7 @@ fn test_storage_persistence() {
     profile.current_streak = 10;
     profile.perfect_scenarios = 5;
     profile.unlock_achievement(AchievementId::FirstPerfect);
-    profile.complete_quest("quest_1".to_string());
+    profile.complete_quest(qid("quest_1"));
 
     storage.save(&profile).unwrap();
 
@@ -261,7 +276,7 @@ fn test_storage_persistence() {
     assert_eq!(loaded.current_streak, profile.current_streak);
     assert_eq!(loaded.perfect_scenarios, profile.perfect_scenarios);
     assert!(loaded.has_achievement(&AchievementId::FirstPerfect));
-    assert!(loaded.is_quest_completed("quest_1"));
+    assert!(loaded.is_quest_completed(&qid("quest_1")));
 }
 
 #[test]
@@ -269,8 +284,8 @@ fn test_daily_quest_reset() {
     let mut profile = UserProfile::new();
 
     // Complete some quests
-    profile.complete_quest("quest_1".to_string());
-    profile.complete_quest("quest_2".to_string());
+    profile.complete_quest(qid("quest_1"));
+    profile.complete_quest(qid("quest_2"));
     assert_eq!(profile.completed_quests_today.len(), 2);
 
     // Reset daily quests
@@ -282,7 +297,7 @@ fn test_daily_quest_reset() {
 #[test]
 fn test_exploration_quest_tracking() {
     let mut quests = vec![Quest::new(
-        "exploration".to_string(),
+        qid("exploration"),
         QuestType::Exploration {
             target_commands: 5,
             commands_used: std::collections::HashSet::new(),
@@ -292,19 +307,19 @@ fn test_exploration_quest_tracking() {
     )];
 
     // Use different commands
-    QuestTracker::update_command_progress(&mut quests, "x");
+    QuestTracker::update_command_progress(&mut quests, &ncmd("x"));
     assert!(!quests[0].is_completed());
 
-    QuestTracker::update_command_progress(&mut quests, "yy");
-    QuestTracker::update_command_progress(&mut quests, "p");
-    QuestTracker::update_command_progress(&mut quests, "w");
+    QuestTracker::update_command_progress(&mut quests, &ncmd("yy"));
+    QuestTracker::update_command_progress(&mut quests, &ncmd("p"));
+    QuestTracker::update_command_progress(&mut quests, &ncmd("w"));
     assert!(!quests[0].is_completed());
 
-    QuestTracker::update_command_progress(&mut quests, "i");
+    QuestTracker::update_command_progress(&mut quests, &ncmd("i"));
     assert!(quests[0].is_completed());
 
     // Duplicate commands don't count
-    QuestTracker::update_command_progress(&mut quests, "x");
+    QuestTracker::update_command_progress(&mut quests, &ncmd("x"));
     if let QuestType::Exploration { commands_used, .. } = &quests[0].quest_type {
         assert_eq!(commands_used.len(), 5);
     }
@@ -313,9 +328,9 @@ fn test_exploration_quest_tracking() {
 #[test]
 fn test_speed_run_quest() {
     let mut quests = vec![Quest::new(
-        "speed".to_string(),
+        qid("speed"),
         QuestType::SpeedRun {
-            scenario_id: "delete_line_001".to_string(),
+            scenario_id: sid("delete_line_001"),
             time_limit: Duration::from_secs(5),
         },
         "Complete scenario in under 5 seconds".to_string(),
@@ -323,18 +338,26 @@ fn test_speed_run_quest() {
     )];
 
     // Too slow
-    QuestTracker::update_scenario_progress(&mut quests, "delete_line_001", Duration::from_secs(10));
+    QuestTracker::update_scenario_progress(
+        &mut quests,
+        &sid("delete_line_001"),
+        Duration::from_secs(10),
+    );
     assert!(!quests[0].is_completed());
 
     // Fast enough
-    QuestTracker::update_scenario_progress(&mut quests, "delete_line_001", Duration::from_secs(3));
+    QuestTracker::update_scenario_progress(
+        &mut quests,
+        &sid("delete_line_001"),
+        Duration::from_secs(3),
+    );
     assert!(quests[0].is_completed());
 }
 
 #[test]
 fn test_time_invested_quest() {
     let mut quests = vec![Quest::new(
-        "time".to_string(),
+        qid("time"),
         QuestType::TimeInvested {
             target_minutes: 10,
             current_minutes: 0,
@@ -360,8 +383,8 @@ fn test_all_achievement_metadata() {
 
     // Verify all achievements have metadata
     for achievement in achievements {
-        assert!(!achievement.name.is_empty());
-        assert!(!achievement.description.is_empty());
+        assert_ne!(achievement.name, "");
+        assert_ne!(achievement.description, "");
         assert!(!achievement.is_unlocked());
     }
 }
@@ -395,20 +418,20 @@ fn test_freeze_eligibility() {
     // Generate today's quests
     for i in 0..3 {
         profile.daily_quests.push(Quest::new(
-            format!("quest_{}", i),
+            qid(&format!("quest_{i}")),
             QuestType::CommandPractice {
-                command: "x".to_string(),
+                command: ncmd("x"),
                 target: 1,
                 current: 0,
             },
-            format!("Quest {}", i),
+            format!("Quest {i}"),
             QuestDifficulty::Easy,
         ));
     }
 
     // Complete all of today's quests
     for i in 0..3 {
-        profile.complete_quest(format!("quest_{}", i));
+        profile.complete_quest(qid(&format!("quest_{i}")));
     }
 
     // Now eligible - all of today's quests completed
@@ -431,7 +454,7 @@ fn test_longest_streak_tracking() {
     profile.longest_streak = 5;
 
     // Increment streak
-    profile.complete_quest("test".to_string());
+    profile.complete_quest(qid("test"));
     clock.advance_days(1);
     StreakManager::update_streak(&mut profile, clock.now());
 

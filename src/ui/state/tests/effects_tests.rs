@@ -51,7 +51,7 @@ fn test_start_fresh_profile_requires_a_backed_up_quarantine() {
 
     state
         .progress
-        .quarantine_profile(QuarantineOutcome::Failed("no space".to_string()));
+        .quarantine_profile(crate::testing::quarantine(crate::testing::failed_backup()));
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
     assert!(
         effects.is_empty(),
@@ -60,9 +60,51 @@ fn test_start_fresh_profile_requires_a_backed_up_quarantine() {
 
     state
         .progress
-        .quarantine_profile(QuarantineOutcome::BackedUp("backup".into()));
+        .quarantine_profile(crate::testing::quarantine(QuarantineOutcome::BackedUp(
+            "backup".into(),
+        )));
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
     assert_eq!(effects, vec![Effect::StartFreshProfile]);
+}
+
+/// #531: restore is offered only with a backup on disk and a loadable previous copy
+#[test]
+fn test_restore_profile_requires_a_backup_and_an_available_previous_copy() {
+    use crate::gamification::{PreviousCopy, QuarantineOutcome};
+    use crate::ui::state::{Effect, ProfilePersistence, Quarantine};
+
+    let mut state = create_test_app_state(vec![]);
+    let mut effects = Vec::new();
+    crate::ui::state::update(&mut state, Message::RestoreProfile, &mut effects).unwrap();
+    assert!(effects.is_empty(), "no quarantine, nothing to restore");
+
+    for (backup, previous) in [
+        (
+            QuarantineOutcome::BackedUp("backup".into()),
+            PreviousCopy::Unavailable,
+        ),
+        (crate::testing::failed_backup(), PreviousCopy::Available),
+    ] {
+        state
+            .progress
+            .quarantine_profile(Quarantine { backup, previous });
+        crate::ui::state::update(&mut state, Message::RestoreProfile, &mut effects).unwrap();
+        assert!(effects.is_empty());
+        std::assert_matches!(
+            state.progress.persistence(),
+            ProfilePersistence::Quarantined(_)
+        );
+    }
+
+    state.progress.quarantine_profile(Quarantine {
+        backup: QuarantineOutcome::BackedUp("backup".into()),
+        previous: PreviousCopy::Available,
+    });
+    crate::ui::state::update(&mut state, Message::RestoreProfile, &mut effects).unwrap();
+    crate::ui::state::update(&mut state, Message::RestoreProfile, &mut effects).unwrap();
+
+    assert_eq!(effects, vec![Effect::RestoreProfile]);
+    std::assert_matches!(state.progress.persistence(), ProfilePersistence::Loading);
 }
 
 /// #518: a repeated request while the first start-fresh is in flight is ignored, so the
@@ -75,12 +117,14 @@ fn test_second_start_fresh_request_is_ignored_while_the_first_is_in_flight() {
     let mut state = create_test_app_state(vec![]);
     state
         .progress
-        .quarantine_profile(QuarantineOutcome::BackedUp("backup".into()));
+        .quarantine_profile(crate::testing::quarantine(QuarantineOutcome::BackedUp(
+            "backup".into(),
+        )));
     let mut effects = Vec::new();
 
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
     crate::ui::state::update(&mut state, Message::StartFreshProfile, &mut effects).unwrap();
 
     assert_eq!(effects, vec![Effect::StartFreshProfile]);
-    assert_eq!(state.progress.persistence(), &ProfilePersistence::Loading);
+    std::assert_matches!(state.progress.persistence(), ProfilePersistence::Loading);
 }

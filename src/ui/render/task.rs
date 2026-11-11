@@ -2,7 +2,6 @@
 
 use super::editor::{PreviewHighlight, PreviewType, render_editor_pair};
 use super::popups::{render_hint_popup, render_key_history_popup, render_success_popup};
-use crate::game::PlayableScenario;
 use crate::helix::ModeKind;
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
@@ -30,9 +29,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
     let target_area = {
         let session = &task_data.session;
         let scenario = session.scenario();
-
-        // Check if scenario just completed - use pending session for final state display
-        let is_completed = state.ui.completion_time.is_some();
+        let is_completed = session.completed().is_some();
 
         // Layout: title | description | editor view | stats | instructions
         let chunks = Layout::default()
@@ -48,12 +45,13 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
             .split(area);
 
         // Title with scenario number for progress tracking
-        let title_text = if let Some(index) = task_data.scenario_index {
-            let total = state.game.scenario_collection.count();
-            format!("Scenario {}/{}: {}", index + 1, total, scenario.name)
-        } else {
-            format!("Scenario: {}", scenario.name)
-        };
+        let title_text = task_data.scenario_index.map_or_else(
+            || format!("Scenario: {}", scenario.name),
+            |index| {
+                let total = state.game.scenario_collection.count();
+                format!("Scenario {}/{}: {}", index + 1, total, scenario.name)
+            },
+        );
         let title = Paragraph::new(title_text)
             .style(
                 Style::default()
@@ -76,17 +74,8 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         frame.render_widget(description, chunks[1]);
 
         // Editor view - get current and target states
-        // When completed, use pending_completed_session for final state display
-        // Use PlayableScenario trait to get states from either Active or Completed session
-        let playable: &dyn PlayableScenario = if is_completed {
-            if let Some(completed) = &state.game.pending_completed_session {
-                completed as &dyn PlayableScenario
-            } else {
-                session as &dyn PlayableScenario
-            }
-        } else {
-            session as &dyn PlayableScenario
-        };
+        // A completed task shows the final editor state of its own session
+        let playable = session.playable();
 
         // Calculate preview highlight for surround operations
         let preview =
@@ -128,11 +117,9 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         let actions = playable.action_count();
         let elapsed = playable.elapsed();
         let mode = playable.mode_kind();
-        let progress = if is_completed {
-            100u8 // Completed = 100%
-        } else {
-            session.completion_progress()
-        };
+        let progress = session
+            .active()
+            .map_or(100u8, crate::game::GameSession::completion_progress);
         let elapsed_secs = elapsed.as_secs_f32();
 
         // Color code mode: green for Normal, yellow for Insert
@@ -159,13 +146,13 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
 
         // Create colored mode indicator
         let mode_span = Span::styled(
-            format!("Mode: {} ", mode_display),
+            format!("Mode: {mode_display} "),
             Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
         );
 
         // Create colored progress indicator
         let progress_span = Span::styled(
-            format!("| Progress: {}% ", progress),
+            format!("| Progress: {progress}% "),
             Style::default()
                 .fg(progress_color)
                 .add_modifier(Modifier::BOLD),
@@ -206,26 +193,28 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
             " [F1: Hint] "
         };
 
-        let last_cmd_text = if let Some(cmd) = &task_data.last_command {
-            format!(" Last: {} |", cmd)
-        } else {
-            String::new()
-        };
+        let last_cmd_text = task_data
+            .last_command
+            .as_ref()
+            .map_or_else(String::new, |cmd| format!(" Last: {cmd} |"));
 
         // Live feedback for an in-progress '"'-register selection,
         // ':'-command-line buffer, or 's'/'S' regex-selection prompt, so the
         // user can see what they're typing.
         let pending_text = super::helpers::pending_input_indicator(&task_data.input_state);
 
-        let macro_indicator = if task_data.session.is_recording_macro() {
+        let macro_indicator = if task_data
+            .session
+            .active()
+            .is_some_and(crate::game::GameSession::is_recording_macro)
+        {
             " [q: REC] "
         } else {
             ""
         };
 
         let instructions = Paragraph::new(format!(
-            "{}{}{}{}| Ctrl-Q: Abandon | Ctrl-C: Quit",
-            pending_text, macro_indicator, hint_indicator, last_cmd_text
+            "{pending_text}{macro_indicator}{hint_indicator}{last_cmd_text}| Ctrl-Q: Abandon | Ctrl-C: Quit"
         ))
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)
@@ -247,7 +236,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         }
 
         // Show success message if scenario just completed
-        if state.ui.completion_time.is_some() {
+        if is_completed {
             render_success_popup(frame);
         }
 

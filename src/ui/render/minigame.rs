@@ -213,7 +213,7 @@ fn render_queue(frame: &mut Frame, area: Rect, session: &crate::minigame::MiniGa
 
 /// Render scenario editor view - uses shared editor rendering
 ///
-/// Uses PlayableScenario trait to access current and target states,
+/// Uses `PlayableScenario` trait to access current and target states,
 /// enabling code reuse with training mode.
 fn render_scenario_editor<S: PlayableScenario>(
     frame: &mut Frame,
@@ -231,7 +231,7 @@ fn render_scenario_editor<S: PlayableScenario>(
         .split(area);
 
     // Task description
-    let task = Paragraph::new(format!("TASK: {}", description))
+    let task = Paragraph::new(format!("TASK: {description}"))
         .style(Style::default().fg(Color::Yellow))
         .wrap(Wrap { trim: true })
         .block(Block::default().borders(Borders::ALL));
@@ -257,7 +257,7 @@ fn render_timer_bar(frame: &mut Frame, area: Rect, scenario: &crate::minigame::A
         Color::Red
     };
 
-    let label = format!("TIME: {:.1}s", remaining);
+    let label = format!("TIME: {remaining:.1}s");
 
     // ratio must be in [0.0, 1.0] for Gauge widget
     let ratio = (1.0 - progress).clamp(0.0, 1.0);
@@ -327,7 +327,7 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
     let stats_line2 = Line::from(vec![
         Span::styled("COMBO: ", Style::default().fg(Color::Gray)),
         Span::styled(
-            format!("{:>2}", combo),
+            format!("{combo:>2}"),
             Style::default()
                 .fg(if combo >= COMBO_HIGHLIGHT_THRESHOLD {
                     Color::Magenta
@@ -350,7 +350,7 @@ fn render_stats_bar(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
         ),
         Span::raw("  "),
         Span::styled(
-            format!("Lv.{} ", level),
+            format!("Lv.{level} "),
             Style::default().fg(tier_color).add_modifier(Modifier::BOLD),
         ),
         Span::styled(tier_name, Style::default().fg(tier_color)),
@@ -384,7 +384,7 @@ fn render_transition(
     let is_success = session.state().transition_success().unwrap_or(true);
     let (title, message, color) = if is_success {
         let xp_msg = match last_xp {
-            Some(xp) if xp > 0 => format!("+{} XP", xp),
+            Some(xp) if xp > 0 => format!("+{xp} XP"),
             _ => "Loading next scenario...".to_string(),
         };
         ("SUCCESS!", xp_msg, Color::Green)
@@ -514,7 +514,7 @@ fn render_game_over(frame: &mut Frame, area: Rect, session: &crate::minigame::Mi
             Span::raw("   "),
             Span::styled("Best Combo: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                format!("{}", best_combo),
+                format!("{best_combo}"),
                 Style::default()
                     .fg(Color::Magenta)
                     .add_modifier(Modifier::BOLD),
@@ -629,7 +629,11 @@ mod tests {
         assert!(result.is_ok());
 
         let buffer: &Buffer = terminal.backend().buffer();
-        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let rendered: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             rendered.contains(':'),
             "expected the pending ':' command-line buffer to be visible in the rendered frame"
@@ -752,7 +756,11 @@ mod tests {
             .unwrap();
 
         let buffer: &Buffer = terminal.backend().buffer();
-        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let rendered: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             rendered.contains("COMBO") && rendered.contains("STREAK") && rendered.contains("BEST"),
             "expected second stats line (COMBO/STREAK/BEST) to be visible in the rendered frame, not clipped by the bordered stats block"
@@ -782,7 +790,11 @@ mod tests {
             .unwrap();
 
         let buffer: &Buffer = terminal.backend().buffer();
-        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let rendered: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             rendered.contains("COMBO") && rendered.contains("STREAK") && rendered.contains("BEST"),
             "expected second stats line (COMBO/STREAK/BEST) to be visible in the rendered frame, not clipped by the bordered stats block"
@@ -817,7 +829,11 @@ mod tests {
             .unwrap();
 
         let buffer: &Buffer = terminal.backend().buffer();
-        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let rendered: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             rendered.contains("COMBO") && rendered.contains("STREAK") && rendered.contains("BEST"),
             "expected second stats line (COMBO/STREAK/BEST) to be visible in the rendered frame, not clipped by the bordered stats block"

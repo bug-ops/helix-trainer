@@ -14,6 +14,10 @@ use helix_trainer::ui::state::{AppState, Message, ReviewSessionState, TypedScree
 use std::assert_matches;
 use std::time::Duration;
 
+fn cid(raw: &str) -> helix_trainer::ids::CommandId {
+    helix_trainer::ids::CommandId::from_card_id(raw).expect("canonical card id fixture")
+}
+
 /// Run `update` and execute the effects it requests, as the event loop does
 fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
     let mut effects = Vec::new();
@@ -35,17 +39,22 @@ fn review_session(state: &AppState) -> Option<&ReviewSessionState> {
 /// Helper: Create test app state with optional due reviews
 fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
     let profile = UserProfile::new();
-    let storage = ProfileStorage::new();
+    let storage = ProfileStorage::with_path(
+        tempfile::tempdir()
+            .expect("create temp dir")
+            .keep()
+            .join("profile.json"),
+    );
     let mut tracker = PerformanceTracker::new();
 
     // Record attempts to create due reviews
     // Note: We need to record failures or multiple attempts to make reviews due sooner
     if due_count > 0 {
         for i in 0..due_count {
-            let command = format!("cmd_{}", i);
+            let command = format!("cmd_{i}");
             // Record failed attempts to make reviews due immediately
             tracker.record_attempt(
-                &command,
+                &cid(&command),
                 Duration::from_secs(5),
                 false,
                 Duration::from_secs(1),
@@ -207,7 +216,7 @@ fn test_complete_review_idempotency() {
     assert_eq!(session.current_index, 1);
 
     // Try to complete again (should safely handle if called twice)
-    let _current_command = session.current_command().map(str::to_owned);
+    let _current_command = session.current_command().cloned();
     update(
         &mut state,
         Message::CompleteReviewCommand {
@@ -235,7 +244,7 @@ fn test_complete_review_command_success() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     let session_before = review_session(&state).unwrap();
-    let command = session_before.current_command().map(str::to_owned).unwrap();
+    let command = session_before.current_command().cloned().unwrap();
 
     // Complete review as success
     update(
@@ -265,7 +274,7 @@ fn test_complete_review_command_failure() {
     update(&mut state, Message::StartReviewSession).unwrap();
 
     let session_before = review_session(&state).unwrap();
-    let command = session_before.current_command().map(str::to_owned).unwrap();
+    let command = session_before.current_command().cloned().unwrap();
 
     // Complete review as failure
     update(
@@ -316,15 +325,14 @@ fn test_performance_tracker_updated() {
 
     let command = {
         let session = review_session(&state).unwrap();
-        session.current_command().map(str::to_owned).unwrap()
+        session.current_command().cloned().unwrap()
     };
 
     let attempts_before = state
         .progress
         .performance_tracker
         .performance(&command)
-        .map(|p| p.attempts())
-        .unwrap_or(0);
+        .map_or(0, helix_trainer::learning::CommandPerformance::attempts);
 
     // Complete review
     update(
@@ -340,8 +348,7 @@ fn test_performance_tracker_updated() {
         .progress
         .performance_tracker
         .performance(&command)
-        .map(|p| p.attempts())
-        .unwrap_or(0);
+        .map_or(0, helix_trainer::learning::CommandPerformance::attempts);
 
     assert!(
         attempts_after > attempts_before,

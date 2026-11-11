@@ -62,7 +62,7 @@ pub struct PerformancePoint {
     /// Difficulty of the scenario completed
     pub scenario_difficulty: Difficulty,
 
-    /// Action efficiency (optimal_count / actual_count, capped at 1.0)
+    /// Action efficiency (`optimal_count` / `actual_count`, capped at 1.0)
     pub efficiency: f64,
 }
 
@@ -107,7 +107,7 @@ impl PerformancePoint {
     ///
     /// Score components (configurable via constants):
     /// - Success: 60% weight (1.0 if success, 0.0 if failure)
-    /// - Speed: 25% weight (1.0 - time_ratio, so faster = higher)
+    /// - Speed: 25% weight (1.0 - `time_ratio`, so faster = higher)
     /// - Efficiency: 15% weight (efficiency ratio)
     ///
     /// # Returns
@@ -394,8 +394,7 @@ impl DifficultyController {
             .metadata
             .as_ref()
             .and_then(|m| m.difficulty)
-            .map(base_time_limit_for)
-            .unwrap_or(FALLBACK_TIME_LIMIT);
+            .map_or(FALLBACK_TIME_LIMIT, base_time_limit_for);
 
         // Scale by current level (level 10 = 80% time, but not less than 50%)
         let scale = match self.level.get() {
@@ -495,12 +494,11 @@ impl DifficultyController {
         }
 
         // Use FSRS-weighted selection if tracker provided, otherwise random
-        match tracker {
-            Some(t) => self.weighted_select(&candidates, t, rng),
-            None => {
-                let idx = rng.random_range(0..candidates.len());
-                Some(candidates[idx].clone())
-            }
+        if let Some(t) = tracker {
+            Self::weighted_select(&candidates, t, rng)
+        } else {
+            let idx = rng.random_range(0..candidates.len());
+            Some(candidates[idx].clone())
         }
     }
 
@@ -522,7 +520,6 @@ impl DifficultyController {
     /// Returns `Some(Scenario)` selected via weighted random, or `None` if
     /// weight distribution construction fails (should not happen with positive base weight).
     fn weighted_select<R: RngExt + ?Sized>(
-        &mut self,
         candidates: &[&Scenario],
         tracker: &PerformanceTracker,
         rng: &mut R,
@@ -637,6 +634,10 @@ impl DifficultyController {
     /// # Returns
     ///
     /// A score between 0.0 and 1.0 representing overall performance.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn calculate_performance_score(&self) -> f64 {
         if self.recent_performance.is_empty() {
             return DEFAULT_PERFORMANCE_SCORE;
@@ -729,6 +730,10 @@ impl DifficultyController {
     }
 
     /// Calculate success rate of recent results (for trend analysis)
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn calculate_recent_success_rate(&self) -> f64 {
         let recent_count = RECENT_TREND_WINDOW.min(self.recent_performance.len());
         if recent_count == 0 {
@@ -866,7 +871,7 @@ impl DifficultyController {
     ///
     /// This indicates how close the player is to leveling up:
     /// - Below performance threshold: progress = score / threshold
-    /// - Above threshold: progress = scenarios_completed / required
+    /// - Above threshold: progress = `scenarios_completed` / required
     ///
     /// # Returns
     ///
@@ -881,7 +886,7 @@ impl DifficultyController {
             self.performance_score / DIFFICULTY_INCREASE_SCORE
         } else {
             // Above threshold - show scenarios completed
-            (self.scenarios_at_level as f64 / MIN_SCENARIOS_FOR_INCREASE as f64).min(1.0)
+            (f64::from(self.scenarios_at_level) / f64::from(MIN_SCENARIOS_FOR_INCREASE)).min(1.0)
         }
     }
 
@@ -907,6 +912,10 @@ impl DifficultyController {
     /// let rate = controller.success_rate();
     /// assert_eq!(rate, Some(0.5));
     /// ```
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn success_rate(&self) -> Option<f64> {
         if self.recent_performance.is_empty() {
             return None;
@@ -950,7 +959,7 @@ impl Default for DifficultyController {
 mod tests {
     use super::*;
     use crate::config::{Difficulty, Scenario};
-    use crate::testing::ScenarioBuilder;
+    use crate::testing::{ScenarioBuilder, cid, sid};
     use rand::{SeedableRng, rngs::StdRng};
 
     fn create_test_scenario(difficulty: Difficulty, id: &str) -> Scenario {
@@ -1605,7 +1614,7 @@ mod tests {
             // Master the "h" command with many successful attempts
             for _ in 0..10 {
                 tracker.record_attempt(
-                    "h",
+                    &cid("h"),
                     StdDuration::from_secs(1),
                     true,
                     StdDuration::from_secs(1),
@@ -1613,7 +1622,7 @@ mod tests {
             }
 
             // Count selections over many iterations
-            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let mut selection_counts: HashMap<crate::ids::ScenarioId, u32> = HashMap::new();
             let iterations = 1000;
             let mut rng = StdRng::seed_from_u64(42);
 
@@ -1627,14 +1636,12 @@ mod tests {
 
             // Novel scenario (dd) should be selected more often than mastered (h)
             // because novel commands have FSRS_NOVELTY_WEIGHT (0.2) > mastered (nearly 0)
-            let novel_count = selection_counts.get("novel").copied().unwrap_or(0);
-            let mastered_count = selection_counts.get("mastered").copied().unwrap_or(0);
+            let novel_count = selection_counts.get(&sid("novel")).copied().unwrap_or(0);
+            let mastered_count = selection_counts.get(&sid("mastered")).copied().unwrap_or(0);
 
             assert!(
                 novel_count > mastered_count,
-                "Novel scenario should be selected more often. Novel: {}, Mastered: {}",
-                novel_count,
-                mastered_count
+                "Novel scenario should be selected more often. Novel: {novel_count}, Mastered: {mastered_count}"
             );
 
             // Both should be selected sometimes due to FSRS_BASE_WEIGHT
@@ -1654,7 +1661,7 @@ mod tests {
             let scenarios = vec![scenario1, scenario2, scenario3];
 
             // Without tracker, should use random selection (backward compatibility)
-            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let mut selection_counts: HashMap<crate::ids::ScenarioId, u32> = HashMap::new();
             let mut rng = StdRng::seed_from_u64(42);
 
             for _ in 0..300 {
@@ -1665,15 +1672,15 @@ mod tests {
 
             // All scenarios should be selected (random distribution)
             assert!(
-                selection_counts.get("s1").copied().unwrap_or(0) > 0,
+                selection_counts.get(&sid("s1")).copied().unwrap_or(0) > 0,
                 "s1 should be selected"
             );
             assert!(
-                selection_counts.get("s2").copied().unwrap_or(0) > 0,
+                selection_counts.get(&sid("s2")).copied().unwrap_or(0) > 0,
                 "s2 should be selected"
             );
             assert!(
-                selection_counts.get("s3").copied().unwrap_or(0) > 0,
+                selection_counts.get(&sid("s3")).copied().unwrap_or(0) > 0,
                 "s3 should be selected"
             );
 
@@ -1682,9 +1689,7 @@ mod tests {
             for (id, count) in &selection_counts {
                 assert!(
                     *count > 50 && *count < 200,
-                    "Selection count for {} should be roughly uniform, got {}",
-                    id,
-                    count
+                    "Selection count for {id} should be roughly uniform, got {count}"
                 );
             }
         }
@@ -1703,7 +1708,7 @@ mod tests {
             // Heavily master "h" command
             for _ in 0..50 {
                 tracker.record_attempt(
-                    "h",
+                    &cid("h"),
                     StdDuration::from_secs(1),
                     true,
                     StdDuration::from_secs(1),
@@ -1749,7 +1754,7 @@ mod tests {
             let scenarios = vec![scenario1, scenario2, scenario3];
 
             // With empty tracker, all commands are novel and should have equal weight
-            let mut selection_counts: HashMap<String, u32> = HashMap::new();
+            let mut selection_counts: HashMap<crate::ids::ScenarioId, u32> = HashMap::new();
             let mut rng = StdRng::seed_from_u64(42);
 
             for _ in 0..300 {
@@ -1768,9 +1773,7 @@ mod tests {
             // Allow for statistical variance but expect roughly uniform
             assert!(
                 max_count - min_count < 100,
-                "Selection should be roughly uniform. Min: {}, Max: {}",
-                min_count,
-                max_count
+                "Selection should be roughly uniform. Min: {min_count}, Max: {max_count}"
             );
         }
 
@@ -1786,7 +1789,7 @@ mod tests {
             for _ in 0..10 {
                 let result = controller.next_scenario(&scenarios, Some(&tracker), &mut rand::rng());
                 assert!(result.is_some());
-                assert_eq!(result.unwrap().id, "single");
+                assert_eq!(result.unwrap().id.as_str(), "single");
             }
         }
 
@@ -1838,7 +1841,8 @@ mod tests {
                     controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
                 {
                     assert_eq!(
-                        scenario.id, "beginner",
+                        scenario.id.as_str(),
+                        "beginner",
                         "At level 1, only beginner scenarios should be selected"
                     );
                 }
@@ -1852,7 +1856,7 @@ mod tests {
             for _ in 0..20 {
                 if let Some(scenario) =
                     controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
-                    && scenario.id == "advanced"
+                    && scenario.id.as_str() == "advanced"
                 {
                     found_advanced = true;
                     break;

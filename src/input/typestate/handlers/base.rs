@@ -1,4 +1,4 @@
-//! BaseState handler - handles input when no prefix is active
+//! `BaseState` handler - handles input when no prefix is active
 //!
 //! This is the default state handler that processes single-key commands and
 //! transitions to pending states for multi-key sequences.
@@ -7,7 +7,10 @@ use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_CTRL_R, CMD_ESCAPE, CMD_HALF_PAGE_DOWN, CMD_HALF_PAGE_UP, CMD_PAGE_DOWN, CMD_PAGE_UP,
+    CMD_REPLAY_MACRO, CMD_TOGGLE_COMMENTS, CMD_TOGGLE_MACRO_RECORDING,
+};
 
 use super::count::count_from_digit;
 use super::{InputHandler, KeyHandler};

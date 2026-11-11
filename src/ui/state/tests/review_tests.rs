@@ -9,6 +9,7 @@
 //! constructing `ReviewSessionState` directly, since `StartReviewSession` cannot be
 //! relied on to produce a due review deterministically.
 
+use crate::testing::cid;
 use std::assert_matches;
 use std::time::{Duration, Instant};
 
@@ -25,7 +26,12 @@ fn test_review_session_with_no_due_reviews() {
     // Even with recorded attempts, FSRS may not schedule reviews immediately
     {
         let tracker = &mut state.progress.performance_tracker;
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
     }
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -67,7 +73,7 @@ fn test_review_session_no_due_reviews_stays_on_menu() {
     assert!(review_session(&state).is_none());
 }
 
-fn review_session_with_commands(due_commands: Vec<String>) -> ReviewSessionState {
+fn review_session_with_commands(due_commands: Vec<crate::ids::CommandId>) -> ReviewSessionState {
     ReviewSessionState {
         due_commands,
         current_index: 0,
@@ -92,8 +98,8 @@ fn test_complete_review_command_persists_fsrs_data_mid_session() {
 
     // Two due commands so completing the first one does not end the session.
     state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
-        "x".to_string(),
-        "d".to_string(),
+        cid("x"),
+        cid("d"),
     ])));
 
     update(
@@ -111,7 +117,7 @@ fn test_complete_review_command_persists_fsrs_data_mid_session() {
         .load()
         .unwrap();
     assert!(
-        persisted.performance_data.contains_key("x"),
+        persisted.performance_data.contains_key(&cid("x")),
         "the completed review's FSRS data must be persisted before the session ends"
     );
 }
@@ -132,9 +138,9 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
     let initial_xp = state.progress.profile.total_xp;
 
     // Single due command: completing it ends the session immediately.
-    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
-        "x".to_string(),
-    ])));
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![cid(
+        "x",
+    )])));
 
     update(
         &mut state,
@@ -154,7 +160,7 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
         .unwrap();
     assert_eq!(persisted.total_xp, state.progress.profile.total_xp);
     assert!(
-        persisted.performance_data.contains_key("x"),
+        persisted.performance_data.contains_key(&cid("x")),
         "FSRS data recorded during the review session must survive the final flush"
     );
 }
@@ -175,9 +181,9 @@ fn test_review_session_completion_persists_level_up() {
     state.progress.profile.total_xp = xp_for_level_2 - 10;
     state.progress.profile.level = 1;
 
-    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
-        "x".to_string(),
-    ])));
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![cid(
+        "x",
+    )])));
 
     update(
         &mut state,
@@ -210,9 +216,9 @@ fn test_review_session_completion_notifies_on_level_up() {
     state.progress.profile.total_xp = xp_for_level_2 - 10;
     state.progress.profile.level = 1;
 
-    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
-        "x".to_string(),
-    ])));
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![cid(
+        "x",
+    )])));
 
     update(
         &mut state,
@@ -241,9 +247,9 @@ fn test_review_session_completion_no_level_up_notification_without_level_up() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
 
-    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
-        "x".to_string(),
-    ])));
+    state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![cid(
+        "x",
+    )])));
 
     update(
         &mut state,
@@ -283,8 +289,8 @@ fn test_abandon_review_session_persists_partial_progress() {
 
     // Two due commands so completing the first one does not end the session.
     state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![
-        "x".to_string(),
-        "d".to_string(),
+        cid("x"),
+        cid("d"),
     ])));
 
     update(
@@ -310,7 +316,7 @@ fn test_abandon_review_session_persists_partial_progress() {
 
     let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
     assert!(
-        persisted.performance_data.contains_key("x"),
+        persisted.performance_data.contains_key(&cid("x")),
         "abandoning must flush FSRS data recorded before the debounce window elapsed"
     );
 }

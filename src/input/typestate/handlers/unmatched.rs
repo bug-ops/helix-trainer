@@ -1,12 +1,12 @@
-//! UnmatchedPrevPending and UnmatchedNextPending handlers
+//! `UnmatchedPrevPending` and `UnmatchedNextPending` handlers
 //!
-//! Handles input after '[' and ']' prefixes for unmatched bracket navigation.
+//! Handles input after `[` and `]` prefixes for unmatched bracket navigation.
 
 use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::*;
+use crate::helix::commands::{CMD_GOTO_NEXT_PARAGRAPH, CMD_GOTO_PREV_PARAGRAPH};
 
 use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{

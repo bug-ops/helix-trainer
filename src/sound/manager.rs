@@ -48,6 +48,14 @@ impl SoundManager {
     ///
     /// Call this early (e.g., at app startup) to detect audio availability.
     /// If this fails, the manager will operate in silent mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SoundError::StreamError`] if no default audio output can be opened.
+    #[expect(
+        clippy::used_underscore_binding,
+        reason = "`_stream` only keeps the output device alive and is never read"
+    )]
     pub fn try_init(&mut self) -> Result<(), SoundError> {
         if self.initialized {
             return Ok(());

@@ -29,6 +29,10 @@ impl Analytics {
     ///
     /// # Arguments
     /// * `tracker` - Reference to performance tracker
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn get_mastery_summary(tracker: &PerformanceTracker) -> MasterySummary {
         let all_commands = tracker.all_commands();
         let total_commands = all_commands.len();
@@ -45,10 +49,10 @@ impl Analytics {
             };
         }
 
-        let mut master = 0;
-        let mut advanced = 0;
-        let mut intermediate = 0;
-        let mut beginner = 0;
+        let mut master: usize = 0;
+        let mut advanced: usize = 0;
+        let mut intermediate: usize = 0;
+        let mut beginner: usize = 0;
         let mut total_stability = 0.0;
         let mut total_difficulty = 0.0;
 
@@ -56,10 +60,10 @@ impl Analytics {
             if let Some(perf) = tracker.performance(command) {
                 use super::ProgressionTier;
                 match perf.mastery_level().tier_level() {
-                    3 => master += 1,
-                    2 => advanced += 1,
-                    1 => intermediate += 1,
-                    _ => beginner += 1,
+                    3 => master = master.saturating_add(1),
+                    2 => advanced = advanced.saturating_add(1),
+                    1 => intermediate = intermediate.saturating_add(1),
+                    _ => beginner = beginner.saturating_add(1),
                 }
                 total_stability += perf.stability();
                 total_difficulty += perf.difficulty();
@@ -122,13 +126,15 @@ impl Analytics {
 
         // Simulate historical progress (linear growth for now)
         // In production, this would be actual historical data
-        let current_avg = summary.avg_stability as f64;
-        let step = current_avg / days as f64;
+        let current_avg = f64::from(summary.avg_stability);
+        let step = current_avg / f64::from(days);
 
         (0..=days)
             .map(|day| {
-                let timestamp = now - chrono::Duration::days((days - day) as i64);
-                let avg_stability = step * day as f64;
+                let timestamp = now
+                    .checked_sub_signed(chrono::Duration::days(i64::from(days.saturating_sub(day))))
+                    .unwrap_or(DateTime::<Utc>::MIN_UTC);
+                let avg_stability = step * f64::from(day);
                 (timestamp, avg_stability)
             })
             .collect()
@@ -143,6 +149,10 @@ impl Analytics {
     ///
     /// # Arguments
     /// * `tracker` - Reference to performance tracker
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn identify_plateaus(tracker: &PerformanceTracker) -> Vec<String> {
         const MIN_ATTEMPTS: u32 = 5;
 
@@ -178,6 +188,10 @@ impl Analytics {
     ///
     /// # Arguments
     /// * `tracker` - Reference to performance tracker
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn avg_success_rate(tracker: &PerformanceTracker) -> f64 {
         let all_commands = tracker.all_commands();
         if all_commands.is_empty() {
@@ -187,7 +201,7 @@ impl Analytics {
         let total: f64 = all_commands
             .iter()
             .filter_map(|&cmd| tracker.performance(cmd))
-            .map(|perf| perf.success_rate())
+            .map(crate::learning::CommandPerformance::success_rate)
             .sum();
 
         total / all_commands.len() as f64
@@ -198,6 +212,7 @@ impl Analytics {
 mod tests {
     use super::*;
     use crate::learning::performance::PerformanceTracker;
+    use crate::testing::cid;
     use std::time::Duration;
 
     fn setup_tracker_with_varied_mastery() -> PerformanceTracker {
@@ -205,7 +220,7 @@ mod tests {
 
         // Beginner: new command, no practice
         tracker.record_attempt(
-            "beginner1",
+            &cid("beginner1"),
             Duration::from_secs(5),
             false,
             Duration::from_secs(1),
@@ -214,7 +229,7 @@ mod tests {
         // Intermediate: moderate stability
         for _ in 0..3 {
             tracker.record_attempt(
-                "intermediate1",
+                &cid("intermediate1"),
                 Duration::from_secs(2),
                 true,
                 Duration::from_secs(1),
@@ -224,7 +239,7 @@ mod tests {
         // Advanced: high stability
         for _ in 0..10 {
             tracker.record_attempt(
-                "advanced1",
+                &cid("advanced1"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),
@@ -345,7 +360,7 @@ mod tests {
 
         // Last point should match current avg stability
         let summary = Analytics::get_mastery_summary(&tracker);
-        assert_eq!(progress.last().unwrap().1, summary.avg_stability as f64);
+        assert_eq!(progress.last().unwrap().1, f64::from(summary.avg_stability));
 
         // Values should increase monotonically
         for window in progress.windows(2) {
@@ -368,7 +383,7 @@ mod tests {
         // Create a plateau: many attempts but low stability
         for _ in 0..10 {
             tracker.record_attempt(
-                "plateau_cmd",
+                &cid("plateau_cmd"),
                 Duration::from_secs(4), // Hard rating
                 true,
                 Duration::from_secs(1),
@@ -378,7 +393,7 @@ mod tests {
         // Create a good command: many attempts with high stability
         for _ in 0..10 {
             tracker.record_attempt(
-                "good_cmd",
+                &cid("good_cmd"),
                 Duration::from_secs(1), // Easy rating
                 true,
                 Duration::from_secs(1),
@@ -398,7 +413,7 @@ mod tests {
         // Command with < 5 attempts should not be considered plateau
         for _ in 0..3 {
             tracker.record_attempt(
-                "few_attempts",
+                &cid("xfew_attempts"),
                 Duration::from_secs(10),
                 false,
                 Duration::from_secs(1),

@@ -125,7 +125,7 @@ No project data-model change.
 
 | ID | Metric | Target |
 |----|--------|--------|
-| SC-001 | For a fixed corpus of review sequences (each of the four ratings, first review and repeated reviews, spaced across 0 to 365 days), `stability`, `difficulty` and the scheduled interval from the migrated build vs. golden values captured from the 6.6.2 build | Equal (bitwise, or within 1e-6 relative if the crate changed `f32` operation order; tolerance and reason recorded in the PR) |
+| SC-001 | For a fixed corpus of review sequences (each of the four ratings, first review and repeated reviews, spaced across 0 to 365 days), `stability`, `difficulty` and the scheduled interval from the migrated build vs. golden values captured from the 6.6.2 build | Within 1e-6 relative. Bitwise equality does not hold: a probe of 6.6.2 vs 7.0.0 over `next_states` and retrievability found 295 of 3652 values differing, max relative error 1.13e-7 (a 10x margin under the tolerance). The reason is recorded in the PR |
 | SC-002 | `retrievability` from `FSRS::current_retrievability` vs. the 6.6.2 free function for the same state and elapsed days, over a grid of at least 20 elapsed-day values | Equal within 1e-6 absolute |
 | SC-003 | Scheduler proptests merged in #435 and `src/learning/performance.rs` proptests | All pass; ignored properties tied to #433/#434 remain `#[ignore]`d with unchanged reasons (neither newly failing nor accidentally un-ignored) |
 | SC-004 | Existing `profile.json` fixture written by the 6.6 build | Loads and yields the same due list and retrievability values |
@@ -156,11 +156,13 @@ No project data-model change.
 
 ## 9. Open Questions
 
-> [!question] Unresolved
-> - [NEEDS CLARIFICATION: Does 7.0.0 compile and pass on the project MSRV 1.98 with edition-2024 dependencies and no declared `rust-version`?]
-> - [NEEDS CLARIFICATION: Do `next_states` / `memory_state_from_sm2` / other APIs used by `performance.rs` and `scheduler.rs` keep their 6.6 signatures in 7.0.0, beyond the four items verified above?]
-> - [NEEDS CLARIFICATION: Is `f32` output bitwise stable across the bump (the new `wide` SIMD dependency may reorder operations)? Determines whether SC-001 is exact or tolerance-based.]
-> - [NEEDS CLARIFICATION: Should the project keep `fsrs` pinned to `6.6` and ignore the Dependabot major until [[fsrs-7-model-adoption/spec]] is decided? Default: migrate now, since 6.x is unlikely to receive updates.]
+> [!success] Resolved
+> - 7.0.0 compiles and runs on the project MSRV: a probe built and ran fsrs 7.0.0 with `cargo +1.98`. MSRV stays 1.98; no bump.
+> - `f32` output is not bitwise stable across the bump: 295 of 3652 probed values differ from 6.6.2, max relative error 1.13e-7. SC-001 therefore uses the 1e-6 relative tolerance branch.
+
+> [!success] Resolved by the migration
+> - API signatures: `FSRS6_DEFAULT_PARAMETERS` is `[f32; 21]`, `current_retrievability` is a method on a shared `FSRS`, and `MemoryState.stability_fast` is set equal to `stability` (FSRS-6 behavior preserved); `next_states` and `memory_state_from_sm2` kept the signatures used by `performance.rs` and `scheduler.rs`.
+> - Pin: the project migrated to fsrs 7 now instead of pinning 6.6.
 
 ## 10. See Also
 

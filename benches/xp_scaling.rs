@@ -1,9 +1,9 @@
 //! Performance benchmarks for scenario mastery XP scaling system
 //!
 //! This benchmark suite measures the performance impact of the new XP scaling feature,
-//! including HashMap operations, DateTime operations, float arithmetic, and serialization.
+//! including `HashMap` operations, `DateTime` operations, float arithmetic, and serialization.
 //!
-//! Run with: cargo bench --bench xp_scaling
+//! Run with: cargo bench --bench `xp_scaling`
 
 #![expect(
     clippy::cast_possible_truncation,
@@ -127,10 +127,17 @@ impl ScenarioHistoryTracker {
     fn get_xp_multiplier(&self, scenario_id: &str) -> f64 {
         self.completions
             .get(scenario_id)
-            .map(|c| c.xp_multiplier())
-            .unwrap_or(1.0)
+            .map_or(1.0, ScenarioCompletion::xp_multiplier)
     }
 
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
+    )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn record_completion(&mut self, scenario_id: &str, score: u32, base_xp: u64) -> u64 {
         let multiplier = self.get_xp_multiplier(scenario_id);
         let actual_xp = (base_xp as f64 * multiplier) as u64;
@@ -162,7 +169,7 @@ fn bench_xp_first_attempt(c: &mut Criterion) {
                 ))
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 }
 
@@ -183,7 +190,7 @@ fn bench_xp_existing_record(c: &mut Criterion) {
                 ))
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 }
 
@@ -197,7 +204,7 @@ fn bench_xp_varying_sizes(c: &mut Criterion) {
                     let mut tracker = ScenarioHistoryTracker::new();
                     // Pre-populate with N scenarios
                     for i in 0..size {
-                        tracker.record_completion(&format!("scenario_{}", i), 100, 50);
+                        tracker.record_completion(&format!("scenario_{i}"), 100, 50);
                     }
                     tracker
                 },
@@ -210,7 +217,7 @@ fn bench_xp_varying_sizes(c: &mut Criterion) {
                     ))
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -226,7 +233,7 @@ fn bench_datetime_now(c: &mut Criterion) {
 fn bench_datetime_format(c: &mut Criterion) {
     let now = Utc::now();
     c.bench_function("datetime_format", |b| {
-        b.iter(|| black_box(now.format("%Y-%m-%d").to_string()))
+        b.iter(|| black_box(now.format("%Y-%m-%d").to_string()));
     });
 }
 
@@ -236,12 +243,20 @@ fn bench_datetime_full_check(c: &mut Criterion) {
             let now = Utc::now();
             let today = now.format("%Y-%m-%d").to_string();
             black_box(today)
-        })
+        });
     });
 }
 
 // Benchmark: Float Arithmetic
 
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "a float-to-int `as` saturates, so a negative value maps to 0"
+)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+)]
 fn bench_float_multiplier(c: &mut Criterion) {
     c.bench_function("float_multiplier", |b| {
         let base_xp = 50u64;
@@ -249,7 +264,7 @@ fn bench_float_multiplier(c: &mut Criterion) {
         b.iter(|| {
             let result = (black_box(base_xp) as f64 * black_box(multiplier)) as u64;
             black_box(result)
-        })
+        });
     });
 }
 
@@ -260,10 +275,18 @@ fn bench_fixed_point_multiplier(c: &mut Criterion) {
         b.iter(|| {
             let result = (black_box(base_xp) * black_box(multiplier)) / 100;
             black_box(result)
-        })
+        });
     });
 }
 
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "a float-to-int `as` saturates, so a negative value maps to 0"
+)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+)]
 fn bench_multiplier_comparison(c: &mut Criterion) {
     let mut group = c.benchmark_group("multiplier_comparison");
 
@@ -274,7 +297,7 @@ fn bench_multiplier_comparison(c: &mut Criterion) {
         b.iter(|| {
             let result = (black_box(base_xp) as f64 * black_box(multiplier)) as u64;
             black_box(result)
-        })
+        });
     });
 
     group.bench_function("fixed_point", |b| {
@@ -282,7 +305,7 @@ fn bench_multiplier_comparison(c: &mut Criterion) {
         b.iter(|| {
             let result = (black_box(base_xp) * black_box(multiplier)) / 100;
             black_box(result)
-        })
+        });
     });
 
     group.finish();
@@ -299,13 +322,13 @@ fn bench_profile_save(c: &mut Criterion) {
                 || {
                     let mut tracker = ScenarioHistoryTracker::new();
                     for i in 0..size {
-                        tracker.record_completion(&format!("scenario_{}", i), 100, 50);
+                        tracker.record_completion(&format!("scenario_{i}"), 100, 50);
                     }
                     tracker
                 },
                 |tracker| black_box(serde_json::to_string(&tracker.completions).unwrap()),
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -321,7 +344,7 @@ fn bench_profile_load(c: &mut Criterion) {
                 || {
                     let mut tracker = ScenarioHistoryTracker::new();
                     for i in 0..size {
-                        tracker.record_completion(&format!("scenario_{}", i), 100, 50);
+                        tracker.record_completion(&format!("scenario_{i}"), 100, 50);
                     }
                     serde_json::to_string(&tracker.completions).unwrap()
                 },
@@ -331,7 +354,7 @@ fn bench_profile_load(c: &mut Criterion) {
                     )
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -345,7 +368,7 @@ fn bench_string_date_comparison(c: &mut Criterion) {
     let date2 = "2025-11-28".to_string();
 
     c.bench_function("string_date_comparison", |b| {
-        b.iter(|| black_box(date1 != date2))
+        b.iter(|| black_box(date1 != date2));
     });
 }
 
@@ -354,7 +377,7 @@ fn bench_timestamp_comparison(c: &mut Criterion) {
     let ts2 = Utc::now().timestamp();
 
     c.bench_function("timestamp_comparison", |b| {
-        b.iter(|| black_box(ts1 / 86400 != ts2 / 86400))
+        b.iter(|| black_box(ts1 / 86400 != ts2 / 86400));
     });
 }
 
@@ -369,13 +392,13 @@ fn bench_hashmap_lookup(c: &mut Criterion) {
                 || {
                     let mut map = HashMap::new();
                     for i in 0..size {
-                        map.insert(format!("scenario_{}", i), i);
+                        map.insert(format!("scenario_{i}"), i);
                     }
                     map
                 },
                 |map| black_box(map.get("scenario_0").copied()),
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -393,13 +416,13 @@ fn bench_btreemap_lookup(c: &mut Criterion) {
                 || {
                     let mut map = BTreeMap::new();
                     for i in 0..size {
-                        map.insert(format!("scenario_{}", i), i);
+                        map.insert(format!("scenario_{i}"), i);
                     }
                     map
                 },
                 |map| black_box(map.get("scenario_0").copied()),
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -423,7 +446,7 @@ fn bench_complete_workflow(c: &mut Criterion) {
                 black_box(tracker.record_completion("scenario_1", 100, 50))
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 }
 

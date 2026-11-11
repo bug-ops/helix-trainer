@@ -19,6 +19,5 @@ mod match_handler_tests;
 mod state_machine_tests;
 mod state_types_tests;
 mod text_object_tests;
-mod typestate_wrapper_tests;
 mod unmatched_handler_tests;
 mod view_handler_tests;

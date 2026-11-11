@@ -1,5 +1,6 @@
 use super::performance::{CommandPerformance, PerformanceTracker};
 use super::urgency::{Urgency, command_urgency};
+use crate::ids::CommandId;
 use crate::time::{Clock, SystemClock};
 use chrono::{DateTime, Utc};
 use std::collections::BinaryHeap;
@@ -9,7 +10,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct ReviewItem {
     /// Command id.
-    pub id: String,
+    pub id: CommandId,
     /// When the review becomes due.
     pub due: DateTime<Utc>,
     /// Urgency score; higher is reviewed first.
@@ -60,6 +61,12 @@ impl Default for Scheduler {
 }
 
 impl Scheduler {
+    fn average_duration(total: std::time::Duration, count: usize) -> std::time::Duration {
+        total
+            .checked_div(u32::try_from(count).unwrap_or(u32::MAX))
+            .unwrap_or(std::time::Duration::ZERO)
+    }
+
     /// Create a new scheduler backed by the system clock
     pub fn new() -> Self {
         Self::with_clock(Arc::new(SystemClock))
@@ -83,7 +90,7 @@ impl Scheduler {
     pub fn record_scenario_commands(
         &self,
         tracker: &mut PerformanceTracker,
-        commands: &[String],
+        commands: &[CommandId],
         total_duration: std::time::Duration,
         success: bool,
     ) {
@@ -92,7 +99,7 @@ impl Scheduler {
         }
 
         // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = total_duration / u32::try_from(commands.len()).unwrap_or(u32::MAX);
+        let avg_duration = Self::average_duration(total_duration, commands.len());
 
         // Optimal time is slightly less than avg (assume user could be 20% faster)
         let optimal_time = avg_duration.mul_f32(0.8);
@@ -107,20 +114,20 @@ impl Scheduler {
 
     /// Record commands and track mastery level changes
     ///
-    /// Returns list of (command, new_level_name) for commands that leveled up
+    /// Returns list of (command, `new_level_name`) for commands that leveled up
     pub fn record_scenario_commands_with_mastery(
         &self,
         tracker: &mut PerformanceTracker,
-        commands: &[String],
+        commands: &[CommandId],
         total_duration: std::time::Duration,
         success: bool,
-    ) -> Vec<(String, String)> {
+    ) -> Vec<(CommandId, String)> {
         if commands.is_empty() {
             return Vec::new();
         }
 
         // Calculate average time per command (rough estimate for FSRS)
-        let avg_duration = total_duration / u32::try_from(commands.len()).unwrap_or(u32::MAX);
+        let avg_duration = Self::average_duration(total_duration, commands.len());
 
         // Optimal time is slightly less than avg (assume user could be 20% faster)
         let optimal_time = avg_duration.mul_f32(0.8);
@@ -148,7 +155,7 @@ impl Scheduler {
     ///
     /// # Arguments
     /// * `tracker` - Reference to performance tracker
-    pub fn get_due_reviews(&self, tracker: &PerformanceTracker) -> Vec<String> {
+    pub fn get_due_reviews(&self, tracker: &PerformanceTracker) -> Vec<CommandId> {
         let now = self.clock.now();
 
         tracker
@@ -158,7 +165,7 @@ impl Scheduler {
                 tracker
                     .performance(cmd)
                     .filter(|perf| perf.due() <= now)
-                    .map(|_| cmd.to_string())
+                    .map(|_| cmd.clone())
             })
             .collect()
     }
@@ -184,7 +191,7 @@ impl Scheduler {
                 tracker.performance(cmd).and_then(|perf| {
                     if perf.due() <= now {
                         Some(ReviewItem {
-                            id: cmd.to_string(),
+                            id: cmd.clone(),
                             due: perf.due(),
                             priority: Self::calculate_priority(perf, now),
                         })
@@ -207,9 +214,9 @@ impl Scheduler {
     /// Higher priority = more urgent to review
     ///
     /// Review projection of [`command_urgency`]:
-    /// - `overdue_ratio` = days_overdue / scheduled_days (how late is it?)
+    /// - `overdue_ratio` = `days_overdue` / `scheduled_days` (how late is it?)
     /// - `difficulty_weight` = difficulty / 5.0 (harder = more important)
-    /// - `priority` = overdue_ratio * difficulty_weight
+    /// - `priority` = `overdue_ratio` * `difficulty_weight`
     ///
     /// A [`Urgency::Novel`] command has no card and is never queued, so it scores 0.
     fn calculate_priority(perf: &CommandPerformance, now: DateTime<Utc>) -> f64 {
@@ -239,23 +246,23 @@ impl Scheduler {
         &self,
         tracker: &PerformanceTracker,
         duration_minutes: u32,
-    ) -> Vec<String> {
+    ) -> Vec<CommandId> {
         const AVG_SCENARIO_TIME_MINUTES: u32 = 3;
         let max_items = duration_minutes / AVG_SCENARIO_TIME_MINUTES;
 
         // Split session: 50% reviews, 50% new/weak content
         let review_items = max_items / 2;
         let review_count = review_items as usize;
-        let new_content_count = (max_items - review_items) as usize;
+        let new_content_count = max_items.saturating_sub(review_items) as usize;
 
         // Get review items (commands due for practice)
         let review_items = self.get_review_queue(tracker, review_count);
 
         // Get new content (weak commands + untried commands)
-        let new_content = self.get_new_content(tracker, new_content_count);
+        let new_content = Self::get_new_content(tracker, new_content_count);
 
         // Combine and return
-        let mut session: Vec<String> = review_items.into_iter().map(|item| item.id).collect();
+        let mut session: Vec<CommandId> = review_items.into_iter().map(|item| item.id).collect();
         session.extend(new_content);
 
         session
@@ -272,7 +279,7 @@ impl Scheduler {
     ///
     /// # Returns
     /// Command IDs for new/weak content
-    fn get_new_content(&self, tracker: &PerformanceTracker, count: usize) -> Vec<String> {
+    fn get_new_content(tracker: &PerformanceTracker, count: usize) -> Vec<CommandId> {
         if count == 0 {
             return Vec::new();
         }
@@ -291,10 +298,10 @@ impl Scheduler {
         ];
 
         // Find untried essential commands
-        let mut untried_commands: Vec<String> = essential_commands
+        let mut untried_commands: Vec<CommandId> = essential_commands
             .iter()
-            .filter(|cmd| !all_known_commands.contains(cmd.to_owned()))
-            .map(|cmd| cmd.to_string())
+            .filter_map(|cmd| CommandId::from_card_id(cmd))
+            .filter(|cmd| !all_known_commands.contains(&cmd))
             .collect();
 
         // Combine: weak commands first, then untried
@@ -315,6 +322,7 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::cid;
     use chrono::Duration as ChronoDuration;
     use std::time::Duration;
 
@@ -322,9 +330,24 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
 
         // Add some commands with different due dates and difficulties
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
-        tracker.record_attempt("p", Duration::from_secs(4), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("yy"),
+            Duration::from_secs(2),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("p"),
+            Duration::from_secs(4),
+            true,
+            Duration::from_secs(1),
+        );
 
         tracker
     }
@@ -343,7 +366,12 @@ mod tests {
         let mut tracker = create_test_tracker();
 
         // Record another attempt to update the command
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
         let scheduler = Scheduler::new();
         let due = scheduler.get_due_reviews(&tracker);
@@ -359,13 +387,13 @@ mod tests {
         let now = Utc::now();
 
         // Command 1: Very overdue, hard difficulty
-        let mut cmd1 = CommandPerformance::new("hard_overdue".to_string(), now);
+        let mut cmd1 = CommandPerformance::new(now);
         cmd1.set_difficulty(8.0);
         cmd1.set_scheduled_days(10);
         cmd1.set_due(now - ChronoDuration::days(20)); // 20 days overdue
 
         // Command 2: Slightly overdue, easy difficulty
-        let mut cmd2 = CommandPerformance::new("easy_overdue".to_string(), now);
+        let mut cmd2 = CommandPerformance::new(now);
         cmd2.set_difficulty(3.0);
         cmd2.set_scheduled_days(10);
         cmd2.set_due(now - ChronoDuration::days(5)); // 5 days overdue
@@ -378,6 +406,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn test_priority_keeps_the_pre_urgency_formula_exactly() {
         let now = Utc::now();
         for (difficulty, scheduled_days, days_overdue) in [
@@ -387,13 +419,13 @@ mod tests {
             (9.5, 3, 7),
             (0.0, 4, 9),
         ] {
-            let mut perf = CommandPerformance::new("c".to_string(), now);
+            let mut perf = CommandPerformance::new(now);
             perf.set_difficulty(difficulty);
             perf.set_scheduled_days(scheduled_days);
             perf.set_due(now - ChronoDuration::days(days_overdue));
 
-            let expected = days_overdue as f64 / scheduled_days.max(1) as f64
-                * (perf.difficulty() as f64 / 5.0);
+            let expected = days_overdue as f64 / f64::from(scheduled_days.max(1))
+                * (f64::from(perf.difficulty()) / 5.0);
 
             assert_eq!(Scheduler::calculate_priority(&perf, now), expected);
         }
@@ -415,9 +447,14 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
 
         // Create commands with different priorities
-        tracker.record_attempt("low", Duration::from_secs(1), true, Duration::from_secs(1));
         tracker.record_attempt(
-            "high",
+            &cid("low"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("high"),
             Duration::from_secs(10),
             false,
             Duration::from_secs(1),
@@ -451,8 +488,18 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
 
         // Add some commands with reviews due
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("yy"),
+            Duration::from_secs(2),
+            true,
+            Duration::from_secs(1),
+        );
 
         let scheduler = Scheduler::new();
 
@@ -464,7 +511,7 @@ mod tests {
         assert!(session.len() <= 4);
 
         // Should contain at least one review item (x or yy)
-        let has_review = session.contains(&"x".to_string()) || session.contains(&"yy".to_string());
+        let has_review = session.contains(&cid("x")) || session.contains(&cid("yy"));
         assert!(
             has_review,
             "Session should contain at least one review item"
@@ -477,20 +524,23 @@ mod tests {
 
         // Make "x" weak by failing it multiple times
         for _ in 0..5 {
-            tracker.record_attempt("x", Duration::from_secs(10), false, Duration::from_secs(1));
+            tracker.record_attempt(
+                &cid("x"),
+                Duration::from_secs(10),
+                false,
+                Duration::from_secs(1),
+            );
         }
 
-        let scheduler = Scheduler::new();
-
         // Get new content
-        let new_content = scheduler.get_new_content(&tracker, 5);
+        let new_content = Scheduler::get_new_content(&tracker, 5);
 
         // Should have up to 5 items
         assert!(new_content.len() <= 5);
 
         // Should include weak command (x)
         assert!(
-            new_content.contains(&"x".to_string()),
+            new_content.contains(&cid("x")),
             "Should include weak command 'x'"
         );
 
@@ -498,16 +548,15 @@ mod tests {
         // (at least one command that wasn't practiced)
         let has_untried = new_content
             .iter()
-            .any(|cmd| cmd != "x" && ["x", "i", "a", "o", "O"].contains(&cmd.as_str()));
+            .any(|cmd| cmd.as_str() != "x" && ["x", "i", "a", "o", "O"].contains(&cmd.as_str()));
         assert!(has_untried, "Should include at least one untried command");
     }
 
     #[test]
     fn test_get_new_content_empty_when_count_zero() {
         let tracker = PerformanceTracker::new();
-        let scheduler = Scheduler::new();
 
-        let new_content = scheduler.get_new_content(&tracker, 0);
+        let new_content = Scheduler::get_new_content(&tracker, 0);
         assert!(new_content.is_empty());
     }
 
@@ -515,7 +564,7 @@ mod tests {
     fn test_priority_zero_when_not_overdue() {
         let now = Utc::now();
 
-        let mut cmd = CommandPerformance::new("not_due".to_string(), now);
+        let mut cmd = CommandPerformance::new(now);
         cmd.set_difficulty(8.0);
         cmd.set_scheduled_days(10);
         cmd.set_due(now + ChronoDuration::days(5)); // Future due date
@@ -532,10 +581,20 @@ mod tests {
 
         let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
         let mut tracker = PerformanceTracker::with_clock(clock.clone());
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
 
-        let scheduled_days = tracker.performance("x").unwrap().scheduled_days();
+        let scheduled_days = tracker.performance(&cid("x")).unwrap().scheduled_days();
         assert!(
             scheduled_days >= 1,
             "second review should push the due date forward"
@@ -547,10 +606,10 @@ mod tests {
             "not due yet relative to the fake clock"
         );
 
-        clock.advance_days(scheduled_days as i64);
+        clock.advance_days(i64::from(scheduled_days));
         assert_eq!(
             scheduler.get_due_reviews(&tracker),
-            vec!["x".to_string()],
+            vec![cid("x")],
             "must become due once the injected clock advances, proving Scheduler doesn't read wall-clock time"
         );
     }
@@ -564,10 +623,10 @@ mod tests {
         let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
         let now = clock.now();
         let card = |id: &str, overdue: ChronoDuration| {
-            let mut perf = CommandPerformance::new(id.to_string(), now);
+            let mut perf = CommandPerformance::new(now);
             perf.set_scheduled_days(10);
             perf.set_due(now - overdue);
-            (id.to_string(), perf)
+            (cid(id), perf)
         };
         // Same whole overdue days (3) => identical priority; different `due` / `id`.
         let day3 = ChronoDuration::days(3);
@@ -585,7 +644,7 @@ mod tests {
             scheduler
                 .get_review_queue(&tracker, limit)
                 .into_iter()
-                .map(|item| item.id)
+                .map(|item| item.id.into_string())
                 .collect()
         };
 
@@ -599,13 +658,13 @@ mod tests {
         let now = Utc::now();
 
         let item1 = ReviewItem {
-            id: "low".to_string(),
+            id: cid("low"),
             due: now,
             priority: 1.0,
         };
 
         let item2 = ReviewItem {
-            id: "high".to_string(),
+            id: cid("high"),
             due: now,
             priority: 5.0,
         };
@@ -619,11 +678,11 @@ mod tests {
         heap.push(item2);
 
         let top = heap.pop().unwrap();
-        assert_eq!(top.id, "high"); // Higher priority should come first
+        assert_eq!(top.id.as_str(), "high"); // Higher priority should come first
         assert_eq!(top.priority, 5.0);
 
         let second = heap.pop().unwrap();
-        assert_eq!(second.id, "low");
+        assert_eq!(second.id.as_str(), "low");
         assert_eq!(second.priority, 1.0);
     }
     mod props {
@@ -666,7 +725,7 @@ mod tests {
                 Just(f64::NEG_INFINITY),
             ];
             ("[a-z]{1,3}", priority).prop_map(|(id, priority)| ReviewItem {
-                id,
+                id: cid(&format!("c{id}")),
                 due: DateTime::UNIX_EPOCH,
                 priority,
             })
@@ -680,7 +739,7 @@ mod tests {
             for event in events {
                 clock.advance_days(event.elapsed_days);
                 tracker.record_attempt(
-                    &format!("c{}", event.command),
+                    &cid(&format!("c{}", event.command)),
                     Duration::from_secs(event.duration_secs),
                     event.success,
                     Duration::from_secs(event.optimal_secs),
@@ -690,7 +749,7 @@ mod tests {
             (Scheduler::with_clock(clock), tracker)
         }
 
-        fn due_ids(scheduler: &Scheduler, tracker: &PerformanceTracker) -> HashSet<String> {
+        fn due_ids(scheduler: &Scheduler, tracker: &PerformanceTracker) -> HashSet<CommandId> {
             scheduler.get_due_reviews(tracker).into_iter().collect()
         }
 
@@ -751,14 +810,14 @@ mod tests {
                 let now = scheduler.clock.now();
 
                 let returned = scheduler.get_due_reviews(&tracker);
-                let returned_set: HashSet<String> = returned.iter().cloned().collect();
+                let returned_set: HashSet<CommandId> = returned.iter().cloned().collect();
                 prop_assert_eq!(returned.len(), returned_set.len(), "duplicate ids");
 
-                let expected: HashSet<String> = tracker
+                let expected: HashSet<CommandId> = tracker
                     .all_commands()
                     .into_iter()
                     .filter(|cmd| tracker.performance(cmd).is_some_and(|p| p.due() <= now))
-                    .map(str::to_string)
+                    .cloned()
                     .collect();
                 prop_assert_eq!(returned_set, expected);
             }

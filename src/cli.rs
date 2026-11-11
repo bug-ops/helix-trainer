@@ -73,10 +73,7 @@ where
         Some("--help" | "-h") => CliAction::Help,
         _ => return unknown(&first),
     };
-    match args.next() {
-        None => action,
-        Some(extra) => unknown(&extra),
-    }
+    args.next().map_or(action, |extra| unknown(&extra))
 }
 
 fn unknown(arg: &OsString) -> CliAction {

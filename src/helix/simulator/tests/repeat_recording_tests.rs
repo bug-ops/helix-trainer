@@ -1,4 +1,4 @@
-//! Repeat buffer recording tests for HelixSimulator
+//! Repeat buffer recording tests for `HelixSimulator`
 //!
 //! Tests that verify commands are recorded correctly in the repeat buffer.
 //! - Command recording: Verify editing commands are captured

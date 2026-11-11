@@ -98,7 +98,7 @@ enum Lineup {
     },
 }
 
-/// Helper to execute operations on a target snapshot's EditorDisplay
+/// Helper to execute operations on a target snapshot's `EditorDisplay`
 fn with_target_display<T, F>(snapshot: &EditorSnapshot, f: F) -> T
 where
     F: FnOnce(&crate::helix::EditorDisplay) -> T,
@@ -245,6 +245,10 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
         self.simulator.display().cursor_position()
     }
 
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+    )]
     fn target_cursor(&self) -> (usize, usize) {
         with_target_display(&self.target_snapshot, |d| d.cursor_position())
     }
@@ -253,6 +257,10 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
         self.simulator.display().selection()
     }
 
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+    )]
     fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
         with_target_display(&self.target_snapshot, |d| d.selection())
     }
@@ -294,6 +302,10 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
             .collect()
     }
 
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+    )]
     fn all_target_cursors(&self) -> Vec<(usize, usize)> {
         with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
     }
@@ -620,7 +632,7 @@ impl<R: Rng> MiniGameSession<R> {
             return Ok(()); // Ignore commands in non-playing states
         }
 
-        let current = self.current.as_mut().ok_or(UserError::OperationFailed)?;
+        let current = self.current.as_mut().ok_or(UserError::operation_failed())?;
 
         // The simulator interprets any count prefix (e.g. "3d", "2G")
         current.execute_single(command)?;
@@ -647,8 +659,7 @@ impl<R: Rng> MiniGameSession<R> {
     pub fn check_completion(&self) -> bool {
         self.current
             .as_ref()
-            .map(|s| s.is_completed())
-            .unwrap_or(false)
+            .is_some_and(ActiveMiniScenario::is_completed)
     }
 
     /// Advance to next scenario after completion
@@ -668,6 +679,10 @@ impl<R: Rng> MiniGameSession<R> {
     /// session.advance_to_next();
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn advance_to_next(&mut self) {
         if let Some(ref scenario) = self.current {
             // Calculate metrics for scoring
@@ -687,7 +702,7 @@ impl<R: Rng> MiniGameSession<R> {
             self.stats.record_completion();
 
             // Calculate score using enhanced ScoreCalculator
-            let base_points = self.base_points_for(scenario);
+            let base_points = Self::base_points_for(scenario);
             let breakdown = self.score_calculator.calculate(
                 base_points,
                 time_ratio,
@@ -755,7 +770,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// Handle timeout for current scenario
     ///
     /// Deducts a life, resets streak, and loads next scenario.
-    /// If no lives remain, transitions to GameOver state.
+    /// If no lives remain, transitions to `GameOver` state.
     ///
     /// # Examples
     ///
@@ -830,15 +845,16 @@ impl<R: Rng> MiniGameSession<R> {
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
     pub fn remaining_time(&self) -> Option<Duration> {
-        self.current.as_ref().map(|s| s.remaining_time())
+        self.current
+            .as_ref()
+            .map(ActiveMiniScenario::remaining_time)
     }
 
     /// Check if current scenario has timed out
     pub fn is_timed_out(&self) -> bool {
         self.current
             .as_ref()
-            .map(|s| s.is_timed_out())
-            .unwrap_or(false)
+            .is_some_and(ActiveMiniScenario::is_timed_out)
     }
 
     /// Get elapsed session-level time, excluding any paused duration
@@ -1047,16 +1063,14 @@ impl<R: Rng> MiniGameSession<R> {
     pub fn is_insert_mode(&self) -> bool {
         self.current
             .as_ref()
-            .map(|s| s.is_insert_mode())
-            .unwrap_or(false)
+            .is_some_and(ActiveMiniScenario::is_insert_mode)
     }
 
     /// Check if a `q`/`Q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
         self.current
             .as_ref()
-            .map(|s| s.is_recording_macro())
-            .unwrap_or(false)
+            .is_some_and(ActiveMiniScenario::is_recording_macro)
     }
 
     /// Get last score breakdown for UI display
@@ -1137,12 +1151,10 @@ impl<R: Rng> MiniGameSession<R> {
             // Same card ids as training mode, so arcade and training practice of one
             // skill share a card; typed text and arguments never become cards.
             let mut recorded_commands = std::collections::HashSet::new();
-            for command in
-                crate::learning::ReviewableCommand::from_actions(actions.iter().map(String::as_str))
-            {
+            for command in crate::ids::CommandId::from_actions(actions.iter().map(String::as_str)) {
                 if recorded_commands.insert(command.clone()) {
                     tracker.record_attempt(
-                        command.as_str(),
+                        &command,
                         time_per_command,
                         success,
                         optimal_time_per_command,
@@ -1153,7 +1165,7 @@ impl<R: Rng> MiniGameSession<R> {
     }
 
     /// Get base points for a scenario based on difficulty
-    fn base_points_for(&self, scenario: &ActiveMiniScenario) -> u64 {
+    fn base_points_for(scenario: &ActiveMiniScenario) -> u64 {
         if let Some(ref metadata) = scenario.scenario.metadata
             && let Some(difficulty) = metadata.difficulty
         {
@@ -1176,7 +1188,10 @@ impl<R: Rng> MiniGameSession<R> {
     /// Returns `UserError` if scenario initialization fails or queue is empty.
     fn load_next_scenario(&mut self) -> Result<(), UserError> {
         // Pop from queue
-        let scenario = self.queue.pop_front().ok_or(UserError::OperationFailed)?;
+        let scenario = self
+            .queue
+            .pop_front()
+            .ok_or(UserError::operation_failed())?;
 
         // Get time limit based on mode
         let time_limit = self.get_scenario_time_limit(&scenario);
@@ -1196,7 +1211,7 @@ impl<R: Rng> MiniGameSession<R> {
 
     /// Get time limit for a scenario based on current game mode
     ///
-    /// - Arcade: Uses DifficultyController's adaptive time limit
+    /// - Arcade: Uses `DifficultyController`'s adaptive time limit
     /// - Survival: Uses survival config's level-based time limit
     /// - Challenge: Uses fixed time limit from config
     fn get_scenario_time_limit(&self, scenario: &Scenario) -> Duration {
@@ -1216,7 +1231,7 @@ impl<R: Rng> MiniGameSession<R> {
         }
     }
 
-    /// Refill queue to maintain QUEUE_SIZE
+    /// Refill queue to maintain `QUEUE_SIZE`
     ///
     /// Uses different selection strategies based on mode:
     /// - Arcade/Survival: FSRS-weighted selection if tracker available
@@ -1301,6 +1316,7 @@ mod tests {
     use crate::game::PlayableScenario;
     use crate::minigame::{ArcadeConfig, ChallengeConfig, SurvivalConfig};
     use crate::testing::ScenarioBuilder;
+    use crate::testing::cid;
     use crate::time::FakeMonotonicClock;
 
     fn seeded_session(
@@ -1613,7 +1629,7 @@ mod tests {
         );
 
         let result = session.handle_command("ge");
-        assert!(result.is_ok(), "ge command should succeed: {:?}", result);
+        assert!(result.is_ok(), "ge command should succeed: {result:?}");
 
         // Check that the cursor moved
         if let Some(scenario) = session.current_scenario() {
@@ -1651,16 +1667,13 @@ mod tests {
         session.record_to_fsrs(&mut tracker, true);
 
         assert!(
-            tracker.performance("\"y").is_some(),
+            tracker.performance(&cid("\"y")).is_some(),
             "expected the normalized '\"y' card to exist"
         );
-        assert!(
-            tracker.performance("\"ay").is_none(),
-            "raw '\"ay' must not exist as its own card"
-        );
-        assert!(
-            tracker.performance("\"by").is_none(),
-            "raw '\"by' must not exist as its own card"
+        assert_eq!(
+            tracker.all_commands().len(),
+            1,
+            "raw register ops must not become their own cards"
         );
     }
 
@@ -1689,7 +1702,11 @@ mod tests {
         let mut tracker = PerformanceTracker::new();
         session.record_to_fsrs(&mut tracker, true);
 
-        let mut cards: Vec<&str> = tracker.all_commands();
+        let mut cards: Vec<&str> = tracker
+            .all_commands()
+            .into_iter()
+            .map(crate::ids::CommandId::as_str)
+            .collect();
         cards.sort_unstable();
         assert_eq!(cards, ["f", "i", "l"]);
     }
@@ -1748,7 +1765,7 @@ mod tests {
     #[test]
     fn test_challenge_mode_scenario_progress() {
         let scenarios: Vec<Scenario> = (0..20)
-            .map(|i| create_test_scenario(&format!("s{}", i), Difficulty::Beginner))
+            .map(|i| create_test_scenario(&format!("s{i}"), Difficulty::Beginner))
             .collect();
 
         let mode =
@@ -1954,7 +1971,7 @@ mod tests {
     #[test]
     fn test_check_game_over_challenge() {
         let scenarios: Vec<Scenario> = (0..20)
-            .map(|i| create_test_scenario(&format!("s{}", i), Difficulty::Beginner))
+            .map(|i| create_test_scenario(&format!("s{i}"), Difficulty::Beginner))
             .collect();
 
         let mode =
@@ -2004,9 +2021,7 @@ mod tests {
             // At level 1, time should be base_time (within margin due to elapsed time)
             assert!(
                 remaining <= SURVIVAL_BASE_TIME,
-                "Remaining time {:?} should be <= base time {:?}",
-                remaining,
-                SURVIVAL_BASE_TIME
+                "Remaining time {remaining:?} should be <= base time {SURVIVAL_BASE_TIME:?}"
             );
         }
 
@@ -2016,7 +2031,10 @@ mod tests {
 
         let level5_time = config.time_limit_for_level(5);
         // Level 5 should have less time than level 1 (500ms * 4 levels = 2s less)
-        let expected_decrease = Duration::from_millis(500 * 4);
-        assert_eq!(level5_time, SURVIVAL_BASE_TIME - expected_decrease);
+        let expected_decrease = Duration::from_secs(2);
+        assert_eq!(
+            level5_time,
+            SURVIVAL_BASE_TIME.saturating_sub(expected_decrease)
+        );
     }
 }

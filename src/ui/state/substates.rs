@@ -1,13 +1,15 @@
-//! Sub-structures for organizing AppState
+//! Sub-structures for organizing `AppState`
 //!
 //! This module defines focused sub-structures that group related fields
-//! from AppState, improving code organization and maintainability.
+//! from `AppState`, improving code organization and maintainability.
 
 use crate::async_state::SaveRequest;
 use crate::config::{AppConfig, ScenarioCollection};
 use crate::constants::PROFILE_SAVE_DEBOUNCE;
-use crate::game::GameSession;
-use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile};
+use crate::gamification::{
+    PreviousCopy, ProfileStorage, QuarantineOutcome, QuestRegistrySlot, UserProfile,
+};
+use crate::ids::NormalizedCommand;
 use crate::input::keymap::KeymapOverlay;
 use crate::learning::{PerformanceTracker, Scheduler};
 use crate::sound::{SoundConfig, SoundManager};
@@ -22,7 +24,7 @@ use crate::ui::notification::NotificationQueue;
 /// UI rendering and display state
 ///
 /// Contains global UI state that persists across screen transitions.
-/// Screen-specific data is stored in TypedScreen variants.
+/// Screen-specific data is stored in `TypedScreen` variants.
 #[derive(Debug)]
 pub struct UIState {
     /// Whether the application is running
@@ -31,11 +33,8 @@ pub struct UIState {
     /// Whether to show key history popup (global setting)
     pub show_key_history: bool,
 
-    /// Time when scenario was completed (for success animation)
-    pub completion_time: Option<Instant>,
-
-    /// Feedback storage for transition to results screen
-    pub last_feedback: Option<crate::game::Feedback>,
+    /// Terminal size, updated from the resize event; list layouts are clamped against it
+    pub viewport: crate::ui::layout::Viewport,
 
     /// Notification queue for transient messages (level-up, achievements, etc.)
     pub notifications: NotificationQueue,
@@ -51,23 +50,17 @@ pub struct UIState {
 }
 
 impl UIState {
-    /// Create new UIState with default values
+    /// Create new `UIState` with default values
     pub fn new() -> Self {
         Self {
             running: true,
             show_key_history: true,
-            completion_time: None,
-            last_feedback: None,
+            viewport: crate::ui::layout::Viewport::MINIMUM,
             notifications: NotificationQueue::new(),
             effects: Vec::new(),
             last_menu_selected: 0,
             last_menu_scroll: 0,
         }
-    }
-
-    /// Clear results data after transitioning away from results screen
-    pub fn clear_temp_results(&mut self) {
-        self.last_feedback = None;
     }
 }
 
@@ -81,17 +74,13 @@ impl Default for UIState {
 pub struct GameState {
     /// All available scenarios with filtering and sorting
     pub scenario_collection: ScenarioCollection,
-
-    /// Completed session pending transition to results screen
-    pub pending_completed_session: Option<GameSession<crate::game::session::Completed>>,
 }
 
 impl GameState {
-    /// Create new GameState with scenarios
+    /// Create new `GameState` with scenarios
     pub fn new(scenarios: Vec<crate::config::Scenario>) -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(scenarios),
-            pending_completed_session: None,
         }
     }
 }
@@ -100,7 +89,6 @@ impl Default for GameState {
     fn default() -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(vec![]),
-            pending_completed_session: None,
         }
     }
 }
@@ -109,11 +97,31 @@ impl std::fmt::Debug for GameState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GameState")
             .field("scenario_count", &self.scenario_collection.count())
-            .field(
-                "pending_completed_session",
-                &self.pending_completed_session.is_some(),
-            )
             .finish()
+    }
+}
+
+/// What is known about a profile that failed to load: whether its file was preserved and
+/// whether a previous copy can be restored.
+#[derive(Debug, Clone)]
+pub struct Quarantine {
+    /// Whether the unreadable file was preserved as a backup copy.
+    pub backup: QuarantineOutcome,
+
+    /// Whether `profile.json.prev` can be restored.
+    pub previous: PreviousCopy,
+}
+
+impl Quarantine {
+    /// Whether Start fresh is offered: only after the unreadable file was preserved, so the
+    /// original is never discarded.
+    pub fn can_start_fresh(&self) -> bool {
+        matches!(self.backup, QuarantineOutcome::BackedUp(_))
+    }
+
+    /// Whether Restore previous is offered: a backup exists and the previous copy loads.
+    pub fn can_restore_previous(&self) -> bool {
+        self.can_start_fresh() && self.previous == PreviousCopy::Available
     }
 }
 
@@ -121,7 +129,7 @@ impl std::fmt::Debug for GameState {
 ///
 /// Every save path consults this, so a placeholder or fallback profile can
 /// never overwrite the user's real `profile.json`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum ProfilePersistence {
     /// The real profile is still loading; the in-memory one is a placeholder.
     Loading,
@@ -131,13 +139,21 @@ pub enum ProfilePersistence {
 
     /// Loading failed; the in-memory profile is a throwaway fallback and
     /// saving is disabled for the rest of the session.
-    Quarantined(QuarantineOutcome),
+    Quarantined(Quarantine),
 }
 
 impl ProfilePersistence {
     /// Whether saves are allowed.
     pub fn is_writable(&self) -> bool {
         matches!(self, Self::Writable)
+    }
+
+    /// The quarantine details while loading has failed.
+    pub fn quarantine(&self) -> Option<&Quarantine> {
+        match self {
+            Self::Quarantined(quarantine) => Some(quarantine),
+            Self::Loading | Self::Writable => None,
+        }
     }
 }
 
@@ -162,7 +178,7 @@ pub struct ProgressState {
     pub scenarios_completed_today: usize,
 
     /// Commands used today (for exploration quests)
-    pub commands_used_today: HashSet<String>,
+    pub commands_used_today: HashSet<NormalizedCommand>,
 
     /// Session start time
     pub session_start_time: Instant,
@@ -199,7 +215,7 @@ pub struct ProgressState {
 }
 
 impl ProgressState {
-    /// Create new ProgressState backed by the system clock
+    /// Create new `ProgressState` backed by the system clock
     pub fn new(
         profile: UserProfile,
         performance_tracker: PerformanceTracker,
@@ -213,7 +229,7 @@ impl ProgressState {
         )
     }
 
-    /// Create new ProgressState with an explicit clock
+    /// Create new `ProgressState` with an explicit clock
     ///
     /// The clock is propagated to every clock-consuming field (`performance_tracker`,
     /// `scheduler`) so they observe the same time, not just `self.clock`.
@@ -283,8 +299,8 @@ impl ProgressState {
 
     /// Declare `profile` a throwaway fallback after a failed load: saving is
     /// disabled for the rest of the session.
-    pub fn quarantine_profile(&mut self, backup: QuarantineOutcome) {
-        self.persistence = ProfilePersistence::Quarantined(backup);
+    pub fn quarantine_profile(&mut self, quarantine: Quarantine) {
+        self.persistence = ProfilePersistence::Quarantined(quarantine);
     }
 
     /// Toggle sound and, when the profile is saveable, record the new state
@@ -344,10 +360,8 @@ impl ProgressState {
 
     /// Check if enough time has passed since last save
     pub fn should_save(&self) -> bool {
-        match self.last_save_time {
-            Some(last) => last.elapsed() >= PROFILE_SAVE_DEBOUNCE,
-            None => true,
-        }
+        self.last_save_time
+            .is_none_or(|last| last.elapsed() >= PROFILE_SAVE_DEBOUNCE)
     }
 
     /// Mark save as completed
@@ -369,7 +383,7 @@ impl ProgressState {
     }
 
     /// Synchronously write the profile to disk, bypassing off-thread dispatch.
-    fn save_sync(&mut self) -> Result<(), crate::gamification::GamificationError> {
+    fn save_sync(&mut self) -> Result<(), crate::config::json_store::StorageError> {
         if !self.persistence.is_writable() {
             return Ok(());
         }
@@ -411,7 +425,7 @@ impl ProgressState {
     /// synchronous fallback path) failed outright — the async path's real
     /// write outcome otherwise arrives later as a
     /// [`crate::async_state::DataLoadMessage`].
-    pub fn save_immediate(&mut self) -> Result<(), crate::gamification::GamificationError> {
+    pub fn save_immediate(&mut self) -> Result<(), crate::config::json_store::StorageError> {
         if !self.persistence.is_writable() {
             tracing::debug!(state = ?self.persistence, "Profile save skipped: profile is not saveable");
             return Ok(());
@@ -470,7 +484,7 @@ impl ProgressState {
     /// # Errors
     ///
     /// Returns an error if the save operation fails.
-    pub fn save_debounced(&mut self) -> Result<(), crate::gamification::GamificationError> {
+    pub fn save_debounced(&mut self) -> Result<(), crate::config::json_store::StorageError> {
         if !self.should_save() {
             return Ok(());
         }
@@ -510,7 +524,7 @@ impl std::fmt::Debug for ProgressState {
             .field("performance_tracker", &"<PerformanceTracker>")
             .field("scenarios_completed_today", &self.scenarios_completed_today)
             .field("commands_used_today", &self.commands_used_today.len())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -549,6 +563,7 @@ impl Default for ConfigState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::cid;
     use std::assert_matches;
 
     fn writable_progress() -> ProgressState {
@@ -566,12 +581,14 @@ mod tests {
     fn test_non_writable_profile_refuses_every_save_path() {
         for state in [
             ProfilePersistence::Loading,
-            ProfilePersistence::Quarantined(QuarantineOutcome::Failed("x".into())),
+            ProfilePersistence::Quarantined(crate::testing::quarantine(
+                crate::testing::failed_backup(),
+            )),
         ] {
             let mut progress = writable_progress();
             match &state {
                 ProfilePersistence::Loading => progress.begin_profile_load(),
-                ProfilePersistence::Quarantined(b) => progress.quarantine_profile(b.clone()),
+                ProfilePersistence::Quarantined(q) => progress.quarantine_profile(q.clone()),
                 ProfilePersistence::Writable => unreachable!(),
             }
 
@@ -593,7 +610,7 @@ mod tests {
             ProfileStorage::for_test(),
         );
 
-        assert_eq!(progress.persistence(), &ProfilePersistence::Loading);
+        assert_matches!(progress.persistence(), ProfilePersistence::Loading);
         progress.save_immediate().unwrap();
         assert!(!progress.storage.exists());
         assert!(progress.prepare_final_save_request().is_none());
@@ -650,7 +667,7 @@ mod tests {
     #[test]
     fn test_toggle_sound_does_not_touch_quarantined_profile() {
         let mut progress = writable_progress();
-        progress.quarantine_profile(QuarantineOutcome::Failed("x".into()));
+        progress.quarantine_profile(crate::testing::quarantine(crate::testing::failed_backup()));
 
         progress.toggle_sound();
 
@@ -662,7 +679,6 @@ mod tests {
         let ui = UIState::new();
         assert!(ui.running);
         assert!(ui.show_key_history);
-        assert!(ui.completion_time.is_none());
         assert_eq!(ui.last_menu_selected, 0);
         assert_eq!(ui.last_menu_scroll, 0);
     }
@@ -677,7 +693,6 @@ mod tests {
     fn test_game_state_default() {
         let game = GameState::default();
         assert_eq!(game.scenario_collection.count(), 0);
-        assert!(game.pending_completed_session.is_none());
     }
 
     #[test]
@@ -736,7 +751,7 @@ mod tests {
         .loaded();
 
         progress.performance_tracker.record_attempt(
-            "x",
+            &cid("x"),
             std::time::Duration::from_secs(1),
             true,
             std::time::Duration::from_secs(1),
@@ -744,7 +759,7 @@ mod tests {
 
         // If the tracker still used SystemClock, `last_review` would be wall-clock "now",
         // not the fake clock's fixed instant.
-        let perf = progress.performance_tracker.performance("x").unwrap();
+        let perf = progress.performance_tracker.performance(&cid("x")).unwrap();
         assert_eq!(perf.last_review(), clock.now());
 
         // The scheduler must observe the same fake "now" the tracker recorded against, so
@@ -752,7 +767,7 @@ mod tests {
         let due = progress
             .scheduler
             .get_due_reviews(&progress.performance_tracker);
-        assert!(due.contains(&"x".to_string()));
+        assert!(due.contains(&cid("x")));
     }
 
     #[test]
@@ -788,7 +803,6 @@ mod tests {
                     other.attempts() == v.attempts()
                         && other.successes() == v.successes()
                         && other.reps() == v.reps()
-                        && other.command() == v.command()
                 })
             })
     }
@@ -811,7 +825,7 @@ mod tests {
         .loaded();
 
         progress.performance_tracker.record_attempt(
-            "x",
+            &cid("x"),
             Duration::from_millis(500),
             true,
             Duration::from_millis(500),
@@ -851,7 +865,7 @@ mod tests {
         // Mutate the tracker after the save; a debounced save within the window
         // must not pick this up.
         progress.performance_tracker.record_attempt(
-            "d",
+            &cid("d"),
             Duration::from_millis(500),
             true,
             Duration::from_millis(500),
@@ -885,10 +899,10 @@ mod tests {
         // Simulate a save that happened long enough ago for the debounce to elapse,
         // without needing to sleep in the test.
         progress.last_save_time =
-            Some(Instant::now() - PROFILE_SAVE_DEBOUNCE - Duration::from_secs(1));
+            Instant::now().checked_sub(PROFILE_SAVE_DEBOUNCE + Duration::from_secs(1));
 
         progress.performance_tracker.record_attempt(
-            "j",
+            &cid("j"),
             Duration::from_millis(500),
             true,
             Duration::from_millis(500),
@@ -1053,6 +1067,7 @@ mod tests {
     /// an earlier call could race ahead of (and overwrite) a later one.
     #[tokio::test]
     async fn test_save_immediate_calls_are_applied_in_request_order() {
+        const REQUESTED_XP_VALUES: [u64; 5] = [100, 150, 200, 250, 300];
         use crate::async_state::DataLoadMessage;
         use crate::data_loader::spawn_save_writer;
         use crate::gamification::{ProfileStorage, UserProfile};
@@ -1072,7 +1087,6 @@ mod tests {
         let (save_tx, writer_handle) = spawn_save_writer(result_tx);
         progress.set_save_channel(save_tx.clone());
 
-        const REQUESTED_XP_VALUES: [u64; 5] = [100, 150, 200, 250, 300];
         for &xp in &REQUESTED_XP_VALUES {
             progress.profile.total_xp = xp;
             progress.save_immediate().unwrap();

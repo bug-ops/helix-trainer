@@ -1,23 +1,26 @@
 //! Async event loop
 //!
-//! Core event loop using tokio::select! for non-blocking I/O.
+//! Core event loop using `tokio::select`! for non-blocking I/O.
 
 use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use ratatui::{Terminal, backend::CrosstermBackend};
+use std::future::Future;
 use std::io;
 use tokio::sync::mpsc;
+use tokio::task::JoinError;
 
 use helix_trainer::{
     async_state::DataLoadMessage,
     constants::{ANIMATION_TICK_INTERVAL, COUNTDOWN_TICK_INTERVAL, SUCCESS_SCREEN_DELAY},
-    security::UserError,
-    ui::{self, AppState, Message, Notification, NotificationType, state::Effect},
+    gamification::ProfileStorage,
+    security::{UserError, error_chain},
+    ui::{self, AppState, Message, Notification, NotificationType, Viewport, state::Effect},
 };
 
 use crate::data_handling::handle_data_message;
-use helix_trainer::data_loader::start_fresh_profile_message;
+use helix_trainer::data_loader::{restore_previous_profile_message, start_fresh_profile_message};
 use helix_trainer::input::handle_key_event;
 
 /// Consecutive terminal input errors tolerated before the event loop gives up.
@@ -40,7 +43,7 @@ fn report_update_error(state: &mut AppState, error: &UserError) {
         );
         return;
     }
-    tracing::warn!(error = %error, "Update failed");
+    tracing::warn!(error = %error_chain(error), "Update failed");
     state
         .ui
         .notifications
@@ -57,18 +60,28 @@ fn run_effects(state: &mut AppState, effects: Vec<Effect>) -> Vec<Effect> {
         .collect()
 }
 
-/// Start a fresh profile in the background and report the outcome over `data_tx` (#518).
-fn spawn_start_fresh_profile(state: &AppState, data_tx: &mpsc::Sender<DataLoadMessage>) {
+/// Replace the quarantined profile in the background and report the outcome over `data_tx`
+/// (#518 Start fresh, #531 Restore previous); `action` names the replacement in logs.
+fn spawn_profile_replacement<Fut>(
+    state: &AppState,
+    data_tx: &mpsc::Sender<DataLoadMessage>,
+    action: &'static str,
+    run: fn(ProfileStorage) -> Fut,
+) where
+    Fut: Future<Output = Result<DataLoadMessage, JoinError>> + Send + 'static,
+{
     let storage = state.progress.storage.clone();
     let data_tx = data_tx.clone();
     tokio::spawn(async move {
-        match start_fresh_profile_message(storage).await {
+        match run(storage).await {
             Ok(msg) => {
                 if let Err(e) = data_tx.send(msg).await {
-                    tracing::error!("Failed to report the fresh profile: {}", e);
+                    tracing::error!(error = %error_chain(&e), action, "Failed to report the profile");
                 }
             }
-            Err(e) => tracing::error!("Failed to start a fresh profile: {:#}", e),
+            Err(e) => {
+                tracing::error!(error = %error_chain(&e), action, "Profile replacement task failed");
+            }
         }
     });
 }
@@ -94,7 +107,20 @@ fn settle_update(
 ) {
     for deferred in run_effects(state, effects) {
         match deferred {
-            Effect::StartFreshProfile => spawn_start_fresh_profile(state, data_tx),
+            Effect::StartFreshProfile => {
+                spawn_profile_replacement(
+                    state,
+                    data_tx,
+                    "start fresh",
+                    start_fresh_profile_message,
+                );
+            }
+            Effect::RestoreProfile => spawn_profile_replacement(
+                state,
+                data_tx,
+                "restore previous",
+                restore_previous_profile_message,
+            ),
             // Already executed by `Effect::execute`; listed so a new async variant fails to compile here
             Effect::Play(_) | Effect::SaveProfile => {}
         }
@@ -108,24 +134,21 @@ fn settle_update(
 fn is_minigame_countdown(state: &AppState) -> bool {
     state
         .minigame_session()
-        .map(|s| s.state().is_countdown())
-        .unwrap_or(false)
+        .is_some_and(|s| s.state().is_countdown())
 }
 
 /// Check if mini-game is in playing state
 fn is_minigame_playing(state: &AppState) -> bool {
     state
         .minigame_session()
-        .map(|s| s.state().is_playing())
-        .unwrap_or(false)
+        .is_some_and(|s| s.state().is_playing())
 }
 
 /// Check if current mini-game scenario has timed out
 fn is_minigame_timed_out(state: &AppState) -> bool {
     state
         .minigame_session()
-        .map(|s| s.is_timed_out())
-        .unwrap_or(false)
+        .is_some_and(helix_trainer::minigame::MiniGameSession::is_timed_out)
 }
 
 /// Check if the mini-game's session-level time limit has elapsed (e.g. Arcade's 60 seconds)
@@ -136,24 +159,20 @@ fn is_minigame_timed_out(state: &AppState) -> bool {
 /// run overrun the limit by up to the transition delay before the check fires
 /// again on the next scenario.
 fn is_minigame_session_expired(state: &AppState) -> bool {
-    state
-        .minigame_session()
-        .map(|s| {
-            let playing_or_transitioning = s.state().is_playing() || s.state().is_transition();
-            playing_or_transitioning && s.is_session_expired()
-        })
-        .unwrap_or(false)
+    state.minigame_session().is_some_and(|s| {
+        let playing_or_transitioning = s.state().is_playing() || s.state().is_transition();
+        playing_or_transitioning && s.is_session_expired()
+    })
 }
 
 /// Check if mini-game should auto-advance to next scenario
 fn should_minigame_advance(state: &AppState) -> bool {
     state
         .minigame_session()
-        .map(|s| s.should_advance_to_next())
-        .unwrap_or(false)
+        .is_some_and(helix_trainer::minigame::MiniGameSession::should_advance_to_next)
 }
 
-/// Async event loop using tokio::select!
+/// Async event loop using `tokio::select`!
 ///
 /// This function runs the core event loop that:
 /// 1. Renders the current state
@@ -187,6 +206,13 @@ pub async fn run_async_event_loop(
 
     let mut consecutive_input_errors = 0u32;
 
+    let size = terminal.size()?;
+    apply_update(
+        state,
+        Message::Resize(Viewport::new(size.width, size.height)),
+        data_tx,
+    );
+
     loop {
         // Render the current state
         terminal.draw(|f| ui::render(f, state))?;
@@ -197,12 +223,13 @@ pub async fn run_async_event_loop(
         }
 
         // Check if scenario completed and delay elapsed
-        if let Some(completion_time) = state.ui.completion_time
-            && completion_time.elapsed() >= SUCCESS_SCREEN_DELAY
+        if state
+            .screen
+            .completed_task()
+            .is_some_and(|task| task.completed_at.elapsed() >= SUCCESS_SCREEN_DELAY)
         {
             tracing::debug!("Success screen delay elapsed, transitioning to results");
             apply_update(state, Message::CompleteScenario, data_tx);
-            state.ui.completion_time = None;
         }
 
         // Select on multiple event sources (non-blocking)
@@ -233,6 +260,10 @@ pub async fn run_async_event_loop(
                             apply_update(state, msg, data_tx);
                         }
                     }
+                    Some(Ok(Event::Resize(cols, rows))) => {
+                        consecutive_input_errors = 0;
+                        apply_update(state, Message::Resize(Viewport::new(cols, rows)), data_tx);
+                    }
                     Some(Ok(_)) => consecutive_input_errors = 0,
                     Some(Err(error)) => {
                         consecutive_input_errors += 1;
@@ -254,6 +285,7 @@ pub async fn run_async_event_loop(
             // Data loading results
             Some(data_msg) = data_rx.recv() => {
                 handle_data_message(state, data_msg);
+                state.normalize_view();
             }
 
             // Countdown tick for mini-game (1 second)
@@ -365,6 +397,77 @@ mod tests {
         let msg = data_rx.recv().await.expect("a result message");
         assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
         assert!(std::fs::read_to_string(&path).unwrap().contains("profile"));
+        let backups = backup_files(dir.path());
+        assert_eq!(
+            backups.len(),
+            1,
+            "the unreadable file must be kept as a backup"
+        );
+        assert_eq!(std::fs::read_to_string(&backups[0]).unwrap(), "{broken");
+    }
+
+    fn backup_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.to_string_lossy().contains(".corrupt-"))
+            .collect()
+    }
+
+    /// #531, #533: the restore effect runs on the runtime, keeps the backup and reports the
+    /// validated previous copy.
+    #[tokio::test]
+    async fn test_restore_effect_runs_the_restore_and_sends_the_previous_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        let mut earlier = UserProfile::new();
+        earlier.add_xp(500);
+        storage.save(&earlier).unwrap();
+        storage.save(&UserProfile::new()).unwrap();
+        std::fs::write(storage.path(), "{broken").unwrap();
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            storage.clone(),
+            PerformanceTracker::new(),
+        );
+        let (data_tx, mut data_rx) = mpsc::channel(1);
+
+        settle_update(&mut state, Ok(()), vec![Effect::RestoreProfile], &data_tx);
+
+        let msg = data_rx.recv().await.expect("a result message");
+        assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500));
+        assert_eq!(backup_files(dir.path()).len(), 1);
+    }
+
+    /// #531: a previous copy that went bad after the offer is refused and reported, nothing
+    /// is rewritten.
+    #[tokio::test]
+    async fn test_restore_effect_refuses_an_invalid_previous_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&UserProfile::new()).unwrap();
+        storage.save(&UserProfile::new()).unwrap();
+        std::fs::write(storage.path(), "{broken").unwrap();
+        let prev = dir.path().join("profile.json.prev");
+        std::fs::write(&prev, "{also broken").unwrap();
+        let mut state = AppState::new(
+            vec![],
+            UserProfile::new(),
+            storage.clone(),
+            PerformanceTracker::new(),
+        );
+        let (data_tx, mut data_rx) = mpsc::channel(1);
+
+        settle_update(&mut state, Ok(()), vec![Effect::RestoreProfile], &data_tx);
+
+        let msg = data_rx.recv().await.expect("a result message");
+        assert!(
+            matches!(msg, DataLoadMessage::ProfileError { .. }),
+            "{msg:?}"
+        );
+        assert_eq!(std::fs::read_to_string(storage.path()).unwrap(), "{broken");
+        assert_eq!(std::fs::read_to_string(&prev).unwrap(), "{also broken");
     }
 
     /// Effects that need no runtime never spawn a load.
@@ -385,9 +488,36 @@ mod tests {
     fn test_recoverable_error_is_reported_and_session_continues() {
         let mut state = test_state();
 
-        report_update_error(&mut state, &UserError::OperationFailed);
+        report_update_error(&mut state, &UserError::operation_failed());
 
         assert!(state.ui.running);
         assert_eq!(state.ui.notifications.count(), 1);
+    }
+
+    /// FR-094: the update-error sink logs the whole cause chain of a storage error, while
+    /// the notification stays free of paths and OS messages.
+    #[test]
+    fn test_storage_error_is_logged_with_its_cause_and_shown_sanitized() {
+        use helix_trainer::config::json_store::{Document, StorageError};
+
+        let mut state = test_state();
+        let cause = serde_json::from_str::<u8>("x").unwrap_err();
+        let cause_text = cause.to_string();
+        let error = UserError::from(StorageError::Corrupt {
+            doc: Document::Profile,
+            path: "/secret/dir/profile.json".into(),
+            source: cause,
+        });
+
+        let logs = crate::log_capture::capture_logs(|| report_update_error(&mut state, &error));
+
+        assert!(logs.contains(&cause_text), "{logs}");
+        let shown = state.ui.notifications.visible();
+        let message = shown
+            .iter()
+            .map(|n| format!("{:?}", n.notification_type))
+            .collect::<Vec<_>>()
+            .concat();
+        assert!(!message.contains("/secret"), "{message}");
     }
 }

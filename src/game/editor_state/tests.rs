@@ -1,4 +1,4 @@
-//! Tests for EditorState
+//! Tests for `EditorState`
 
 use super::*;
 

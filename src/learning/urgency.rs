@@ -48,24 +48,30 @@ pub enum Urgency {
 /// # Examples
 ///
 /// ```
+/// use helix_trainer::ids::CommandId;
 /// use helix_trainer::learning::{PerformanceTracker, Urgency, command_urgency};
 /// use std::time::Duration;
 ///
 /// let mut tracker = PerformanceTracker::new();
-/// tracker.record_attempt("x", Duration::from_secs(1), false, Duration::from_secs(1));
+/// let x = CommandId::from_card_id("x").unwrap();
+/// tracker.record_attempt(&x, Duration::from_secs(1), false, Duration::from_secs(1));
 ///
 /// let now = tracker.clock().now();
-/// match command_urgency(tracker.performance("x"), now) {
+/// match command_urgency(tracker.performance(&x), now) {
 ///     Urgency::Practiced { weakness, .. } => assert_eq!(weakness, 1.0),
 ///     Urgency::Novel => unreachable!("the tracker has an entry for x"),
 /// }
 /// ```
 #[must_use]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+)]
 pub fn command_urgency(perf: Option<&CommandPerformance>, now: DateTime<Utc>) -> Urgency {
     let Some(perf) = perf else {
         return Urgency::Novel;
     };
-    let days_overdue = (now - perf.due()).num_days().max(0) as f64;
+    let days_overdue = now.signed_duration_since(perf.due()).num_days().max(0) as f64;
     Urgency::Practiced {
         overdue_ratio: days_overdue / f64::from(perf.scheduled_days().max(1)),
         difficulty: f64::from(perf.difficulty()),
@@ -80,6 +86,7 @@ mod tests {
 
     use super::*;
     use crate::learning::{PerformanceData, PerformanceTracker};
+    use crate::testing::cid;
     use crate::time::FakeClock;
 
     fn practiced(urgency: Urgency) -> (f64, f64, f64) {
@@ -109,7 +116,7 @@ mod tests {
             }}"#,
         )
         .unwrap();
-        let perf = data.get("x").unwrap();
+        let perf = data.get(&cid("x")).unwrap();
         assert!(perf.memory_state().is_none());
 
         let (ratio, difficulty, weakness) = practiced(command_urgency(Some(perf), perf.due()));
@@ -123,9 +130,19 @@ mod tests {
     fn overdue_ratio_is_days_past_due_over_the_interval() {
         let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
         let mut tracker = PerformanceTracker::with_clock(clock);
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        let perf = tracker.performance("x").unwrap();
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        let perf = tracker.performance(&cid("x")).unwrap();
         let interval = f64::from(perf.scheduled_days());
 
         let at_due = practiced(command_urgency(Some(perf), perf.due())).0;
@@ -149,12 +166,17 @@ mod tests {
     fn same_inputs_give_the_same_urgency() {
         let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
         let mut tracker = PerformanceTracker::with_clock(clock.clone());
-        tracker.record_attempt("x", Duration::from_secs(9), false, Duration::from_secs(1));
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(9),
+            false,
+            Duration::from_secs(1),
+        );
         clock.advance_days(10);
 
         let now = tracker.clock().now();
-        let first = command_urgency(tracker.performance("x"), now);
-        let second = command_urgency(tracker.performance("x"), now);
+        let first = command_urgency(tracker.performance(&cid("x")), now);
+        let second = command_urgency(tracker.performance(&cid("x")), now);
 
         assert_eq!(first, second);
     }
@@ -170,7 +192,7 @@ mod tests {
             }}"#,
         )
         .unwrap();
-        let perf = data.get("x").unwrap();
+        let perf = data.get(&cid("x")).unwrap();
         assert_eq!(perf.scheduled_days(), 0);
 
         let now = perf.due() + chrono::Duration::days(3);

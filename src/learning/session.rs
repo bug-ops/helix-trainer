@@ -1,6 +1,7 @@
 use super::LearningError;
 use super::performance::{CommandPerformance, MasteryLevel, PerformanceTracker};
 use super::scheduler::{ReviewItem, Scheduler};
+use crate::ids::CommandId;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -9,7 +10,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct ReviewResult {
     /// Reviewed command.
-    pub command: String,
+    pub command: CommandId,
     /// Time the attempt took.
     pub duration: Duration,
     /// Whether the attempt succeeded.
@@ -32,7 +33,7 @@ pub struct SessionSummary {
     /// Mean time per review.
     pub avg_time: Duration,
     /// Commands whose mastery level changed, with the old and new level.
-    pub mastery_changes: Vec<(String, MasteryLevel, MasteryLevel)>,
+    pub mastery_changes: Vec<(CommandId, MasteryLevel, MasteryLevel)>,
 }
 
 /// Review session for spaced repetition practice
@@ -60,6 +61,7 @@ impl ReviewSession {
     /// # Examples
     ///
     /// ```
+    /// use helix_trainer::ids::CommandId;
     /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
     /// use std::cell::RefCell;
     /// use std::rc::Rc;
@@ -107,6 +109,7 @@ impl ReviewSession {
     /// # Examples
     ///
     /// ```
+    /// use helix_trainer::ids::CommandId;
     /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
     /// use std::cell::RefCell;
     /// use std::rc::Rc;
@@ -114,7 +117,8 @@ impl ReviewSession {
     ///
     /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
     /// let mut tracker_mut = tracker.borrow_mut();
-    /// tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+    /// let x = CommandId::from_card_id("x").unwrap();
+    /// tracker_mut.record_attempt(&x, Duration::from_secs(1), true, Duration::from_secs(1));
     /// drop(tracker_mut);
     ///
     /// let scheduler = Scheduler::new();
@@ -164,7 +168,7 @@ impl ReviewSession {
             old_mastery,
             new_mastery,
         });
-        self.current_index += 1;
+        self.current_index = self.current_index.saturating_add(1);
 
         outcome
     }
@@ -183,6 +187,7 @@ impl ReviewSession {
     /// # Examples
     ///
     /// ```
+    /// use helix_trainer::ids::CommandId;
     /// use helix_trainer::learning::{PerformanceTracker, Scheduler, ReviewSession};
     /// use std::cell::RefCell;
     /// use std::rc::Rc;
@@ -190,7 +195,8 @@ impl ReviewSession {
     ///
     /// let tracker = Rc::new(RefCell::new(PerformanceTracker::new()));
     /// let mut tracker_mut = tracker.borrow_mut();
-    /// tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
+    /// let x = CommandId::from_card_id("x").unwrap();
+    /// tracker_mut.record_attempt(&x, Duration::from_secs(1), true, Duration::from_secs(1));
     /// drop(tracker_mut);
     ///
     /// let scheduler = Scheduler::new();
@@ -207,14 +213,12 @@ impl ReviewSession {
     pub fn summary(&self) -> SessionSummary {
         let total_reviews = self.results.len();
         let successful = self.results.iter().filter(|r| r.success).count();
-        let failed = total_reviews - successful;
+        let failed = total_reviews.saturating_sub(successful);
 
         let total_time: Duration = self.results.iter().map(|r| r.duration).sum();
-        let avg_time = if total_reviews > 0 {
-            total_time / u32::try_from(total_reviews).unwrap_or(u32::MAX)
-        } else {
-            Duration::ZERO
-        };
+        let avg_time = total_time
+            .checked_div(u32::try_from(total_reviews).unwrap_or(u32::MAX))
+            .unwrap_or(Duration::ZERO);
 
         let mastery_changes: Vec<_> = self
             .results
@@ -237,6 +241,7 @@ impl ReviewSession {
 mod tests {
     use super::*;
     use crate::learning::PerformanceTracker;
+    use crate::testing::cid;
     use std::assert_matches;
 
     fn create_populated_tracker() -> Rc<RefCell<PerformanceTracker>> {
@@ -244,9 +249,24 @@ mod tests {
 
         // Add some commands that are immediately due
         let mut tracker_mut = tracker.borrow_mut();
-        tracker_mut.record_attempt("x", Duration::from_secs(1), true, Duration::from_secs(1));
-        tracker_mut.record_attempt("yy", Duration::from_secs(2), true, Duration::from_secs(1));
-        tracker_mut.record_attempt("p", Duration::from_secs(1), true, Duration::from_secs(1));
+        tracker_mut.record_attempt(
+            &cid("x"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker_mut.record_attempt(
+            &cid("yy"),
+            Duration::from_secs(2),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker_mut.record_attempt(
+            &cid("p"),
+            Duration::from_secs(1),
+            true,
+            Duration::from_secs(1),
+        );
         drop(tracker_mut);
 
         tracker
@@ -269,10 +289,10 @@ mod tests {
         let scheduler = Scheduler::new();
         let session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
-        if !session.items.is_empty() {
-            let item = session.current_item();
-            assert!(item.is_some());
-        }
+        assert_eq!(
+            session.current_item().map(|i| &i.id),
+            Some(&session.items[0].id)
+        );
     }
 
     #[test]
@@ -281,14 +301,13 @@ mod tests {
         let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
-        if session.current_item().is_some() {
-            let old_index = session.current_index;
-            session
-                .record_and_next(Duration::from_secs(2), true, Duration::from_secs(1))
-                .unwrap();
-            assert_eq!(session.current_index, old_index + 1);
-            assert_eq!(session.results.len(), 1);
-        }
+        assert!(session.current_item().is_some(), "seeded queue is empty");
+        let old_index = session.current_index;
+        session
+            .record_and_next(Duration::from_secs(2), true, Duration::from_secs(1))
+            .unwrap();
+        assert_eq!(session.current_index, old_index + 1);
+        assert_eq!(session.results.len(), 1);
     }
 
     #[test]
@@ -297,18 +316,20 @@ mod tests {
         let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
-        if let Some(item) = session.current_item() {
-            let command = item.id.clone();
-            session
-                .record_and_next(Duration::from_secs(3), false, Duration::from_secs(1))
-                .unwrap();
+        let command = session
+            .current_item()
+            .expect("seeded queue is empty")
+            .id
+            .clone();
+        session
+            .record_and_next(Duration::from_secs(3), false, Duration::from_secs(1))
+            .unwrap();
 
-            assert_eq!(session.results.len(), 1);
-            let result = &session.results[0];
-            assert_eq!(result.command, command);
-            assert_eq!(result.duration, Duration::from_secs(3));
-            assert!(!result.success);
-        }
+        assert_eq!(session.results.len(), 1);
+        let result = &session.results[0];
+        assert_eq!(result.command, command);
+        assert_eq!(result.duration, Duration::from_secs(3));
+        assert!(!result.success);
     }
 
     #[test]
@@ -317,28 +338,26 @@ mod tests {
         let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
-        if session.current_item().is_some() {
-            session
-                .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
-                .unwrap();
+        assert!(session.current_item().is_some(), "seeded queue is empty");
+        session
+            .record_and_next(Duration::from_secs(1), true, Duration::from_secs(1))
+            .unwrap();
 
-            let result = &session.results[0];
-            // Both old and new mastery should be set
-            assert_matches!(
-                result.old_mastery,
-                MasteryLevel::Beginner
-                    | MasteryLevel::Intermediate
-                    | MasteryLevel::Advanced
-                    | MasteryLevel::Master
-            );
-            assert_matches!(
-                result.new_mastery,
-                MasteryLevel::Beginner
-                    | MasteryLevel::Intermediate
-                    | MasteryLevel::Advanced
-                    | MasteryLevel::Master
-            );
-        }
+        let result = &session.results[0];
+        assert_matches!(
+            result.old_mastery,
+            MasteryLevel::Beginner
+                | MasteryLevel::Intermediate
+                | MasteryLevel::Advanced
+                | MasteryLevel::Master
+        );
+        assert_matches!(
+            result.new_mastery,
+            MasteryLevel::Beginner
+                | MasteryLevel::Intermediate
+                | MasteryLevel::Advanced
+                | MasteryLevel::Master
+        );
     }
 
     #[test]
@@ -391,19 +410,19 @@ mod tests {
             let mut tracker_mut = tracker.borrow_mut();
             // Just create the entries without practicing to ensure they're due
             tracker_mut.record_attempt(
-                "cmd1",
+                &cid("cmd1"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),
             );
             tracker_mut.record_attempt(
-                "cmd2",
+                &cid("cmd2"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),
             );
             tracker_mut.record_attempt(
-                "cmd3",
+                &cid("cmd3"),
                 Duration::from_secs(1),
                 true,
                 Duration::from_secs(1),
@@ -413,7 +432,7 @@ mod tests {
         let scheduler = Scheduler::new();
         let mut session = ReviewSession::new(&scheduler, Rc::clone(&tracker), 10);
 
-        // If we have items, process exactly 3 (or however many are available)
+        assert!(session.items.len() >= 3, "seeded queue is too short");
         let mut processed = 0;
         while processed < 3 && session.current_item().is_some() {
             let success = processed != 1; // Second item fails
@@ -429,14 +448,10 @@ mod tests {
         }
 
         let summary = session.summary();
-        assert_eq!(summary.total_reviews, processed);
-
-        // Verify statistics match our recorded attempts
-        if processed >= 3 {
-            assert_eq!(summary.successful, 2); // items 0 and 2 succeeded
-            assert_eq!(summary.failed, 1); // item 1 failed
-            assert_eq!(summary.avg_time, Duration::from_secs(3)); // (2+4+3)/3 = 3
-        }
+        assert_eq!(summary.total_reviews, 3);
+        assert_eq!(summary.successful, 2); // items 0 and 2 succeeded
+        assert_eq!(summary.failed, 1); // item 1 failed
+        assert_eq!(summary.avg_time, Duration::from_secs(3)); // (2+4+3)/3 = 3
     }
 
     #[test]

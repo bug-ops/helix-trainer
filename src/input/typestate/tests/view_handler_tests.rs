@@ -1,4 +1,4 @@
-//! Tests for ViewPending handler
+//! Tests for `ViewPending` handler
 
 use std::assert_matches;
 

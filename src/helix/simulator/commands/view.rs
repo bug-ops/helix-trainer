@@ -4,6 +4,11 @@ use crate::helix::simulator::HelixSimulator;
 use crate::security::UserError;
 
 /// Center viewport on cursor line (z or zz command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn view_center<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -16,6 +21,11 @@ pub fn view_center<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Align cursor line to top of viewport (zt command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn view_align_top<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -28,6 +38,11 @@ pub fn view_align_top<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Align cursor line to bottom of viewport (zb command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn view_align_bottom<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -40,6 +55,11 @@ pub fn view_align_bottom<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Center viewport horizontally on cursor column (zm command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn view_center_horizontal<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -59,6 +79,11 @@ pub fn view_center_horizontal<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Scroll viewport down by one line (zj command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn scroll_down<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -68,6 +93,11 @@ pub fn scroll_down<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Scroll viewport up by one line (zk command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn scroll_up<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -76,6 +106,11 @@ pub fn scroll_up<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Scroll viewport down by count lines
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn scroll_down_count<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
@@ -86,6 +121,11 @@ pub fn scroll_down_count<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Scroll viewport up by count lines
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn scroll_up_count<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
@@ -101,7 +141,10 @@ mod tests {
     use helix_core::Selection;
 
     fn create_multiline_sim(lines: usize) -> HelixSimulator<NormalMode> {
-        let content: String = (0..lines).map(|i| format!("line {}\n", i)).collect();
+        let content = (0..lines)
+            .map(|i| format!("line {i}\n"))
+            .collect::<Vec<_>>()
+            .concat();
         HelixSimulator::new(content)
     }
 

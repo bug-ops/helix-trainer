@@ -56,12 +56,13 @@ impl StreakManager {
     ///
     /// ```
     /// use helix_trainer::gamification::{StreakManager, UserProfile, StreakChange};
+    /// use helix_trainer::ids::QuestId;
     /// use helix_trainer::time::{Clock, FakeClock};
     ///
     /// let clock = FakeClock::at("2026-01-15T12:00:00Z");
     /// let mut profile = UserProfile::new_at(clock.now());
     /// profile.current_streak = 5;
-    /// profile.complete_quest("test_quest".to_string());
+    /// profile.complete_quest(QuestId::parse("test_quest").unwrap());
     ///
     /// // Simulate next day activity
     /// clock.advance_days(1);
@@ -82,15 +83,15 @@ impl StreakManager {
             }
             1 => {
                 // Next day - increment if completed any quest today
-                if !profile.completed_quests_today.is_empty() {
+                if profile.completed_quests_today.is_empty() {
+                    // Activity but no quest completion - don't increment
+                    StreakChange::Continued
+                } else {
                     profile.current_streak = profile.current_streak.saturating_add(1);
                     profile.longest_streak = profile.longest_streak.max(profile.current_streak);
                     StreakChange::Incremented {
                         new_streak: profile.current_streak,
                     }
-                } else {
-                    // Activity but no quest completion - don't increment
-                    StreakChange::Continued
                 }
             }
             _ => {
@@ -203,7 +204,9 @@ impl StreakManager {
 
     /// Calculate days between two dates
     fn days_between(start: DateTime<Utc>, end: DateTime<Utc>) -> i64 {
-        (end.date_naive() - start.date_naive()).num_days()
+        end.date_naive()
+            .signed_duration_since(start.date_naive())
+            .num_days()
     }
 
     /// Check if streak milestone reached
@@ -232,6 +235,7 @@ impl StreakManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::{ncmd, qid};
     use crate::time::{Clock, FakeClock};
     use chrono::Duration;
     use std::assert_matches;
@@ -252,7 +256,7 @@ mod tests {
         let clock = FakeClock::at("2026-01-15T12:00:00Z");
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
-        profile.complete_quest("test_quest".to_string());
+        profile.complete_quest(qid("test_quest"));
         clock.advance_days(1);
 
         let change = StreakManager::update_streak(&mut profile, clock.now());
@@ -265,7 +269,7 @@ mod tests {
         let clock = FakeClock::at("2026-01-15T12:00:00Z");
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = u32::MAX;
-        profile.complete_quest("test_quest".to_string());
+        profile.complete_quest(qid("test_quest"));
         clock.advance_days(1);
 
         StreakManager::update_streak(&mut profile, clock.now());
@@ -472,7 +476,7 @@ mod tests {
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
         profile.longest_streak = 5;
-        profile.complete_quest("test".to_string());
+        profile.complete_quest(qid("test"));
         clock.advance_days(1);
 
         StreakManager::update_streak(&mut profile, clock.now());
@@ -566,13 +570,13 @@ mod tests {
 
         for i in 0..3 {
             profile.daily_quests.push(Quest::new(
-                format!("quest_{}", i),
+                qid(&format!("quest_{i}")),
                 QuestType::CommandPractice {
-                    command: "x".to_string(),
+                    command: ncmd("x"),
                     target: 1,
                     current: 0,
                 },
-                format!("Quest {}", i),
+                format!("Quest {i}"),
                 QuestDifficulty::Easy,
             ));
         }
@@ -583,7 +587,7 @@ mod tests {
         // Not eligible - already has freeze, even if all quests are completed
         profile.streak_freeze_available = true;
         for i in 0..3 {
-            profile.complete_quest(format!("quest_{}", i));
+            profile.complete_quest(qid(&format!("quest_{i}")));
         }
         assert!(!StreakManager::check_freeze_eligibility(&profile));
 

@@ -109,6 +109,10 @@ pub trait Modifier {
         clippy::cast_sign_loss,
         reason = "a modifier factor is non-negative and the scaled value stays far below u64::MAX"
     )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn apply(&self, value: u64) -> u64 {
         (value as f64 * self.factor()).round() as u64
     }
@@ -183,6 +187,10 @@ mod tests {
     }
 
     impl ProgressTracker for TestProgress {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+        )]
         fn progress(&self) -> f64 {
             if self.target == 0 {
                 0.0

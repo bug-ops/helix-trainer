@@ -24,7 +24,7 @@ impl Harness {
 
     fn press(&mut self, key: KeyEvent) {
         let cmd = if self.sim.is_insert_mode() {
-            handle_insert_mode_input(key).map(|cmd| cmd.into_owned())
+            handle_insert_mode_input(key).map(std::borrow::Cow::into_owned)
         } else {
             match self.machine.process_key(key) {
                 HandlerResult::Execute(cmd) => Some(cmd.into_owned()),

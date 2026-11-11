@@ -27,7 +27,6 @@ allow = [
     "ISC",
     "MPL-2.0",
     "Unicode-3.0",
-    "Unicode-DFS-2016",
     "Unlicense",
     "Zlib",
 ]
@@ -64,14 +63,10 @@ skip = [
     # proc-macro-crate chain). Independent transitive chains.
     { name = "foldhash" },
     { name = "hashbrown" },
-    # getrandom and r-efi: getrandom 0.2.17 via dirs -> dirs-sys ->
-    # redox_users (Redox-only); 0.3.4 via ahash (rust-i18n-support's
-    # serde-saphyr) and proptest's rand 0.9 chain; 0.4.3 via fsrs/
-    # helix-trainer's direct rand 0.10 dependency and tempfile. r-efi
-    # mirrors the 0.3.4/0.4.3 split (it's getrandom's UEFI target binding).
-    # All three chains are transitive with independent major-version pins.
-    { name = "getrandom" },
-    { name = "r-efi" },
+    # jni-sys: 0.4.1 via rodio -> cpal -> jni; 0.3.1 via rodio -> cpal ->
+    # ndk (and ndk-sys). Android-only chains inside cpal, which depends on
+    # both the jni and ndk crates; not collapsible without cpal upstream.
+    { name = "jni-sys" },
     # itertools: three chains cargo-deny sees on the default (non-dev) graph
     # -- 0.11.0 via rust-i18n-support, 0.14.0 via fsrs (direct) and
     # ratatui-core, 0.15.0 via tui-big-text. criterion also pulls 0.13.0 but

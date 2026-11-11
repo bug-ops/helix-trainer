@@ -1,4 +1,4 @@
-//! Clipboard (yank/paste) tests for HelixSimulator
+//! Clipboard (yank/paste) tests for `HelixSimulator`
 //!
 //! Tests for yank and paste operations including:
 //! - Yank: y

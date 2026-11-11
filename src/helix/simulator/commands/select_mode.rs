@@ -2,13 +2,27 @@
 //! the editing commands of Helix leave it.
 
 use super::execute_normal_mode_command_internal;
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_ALIGN_SELECTIONS, CMD_DEDENT, CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK,
+    CMD_ESCAPE, CMD_GOTO_FILE_START, CMD_GOTO_FIRST_NONWHITESPACE, CMD_GOTO_LAST_LINE,
+    CMD_GOTO_LINE, CMD_GOTO_LINE_END, CMD_GOTO_LINE_START, CMD_HALF_PAGE_DOWN, CMD_HALF_PAGE_UP,
+    CMD_INDENT, CMD_MATCH_BRACKETS, CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_LONG_WORD_BACKWARD,
+    CMD_MOVE_LONG_WORD_END, CMD_MOVE_LONG_WORD_FORWARD, CMD_MOVE_RIGHT, CMD_MOVE_UP,
+    CMD_MOVE_WORD_BACKWARD, CMD_MOVE_WORD_END, CMD_MOVE_WORD_FORWARD, CMD_PASTE_AFTER,
+    CMD_PASTE_BEFORE, CMD_REPLACE_WITH_YANKED, CMD_SWITCH_CASE, CMD_SWITCH_CASE_ALT,
+    CMD_SWITCH_TO_UPPERCASE, CMD_TOGGLE_COMMENTS, CMD_YANK,
+};
 use crate::helix::registry::parse_counted_command;
 use crate::helix::simulator::{EditorMode, HelixSimulator, NormalMode};
 use crate::security::UserError;
 use helix_core::{Selection, ropey::RopeSlice};
 
 /// Toggle Select mode (`v` command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn toggle<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     sim.select_mode = !sim.select_mode;
     Ok(())
@@ -70,6 +84,9 @@ fn is_extending_motion(base: &str) -> bool {
             | CMD_GOTO_LINE_END
             | CMD_GOTO_FIRST_NONWHITESPACE
             | CMD_GOTO_LINE
+            | CMD_HALF_PAGE_UP
+            | CMD_HALF_PAGE_DOWN
+            | CMD_MATCH_BRACKETS
     ) || is_find_command(base)
 }
 

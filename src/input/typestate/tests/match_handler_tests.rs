@@ -1,4 +1,4 @@
-//! Tests for MatchPending and surround handlers
+//! Tests for `MatchPending` and surround handlers
 
 use std::assert_matches;
 

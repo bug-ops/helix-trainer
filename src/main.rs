@@ -6,10 +6,14 @@
 use anyhow::Result;
 use helix_trainer::{
     async_state::SaveWriterOutcome,
-    config::{AppConfig, ConfigStorage, keymap::resolve_startup_overlay},
+    config::{
+        AppConfig, ConfigStorage, app_config::config_load_failed_message, data_dir::DataDir,
+        keymap::resolve_startup_overlay,
+    },
     data_loader::{spawn_data_loaders, spawn_save_writer},
     gamification::ProfileStorage,
     learning::PerformanceTracker,
+    security::error_chain,
     ui::{self, AppState, Notification, NotificationType},
 };
 use std::io;
@@ -18,12 +22,39 @@ use tokio::sync::mpsc;
 mod cli;
 mod data_handling;
 mod event_loop;
+#[cfg(test)]
+#[path = "testing/log_capture.rs"]
+mod log_capture;
 mod logging;
 mod terminal;
 
 use event_loop::run_async_event_loop;
 use logging::init_secure_logging;
 use terminal::{install_panic_hook, setup_terminal};
+
+/// Exit status when no data directory can be determined.
+const NO_DATA_DIR_EXIT_CODE: i32 = 1;
+
+/// Error text shown when no data directory can be determined.
+const NO_DATA_DIR_MESSAGE: &str = "cannot determine the configuration directory; \
+     set HOME or XDG_CONFIG_HOME to an absolute path";
+
+/// Turns an unresolved data directory into the startup error message.
+fn require_data_dir(resolved: Option<DataDir>) -> Result<DataDir, &'static str> {
+    resolved.ok_or(NO_DATA_DIR_MESSAGE)
+}
+
+/// Loads the user configuration; on failure falls back to the defaults and returns the
+/// notification text to show at startup.
+fn load_config_or_default(storage: &ConfigStorage) -> (AppConfig, Option<String>) {
+    match storage.load() {
+        Ok(config) => (config, None),
+        Err(e) => {
+            tracing::warn!(error = %error_chain(&e), "Failed to load config, using defaults");
+            (AppConfig::default(), Some(config_load_failed_message()))
+        }
+    }
+}
 
 /// Main entry point (async)
 ///
@@ -49,6 +80,15 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Resolved before logging and the terminal exist so the message is readable.
+    let data_dir = match require_data_dir(DataDir::resolve()) {
+        Ok(dir) => dir,
+        Err(message) => {
+            eprintln!("error: {message}");
+            std::process::exit(NO_DATA_DIR_EXIT_CODE);
+        }
+    };
+
     // Warn if running debug build
     #[cfg(debug_assertions)]
     {
@@ -65,11 +105,8 @@ async fn main() -> Result<()> {
     let (data_tx, mut data_rx) = mpsc::channel(32);
 
     // Load application configuration
-    let config_storage = ConfigStorage::new();
-    let app_config = config_storage.load().unwrap_or_else(|e| {
-        tracing::warn!("Failed to load config, using defaults: {}", e);
-        AppConfig::default()
-    });
+    let config_storage = ConfigStorage::in_data_dir(&data_dir);
+    let (app_config, config_startup_message) = load_config_or_default(&config_storage);
 
     // Resolve the gameplay keymap overlay from the user's Helix config, if
     // `use_helix_keymap` is enabled. Degrades to the stock keymap
@@ -77,7 +114,7 @@ async fn main() -> Result<()> {
     let (keymap, keymap_report, keymap_startup_message) = resolve_startup_overlay(&app_config);
 
     // Initialize app state (empty, will be populated by async loaders)
-    let profile_storage = ProfileStorage::new();
+    let profile_storage = ProfileStorage::in_data_dir(&data_dir);
     let tracker = PerformanceTracker::new();
 
     // Create ConfigState from loaded AppConfig
@@ -87,6 +124,10 @@ async fn main() -> Result<()> {
         keymap_report,
     };
 
+    // The loader shares the app's handle (clones share the last known-valid profile text), so the
+    // first save after startup keeps the profile that just loaded as `profile.json.prev`.
+    let loader_storage = profile_storage.clone();
+
     let mut app_state = AppState::with_config(
         vec![],
         helix_trainer::gamification::UserProfile::new(),
@@ -95,7 +136,10 @@ async fn main() -> Result<()> {
         config_state,
     );
 
-    if let Some(message) = keymap_startup_message {
+    for message in config_startup_message
+        .into_iter()
+        .chain(keymap_startup_message)
+    {
         app_state
             .ui
             .notifications
@@ -120,12 +164,12 @@ async fn main() -> Result<()> {
     app_state.progress.begin_profile_load();
 
     // Spawn background data loaders
-    spawn_data_loaders(data_tx.clone());
+    spawn_data_loaders(data_tx.clone(), loader_storage);
 
     // Force full redraw on first render by clearing the terminal
     // This ensures the UI is visible immediately on startup
     terminal.clear()?;
-    terminal.draw(|f| ui::render(f, &mut app_state))?;
+    terminal.draw(|f| ui::render(f, &app_state))?;
     // Flush to ensure immediate display
     io::Write::flush(terminal.backend_mut())?;
 
@@ -169,7 +213,7 @@ async fn main() -> Result<()> {
             tracing::info!("Profile saved successfully");
         }
         Ok(SaveWriterOutcome::LastSaveFailed(err)) => {
-            tracing::error!("Failed to save profile on exit: {}", err);
+            tracing::error!(error = %error_chain(&*err), "Failed to save profile on exit");
         }
         Ok(SaveWriterOutcome::NoRequestsProcessed) if exit_save_requested => {
             tracing::error!("Profile save writer exited without processing the exit-time save");
@@ -177,7 +221,9 @@ async fn main() -> Result<()> {
         Ok(SaveWriterOutcome::NoRequestsProcessed) => {
             tracing::info!("Exit-time profile save skipped (profile not loaded or load failed)");
         }
-        Err(e) => tracing::error!("Profile save writer task panicked: {}", e),
+        Err(e) => {
+            tracing::error!(error = %error_chain(&e), "Profile save writer task panicked");
+        }
     }
 
     // Restore terminal
@@ -186,4 +232,59 @@ async fn main() -> Result<()> {
     tracing::info!("Exiting Helix Keybindings Trainer");
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unresolved_data_dir_is_an_error_naming_both_variables() {
+        let message = require_data_dir(None).unwrap_err();
+        assert!(message.contains("HOME"), "{message}");
+        assert!(message.contains("XDG_CONFIG_HOME"), "{message}");
+        assert_eq!(NO_DATA_DIR_EXIT_CODE, 1);
+    }
+
+    #[test]
+    fn relative_bases_do_not_resolve_a_data_dir() {
+        let resolved = DataDir::resolve_for(
+            false,
+            None,
+            Some(std::path::PathBuf::from("relative/.config")),
+        );
+        assert!(require_data_dir(resolved).is_err());
+    }
+
+    #[test]
+    fn resolved_data_dir_passes_through() {
+        let base = std::env::temp_dir();
+        let resolved = DataDir::resolve_for(false, None, Some(base.clone()));
+        assert_eq!(
+            require_data_dir(resolved).unwrap().dir(),
+            base.join("helix-trainer")
+        );
+    }
+
+    #[test]
+    fn corrupt_config_falls_back_to_defaults_with_a_notification() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, "{ not json").unwrap();
+
+        let (config, message) = load_config_or_default(&ConfigStorage::with_path(&path));
+        assert_eq!(message, Some(config_load_failed_message()));
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            serde_json::to_value(AppConfig::default()).unwrap()
+        );
+    }
+
+    #[test]
+    fn missing_config_yields_defaults_without_a_notification() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, message) =
+            load_config_or_default(&ConfigStorage::with_path(dir.path().join("config.json")));
+        assert_eq!(message, None);
+    }
 }

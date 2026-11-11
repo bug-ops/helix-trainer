@@ -1,0 +1,67 @@
+{
+  "ciw": {
+    "stability": 21.411402,
+    "difficulty": 2.1112142,
+    "state": "Review",
+    "reps": 2,
+    "lapses": 0,
+    "attempts": 2,
+    "successes": 2,
+    "total_time": 4000,
+    "last_review": "2026-01-22T12:00:00Z",
+    "due": "2026-02-12T12:00:00Z",
+    "scheduled_days": 21
+  },
+  "dd": {
+    "stability": 4.2300515,
+    "difficulty": 7.591834,
+    "state": "Review",
+    "reps": 3,
+    "lapses": 1,
+    "attempts": 3,
+    "successes": 2,
+    "total_time": 7000,
+    "last_review": "2026-01-18T12:00:00Z",
+    "due": "2026-01-22T12:00:00Z",
+    "scheduled_days": 4
+  },
+  "x": {
+    "stability": 72.62984,
+    "difficulty": 1.0,
+    "state": "Review",
+    "reps": 3,
+    "lapses": 0,
+    "attempts": 3,
+    "successes": 3,
+    "total_time": 4000,
+    "last_review": "2026-01-28T12:00:00Z",
+    "due": "2026-04-11T12:00:00Z",
+    "scheduled_days": 73
+  },
+  "w": {
+    "stability": 2.3065,
+    "difficulty": 2.118104,
+    "state": "Review",
+    "reps": 1,
+    "lapses": 0,
+    "attempts": 1,
+    "successes": 1,
+    "total_time": 2000,
+    "last_review": "2026-01-15T12:00:00Z",
+    "due": "2026-01-15T12:00:00Z",
+    "scheduled_days": 2
+  },
+  "gg": {
+    "stability": 33.797955,
+    "difficulty": 7.079541,
+    "state": "Review",
+    "reps": 4,
+    "lapses": 1,
+    "attempts": 4,
+    "successes": 3,
+    "total_time": 7000,
+    "last_review": "2026-02-14T12:00:00Z",
+    "due": "2026-03-20T12:00:00Z",
+    "scheduled_days": 34
+  }
+}

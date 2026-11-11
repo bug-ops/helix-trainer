@@ -1,4 +1,4 @@
-//! TextObject handlers - handles text object selection after 'ma'/'mi'
+//! `TextObject` handlers - handles text object selection after 'ma'/'mi'
 //!
 //! Processes text object types like 'w' (word), '(' (parentheses), etc.
 
@@ -24,7 +24,7 @@ impl InputHandler<TextObjectAroundPending> for KeyHandler {
                 c @ ('w' | 'W' | '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | '`'
                 | 'p'),
             ) => {
-                let cmd = format!("ma{}", c);
+                let cmd = format!("ma{c}");
                 HandlerResult::Execute(Cow::Owned(cmd))
             }
             // Escape - cancel
@@ -47,7 +47,7 @@ impl InputHandler<TextObjectInsidePending> for KeyHandler {
                 c @ ('w' | 'W' | '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '"' | '\'' | '`'
                 | 'p'),
             ) => {
-                let cmd = format!("mi{}", c);
+                let cmd = format!("mi{c}");
                 HandlerResult::Execute(Cow::Owned(cmd))
             }
             // Escape - cancel

@@ -1,12 +1,7 @@
 //! Message handlers for the Elm Architecture update function
 //!
 //! This module contains all message handlers, organized by functional domain.
-//! Each handler is a pure function that modifies AppState based on a message.
-
-#![expect(
-    clippy::unnecessary_wraps,
-    reason = "handlers share one fallible signature so `update` can dispatch them uniformly"
-)]
+//! Each handler is a pure function that modifies `AppState` based on a message.
 
 // Re-export all handlers for use in the main update function
 pub(super) use category_filters::{

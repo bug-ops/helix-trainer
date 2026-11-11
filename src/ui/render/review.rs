@@ -2,6 +2,7 @@
 
 use crate::helix::commands::CMD_ESCAPE;
 use crate::helix::registry::normal_registry;
+use crate::ids::CommandId;
 use crate::ui::state::{AppState, ReviewData, ReviewSessionState};
 use ratatui::{
     Frame,
@@ -15,8 +16,7 @@ use ratatui::{
 fn get_command_description(command: &str) -> &'static str {
     normal_registry()
         .metadata(command)
-        .map(|m| m.description)
-        .unwrap_or("Helix command")
+        .map_or("Helix command", |m| m.description)
 }
 
 /// Render the review session screen
@@ -43,6 +43,10 @@ pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState, data: &R
 }
 
 /// Render the header with progress gauge
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+)]
 fn render_header(frame: &mut Frame, area: Rect, session: &ReviewSessionState) {
     let progress = (session.current_index + 1) as f64 / session.due_commands.len() as f64;
     let progress_text = format!(
@@ -96,44 +100,43 @@ fn render_review_content(
 }
 
 /// Render command information panel
-fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command: &str) {
+fn render_command_info(frame: &mut Frame, area: Rect, state: &AppState, command: &CommandId) {
     let tracker = &state.progress.performance_tracker;
     let perf = tracker.performance(command);
 
     // Get command description
-    let description = get_command_description(command);
+    let description = get_command_description(command.as_str());
 
-    let mastery_text = if let Some(p) = perf {
-        format!("Mastery: {:?} ⭐", p.mastery_level())
-    } else {
-        "Mastery: New".to_string()
-    };
+    let mastery_text = perf.map_or_else(
+        || "Mastery: New".to_string(),
+        |p| format!("Mastery: {:?} ⭐", p.mastery_level()),
+    );
 
-    let next_review = if let Some(p) = perf {
-        // `state: &AppState` is in scope here, so use the injected clock rather than
-        // the wall clock directly.
-        let now = state.progress.now();
-        let days = (p.due() - now).num_days();
-        if days > 0 {
-            format!("Next: in {} days", days)
-        } else {
-            "Due: Now".to_string()
-        }
-    } else {
-        "First time".to_string()
-    };
+    let next_review = perf.map_or_else(
+        || "First time".to_string(),
+        |p| {
+            // `state: &AppState` is in scope here, so use the injected clock rather than
+            // the wall clock directly.
+            let now = state.progress.now();
+            let days = (p.due() - now).num_days();
+            if days > 0 {
+                format!("Next: in {days} days")
+            } else {
+                "Due: Now".to_string()
+            }
+        },
+    );
 
-    let success_rate = if let Some(p) = perf {
-        format!("Success rate: {:.0}%", p.success_rate() * 100.0)
-    } else {
-        "Success rate: N/A".to_string()
-    };
+    let success_rate = perf.map_or_else(
+        || "Success rate: N/A".to_string(),
+        |p| format!("Success rate: {:.0}%", p.success_rate() * 100.0),
+    );
 
     let text = vec![
         Line::from(vec![
             Span::styled("Command: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                command,
+                command.as_str(),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),

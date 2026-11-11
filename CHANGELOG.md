@@ -9,12 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Restore action (Ctrl-R) on the corrupt-profile banner restores `profile.json.prev`, a validated copy rotated from the last good in-memory bytes on every save (#545)
+- `ScenarioId`, `QuestId`, `CommandId` and `NormalizedCommand` newtypes with validating serde; the on-disk JSON is unchanged (#545)
+- Config load failures are shown as a startup notification (#545)
 - `?` backward search, `K`/`Alt-K` regex prompts, real Select mode, per-language indent unit, Insert-mode Tab and indent/dedent (#526)
 - Start fresh action (Ctrl-N) on the corrupt-profile banner; identical corrupt backups are no longer duplicated (#526)
 - Opt-in `completion = "after_taught_commands"` scenario rule so undo and redo goals can be expressed (#526)
 
 ### Changed
 
+- **Breaking**: the app exits with code 1 without an absolute config directory instead of falling back to the current directory; `ProfileStorage::new`, `ConfigStorage::new` and their `Default` are removed and `DataDir::resolve` returns `Option` (#545)
+- **Breaking**: persistence and loader errors are typed (`StorageError`, `LoaderError`, `SaveFailure`) and `UserError` keeps its `ErrorCause` (#545)
+- **Breaking**: `ReviewableCommand` is now `CommandId` (card ids only), scenario, quest and command ids are newtypes, `CommandPerformance.command` is removed and `ScenarioHistory` ids follow the `ScenarioId` rule (#545)
+- Command names longer than 64 bytes no longer create FSRS cards (#545)
+- Arcade prioritization keys scenario commands by real FSRS cards, so Insert-mode text and raw tokens such as `3h` no longer count as commands (#545)
+- fsrs is bumped to 7 and syntect uses the pure-Rust `regex-fancy` backend, which makes the first highlight of a language slower (#545)
+- Failed-save notifications no longer include the error text; details go to the log (#545)
+- Commands and abandon are ignored during the success animation; render no longer mutates state and list selection is normalized after every update (#545)
+- Helix simulator follows Helix 25.07.1 for Select-mode extension, indent unit detection, `&`, `J` and newline indent (#545)
+- `[lints.clippy]` allow-list reduced to six entries with reasons; `assert_is_empty`, `match_same_arms`, `similar_names` and `too_many_lines` remain as a deferred residual (#545)
+- CI: dependabot auto-merge gates on the PR author; cargo-deny config cleaned up (#545)
 - **Breaking**: F1 is the only hint key and `?` is no longer reserved; typed `?` reaches Insert mode and prompts (#526)
 - **Breaking**: macOS data and config move to `~/.config/helix-trainer` with a per-file copy migration; older versions keep using the old directory and diverge on downgrade (#526)
 - **Breaking**: profiles omit derived card fields (`retrievability`, `avg_time`, `mastery_level`, `command`) and invalid or non-reviewable cards are dropped on load; versions up to 0.6.2 cannot read them (#526)
@@ -37,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- No spurious WARN on clean exit; scenario collection sorting and card due dates no longer panic on overflow or stale indices (#545)
 - Menu count prefixes no longer leak into other keys; the Task footer shows the real hint key (#526)
 - Backtick toggles case like Helix, `R`, Insert-mode `.` replay, `J`, `&` and indent follow Helix, and retrying a scenario keeps its language indent unit (#526)
 - Completing a scenario no longer leaves a placeholder session when scoring fails; `x d U` no longer completes `undo_redo_001` early (#526)

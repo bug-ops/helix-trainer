@@ -22,7 +22,7 @@ related:
 # Feature: User-Data Safety and Runtime Robustness Hardening
 
 > [!info] Metadata
-> **Issues**: #440 (P1), #441, #444, #442, #443; extended 2026-11-11 with #467, #484, #515, #518
+> **Issues**: #440 (P1), #441, #444, #442, #443; extended 2026-11-11 with #467, #484, #515, #518; extended again 2026-11-11 with #460, #457, #456, #531, #454, #523, #463 (section 7)
 > **Status**: Proposed
 > **Depth**: Lightweight spec covering five related findings of the CI-011 security audit. Constitution V (security) and the recoverable-error rule in [[constitution#V. Security]] apply.
 
@@ -44,8 +44,9 @@ A failed profile load never destroys the file on disk; reads are bounded and rej
 
 - Encrypting profile data
 - Pruning review cards already persisted by earlier versions (specified separately: [[fsrs-proptest-coverage-gap/spec#12. Bug-Fix Batch: Persisted Card Integrity, Panic-Free FSRS Updates, Single Urgency Authority (#511, #464, #469, #470)|FSRS spec section 12]])
-- Restoring a profile from a previous good copy (`profile.json.prev`, tracked as a follow-up; #518 covers dedupe and start-fresh only)
 - Windows ACL permissions (Unix modes only)
+- Multi-generation history of the profile (only one `profile.json.prev` is kept)
+- cargo-fuzz targets for the loaders (optional part of #454, tracked as a follow-up)
 
 ## 2. Functional Requirements
 
@@ -194,7 +195,7 @@ THEN  raw mode is off and the alternate screen is left before the previous hook 
 | Same unreadable file on a later launch | No new copy; the existing byte-identical backup is reused (FR-006) |
 | Start fresh chosen, then the new profile save fails | Remains `Quarantined`/non-writable, error shown; the original and the backup are untouched |
 | Profile larger than the 1 MiB cap | Treated as a load failure (FR-001..003), not as a new profile |
-| Config file bad (`config.json`) | Existing fallback to defaults is kept; no overwrite of the bad file without a backup `[NEEDS CLARIFICATION: apply FR-002 backup to config.json too]` |
+| Config file bad (`config.json`) | Fallback to defaults is kept, the user sees a startup notification (FR-110), and the bad file is not overwritten by the load path. A `.corrupt-*` backup of `config.json` is out of scope: the app has no production config save call site (see the note under 2.8) |
 | Panic hook invoked twice | Idempotent restore, no second panic |
 
 ## 5. Success Criteria
@@ -217,10 +218,148 @@ THEN  raw mode is off and the alternate screen is left before the previous hook 
 - Ask first: deleting any user file; changing the data directory location again beyond FR-080
 - Never: overwrite `profile.json` after a failed load without an existing backup; move (instead of copy) migrated files; add `unsafe`
 
-## 7. See Also
+## 7. Bug-Fix Batch: Typed Storage Errors, Config Directory, Config Notification, Profile Restore, Loader Robustness, Level Display, Typed Identifiers (#460, #457, #456, #531, #454, #523, #463)
+
+> [!info] Added 2026-11-11 (spec-first update for the 25-issue batch)
+> Implementation starts only from issues that link this section.
+
+### 7.1 Typed storage and loader errors (#460)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-090 | THE SYSTEM SHALL represent persistence failures as one typed error `StorageError` carrying the document (`Profile` or `Config`) and a closed set of kinds: read, too large, corrupt (parse), serialize, write, migrate, no backup, delete. Each variant keeps its cause as a `#[source]`; the cause text SHALL NOT be interpolated into the variant's own message, so a chain walker prints each cause once. `StorageError` replaces the former `JsonStoreError` and the string-payload `GamificationError::StorageError` | must |
+| FR-091 | `path_validator::read_capped` SHALL return a typed `CappedReadError` (not a regular file, too large with limit and actual size, I/O, invalid UTF-8) convertible to `SecurityError`, so scenario, quest and keymap loader sites keep their behavior. "File does not exist" SHALL stay distinguishable from every other read failure (first launch, FR-005, relies on it) | must |
+| FR-092 | THE library modules (`data_loader`, `config`, `gamification`, `async_state`) SHALL NOT expose `anyhow` or `String` error payloads; loader results, profile load, profile save and quarantine outcomes SHALL carry typed errors (a loader error, a storage error, a quarantine copy error, a save failure that is a storage error or a task join error). `anyhow` stays only in the binary entry point | must |
+| FR-093 | `UserError` SHALL expose storage failures as a variant with `StorageError` as its `#[source]` and a sanitized Display (no filesystem paths or OS messages shown to the learner). A save-failure notification likewise shows no error text; the details go to the log only | must |
+| FR-094 | THE `From` conversions into `UserError` SHALL NOT log. EVERY place that consumes such an error (event-loop update and data-message error reporting, start-fresh and restore tasks, config load and exit-save in `main`, the profile, scenario, quest-registry and save-error arms of the data-message handler, and the review, scenario and gameplay handlers that convert errors) SHALL log the full cause chain through one shared helper, so no error becomes silent when logging leaves `From`. `StorageError` Display contains the absolute file path, so logged chains may include local paths; this is accepted for the local log file, while user-facing `UserError` text stays path-free (the logging module comment that says otherwise is corrected) | must |
+
+### 7.2 Data directory without fallback (#457)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-100 | WHEN no data directory can be resolved (no usable `HOME` or `XDG_CONFIG_HOME`; a relative value of either is treated as unset, per FR-080 on macOS and `dirs::config_dir()` elsewhere) THE SYSTEM SHALL NOT fall back to the current working directory for `profile.json` or `config.json` | must |
+| FR-101 | WHEN the data directory cannot be resolved THE SYSTEM SHALL exit with status 1 and a message that names `HOME` and `XDG_CONFIG_HOME`, before logging and terminal setup (the message is readable in the normal terminal) | must |
+| FR-102 | `--help` and `--version` SHALL keep working without a data directory (command-line parsing precedes resolution, see [[cli-version-and-help-flags/spec]]) | must |
+| FR-103 | THE path-less constructors `ProfileStorage::new()` and `ConfigStorage::new()` (and their `Default` impls) SHALL be removed; `DataDir::resolve()` returns an `Option`; storage is built only from a resolved directory or an explicit path. The loader entry point takes the storage instance, and `main` SHALL hand it a clone of the application's `ProfileStorage` so loader and application share the last-valid bytes of FR-121 | must |
+
+### 7.3 Config parse failure notification (#456)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-110 | WHEN `config.json` exists but cannot be read or parsed THE SYSTEM SHALL fall back to defaults AND show a visible startup notification stating that the configuration was not loaded (same mechanism as the Helix keymap startup message), and SHALL log the cause chain; the notification text is the locale key `config.load_failed` | must |
+| FR-111 | THE atomic save required for `config.json` is delivered by FR-071 (temp file, fsync, rename); no additional save requirement is added here | must |
+
+### 7.4 Restore from the previous profile copy (#531)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-120 | WHEN the profile is saved THE SYSTEM SHALL first write the last known-valid profile bytes to `profile.json.prev` (best effort: a failure is logged and does not block the save), then write `profile.json` atomically per FR-071 | must |
+| FR-121 | "Last known-valid" SHALL mean bytes held in memory that this process either loaded successfully or wrote successfully; the rotation SHALL NEVER copy bytes read back from disk, so external edits or corruption of `profile.json` while the app runs cannot overwrite the last good `.prev`. After a failed load nothing is held, so Start fresh does not rotate the corrupt file into `.prev`. The held bytes are shared by all clones of the storage handle (loader, writer, background tasks), and rotation, write and update happen under one lock. Rotation is a write, never a rename (a crash between renames must not leave no `profile.json`). The held bytes SHALL never appear in `Debug` output | must |
+| FR-122 | `ProfilePersistence::Quarantined` SHALL carry both the backup outcome and whether a restorable previous copy exists; the previous copy is loaded through the same full load path as `profile.json` (size cap, lenient card loader, level recomputation) and counts as available only if it passes | must |
+| FR-123 | WHILE the profile is `Quarantined` with a backup on disk (`BackedUp`) AND an available previous copy THE BANNER SHALL offer a second action, **Restore previous** (bound to `Ctrl-R`, shown only in that state), next to Start fresh. It is a state-model message yielding an effect executed by the event loop (no I/O in `update()`). `Ctrl-R` is NOT intercepted on the Task and MiniGame screens, where it is redo; the banner still shows the restore line there | must |
+| FR-124 | WHEN Restore previous is chosen THE SYSTEM SHALL re-validate `profile.json.prev` through the full load path at that moment (the file may have changed since the offer); on success it SHALL write the validated bytes to `profile.json` atomically, make `ProfilePersistence` `Writable`, and keep the `.corrupt-*` backup; on failure it SHALL refuse, leave every file untouched and report the error | must |
+| FR-125 | `delete` of the profile SHALL also remove `profile.json.prev`. WHEN the user chooses Start fresh THE SYSTEM SHALL write the new default profile; the old `.prev` stays restorable only until the next save, which replaces it with the in-memory last-valid bytes (this discard is intended) | must |
+
+### 7.5 Loader robustness gates (#454)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-130 | THE modules `gamification`, `learning` and `config` SHALL enable `clippy::arithmetic_side_effects`, `clippy::indexing_slicing`, `clippy::unwrap_used` and `clippy::expect_used` as warnings for non-test code (module-level `cfg_attr(not(test), warn(..))`); every hit is fixed or carries a local `expect` with a reason | must |
+| FR-131 | A property test SHALL mutate a valid profile JSON (integer leaves set to 0 and `MAX`, extreme chrono dates, unknown fields), load it from a temporary file, and on every successful load run `record_attempt`, streak update, achievement check, quest generation and the XP progress computation without panicking; case count is bounded for CI | must |
+| FR-132 | WHEN `ScenarioCollection` sorts or filters scenarios THE SYSTEM SHALL NOT panic on arithmetic overflow or a stale index (out-of-range indices are skipped); a card's `due` date SHALL saturate to `DateTime::MAX_UTC` instead of panicking when the computed interval overflows | must |
+
+### 7.6 Level display overflow (#523)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-140 | WHEN the menu or results screen shows the next level THE SYSTEM SHALL compute `level + 1` with saturating addition (`level = u32::MAX` does not panic or wrap); this extends FR-032 to display code | must |
+
+### 7.7 Command, scenario and quest identifiers (#463)
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-150 | `ScenarioId` and `QuestId` SHALL be validated newtypes (existing rule: 1 to 64 bytes, each character a Unicode alphanumeric or `_`, the behavior of the former `validate_id_field`; FR-155 relies on it), constructed only through a fallible parse; deserialization goes through the same validation (an invalid persisted or TOML id is a load error of that document, not a silently accepted value). They have no `Default` and no infallible conversion from `&str` | must |
+| FR-151 | `CommandId` SHALL be exclusively the FSRS review-card identifier (the former `ReviewableCommand`): its only constructors are the canonical derivation from a raw action and re-validation of a stored canonical id; there is no permissive parse. Card ids are limited to 64 characters | must |
+| FR-152 | A command whose canonical card id exceeds 64 characters (for example an overlong `:name` command) SHALL NOT create a review card (`CommandId::from_action` returns none); this is an intended behavior change from the previous unbounded `:name` ids and SHALL be stated in the PR text and CHANGELOG | must |
+| FR-153 | `NormalizedCommand` SHALL be the type of normalized command strings (counts kept, as `3h` or `"y`) used by `commands_taught`, quest `requires_commands`, the `CommandPractice` command and `commands_used_today`. It is constructed by normalizing a raw string (`from_raw` returns a `Result` with a typed `IdError` cause, which serde `try_from` needs) and rejects empty or over-long input; deserialization normalizes (never stricter than today's normalize-then-compare matching). Conversion to a card id is explicit and fallible | must |
+| FR-154 | THE performance data loader SHALL keep its lenient per-entry behavior: entries whose key is not a valid canonical card id (including over-cap ids) are dropped and counted in the existing warning, never failing the whole profile. `CommandPerformance` SHALL NOT duplicate its map key as a field (`profile.json` layout is unchanged: the field was never written) | must |
+| FR-155 | OTHER persisted ids (`completed_quests_today`, `daily_quests[].id`, `scenario_history` attempts) are strict: a profile written by any earlier version SHALL still load. This is proven by the legacy-profile fixture of [[fsrs-7-crate-migration/spec]] (SC-004), extended with these fields | must |
+| FR-156 | RAW input (`UserAction.command`, key buffers) stays `String`; rendering, i18n and tracing use string views of the id types | must |
+| FR-157 | `ScenarioHistory` ids follow the common `ScenarioId` rule (previously hyphens and up to 100 characters were accepted; no historic id violates the common rule) | must |
+| FR-158 | `ScenarioPrioritizer::extract_commands` SHALL map solution commands through `CommandId::from_actions`, so novelty keys match real FSRS cards. Arcade prioritization changes: Insert-mode text and raw tokens such as `3h` or `Escape` no longer count as commands. The change SHALL be stated in the PR text and CHANGELOG | must |
+
+### 7.8 Acceptance Criteria
+
+```
+GIVEN a profile loaded cleanly at startup and one later save
+WHEN  profile.json is corrupted externally between saves and the app saves again
+THEN  profile.json.prev still holds the bytes loaded at startup (FR-121)
+```
+```
+GIVEN an unreadable profile.json, a backup, and a valid profile.json.prev
+WHEN  the banner offers Restore previous and the user presses Ctrl-R
+THEN  profile.json holds the validated previous bytes, persistence is Writable, the backup remains (FR-123, FR-124)
+```
+```
+GIVEN the banner offered Restore previous and profile.json.prev is corrupted afterwards
+WHEN  the user presses Ctrl-R
+THEN  restore is refused, no file changes, an error is reported (FR-124)
+```
+```
+GIVEN the profile is deleted
+THEN  profile.json.prev is removed too (FR-125)
+```
+```
+GIVEN no HOME and no XDG_CONFIG_HOME
+WHEN  the app starts
+THEN  it exits non-zero naming both variables and writes no file in the current directory; --help and --version still print (FR-100..102)
+```
+```
+GIVEN config.json with invalid JSON
+WHEN  the app starts
+THEN  defaults are used and a startup notification is shown (FR-110)
+```
+```
+GIVEN a profile with level = u32::MAX
+WHEN  the menu and results screens render
+THEN  no panic occurs (FR-140)
+```
+```
+GIVEN a 6.x-era profile.json containing performance_data keys over 64 characters or with counts ("3h")
+WHEN  the profile loads
+THEN  those cards are dropped and counted in a warning, the rest of the profile loads (FR-154)
+```
+
+### 7.9 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| First launch (no profile) | No rotation (nothing last-valid); no `.prev` |
+| Save while `Quarantined` | Refused (FR-001); `.prev` untouched |
+| `.prev` write fails (read-only dir) | Logged; the main save proceeds |
+| `.prev` exists but fails validation | Restore is not offered; Start fresh is |
+| Two storage clones save concurrently | Serialized by the shared lock; `.prev` always parses |
+| Debug output of a storage handle | Prints the path and byte length, never profile contents |
+
+### 7.10 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-010 | Storage tests: each `StorageError` kind is produced by its failing scenario and a chain walker prints each cause once; sinks of FR-094 log the chain | Pass |
+| SC-011 | Rotation tests: from-memory rotation, external corruption between saves, first save after a load through the loader entry point (`.prev` equals the loaded bytes), Start fresh does not rotate the corrupt file, restore re-validation, `delete` removes `.prev`; event-loop spawn-path tests for Start fresh (with backup check), Restore success and Restore with a corrupt `.prev` (#533). The paused-arcade review start (#533) is already covered by `menu_tests::test_starting_review_ends_the_paused_arcade_run_and_awards_it` | Pass |
+| SC-012 | Startup tests for FR-100..103 and FR-110. FR-101 (no data dir) is met at unit level through the directory resolver with an injected environment; a binary-level test is infeasible because the OS directory lookup falls back to the passwd entry when `HOME` is unset. `--help`/`--version` stay unaffected because CLI parsing precedes resolution | Pass |
+| SC-013 | Profile proptest of FR-131 and lint gates of FR-130 pass in CI | Pass |
+| SC-014 | Legacy-profile fixture loads with the strict id types; id newtypes reject invalid input at every deserialization site; every bundled `commands_taught` value equals its normalized form | Pass |
+| SC-015 | A level of `u32::MAX` renders on menu and results without panic | Pass |
+
+> [!question] Out of this batch
+> Optional cargo-fuzz targets for the config and keymap loaders (part of #454) are tracked as a separate follow-up issue.
+
+## 8. See Also
 
 - [[constitution]] - Section V (security, recoverable errors)
 - [[custom-helix-keymap-support/spec]] - keymap config path; shares the XDG resolver (FR-080)
 - [[sound-setting-persistence/spec]] - sound settings must not be written into a quarantined profile
-- [[cli-version-and-help-flags/spec]] - shares `main.rs`
+- [[cli-version-and-help-flags/spec]] - shares `main.rs`; `--help`/`--version` must work without a data directory (FR-102)
+- [[fsrs-7-crate-migration/spec]] - legacy-profile fixture (SC-004) reused for FR-155
 - [[MOC-specs]] - all specifications

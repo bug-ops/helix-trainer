@@ -6,7 +6,7 @@ use super::common::create_test_app_state;
 use crate::testing::update_executing_effects as update;
 use crate::ui::state::Message;
 
-/// CR-001: Test that Message::ToggleSound toggles sound_manager.config().enabled
+/// CR-001: Test that `Message::ToggleSound` toggles `sound_manager.config().enabled`
 #[test]
 fn test_toggle_sound_message() {
     let mut state = create_test_app_state(vec![]);
@@ -32,7 +32,7 @@ fn test_toggle_sound_message() {
     );
 }
 
-/// Test that ToggleSound works regardless of current screen
+/// Test that `ToggleSound` works regardless of current screen
 #[test]
 fn test_toggle_sound_works_on_any_screen() {
     use crate::ui::state::{NavTarget, TypedScreen};

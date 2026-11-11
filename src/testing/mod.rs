@@ -23,6 +23,7 @@
 //! ```
 
 pub mod app_state;
+pub mod log_capture;
 pub mod scenario;
 
 // Re-export commonly used items
@@ -34,3 +35,62 @@ pub use app_state::{
 pub use scenario::{
     ScenarioBuilder, default_test_scenario, test_scenario_with_difficulty, test_scenario_with_id,
 };
+
+use crate::gamification::{PreviousCopy, QuarantineError, QuarantineOutcome};
+use crate::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
+use crate::ui::state::Quarantine;
+
+/// A quarantined profile with `backup` and no restorable previous copy.
+#[must_use]
+pub fn quarantine(backup: QuarantineOutcome) -> Quarantine {
+    Quarantine {
+        backup,
+        previous: PreviousCopy::Unavailable,
+    }
+}
+
+/// A quarantine outcome for a profile whose backup could not be made.
+#[must_use]
+pub fn failed_backup() -> QuarantineOutcome {
+    QuarantineOutcome::Failed(std::sync::Arc::new(QuarantineError::Missing))
+}
+
+/// Build a [`ScenarioId`] from a literal, panicking on an invalid test fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a valid fixture value.
+#[must_use]
+pub fn sid(raw: &str) -> ScenarioId {
+    ScenarioId::parse(raw).expect("valid scenario id fixture")
+}
+
+/// Build a [`QuestId`] from a literal, panicking on an invalid test fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a valid fixture value.
+#[must_use]
+pub fn qid(raw: &str) -> QuestId {
+    QuestId::parse(raw).expect("valid quest id fixture")
+}
+
+/// Build a [`CommandId`] from a canonical card id literal.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a canonical card id.
+#[must_use]
+pub fn cid(raw: &str) -> CommandId {
+    CommandId::from_card_id(raw).expect("canonical card id fixture")
+}
+
+/// Build a [`NormalizedCommand`] from a literal, panicking on an invalid test fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a valid fixture value.
+#[must_use]
+pub fn ncmd(raw: &str) -> NormalizedCommand {
+    NormalizedCommand::from_raw(raw).expect("valid command fixture")
+}

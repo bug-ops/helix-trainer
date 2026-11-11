@@ -39,7 +39,7 @@ fn unknown_argument_exits_two_naming_it() {
     let out = run(&["--bogus"]);
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("--bogus"));
-    assert!(out.stdout.is_empty());
+    assert_eq!(out.stdout, [] as [u8; 0]);
 }
 
 #[test]

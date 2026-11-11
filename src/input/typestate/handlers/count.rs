@@ -1,4 +1,4 @@
-//! CountPending handler - handles count prefix building
+//! `CountPending` handler - handles count prefix building
 //!
 //! Accumulates digits and then applies the count to the following command.
 //! `g`, `G`, `f`, `F`, `t` and `T` carry the count into a dedicated pending
@@ -42,10 +42,9 @@ fn counted_command(count: NonZeroUsize, c: char, modifiers: KeyModifiers) -> Han
     if !is_count_compatible_command(c, modifiers) {
         return HandlerResult::Cancel;
     }
-    match map_single_key_command(c, modifiers) {
-        Some(cmd) => HandlerResult::Execute(Cow::Owned(format!("{count}{cmd}"))),
-        None => HandlerResult::Cancel,
-    }
+    map_single_key_command(c, modifiers).map_or(HandlerResult::Cancel, |cmd| {
+        HandlerResult::Execute(Cow::Owned(format!("{count}{cmd}")))
+    })
 }
 
 impl InputHandler<CountPending> for KeyHandler {
@@ -70,15 +69,15 @@ impl InputHandler<CountPending> for KeyHandler {
                 match c {
                     'g' => HandlerResult::Transition(InputState::CountedGotoPending { count }),
                     'G' => HandlerResult::Execute(Cow::Owned(goto_line_command(count))),
-                    _ => match FindType::from_key(c) {
-                        Some(find_type) => {
+                    _ => FindType::from_key(c).map_or_else(
+                        || counted_command(count, c, key.modifiers),
+                        |find_type| {
                             HandlerResult::Transition(InputState::CountedFindCharPending {
                                 find_type,
                                 count,
                             })
-                        }
-                        None => counted_command(count, c, key.modifiers),
-                    },
+                        },
+                    ),
                 }
             }
             KeyCode::Char(c) => counted_command(state.count, c, key.modifiers),

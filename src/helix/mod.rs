@@ -17,16 +17,16 @@
 //! ```
 
 pub mod commands;
-pub mod executor;
 pub mod indent;
+pub mod language;
 pub mod macro_recorder;
 pub mod registry;
 pub mod repeat;
 pub mod simulator;
 
 pub use commands::*;
-pub use executor::CommandExecutor;
 pub use indent::IndentUnit;
+pub use language::LanguageRules;
 pub use repeat::{
     InsertAction, InsertKey, Movement, RepeatBuffer, RepeatableAction, is_repeatable_command,
 };
@@ -74,7 +74,7 @@ pub fn get_bracket_pair(ch: char) -> (char, char) {
 ///
 /// # Returns
 ///
-/// Option containing (open_row, open_col, close_row, close_col) if found
+/// Option containing (`open_row`, `open_col`, `close_row`, `close_col`) if found
 ///
 /// # Examples
 ///

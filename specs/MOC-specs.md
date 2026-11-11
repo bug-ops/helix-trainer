@@ -29,16 +29,16 @@ follows these packages. The batch also appends "Bug-Fix Batch" sections to
 [[custom-helix-keymap-support/spec]],
 [[arcade-gamification-session-fixes/spec]],
 [[fsrs-proptest-coverage-gap/spec]] and amends [[constitution]] Section V.
-The 2026-11-11 P2-P3 batch (PR for #509) further extends [[helix-core-post-25-07-1-upgrade-readiness/spec]] (section 3.8), [[regex-selection-and-macro-commands/spec]] (section 11: `?`, `K`/`Alt-K`/`&`, F1 hint), [[register-command-mode-support/spec]] (deferral pointers), [[custom-helix-keymap-support/spec]] (data-directory pointer), [[fsrs-proptest-coverage-gap/spec]] (section 12: #511, #464, #469, #470), [[data-and-runtime-hardening/spec]] (#467, #484, #515, #518), [[optimal-count-action-counter-unit/spec]] (#512) and [[arcade-gamification-session-fixes/spec]] (section 9: #468, #469, #461).
+The 2026-11-11 P2-P3 batch (PR for #509) further extends [[helix-core-post-25-07-1-upgrade-readiness/spec]] (section 3.8), [[regex-selection-and-macro-commands/spec]] (section 11: `?`, `K`/`Alt-K`/`&`, F1 hint), [[register-command-mode-support/spec]] (deferral pointers), [[custom-helix-keymap-support/spec]] (data-directory pointer), [[fsrs-proptest-coverage-gap/spec]] (section 12: #511, #464, #469, #470), [[data-and-runtime-hardening/spec]] (#467, #484, #515, #518), [[optimal-count-action-counter-unit/spec]] (#512) and [[arcade-gamification-session-fixes/spec]] (section 9: #468, #469, #461; section 10: #527, #528, #529, #530).
 
 | Feature | Phase | Status |
 |---------|-------|--------|
-| [[helix-core-post-25-07-1-upgrade-readiness/spec\|Helix Core Upgrade Readiness and Simulator Fidelity at the Pinned Core]] | specify (lightweight) | proposed — upgrade checklist (sections 3.1-3.7) not built; section 3.8 (simulator fidelity, #490-#499, #501; extended 2026-11-11 with #500, #510, #514, #517, #519, #520, #524) specified for the bug batches |
+| [[helix-core-post-25-07-1-upgrade-readiness/spec\|Helix Core Upgrade Readiness and Simulator Fidelity at the Pinned Core]] | specify (lightweight) | proposed — upgrade checklist (sections 3.1-3.7) not built; section 3.8 (simulator fidelity, #490-#499, #501; extended 2026-11-11 with #500, #510, #514, #517, #519, #520, #524, #534, #535, #521, #516) specified for the bug batches |
 | [[cli-version-and-help-flags/spec\|`--version` and `--help` Command-Line Flags]] | specify (lightweight bug-fix spec) | proposed — #452 |
 | [[training-progress-indicator/spec\|Training Progress Indicator Reflects Cursor and Selection]] | specify (lightweight bug-fix spec) | proposed — #451 |
 | [[optimal-count-action-counter-unit/spec\|`optimal_count` and Action Counter Use the Same Unit]] | specify (lightweight bug-fix spec) | proposed — #488; section 7 adds the opt-in `after_taught_commands` completion rule (#512) |
 | [[sound-setting-persistence/spec\|Sound Toggle Persists Across Restarts]] | specify (lightweight bug-fix spec) | proposed — #459 |
-| [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444; extended 2026-11-11 with #467, #484, #515, #518 |
+| [[data-and-runtime-hardening/spec\|User-Data Safety and Runtime Robustness Hardening]] | specify (lightweight spec) | proposed — #440, #441, #442, #443, #444; extended 2026-11-11 with #467, #484, #515, #518, #460, #457, #456, #531, #454, #523, #463 (section 7) |
 
 ## Completed Specs
 
@@ -47,7 +47,7 @@ The 2026-11-11 P2-P3 batch (PR for #509) further extends [[helix-core-post-25-07
 | [[fsrs-proptest-coverage-gap/README\|FSRS Scheduler Property-Based Test Coverage Gap]] | review | implemented (residual: ignored properties tied to #433/#434 — see [[fsrs-proptest-coverage-gap/BRD#Residual Gap\|Residual Gap]]) |
 | [[arcade-game-mode-variety/README\|Arcade Game Mode Variety]] | rejected | NO-GO — full decision-record package, not built |
 | [[register-command-mode-support/README\|Named Register and Command-Line (`:`) Mode Support]] | review | implemented (command-line mode narrower than drafted — `:goto`/`:g` only, no `:s` substitute); extended in v0.6.0 with blackhole register and register-scoped delete/change — see [[register-command-mode-support/spec#11. Post-Release Extensions (v0.6.0)\|Post-Release Extensions]] |
-| [[arcade-gamification-session-fixes/spec\|Gamification Live-Trigger Wiring, Notifications, and Bookkeeping Fixes]] | specify (lightweight, per SDD scaling guidance) | implemented — broadened in v0.6.0 from one commit (`623e0a8`) to the full seven-commit bug-fix thread |
+| [[arcade-gamification-session-fixes/spec\|Gamification Live-Trigger Wiring, Notifications, and Bookkeeping Fixes]] | specify (lightweight, per SDD scaling guidance) | implemented — broadened in v0.6.0 from one commit (`623e0a8`) to the full seven-commit bug-fix thread; section 10 (2026-11-11) specifies #527-#530 |
 | [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting for Scenario Content]] | specify (lightweight, per SDD scaling guidance) | implemented — shared prerequisite for the two specs below |
 | [[writing-markup-scenario-track/spec\|Writing / Markup Scenario Track]] | specify (lightweight, per SDD scaling guidance) | implemented — evaluates GitHub issue #152 (#361) |
 | [[multi-language-scenario-content/spec\|Multi-Language Scenario Content]] | specify (lightweight, per SDD scaling guidance) | implemented — pilot shipped as scoped (#362) |

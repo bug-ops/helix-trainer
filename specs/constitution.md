@@ -58,7 +58,9 @@ status: permanent
 - Optional audio: `rodio`, feature-gated behind `audio` (requires
   `libasound2-dev` on Linux).
 - Config/scenario data: TOML (`scenarios/en/<category>/*.toml`), user
-  profile/config: JSON in the OS config directory (`dirs::config_dir()/helix-trainer/`).
+  profile/config: JSON in the OS config directory (`dirs::config_dir()/helix-trainer/`;
+  macOS uses `~/.config/helix-trainer`). There is no current-directory fallback: when no
+  config directory can be resolved the application refuses to start (#457).
 - YAML tooling (when needed): `fast-yaml` (`fy` CLI) exclusively — never
   hand-edit YAML without validating via `fy` afterward.
 
@@ -101,6 +103,7 @@ status: permanent
   `#![forbid(unsafe_code)]` crate attributes in `main.rs` and `lib.rs`) MUST
   remain in force project-wide — no exceptions, no `#[allow(unsafe_code)]`
   overrides.
+- Clippy pedantic lints are enabled project-wide (#532). Kept allowed in `Cargo.toml`, each with a one-line reason: `module_name_repetitions` and `must_use_candidate` (user decision), and, as a deferred residual, `assert_is_empty`, `match_same_arms`, `similar_names` and `too_many_lines`.
 - Every `pub` type, trait, function, and method must have a `///` doc
   comment explaining *what* and *why*, not merely restating the name;
   non-trivial public APIs need a runnable `# Examples` doc-test.

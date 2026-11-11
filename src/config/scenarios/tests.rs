@@ -1,6 +1,8 @@
 //! Tests for scenario loading and validation
 
 use super::*;
+use crate::testing::{ncmd, sid};
+use std::fmt::Write as _;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -59,7 +61,7 @@ fn test_valid_scenario_loading() {
 
     let scenarios = result.unwrap();
     assert_eq!(scenarios.len(), 1);
-    assert_eq!(scenarios[0].id, "test_001");
+    assert_eq!(scenarios[0].id.as_str(), "test_001");
 }
 
 #[test]
@@ -248,7 +250,7 @@ name = "Test"
 description = "Test"
 
 [scenarios.setup]
-file_content = "{}"
+file_content = "{huge_content}"
 cursor_position = [0, 0]
 
 [scenarios.target]
@@ -263,8 +265,7 @@ description = "test"
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        huge_content
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -343,8 +344,8 @@ tolerance = 0
 
     let scenarios = result.unwrap();
     assert_eq!(scenarios.len(), 2);
-    assert_eq!(scenarios[0].id, "test_001");
-    assert_eq!(scenarios[1].id, "test_002");
+    assert_eq!(scenarios[0].id.as_str(), "test_001");
+    assert_eq!(scenarios[1].id.as_str(), "test_002");
 }
 
 #[test]
@@ -450,10 +451,11 @@ tolerance = 0
 
     // Add 21 alternatives (MAX_ALTERNATIVES is 20)
     for i in 0..21 {
-        toml.push_str(&format!(
-            "\n[[scenarios.alternatives]]\ncommands = [\"alt{}\"]\npoints_multiplier = 1.0\ndescription = \"Alternative {}\"",
-            i, i
-        ));
+        write!(
+            toml,
+            "\n[[scenarios.alternatives]]\ncommands = [\"alt{i}\"]\npoints_multiplier = 1.0\ndescription = \"Alternative {i}\""
+        )
+.unwrap();
     }
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -472,7 +474,7 @@ fn test_command_sequence_too_long() {
     let commands = vec!["cmd".to_string(); MAX_COMMAND_SEQUENCE_LENGTH + 1];
     let commands_str = commands
         .iter()
-        .map(|c| format!("\"{}\"", c))
+        .map(|c| format!("\"{c}\""))
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -492,15 +494,14 @@ file_content = "test"
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = [{}]
+commands = [{commands_str}]
 description = "test"
 
 [scenarios.scoring]
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        commands_str
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -520,7 +521,7 @@ tolerance = 0
 #[test]
 fn test_alternative_command_sequence_too_long() {
     let commands_str = (0..=MAX_COMMAND_SEQUENCE_LENGTH)
-        .map(|i| format!("\"cmd{}\"", i))
+        .map(|i| format!("\"cmd{i}\""))
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -544,7 +545,7 @@ commands = ["test"]
 description = "test"
 
 [[scenarios.alternatives]]
-commands = [{}]
+commands = [{commands_str}]
 points_multiplier = 1.0
 description = "Alternative"
 
@@ -552,8 +553,7 @@ description = "Alternative"
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        commands_str
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -629,7 +629,7 @@ tolerance = 1
     assert_eq!(scenarios.len(), 1);
 
     let scenario = &scenarios[0];
-    assert_eq!(scenario.id, "comprehensive_test_001");
+    assert_eq!(scenario.id.as_str(), "comprehensive_test_001");
     assert_eq!(scenario.alternatives.len(), 2);
     assert_eq!(scenario.hints.len(), 2);
     assert_eq!(scenario.solution.commands.len(), 2);
@@ -678,7 +678,7 @@ fn test_repeat_insert_scenario_loads_correctly() {
     // Find repeat_insert_001 scenario
     let scenario = scenarios
         .iter()
-        .find(|s| s.id == "repeat_insert_001")
+        .find(|s| s.id.as_str() == "repeat_insert_001")
         .expect("Should find repeat_insert_001");
 
     // Verify cursor positions are within bounds
@@ -792,7 +792,7 @@ fn test_too_many_hints_rejection() {
     let mut hints = String::new();
     // Add more than MAX_HINTS hints (assuming MAX_HINTS is 10)
     for i in 0..11 {
-        hints.push_str(&format!("\"Hint {}\"", i));
+        write!(hints, "\"Hint {i}\"").unwrap();
         if i < 10 {
             hints.push_str(", ");
         }
@@ -804,7 +804,7 @@ fn test_too_many_hints_rejection() {
 id = "test_001"
 name = "Test"
 description = "Test"
-hints = [{}]
+hints = [{hints}]
 
 [scenarios.setup]
 file_content = "test"
@@ -822,8 +822,7 @@ description = "test"
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        hints
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -986,17 +985,20 @@ locale = "en"
     assert_eq!(metadata.category, Some(ScenarioCategory::Movement));
     assert_eq!(metadata.difficulty, Some(Difficulty::Intermediate));
     assert_eq!(metadata.tags, vec!["test", "metadata"]);
-    assert_eq!(metadata.commands_taught, vec!["h", "j", "k", "l"]);
-    assert_eq!(metadata.prerequisites, vec!["basic_001"]);
+    assert_eq!(
+        metadata.commands_taught,
+        vec![ncmd("h"), ncmd("j"), ncmd("k"), ncmd("l")]
+    );
+    assert_eq!(metadata.prerequisites, vec![sid("basic_001")]);
     assert_eq!(metadata.estimated_time_seconds, Some(30));
     assert_eq!(metadata.locale, Some("en".to_string()));
 }
 
 #[test]
 fn test_invalid_toml_rejection() {
-    let toml = r#"
+    let toml = r"
 this is not valid toml [[[
-        "#;
+        ";
 
     let mut temp_file = NamedTempFile::new().unwrap();
     temp_file.write_all(toml.as_bytes()).unwrap();
@@ -1064,7 +1066,7 @@ file_content = "start"
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = "{}"
+file_content = "{huge_content}"
 cursor_position = [0, 0]
 
 [scenarios.solution]
@@ -1075,8 +1077,7 @@ description = "test"
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        huge_content
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -1738,7 +1739,7 @@ fn test_cursors_at_max_limit() {
         if i > 0 {
             cursors_str.push_str(", ");
         }
-        cursors_str.push_str(&format!("[0, {}]", i % 4));
+        write!(cursors_str, "[0, {}]", i % 4).unwrap();
     }
     cursors_str.push(']');
 
@@ -1755,7 +1756,7 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "test"
-cursors = {}
+cursors = {cursors_str}
 
 [scenarios.solution]
 commands = ["C"]
@@ -1765,8 +1766,7 @@ description = "Add cursor"
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        cursors_str
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -1791,7 +1791,7 @@ fn test_cursors_exceeding_max_limit() {
         if i > 0 {
             cursors_str.push_str(", ");
         }
-        cursors_str.push_str(&format!("[0, {}]", i % 4));
+        write!(cursors_str, "[0, {}]", i % 4).unwrap();
     }
     cursors_str.push(']');
 
@@ -1808,7 +1808,7 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "test"
-cursors = {}
+cursors = {cursors_str}
 
 [scenarios.solution]
 commands = ["C"]
@@ -1818,8 +1818,7 @@ description = "Add cursor"
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        cursors_str
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -1844,7 +1843,7 @@ fn test_selections_at_max_limit() {
         if i > 0 {
             selections_str.push_str(", ");
         }
-        selections_str.push_str(&format!("[0, {}, 0, {}]", i % 4, (i % 4) + 1));
+        write!(selections_str, "[0, {}, 0, {}]", i % 4, (i % 4) + 1).unwrap();
     }
     selections_str.push(']');
 
@@ -1861,7 +1860,7 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "test"
-selections = {}
+selections = {selections_str}
 
 [scenarios.solution]
 commands = ["C"]
@@ -1871,8 +1870,7 @@ description = "Add selection"
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        selections_str
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -1897,7 +1895,7 @@ fn test_selections_exceeding_max_limit() {
         if i > 0 {
             selections_str.push_str(", ");
         }
-        selections_str.push_str(&format!("[0, {}, 0, {}]", i % 4, (i % 4) + 1));
+        write!(selections_str, "[0, {}, 0, {}]", i % 4, (i % 4) + 1).unwrap();
     }
     selections_str.push(']');
 
@@ -1914,7 +1912,7 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = "test"
-selections = {}
+selections = {selections_str}
 
 [scenarios.solution]
 commands = ["C"]
@@ -1924,8 +1922,7 @@ description = "Add selection"
 optimal_count = 1
 max_points = 100
 tolerance = 0
-        "#,
-        selections_str
+        "#
     );
 
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -2023,8 +2020,8 @@ tolerance = 0
 mod completion_rule {
     use super::*;
 
-    fn taught(commands: &[&str]) -> Vec<String> {
-        commands.iter().map(ToString::to_string).collect()
+    fn taught(commands: &[&str]) -> Vec<NormalizedCommand> {
+        commands.iter().map(|c| ncmd(c)).collect()
     }
 
     fn last(command: &str, target_held_before: bool) -> LastAction<'_> {

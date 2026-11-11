@@ -17,7 +17,7 @@ anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 crossterm = { version = "0.29", features = ["event-stream"] }
 dirs = "7.0"
-fsrs = "6.6"
+fsrs = "7"
 futures = "0.3"
 helix-core = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
 helix-stdx = { git = "https://github.com/helix-editor/helix", tag = "25.07.1" }
@@ -27,7 +27,7 @@ rodio = { version = "0.23", default-features = false, features = ["vorbis", "pla
 rust-i18n = "4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-syntect = { version = "5.3", default-features = false, features = ["default-themes", "default-syntaxes", "regex-onig"] }
+syntect = { version = "5.3", default-features = false, features = ["default-themes", "default-syntaxes", "regex-fancy"] }
 thiserror = "2.0"
 tokio = { version = "1.54", features = [
     "rt-multi-thread",
@@ -76,56 +76,10 @@ pedantic = { level = "warn", priority = -1 }
 redundant_clone = "warn"
 cast_possible_truncation = "warn"
 unnecessary_wraps = "warn"
-# Noisy pedantic lints, to be burned down incrementally.
-assert_is_empty = "allow"
-cast_lossless = "allow"
-cast_possible_wrap = "allow"
-cast_precision_loss = "allow"
-cast_sign_loss = "allow"
-default_trait_access = "allow"
-doc_link_with_quotes = "allow"
-doc_markdown = "allow"
-duration_suboptimal_units = "allow"
-enum_glob_use = "allow"
-explicit_iter_loop = "allow"
-float_cmp = "allow"
-format_collect = "allow"
-format_push_string = "allow"
-if_not_else = "allow"
-implicit_clone = "allow"
-implicit_hasher = "allow"
-items_after_statements = "allow"
-manual_assert_eq = "allow"
-manual_let_else = "allow"
-manual_string_new = "allow"
-map_unwrap_or = "allow"
-match_same_arms = "allow"
-match_wildcard_for_single_variants = "allow"
-missing_errors_doc = "allow"
-missing_fields_in_debug = "allow"
-missing_panics_doc = "allow"
-module_name_repetitions = "allow"
-must_use_candidate = "allow"
-needless_continue = "allow"
-needless_pass_by_value = "allow"
-needless_raw_string_hashes = "allow"
-range_plus_one = "allow"
-redundant_closure_for_method_calls = "allow"
-redundant_else = "allow"
-return_self_not_must_use = "allow"
-semicolon_if_nothing_returned = "allow"
-similar_names = "allow"
-single_char_pattern = "allow"
-single_match_else = "allow"
-stable_sort_primitive = "allow"
-struct_field_names = "allow"
-too_many_lines = "allow"
-trivially_copy_pass_by_ref = "allow"
-unchecked_time_subtraction = "allow"
-uninlined_format_args = "allow"
-unnecessary_semicolon = "allow"
-unnested_or_patterns = "allow"
-unreadable_literal = "allow"
-unused_self = "allow"
-used_underscore_binding = "allow"
-wildcard_imports = "allow"
+# Pedantic lints kept allowed on purpose.
+assert_is_empty = "allow" # fixing 100+ test assertions hurts readability
+match_same_arms = "allow" # exhaustive per-variant mappings stay explicit
+module_name_repetitions = "allow" # 71 public names, renaming adds churn without safety gain
+must_use_candidate = "allow" # 461 sites, attribute noise outweighs the benefit
+similar_names = "allow" # name heuristic, renames give no benefit
+too_many_lines = "allow" # needs dedicated function-splitting refactors

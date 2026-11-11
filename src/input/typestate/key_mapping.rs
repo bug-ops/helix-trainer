@@ -7,7 +7,26 @@ use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_ALIGN_SELECTIONS, CMD_APPEND, CMD_APPEND_LINE_END, CMD_ARROW_DOWN, CMD_ARROW_LEFT,
+    CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK,
+    CMD_COLLAPSE_SELECTION, CMD_COPY_SELECTION_NEXT, CMD_COPY_SELECTION_PREV, CMD_DEDENT,
+    CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK, CMD_ESCAPE, CMD_EXTEND_LINE,
+    CMD_FLIP_SELECTIONS, CMD_HALF_PAGE_DOWN, CMD_HALF_PAGE_UP, CMD_INDENT, CMD_INSERT,
+    CMD_INSERT_ALT_BACKSPACE, CMD_INSERT_DELETE_CHAR_FORWARD, CMD_INSERT_DELETE_KEY,
+    CMD_INSERT_DELETE_TO_LINE_END, CMD_INSERT_DELETE_TO_LINE_START,
+    CMD_INSERT_DELETE_WORD_BACKWARD, CMD_INSERT_DELETE_WORD_FORWARD, CMD_INSERT_LINE_START,
+    CMD_INSERT_TAB, CMD_JOIN_LINES, CMD_JOIN_SELECTIONS_SPACE, CMD_KEEP_MATCHING,
+    CMD_MERGE_CONSECUTIVE, CMD_MERGE_SELECTIONS, CMD_MOVE_DOWN, CMD_MOVE_LEFT,
+    CMD_MOVE_LONG_WORD_BACKWARD, CMD_MOVE_LONG_WORD_END, CMD_MOVE_LONG_WORD_FORWARD,
+    CMD_MOVE_RIGHT, CMD_MOVE_UP, CMD_MOVE_WORD_BACKWARD, CMD_MOVE_WORD_END, CMD_MOVE_WORD_FORWARD,
+    CMD_OPEN_ABOVE, CMD_OPEN_BELOW, CMD_PAGE_DOWN, CMD_PAGE_UP, CMD_PASTE_AFTER, CMD_PASTE_BEFORE,
+    CMD_REDO, CMD_REMOVE_MATCHING, CMD_REMOVE_PRIMARY_SELECTION, CMD_REPEAT,
+    CMD_REPEAT_LAST_MOTION, CMD_REPLACE_WITH_YANKED, CMD_SEARCH_BACKWARD, CMD_SEARCH_NEXT,
+    CMD_SEARCH_PREV, CMD_SEARCH_SELECTION, CMD_SEARCH_WORD, CMD_SELECT_ALL, CMD_SELECT_LINE,
+    CMD_SELECT_MODE, CMD_SHRINK_TO_LINE_BOUNDS, CMD_SPLIT_SELECTION_NEWLINES, CMD_SWITCH_CASE,
+    CMD_SWITCH_CASE_ALT, CMD_SWITCH_TO_UPPERCASE, CMD_TRIM_SELECTIONS, CMD_UNDO, CMD_YANK,
+};
 
 /// Map macOS composed Unicode characters to Alt + base key
 ///
@@ -74,7 +93,7 @@ pub(crate) fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> 
     }
 }
 
-/// Normalize a KeyEvent to canonical form (like Helix does)
+/// Normalize a `KeyEvent` to canonical form (like Helix does)
 ///
 /// This ensures consistent representation regardless of terminal behavior:
 /// - macOS composed chars (Ç, ˝, ...) → base char + ALT modifier
@@ -82,7 +101,7 @@ pub(crate) fn map_macos_composed_char(ch: char) -> Option<(char, KeyModifiers)> 
 /// - uppercase + SHIFT → uppercase (SHIFT removed, already uppercase)
 /// - Shift-`/` → `?`
 ///
-/// This matches Helix's normalization: "C-S-r and C-R are represented by equal KeyEvents"
+/// This matches Helix's normalization: "C-S-r and C-R are represented by equal `KeyEvents`"
 pub fn normalize_key_event(key: KeyEvent) -> KeyEvent {
     // First, try to map macOS composed Unicode characters to Alt combinations
     if let KeyCode::Char(ch) = key.code
@@ -123,7 +142,7 @@ pub fn normalize_key_event(key: KeyEvent) -> KeyEvent {
     }
 }
 
-/// Parse Helix-style key string to KeyEvent
+/// Parse Helix-style key string to `KeyEvent`
 ///
 /// Supports formats:
 /// - "Alt-C" / "A-C" -> Alt + Shift + c
@@ -452,31 +471,10 @@ pub fn is_count_compatible_command(c: char, modifiers: KeyModifiers) -> bool {
     matches!(
         (c, is_shift),
         // Movement commands support count
-        ('h', false)
-            | ('j', false)
-            | ('k', false)
-            | ('l', false)
-            | ('w', false)
-            | ('b', false)
-            | ('e', false)
-            | ('W', _)
-            | ('B', _)
-            | ('E', _)
-            // Selection
-            | ('x', false)
-            | ('X', _)
-            // Some editing commands
-            | ('d', false)
-            | ('c', false)
-            | ('J', _)
-            | ('>', _)
-            | ('<', _)
-            // Undo/Redo
-            | ('u', false)
-            | ('U', _)
-            // Search navigation
-            | ('n', false)
-            | ('N', _)
+        (
+            'h' | 'j' | 'k' | 'l' | 'w' | 'b' | 'e' | 'x' | 'd' | 'c' | 'u' | 'n',
+            false
+        ) | ('W' | 'B' | 'E' | 'X' | 'J' | '>' | '<' | 'U' | 'N', _)
     )
 }
 
@@ -485,7 +483,7 @@ pub fn is_count_compatible_command(c: char, modifiers: KeyModifiers) -> bool {
 /// This is a convenience function for use in handlers that maps
 /// simple key events to their corresponding Helix command strings.
 /// It handles single-key commands but not multi-key sequences
-/// (those require the InputStateMachine).
+/// (those require the `InputStateMachine`).
 ///
 /// Note: This function normalizes the key event before mapping.
 pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
@@ -543,7 +541,7 @@ pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
     }
 }
 
-/// Convert a command string to a KeyEvent for the input state machine
+/// Convert a command string to a `KeyEvent` for the input state machine
 ///
 /// This is a helper function to bridge the gap between command strings
 /// coming from the input layer and the KeyEvent-based state machine.

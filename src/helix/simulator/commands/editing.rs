@@ -8,16 +8,25 @@ use helix_core::movement::skip_while;
 use helix_core::surround::find_nth_pairs_pos;
 use helix_core::textobject::{TextObject, textobject_paragraph, textobject_word};
 use helix_core::{Range, Selection, Tendril, Transaction};
+use helix_stdx::rope::RopeSliceExt;
 
 /// Changes that join the lines of every range, as upstream Helix's
-/// `join_selections`: each line break plus the next line's leading blanks
+/// `join_selections_impl`: each line break plus the next line's leading blanks
 /// becomes one space (none when the next line is blank).
 ///
-/// A range within a single line joins that line with the next one. Comment
-/// tokens are not stripped: the simulator is language-agnostic.
+/// A range within a single line joins that line with the next one. When the
+/// joined line starts with the comment token of the range's first line, that
+/// token is removed too; a different token becomes the current one and stays.
 fn join_changes<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<(usize, usize, Option<Tendril>)> {
     let slice = sim.doc.slice(..);
     let last_line = sim.doc.len_lines() - 1;
+    let blanks = |at: usize| skip_while(slice, at, |ch| matches!(ch, ' ' | '\t')).unwrap_or(at);
+    let token_at = |at: usize| {
+        sim.language
+            .comment_tokens
+            .iter()
+            .find(|token| slice.slice(at..).starts_with(token))
+    };
     let mut changes = Vec::new();
 
     for range in sim.selection.ranges() {
@@ -25,11 +34,18 @@ fn join_changes<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<(usize, usize, Op
         if start == end {
             end = (end + 1).min(last_line);
         }
+        let mut current_token = token_at(blanks(sim.doc.line_to_char(start)));
+
         for line in start..end {
             let from = line_end_char_index(&slice, line);
-            let next_start = sim.doc.line_to_char(line + 1);
-            let to =
-                skip_while(slice, next_start, |ch| matches!(ch, ' ' | '\t')).unwrap_or(next_start);
+            let mut to = blanks(sim.doc.line_to_char(line + 1));
+            if let Some(token) = token_at(to) {
+                if current_token == Some(token) {
+                    to = blanks(to + token.chars().count());
+                } else {
+                    current_token = Some(token);
+                }
+            }
             let separator = (to != line_end_char_index(&slice, line + 1)).then(|| " ".into());
             changes.push((from, to, separator));
         }
@@ -45,10 +61,15 @@ fn join_changes<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<(usize, usize, Op
 /// Joins every selected line, or the current line with the next one for a
 /// single-line range, and keeps the selection mapped over the edit. Never
 /// repeated by a count prefix, as in Helix.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn join_lines<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let transaction = Transaction::change(&sim.doc, join_changes(sim).into_iter());
     let mapped = sim.selection.clone().map(transaction.changes());
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
     sim.selection = mapped;
     Ok(())
 }
@@ -77,7 +98,7 @@ fn apply_changes_mapping_selection<M: EditorMode>(
 ) {
     let transaction = Transaction::change(&sim.doc, changes.into_iter());
     let mapped = sim.selection.clone().map(transaction.changes());
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
     sim.selection = mapped;
 }
 
@@ -85,6 +106,11 @@ fn apply_changes_mapping_selection<M: EditorMode>(
 ///
 /// The unit comes from the document language; blank lines are left alone.
 /// A count prefix repeats the command, so `2>` indents twice.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let unit = sim.indent_unit.to_string();
     let changes = touched_lines(sim)
@@ -103,6 +129,11 @@ pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 /// by the selection (Helix '<' command)
 ///
 /// Tabs count as one tab stop of the language, as in Helix.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let unit_width = sim.indent_unit.width();
     let changes = touched_lines(sim)
@@ -153,7 +184,7 @@ pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>
     });
 
     let mapped = sim.selection.clone().map(transaction.changes());
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
     mapped
 }
 
@@ -162,6 +193,11 @@ pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>
 /// Stays in Normal mode, so each resulting cursor is clamped to the last
 /// valid character rather than resting one-past-the-end (unlike
 /// `change_selection`, which hands the raw mapped positions to Insert mode).
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     delete_selection_from_register(sim, None)
 }
@@ -170,6 +206,10 @@ pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 ///
 /// `register: None` addresses the unnamed register, matching plain `d`. See
 /// [`delete_selection`] for the deletion/cursor rules.
+///
+/// # Errors
+///
+/// Returns the error of yanking to `register`; the yank currently never fails.
 pub fn delete_selection_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
@@ -183,6 +223,11 @@ pub fn delete_selection_from_register<M: EditorMode>(
 /// active selection, leaving every register untouched.
 ///
 /// Upstream Helix binds this alongside `change_selection_noyank` (`Alt-c`).
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn delete_selection_noyank<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -202,7 +247,7 @@ fn delete_selection_impl<M: EditorMode>(sim: &mut HelixSimulator<M>) {
 ///
 /// Mirrors upstream Helix's `selection_is_linewise` - the condition under
 /// which `change_selection` opens a blank line (`Open::Above`) instead of
-/// leaving a plain mid-line insertion point. `x` (select_line) produces
+/// leaving a plain mid-line insertion point. `x` (`select_line`) produces
 /// exactly this shape of selection.
 pub(crate) fn is_selection_linewise<M: EditorMode>(sim: &HelixSimulator<M>) -> bool {
     let slice = sim.doc.slice(..);
@@ -257,7 +302,7 @@ pub(crate) fn change_selection_linewise<M: EditorMode>(sim: &mut HelixSimulator<
         .collect();
 
     let primary_idx = sim.selection.primary_index();
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
 
     Selection::new(new_ranges.into(), primary_idx)
 }
@@ -265,7 +310,7 @@ pub(crate) fn change_selection_linewise<M: EditorMode>(sim: &mut HelixSimulator<
 /// Apply `transaction` and keep the selection: non-empty ranges are mapped
 /// over the edit, empty ranges stay where they were (mapping would push a
 /// cursor on a replaced character past it).
-fn apply_keeping_selection<M: EditorMode>(sim: &mut HelixSimulator<M>, transaction: Transaction) {
+fn apply_keeping_selection<M: EditorMode>(sim: &mut HelixSimulator<M>, transaction: &Transaction) {
     let mapped = sim.selection.clone().map(transaction.changes());
     sim.apply_transaction(transaction);
     sim.selection = if mapped.len() == sim.selection.len() {
@@ -286,6 +331,11 @@ fn apply_keeping_selection<M: EditorMode>(sim: &mut HelixSimulator<M>, transacti
 ///
 /// Toggles case of all characters in the selection and keeps the selection,
 /// so the next command still applies to the same span.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let transaction = Transaction::change_by_selection(&sim.doc, &sim.selection, |range| {
         let start = range.from();
@@ -316,7 +366,7 @@ pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
         (start, end, Some(text.into()))
     });
 
-    apply_keeping_selection(sim, transaction);
+    apply_keeping_selection(sim, &transaction);
     Ok(())
 }
 
@@ -326,6 +376,11 @@ pub fn switch_case<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 /// Produces forward ranges ending on the next line start, so vertical motion
 /// starts from the selected line's newline and repeating `x` (also via a
 /// count) grows the selection one line at a time.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let doc = &sim.doc;
     let slice = doc.slice(..);
@@ -346,6 +401,11 @@ pub fn select_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 
 /// Extend every range to whole-line bounds, keeping its direction
 /// (Helix 'X' command, `extend_to_line_bounds`).
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let doc = &sim.doc;
     let slice = doc.slice(..);
@@ -359,6 +419,11 @@ pub fn extend_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 }
 
 /// Select entire document (Helix '%' command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     sim.selection = Selection::single(0, sim.doc.len_chars());
     Ok(())
@@ -367,18 +432,33 @@ pub fn select_all<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), User
 /// Collapse every range to its block cursor (Helix ';' command)
 ///
 /// A forward range's cursor is its last selected character (`head - 1`), as in Helix.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn collapse_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     sim.selection = sim.selection.clone().cursors(sim.doc.slice(..));
     Ok(())
 }
 
-/// Switch selected text to uppercase (Helix 'Alt-`' command), keeping the selection
+/// Switch selected text to uppercase (Helix Alt-backtick command), keeping the selection
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn switch_to_uppercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     map_selected_text(sim, str::to_uppercase);
     Ok(())
 }
 
-/// Switch selected text to lowercase (Helix '`' command), keeping the selection
+/// Switch selected text to lowercase (Helix backtick command), keeping the selection
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn switch_to_lowercase<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     map_selected_text(sim, str::to_lowercase);
     Ok(())
@@ -397,10 +477,15 @@ fn map_selected_text<M: EditorMode>(sim: &mut HelixSimulator<M>, map: fn(&str) -
         (start, end, Some(mapped.into()))
     });
 
-    apply_keeping_selection(sim, transaction);
+    apply_keeping_selection(sim, &transaction);
 }
 
 /// Replace selection with the unnamed register's content (Helix 'R' command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     replace_with_yanked_from_register(sim, None)
 }
@@ -408,6 +493,11 @@ pub fn replace_with_yanked<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result
 /// Replace selection with a named register's content (Helix 'R' command)
 ///
 /// `register: None` addresses the unnamed register. See [`replace_with_yanked`].
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn replace_with_yanked_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
@@ -425,7 +515,7 @@ pub fn replace_with_yanked_from_register<M: EditorMode>(
         (range.from(), range.to(), Some(value.into()))
     });
 
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
     Ok(())
 }
 
@@ -433,6 +523,11 @@ pub fn replace_with_yanked_from_register<M: EditorMode>(
 ///
 /// One transaction (one undo step); each range then spans its surround
 /// characters, keeping its direction.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn surround_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     surround_char: char,
@@ -462,7 +557,7 @@ pub fn surround_selection<M: EditorMode>(
 
     let selection = Selection::new(ranges.into(), sim.selection.primary_index());
     let transaction = Transaction::change(&sim.doc, changes.into_iter());
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
     sim.selection = selection;
 
     Ok(())
@@ -471,6 +566,11 @@ pub fn surround_selection<M: EditorMode>(
 /// Delete surrounding pair (Helix 'md{char}' command)
 ///
 /// One transaction (one undo step); the selection is mapped over the edit.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn delete_surround<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     surround_char: char,
@@ -492,7 +592,7 @@ pub fn delete_surround<M: EditorMode>(
         .into_iter(),
     );
     let mapped = sim.selection.clone().map(transaction.changes());
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
     sim.selection = mapped;
 
     Ok(())
@@ -502,6 +602,11 @@ pub fn delete_surround<M: EditorMode>(
 ///
 /// One transaction (one undo step); the selection is unchanged because the
 /// replacement characters have the same width.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn replace_surround<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     from_char: char,
@@ -532,7 +637,7 @@ pub fn replace_surround<M: EditorMode>(
         ]
         .into_iter(),
     );
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
 
     Ok(())
 }
@@ -551,6 +656,11 @@ fn find_surrounding_pair<M: EditorMode>(
 }
 
 /// Select around text object (Helix 'ma{obj}' command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn select_around_textobject<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     obj: char,
@@ -567,11 +677,16 @@ pub fn select_around_textobject<M: EditorMode>(
         '`' => select_around_quote(sim, '`'),
         'p' => select_around_paragraph(sim),
         _ => {}
-    };
+    }
     Ok(())
 }
 
 /// Select inside text object (Helix 'mi{obj}' command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn select_inside_textobject<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     obj: char,
@@ -588,7 +703,7 @@ pub fn select_inside_textobject<M: EditorMode>(
         '`' => select_inside_quote(sim, '`'),
         'p' => select_inside_paragraph(sim),
         _ => {}
-    };
+    }
     Ok(())
 }
 
@@ -694,6 +809,11 @@ fn select_inside_paragraph<M: EditorMode>(sim: &mut HelixSimulator<M>) {
 
 /// Join lines like [`join_lines`] and select every inserted space
 /// (Helix 'Alt-J' command).
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     let changes = join_changes(sim);
     let mut offset = 0;
@@ -709,7 +829,7 @@ pub fn join_selections_space<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Resu
     }
 
     let transaction = Transaction::change(&sim.doc, changes.into_iter());
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
     if !spaces.is_empty() {
         sim.selection = Selection::new(spaces.into(), 0);
     }

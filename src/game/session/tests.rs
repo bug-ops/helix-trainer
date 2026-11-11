@@ -1,7 +1,8 @@
-//! Tests for GameSession
+//! Tests for `GameSession`
 
 use super::*;
 use crate::testing::ScenarioBuilder;
+use crate::testing::sid;
 use crate::time::FakeMonotonicClock;
 use std::assert_matches;
 
@@ -118,7 +119,9 @@ fn test_abandon_session() {
     // Type is now GameSession<Abandoned> - no runtime checks needed
     // Get feedback to verify it works
     let feedback = abandoned.feedback();
-    assert!(!feedback.success);
+    assert_eq!(feedback.outcome, FeedbackOutcome::Abandoned);
+    assert!(!feedback.success());
+    assert!(!feedback.is_optimal());
     assert_eq!(feedback.score, 0);
 }
 
@@ -156,7 +159,7 @@ fn test_calculate_score_incomplete() {
     let abandoned = session.abandon();
     let feedback = abandoned.feedback();
     assert_eq!(feedback.score, 0);
-    assert!(!feedback.success);
+    assert!(!feedback.success());
 }
 
 #[test]
@@ -176,10 +179,11 @@ fn test_get_feedback_success() {
     match result {
         SessionAfterAction::Completed(completed) => {
             let feedback = completed.feedback().unwrap();
-            assert!(feedback.success);
+            assert_eq!(feedback.outcome, FeedbackOutcome::Optimal);
+            assert!(feedback.success());
             assert_eq!(feedback.score, 100);
             assert_eq!(feedback.rating, PerformanceRating::Perfect);
-            assert!(feedback.is_optimal);
+            assert!(feedback.is_optimal());
         }
         SessionAfterAction::StillActive(_) => {
             panic!("Session should be completed after 'x' + 'd' commands");
@@ -236,9 +240,10 @@ fn test_get_feedback_with_hint() {
     match result {
         SessionAfterAction::Completed(completed) => {
             let feedback = completed.feedback().unwrap();
-            assert!(feedback.success);
+            assert_eq!(feedback.outcome, FeedbackOutcome::Completed);
+            assert!(feedback.success());
             assert!(feedback.hint.is_some()); // Should provide hint
-            assert!(!feedback.is_optimal);
+            assert!(!feedback.is_optimal());
         }
         SessionAfterAction::StillActive(_) => {
             panic!("Session should be completed after 'x' + 'd' commands");
@@ -285,8 +290,8 @@ fn test_elapsed_time() {
 #[test]
 fn test_feedback_summary() {
     let feedback = Feedback {
-        scenario_id: "test_001".to_string(),
-        success: true,
+        scenario_id: sid("test_001"),
+        outcome: FeedbackOutcome::Optimal,
         score: 100,
         max_points: 100,
         rating: PerformanceRating::Perfect,
@@ -294,7 +299,6 @@ fn test_feedback_summary() {
         optimal_actions: 2,
         duration: Duration::from_secs(5),
         hint: None,
-        is_optimal: true,
         user_actions: vec![],
     };
 
@@ -501,7 +505,7 @@ fn test_no_bundled_scenario_starts_complete() {
     let scenarios = crate::config::ScenarioLoader::new()
         .load_from_embedded("en")
         .unwrap();
-    let started_complete: Vec<String> = scenarios
+    let started_complete: Vec<ScenarioId> = scenarios
         .into_iter()
         .filter_map(|s| {
             let id = s.id.clone();
@@ -520,7 +524,7 @@ fn undo_redo_scenario() -> Scenario {
         .load_from_embedded("en")
         .unwrap()
         .into_iter()
-        .find(|s| s.id == "undo_redo_001")
+        .find(|s| s.id.as_str() == "undo_redo_001")
         .unwrap()
 }
 

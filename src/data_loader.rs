@@ -6,13 +6,20 @@
 //! Scenarios are loaded from compile-time embedded data, while
 //! profiles are loaded from the user's config directory.
 
-use crate::async_state::{DataLoadMessage, SaveRequest, SaveWriterOutcome};
+use crate::async_state::{
+    DataLoadMessage, LoaderError, SaveFailure, SaveRequest, SaveWriterOutcome,
+};
+use crate::config::json_store::{Document, StorageError};
 use crate::config::{Scenario, ScenarioLoader};
 use crate::constants::PROFILE_SAVE_QUEUE_CAPACITY;
-use crate::gamification::{ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile};
-use anyhow::Result;
+use crate::gamification::{
+    PreviousCopy, ProfileStorage, QuarantineError, QuarantineOutcome, QuestTemplateRegistry,
+    UserProfile,
+};
+use crate::security::CappedReadError;
+use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
+use tokio::task::{JoinError, JoinHandle};
 
 /// Spawn background data loaders for scenarios, profile, and quest registry
 ///
@@ -22,17 +29,21 @@ use tokio::task::JoinHandle;
 /// # Arguments
 ///
 /// * `tx` - Channel sender for communicating loading results
+/// * `storage` - Profile storage to load from. Pass a clone of the application's own handle:
+///   clones share the last known-valid profile text, so the first save after startup can keep
+///   the profile that just loaded as `profile.json.prev`
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use tokio::sync::mpsc;
 /// use helix_trainer::data_loader::spawn_data_loaders;
+/// use helix_trainer::gamification::ProfileStorage;
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     let (tx, mut rx) = mpsc::channel(32);
-///     spawn_data_loaders(tx);
+///     spawn_data_loaders(tx, ProfileStorage::with_path("/tmp/example-profile.json"));
 ///
 ///     // Handle messages from loaders
 ///     while let Some(msg) = rx.recv().await {
@@ -40,7 +51,7 @@ use tokio::task::JoinHandle;
 ///     }
 /// }
 /// ```
-pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
+pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>, storage: ProfileStorage) {
     let tx_scenarios = tx.clone();
     let tx_quests = tx.clone();
     let tx_profile = tx;
@@ -50,7 +61,7 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
         let result = load_scenarios_async().await;
         let msg = match result {
             Ok(scenarios) => DataLoadMessage::ScenariosReady(scenarios),
-            Err(e) => DataLoadMessage::ScenariosError(e.to_string()),
+            Err(e) => DataLoadMessage::ScenariosError(e),
         };
         if tx_scenarios.send(msg).await.is_err() {
             tracing::warn!("Failed to send scenarios message: receiver dropped");
@@ -62,7 +73,7 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
         let locale = rust_i18n::locale();
         let msg = match load_quest_registry_async(&locale).await {
             Ok(registry) => DataLoadMessage::QuestRegistryReady(registry),
-            Err(e) => DataLoadMessage::QuestRegistryError(e.to_string()),
+            Err(e) => DataLoadMessage::QuestRegistryError(e),
         };
         if tx_quests.send(msg).await.is_err() {
             tracing::warn!("Failed to send quest registry message: receiver dropped");
@@ -71,13 +82,9 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
 
     // Spawn profile loader (runs in parallel)
     tokio::spawn(async move {
-        let msg = match load_profile_message(ProfileStorage::new()).await {
+        let msg = match load_profile_message(storage.clone()).await {
             Ok(msg) => msg,
-            Err(e) => DataLoadMessage::ProfileError {
-                error: e.to_string(),
-                fallback: UserProfile::new(),
-                backup: QuarantineOutcome::Failed("profile loader task failed".to_string()),
-            },
+            Err(e) => profile_task_failed(&storage, e),
         };
         if tx_profile.send(msg).await.is_err() {
             tracing::warn!("Failed to send profile message: receiver dropped");
@@ -129,7 +136,7 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>) {
 ///
 ///     drop(save_tx);
 ///     let outcome = writer_handle.await.unwrap();
-///     assert_eq!(outcome, SaveWriterOutcome::LastSaveSucceeded);
+///     assert!(matches!(outcome, SaveWriterOutcome::LastSaveSucceeded));
 /// }
 /// ```
 pub fn spawn_save_writer(
@@ -142,29 +149,30 @@ pub fn spawn_save_writer(
         while let Some(request) = save_rx.recv().await {
             let SaveRequest { storage, profile } = request;
             let result = tokio::task::spawn_blocking(move || storage.save(&profile)).await;
-            let (msg, latest_outcome) = match result {
-                Ok(Ok(())) => (
-                    DataLoadMessage::ProfileSaved,
-                    SaveWriterOutcome::LastSaveSucceeded,
-                ),
-                Ok(Err(e)) => {
-                    let error = e.to_string();
-                    (
-                        DataLoadMessage::ProfileSaveError(error.clone()),
-                        SaveWriterOutcome::LastSaveFailed(error),
-                    )
-                }
-                Err(join_err) => {
-                    let error = join_err.to_string();
-                    (
-                        DataLoadMessage::ProfileSaveError(error.clone()),
-                        SaveWriterOutcome::LastSaveFailed(error),
-                    )
-                }
+            let failure = match result {
+                Ok(Ok(())) => None,
+                Ok(Err(e)) => Some(SaveFailure::Storage(e)),
+                Err(e) => Some(SaveFailure::Task(e)),
             };
+            let (msg, latest_outcome) = failure.map_or_else(
+                || {
+                    (
+                        DataLoadMessage::ProfileSaved,
+                        SaveWriterOutcome::LastSaveSucceeded,
+                    )
+                },
+                |failure| {
+                    let failure = Arc::new(failure);
+                    (
+                        DataLoadMessage::ProfileSaveError(Arc::clone(&failure)),
+                        SaveWriterOutcome::LastSaveFailed(failure),
+                    )
+                },
+            );
             outcome = latest_outcome;
             if result_tx.send(msg).await.is_err() {
-                tracing::warn!("Failed to send profile save result: receiver dropped");
+                // The receiver is intentionally gone once the event loop has exited at shutdown.
+                tracing::debug!("Profile save result not delivered: receiver dropped");
             }
         }
         outcome
@@ -181,8 +189,9 @@ pub fn spawn_save_writer(
 ///
 /// # Errors
 ///
-/// Returns an error if scenarios cannot be loaded from embedded data.
-pub async fn load_scenarios_async() -> Result<Vec<Scenario>> {
+/// Returns [`LoaderError::Scenarios`] if scenarios cannot be loaded from embedded data and
+/// [`LoaderError::Task`] if the blocking task fails.
+pub async fn load_scenarios_async() -> Result<Vec<Scenario>, LoaderError> {
     tokio::task::spawn_blocking(move || {
         let current_locale = rust_i18n::locale();
         let locale_str: &str = current_locale.as_ref();
@@ -190,7 +199,7 @@ pub async fn load_scenarios_async() -> Result<Vec<Scenario>> {
         let loader = ScenarioLoader::new();
         loader
             .load_from_embedded(locale_str)
-            .map_err(|e| anyhow::anyhow!("Scenario load error: {:?}", e))
+            .map_err(LoaderError::Scenarios)
     })
     .await?
 }
@@ -206,16 +215,41 @@ pub async fn load_scenarios_async() -> Result<Vec<Scenario>> {
 ///
 /// Returns an error only if the blocking task itself panics or is cancelled;
 /// load failures are reported as [`DataLoadMessage::ProfileError`].
-pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage> {
-    Ok(tokio::task::spawn_blocking(move || match storage.load() {
+pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage, JoinError> {
+    tokio::task::spawn_blocking(move || match storage.load() {
         Ok(profile) => DataLoadMessage::ProfileReady(profile),
-        Err(e) => DataLoadMessage::ProfileError {
-            error: e.to_string(),
-            fallback: UserProfile::new(),
-            backup: storage.quarantine(),
-        },
+        Err(error) => profile_refused(&storage, error),
     })
-    .await?)
+    .await
+}
+
+/// The [`DataLoadMessage::ProfileError`] for a profile that could not be loaded or replaced:
+/// a throwaway fallback, the backup state of the unreadable file and whether its previous
+/// copy can be restored.
+fn profile_refused(storage: &ProfileStorage, error: StorageError) -> DataLoadMessage {
+    DataLoadMessage::ProfileError {
+        error,
+        fallback: UserProfile::new(),
+        backup: storage.quarantine(),
+        previous: storage.previous_copy(),
+    }
+}
+
+/// The refusal reported when a profile task panicked or was cancelled before it produced a
+/// message, so the event loop still receives a [`DataLoadMessage::ProfileError`].
+fn profile_task_failed(storage: &ProfileStorage, error: JoinError) -> DataLoadMessage {
+    DataLoadMessage::ProfileError {
+        error: StorageError::Read {
+            doc: Document::Profile,
+            path: storage.path().to_path_buf(),
+            source: CappedReadError::Io(std::io::Error::other(error)),
+        },
+        fallback: UserProfile::new(),
+        backup: QuarantineOutcome::Failed(Arc::new(QuarantineError::Copy {
+            source: std::io::Error::other("the profile task failed"),
+        })),
+        previous: PreviousCopy::Unavailable,
+    }
 }
 
 /// Async "Start fresh" for a quarantined profile.
@@ -250,18 +284,57 @@ pub async fn load_profile_message(storage: ProfileStorage) -> Result<DataLoadMes
 /// assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
 /// # }
 /// ```
-pub async fn start_fresh_profile_message(storage: ProfileStorage) -> Result<DataLoadMessage> {
-    Ok(
-        tokio::task::spawn_blocking(move || match storage.start_fresh() {
-            Ok(profile) => DataLoadMessage::ProfileReady(profile),
-            Err(e) => DataLoadMessage::ProfileError {
-                error: e.to_string(),
-                fallback: UserProfile::new(),
-                backup: storage.quarantine(),
-            },
-        })
-        .await?,
-    )
+pub async fn start_fresh_profile_message(
+    storage: ProfileStorage,
+) -> Result<DataLoadMessage, JoinError> {
+    tokio::task::spawn_blocking(move || match storage.start_fresh() {
+        Ok(profile) => DataLoadMessage::ProfileReady(profile),
+        Err(error) => profile_refused(&storage, error),
+    })
+    .await
+}
+
+/// Async "Restore previous" for a quarantined profile.
+///
+/// Runs [`ProfileStorage::restore_previous`] on tokio's blocking task pool: the previous
+/// copy is re-validated, written over the unreadable profile and reported as
+/// [`DataLoadMessage::ProfileReady`], which the usual profile-loaded handling adopts and
+/// re-enables saving with. A refusal (no backup, previous copy gone or invalid, write error)
+/// is reported as [`DataLoadMessage::ProfileError`] and every file is untouched.
+///
+/// # Errors
+///
+/// Returns an error only if the blocking task itself panics or is cancelled.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::async_state::DataLoadMessage;
+/// use helix_trainer::data_loader::restore_previous_profile_message;
+/// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() {
+/// let dir = tempfile::tempdir().unwrap();
+/// let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+/// let mut profile = UserProfile::new();
+/// profile.add_xp(500);
+/// storage.save(&profile).unwrap();
+/// storage.save(&UserProfile::new()).unwrap();
+/// std::fs::write(storage.path(), "{broken").unwrap();
+///
+/// let msg = restore_previous_profile_message(storage).await.unwrap();
+/// assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500));
+/// # }
+/// ```
+pub async fn restore_previous_profile_message(
+    storage: ProfileStorage,
+) -> Result<DataLoadMessage, JoinError> {
+    tokio::task::spawn_blocking(move || match storage.restore_previous() {
+        Ok(profile) => DataLoadMessage::ProfileReady(profile),
+        Err(error) => profile_refused(&storage, error),
+    })
+    .await
 }
 
 /// Locale whose quest templates stand in when the active locale has none
@@ -275,9 +348,9 @@ const FALLBACK_QUEST_LOCALE: &str = "en";
 ///
 /// # Errors
 ///
-/// Returns an error if neither `locale` nor the fallback locale yields a
-/// valid registry.
-pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegistry> {
+/// Returns [`LoaderError::QuestRegistry`] if neither `locale` nor the fallback locale yields a
+/// valid registry, and [`LoaderError::Task`] if the blocking task fails.
+pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegistry, LoaderError> {
     let locale = locale.to_string();
     tokio::task::spawn_blocking(move || {
         QuestTemplateRegistry::from_embedded(&locale)
@@ -288,7 +361,7 @@ pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegi
                 tracing::warn!(%locale, "No quest templates for locale, using the fallback");
                 QuestTemplateRegistry::from_embedded(FALLBACK_QUEST_LOCALE)
             })
-            .map_err(|e| anyhow::anyhow!("Quest registry error: {:?}", e))
+            .map_err(LoaderError::QuestRegistry)
     })
     .await?
 }
@@ -297,6 +370,39 @@ pub async fn load_quest_registry_async(locale: &str) -> Result<QuestTemplateRegi
 mod tests {
     use super::*;
     use crate::constants::DATA_LOADING_TIMEOUT;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn save_writer_does_not_warn_when_the_result_receiver_is_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        let logs = crate::testing::log_capture::capture_logs(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async {
+                let (result_tx, result_rx) = mpsc::channel(1);
+                drop(result_rx);
+                let (save_tx, handle) = spawn_save_writer(result_tx);
+                save_tx
+                    .send(SaveRequest {
+                        storage,
+                        profile: UserProfile::new(),
+                    })
+                    .await
+                    .unwrap();
+                drop(save_tx);
+                assert!(matches!(
+                    handle.await.unwrap(),
+                    SaveWriterOutcome::LastSaveSucceeded
+                ));
+            });
+        });
+
+        assert!(!logs.contains("WARN"), "unexpected warning: {logs}");
+    }
 
     // Miri is too slow for async/tokio tests (300+ seconds per test)
     #[tokio::test]
@@ -317,8 +423,7 @@ mod tests {
                 let error_msg = e.to_string();
                 assert!(
                     error_msg.contains("Scenario") || error_msg.contains("load"),
-                    "Error should mention scenarios or loading: {}",
-                    error_msg
+                    "Error should mention scenarios or loading: {error_msg}"
                 );
             }
         }
@@ -410,9 +515,8 @@ mod tests {
             Err(e) => {
                 // If this fails, the quests directory may be missing
                 panic!(
-                    "Quest registry should load successfully. Error: {}. \
-                     Make sure quests/en/daily.toml exists.",
-                    e
+                    "Quest registry should load successfully. Error: {e}. \
+                     Make sure quests/en/daily.toml exists."
                 );
             }
         }
@@ -429,7 +533,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     async fn test_spawn_data_loaders_sends_quest_registry() {
         let (tx, mut rx) = mpsc::channel(32);
-        spawn_data_loaders(tx);
+        spawn_data_loaders(tx, ProfileStorage::for_test());
 
         let mut quest_registry_received = false;
         for _ in 0..3 {
@@ -448,7 +552,7 @@ mod tests {
     async fn test_spawn_data_loaders() {
         let (tx, mut rx) = mpsc::channel(32);
 
-        spawn_data_loaders(tx);
+        spawn_data_loaders(tx, ProfileStorage::for_test());
 
         // Collect messages (scenarios, quest registry and profile)
         let mut scenarios_received = false;
@@ -458,12 +562,14 @@ mod tests {
         for _ in 0..3 {
             if let Ok(msg) = tokio::time::timeout(DATA_LOADING_TIMEOUT, rx.recv()).await {
                 match msg {
-                    Some(DataLoadMessage::ScenariosReady(_))
-                    | Some(DataLoadMessage::ScenariosError(_)) => {
+                    Some(
+                        DataLoadMessage::ScenariosReady(_) | DataLoadMessage::ScenariosError(_),
+                    ) => {
                         scenarios_received = true;
                     }
-                    Some(DataLoadMessage::ProfileReady(_))
-                    | Some(DataLoadMessage::ProfileError { .. }) => {
+                    Some(
+                        DataLoadMessage::ProfileReady(_) | DataLoadMessage::ProfileError { .. },
+                    ) => {
                         profile_received = true;
                     }
                     _ => {}
@@ -478,6 +584,72 @@ mod tests {
         assert!(
             profile_received,
             "Should receive profile message (ready or error)"
+        );
+    }
+
+    /// S1 / FR-103, SC-011: the loader shares the application's storage handle, so the first
+    /// save after startup keeps the profile that just loaded as `.prev`.
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_first_save_after_spawn_data_loaders_keeps_the_loaded_profile_as_prev() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        let mut original = UserProfile::new();
+        original.add_xp(700);
+        storage.save(&original).unwrap();
+        let loaded_bytes = std::fs::read(storage.path()).unwrap();
+
+        // A fresh handle, as `main` builds it, so nothing is held before the loader runs.
+        let app_storage = ProfileStorage::with_path(storage.path());
+        let (tx, mut rx) = mpsc::channel(32);
+        spawn_data_loaders(tx, app_storage.clone());
+        let mut profile = loop {
+            match tokio::time::timeout(DATA_LOADING_TIMEOUT, rx.recv()).await {
+                Ok(Some(DataLoadMessage::ProfileReady(profile))) => break profile,
+                Ok(Some(_)) => {}
+                other => panic!("no profile message: {:?}", other.map(|m| m.is_some())),
+            }
+        };
+        assert_eq!(profile.total_xp, 700);
+
+        profile.add_xp(50);
+        app_storage.save(&profile).unwrap();
+
+        let prev = dir.path().join("profile.json.prev");
+        assert_eq!(std::fs::read(prev).unwrap(), loaded_bytes);
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_restore_previous_profile_message_restores_or_refuses() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        let mut profile = UserProfile::new();
+        profile.add_xp(500);
+        storage.save(&profile).unwrap();
+        storage.save(&UserProfile::new()).unwrap();
+        std::fs::write(storage.path(), "{broken").unwrap();
+
+        let message = restore_previous_profile_message(storage.clone())
+            .await
+            .unwrap();
+        assert!(matches!(message, DataLoadMessage::ProfileReady(p) if p.total_xp == 500));
+
+        std::fs::write(storage.path(), "{broken again").unwrap();
+        std::fs::write(storage.path().with_added_extension("prev"), "{also broken").unwrap();
+        let message = restore_previous_profile_message(storage.clone())
+            .await
+            .unwrap();
+        assert!(matches!(
+            message,
+            DataLoadMessage::ProfileError {
+                previous: PreviousCopy::Unavailable,
+                ..
+            }
+        ));
+        assert_eq!(
+            std::fs::read_to_string(storage.path()).unwrap(),
+            "{broken again"
         );
     }
 }

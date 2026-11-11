@@ -342,7 +342,7 @@ THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0
 ## 9. Bug-Fix Batch: Quest Registry, Quest Panic Paths, Session Ownership (#468, #469, #461)
 
 > [!info] Added 2026-11-11 (spec-first update for the P2-P3 bug batch)
-> FR numbers continue after FR-012. `QuestBonus.quest` stays a `String`; the typed `QuestId` belongs to #463, which is outside this batch (#483 narrows other fields only; `MiniGameModeSelection.selected` is now the typed `MiniGameModeKind`, the index-based `mode_name`/`mode_description` were removed).
+> FR numbers continue after FR-012. `QuestBonus.quest` stays a `String` in this batch (the typed `QuestId` arrives with #463, see the note below and section 10; #483 narrows other fields only; `MiniGameModeSelection.selected` is now the typed `MiniGameModeKind`, the index-based `mode_name`/`mode_description` were removed).
 
 ### 9.1 Requirements
 
@@ -355,13 +355,8 @@ THEN  level equals level_from_xp(1_000_000) and the bar does not read "1000000/0
 | FR-017 | THE MINIGAME and review sessions SHALL be owned by their screen data (`MiniGameData` owns the arcade session, `ReviewData` is the single owner of the review session read by the renderer), so a MiniGame screen cannot exist without a session; `GameState.minigame_session` and `GameState.review_session` are removed; a paused arcade run travels via `ReturnDestination::PausedMiniGame` | #461 | must |
 | FR-018 | WHEN starting an arcade session finds no scenarios THE SYSTEM SHALL stay on the current screen and raise a notification instead of navigating to an inert MiniGame screen; this applies to `StartMiniGame`, arcade mode selection and `NavigateTo(MiniGame)` | #461 | must |
 
-> [!danger] Explicitly deferred (out of scope of this batch)
-> The following parts of the session-ownership refactor are not implemented here; follow-up issues will be filed for them.
-> - #461: removal of the `pending_completed_session` / `UIState.last_feedback` / completion-time mailbox (the `TaskSession` active/completed enum).
-> - #482: the rest of the mailbox removal beyond what #461 delivered.
-> - #480: only the `update()` dispatch dedupe is done.
-> - #481: `update` takes an effects sink; render still clamps the selection.
-> - #483: only `Feedback.success`/`is_optimal` stay as they are, because `is_optimal` depends on the tolerance; `MiniGameModeSelection.selected` is typed (`MiniGameModeKind`) in this batch.
+> [!success] Deferred items delivered (updated 2026-11-11)
+> The parts originally deferred from this batch (#461 remainder and #482, #480, #481, #483) are specified in section 10 and delivered by the issues #527, #528, #529 and #530 (see the mapping there; #529 delivered the typed viewport and the single post-update `AppState::normalize_view`). The typed `QuestId` of #463 is delivered in [[data-and-runtime-hardening/spec#7.7 Command, scenario and quest identifiers (#463)|data-and-runtime-hardening section 7.7]]; `QuestBonus.quest` becomes that type.
 
 ### 9.2 Acceptance Criteria
 
@@ -397,7 +392,64 @@ THEN  the user stays on the selection screen and sees a notification
 | SC-012 | Handler tests: empty scenario set for each of the three arcade entry points keeps the screen | Pass |
 | SC-013 | `GameState` no longer holds the minigame and review session `Option` fields (compile-time guarantee) | Pass |
 
-## 10. See Also
+## 10. Bug-Fix Batch: Completed-Task Ownership, Handler Outcomes, View Normalization, Feedback Outcome (#527, #528, #529, #530)
+
+> [!info] Added 2026-11-11 (spec-first update; delivers the items deferred in section 9)
+> FR numbers continue after FR-018. Issue mapping: #527 closes the remainder of #461 and #482; #528 closes #480; #529 closes #481; #530 closes #483.
+
+### 10.1 Requirements
+
+| ID | Requirement | Issue | Priority |
+|----|------------|-------|----------|
+| FR-019 | THE task screen data SHALL hold its session as a two-state value, `Active(session)` or `Completed(completed task)`, where the completed task owns the finished session, its feedback and its completion time; a completed task cannot exist without its session. The one-shot mailbox fields (`GameState.pending_completed_session`, `UIState.last_feedback`, `UIState.completion_time`) are removed, and the results screen reads the completed task from the screen data | #527 | must |
+| FR-020 | WHEN a scenario completes THE SYSTEM SHALL transition the screen data from the active to the completed state in one `update()` step, with no intermediate state where completion data lives outside the screen | #527 | must |
+| FR-021 | HANDLERS that cannot fail SHALL return a plain outcome value (state plus effects), not a `Result`; only handlers with a real failure path return `Result`. The dispatcher SHALL wrap both through one boundary that preserves the error policy of FR-050..FR-052, and the module-wide lint allowance for unnecessary `Result` wrapping is removed | #528 | must |
+| FR-022 | THE VIEW state that depends on the terminal size or on list contents (menu selection and scroll offset, achievements scroll offset) SHALL be clamped in state, not only at render time: `UIState` stores the terminal size as a typed viewport, updated from the terminal resize event and read at loop start; ONE normalization function over the application state runs after every `update()` call and after every background data message, so every path (navigation, filter change, scenarios loaded, resize, and every rebuild of menu data from the remembered selection) is covered without per-handler clamps | #529 | must |
+| FR-023 | THE LAYOUT arithmetic shared by state clamping and rendering (visible rows of the menu and the achievements list for a given viewport) SHALL be one pure function per list, used by both; the renderer keeps a read-only defensive clamp and takes the state by shared reference | #529 | must |
+| FR-024 | THE RESULT of a finished task SHALL be one closed enum, `Optimal`, `Completed` or `Abandoned`, computed once; the boolean views `success` and `is_optimal` are derived from it. The tolerance rule that decides `Optimal` versus `Completed` is unchanged | #530 | must |
+
+### 10.2 Acceptance Criteria
+
+```
+GIVEN a scenario is completed
+WHEN  the results screen renders
+THEN  the session, feedback and completion time come from the completed-task value in the screen data, and no mailbox field exists on UIState or GameState
+```
+```
+GIVEN the terminal is resized smaller while the menu is open with a selection below the new last visible row
+WHEN  the resize event is processed
+THEN  the selection and scroll offset are within bounds in state before the next render
+```
+```
+GIVEN the menu data is rebuilt from the remembered selection after a scenarios-loaded message with fewer scenarios
+WHEN  the message has been handled
+THEN  the selected index is within the new display count (the same post-update normalization covers it)
+```
+```
+GIVEN a completion within tolerance but not at the optimal count
+THEN  the feedback outcome is Completed, success is true and is_optimal is false (unchanged behavior)
+```
+
+### 10.3 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Resize event while a non-list screen is active | Normalization is a no-op for that screen |
+| Zero-height viewport | Visible rows saturate to 0; selection stays valid, no panic |
+| Data message arrives while the menu is open | Normalized after handling (FR-022) |
+| Completed task | Stores its feedback next to the session: feedback derivation is fallible, so it is computed once at completion and not re-derived (FR-019) |
+| Commands or `AbandonScenario` arrive during the command-success animation | Ignored (previously they acted on a placeholder session) |
+
+### 10.4 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-014 | Compile-time: no mailbox fields remain; the completed state requires its session | Pass |
+| SC-015 | Render and normalization tests at several viewport heights, on resize, on filter shrink, and on each rebuild path of menu data from the remembered selection | Pass |
+| SC-016 | Feedback tests assert outcome, `success` and `is_optimal` for optimal, within-tolerance and abandoned runs; existing results-screen tests stay green | Pass |
+| SC-017 | The infallible handlers contain no `Ok(...)` wrapping and the lint allowance is gone | Pass |
+
+## 11. See Also
 
 - [[constitution]] — project principles
 - [[../end-game-summary-screen/spec|End-Game Summary Screen]] — sibling

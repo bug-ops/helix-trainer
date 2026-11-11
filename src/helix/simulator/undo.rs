@@ -29,6 +29,11 @@ impl<M: EditorMode> HelixSimulator<M> {
     /// Restores the document and the selection from before the change. The
     /// state being undone away from is moved onto the redo stack, so a
     /// subsequent `redo` can restore it.
+    ///
+    /// # Errors
+    ///
+    /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+    /// with the fallible commands that share the registry's function type.
     pub fn undo(&mut self) -> Result<(), UserError> {
         if let Some(prev) = self.history.pop() {
             let undone = self.swap_state(prev);
@@ -43,6 +48,11 @@ impl<M: EditorMode> HelixSimulator<M> {
     /// redo stack and pushes the state being redone away from back onto the
     /// undo history, so repeated `Ctrl-r` presses walk forward through
     /// history and `undo`/`redo` round-trip.
+    ///
+    /// # Errors
+    ///
+    /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+    /// with the fallible commands that share the registry's function type.
     pub fn redo(&mut self) -> Result<(), UserError> {
         if let Some(redone) = self.redo_stack.pop() {
             let prev = self.swap_state(redone);
@@ -67,7 +77,7 @@ mod tests {
         let noop = Transaction::new(&sim.doc);
         assert!(noop.changes().is_empty());
 
-        sim.apply_transaction(noop);
+        sim.apply_transaction(&noop);
 
         assert_eq!(
             sim.history.len(),
@@ -81,12 +91,12 @@ mod tests {
         let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello".to_string());
 
         let edit = Transaction::change(&sim.doc, [(0, 0, Some("x".into()))].into_iter());
-        sim.apply_transaction(edit);
+        sim.apply_transaction(&edit);
         sim.undo().unwrap();
         assert_eq!(sim.redo_stack.len(), 1, "undo should leave one redo entry");
 
         let noop = Transaction::new(&sim.doc);
-        sim.apply_transaction(noop);
+        sim.apply_transaction(&noop);
 
         assert_eq!(
             sim.redo_stack.len(),
@@ -101,7 +111,7 @@ mod tests {
         sim.selection = Selection::single(0, 4);
 
         let edit = Transaction::change(&sim.doc, [(0, 4, None)].into_iter());
-        sim.apply_transaction(edit);
+        sim.apply_transaction(&edit);
         sim.selection = Selection::point(0);
 
         sim.undo().unwrap();
@@ -116,7 +126,7 @@ mod tests {
         sim.selection = Selection::single(0, 4);
 
         let edit = Transaction::change(&sim.doc, [(0, 4, None)].into_iter());
-        sim.apply_transaction(edit);
+        sim.apply_transaction(&edit);
         sim.selection = Selection::point(2);
 
         sim.undo().unwrap();

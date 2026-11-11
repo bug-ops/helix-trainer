@@ -1,4 +1,4 @@
-//! Repeat dot command execution tests for HelixSimulator
+//! Repeat dot command execution tests for `HelixSimulator`
 //!
 //! Tests that verify the dot command correctly replays recorded actions:
 //! - Basic repeat: Delete, join, indent operations

@@ -3,7 +3,6 @@
 //! This module provides security-related functionality including
 //! error definitions, validation utilities, and security helpers.
 
-use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 /// Security-specific errors raised while validating untrusted input.
@@ -122,7 +121,114 @@ pub enum SecurityError {
     ReadFailed(String),
 }
 
+/// Why [`path_validator::read_capped`] refused or failed to read a file.
+///
+/// Keeps the I/O and UTF-8 causes as sources so callers can tell "the file does not exist"
+/// (first launch) from every other failure; [`SecurityError`] is derived from it for the
+/// scenario, quest and keymap loaders.
+#[derive(Error, Debug)]
+pub enum CappedReadError {
+    /// The path exists but is not a regular file (directory, device, FIFO, ...).
+    #[error("not a regular file")]
+    NotRegularFile,
+
+    /// The file is larger than the cap.
+    #[error("file too large (max {max} bytes, got {actual} bytes)")]
+    TooLarge {
+        /// Maximum allowed size in bytes.
+        max: u64,
+        /// Number of bytes read, a lower bound on the real size.
+        actual: u64,
+    },
+
+    /// Inspecting (`stat`) or opening the file failed: the path is unusable.
+    #[error("the file could not be inspected or opened")]
+    Inaccessible(#[source] std::io::Error),
+
+    /// Inspecting the opened handle or reading the file failed.
+    #[error("I/O error while reading the file")]
+    Io(#[source] std::io::Error),
+
+    /// The content is not valid UTF-8.
+    #[error("file content is not valid UTF-8")]
+    InvalidUtf8(#[source] std::string::FromUtf8Error),
+}
+
+impl CappedReadError {
+    /// Whether the file simply does not exist.
+    #[must_use]
+    pub fn is_not_found(&self) -> bool {
+        matches!(
+            self,
+            Self::Inaccessible(e) | Self::Io(e) if e.kind() == std::io::ErrorKind::NotFound
+        )
+    }
+}
+
+impl From<CappedReadError> for SecurityError {
+    fn from(err: CappedReadError) -> Self {
+        match err {
+            CappedReadError::NotRegularFile => Self::NotRegularFile,
+            CappedReadError::TooLarge { max, actual } => Self::FileTooLarge { max, actual },
+            CappedReadError::Inaccessible(_) => Self::InvalidPath,
+            CappedReadError::Io(e) => Self::ReadFailed(e.to_string()),
+            CappedReadError::InvalidUtf8(_) => Self::InvalidEncoding,
+        }
+    }
+}
+
+/// Renders `error` and every cause below it as `top: cause: root cause`.
+///
+/// Error sinks log this instead of `Display` alone, because variants that keep their cause
+/// as a `#[source]` do not repeat it in their own message.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::security::error_chain;
+///
+/// let io = std::io::Error::other("disk full");
+/// let wrapped = helix_trainer::security::CappedReadError::Io(io);
+/// assert_eq!(
+///     error_chain(&wrapped),
+///     "I/O error while reading the file: disk full"
+/// );
+/// ```
+#[must_use]
+pub fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut rendered = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        rendered.push_str(": ");
+        rendered.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    rendered
+}
+
+/// Typed internal cause kept below a sanitized [`UserError`].
+///
+/// Never rendered to the user; it exists so [`error_chain`] can show the original failure in
+/// logs after a domain error was reduced to generic user-facing text.
+#[derive(Error, Debug)]
+pub enum ErrorCause {
+    /// Input validation or limit failure.
+    #[error(transparent)]
+    Security(#[from] SecurityError),
+
+    /// Gamification (quests, streaks, achievements) failure.
+    #[error(transparent)]
+    Gamification(#[from] crate::gamification::GamificationError),
+
+    /// Learning (FSRS, scheduling) failure.
+    #[error(transparent)]
+    Learning(#[from] crate::learning::LearningError),
+}
+
 /// User-facing error messages (sanitized)
+///
+/// The `Display` text is path-free and generic. Variants produced from a domain error keep it
+/// as a typed [`ErrorCause`] source for logs.
 #[derive(Error, Debug)]
 pub enum UserError {
     /// An internal invariant was violated; the message is for logs, the
@@ -131,6 +237,9 @@ pub enum UserError {
     InvalidState {
         /// Diagnostic detail that is never shown to the user.
         message: String,
+        /// Original failure, if the state error was derived from one.
+        #[source]
+        cause: Option<ErrorCause>,
     },
 
     /// A message arrived for a screen other than the current one (e.g. a stale
@@ -140,59 +249,104 @@ pub enum UserError {
 
     /// A scenario file could not be loaded or parsed.
     #[error("Failed to load scenario file. Please check the file path and format.")]
-    ScenarioLoadError,
+    ScenarioLoadError {
+        /// Original failure, if any.
+        #[source]
+        cause: Option<ErrorCause>,
+    },
 
     /// A scenario file breaches a size or count limit.
     #[error("The scenario file is too large or complex. Please use a smaller file.")]
-    ScenarioTooComplex,
+    ScenarioTooComplex {
+        /// Original failure, if any.
+        #[source]
+        cause: Option<ErrorCause>,
+    },
 
     /// A generic failure with no actionable detail for the user.
     #[error("Operation failed. Please try again.")]
-    OperationFailed,
+    OperationFailed {
+        /// Original failure, if any.
+        #[source]
+        cause: Option<ErrorCause>,
+    },
 
     /// A Helix command failed to execute in the simulator.
     #[error("Command execution failed: {context}")]
     CommandFailed {
         /// What was being executed, for debugging.
         context: String,
+        /// Original failure, if any.
+        #[source]
+        cause: Option<ErrorCause>,
     },
+
+    /// Reading or writing the saved profile or configuration failed. The cause is kept as a
+    /// source for logs; the displayed text carries no paths or OS messages.
+    #[error("Could not read or save your data. Please try again.")]
+    Storage(#[source] crate::config::json_store::StorageError),
 }
 
 impl UserError {
-    /// Create an InvalidState error with a descriptive message
+    /// Create an `InvalidState` error with a descriptive message
     pub fn invalid_state(message: &str) -> Self {
         Self::InvalidState {
             message: message.to_string(),
+            cause: None,
         }
     }
 
-    /// Create a CommandFailed error with context for debugging
+    /// Create a `CommandFailed` error with context for debugging
     pub fn command_failed(context: impl Into<String>) -> Self {
         Self::CommandFailed {
             context: context.into(),
+            cause: None,
         }
+    }
+
+    /// A [`UserError::ScenarioLoadError`] without an underlying cause.
+    #[must_use]
+    pub fn scenario_load_error() -> Self {
+        Self::ScenarioLoadError { cause: None }
+    }
+
+    /// A [`UserError::ScenarioTooComplex`] without an underlying cause.
+    #[must_use]
+    pub fn scenario_too_complex() -> Self {
+        Self::ScenarioTooComplex { cause: None }
+    }
+
+    /// A [`UserError::OperationFailed`] without an underlying cause.
+    #[must_use]
+    pub fn operation_failed() -> Self {
+        Self::OperationFailed { cause: None }
     }
 }
 
 impl From<SecurityError> for UserError {
     fn from(err: SecurityError) -> Self {
-        tracing::error!("Security error occurred: {:?}", err);
-
         match err {
-            SecurityError::PathTraversal
+            e @ (SecurityError::PathTraversal
             | SecurityError::InvalidPath
             | SecurityError::SuspiciousPath
-            | SecurityError::InvalidToml(_) => UserError::ScenarioLoadError,
+            | SecurityError::InvalidToml(_)) => UserError::ScenarioLoadError {
+                cause: Some(e.into()),
+            },
 
-            SecurityError::FileTooLarge { .. }
+            e @ (SecurityError::FileTooLarge { .. }
             | SecurityError::TooManyScenarios { .. }
             | SecurityError::ContentTooLarge { .. }
             | SecurityError::TooManyHints { .. }
-            | SecurityError::TooManyAlternatives { .. } => UserError::ScenarioTooComplex,
+            | SecurityError::TooManyAlternatives { .. }) => UserError::ScenarioTooComplex {
+                cause: Some(e.into()),
+            },
 
-            SecurityError::InvalidState(msg) => UserError::InvalidState { message: msg },
+            SecurityError::InvalidState(msg) => UserError::InvalidState {
+                message: msg.clone(),
+                cause: Some(SecurityError::InvalidState(msg).into()),
+            },
 
-            SecurityError::InvalidCursorPosition
+            e @ (SecurityError::InvalidCursorPosition
             | SecurityError::TooManyActions
             | SecurityError::ScoreOverflow
             | SecurityError::CommandSequenceTooLong { .. }
@@ -201,7 +355,9 @@ impl From<SecurityError> for UserError {
             | SecurityError::InvalidInput(_)
             | SecurityError::TooManyKeymapBindings { .. }
             | SecurityError::NotRegularFile
-            | SecurityError::ReadFailed(_) => UserError::OperationFailed,
+            | SecurityError::ReadFailed(_)) => UserError::OperationFailed {
+                cause: Some(e.into()),
+            },
         }
     }
 }
@@ -209,16 +365,19 @@ impl From<SecurityError> for UserError {
 impl From<crate::gamification::GamificationError> for UserError {
     fn from(err: crate::gamification::GamificationError) -> Self {
         use crate::gamification::GamificationError;
-        tracing::error!("Gamification error occurred: {:?}", err);
 
         match err {
-            GamificationError::StorageError(_) => UserError::OperationFailed,
-            GamificationError::QuestNotFound(_) => UserError::OperationFailed,
-            GamificationError::InvalidLevel(_) => UserError::invalid_state("Invalid level"),
-            GamificationError::StreakFreezeUnavailable => UserError::OperationFailed,
-            GamificationError::StreakFreezeNothingToProtect => UserError::OperationFailed,
-            GamificationError::StreakFreezeGapOutOfRange { .. } => UserError::OperationFailed,
-            GamificationError::AchievementAlreadyUnlocked(_) => UserError::OperationFailed,
+            e @ GamificationError::InvalidLevel(_) => UserError::InvalidState {
+                message: "Invalid level".to_string(),
+                cause: Some(e.into()),
+            },
+            e @ (GamificationError::QuestNotFound(_)
+            | GamificationError::StreakFreezeUnavailable
+            | GamificationError::StreakFreezeNothingToProtect
+            | GamificationError::StreakFreezeGapOutOfRange { .. }
+            | GamificationError::AchievementAlreadyUnlocked(_)) => UserError::OperationFailed {
+                cause: Some(e.into()),
+            },
         }
     }
 }
@@ -226,20 +385,30 @@ impl From<crate::gamification::GamificationError> for UserError {
 impl From<crate::learning::LearningError> for UserError {
     fn from(err: crate::learning::LearningError) -> Self {
         use crate::learning::LearningError;
-        tracing::error!("Learning error occurred: {:?}", err);
 
         match err {
-            LearningError::InvalidStability(_)
+            e @ (LearningError::InvalidStability(_)
             | LearningError::InvalidDifficulty(_)
-            | LearningError::InvalidCounters { .. } => {
-                UserError::invalid_state("Invalid learning parameters")
+            | LearningError::InvalidCounters { .. }) => UserError::InvalidState {
+                message: "Invalid learning parameters".to_string(),
+                cause: Some(e.into()),
+            },
+            e @ LearningError::CommandNotFound(_) => UserError::CommandFailed {
+                context: "Command not found in registry".to_string(),
+                cause: Some(e.into()),
+            },
+            e @ (LearningError::SessionComplete | LearningError::FsrsError(_)) => {
+                UserError::OperationFailed {
+                    cause: Some(e.into()),
+                }
             }
-            LearningError::SessionComplete => UserError::OperationFailed,
-            LearningError::CommandNotFound(_) => {
-                UserError::command_failed("Command not found in registry")
-            }
-            LearningError::FsrsError(_) => UserError::OperationFailed,
         }
+    }
+}
+
+impl From<crate::config::json_store::StorageError> for UserError {
+    fn from(err: crate::config::json_store::StorageError) -> Self {
+        Self::Storage(err)
     }
 }
 
@@ -357,11 +526,18 @@ pub mod limits {
 
 /// Path validation utilities
 pub mod path_validator {
-    use super::*;
+    use super::{CappedReadError, SecurityError};
     use std::fs;
     use std::io::Read;
+    use std::path::{Path, PathBuf};
 
     /// Validates that a path is safe to access
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError::InvalidPath`] if `path` cannot be canonicalized,
+    /// [`SecurityError::PathTraversal`] if it lies outside every allowed base, or
+    /// [`SecurityError::SuspiciousPath`] if it matches a suspicious pattern.
     pub fn validate_path(path: &Path, allowed_bases: &[PathBuf]) -> Result<PathBuf, SecurityError> {
         // Canonicalize path to resolve symlinks and .. components
         let canonical = path
@@ -371,11 +547,8 @@ pub mod path_validator {
         // Check if path is within allowed directories
         let is_allowed = allowed_bases.iter().any(|base| {
             // Canonicalize base path
-            if let Ok(canonical_base) = base.canonicalize() {
-                canonical.starts_with(&canonical_base)
-            } else {
-                false
-            }
+            base.canonicalize()
+                .is_ok_and(|canonical_base| canonical.starts_with(&canonical_base))
         });
 
         if !is_allowed {
@@ -415,10 +588,11 @@ pub mod path_validator {
     ///
     /// # Errors
     ///
-    /// - [`SecurityError::InvalidPath`] if the path cannot be opened
-    /// - [`SecurityError::NotRegularFile`] if it is not a regular file
-    /// - [`SecurityError::FileTooLarge`] if it exceeds `max_size`
-    /// - [`SecurityError::InvalidEncoding`] if the content is not UTF-8
+    /// - [`CappedReadError::Io`] if the path cannot be inspected, opened or read (a missing
+    ///   file is `Io` with [`std::io::ErrorKind::NotFound`])
+    /// - [`CappedReadError::NotRegularFile`] if it is not a regular file
+    /// - [`CappedReadError::TooLarge`] if it exceeds `max_size`
+    /// - [`CappedReadError::InvalidUtf8`] if the content is not UTF-8
     ///
     /// # Examples
     ///
@@ -431,38 +605,34 @@ pub mod path_validator {
     /// assert_eq!(read_capped(&path, 16).unwrap(), "hello");
     /// assert!(read_capped(&path, 4).is_err());
     /// ```
-    pub fn read_capped(path: &Path, max_size: u64) -> Result<String, SecurityError> {
+    pub fn read_capped(path: &Path, max_size: u64) -> Result<String, CappedReadError> {
         // `stat` never blocks, so a FIFO is rejected here before `open` could hang on it.
         if !fs::metadata(path)
-            .map_err(|_| SecurityError::InvalidPath)?
+            .map_err(CappedReadError::Inaccessible)?
             .is_file()
         {
-            return Err(SecurityError::NotRegularFile);
+            return Err(CappedReadError::NotRegularFile);
         }
 
-        let file = fs::File::open(path).map_err(|_| SecurityError::InvalidPath)?;
-        let is_file = file
-            .metadata()
-            .map_err(|e| SecurityError::ReadFailed(e.to_string()))?
-            .is_file();
-        if !is_file {
-            return Err(SecurityError::NotRegularFile);
+        let file = fs::File::open(path).map_err(CappedReadError::Inaccessible)?;
+        if !file.metadata().map_err(CappedReadError::Io)?.is_file() {
+            return Err(CappedReadError::NotRegularFile);
         }
 
         let mut buf = Vec::new();
         file.take(max_size.saturating_add(1))
             .read_to_end(&mut buf)
-            .map_err(|e| SecurityError::ReadFailed(e.to_string()))?;
+            .map_err(CappedReadError::Io)?;
 
         let read = buf.len() as u64;
         if read > max_size {
-            return Err(SecurityError::FileTooLarge {
+            return Err(CappedReadError::TooLarge {
                 max: max_size,
                 actual: read,
             });
         }
 
-        String::from_utf8(buf).map_err(|_| SecurityError::InvalidEncoding)
+        String::from_utf8(buf).map_err(CappedReadError::InvalidUtf8)
     }
 }
 
@@ -512,35 +682,12 @@ pub mod private_fs {
 
 /// Shared serde validators for scenario/quest configuration fields
 pub mod validators {
-    use super::limits::{MAX_ID_LENGTH, MAX_LANGUAGE_LENGTH};
+    use super::limits::MAX_LANGUAGE_LENGTH;
     use serde::Deserialize;
-
-    /// Custom deserialization for ID field to validate format
-    pub fn validate_id_field<'de, D>(deserializer: D) -> Result<String, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-
-        // Validate ID is not empty
-        if s.is_empty() {
-            return Err(serde::de::Error::custom("Invalid ID: cannot be empty"));
-        }
-
-        // Validate ID format: alphanumeric with underscores, max MAX_ID_LENGTH chars
-        if s.len() > MAX_ID_LENGTH || !s.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            return Err(serde::de::Error::custom(format!(
-                "Invalid ID: must be alphanumeric with underscores, max {} chars",
-                MAX_ID_LENGTH
-            )));
-        }
-
-        Ok(s)
-    }
 
     /// Custom deserialization for `Setup.language` to validate format
     ///
-    /// Unlike [`validate_id_field`], an explicit empty string is accepted rather than
+    /// Unlike a content id, an explicit empty string is accepted rather than
     /// rejected: it is a valid "unsupported language" value that the syntax highlighter
     /// resolves to plain-text rendering rather than a load-time error (see
     /// `specs/language-aware-syntax-highlighting/spec.md` edge cases). The character set is
@@ -548,6 +695,11 @@ pub mod validators {
     /// `"c++"` or `"h++"` - rejecting only control characters, whitespace, and oversized
     /// values; the value is only ever used as an exact-match lookup key into syntect's
     /// `SyntaxSet`, never as a path or shell argument, so it carries no injection risk.
+    ///
+    /// # Errors
+    ///
+    /// Returns the deserializer's error, or a custom error if the language exceeds the length
+    /// limit or contains control characters or whitespace.
     pub fn validate_language_field<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -557,8 +709,7 @@ pub mod validators {
         if let Some(ref language) = opt {
             if language.len() > MAX_LANGUAGE_LENGTH {
                 return Err(serde::de::Error::custom(format!(
-                    "Invalid language: max {} characters",
-                    MAX_LANGUAGE_LENGTH
+                    "Invalid language: max {MAX_LANGUAGE_LENGTH} characters"
                 )));
             }
             if language
@@ -577,7 +728,8 @@ pub mod validators {
 
 /// Content sanitization utilities
 pub mod sanitizer {
-    use super::*;
+    use super::{SecurityError, limits};
+    use std::path::Path;
 
     /// Sanitizes string for terminal output
     pub fn sanitize_terminal_output(input: &str) -> String {
@@ -588,6 +740,12 @@ pub mod sanitizer {
     }
 
     /// Sanitizes file content
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError::InvalidContent`] if `content` contains a null byte,
+    /// [`SecurityError::ContentTooLarge`] if it exceeds the size limit, or
+    /// [`SecurityError::InvalidEncoding`] if it is not valid UTF-8.
     pub fn sanitize_content(content: &str) -> Result<String, SecurityError> {
         // Check for null bytes
         if content.contains('\0') {
@@ -623,7 +781,7 @@ pub mod sanitizer {
 
 /// Safe arithmetic operations for scoring and calculations
 pub mod arithmetic {
-    use super::*;
+    use super::SecurityError;
 
     /// Safely calculates score with overflow prevention
     ///
@@ -649,7 +807,7 @@ pub mod arithmetic {
         }
 
         // Use checked arithmetic to prevent overflow
-        let numerator = (max_points as u64)
+        let numerator = u64::from(max_points)
             .checked_mul(optimal_count as u64)
             .ok_or(SecurityError::ScoreOverflow)?;
 
@@ -728,6 +886,7 @@ pub mod arithmetic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn test_suspicious_path_detection() {
@@ -1162,34 +1321,75 @@ mod tests {
     #[test]
     fn test_user_error_display() {
         assert!(
-            UserError::InvalidState {
-                message: "test".to_string()
-            }
-            .to_string()
-            .contains("Invalid application state")
+            UserError::invalid_state("test")
+                .to_string()
+                .contains("Invalid application state")
         );
         assert!(
-            UserError::ScenarioLoadError
+            UserError::scenario_load_error()
                 .to_string()
                 .contains("load scenario")
         );
         assert!(
-            UserError::ScenarioTooComplex
+            UserError::scenario_too_complex()
                 .to_string()
                 .contains("too large")
         );
         assert!(
-            UserError::OperationFailed
+            UserError::operation_failed()
                 .to_string()
                 .contains("Operation failed")
         );
         assert!(
-            UserError::CommandFailed {
-                context: "test".to_string()
-            }
-            .to_string()
-            .contains("Command")
+            UserError::command_failed("test")
+                .to_string()
+                .contains("Command")
         );
+    }
+
+    #[test]
+    fn user_error_keeps_typed_cause_for_logs() {
+        let user = UserError::from(SecurityError::TooManyActions);
+        assert_eq!(user.to_string(), "Operation failed. Please try again.");
+        assert_eq!(
+            error_chain(&user),
+            "Operation failed. Please try again.: Too many actions (max: 1000000)"
+        );
+
+        let user = UserError::from(SecurityError::InvalidToml("bad key".to_string()));
+        assert!(error_chain(&user).ends_with("Invalid TOML format: bad key"));
+        assert!(!user.to_string().contains("bad key"));
+
+        let user = UserError::from(SecurityError::InvalidState("broken".to_string()));
+        assert!(error_chain(&user).contains("Invalid state: broken"));
+
+        let user = UserError::from(crate::learning::LearningError::SessionComplete);
+        assert!(std::error::Error::source(&user).is_some());
+
+        let user = UserError::from(crate::gamification::GamificationError::StreakFreezeUnavailable);
+        assert!(matches!(
+            std::error::Error::source(&user).and_then(|e| e.downcast_ref::<ErrorCause>()),
+            Some(ErrorCause::Gamification(_))
+        ));
+    }
+
+    #[test]
+    fn error_chain_joins_every_cause() {
+        let root = std::io::Error::other("disk full");
+        let storage = crate::config::json_store::StorageError::Write {
+            doc: crate::config::json_store::Document::Profile,
+            path: "/secret/profile.json".into(),
+            source: root,
+        };
+        let chain = error_chain(&storage);
+        assert_eq!(
+            chain,
+            "failed to write the profile file /secret/profile.json: disk full"
+        );
+
+        let user = UserError::from(storage);
+        assert!(!user.to_string().contains("/secret"), "{user}");
+        assert_eq!(error_chain(&user).matches("disk full").count(), 1);
     }
 
     mod read_capped {
@@ -1210,7 +1410,7 @@ mod tests {
             std::fs::write(&path, "123456").unwrap();
             assert!(matches!(
                 path_validator::read_capped(&path, 5),
-                Err(SecurityError::FileTooLarge { max: 5, .. })
+                Err(CappedReadError::TooLarge { max: 5, .. })
             ));
         }
 
@@ -1219,7 +1419,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             assert!(matches!(
                 path_validator::read_capped(dir.path(), 5),
-                Err(SecurityError::NotRegularFile)
+                Err(CappedReadError::NotRegularFile)
             ));
         }
 
@@ -1230,16 +1430,42 @@ mod tests {
             std::fs::write(&path, [0xff, 0xfe]).unwrap();
             assert!(matches!(
                 path_validator::read_capped(&path, 5),
-                Err(SecurityError::InvalidEncoding)
+                Err(CappedReadError::InvalidUtf8(_))
             ));
         }
 
         #[test]
-        fn missing_path_is_invalid_path() {
+        fn missing_path_is_not_found() {
             let dir = tempfile::tempdir().unwrap();
+            let err = path_validator::read_capped(&dir.path().join("nope"), 5).unwrap_err();
+            assert!(err.is_not_found(), "{err}");
             assert!(matches!(
-                path_validator::read_capped(&dir.path().join("nope"), 5),
-                Err(SecurityError::InvalidPath)
+                SecurityError::from(err),
+                SecurityError::InvalidPath
+            ));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn stat_failures_other_than_not_found_map_to_invalid_path() {
+            let dir = tempfile::tempdir().unwrap();
+            let file = dir.path().join("f.txt");
+            std::fs::write(&file, "x").unwrap();
+            let err = path_validator::read_capped(&file.join("child"), 5).unwrap_err();
+            assert!(matches!(err, CappedReadError::Inaccessible(_)), "{err}");
+            assert!(!err.is_not_found(), "ENOTDIR is not NotFound");
+            assert!(matches!(
+                SecurityError::from(err),
+                SecurityError::InvalidPath
+            ));
+        }
+
+        #[test]
+        fn read_phase_io_errors_map_to_read_failed() {
+            let err = CappedReadError::Io(std::io::Error::other("boom"));
+            assert!(matches!(
+                SecurityError::from(err),
+                SecurityError::ReadFailed(_)
             ));
         }
 
@@ -1251,7 +1477,7 @@ mod tests {
             std::os::unix::fs::symlink("/dev/zero", &link).unwrap();
             assert!(matches!(
                 path_validator::read_capped(&link, 1024),
-                Err(SecurityError::NotRegularFile)
+                Err(CappedReadError::NotRegularFile)
             ));
         }
 
@@ -1267,7 +1493,7 @@ mod tests {
             assert!(status.success());
             assert!(matches!(
                 path_validator::read_capped(&fifo, 1024),
-                Err(SecurityError::NotRegularFile)
+                Err(CappedReadError::NotRegularFile)
             ));
         }
     }

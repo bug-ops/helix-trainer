@@ -8,7 +8,9 @@
 //!
 //! - [`CommandExecutor`]: Execute commands with count prefix support
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
+};
 use crate::security::UserError;
 
 /// Format a key command for display in key history
@@ -64,6 +66,10 @@ pub trait CommandExecutor {
     /// The whole string (e.g. `"3d"`) is passed to the simulator unchanged, so
     /// the count is applied according to the command's `CountBehavior`.
     /// This counts as ONE action for scoring purposes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if the command does not exist or fails.
     fn execute_single(&mut self, command: &str) -> Result<(), UserError>;
 
     /// Check if scenario is completed after command execution

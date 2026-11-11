@@ -1,5 +1,6 @@
 //! Tests for quest tracking and XP rewards
 
+use crate::testing::{ncmd, qid, sid};
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -18,9 +19,9 @@ fn test_quest_progress_command_practice() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_x".to_string(),
+            qid("test_x"),
             QuestType::CommandPractice {
-                command: "x".to_string(),
+                command: ncmd("x"),
                 target: 3,
                 current: 0,
             },
@@ -88,7 +89,7 @@ fn test_quest_progress_scenario_completion() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_scenario".to_string(),
+            qid("test_scenario"),
             QuestType::ScenarioCompletion {
                 target: 2,
                 current: 0,
@@ -107,7 +108,7 @@ fn test_quest_progress_scenario_completion() {
         Message::UpdateQuestProgress {
             command: None,
             scenario_completed: true,
-            scenario_id: Some("test_scenario".to_string()),
+            scenario_id: Some(sid("test_scenario")),
             duration: Duration::from_secs(5),
         },
     )
@@ -125,7 +126,7 @@ fn test_quest_progress_scenario_completion() {
         Message::UpdateQuestProgress {
             command: None,
             scenario_completed: true,
-            scenario_id: Some("test_scenario".to_string()),
+            scenario_id: Some(sid("test_scenario")),
             duration: Duration::from_secs(5),
         },
     )
@@ -154,9 +155,9 @@ fn test_quest_completion_awards_bonus_xp() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_quest".to_string(),
+            qid("test_quest"),
             QuestType::CommandPractice {
-                command: "x".to_string(),
+                command: ncmd("x"),
                 target: 1,
                 current: 0,
             },
@@ -199,7 +200,7 @@ fn test_exploration_quest_tracking() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_exploration".to_string(),
+            qid("test_exploration"),
             QuestType::Exploration {
                 target_commands: 3,
                 commands_used: HashSet::new(),
@@ -315,9 +316,9 @@ fn test_quest_progress_changes_tracking() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_quest".to_string(),
+            qid("test_quest"),
             QuestType::CommandPractice {
-                command: "x".to_string(),
+                command: ncmd("x"),
                 target: 3,
                 current: 0,
             },
@@ -329,7 +330,7 @@ fn test_quest_progress_changes_tracking() {
     // Execute command to trigger progress
     let quest_update = crate::ui::state::handlers::apply_quest_progress(
         &mut state,
-        Some("x".to_string()),
+        Some("x"),
         false,
         None,
         Duration::from_secs(0),
@@ -340,7 +341,7 @@ fn test_quest_progress_changes_tracking() {
     let change = &quest_update.changes[0];
     assert_eq!(change.old_progress, 0);
     assert_eq!(change.new_progress, 1);
-    assert!(change.quest_description.contains("x"));
+    assert!(change.quest_description.contains('x'));
 }
 
 /// Regression test for #267: completing a quest through the live message-passing
@@ -354,9 +355,9 @@ fn test_quest_completion_populates_completed_quests_today() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_quest".to_string(),
+            qid("test_quest"),
             QuestType::CommandPractice {
-                command: "x".to_string(),
+                command: ncmd("x"),
                 target: 1,
                 current: 0,
             },
@@ -408,9 +409,9 @@ fn test_streak_increments_next_day_after_live_quest_completion() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_quest".to_string(),
+            qid("test_quest"),
             QuestType::CommandPractice {
-                command: "x".to_string(),
+                command: ncmd("x"),
                 target: 1,
                 current: 0,
             },
@@ -456,13 +457,13 @@ fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
     let quest_ids = ["quest_0", "quest_1", "quest_2"];
     for id in quest_ids {
         state.progress.profile.daily_quests.push(Quest::new(
-            id.to_string(),
+            qid(id),
             QuestType::CommandPractice {
-                command: id.to_string(),
+                command: ncmd(id),
                 target: 1,
                 current: 0,
             },
-            format!("Use {}", id),
+            format!("Use {id}"),
             QuestDifficulty::Easy,
         ));
     }
@@ -502,9 +503,9 @@ fn test_streak_freeze_not_granted_twice() {
     let mut state = create_test_app_state(vec![scenario]);
     state.progress.profile.streak_freeze_available = true;
     state.progress.profile.daily_quests.push(Quest::new(
-        "quest_0".to_string(),
+        qid("quest_0"),
         QuestType::CommandPractice {
-            command: "x".to_string(),
+            command: ncmd("x"),
             target: 1,
             current: 0,
         },

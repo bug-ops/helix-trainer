@@ -15,6 +15,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 use rust_i18n::t;
+use std::collections::VecDeque;
 use tui_big_text::{BigText, PixelSize};
 
 /// Render a centered hint popup
@@ -61,7 +62,11 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 /// border - regardless of how wide the key text grows. If the inner area is
 /// smaller than the minimum legible popup size, rendering is skipped for
 /// that frame instead of drawing illegibly clipped glyphs.
-pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String], bounds: Rect) {
+pub(super) fn render_key_history_popup(
+    frame: &mut Frame,
+    key_history: &VecDeque<String>,
+    bounds: Rect,
+) {
     if key_history.is_empty() {
         return;
     }
@@ -249,9 +254,10 @@ pub(super) fn render_notifications(frame: &mut Frame, state: &AppState) {
 /// it never covers the bottom-row footer (key hints, `/`, `:` and `s`
 /// prompts), and wraps so the backup path stays readable on narrow terminals.
 pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
-    let ProfilePersistence::Quarantined(backup) = state.progress.persistence() else {
+    let ProfilePersistence::Quarantined(quarantine) = state.progress.persistence() else {
         return;
     };
+    let backup = &quarantine.backup;
     let area = frame.area();
     if area.width == 0 || area.height == 0 {
         return;
@@ -265,8 +271,11 @@ pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
         "Profile load failed: saving is disabled this session.".to_string(),
         backup_line,
     ];
-    if matches!(backup, QuarantineOutcome::BackedUp(_)) {
+    if quarantine.can_start_fresh() {
         lines.push(t!("profile.start_fresh_action").to_string());
+    }
+    if quarantine.can_restore_previous() {
+        lines.push(t!("profile.restore_action").to_string());
     }
 
     // +1 line of slack because word wrapping can need more rows than a plain
@@ -323,7 +332,9 @@ mod tests {
         let mut state = crate::testing::app_state::empty_test_app_state();
         state
             .progress
-            .quarantine_profile(QuarantineOutcome::BackedUp(path.into()));
+            .quarantine_profile(crate::testing::quarantine(QuarantineOutcome::BackedUp(
+                path.into(),
+            )));
         state
     }
 
@@ -348,6 +359,34 @@ mod tests {
     }
 
     #[test]
+    fn test_profile_load_banner_offers_restore_only_with_an_available_previous_copy() {
+        use crate::gamification::PreviousCopy;
+        use crate::ui::state::Quarantine;
+
+        let mut state = quarantined_state("/tmp/profile.json.corrupt-1");
+        let without = rows(&render_banner(&state, 100, 12)).join("");
+        assert!(without.contains("Ctrl-N"));
+        assert!(!without.contains("Ctrl-R"), "{without}");
+
+        state.progress.quarantine_profile(Quarantine {
+            backup: QuarantineOutcome::BackedUp("/tmp/profile.json.corrupt-1".into()),
+            previous: PreviousCopy::Available,
+        });
+        let with = rows(&render_banner(&state, 100, 12)).join("");
+        assert!(with.contains("Ctrl-N") && with.contains("Ctrl-R"), "{with}");
+
+        state.progress.quarantine_profile(Quarantine {
+            backup: crate::testing::failed_backup(),
+            previous: PreviousCopy::Available,
+        });
+        let no_backup = rows(&render_banner(&state, 100, 12)).join("");
+        assert!(
+            !no_backup.contains("Ctrl-R"),
+            "no backup, no restore: {no_backup}"
+        );
+    }
+
+    #[test]
     fn test_profile_load_banner_leaves_bottom_row_untouched() {
         let state = quarantined_state("/tmp/profile.json.corrupt-1");
 
@@ -364,7 +403,7 @@ mod tests {
                 // Simulate the Target panel's own border, matching what
                 // `render_editor_pair` renders into `bounds` in production.
                 frame.render_widget(Block::default().borders(Borders::ALL), bounds);
-                render_key_history_popup(frame, keys, bounds);
+                render_key_history_popup(frame, &keys.iter().cloned().collect(), bounds);
             })
             .unwrap();
         terminal.backend().buffer().clone()

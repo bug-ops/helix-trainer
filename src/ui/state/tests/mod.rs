@@ -11,3 +11,4 @@ mod review_tests;
 mod scenario_tests;
 mod sound_tests;
 mod substate_tests;
+mod view_tests;

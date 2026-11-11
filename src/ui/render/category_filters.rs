@@ -14,7 +14,7 @@ use ratatui::{
 ///
 /// `pub(super)` so `end_game.rs` can reuse it for the category-mastery
 /// breakdown instead of duplicating the match.
-pub(super) fn category_display_name(category: &ScenarioCategory) -> &'static str {
+pub(super) fn category_display_name(category: ScenarioCategory) -> &'static str {
     match category {
         ScenarioCategory::Movement => "Movement",
         ScenarioCategory::Editing => "Editing",
@@ -31,7 +31,7 @@ pub(super) fn category_display_name(category: &ScenarioCategory) -> &'static str
 }
 
 /// Get an icon for a category
-fn category_icon(category: &ScenarioCategory) -> &'static str {
+fn category_icon(category: ScenarioCategory) -> &'static str {
     match category {
         ScenarioCategory::Movement => "->",
         ScenarioCategory::Editing => "ed",
@@ -117,10 +117,7 @@ fn render_popup_content(
         // Determine if this category is enabled:
         // - If no categories filter is set (None), all categories are enabled
         // - If categories filter is set, check if this category is in the set
-        let is_enabled = match enabled_categories {
-            None => true, // All enabled when no filter
-            Some(set) => set.contains(category),
-        };
+        let is_enabled = enabled_categories.is_none_or(|set| set.contains(category));
 
         // Build the checkbox indicator
         let checkbox = if is_enabled { "[x]" } else { "[ ]" };
@@ -137,8 +134,8 @@ fn render_popup_content(
             ("   ", Style::default().fg(Color::White))
         };
 
-        let icon = category_icon(category);
-        let name = category_display_name(category);
+        let icon = category_icon(*category);
+        let name = category_display_name(*category);
 
         // Checkbox color: green if enabled, gray if disabled
         let checkbox_style = if is_enabled {
@@ -149,8 +146,8 @@ fn render_popup_content(
 
         lines.push(Line::from(vec![
             Span::styled(prefix, base_style),
-            Span::styled(format!("{} ", checkbox), checkbox_style),
-            Span::styled(format!("{} ", icon), base_style.fg(Color::Cyan)),
+            Span::styled(format!("{checkbox} "), checkbox_style),
+            Span::styled(format!("{icon} "), base_style.fg(Color::Cyan)),
             Span::styled(name, base_style),
         ]));
     }
@@ -158,10 +155,7 @@ fn render_popup_content(
     // Add summary line
     lines.push(Line::from("")); // Spacing
 
-    let enabled_count = match enabled_categories {
-        None => categories.len(),
-        Some(set) => set.len(),
-    };
+    let enabled_count = enabled_categories.map_or(categories.len(), std::collections::HashSet::len);
 
     let summary_text = if enabled_count == categories.len() {
         "All categories enabled".to_string()
@@ -309,62 +303,62 @@ mod tests {
     #[test]
     fn test_category_display_name_all_variants() {
         assert_eq!(
-            category_display_name(&ScenarioCategory::Movement),
+            category_display_name(ScenarioCategory::Movement),
             "Movement"
         );
-        assert_eq!(category_display_name(&ScenarioCategory::Editing), "Editing");
+        assert_eq!(category_display_name(ScenarioCategory::Editing), "Editing");
         assert_eq!(
-            category_display_name(&ScenarioCategory::Clipboard),
+            category_display_name(ScenarioCategory::Clipboard),
             "Clipboard"
         );
-        assert_eq!(category_display_name(&ScenarioCategory::Search), "Search");
+        assert_eq!(category_display_name(ScenarioCategory::Search), "Search");
         assert_eq!(
-            category_display_name(&ScenarioCategory::Selection),
+            category_display_name(ScenarioCategory::Selection),
             "Selection"
         );
         assert_eq!(
-            category_display_name(&ScenarioCategory::TextObjects),
+            category_display_name(ScenarioCategory::TextObjects),
             "Text Objects"
         );
         assert_eq!(
-            category_display_name(&ScenarioCategory::Advanced),
+            category_display_name(ScenarioCategory::Advanced),
             "Advanced"
         );
         assert_eq!(
-            category_display_name(&ScenarioCategory::Registers),
+            category_display_name(ScenarioCategory::Registers),
             "Registers"
         );
-        assert_eq!(category_display_name(&ScenarioCategory::Multi), "Multi");
-        assert_eq!(category_display_name(&ScenarioCategory::Other), "Other");
+        assert_eq!(category_display_name(ScenarioCategory::Multi), "Multi");
+        assert_eq!(category_display_name(ScenarioCategory::Other), "Other");
     }
 
     #[test]
     fn test_category_icon_all_variants() {
         // Just verify all variants return non-empty strings
-        assert!(!category_icon(&ScenarioCategory::Movement).is_empty());
-        assert!(!category_icon(&ScenarioCategory::Editing).is_empty());
-        assert!(!category_icon(&ScenarioCategory::Clipboard).is_empty());
-        assert!(!category_icon(&ScenarioCategory::Search).is_empty());
-        assert!(!category_icon(&ScenarioCategory::Selection).is_empty());
-        assert!(!category_icon(&ScenarioCategory::TextObjects).is_empty());
-        assert!(!category_icon(&ScenarioCategory::Advanced).is_empty());
-        assert!(!category_icon(&ScenarioCategory::Registers).is_empty());
-        assert!(!category_icon(&ScenarioCategory::Multi).is_empty());
-        assert!(!category_icon(&ScenarioCategory::Other).is_empty());
+        assert!(!category_icon(ScenarioCategory::Movement).is_empty());
+        assert!(!category_icon(ScenarioCategory::Editing).is_empty());
+        assert!(!category_icon(ScenarioCategory::Clipboard).is_empty());
+        assert!(!category_icon(ScenarioCategory::Search).is_empty());
+        assert!(!category_icon(ScenarioCategory::Selection).is_empty());
+        assert!(!category_icon(ScenarioCategory::TextObjects).is_empty());
+        assert!(!category_icon(ScenarioCategory::Advanced).is_empty());
+        assert!(!category_icon(ScenarioCategory::Registers).is_empty());
+        assert!(!category_icon(ScenarioCategory::Multi).is_empty());
+        assert!(!category_icon(ScenarioCategory::Other).is_empty());
     }
 
     #[test]
     fn test_category_icon_values() {
-        assert_eq!(category_icon(&ScenarioCategory::Movement), "->");
-        assert_eq!(category_icon(&ScenarioCategory::Editing), "ed");
-        assert_eq!(category_icon(&ScenarioCategory::Clipboard), "[]");
-        assert_eq!(category_icon(&ScenarioCategory::Search), "??");
-        assert_eq!(category_icon(&ScenarioCategory::Selection), "##");
-        assert_eq!(category_icon(&ScenarioCategory::TextObjects), "{}");
-        assert_eq!(category_icon(&ScenarioCategory::Advanced), "++");
-        assert_eq!(category_icon(&ScenarioCategory::Registers), "\"\"");
-        assert_eq!(category_icon(&ScenarioCategory::Multi), "**");
-        assert_eq!(category_icon(&ScenarioCategory::Other), "..");
+        assert_eq!(category_icon(ScenarioCategory::Movement), "->");
+        assert_eq!(category_icon(ScenarioCategory::Editing), "ed");
+        assert_eq!(category_icon(ScenarioCategory::Clipboard), "[]");
+        assert_eq!(category_icon(ScenarioCategory::Search), "??");
+        assert_eq!(category_icon(ScenarioCategory::Selection), "##");
+        assert_eq!(category_icon(ScenarioCategory::TextObjects), "{}");
+        assert_eq!(category_icon(ScenarioCategory::Advanced), "++");
+        assert_eq!(category_icon(ScenarioCategory::Registers), "\"\"");
+        assert_eq!(category_icon(ScenarioCategory::Multi), "**");
+        assert_eq!(category_icon(ScenarioCategory::Other), "..");
     }
 
     #[test]

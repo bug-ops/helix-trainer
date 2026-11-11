@@ -1,10 +1,11 @@
 //! Achievements screen rendering
 
 use crate::gamification::AchievementEngine;
+use crate::ui::layout::{achievement_chunks, clamp_achievement_scroll};
 use crate::ui::state::{AppState, TypedScreen};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::Alignment,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
@@ -17,23 +18,10 @@ use ratatui::{
 /// full unlocked/locked achievement roster. The list scrolls (`j`/`k`/arrows) and clamps
 /// its offset to the actual content height, so it degrades gracefully on small terminals
 /// instead of silently truncating with no indicator.
-pub(super) fn render_achievements_screen(frame: &mut Frame, state: &mut AppState) {
+pub(super) fn render_achievements_screen(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
-    // margin(1), not the Statistics/Profile screens' margin(2): at the minimum supported
-    // terminal size (80x24), Length(3)+Min(15)+Length(3)=21 rows doesn't fit the 20 rows
-    // margin(2) leaves, and the layout solver silently squeezes the Instructions section
-    // to 2 rows (0 usable content height inside its border) - which would swallow the
-    // achievement count + scroll position indicator without any visible sign of it.
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints([
-            Constraint::Length(3), // Title
-            Constraint::Min(15),   // Content
-            Constraint::Length(3), // Instructions
-        ])
-        .split(area);
+    let chunks = achievement_chunks(area);
 
     let achievements = AchievementEngine::all_achievements();
     let unlocked_count = achievements
@@ -63,8 +51,7 @@ pub(super) fn render_achievements_screen(frame: &mut Frame, state: &mut AppState
         String::new()
     };
     let instructions = Paragraph::new(format!(
-        "'p': profile | 's': statistics | 'j'/'k': scroll | 'm': menu{}",
-        scroll_hint
+        "'p': profile | 's': statistics | 'j'/'k': scroll | 'm': menu{scroll_hint}"
     ))
     .style(Style::default().fg(Color::Gray))
     .alignment(Alignment::Center)
@@ -77,7 +64,7 @@ pub(super) fn render_achievements_screen(frame: &mut Frame, state: &mut AppState
 /// list doesn't fully fit, for the instructions bar's position indicator.
 fn render_achievements_content(
     frame: &mut Frame,
-    state: &mut AppState,
+    state: &AppState,
     achievements: &[crate::gamification::Achievement],
     area: ratatui::layout::Rect,
 ) -> Option<(usize, usize)> {
@@ -85,14 +72,14 @@ fn render_achievements_content(
     let inner_area = content_block.inner(area);
     frame.render_widget(content_block, area);
 
-    let TypedScreen::Achievements(ref mut data) = state.screen else {
+    let TypedScreen::Achievements(data) = &state.screen else {
         return None;
     };
 
+    // Read-only defensive clamp; `AppState::normalize_view` clamps the stored offset
     let visible_height = inner_area.height as usize;
     let total = achievements.len();
-    let max_offset = total.saturating_sub(visible_height);
-    data.scroll_offset = data.scroll_offset.min(max_offset);
+    let scroll_offset = clamp_achievement_scroll(data.scroll_offset, total, visible_height);
 
     let profile = &state.progress.profile;
     let mut lines = Vec::with_capacity(total);
@@ -115,14 +102,13 @@ fn render_achievements_content(
         };
 
         lines.push(Line::from(vec![
-            Span::raw(format!("  {} ", marker)),
+            Span::raw(format!("  {marker} ")),
             Span::styled(format!("{:20}", achievement.name), name_style),
             Span::raw(" - "),
             Span::styled(achievement.description.clone(), desc_style),
         ]));
     }
 
-    let scroll_offset = data.scroll_offset;
     let list = Paragraph::new(lines)
         .alignment(Alignment::Left)
         .style(Style::default().fg(Color::White))

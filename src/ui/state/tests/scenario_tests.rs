@@ -1,9 +1,9 @@
 //! Tests for scenario lifecycle (start, complete, abandon, retry)
 
+use crate::testing::{ncmd, qid};
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario, exec};
-use crate::game::PlayableScenario;
 use crate::helix::commands::{CMD_DELETE_SELECTION, CMD_SELECT_LINE};
 use crate::testing::update_executing_effects as update;
 use crate::ui::state::{Message, TypedScreen};
@@ -19,7 +19,7 @@ fn test_start_scenario() {
     assert_matches!(state.screen, TypedScreen::Task(_));
     if let TypedScreen::Task(task_data) = &state.screen {
         // Verify session exists in task data
-        assert!(!task_data.session.current_content().is_empty());
+        assert!(!task_data.session.playable().current_content().is_empty());
     }
 }
 
@@ -52,9 +52,9 @@ fn test_complete_scenario_navigates_to_results() {
     update(&mut state, exec(CMD_SELECT_LINE)).unwrap();
     update(&mut state, exec(CMD_DELETE_SELECTION)).unwrap();
 
-    // After completing the scenario, completion_time is set (success animation starts)
+    // After completing the scenario the task is completed (success animation starts)
     // Screen stays on Task until CompleteScenario message is sent after delay
-    assert!(state.ui.completion_time.is_some());
+    assert!(state.screen.completed_task().is_some());
     assert_matches!(state.screen, TypedScreen::Task(_));
 
     // Simulate the delayed transition (event loop sends CompleteScenario after 1.5s)
@@ -62,6 +62,64 @@ fn test_complete_scenario_navigates_to_results() {
 
     // Now should be on Results screen
     assert_matches!(state.screen, TypedScreen::Results(_));
+}
+
+/// Complete the test scenario and stay on the task screen for the success animation
+fn completed_task_state() -> crate::ui::state::AppState {
+    let mut state = create_test_app_state(vec![create_test_scenario()]);
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
+    update(&mut state, exec(CMD_SELECT_LINE)).unwrap();
+    update(&mut state, exec(CMD_DELETE_SELECTION)).unwrap();
+    assert!(state.screen.completed_task().is_some());
+    state
+}
+
+#[test]
+fn test_completed_task_carries_its_feedback() {
+    let state = completed_task_state();
+
+    let completed = state.screen.completed_task().unwrap();
+    assert!(completed.feedback.success());
+    assert_eq!(
+        completed.feedback.scenario_id,
+        completed.session.scenario().id
+    );
+}
+
+#[test]
+fn test_commands_are_ignored_while_the_task_is_completed() {
+    let mut state = completed_task_state();
+    let content_before = match &state.screen {
+        TypedScreen::Task(task) => task.session.playable().current_content(),
+        _ => panic!("Should stay on Task screen"),
+    };
+
+    update(&mut state, exec("j")).unwrap();
+
+    let TypedScreen::Task(task) = &state.screen else {
+        panic!("Should stay on Task screen");
+    };
+    assert!(task.session.completed().is_some());
+    assert_eq!(task.session.playable().current_content(), content_before);
+}
+
+#[test]
+fn test_abandon_during_success_animation_keeps_completed_task() {
+    let mut state = completed_task_state();
+
+    update(&mut state, Message::AbandonScenario).unwrap();
+
+    assert!(state.screen.completed_task().is_some());
+}
+
+#[test]
+fn test_complete_scenario_without_completed_task_goes_to_menu() {
+    let mut state = create_test_app_state(vec![create_test_scenario()]);
+    crate::testing::start_scenario_from_menu(&mut state, 0).unwrap();
+
+    update(&mut state, Message::CompleteScenario).unwrap();
+
+    assert_matches!(state.screen, TypedScreen::Menu(_));
 }
 
 #[test]
@@ -76,7 +134,7 @@ fn test_abandon_scenario_navigates_to_results() {
     update(&mut state, Message::AbandonScenario).unwrap();
     // Should transition to Results screen
     if let TypedScreen::Results(results_data) = &state.screen {
-        assert!(!results_data.feedback.success);
+        assert!(!results_data.feedback.success());
         assert_eq!(results_data.feedback.score, 0);
     } else {
         panic!("Should be on Results screen after abandon");
@@ -116,7 +174,7 @@ fn test_retry_scenario_resets_state() {
 
     // Verify we have 1 action recorded
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.session.action_count(), 1);
+        assert_eq!(task_data.session.playable().action_count(), 1);
     }
 
     // Abandon to go to Results screen
@@ -126,7 +184,7 @@ fn test_retry_scenario_resets_state() {
     // Now retry - this should create a fresh session with action count = 0
     update(&mut state, Message::RetryScenario).unwrap();
     if let TypedScreen::Task(task_data) = &state.screen {
-        assert_eq!(task_data.session.action_count(), 0);
+        assert_eq!(task_data.session.playable().action_count(), 0);
     } else {
         panic!("Should be on Task screen after retry");
     }
@@ -147,9 +205,9 @@ fn test_previously_completed_quests_tracking() {
     {
         let profile = &mut state.progress.profile;
         profile.daily_quests.push(Quest::new(
-            "test_quest".to_string(),
+            qid("test_quest"),
             QuestType::CommandPractice {
-                command: "x".to_string(),
+                command: ncmd("x"),
                 target: 1,
                 current: 0,
             },
@@ -166,11 +224,11 @@ fn test_previously_completed_quests_tracking() {
     update(&mut state, exec(CMD_SELECT_LINE)).unwrap();
     update(&mut state, exec(CMD_DELETE_SELECTION)).unwrap();
 
-    // After executing the solution, completion_time is set (success animation)
+    // After executing the solution the task is completed (success animation)
     // Screen stays on Task until CompleteScenario message is sent after delay
     assert!(
-        state.ui.completion_time.is_some(),
-        "completion_time should be set after completing scenario"
+        state.screen.completed_task().is_some(),
+        "the task should be completed after finishing the scenario"
     );
     assert_matches!(
         state.screen,
@@ -184,8 +242,7 @@ fn test_previously_completed_quests_tracking() {
         let quest = &profile.daily_quests[0];
         assert!(
             quest.is_completed(),
-            "Quest should be completed after executing 'x'. Quest state: {:?}",
-            quest
+            "Quest should be completed after executing 'x'. Quest state: {quest:?}"
         );
     }
 

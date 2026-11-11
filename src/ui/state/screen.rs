@@ -1,42 +1,49 @@
 //! Type-safe screen variants with required data
 //!
-//! This module implements the TypedScreen pattern, where each screen variant
+//! This module implements the `TypedScreen` pattern, where each screen variant
 //! carries the data required for that screen. This makes invalid states
 //! unrepresentable at compile time - you can't be on the Task screen without
-//! an active GameSession.
+//! an active `GameSession`.
 
+use crate::config::Scenario;
 use crate::config::ScenarioCategory;
-use crate::game::{Abandoned, Active, Completed, Feedback, GameSession};
+use crate::game::{
+    Abandoned, Active, Completed, Feedback, GameSession, PlayableScenario, SessionAfterAction,
+};
+use crate::ids::ScenarioId;
 use crate::input::typestate::InputStateMachine;
 use crate::learning::ScenarioMastery;
 use crate::minigame::MiniGameSession;
+use crate::security::SecurityError;
 use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
+use std::collections::VecDeque;
+use std::time::Instant;
 
 /// Maximum number of keys to keep in history
 const KEY_HISTORY_CAPACITY: usize = 5;
 
 /// Shared key history for tracking recent keypresses
 ///
-/// Used by both training mode (TaskData) and arcade mode (MiniGameData)
+/// Used by both training mode (`TaskData`) and arcade mode (`MiniGameData`)
 /// to display recent key presses in the UI. Keeps the last 5 keys
 /// with most recent first.
 #[derive(Debug, Clone, Default)]
 pub struct KeyHistory {
     /// History of keypresses (most recent first)
-    keys: Vec<String>,
+    keys: VecDeque<String>,
 }
 
 impl KeyHistory {
     /// Create a new empty key history
     pub fn new() -> Self {
         Self {
-            keys: Vec::with_capacity(KEY_HISTORY_CAPACITY),
+            keys: VecDeque::with_capacity(KEY_HISTORY_CAPACITY),
         }
     }
 
     /// Add a key to the history (keeps last 5, most recent first)
     pub fn push(&mut self, key: String) {
-        self.keys.insert(0, key);
+        self.keys.push_front(key);
         if self.keys.len() > KEY_HISTORY_CAPACITY {
             self.keys.truncate(KEY_HISTORY_CAPACITY);
         }
@@ -47,8 +54,8 @@ impl KeyHistory {
         self.keys.clear();
     }
 
-    /// Get the keys as a slice (most recent first)
-    pub fn keys(&self) -> &[String] {
+    /// Get the keys, most recent first
+    pub fn keys(&self) -> &VecDeque<String> {
         &self.keys
     }
 
@@ -134,6 +141,14 @@ impl TypedScreen {
                 ReturnDestination::PausedMiniGame(data) => Some(data),
                 ReturnDestination::Menu => None,
             },
+            _ => None,
+        }
+    }
+
+    /// The finished task while the task screen shows its success animation
+    pub fn completed_task(&self) -> Option<&CompletedTask> {
+        match self {
+            Self::Task(data) => data.session.completed(),
             _ => None,
         }
     }
@@ -228,11 +243,116 @@ impl HintPanel {
     }
 }
 
-/// Data required for task screen (contains active session)
+/// A finished task kept on the task screen during the success animation
+///
+/// Owns the completed session together with the feedback derived from it and the instant it
+/// finished, so none of the three can exist without the others.
+#[derive(Debug)]
+pub struct CompletedTask {
+    /// The finished session, rendered as the final editor state
+    pub session: GameSession<Completed>,
+
+    /// Feedback derived once from the completed session
+    pub feedback: Feedback,
+
+    /// When the scenario was completed; the success animation runs from here
+    pub completed_at: Instant,
+}
+
+impl CompletedTask {
+    /// Derive the feedback of a completed session and stamp the completion time
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError`] when the scenario's scoring cannot score the run.
+    pub fn new(session: GameSession<Completed>) -> Result<Self, SecurityError> {
+        let feedback = session.feedback()?;
+        Ok(Self {
+            session,
+            feedback,
+            completed_at: Instant::now(),
+        })
+    }
+}
+
+/// Session of the task screen: being played, or finished and showing the success animation
+///
+/// A completed task cannot exist without its session and feedback, and an active task carries
+/// no completion data.
+#[derive(Debug)]
+pub enum TaskSession {
+    /// The scenario is being played
+    Active(GameSession<Active>),
+
+    /// The scenario was completed and the screen waits for the success animation to end
+    Completed(CompletedTask),
+}
+
+impl TaskSession {
+    /// The session while it is being played, `None` once completed
+    pub fn active(&self) -> Option<&GameSession<Active>> {
+        match self {
+            Self::Active(session) => Some(session),
+            Self::Completed(_) => None,
+        }
+    }
+
+    /// Mutable counterpart of [`TaskSession::active`]
+    pub fn active_mut(&mut self) -> Option<&mut GameSession<Active>> {
+        match self {
+            Self::Active(session) => Some(session),
+            Self::Completed(_) => None,
+        }
+    }
+
+    /// The completed task, `None` while the scenario is being played
+    pub fn completed(&self) -> Option<&CompletedTask> {
+        match self {
+            Self::Active(_) => None,
+            Self::Completed(task) => Some(task),
+        }
+    }
+
+    /// Read-only view of the editor state, valid in either state
+    pub fn playable(&self) -> &dyn PlayableScenario {
+        match self {
+            Self::Active(session) => session,
+            Self::Completed(task) => &task.session,
+        }
+    }
+
+    /// The scenario being played, in either state
+    pub fn scenario(&self) -> &Scenario {
+        match self {
+            Self::Active(session) => session.scenario(),
+            Self::Completed(task) => task.session.scenario(),
+        }
+    }
+
+    /// Resolve the state after an action was applied: an active session whose editor now matches
+    /// the target becomes a completed task, everything else is unchanged
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError`] when the completed run cannot be scored.
+    pub fn finish_action(self) -> Result<Self, SecurityError> {
+        match self {
+            Self::Active(session) => match session.finish_action() {
+                SessionAfterAction::StillActive(session) => Ok(Self::Active(session)),
+                SessionAfterAction::Completed(session) => {
+                    CompletedTask::new(session).map(Self::Completed)
+                }
+            },
+            completed @ Self::Completed(_) => Ok(completed),
+        }
+    }
+}
+
+/// Data required for task screen
 #[derive(Debug)]
 pub struct TaskData {
-    /// Active game session (guaranteed to exist)
-    pub session: GameSession<Active>,
+    /// Session of the task: active while playing, completed during the success animation
+    pub session: TaskSession,
 
     /// Typestate-based input state machine for multi-key commands
     ///
@@ -240,7 +360,7 @@ pub struct TaskData {
     /// state machine that tracks pending input states (goto, find, count, etc.)
     pub input_state: InputStateMachine,
 
-    /// History of recent keypresses (shared KeyHistory struct)
+    /// History of recent keypresses (shared `KeyHistory` struct)
     pub key_history: KeyHistory,
 
     /// Hint panel state
@@ -255,13 +375,13 @@ pub struct TaskData {
 }
 
 impl TaskData {
-    /// Create new TaskData with an active session
+    /// Create new `TaskData` with an active session
     ///
     /// # Arguments
     /// * `session` - Active game session
     pub fn new(session: GameSession<Active>) -> Self {
         Self {
-            session,
+            session: TaskSession::Active(session),
             input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
             hint: HintPanel::Hidden,
@@ -270,20 +390,32 @@ impl TaskData {
         }
     }
 
-    /// Create new TaskData with an active session and scenario index
+    /// Create new `TaskData` with an active session and scenario index
     ///
     /// # Arguments
     /// * `session` - Active game session
     /// * `index` - Index of scenario in filtered list
     pub fn with_index(session: GameSession<Active>, index: usize) -> Self {
         Self {
-            session,
+            session: TaskSession::Active(session),
             input_state: InputStateMachine::new(),
             key_history: KeyHistory::new(),
             hint: HintPanel::Hidden,
             last_command: None,
             scenario_index: Some(index),
         }
+    }
+
+    /// Resolve the session state after an action: see [`TaskSession::finish_action`]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError`] when the completed run cannot be scored.
+    pub fn finish_action(self) -> Result<Self, SecurityError> {
+        Ok(Self {
+            session: self.session.finish_action()?,
+            ..self
+        })
     }
 
     /// Add a key to the history (keeps last 5)
@@ -321,7 +453,7 @@ pub struct ResultsData {
 }
 
 impl ResultsData {
-    /// Create new ResultsData from a completed session
+    /// Create new `ResultsData` from a completed session
     ///
     /// # Arguments
     /// * `session` - Completed game session
@@ -342,7 +474,7 @@ impl ResultsData {
         }
     }
 
-    /// Create new ResultsData from an abandoned session
+    /// Create new `ResultsData` from an abandoned session
     ///
     /// # Arguments
     /// * `session` - Abandoned game session
@@ -386,7 +518,7 @@ impl CompletedOrAbandoned {
     }
 
     /// Get the scenario ID from either variant
-    pub fn scenario_id(&self) -> &str {
+    pub fn scenario_id(&self) -> &ScenarioId {
         match self {
             Self::Completed(session) => &session.scenario().id,
             Self::Abandoned(session) => &session.scenario().id,
@@ -453,7 +585,7 @@ pub struct ReviewData {
 }
 
 impl ReviewData {
-    /// Create new ReviewData with a review session
+    /// Create new `ReviewData` with a review session
     pub fn new(session: ReviewSessionState) -> Self {
         Self { session }
     }
@@ -522,11 +654,13 @@ pub enum TopMode {
 
 impl TopMode {
     /// The mode above this one, or itself at the top
+    #[must_use]
     pub fn previous(self) -> Self {
         Self::Training
     }
 
     /// The mode below this one, or itself at the bottom
+    #[must_use]
     pub fn next(self) -> Self {
         Self::Arcade
     }
@@ -559,6 +693,7 @@ impl MiniGameModeKind {
     pub const ALL: [Self; 3] = [Self::Arcade, Self::Survival, Self::Challenge];
 
     /// The mode above this one, wrapping from the first to the last
+    #[must_use]
     pub fn previous(self) -> Self {
         match self {
             Self::Arcade => Self::Challenge,
@@ -568,6 +703,7 @@ impl MiniGameModeKind {
     }
 
     /// The mode below this one, wrapping from the last to the first
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             Self::Arcade => Self::Survival,
@@ -672,7 +808,7 @@ pub struct MiniGameData {
     pub input_state: InputStateMachine,
     /// Last XP earned (for popup display during transition)
     pub last_xp_earned: Option<u64>,
-    /// History of recent keypresses (shared KeyHistory struct)
+    /// History of recent keypresses (shared `KeyHistory` struct)
     pub key_history: KeyHistory,
 }
 
@@ -709,7 +845,7 @@ impl MiniGameData {
 
 /// Trait for types that use typestate-based input state machine
 ///
-/// TaskData and MiniGameData use `InputStateMachine` for handling multi-key
+/// `TaskData` and `MiniGameData` use `InputStateMachine` for handling multi-key
 /// Helix commands with compile-time safety. This trait provides uniform
 /// access to the input state machine.
 ///
@@ -782,6 +918,7 @@ impl InputStateAccess for MiniGameData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::sid;
 
     #[test]
     fn test_menu_data_default() {
@@ -804,7 +941,7 @@ mod tests {
         use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
-            id: "test".to_string(),
+            id: sid("test"),
             name: "Test".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -862,7 +999,7 @@ mod tests {
         use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
-            id: "test".to_string(),
+            id: sid("test"),
             name: "Test".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -902,7 +1039,7 @@ mod tests {
         let mut task_data = TaskData::new(session);
 
         for i in 0..7 {
-            task_data.add_key_to_history(format!("key{}", i));
+            task_data.add_key_to_history(format!("key{i}"));
         }
 
         // Should only keep last 5
@@ -916,7 +1053,7 @@ mod tests {
         use crate::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
-            id: "test_123".to_string(),
+            id: sid("test_123"),
             name: "Test".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -958,7 +1095,7 @@ mod tests {
         let coa = CompletedOrAbandoned::Abandoned(abandoned);
         assert!(coa.is_abandoned());
         assert!(!coa.is_completed());
-        assert_eq!(coa.scenario_id(), "test_123");
+        assert_eq!(coa.scenario_id().as_str(), "test_123");
     }
 
     #[test]

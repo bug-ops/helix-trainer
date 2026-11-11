@@ -1,5 +1,8 @@
-//! Per-language indent unit used by `>`, `<` and Insert-mode `Tab`.
+//! Indent unit used by `>`, `<`, Insert-mode `Tab` and new-line indentation.
 
+use super::language::LanguageRules;
+use helix_core::Rope;
+use helix_core::indent::{IndentStyle, auto_detect_indent_style};
 use std::num::NonZeroU8;
 
 /// Tab stop width `hx` uses for tab characters when the unit is a tab.
@@ -27,15 +30,8 @@ pub enum IndentUnit {
     Tab,
 }
 
-const FOUR_SPACES: IndentUnit = IndentUnit::Spaces(NonZeroU8::new(4).unwrap());
-const TWO_SPACES: IndentUnit = IndentUnit::Spaces(NonZeroU8::new(2).unwrap());
-
-/// Languages used by bundled scenarios, with the unit `hx` 25.07.1 applies.
-///
-/// A unit test over the embedded scenarios fails when a scenario uses a
-/// language that is missing here.
-const LANGUAGE_UNITS: [(&str, IndentUnit); 3] =
-    [("rs", FOUR_SPACES), ("md", TWO_SPACES), ("py", FOUR_SPACES)];
+pub(super) const FOUR_SPACES: IndentUnit = IndentUnit::Spaces(NonZeroU8::new(4).unwrap());
+pub(super) const TWO_SPACES: IndentUnit = IndentUnit::Spaces(NonZeroU8::new(2).unwrap());
 
 impl IndentUnit {
     /// Unit for scenarios that name no language or one outside the table
@@ -47,9 +43,30 @@ impl IndentUnit {
     /// The unit `hx` 25.07.1 uses for `language` (a file-extension token), or
     /// `None` when the language has no table entry
     pub fn for_language(language: &str) -> Option<Self> {
-        LANGUAGE_UNITS
-            .iter()
-            .find_map(|&(name, unit)| (name == language).then_some(unit))
+        LanguageRules::for_language(language).map(|rules| rules.indent_unit)
+    }
+
+    /// The unit `hx` auto-detects from consistently indented `text`, or
+    /// `None` when the text reveals none
+    ///
+    /// `hx` prefers this over the language default, so a document indented
+    /// with 8 spaces indents by 8.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_core::Rope;
+    /// use helix_trainer::helix::IndentUnit;
+    ///
+    /// let text = Rope::from_str("a\n        b\n                c\n        d\n");
+    /// assert_eq!(IndentUnit::detect(&text).unwrap().width(), 8);
+    /// assert_eq!(IndentUnit::detect(&Rope::from_str("a\nb\n")), None);
+    /// ```
+    pub fn detect(text: &Rope) -> Option<Self> {
+        match auto_detect_indent_style(text)? {
+            IndentStyle::Tabs => Some(Self::Tab),
+            IndentStyle::Spaces(width) => NonZeroU8::new(width).map(Self::Spaces),
+        }
     }
 
     /// Width of one unit in columns, as `<` measures leading whitespace

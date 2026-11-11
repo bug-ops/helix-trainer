@@ -3,12 +3,12 @@
 //! Loads quest definitions from TOML files, following the same
 //! security patterns as scenario loading.
 
+use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::security::limits::{
     MAX_CUSTOM_XP_REWARD, MAX_LOCALE_LENGTH, MAX_QUEST_DESCRIPTION_LENGTH, MAX_QUEST_NAME_LENGTH,
     MAX_QUEST_TARGET, MAX_QUEST_TEMPLATES_PER_FILE, MAX_REQUIRED_CONDITIONS,
     MAX_SCENARIO_FILE_SIZE, MAX_SPEED_RUN_TIME_SECONDS, MAX_VERSION_LENGTH,
 };
-use crate::security::validators::validate_id_field;
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -41,8 +41,7 @@ pub struct QuestsMetadata {
 #[serde(deny_unknown_fields)]
 pub struct QuestTemplate {
     /// Unique identifier, validated as a safe id.
-    #[serde(deserialize_with = "validate_id_field")]
-    pub id: String,
+    pub id: QuestId,
     /// Display name shown on the quest card.
     pub name: String,
     /// One-line goal description shown to the player.
@@ -88,7 +87,7 @@ pub enum QuestSpec {
     /// Execute one command a number of times.
     CommandPractice {
         /// Command whose executions are counted.
-        command: String,
+        command: NormalizedCommand,
         /// Number of executions required.
         target: u32,
     },
@@ -100,7 +99,7 @@ pub enum QuestSpec {
     /// Finish one specific scenario within a time limit.
     SpeedRun {
         /// Scenario that must be completed.
-        scenario_id: String,
+        scenario_id: ScenarioId,
         /// Time limit in seconds.
         time_limit_seconds: u64,
     },
@@ -127,7 +126,7 @@ pub struct XpConfig {
 
 /// Quest unlock conditions
 ///
-/// INVARIANT: min_level <= max_level when both are set, checked by
+/// INVARIANT: `min_level` <= `max_level` when both are set, checked by
 /// `QuestLoader::validate_quest`.
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
@@ -140,10 +139,10 @@ pub struct QuestConditions {
     pub max_level: Option<u32>,
     /// Commands the player must already have practiced.
     #[serde(default)]
-    pub requires_commands: Vec<String>,
+    pub requires_commands: Vec<NormalizedCommand>,
     /// Scenarios the player must already have completed.
     #[serde(default)]
-    pub requires_scenarios: Vec<String>,
+    pub requires_scenarios: Vec<ScenarioId>,
 }
 
 /// Custom deserialization for version field to validate format
@@ -159,8 +158,7 @@ where
     }
     if s.len() > MAX_VERSION_LENGTH {
         return Err(serde::de::Error::custom(format!(
-            "Invalid version: max {} characters",
-            MAX_VERSION_LENGTH
+            "Invalid version: max {MAX_VERSION_LENGTH} characters"
         )));
     }
 
@@ -178,8 +176,7 @@ where
         // Locale should be 1-MAX_LOCALE_LENGTH chars (e.g., "en", "ru", "en_US")
         if locale.is_empty() || locale.len() > MAX_LOCALE_LENGTH {
             return Err(serde::de::Error::custom(format!(
-                "Invalid locale: must be 1-{} characters",
-                MAX_LOCALE_LENGTH
+                "Invalid locale: must be 1-{MAX_LOCALE_LENGTH} characters"
             )));
         }
         // Only allow alphanumeric and underscore
@@ -233,7 +230,7 @@ impl QuestLoader {
     /// in order and returns the first that loads successfully.
     ///
     /// # Errors
-    /// Returns UserError if no candidate path loads or validation fails
+    /// Returns `UserError` if no candidate path loads or validation fails
     ///
     /// Not reached from production code today — see the [`QuestLoader`] type
     /// docs for why this filesystem path is retained.
@@ -246,20 +243,20 @@ impl QuestLoader {
                 Err(e) => last_err = Some(e),
             }
         }
-        Err(last_err.unwrap_or(UserError::ScenarioLoadError))
+        Err(last_err.unwrap_or(UserError::scenario_load_error()))
     }
 
     /// Load quest templates from a TOML file
     ///
     /// # Security Validations
     /// - Path must be within allowed directories (prevents path traversal)
-    /// - File size must not exceed MAX_SCENARIO_FILE_SIZE
+    /// - File size must not exceed `MAX_SCENARIO_FILE_SIZE`
     /// - TOML must be valid
-    /// - Quest count must not exceed MAX_QUEST_TEMPLATES_PER_FILE
+    /// - Quest count must not exceed `MAX_QUEST_TEMPLATES_PER_FILE`
     /// - Each quest template is validated for parameter correctness
     ///
     /// # Errors
-    /// Returns UserError with sanitized message if any validation fails
+    /// Returns `UserError` with sanitized message if any validation fails
     ///
     /// Not reached from production code today — see the [`QuestLoader`] type
     /// docs for why this filesystem path is retained.
@@ -276,13 +273,13 @@ impl QuestLoader {
 
         // Bounded read of a regular file to prevent resource exhaustion
         let content = path_validator::read_capped(&canonical, MAX_SCENARIO_FILE_SIZE)
-            .map_err(UserError::from)?;
+            .map_err(|e| UserError::from(SecurityError::from(e)))?;
 
         // Parse, count-check, and validate each quest template
         let quests = super::loader::parse_and_validate::<QuestsFile>(
             &content,
             MAX_QUEST_TEMPLATES_PER_FILE,
-            |q| self.validate_quest(q),
+            Self::validate_quest,
         )
         .map_err(UserError::from)?;
 
@@ -303,7 +300,7 @@ impl QuestLoader {
     ///
     /// # Errors
     ///
-    /// Returns UserError if no embedded data exists for the locale or
+    /// Returns `UserError` if no embedded data exists for the locale or
     /// if validation fails.
     ///
     /// # Examples
@@ -319,7 +316,7 @@ impl QuestLoader {
     pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<QuestTemplate>, UserError> {
         let content = embedded::get_embedded_quests(locale).ok_or_else(|| {
             tracing::warn!(locale = locale, "No embedded quests for locale");
-            UserError::ScenarioLoadError
+            UserError::scenario_load_error()
         })?;
 
         tracing::info!(locale = locale, "Loading quests from embedded data");
@@ -328,7 +325,7 @@ impl QuestLoader {
         let quests = super::loader::parse_and_validate::<QuestsFile>(
             content,
             MAX_QUEST_TEMPLATES_PER_FILE,
-            |q| self.validate_quest(q),
+            Self::validate_quest,
         )
         .map_err(|e| {
             tracing::error!(
@@ -349,7 +346,7 @@ impl QuestLoader {
     }
 
     /// Validate a single quest template for security and correctness
-    fn validate_quest(&self, quest: &QuestTemplate) -> Result<(), SecurityError> {
+    fn validate_quest(quest: &QuestTemplate) -> Result<(), SecurityError> {
         // Validate string lengths
         if quest.name.len() > MAX_QUEST_NAME_LENGTH {
             return Err(SecurityError::InvalidInput("Quest name too long".into()));
@@ -392,16 +389,16 @@ impl QuestLoader {
         }
 
         // Validate spec parameter bounds
-        self.validate_spec(quest)?;
+        Self::validate_spec(quest)?;
 
         Ok(())
     }
 
     /// Validate quest spec parameters are within bounds
-    fn validate_spec(&self, quest: &QuestTemplate) -> Result<(), SecurityError> {
+    fn validate_spec(quest: &QuestTemplate) -> Result<(), SecurityError> {
         match &quest.spec {
             QuestSpec::CommandPractice { command, target } => {
-                if command.is_empty() || command.len() > 10 {
+                if command.as_str().len() > 10 {
                     return Err(SecurityError::InvalidInput("Invalid command name".into()));
                 }
                 if *target == 0 || *target > MAX_QUEST_TARGET {
@@ -418,12 +415,8 @@ impl QuestLoader {
                 }
             }
             QuestSpec::SpeedRun {
-                scenario_id,
-                time_limit_seconds,
+                time_limit_seconds, ..
             } => {
-                if scenario_id.is_empty() || scenario_id.len() > 64 {
-                    return Err(SecurityError::InvalidInput("Invalid scenario ID".into()));
-                }
                 if *time_limit_seconds == 0 || *time_limit_seconds > MAX_SPEED_RUN_TIME_SECONDS {
                     return Err(SecurityError::InvalidInput(
                         "Invalid speed run time limit".into(),
@@ -484,7 +477,7 @@ impl QuestTemplate {
         )
     }
 
-    /// Convert template spec to runtime QuestType
+    /// Convert template spec to runtime `QuestType`
     fn spec_to_quest_type(&self) -> crate::gamification::QuestType {
         use crate::gamification::QuestType;
 

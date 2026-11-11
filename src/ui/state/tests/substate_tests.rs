@@ -49,5 +49,4 @@ fn test_ui_state_initial() {
 fn test_game_state_default() {
     let state = crate::ui::state::GameState::default();
     assert_eq!(state.scenario_collection.count(), 0);
-    assert!(state.pending_completed_session.is_none());
 }

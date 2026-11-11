@@ -7,11 +7,11 @@
 
 use std::path::Path;
 
-use anyhow::Result;
+use rust_i18n::t;
 use serde::{Deserialize, Serialize};
 
 use super::data_dir::DataDir;
-use super::json_store::JsonStore;
+use super::json_store::{Document, JsonStore, StorageError};
 use crate::security::limits::MAX_CONFIG_FILE_SIZE;
 
 const CONFIG_FILE_NAME: &str = "config.json";
@@ -53,6 +53,24 @@ pub struct AppConfig {
     pub use_helix_keymap: bool,
 }
 
+/// Localized startup notification shown when `config.json` exists but could not
+/// be loaded and defaults are used instead.
+///
+/// A free function in the library crate because only it expands
+/// `rust_i18n::i18n!`; the binary entry point cannot call `t!` itself.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::app_config::config_load_failed_message;
+///
+/// assert!(!config_load_failed_message().is_empty());
+/// ```
+#[must_use]
+pub fn config_load_failed_message() -> String {
+    t!("config.load_failed").to_string()
+}
+
 /// Wrapper for config serialization
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -67,28 +85,13 @@ pub struct ConfigStorage {
 }
 
 impl ConfigStorage {
-    /// Create a new storage handler
-    ///
-    /// Default path: `config.json` in the data directory ([`DataDir::resolve`])
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use helix_trainer::config::ConfigStorage;
-    ///
-    /// let storage = ConfigStorage::new();
-    /// ```
-    pub fn new() -> Self {
-        Self::in_data_dir(&DataDir::resolve())
-    }
-
     /// Create storage for `config.json` in `data_dir`, copying it from the
     /// previous data directory on first load when the location moved (macOS).
     pub fn in_data_dir(data_dir: &DataDir) -> Self {
         Self {
             store: JsonStore::new(
                 data_dir.file(CONFIG_FILE_NAME),
-                "config",
+                Document::Config,
                 MAX_CONFIG_FILE_SIZE,
             )
             .migrating_from(data_dir.legacy_file(CONFIG_FILE_NAME)),
@@ -98,7 +101,7 @@ impl ConfigStorage {
     /// Create storage with custom path
     pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            store: JsonStore::new(path.as_ref(), "config", MAX_CONFIG_FILE_SIZE),
+            store: JsonStore::new(path.as_ref(), Document::Config, MAX_CONFIG_FILE_SIZE),
         }
     }
 
@@ -115,10 +118,10 @@ impl ConfigStorage {
     /// ```no_run
     /// use helix_trainer::config::ConfigStorage;
     ///
-    /// let storage = ConfigStorage::new();
+    /// let storage = ConfigStorage::with_path("config.json");
     /// let config = storage.load().unwrap();
     /// ```
-    pub fn load(&self) -> Result<AppConfig> {
+    pub fn load(&self) -> Result<AppConfig, StorageError> {
         Ok(self
             .store
             .load()?
@@ -140,14 +143,14 @@ impl ConfigStorage {
     /// ```no_run
     /// use helix_trainer::config::{ConfigStorage, AppConfig};
     ///
-    /// let storage = ConfigStorage::new();
+    /// let storage = ConfigStorage::with_path("config.json");
     /// let config = AppConfig::default();
     /// storage.save(&config).unwrap();
     /// ```
-    pub fn save(&self, config: &AppConfig) -> Result<()> {
-        Ok(self.store.save(&ConfigData {
+    pub fn save(&self, config: &AppConfig) -> Result<(), StorageError> {
+        self.store.save(&ConfigData {
             config: config.clone(),
-        })?)
+        })
     }
 
     /// Check if config file exists
@@ -158,12 +161,6 @@ impl ConfigStorage {
     /// Get file path
     pub fn path(&self) -> &Path {
         self.store.path()
-    }
-}
-
-impl Default for ConfigStorage {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -204,7 +201,8 @@ mod tests {
             true,
             Some(root.path().join("xdg")),
             Some(root.path().join("os")),
-        );
+        )
+        .unwrap();
         let legacy = ConfigStorage::with_path(root.path().join("os/helix-trainer/config.json"));
         legacy
             .save(&AppConfig {
@@ -227,7 +225,8 @@ mod tests {
             true,
             Some(root.path().join("xdg")),
             Some(root.path().join("os")),
-        );
+        )
+        .unwrap();
         fs::create_dir_all(root.path().join("os/helix-trainer/config.json")).unwrap();
 
         let storage = ConfigStorage::in_data_dir(&data_dir);
@@ -322,14 +321,13 @@ mod tests {
         // Write invalid JSON
         fs::write(&file_path, "invalid json {").unwrap();
 
-        let result = storage.load();
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Failed to parse config JSON")
-        );
+        assert!(matches!(
+            storage.load(),
+            Err(StorageError::Corrupt {
+                doc: Document::Config,
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -368,26 +366,11 @@ mod tests {
     }
 
     #[test]
-    fn test_new_creates_default_path() {
-        let storage = ConfigStorage::new();
-        let path = storage.path();
-        assert!(path.to_string_lossy().contains("helix-trainer"));
-        assert!(path.to_string_lossy().contains("config.json"));
-    }
-
-    #[test]
     fn test_path_returns_file_path() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("config.json");
         let storage = ConfigStorage::with_path(&file_path);
         assert_eq!(storage.path(), file_path.as_path());
-    }
-
-    #[test]
-    fn test_default_impl() {
-        let storage = ConfigStorage::default();
-        let path = storage.path();
-        assert!(path.to_string_lossy().contains("helix-trainer"));
     }
 
     #[test]

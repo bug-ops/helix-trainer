@@ -37,7 +37,7 @@ mod tests {
     #[test]
     fn test_sound_error_debug() {
         let err = SoundError::NoAudioDevice;
-        let debug = format!("{:?}", err);
+        let debug = format!("{err:?}");
         assert!(debug.contains("NoAudioDevice"));
     }
 }

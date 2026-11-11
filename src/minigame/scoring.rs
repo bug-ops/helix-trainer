@@ -26,7 +26,7 @@ pub struct ScoreBreakdown {
     pub combo_bonus: u64,
     /// Multiplier from scenario difficulty (1.0, 1.25, or 1.5)
     pub difficulty_multiplier: f64,
-    /// Multiplier from stats streak (applied separately in MiniGameStats)
+    /// Multiplier from stats streak (applied separately in `MiniGameStats`)
     pub streak_multiplier: f64,
     /// Sum before multipliers applied
     pub subtotal: u64,
@@ -139,7 +139,7 @@ impl ScoreCalculator {
     /// * `time_ratio` - Time used as fraction of limit (0.0 to 1.0, where 0 = instant)
     /// * `efficiency` - Action efficiency (optimal / actual, capped at 1.0)
     /// * `difficulty` - Scenario difficulty level
-    /// * `streak_multiplier` - Current streak multiplier from MiniGameStats
+    /// * `streak_multiplier` - Current streak multiplier from `MiniGameStats`
     ///
     /// # Returns
     ///
@@ -147,6 +147,14 @@ impl ScoreCalculator {
     #[expect(
         clippy::cast_possible_truncation,
         reason = "score components truncate toward zero by design"
+    )]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
+    )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
     )]
     pub fn calculate(
         &mut self,
@@ -174,7 +182,7 @@ impl ScoreCalculator {
 
         // Combo bonus: 10% per level, max 50%
         let combo_bonus_ratio =
-            (self.combo_count as f64 * COMBO_BONUS_PER_LEVEL).min(MAX_COMBO_BONUS);
+            (f64::from(self.combo_count) * COMBO_BONUS_PER_LEVEL).min(MAX_COMBO_BONUS);
         let combo_bonus = (base_points as f64 * combo_bonus_ratio) as u64;
 
         // Difficulty multiplier
@@ -468,6 +476,14 @@ mod tests {
         #[expect(
             clippy::cast_possible_truncation,
             reason = "mirrors the production score truncation"
+        )]
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "a float-to-int `as` saturates, so a negative value maps to 0"
+        )]
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
         )]
         fn test_total_with_difficulty_multiplier() {
             let mut calc = ScoreCalculator::new();

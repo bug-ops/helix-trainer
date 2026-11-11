@@ -114,7 +114,7 @@ fn render_level_section(
     // Level text
     let level_text = Paragraph::new(Line::from(vec![
         Span::styled(
-            format!("Level {} ", level),
+            format!("Level {level} "),
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -125,7 +125,7 @@ fn render_level_section(
     frame.render_widget(level_text, level_chunks[0]);
 
     // XP progress bar
-    let xp_label = format!("{}/{} XP", xp_in_level, xp_for_next);
+    let xp_label = format!("{xp_in_level}/{xp_for_next} XP");
     let gauge = Gauge::default()
         .block(Block::default())
         .gauge_style(
@@ -162,7 +162,7 @@ fn render_stats_section(
     lines.push(Line::from(vec![
         Span::raw("  Total Scenarios: "),
         Span::styled(
-            format!("{}", scenarios_completed),
+            format!("{scenarios_completed}"),
             Style::default().fg(Color::Cyan),
         ),
     ]));
@@ -170,14 +170,14 @@ fn render_stats_section(
     lines.push(Line::from(vec![
         Span::raw("  Perfect Runs: "),
         Span::styled(
-            format!("{}", perfect_scenarios),
+            format!("{perfect_scenarios}"),
             Style::default().fg(Color::Green),
         ),
     ]));
 
     lines.push(Line::from(vec![
         Span::raw("  Total XP: "),
-        Span::styled(format!("{}", total_xp), Style::default().fg(Color::Yellow)),
+        Span::styled(format!("{total_xp}"), Style::default().fg(Color::Yellow)),
     ]));
 
     lines.push(Line::from(""));
@@ -198,7 +198,7 @@ fn render_stats_section(
     lines.push(Line::from(vec![
         Span::raw("  Active Quests: "),
         Span::styled(
-            format!("{}/3", active_quests),
+            format!("{active_quests}/3"),
             Style::default().fg(Color::Cyan),
         ),
     ]));
@@ -206,7 +206,7 @@ fn render_stats_section(
     lines.push(Line::from(vec![
         Span::raw("  Completed Today: "),
         Span::styled(
-            format!("{}", completed_today),
+            format!("{completed_today}"),
             Style::default().fg(Color::Green),
         ),
     ]));
@@ -246,7 +246,7 @@ fn render_stats_section(
     if due_count > 0 {
         lines.push(Line::from(vec![
             Span::raw("  Due for Review: "),
-            Span::styled(format!("{}", due_count), Style::default().fg(Color::Yellow)),
+            Span::styled(format!("{due_count}"), Style::default().fg(Color::Yellow)),
             Span::styled(" (press 'r' in menu)", Style::default().fg(Color::Gray)),
         ]));
     } else {

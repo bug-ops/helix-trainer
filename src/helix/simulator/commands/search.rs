@@ -6,8 +6,8 @@
 use crate::helix::simulator::HelixSimulator;
 use crate::helix::simulator::search_state::SearchDirection;
 use crate::security::UserError;
-use helix_core::Selection;
 use helix_core::ropey::RopeSlice;
+use helix_core::{Range, Selection};
 use std::hash::{Hash, Hasher};
 
 #[inline]
@@ -73,7 +73,31 @@ fn compute_doc_version(doc: &helix_core::Rope) -> u64 {
     hasher.finish()
 }
 
+/// Select the found `range` (byte offsets): replaces the selection, or in
+/// Select mode adds a new primary range that keeps the direction of the old
+/// primary, as `hx` does for `/`, `?`, `n` and `N` while extending
+fn place_match<M: crate::helix::simulator::EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    range: std::ops::Range<usize>,
+) {
+    let start = sim.doc.byte_to_char(range.start);
+    let end = sim.doc.byte_to_char(range.end);
+    sim.selection = if sim.select_mode {
+        let direction = sim.selection.primary().direction();
+        sim.selection
+            .clone()
+            .push(Range::new(start, end).with_direction(direction))
+    } else {
+        Selection::single(start, end)
+    };
+}
+
 /// Search forward from cursor position
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn search_next_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -86,15 +110,18 @@ pub fn search_next_match<M: crate::helix::simulator::EditorMode>(
 
     let head_byte = sim.doc.char_to_byte(head);
     if let Some((_, range)) = sim.search_state.find_next(head_byte) {
-        let start_chars = sim.doc.byte_to_char(range.start);
-        let end_chars = sim.doc.byte_to_char(range.end);
-        sim.selection = Selection::single(start_chars, end_chars);
+        place_match(sim, range);
     }
 
     Ok(())
 }
 
 /// Search backward from cursor position
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn search_prev_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -107,15 +134,18 @@ pub fn search_prev_match<M: crate::helix::simulator::EditorMode>(
 
     let head_byte = sim.doc.char_to_byte(head);
     if let Some((_, range)) = sim.search_state.find_prev(head_byte) {
-        let start_chars = sim.doc.byte_to_char(range.start);
-        let end_chars = sim.doc.byte_to_char(range.end);
-        sim.selection = Selection::single(start_chars, end_chars);
+        place_match(sim, range);
     }
 
     Ok(())
 }
 
 /// Search forward (/) command
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn search_forward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -170,6 +200,11 @@ pub fn search_pattern_backward<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Search backward (?) command
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn search_backward<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -178,6 +213,11 @@ pub fn search_backward<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Go to next match (n command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn goto_next_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -192,6 +232,11 @@ pub fn goto_next_match<M: crate::helix::simulator::EditorMode>(
 }
 
 /// Go to previous match (N command)
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn goto_prev_match<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -209,6 +254,11 @@ pub fn goto_prev_match<M: crate::helix::simulator::EditorMode>(
 ///
 /// Sets the word under cursor as search pattern and selects it,
 /// but does NOT jump to next match. Use `n` to navigate to next occurrence.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {
@@ -236,6 +286,11 @@ pub fn search_word_under_cursor<M: crate::helix::simulator::EditorMode>(
 ///
 /// Sets the current selection as search pattern. If selection is empty,
 /// falls back to word under cursor. Does NOT jump to next match.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn search_selection<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), UserError> {

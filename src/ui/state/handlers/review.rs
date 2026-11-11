@@ -4,7 +4,7 @@
 
 use crate::constants::OPTIMAL_REVIEW_TIME;
 use crate::gamification::XPCalculator;
-use crate::security::UserError;
+use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
@@ -13,12 +13,10 @@ use crate::ui::state::{
 };
 use std::time::Instant;
 
-/// Handle StartReviewSession message
+/// Handle `StartReviewSession` message
 ///
 /// Initializes a new review session with due commands
-pub fn handle_start_review_session(
-    ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+pub fn handle_start_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
     // Get due commands from scheduler
     let due_commands = ctx
         .progress
@@ -32,7 +30,7 @@ pub fn handle_start_review_session(
             .push(Notification::new(NotificationType::Info {
                 message: "No reviews due. Keep practicing!".to_string(),
             }));
-        return Ok(HandlerOutcome::Stay);
+        return HandlerOutcome::Stay;
     }
 
     let review_session = ReviewSessionState {
@@ -42,24 +40,24 @@ pub fn handle_start_review_session(
         completed_reviews: Vec::new(),
     };
 
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Review(
-        ReviewData::new(review_session),
+    HandlerOutcome::Transition(Box::new(TypedScreen::Review(ReviewData::new(
+        review_session,
     ))))
 }
 
-/// Handle CompleteReviewCommand message
+/// Handle `CompleteReviewCommand` message
 ///
 /// Records review result and updates performance tracker
 ///
 /// Note: This handler mutates review session data and then delegates to
-/// handle_next_review_command for screen transitions
+/// `handle_next_review_command` for screen transitions
 pub fn handle_complete_review_command(
     data: &mut ReviewData,
     ctx: &mut HandlerContext<'_>,
     outcome: ReviewOutcome,
-) -> Result<HandlerOutcome, UserError> {
+) -> HandlerOutcome {
     let session = &mut data.session;
-    if let Some(command) = session.current_command().map(str::to_owned) {
+    if let Some(command) = session.current_command().cloned() {
         let duration = session.session_started_at.elapsed();
 
         // Record result
@@ -81,15 +79,18 @@ pub fn handle_complete_review_command(
         // Persist periodically so review progress survives a crash mid-session
         // (non-fatal error - log but continue, a review keypress must not kill the session)
         if let Err(e) = ctx.progress.save_debounced() {
-            tracing::error!("Failed to save profile during review session: {:?}", e);
+            tracing::error!(
+                error = %error_chain(&e),
+                "Failed to save profile during review session"
+            );
         }
     }
 
     // Delegate to next review handler for screen transition logic
-    Ok(handle_next_review_command(data, ctx))
+    handle_next_review_command(data, ctx)
 }
 
-/// Handle NextReviewCommand message
+/// Handle `NextReviewCommand` message
 ///
 /// Advances to next review command or completes session
 fn handle_next_review_command(
@@ -136,17 +137,13 @@ fn handle_next_review_command(
     HandlerOutcome::Stay
 }
 
-/// Handle AbandonReviewSession message
+/// Handle `AbandonReviewSession` message
 ///
 /// Cancels the current review session
-pub fn handle_abandon_review_session(
-    ctx: &mut HandlerContext<'_>,
-) -> Result<HandlerOutcome, UserError> {
+pub fn handle_abandon_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
     // Persist attempts already recorded so far - abandoning mid-session (e.g. Esc)
     // is the likelier interrupted-user path, so it should flush just like completion does
     ctx.ui.effects.push(Effect::SaveProfile);
 
-    Ok(HandlerOutcome::Transition(Box::new(TypedScreen::Menu(
-        MenuData::default(),
-    ))))
+    HandlerOutcome::Transition(Box::new(TypedScreen::Menu(MenuData::default())))
 }

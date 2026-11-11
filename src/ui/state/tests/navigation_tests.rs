@@ -1,5 +1,6 @@
 //! Tests for navigation and screen transitions
 
+use crate::testing::cid;
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
@@ -17,7 +18,6 @@ fn test_new_state() {
     }
     assert!(state.ui.running);
     assert!(review_session(&state).is_none());
-    assert!(state.game.pending_completed_session.is_none());
 }
 
 #[test]
@@ -81,8 +81,7 @@ fn test_quit_app_after_timeout_game_over_does_not_double_award() {
     assert!(
         state
             .minigame_session()
-            .map(|s| s.state().is_game_over())
-            .unwrap_or(false)
+            .is_some_and(|s| s.state().is_game_over())
     );
 
     let xp_after_timeout_game_over = state.progress.profile.total_xp;
@@ -147,7 +146,7 @@ fn test_quit_app_persists_fsrs_data() {
 
     // Seed tracker state as if reviews happened earlier in the session.
     state.progress.performance_tracker.record_attempt(
-        "j",
+        &cid("j"),
         Duration::from_millis(500),
         true,
         Duration::from_millis(500),
@@ -158,7 +157,7 @@ fn test_quit_app_persists_fsrs_data() {
     let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
     assert!(!persisted.performance_data.is_empty());
     assert!(
-        persisted.performance_data.contains_key("j"),
+        persisted.performance_data.contains_key(&cid("j")),
         "FSRS review data recorded before Ctrl-C must be persisted, not just XP/high score"
     );
 }
@@ -173,6 +172,10 @@ fn test_quit_app_persists_fsrs_data() {
 /// active scenario, then fires Ctrl-C and asserts the resulting FSRS record
 /// - not a manually seeded one - is what gets persisted.
 #[test]
+#[expect(
+    clippy::redundant_closure_for_method_calls,
+    reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+)]
 fn test_quit_app_persists_fsrs_data_from_live_action() {
     use crate::gamification::ProfileStorage;
     use tempfile::TempDir;
@@ -205,7 +208,7 @@ fn test_quit_app_persists_fsrs_data_from_live_action() {
 
     let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
     assert!(
-        persisted.performance_data.contains_key("x"),
+        persisted.performance_data.contains_key(&cid("x")),
         "an action taken mid-session before Ctrl-C must reach record_to_fsrs, \
          not just whatever was already in the tracker"
     );

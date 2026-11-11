@@ -1,4 +1,4 @@
-//! Tests for HelixSimulator organized by functionality
+//! Tests for `HelixSimulator` organized by functionality
 //!
 //! This module contains comprehensive tests for the Helix editor simulator:
 //! - `basic_tests`: Core simulator creation and initialization
@@ -17,12 +17,15 @@ mod editing_tests;
 mod indent_tests;
 mod insert_indent_replace_tests;
 mod insert_keys_tests;
+mod language_tests;
 mod macro_tests;
 mod mode_tests;
 mod movement_tests;
 mod multi_cursor_tests;
+mod newline_indent_tests;
 mod paste_tests;
 mod repeat_execution_tests;
 mod repeat_recording_tests;
+mod select_mode_extend_tests;
 mod select_mode_tests;
 mod selection_tests;

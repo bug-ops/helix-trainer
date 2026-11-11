@@ -3,7 +3,7 @@
 //! Handles quest progress updates and tracking
 
 use crate::gamification::{QuestTracker, QuestType, StreakManager};
-use crate::security::UserError;
+use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::QuestBonus;
 use crate::ui::state::{AppState, QuestProgressChange};
@@ -19,13 +19,15 @@ use std::time::Duration;
 /// (`:g 3` -> `:goto`) before tracking, so quest matching (exact equality)
 /// and FSRS see the same command id for the same skill.
 pub fn track_command_for_quests(state: &mut AppState, command: &str) {
-    let normalized = crate::helix::commands::normalize_command_id(command);
+    let Ok(normalized) = NormalizedCommand::from_raw(command) else {
+        return;
+    };
 
     // Track for exploration quests
     state
         .progress
         .commands_used_today
-        .insert(normalized.to_string());
+        .insert(normalized.clone());
 
     // Update command progress in quests
     let profile = &mut state.progress.profile;
@@ -38,7 +40,7 @@ pub fn track_command_for_quests(state: &mut AppState, command: &str) {
 /// Updates scenario completion and speed run quests.
 pub fn track_scenario_completion_for_quests(
     state: &mut AppState,
-    scenario_id: &str,
+    scenario_id: &ScenarioId,
     duration: Duration,
 ) {
     let profile = &mut state.progress.profile;
@@ -65,7 +67,7 @@ pub struct QuestXpAward {
 /// completed by this call, for the caller to display or total up. This is the only place
 /// quest-completion XP is applied to `profile.xp` - callers must not re-add it.
 pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -> QuestXpAward {
-    let newly_completed: Vec<(String, String, u32)> = {
+    let newly_completed: Vec<(QuestId, String, u32)> = {
         let profile = &state.progress.profile;
         profile
             .daily_quests
@@ -85,7 +87,10 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
         return QuestXpAward::default();
     }
 
-    let total_bonus_xp: u64 = newly_completed.iter().map(|(_, _, xp)| *xp as u64).sum();
+    let total_bonus_xp: u64 = newly_completed
+        .iter()
+        .map(|(_, _, xp)| u64::from(*xp))
+        .sum();
     let profile = &mut state.progress.profile;
     let leveled_up = profile.add_xp(total_bonus_xp);
     for (quest_id, _, _) in &newly_completed {
@@ -97,7 +102,7 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
         .iter()
         .map(|(_, description, xp_reward)| QuestBonus {
             quest: description.clone(),
-            xp: *xp_reward as u64,
+            xp: u64::from(*xp_reward),
         })
         .collect();
     for (_, description, xp_reward) in newly_completed {
@@ -133,15 +138,16 @@ pub fn snapshot_quest_completion(state: &AppState) -> Vec<bool> {
 
 /// Get current progress value from quest type
 fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
-    use QuestType::*;
     match quest_type {
-        CommandPractice { current, .. } => *current,
-        ScenarioCompletion { current, .. } => *current,
-        TimeInvested {
+        QuestType::CommandPractice { current, .. } => *current,
+        QuestType::ScenarioCompletion { current, .. } => *current,
+        QuestType::TimeInvested {
             current_minutes, ..
         } => *current_minutes,
-        Exploration { commands_used, .. } => u32::try_from(commands_used.len()).unwrap_or(u32::MAX),
-        SpeedRun { .. } => 0, // Single-attempt quest
+        QuestType::Exploration { commands_used, .. } => {
+            u32::try_from(commands_used.len()).unwrap_or(u32::MAX)
+        }
+        QuestType::SpeedRun { .. } => 0, // Single-attempt quest
     }
 }
 
@@ -154,34 +160,33 @@ pub struct QuestUpdate {
     pub award: QuestXpAward,
 }
 
-/// Handle UpdateQuestProgress message
+/// Handle `UpdateQuestProgress` message
 ///
 /// Updates quest progress after a command; the per-update outcome is only needed at
 /// scenario completion, which calls [`apply_quest_progress`] directly.
 pub fn handle_update_quest_progress(
     state: &mut AppState,
-    command: Option<String>,
+    command: Option<&str>,
     scenario_completed: bool,
-    scenario_id: Option<String>,
+    scenario_id: Option<ScenarioId>,
     duration: Duration,
-) -> Result<(), UserError> {
+) {
     apply_quest_progress(state, command, scenario_completed, scenario_id, duration);
-    Ok(())
 }
 
 /// Update quest progress based on commands, scenario completions, or time, and return what
 /// changed so callers can hand it on by value.
 pub fn apply_quest_progress(
     state: &mut AppState,
-    command: Option<String>,
+    command: Option<&str>,
     scenario_completed: bool,
-    scenario_id: Option<String>,
+    scenario_id: Option<ScenarioId>,
     duration: Duration,
 ) -> QuestUpdate {
     let mut changes = Vec::new();
 
     // Snapshot progress BEFORE updates
-    let progress_before: HashMap<String, u32> = {
+    let progress_before: HashMap<QuestId, u32> = {
         let profile = &state.progress.profile;
         profile
             .daily_quests
@@ -194,15 +199,12 @@ pub fn apply_quest_progress(
     let was_completed = snapshot_quest_completion(state);
 
     // Update command practice quests and exploration quests
-    if let Some(cmd) = &command {
+    if let Some(cmd) = command {
         track_command_for_quests(state, cmd);
     }
 
     // Update scenario completion quests and speed run quests
-    if scenario_completed
-        && let Some(id) = scenario_id
-        && crate::learning::is_valid_scenario_id(&id)
-    {
+    if scenario_completed && let Some(id) = scenario_id {
         track_scenario_completion_for_quests(state, &id, duration);
     }
 
@@ -242,16 +244,15 @@ pub fn apply_quest_progress(
 
 /// Format quest type as readable description
 pub fn format_quest_description(quest_type: &QuestType) -> String {
-    use QuestType::*;
     match quest_type {
-        CommandPractice {
+        QuestType::CommandPractice {
             command, target, ..
-        } => format!("Use '{}' {} times", command, target),
-        ScenarioCompletion { target, .. } => format!("Complete {} scenarios", target),
-        SpeedRun { scenario_id, .. } => format!("Speed run: {}", scenario_id),
-        TimeInvested { target_minutes, .. } => format!("Practice {} min", target_minutes),
-        Exploration {
+        } => format!("Use '{command}' {target} times"),
+        QuestType::ScenarioCompletion { target, .. } => format!("Complete {target} scenarios"),
+        QuestType::SpeedRun { scenario_id, .. } => format!("Speed run: {scenario_id}"),
+        QuestType::TimeInvested { target_minutes, .. } => format!("Practice {target_minutes} min"),
+        QuestType::Exploration {
             target_commands, ..
-        } => format!("Try {} commands", target_commands),
+        } => format!("Try {target_commands} commands"),
     }
 }

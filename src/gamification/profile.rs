@@ -13,6 +13,7 @@ use crate::constants::{
     SCENARIO_BASE_XP_PER_100_POINTS, SCENARIO_FIRST_TODAY_BONUS_XP, SCENARIO_PERFECT_BONUS_DIVISOR,
     XP_LEVEL_FORMULA_BASE, XP_LEVEL_FORMULA_EXPONENT,
 };
+use crate::ids::QuestId;
 use crate::learning::PerformanceData;
 use crate::learning::ScenarioHistory;
 use crate::sound::SoundConfig;
@@ -43,7 +44,7 @@ where
     if known.len() < total {
         tracing::warn!(
             "Ignored {} unknown achievement id(s) in profile",
-            total - known.len()
+            total.saturating_sub(known.len())
         );
     }
     Ok(known)
@@ -81,7 +82,7 @@ pub struct UserProfile {
     pub last_quest_refresh: DateTime<Utc>,
 
     /// Completed quest IDs today
-    pub completed_quests_today: HashSet<String>,
+    pub completed_quests_today: HashSet<QuestId>,
 
     /// Streak freeze available (protects from one missed day)
     pub streak_freeze_available: bool,
@@ -288,6 +289,10 @@ impl UserProfile {
     /// profile.add_xp(50); // 50/100 XP to level 2
     /// assert_eq!(profile.xp_progress(), 0.5);
     /// ```
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn xp_progress(&self) -> f64 {
         let (current, next) = self.level_bounds();
         let xp_needed = next.saturating_sub(current);
@@ -306,12 +311,12 @@ impl UserProfile {
     }
 
     /// Check if quest is completed today
-    pub fn is_quest_completed(&self, quest_id: &str) -> bool {
+    pub fn is_quest_completed(&self, quest_id: &QuestId) -> bool {
         self.completed_quests_today.contains(quest_id)
     }
 
     /// Mark quest as completed
-    pub fn complete_quest(&mut self, quest_id: String) {
+    pub fn complete_quest(&mut self, quest_id: QuestId) {
         self.completed_quests_today.insert(quest_id);
     }
 
@@ -386,14 +391,15 @@ impl XPCalculator {
         if level <= 1 {
             0
         } else {
-            (XP_LEVEL_FORMULA_BASE * ((level - 1) as f64).powf(XP_LEVEL_FORMULA_EXPONENT)).round()
-                as u64
+            (XP_LEVEL_FORMULA_BASE
+                * (f64::from(level.saturating_sub(1))).powf(XP_LEVEL_FORMULA_EXPONENT))
+            .round() as u64
         }
     }
 
     /// Calculate level from total XP
     ///
-    /// Uses binary search to find the highest level where threshold <= total_xp
+    /// Uses binary search to find the highest level where threshold <= `total_xp`
     ///
     /// # Examples
     ///
@@ -411,11 +417,11 @@ impl XPCalculator {
         let mut high = MAX_PLAYER_LEVEL;
 
         while low < high {
-            let mid = (low + high).div_ceil(2);
+            let mid = low.saturating_add(high).div_ceil(2);
             if Self::xp_for_level(mid) <= total_xp {
                 low = mid;
             } else {
-                high = mid - 1;
+                high = mid.saturating_sub(1);
             }
         }
 
@@ -428,9 +434,10 @@ impl XPCalculator {
     ///
     /// ```
     /// use helix_trainer::gamification::{QuestDifficulty, QuestType, XPCalculator};
+    /// use helix_trainer::ids::NormalizedCommand;
     ///
     /// let easy_practice = QuestType::CommandPractice {
-    ///     command: "w".to_string(),
+    ///     command: NormalizedCommand::from_raw("w").unwrap(),
     ///     target: 5,
     ///     current: 0,
     /// };
@@ -503,9 +510,13 @@ impl XPCalculator {
         clippy::cast_sign_loss,
         reason = "XP formula: the result is non-negative and far below u64::MAX"
     )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn scenario_xp(score: u32, multiplier: f64) -> u64 {
         // Base XP per 100 points scored
-        let base_xp = (score as u64 * SCENARIO_BASE_XP_PER_100_POINTS) / 100;
+        let base_xp = (u64::from(score) * SCENARIO_BASE_XP_PER_100_POINTS) / 100;
         (base_xp as f64 * multiplier).round() as u64
     }
 
@@ -536,7 +547,9 @@ impl XPCalculator {
         } else {
             0
         };
-        let total_base_xp = base_xp + perfect_bonus + first_today_bonus;
+        let total_base_xp = base_xp
+            .saturating_add(perfect_bonus)
+            .saturating_add(first_today_bonus);
 
         XPComponents {
             base_xp,
@@ -558,8 +571,9 @@ impl XPCalculator {
     /// ```
     #[must_use]
     pub fn arcade_scenario_xp(streak: u32) -> u64 {
-        MINIGAME_SCENARIO_BASE_XP
-            + (streak.saturating_sub(1) as u64 * MINIGAME_STREAK_XP_MULTIPLIER)
+        MINIGAME_SCENARIO_BASE_XP.saturating_add(
+            u64::from(streak.saturating_sub(1)).saturating_mul(MINIGAME_STREAK_XP_MULTIPLIER),
+        )
     }
 
     /// XP for a finished review session: a flat amount per completed command plus a
@@ -579,14 +593,19 @@ impl XPCalculator {
         clippy::cast_sign_loss,
         reason = "XP formula: the result is non-negative and far below u64::MAX"
     )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn review_session_xp(completed: usize, recalled: usize) -> u64 {
         let success_rate = if completed > 0 {
             recalled as f64 / completed as f64
         } else {
             0.0
         };
-        (completed as u64 * REVIEW_XP_PER_COMMAND)
-            + (success_rate * REVIEW_SUCCESS_BONUS_MAX_XP) as u64
+        (completed as u64)
+            .saturating_mul(REVIEW_XP_PER_COMMAND)
+            .saturating_add((success_rate * REVIEW_SUCCESS_BONUS_MAX_XP) as u64)
     }
 
     /// Calculate XP earned from mini-game session
@@ -621,19 +640,22 @@ impl XPCalculator {
         let base_xp = score / MINIGAME_XP_PER_100_POINTS;
 
         // Level bonus per level reached
-        let level_bonus = level as u64 * MINIGAME_LEVEL_BONUS_XP;
+        let level_bonus = u64::from(level).saturating_mul(MINIGAME_LEVEL_BONUS_XP);
 
         // Streak bonus per streak milestone
-        let streak_bonus =
-            (best_streak as u64 / MINIGAME_STREAK_BONUS_DIVISOR) * MINIGAME_STREAK_BONUS_MAX_XP;
+        let streak_bonus = (u64::from(best_streak) / MINIGAME_STREAK_BONUS_DIVISOR)
+            .saturating_mul(MINIGAME_STREAK_BONUS_MAX_XP);
 
-        base_xp + level_bonus + streak_bonus
+        base_xp
+            .saturating_add(level_bonus)
+            .saturating_add(streak_bonus)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::qid;
 
     /// Golden values derived from the pre-#485 inline formulas; they pin current
     /// behavior so the move into `XPCalculator` cannot change any award.
@@ -819,21 +841,21 @@ mod tests {
     fn test_quest_completion_tracking() {
         let mut profile = UserProfile::new();
 
-        assert!(!profile.is_quest_completed("quest_1"));
+        assert!(!profile.is_quest_completed(&qid("quest_1")));
 
-        profile.complete_quest("quest_1".to_string());
-        assert!(profile.is_quest_completed("quest_1"));
+        profile.complete_quest(qid("quest_1"));
+        assert!(profile.is_quest_completed(&qid("quest_1")));
     }
 
     #[test]
     fn test_reset_daily_quests() {
         let mut profile = UserProfile::new();
 
-        profile.complete_quest("quest_1".to_string());
-        assert!(profile.is_quest_completed("quest_1"));
+        profile.complete_quest(qid("quest_1"));
+        assert!(profile.is_quest_completed(&qid("quest_1")));
 
         profile.reset_daily_quests(Utc::now());
-        assert!(!profile.is_quest_completed("quest_1"));
+        assert!(!profile.is_quest_completed(&qid("quest_1")));
         assert!(profile.daily_quests.is_empty());
     }
 

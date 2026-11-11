@@ -218,18 +218,18 @@ impl RepeatBuffer {
     /// If there are pending selection keys, combines them with the operator.
     /// Otherwise records just the operator.
     pub fn record_operator(&mut self, keys: Vec<KeyEvent>, mode: Mode) {
-        if !self.pending_keys.is_empty() {
+        if self.pending_keys.is_empty() {
+            // Just the operator
+            self.last_action = Some(RepeatableAction::Command {
+                keys,
+                expected_mode: mode,
+            });
+        } else {
             // Complete compound action
             let mut compound_keys = std::mem::take(&mut self.pending_keys);
             compound_keys.extend(keys);
             self.last_action = Some(RepeatableAction::Command {
                 keys: compound_keys,
-                expected_mode: mode,
-            });
-        } else {
-            // Just the operator
-            self.last_action = Some(RepeatableAction::Command {
-                keys,
                 expected_mode: mode,
             });
         }
@@ -549,7 +549,7 @@ mod tests {
                 assert_eq!(text, "hello");
                 assert!(keys.is_empty());
             }
-            _ => panic!("Expected InsertSequence"),
+            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
     }
 
@@ -590,7 +590,7 @@ mod tests {
                     ]
                 );
             }
-            _ => panic!("Expected InsertSequence"),
+            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
     }
 
@@ -612,7 +612,7 @@ mod tests {
                 assert!(text.is_empty());
                 assert!(keys.is_empty());
             }
-            _ => panic!("Expected InsertSequence"),
+            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
     }
 
@@ -637,7 +637,7 @@ mod tests {
                 assert!(text.is_empty());
                 assert!(keys.is_empty());
             }
-            _ => panic!("Expected InsertSequence"),
+            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
     }
 
@@ -658,7 +658,7 @@ mod tests {
                 // Should be limited to MAX_INSERT_TEXT_LENGTH
                 assert_eq!(text.len(), MAX_INSERT_TEXT_LENGTH);
             }
-            _ => panic!("Expected InsertSequence"),
+            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
     }
 
@@ -679,7 +679,7 @@ mod tests {
                 // Should be limited to MAX_INSERT_MOVEMENTS
                 assert_eq!(keys.len(), MAX_INSERT_MOVEMENTS);
             }
-            _ => panic!("Expected InsertSequence"),
+            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
     }
 
@@ -706,7 +706,7 @@ mod tests {
                 assert_eq!(entry_command, Some("i".to_string()));
                 assert_eq!(text, "b"); // Should only have 'b', not 'ab'
             }
-            _ => panic!("Expected InsertSequence"),
+            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
     }
 

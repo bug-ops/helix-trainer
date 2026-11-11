@@ -1,9 +1,9 @@
 //! Tests for menu navigation and selection
 
+use crate::testing::cid;
 use std::assert_matches;
 
 use super::common::{create_test_app_state, create_test_scenario};
-use crate::game::PlayableScenario;
 use crate::testing::update_executing_effects as update;
 use crate::ui::state::{Message, TypedScreen};
 
@@ -91,7 +91,7 @@ fn test_menu_select_start_training() {
     // After TypedScreen refactoring, session is inside TaskData
     if let TypedScreen::Task(task_data) = &state.screen {
         // Session exists inside TaskData
-        assert!(!task_data.session.current_content().is_empty());
+        assert!(!task_data.session.playable().current_content().is_empty());
     } else {
         panic!("Should be on Task screen with active session");
     }
@@ -214,7 +214,7 @@ fn test_menu_with_zero_scenarios() {
     assert_matches!(state.screen, TypedScreen::Profile(_));
 
     // Statistics at index 2
-    state.screen = TypedScreen::Menu(Default::default());
+    state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 2;
     }
@@ -222,7 +222,7 @@ fn test_menu_with_zero_scenarios() {
     assert_matches!(state.screen, TypedScreen::Statistics(_));
 
     // Quit at index 3
-    state.screen = TypedScreen::Menu(Default::default());
+    state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
     state.ui.running = true;
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 3;
@@ -381,7 +381,7 @@ fn test_starting_review_ends_the_paused_arcade_run_and_awards_it() {
     pause_arcade_with_score(&mut state, 4242);
     update(&mut state, Message::ShowProfile).unwrap();
     state.progress.performance_tracker.record_attempt(
-        "x",
+        &cid("x"),
         Duration::from_secs(5),
         false,
         Duration::from_secs(1),

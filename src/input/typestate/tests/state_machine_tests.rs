@@ -1,4 +1,4 @@
-//! Tests for InputStateMachine
+//! Tests for `InputStateMachine`
 
 use std::assert_matches;
 

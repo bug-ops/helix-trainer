@@ -1,4 +1,4 @@
-//! Tests for AppState functionality
+//! Tests for `AppState` functionality
 
 use std::assert_matches;
 
@@ -9,7 +9,7 @@ use crate::ui::state::TypedScreen;
 fn test_app_state_debug_impl() {
     let state = create_test_app_state(vec![]);
     // Test that Debug trait works without panic
-    let debug_str = format!("{:?}", state);
+    let debug_str = format!("{state:?}");
     assert!(debug_str.contains("AppState"));
     assert!(debug_str.contains("screen"));
 }
@@ -35,7 +35,7 @@ fn test_scenario_valid_index() {
 
     let fetched = state.scenario(0);
     assert!(fetched.is_some());
-    assert_eq!(fetched.unwrap().id, "test_001");
+    assert_eq!(fetched.unwrap().id.as_str(), "test_001");
 }
 
 #[test]

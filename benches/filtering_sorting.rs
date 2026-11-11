@@ -1,9 +1,9 @@
 //! Performance benchmarks for scenario filtering and sorting
 //!
-//! This benchmark suite measures the performance of ScenarioCollection operations
+//! This benchmark suite measures the performance of `ScenarioCollection` operations
 //! including filtering, sorting, and menu rendering for Phase 1.5.
 //!
-//! Run with: cargo bench --bench filtering_sorting
+//! Run with: cargo bench --bench `filtering_sorting`
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use helix_trainer::config::{
@@ -11,6 +11,7 @@ use helix_trainer::config::{
     ScenarioFilter, ScenarioMetadata, ScoringConfig, Setup, Solution, SortMode, TargetState,
 };
 use helix_trainer::gamification::UserProfile;
+use helix_trainer::ids::{NormalizedCommand, ScenarioId};
 use std::collections::HashSet;
 use std::hint::black_box;
 
@@ -22,7 +23,7 @@ fn create_scenario(
     difficulty: Option<Difficulty>,
 ) -> Scenario {
     Scenario {
-        id: id.to_string(),
+        id: ScenarioId::parse(id).expect("valid scenario id"),
         name: name.to_string(),
         description: "Test scenario".to_string(),
         setup: Setup {
@@ -58,7 +59,7 @@ fn create_scenario(
         metadata: Some(ScenarioMetadata {
             category,
             difficulty,
-            commands_taught: vec!["x".to_string()],
+            commands_taught: vec![NormalizedCommand::from_raw("x").expect("valid command")],
             prerequisites: vec![],
             tags: vec![],
             estimated_time_seconds: Some(30),
@@ -91,8 +92,8 @@ fn generate_scenarios(count: usize) -> Vec<Scenario> {
             let cat = categories[i % categories.len()];
             let diff = difficulties[i % difficulties.len()];
             create_scenario(
-                &format!("scenario_{:04}", i),
-                &format!("Scenario {}", i),
+                &format!("scenario_{i:04}"),
+                &format!("Scenario {i}"),
                 cat,
                 diff,
             )
@@ -101,7 +102,7 @@ fn generate_scenarios(count: usize) -> Vec<Scenario> {
 }
 
 // Helper: Create a profile with some scenario completions
-fn create_profile_with_completions(scenario_ids: &[String]) -> UserProfile {
+fn create_profile_with_completions(scenario_ids: &[ScenarioId]) -> UserProfile {
     let mut profile = UserProfile::new();
 
     // Record completions for some scenarios
@@ -130,7 +131,7 @@ fn bench_collection_creation(c: &mut Criterion) {
                 || generate_scenarios(size),
                 |scenarios| black_box(ScenarioCollection::new(scenarios)),
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -167,7 +168,7 @@ fn bench_filter_by_category(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -199,7 +200,7 @@ fn bench_filter_by_difficulty(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -214,7 +215,7 @@ fn bench_filter_by_completion(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
 
@@ -232,7 +233,7 @@ fn bench_filter_by_completion(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -247,7 +248,7 @@ fn bench_filter_multi_criteria(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
 
@@ -274,7 +275,7 @@ fn bench_filter_multi_criteria(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -300,7 +301,7 @@ fn bench_sort_by_name(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -322,7 +323,7 @@ fn bench_sort_by_difficulty(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -344,7 +345,7 @@ fn bench_sort_by_category(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -359,7 +360,7 @@ fn bench_sort_by_progress(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
                     let collection = ScenarioCollection::new(scenarios);
@@ -371,7 +372,7 @@ fn bench_sort_by_progress(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -396,7 +397,7 @@ fn bench_sort_by_category_then_difficulty(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -411,7 +412,7 @@ fn bench_sort_by_mastery(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
                     let collection = ScenarioCollection::new(scenarios);
@@ -423,7 +424,7 @@ fn bench_sort_by_mastery(c: &mut Criterion) {
                     black_box(collection)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -449,7 +450,7 @@ fn bench_sort_reverse_sorted(c: &mut Criterion) {
                 black_box(collection)
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 }
 
@@ -462,7 +463,9 @@ fn bench_filter_no_matches(c: &mut Criterion) {
 
                 // Filter by commands that don't exist in any scenario
                 let mut filter_commands = HashSet::new();
-                filter_commands.insert("NonExistentCommand".to_string());
+                filter_commands.insert(
+                    NormalizedCommand::from_raw("NonExistentCommand").expect("valid command"),
+                );
 
                 let filter = ScenarioFilter {
                     commands: Some(filter_commands),
@@ -476,7 +479,7 @@ fn bench_filter_no_matches(c: &mut Criterion) {
                 black_box(collection)
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 }
 
@@ -500,7 +503,7 @@ fn bench_get_filtered_scenarios(c: &mut Criterion) {
                     black_box(count)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -525,7 +528,7 @@ fn bench_get_filtered_by_index(c: &mut Criterion) {
                     black_box(exists)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -549,7 +552,7 @@ fn bench_sequential_access(c: &mut Criterion) {
                 black_box(count)
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 }
 
@@ -565,7 +568,7 @@ fn bench_menu_render_simulation(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let scenarios = generate_scenarios(size);
-                    let scenario_ids: Vec<String> =
+                    let scenario_ids: Vec<ScenarioId> =
                         scenarios.iter().map(|s| s.id.clone()).collect();
                     let profile = create_profile_with_completions(&scenario_ids);
                     let collection = ScenarioCollection::new(scenarios);
@@ -579,19 +582,19 @@ fn bench_menu_render_simulation(c: &mut Criterion) {
                     // Check completion status for each scenario (like menu does)
                     let mut count = 0;
                     for scenario in &filtered {
-                        let _completed = profile.scenario_history.get(&scenario.id).is_some();
-                        black_box(_completed);
+                        let completed = profile.scenario_history.get(&scenario.id).is_some();
+                        black_box(completed);
 
                         // Get difficulty indicator (like menu does)
-                        let _difficulty = scenario.metadata.as_ref().and_then(|m| m.difficulty);
-                        black_box(_difficulty);
+                        let difficulty = scenario.metadata.as_ref().and_then(|m| m.difficulty);
+                        black_box(difficulty);
                         count += 1;
                     }
 
                     black_box(count)
                 },
                 criterion::BatchSize::SmallInput,
-            )
+            );
         });
     }
 
@@ -607,7 +610,8 @@ fn bench_filter_sort_access_workflow(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let scenarios = generate_scenarios(100);
-                let scenario_ids: Vec<String> = scenarios.iter().map(|s| s.id.clone()).collect();
+                let scenario_ids: Vec<ScenarioId> =
+                    scenarios.iter().map(|s| s.id.clone()).collect();
                 let profile = create_profile_with_completions(&scenario_ids);
 
                 let collection = ScenarioCollection::new(scenarios);
@@ -639,7 +643,7 @@ fn bench_filter_sort_access_workflow(c: &mut Criterion) {
                 black_box(count)
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 }
 
@@ -674,7 +678,7 @@ fn bench_repeated_filter_changes(c: &mut Criterion) {
                 black_box(collection)
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 }
 
@@ -698,7 +702,7 @@ fn bench_clone_avoidance(c: &mut Criterion) {
                 black_box(filtered)
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 
     group.bench_function("get_filtered_with_references", |b| {
@@ -714,7 +718,7 @@ fn bench_clone_avoidance(c: &mut Criterion) {
                 black_box(count)
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 
     group.finish();

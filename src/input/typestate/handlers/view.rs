@@ -1,4 +1,4 @@
-//! ViewPending handler - handles input after 'z' prefix
+//! `ViewPending` handler - handles input after 'z' prefix
 //!
 //! Processes the second key of view commands like 'zz', 'zt', 'zb', etc.
 
@@ -6,7 +6,10 @@ use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_SCROLL_DOWN, CMD_SCROLL_UP, CMD_VIEW_BOTTOM, CMD_VIEW_CENTER, CMD_VIEW_CENTER_HORIZONTAL,
+    CMD_VIEW_TOP,
+};
 
 use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{handler_result::HandlerResult, state_types::ViewPending};

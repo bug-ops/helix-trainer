@@ -19,8 +19,8 @@ pub use editor_state::EditorState;
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};
 pub use session::{
-    Abandoned, Active, Completed, Feedback, GameSession, SessionAfterAction, SessionState,
-    UserAction,
+    Abandoned, Active, Completed, Feedback, FeedbackOutcome, GameSession, SessionAfterAction,
+    SessionState, UserAction,
 };
 
 /// Trait for types that represent a playable scenario session.
@@ -28,9 +28,9 @@ pub use session::{
 /// Both training mode (`GameSession<Active>`) and arcade mode (`ActiveMiniScenario`)
 /// implement this trait, enabling shared rendering and state inspection logic.
 ///
-/// This trait uses primitive types (strings, tuples) instead of EditorState
+/// This trait uses primitive types (strings, tuples) instead of `EditorState`
 /// to minimize coupling with legacy types. Implementations typically use
-/// the simulator's EditorDisplay facade internally.
+/// the simulator's `EditorDisplay` facade internally.
 ///
 /// # Examples
 ///
@@ -94,7 +94,7 @@ pub trait PlayableScenario {
 
     /// Get all selection bounds for multi-selection scenarios.
     ///
-    /// Returns a vector of SelectionBounds. Default implementation
+    /// Returns a vector of `SelectionBounds`. Default implementation
     /// returns the primary selection if any.
     fn all_selections(&self) -> Vec<SelectionBounds> {
         self.current_selection().into_iter().collect()
@@ -110,7 +110,7 @@ pub trait PlayableScenario {
 
     /// Get all target selection bounds for multi-selection scenarios.
     ///
-    /// Returns a vector of SelectionBounds. Default implementation
+    /// Returns a vector of `SelectionBounds`. Default implementation
     /// returns the primary target selection if any.
     fn all_target_selections(&self) -> Vec<SelectionBounds> {
         self.target_selection().into_iter().collect()

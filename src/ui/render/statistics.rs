@@ -162,7 +162,8 @@ fn render_mastery_bar(
     total: usize,
     color: Color,
 ) {
-    let percentage = (count * 100)
+    let percentage = count
+        .saturating_mul(100)
         .checked_div(total)
         .map_or(0, |pct| u32::try_from(pct).unwrap_or(u32::MAX));
 
@@ -172,10 +173,10 @@ fn render_mastery_bar(
     let bar = format!("{}{}", "|".repeat(filled), ".".repeat(empty));
 
     lines.push(Line::from(vec![
-        Span::raw(format!("  {:12}: ", label)),
-        Span::styled(format!("{:3} ", count), Style::default().fg(Color::White)),
+        Span::raw(format!("  {label:12}: ")),
+        Span::styled(format!("{count:3} "), Style::default().fg(Color::White)),
         Span::styled(bar, Style::default().fg(color)),
-        Span::raw(format!("  {:3}%", percentage)),
+        Span::raw(format!("  {percentage:3}%")),
     ]));
 }
 
@@ -213,7 +214,7 @@ fn render_review_status_section(lines: &mut Vec<Line<'static>>, state: &AppState
 
     lines.push(Line::from(vec![
         Span::raw("  Due for Review: "),
-        Span::styled(format!("{}", due_count), Style::default().fg(due_color)),
+        Span::styled(format!("{due_count}"), Style::default().fg(due_color)),
         Span::styled(
             if due_count > 5 {
                 " (practice recommended!)"
@@ -230,7 +231,7 @@ fn render_review_status_section(lines: &mut Vec<Line<'static>>, state: &AppState
     lines.push(Line::from(vec![
         Span::raw("  Commands Tracked: "),
         Span::styled(
-            format!("{}", total_commands),
+            format!("{total_commands}"),
             Style::default().fg(Color::Cyan),
         ),
     ]));
@@ -286,7 +287,7 @@ fn render_weak_commands_section(lines: &mut Vec<Line<'static>>, state: &AppState
 
             lines.push(Line::from(vec![
                 Span::raw(format!("  {}. ", i + 1)),
-                Span::styled(format!("{:10}", cmd), Style::default().fg(Color::White)),
+                Span::styled(format!("{cmd:10}"), Style::default().fg(Color::White)),
                 Span::raw(" - "),
                 Span::styled(
                     format!("{:.0}% success", success_rate * 100.0),
@@ -327,6 +328,9 @@ fn render_scenario_mastery_section(lines: &mut Vec<Line<'static>>, state: &AppSt
     let stats = profile.scenario_history.mastery_stats();
 
     let total = stats.learning + stats.proficient + stats.mastered;
+    let [mastered, proficient, learning, total_count] =
+        [stats.mastered, stats.proficient, stats.learning, total]
+            .map(|n| usize::try_from(n).unwrap_or(usize::MAX));
 
     if total == 0 {
         lines.push(Line::from(vec![Span::styled(
@@ -337,44 +341,19 @@ fn render_scenario_mastery_section(lines: &mut Vec<Line<'static>>, state: &AppSt
     }
 
     // Mastered scenarios
-    render_scenario_mastery_bar(lines, "Mastered", stats.mastered, total, Color::Yellow);
+    render_mastery_bar(lines, "Mastered", mastered, total_count, Color::Yellow);
 
     // Proficient scenarios
-    render_scenario_mastery_bar(lines, "Proficient", stats.proficient, total, Color::Cyan);
+    render_mastery_bar(lines, "Proficient", proficient, total_count, Color::Cyan);
 
     // Learning scenarios
-    render_scenario_mastery_bar(lines, "Learning", stats.learning, total, Color::Gray);
+    render_mastery_bar(lines, "Learning", learning, total_count, Color::Gray);
 
     // Total scenarios attempted
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::raw("  Total Scenarios Attempted: "),
-        Span::styled(format!("{}", total), Style::default().fg(Color::White)),
-    ]));
-}
-
-/// Render a horizontal bar for scenario mastery distribution
-fn render_scenario_mastery_bar(
-    lines: &mut Vec<Line<'static>>,
-    label: &str,
-    count: u32,
-    total: u32,
-    color: Color,
-) {
-    let percentage = (u64::from(count) * 100)
-        .checked_div(u64::from(total))
-        .map_or(0, |pct| u32::try_from(pct).unwrap_or(u32::MAX));
-
-    // Create horizontal progress bar
-    let filled = (percentage as usize * PROGRESS_BAR_WIDTH / 100).min(PROGRESS_BAR_WIDTH);
-    let empty = PROGRESS_BAR_WIDTH - filled;
-    let bar = format!("{}{}", "|".repeat(filled), ".".repeat(empty));
-
-    lines.push(Line::from(vec![
-        Span::raw(format!("  {:12}: ", label)),
-        Span::styled(format!("{:3} ", count), Style::default().fg(Color::White)),
-        Span::styled(bar, Style::default().fg(color)),
-        Span::raw(format!("  {:3}%", percentage)),
+        Span::styled(format!("{total}"), Style::default().fg(Color::White)),
     ]));
 }
 
@@ -395,7 +374,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Daily Quests Completed: "),
         Span::styled(
-            format!("{}", completed_today),
+            format!("{completed_today}"),
             Style::default().fg(Color::Green),
         ),
     ]));
@@ -407,7 +386,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Current Streak: "),
         Span::styled(
-            format!("{} days", current_streak),
+            format!("{current_streak} days"),
             Style::default().fg(Color::Yellow),
         ),
     ]));
@@ -415,7 +394,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Longest Streak: "),
         Span::styled(
-            format!("{} days", longest_streak),
+            format!("{longest_streak} days"),
             Style::default().fg(Color::Cyan),
         ),
     ]));
@@ -447,14 +426,14 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
 
     lines.push(Line::from(vec![
         Span::raw("  Average Score: "),
-        Span::styled(format!("{}%", avg_score), Style::default().fg(Color::Cyan)),
+        Span::styled(format!("{avg_score}%"), Style::default().fg(Color::Cyan)),
     ]));
 
     // Total scenarios completed
     lines.push(Line::from(vec![
         Span::raw("  Scenarios Completed: "),
         Span::styled(
-            format!("{}", scenarios_completed),
+            format!("{scenarios_completed}"),
             Style::default().fg(Color::Green),
         ),
     ]));
@@ -463,7 +442,7 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Perfect Completions: "),
         Span::styled(
-            format!("{}", perfect_scenarios),
+            format!("{perfect_scenarios}"),
             Style::default().fg(Color::Yellow),
         ),
     ]));
@@ -475,9 +454,9 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
     let remaining_minutes = minutes % 60;
 
     let time_str = if hours > 0 {
-        format!("{}h {}m", hours, remaining_minutes)
+        format!("{hours}h {remaining_minutes}m")
     } else {
-        format!("{}m", minutes)
+        format!("{minutes}m")
     };
 
     lines.push(Line::from(vec![
@@ -524,4 +503,37 @@ fn render_arcade_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
             Style::default().fg(Color::Green),
         ),
     ]));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bar_text(count: usize, total: usize) -> String {
+        let mut lines = Vec::new();
+        render_mastery_bar(&mut lines, "Label", count, total, Color::Gray);
+        lines
+            .iter()
+            .flat_map(|line| line.spans.iter())
+            .map(|span| span.content.as_ref())
+            .collect()
+    }
+
+    #[test]
+    fn test_mastery_bar_fills_proportionally() {
+        let text = bar_text(1, 2);
+        assert!(text.contains(" 50%"), "{text}");
+        assert_eq!(text.matches('|').count(), PROGRESS_BAR_WIDTH / 2);
+    }
+
+    #[test]
+    fn test_mastery_bar_with_empty_total_is_zero_percent() {
+        assert!(bar_text(0, 0).contains("  0%"));
+    }
+
+    #[test]
+    fn test_mastery_bar_survives_extreme_counts() {
+        let text = bar_text(usize::MAX, usize::MAX);
+        assert!(text.contains('%'), "{text}");
+    }
 }

@@ -13,12 +13,13 @@ use tracing_subscriber::{EnvFilter, fmt};
 /// Initialize secure logging
 ///
 /// In release mode, logging is disabled by default to avoid interfering with TUI.
-/// Set RUST_LOG environment variable to enable logging (e.g., RUST_LOG=debug).
+/// Set `RUST_LOG` environment variable to enable logging (e.g., `RUST_LOG=debug`).
 ///
 /// # Security
 ///
 /// - Filters out sensitive modules at high log levels
-/// - Sanitizes output (no thread info, no file paths)
+/// - Omits thread info and source file names; logged error chains may still contain local
+///   file paths (the log is local, user-facing error text stays path-free)
 /// - Writes to stderr only
 pub fn init_secure_logging() -> Result<()> {
     // Only enable logging if RUST_LOG is explicitly set
@@ -41,7 +42,7 @@ pub fn init_secure_logging() -> Result<()> {
         .with_target(true)
         .with_thread_ids(false) // Don't leak thread info
         .with_thread_names(false)
-        .with_file(false) // Don't leak file paths in production
+        .with_file(false) // No source file names in output
         .with_line_number(true)
         .with_writer(std::io::stderr); // Write to stderr, not stdout
 

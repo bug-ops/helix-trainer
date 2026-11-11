@@ -2,7 +2,16 @@
 //!
 //! Registers all movement commands (h, j, k, l, w, b, e, etc.)
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_FIND_CHAR, CMD_FIND_CHAR_REVERSE, CMD_FLIP_SELECTIONS, CMD_GOTO_FILE_START,
+    CMD_GOTO_FIRST_NONBLANK, CMD_GOTO_FIRST_NONWHITESPACE, CMD_GOTO_LAST_LINE, CMD_GOTO_LINE_END,
+    CMD_GOTO_LINE_START, CMD_GOTO_NEXT_PARAGRAPH, CMD_GOTO_PREV_PARAGRAPH, CMD_HALF_PAGE_DOWN,
+    CMD_HALF_PAGE_UP, CMD_MATCH_BRACKETS, CMD_MOVE_DOWN, CMD_MOVE_LEFT,
+    CMD_MOVE_LONG_WORD_BACKWARD, CMD_MOVE_LONG_WORD_END, CMD_MOVE_LONG_WORD_FORWARD,
+    CMD_MOVE_RIGHT, CMD_MOVE_UP, CMD_MOVE_WORD_BACKWARD, CMD_MOVE_WORD_END, CMD_MOVE_WORD_FORWARD,
+    CMD_PAGE_DOWN, CMD_PAGE_UP, CMD_REPEAT_LAST_MOTION, CMD_SELECT_MODE, CMD_TILL_CHAR,
+    CMD_TILL_CHAR_REVERSE,
+};
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
 use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior};
 use crate::helix::simulator::NormalMode;

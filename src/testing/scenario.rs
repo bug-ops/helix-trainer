@@ -77,36 +77,42 @@ impl ScenarioBuilder {
     }
 
     /// Set the scenario ID
+    #[must_use]
     pub fn id(mut self, id: impl Into<String>) -> Self {
         self.id = id.into();
         self
     }
 
     /// Set the scenario name (defaults to "Test Scenario {id}")
+    #[must_use]
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
     /// Set the scenario description
+    #[must_use]
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
         self
     }
 
     /// Set the initial file content
+    #[must_use]
     pub fn setup_content(mut self, content: impl Into<String>) -> Self {
         self.setup_content = content.into();
         self
     }
 
     /// Set the setup content's language (file-extension-style token, e.g. `"md"`, `"py"`)
+    #[must_use]
     pub fn setup_language(mut self, language: impl Into<String>) -> Self {
         self.setup_language = Some(language.into());
         self
     }
 
     /// Set the initial cursor position (row, col)
+    #[must_use]
     pub fn setup_cursor(mut self, row: usize, col: usize) -> Self {
         self.setup_cursor = (row, col);
         self
@@ -117,18 +123,21 @@ impl ScenarioBuilder {
     /// # Arguments
     /// * `start` - Start position as (row, col)
     /// * `end` - End position as (row, col)
+    #[must_use]
     pub fn setup_selection(mut self, start: (usize, usize), end: (usize, usize)) -> Self {
         self.setup_selection = Some([start.0, start.1, end.0, end.1]);
         self
     }
 
     /// Set the target file content
+    #[must_use]
     pub fn target_content(mut self, content: impl Into<String>) -> Self {
         self.target_content = content.into();
         self
     }
 
     /// Set the target cursor position (row, col)
+    #[must_use]
     pub fn target_cursor(mut self, row: usize, col: usize) -> Self {
         self.target_cursor = (row, col);
         self
@@ -139,30 +148,35 @@ impl ScenarioBuilder {
     /// # Arguments
     /// * `start` - Start position as (row, col)
     /// * `end` - End position as (row, col)
+    #[must_use]
     pub fn target_selection(mut self, start: (usize, usize), end: (usize, usize)) -> Self {
         self.target_selection = Some([start.0, start.1, end.0, end.1]);
         self
     }
 
     /// Set the solution commands
+    #[must_use]
     pub fn commands(mut self, commands: Vec<impl Into<String>>) -> Self {
         self.commands = commands.into_iter().map(Into::into).collect();
         self
     }
 
     /// Set the solution description
+    #[must_use]
     pub fn command_description(mut self, description: impl Into<String>) -> Self {
         self.command_description = description.into();
         self
     }
 
     /// Add a hint
+    #[must_use]
     pub fn hint(mut self, hint: impl Into<String>) -> Self {
         self.hints.push(hint.into());
         self
     }
 
     /// Set all hints at once
+    #[must_use]
     pub fn hints(mut self, hints: Vec<impl Into<String>>) -> Self {
         self.hints = hints.into_iter().map(Into::into).collect();
         self
@@ -174,6 +188,7 @@ impl ScenarioBuilder {
     /// * `commands` - The alternative command sequence
     /// * `points_multiplier` - Score multiplier for this solution (e.g., 0.8 for 80%)
     /// * `description` - Description of the alternative approach
+    #[must_use]
     pub fn alternative(
         mut self,
         commands: Vec<impl Into<String>>,
@@ -193,42 +208,52 @@ impl ScenarioBuilder {
     /// # Panics
     /// [`Self::build`] panics if `count` is 0, since `ScoringConfig::optimal_count`
     /// requires a non-zero value.
+    #[must_use]
     pub fn optimal_count(mut self, count: usize) -> Self {
         self.optimal_count = count;
         self
     }
 
     /// Set the maximum points
+    #[must_use]
     pub fn max_points(mut self, points: u32) -> Self {
         self.max_points = points;
         self
     }
 
     /// Set the tolerance for scoring
+    #[must_use]
     pub fn tolerance(mut self, tolerance: usize) -> Self {
         self.tolerance = tolerance;
         self
     }
 
     /// Set the difficulty level
+    #[must_use]
     pub fn difficulty(mut self, difficulty: Difficulty) -> Self {
         self.difficulty = Some(difficulty);
         self
     }
 
     /// Set the category
+    #[must_use]
     pub fn category(mut self, category: ScenarioCategory) -> Self {
         self.category = Some(category);
         self
     }
 
     /// Add a tag
+    #[must_use]
     pub fn tag(mut self, tag: impl Into<String>) -> Self {
         self.tags.push(tag.into());
         self
     }
 
     /// Build the scenario
+    ///
+    /// # Panics
+    ///
+    /// Panics if the configured optimal action count is zero.
     pub fn build(self) -> Scenario {
         let name = self
             .name
@@ -247,7 +272,7 @@ impl ScenarioBuilder {
             };
 
         Scenario {
-            id: self.id,
+            id: crate::testing::sid(&self.id),
             name,
             description: self.description,
             setup: Setup {
@@ -314,7 +339,7 @@ mod tests {
     #[test]
     fn test_default_scenario_helper() {
         let scenario = default_test_scenario();
-        assert_eq!(scenario.id, "test_scenario");
+        assert_eq!(scenario.id.as_str(), "test_scenario");
         assert_eq!(scenario.name, "Test Scenario test_scenario");
         assert!(scenario.metadata.is_none());
     }
@@ -322,14 +347,14 @@ mod tests {
     #[test]
     fn test_scenario_with_id_helper() {
         let scenario = test_scenario_with_id("custom_001");
-        assert_eq!(scenario.id, "custom_001");
+        assert_eq!(scenario.id.as_str(), "custom_001");
         assert_eq!(scenario.name, "Test Scenario custom_001");
     }
 
     #[test]
     fn test_scenario_with_difficulty_helper() {
         let scenario = test_scenario_with_difficulty("s1", Difficulty::Beginner);
-        assert_eq!(scenario.id, "s1");
+        assert_eq!(scenario.id.as_str(), "s1");
         assert!(scenario.metadata.is_some());
         assert_eq!(
             scenario.metadata.as_ref().unwrap().difficulty,
@@ -353,7 +378,7 @@ mod tests {
             .optimal_count(3)
             .build();
 
-        assert_eq!(scenario.id, "full_test");
+        assert_eq!(scenario.id.as_str(), "full_test");
         assert_eq!(scenario.name, "Full Test Scenario");
         assert_eq!(scenario.setup.file_content, "hello");
         assert_eq!(scenario.target.file_content, "world");

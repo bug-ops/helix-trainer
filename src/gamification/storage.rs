@@ -3,15 +3,19 @@
 use std::fs;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::config::data_dir::DataDir;
-use crate::config::json_store::{JsonStore, create_unique_tmp};
+use crate::config::json_store::{
+    Document, JsonStore, StorageError, create_unique_tmp, write_atomic,
+};
 use crate::security::limits::{MAX_LOCK_FILE_SIZE, MAX_PROFILE_FILE_SIZE};
-use crate::security::{path_validator, private_fs};
+use crate::security::{CappedReadError, path_validator, private_fs};
 
-use super::{GamificationError, Result, UserProfile};
+use super::UserProfile;
 
 /// Check whether a process with the given pid is currently alive.
 ///
@@ -65,8 +69,11 @@ fn same_content(a: &mut fs::File, b: &mut fs::File) -> std::io::Result<bool> {
         if n == 0 {
             return Ok(b.read(&mut buf_b)? == 0);
         }
-        match b.read_exact(&mut buf_b[..n]) {
-            Ok(()) if buf_a[..n] == buf_b[..n] => {}
+        let (Some(chunk_a), Some(chunk_b)) = (buf_a.get(..n), buf_b.get_mut(..n)) else {
+            return Ok(false);
+        };
+        match b.read_exact(chunk_b) {
+            Ok(()) if chunk_a == chunk_b => {}
             Ok(()) => return Ok(false),
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(false),
             Err(e) => return Err(e),
@@ -104,14 +111,51 @@ struct ProfileData {
     profile: UserProfile,
 }
 
+/// Why an unreadable `profile.json` could not be backed up.
+#[derive(Debug, Error)]
+pub enum QuarantineError {
+    /// There is no profile file (and no untransferred legacy file) to back up.
+    #[error("there is no profile file to back up")]
+    Missing,
+
+    /// The path exists but is not a regular file, so it is not copied (reading it could block
+    /// or never end).
+    #[error("the profile path is not a regular file")]
+    NotRegularFile,
+
+    /// Inspecting, reading or copying the file failed.
+    #[error("failed to copy the profile file")]
+    Copy {
+        /// The I/O error.
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+impl From<std::io::Error> for QuarantineError {
+    fn from(source: std::io::Error) -> Self {
+        Self::Copy { source }
+    }
+}
+
 /// Result of preserving an unreadable `profile.json` via [`ProfileStorage::quarantine`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum QuarantineOutcome {
     /// The original file was copied to this path; the original is untouched.
     BackedUp(PathBuf),
 
     /// The backup could not be made; the original is untouched.
-    Failed(String),
+    Failed(Arc<QuarantineError>),
+}
+
+/// Whether `profile.json.prev` holds a profile that passes the full load path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviousCopy {
+    /// The previous copy loads cleanly and can be restored.
+    Available,
+
+    /// There is no previous copy, or it does not load.
+    Unavailable,
 }
 
 /// Outcome of [`ProfileStorage::check_and_refresh_lock`].
@@ -126,28 +170,30 @@ pub enum LockStatus {
 }
 
 /// Handles profile persistence to disk
-#[derive(Debug, Clone)]
+///
+/// Clones share one in-memory copy of the last profile text this process either loaded or
+/// wrote successfully. [`ProfileStorage::save`] writes that text to `profile.json.prev`
+/// before replacing `profile.json`, so the previous copy is never read back from disk and an
+/// external edit or corruption of `profile.json` cannot overwrite the last good copy.
+#[derive(Clone)]
 pub struct ProfileStorage {
     store: JsonStore<ProfileData>,
+    last_valid: Arc<Mutex<Option<Arc<str>>>>,
+}
+
+impl std::fmt::Debug for ProfileStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProfileStorage")
+            .field("path", &self.path())
+            .field(
+                "last_valid_bytes",
+                &self.held_last_valid().as_ref().map(|text| text.len()),
+            )
+            .finish()
+    }
 }
 
 impl ProfileStorage {
-    /// Create a new storage handler
-    ///
-    /// Default path: `profile.json` in the data directory ([`DataDir::resolve`]):
-    /// `dirs::config_dir()/helix-trainer`, or `~/.config/helix-trainer` on macOS
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use helix_trainer::gamification::ProfileStorage;
-    ///
-    /// let storage = ProfileStorage::new();
-    /// ```
-    pub fn new() -> Self {
-        Self::in_data_dir(&DataDir::resolve())
-    }
-
     /// Create storage for `profile.json` in `data_dir`.
     ///
     /// When the data directory moved (macOS), [`ProfileStorage::load`] first
@@ -158,17 +204,19 @@ impl ProfileStorage {
         Self {
             store: JsonStore::new(
                 data_dir.file(PROFILE_FILE_NAME),
-                "profile",
+                Document::Profile,
                 MAX_PROFILE_FILE_SIZE,
             )
             .migrating_from(data_dir.legacy_file(PROFILE_FILE_NAME)),
+            last_valid: Arc::default(),
         }
     }
 
     /// Create storage with custom path
     pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            store: JsonStore::new(path.as_ref(), "profile", MAX_PROFILE_FILE_SIZE),
+            store: JsonStore::new(path.as_ref(), Document::Profile, MAX_PROFILE_FILE_SIZE),
+            last_valid: Arc::default(),
         }
     }
 
@@ -179,14 +227,18 @@ impl ProfileStorage {
     /// `helix-trainer/profile.json` or with another test's storage, even
     /// under parallel `cargo nextest` execution. All test fixture builders (
     /// `src/testing/app_state.rs` and the per-file `create_test_state()` helpers)
-    /// must construct `ProfileStorage` through this function, not `new()` — `new()`
-    /// resolves to the real user profile path and a test that reaches a save call
-    /// with it will silently overwrite the developer's real progress data.
+    /// must construct `ProfileStorage` through this function, never from the real
+    /// data directory — a test that reaches a save call with it would silently
+    /// overwrite the developer's real progress data.
     ///
     /// The backing temp directory is intentionally never cleaned up mid-process
     /// (it outlives any single test), relying on the OS to reclaim it; this mirrors
     /// the tradeoff every other `tempfile::TempDir`-based test already makes, just
     /// centralized instead of per-call-site.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the shared temporary directory cannot be created.
     #[cfg(test)]
     pub fn for_test() -> Self {
         use std::sync::OnceLock;
@@ -216,18 +268,117 @@ impl ProfileStorage {
     /// ```no_run
     /// use helix_trainer::gamification::ProfileStorage;
     ///
-    /// let storage = ProfileStorage::new();
+    /// let storage = ProfileStorage::with_path("profile.json");
     /// let profile = storage.load().unwrap();
     /// println!("Level: {}", profile.level);
     /// ```
-    pub fn load(&self) -> Result<UserProfile> {
-        match self.store.load()? {
-            Some(mut data) => {
+    pub fn load(&self) -> Result<UserProfile, StorageError> {
+        let loaded = self.store.load_with_source();
+        let mut held = self.held_last_valid();
+        match loaded {
+            Ok(Some((mut data, text))) => {
                 data.profile.recompute_level();
+                *held = Some(text.into());
                 Ok(data.profile)
             }
-            None => Ok(UserProfile::new()),
+            Ok(None) => Ok(UserProfile::new()),
+            Err(e) => {
+                *held = None;
+                Err(e)
+            }
         }
+    }
+
+    fn held_last_valid(&self) -> MutexGuard<'_, Option<Arc<str>>> {
+        self.last_valid
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Path of the previous profile copy kept next to `profile.json`.
+    fn previous_path(&self) -> PathBuf {
+        self.path().with_added_extension("prev")
+    }
+
+    /// Loads `profile.json.prev` through the same path as `profile.json` (size cap, lenient
+    /// card loader, level recomputation), returning the profile and the text it came from.
+    fn load_previous(&self) -> Result<(UserProfile, String), StorageError> {
+        let path = self.previous_path();
+        let store = JsonStore::<ProfileData>::new(&path, Document::Profile, MAX_PROFILE_FILE_SIZE);
+        match store.load_with_source()? {
+            Some((mut data, text)) => {
+                data.profile.recompute_level();
+                Ok((data.profile, text))
+            }
+            None => Err(StorageError::Read {
+                doc: Document::Profile,
+                path,
+                source: CappedReadError::Io(std::io::ErrorKind::NotFound.into()),
+            }),
+        }
+    }
+
+    /// Whether `profile.json.prev` exists and loads, i.e. whether
+    /// [`ProfileStorage::restore_previous`] can succeed right now.
+    ///
+    /// Offered next to Start fresh when the current profile is quarantined.
+    #[must_use]
+    pub fn previous_copy(&self) -> PreviousCopy {
+        match self.load_previous() {
+            Ok(_) => PreviousCopy::Available,
+            Err(e) => {
+                tracing::debug!(
+                    error = %crate::security::error_chain(&e),
+                    "No restorable previous profile copy"
+                );
+                PreviousCopy::Unavailable
+            }
+        }
+    }
+
+    /// Replace an unreadable profile with its previous copy, keeping the backup.
+    ///
+    /// Requires the unreadable file to have a backup (an identical existing one is reused),
+    /// then re-validates `profile.json.prev` through the full load path at this moment (it
+    /// may have changed since [`ProfileStorage::previous_copy`]) and writes exactly the
+    /// validated text to `profile.json` atomically. On any failure every file is left as it
+    /// was.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NoBackup`] when no backup could be made, a read or parse
+    /// error when the previous copy is missing or invalid, and [`StorageError::Write`] when
+    /// `profile.json` cannot be written.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+    ///
+    /// let dir = tempfile::tempdir().unwrap();
+    /// let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+    /// let mut profile = UserProfile::new();
+    /// profile.add_xp(500);
+    /// storage.save(&profile).unwrap();
+    /// storage.save(&UserProfile::new()).unwrap();
+    /// std::fs::write(storage.path(), "{broken").unwrap();
+    ///
+    /// let restored = storage.restore_previous().unwrap();
+    /// assert_eq!(restored.total_xp, 500);
+    /// assert_eq!(storage.load().unwrap().total_xp, 500);
+    /// ```
+    pub fn restore_previous(&self) -> Result<UserProfile, StorageError> {
+        if let QuarantineOutcome::Failed(source) = self.quarantine() {
+            return Err(StorageError::NoBackup {
+                doc: Document::Profile,
+                source,
+            });
+        }
+        let (profile, text) = self.load_previous()?;
+        let mut held = self.held_last_valid();
+        self.store.write(&text)?;
+        *held = Some(text.into());
+        Ok(profile)
     }
 
     /// Copy an unreadable profile file to `profile.json.corrupt-<timestamp>`
@@ -244,25 +395,24 @@ impl ProfileStorage {
     pub fn quarantine(&self) -> QuarantineOutcome {
         match self.try_quarantine() {
             Ok(path) => QuarantineOutcome::BackedUp(path),
-            Err(e) => QuarantineOutcome::Failed(e.to_string()),
+            Err(e) => QuarantineOutcome::Failed(Arc::new(e)),
         }
     }
 
-    fn try_quarantine(&self) -> std::io::Result<PathBuf> {
-        let not_regular = || std::io::Error::other("not a regular file");
+    fn try_quarantine(&self) -> Result<PathBuf, QuarantineError> {
         let metadata = match fs::metadata(self.path()) {
             Ok(metadata) => metadata,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return self.untransferred_legacy().ok_or(e);
+                return self.untransferred_legacy().ok_or(QuarantineError::Missing);
             }
-            Err(e) => return Err(e),
+            Err(e) => return Err(e.into()),
         };
         if !metadata.is_file() {
-            return Err(not_regular());
+            return Err(QuarantineError::NotRegularFile);
         }
         let mut source = fs::File::open(self.path())?;
         if !source.metadata()?.is_file() {
-            return Err(not_regular());
+            return Err(QuarantineError::NotRegularFile);
         }
         if let Some(existing) = self.find_identical_backup(&mut source) {
             return Ok(existing);
@@ -280,15 +430,17 @@ impl ProfileStorage {
             let candidate = self.path().with_added_extension(extension);
             match private_fs::create_new_file(&candidate) {
                 Ok(file) => break (candidate, file),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
-                Err(e) => return Err(e),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    attempt = attempt.saturating_add(1);
+                }
+                Err(e) => return Err(e.into()),
             }
         };
 
         let copied = std::io::copy(&mut source, &mut backup).and_then(|_| backup.sync_all());
         if let Err(e) = copied {
             let _ = fs::remove_file(&backup_path);
-            return Err(e);
+            return Err(e.into());
         }
         Ok(backup_path)
     }
@@ -315,7 +467,7 @@ impl ProfileStorage {
         let source_len = source_meta.len();
         let mut candidates: Vec<PathBuf> = fs::read_dir(self.path().parent()?)
             .ok()?
-            .filter_map(|entry| entry.ok())
+            .filter_map(Result::ok)
             .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
             .map(|entry| entry.path())
             .collect();
@@ -364,11 +516,12 @@ impl ProfileStorage {
     /// assert_eq!(fresh.level, 1);
     /// assert_eq!(storage.load().unwrap().level, 1);
     /// ```
-    pub fn start_fresh(&self) -> Result<UserProfile> {
-        if let QuarantineOutcome::Failed(reason) = self.quarantine() {
-            return Err(GamificationError::StorageError(format!(
-                "Refusing to replace the profile without a backup: {reason}"
-            )));
+    pub fn start_fresh(&self) -> Result<UserProfile, StorageError> {
+        if let QuarantineOutcome::Failed(source) = self.quarantine() {
+            return Err(StorageError::NoBackup {
+                doc: Document::Profile,
+                source,
+            });
         }
         let profile = UserProfile::new();
         self.save(&profile)?;
@@ -397,15 +550,31 @@ impl ProfileStorage {
     /// ```no_run
     /// use helix_trainer::gamification::{ProfileStorage, UserProfile};
     ///
-    /// let storage = ProfileStorage::new();
+    /// let storage = ProfileStorage::with_path("profile.json");
     /// let mut profile = UserProfile::new();
     /// profile.add_xp(100);
     /// storage.save(&profile).unwrap();
     /// ```
-    pub fn save(&self, profile: &UserProfile) -> Result<()> {
-        self.store.save(&ProfileData {
+    pub fn save(&self, profile: &UserProfile) -> Result<(), StorageError> {
+        let text = self.store.serialize(&ProfileData {
             profile: profile.clone(),
         })?;
+        {
+            // One lock across rotate, write and update, so clones saving concurrently never
+            // interleave and `.prev` always parses.
+            let mut held = self.held_last_valid();
+            if let Some(last_valid) = held.as_ref() {
+                // Best effort: a failed rotation must not block the save itself.
+                if let Err(e) = write_atomic(&self.previous_path(), last_valid.as_bytes()) {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to keep the previous profile copy"
+                    );
+                }
+            }
+            self.store.write(&text)?;
+            *held = Some(text.into());
+        }
 
         // Best-effort: keep the PID lock pointed at this process on every
         // save, not just at startup, so a second instance launched mid-way
@@ -471,7 +640,7 @@ impl ProfileStorage {
     /// ```no_run
     /// use helix_trainer::gamification::{LockStatus, ProfileStorage};
     ///
-    /// let storage = ProfileStorage::new();
+    /// let storage = ProfileStorage::with_path("profile.json");
     /// match storage.check_and_refresh_lock() {
     ///     LockStatus::Acquired => {}
     ///     LockStatus::OtherInstanceRunning(pid) => {
@@ -489,10 +658,7 @@ impl ProfileStorage {
 
         self.refresh_lock();
 
-        match other_live_pid {
-            Some(pid) => LockStatus::OtherInstanceRunning(pid),
-            None => LockStatus::Acquired,
-        }
+        other_live_pid.map_or(LockStatus::Acquired, LockStatus::OtherInstanceRunning)
     }
 
     /// Check if profile file exists
@@ -510,13 +676,17 @@ impl ProfileStorage {
     /// # Errors
     ///
     /// Returns error if file exists but cannot be deleted
-    pub fn delete(&self) -> Result<()> {
+    pub fn delete(&self) -> Result<(), StorageError> {
         if self.exists() {
-            fs::remove_file(self.path()).map_err(|e| {
-                GamificationError::StorageError(format!("Failed to delete profile: {}", e))
+            fs::remove_file(self.path()).map_err(|source| StorageError::Delete {
+                doc: Document::Profile,
+                path: self.path().to_path_buf(),
+                source,
             })?;
         }
-        let _ = fs::remove_file(self.lock_path());
+        remove_companion_file(&self.previous_path(), "previous profile copy");
+        *self.held_last_valid() = None;
+        remove_companion_file(&self.lock_path(), "lock file");
         Ok(())
     }
 
@@ -526,9 +696,13 @@ impl ProfileStorage {
     }
 }
 
-impl Default for ProfileStorage {
-    fn default() -> Self {
-        Self::new()
+/// Best-effort removal of a file kept next to the profile: a missing file is fine, any other
+/// failure is logged (the I/O message carries no path) and does not fail the caller.
+fn remove_companion_file(path: &Path, what: &str) {
+    if let Err(e) = fs::remove_file(path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!(error = %crate::security::error_chain(&e), "Failed to remove the {what}");
     }
 }
 
@@ -902,7 +1076,7 @@ mod tests {
         let second = storage.quarantine();
 
         assert!(matches!(first, QuarantineOutcome::BackedUp(_)));
-        assert_eq!(first, second);
+        std::assert_matches!((&first, &second), (QuarantineOutcome::BackedUp(a), QuarantineOutcome::BackedUp(b)) if a == b);
         assert_eq!(backups_in(dir.path()).len(), 1);
     }
 
@@ -1101,7 +1275,7 @@ mod tests {
     }
 
     fn moved_data_dir(root: &Path) -> DataDir {
-        DataDir::resolve_for(true, Some(root.join("xdg")), Some(root.join("os")))
+        DataDir::resolve_for(true, Some(root.join("xdg")), Some(root.join("os"))).unwrap()
     }
 
     fn legacy_profile_path(root: &Path) -> PathBuf {
@@ -1253,7 +1427,16 @@ mod tests {
 
         let err = ProfileStorage::with_path(&path).load().unwrap_err();
 
-        assert!(err.to_string().contains("Not a regular file"), "{err}");
+        assert!(
+            matches!(
+                err,
+                StorageError::Read {
+                    source: crate::security::CappedReadError::NotRegularFile,
+                    ..
+                }
+            ),
+            "{err}"
+        );
     }
 
     /// #441: a FIFO must be rejected without blocking.
@@ -1311,5 +1494,288 @@ mod tests {
             .unwrap();
 
         assert_eq!(mode_of(&path), 0o600);
+    }
+
+    #[test]
+    fn start_fresh_without_a_profile_file_is_a_no_backup_error() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        let err = storage.start_fresh().unwrap_err();
+
+        assert!(matches!(err, StorageError::NoBackup { .. }), "{err}");
+        let chain = crate::security::error_chain(&err);
+        assert_eq!(chain.matches("no profile file").count(), 1, "{chain}");
+        assert!(!storage.exists());
+    }
+
+    #[test]
+    fn delete_failure_is_a_typed_delete_error() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::create_dir(&path).unwrap();
+
+        let err = ProfileStorage::with_path(&path).delete().unwrap_err();
+
+        assert!(matches!(err, StorageError::Delete { .. }), "{err}");
+    }
+
+    #[test]
+    fn quarantine_failure_for_a_missing_file_is_typed() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        std::assert_matches!(
+            storage.quarantine(),
+            QuarantineOutcome::Failed(e) if matches!(*e, QuarantineError::Missing)
+        );
+    }
+
+    fn profile_with_xp(xp: u64) -> UserProfile {
+        let mut profile = UserProfile::new();
+        profile.add_xp(xp);
+        profile
+    }
+
+    fn previous_bytes(storage: &ProfileStorage) -> Vec<u8> {
+        fs::read(storage.path().with_added_extension("prev")).unwrap()
+    }
+
+    fn previous_exists(storage: &ProfileStorage) -> bool {
+        storage.path().with_added_extension("prev").exists()
+    }
+
+    #[test]
+    fn first_save_without_a_loaded_profile_makes_no_previous_copy() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        storage.save(&profile_with_xp(10)).unwrap();
+
+        assert!(!previous_exists(&storage));
+    }
+
+    #[test]
+    fn each_save_keeps_the_previous_one_as_prev() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        storage.save(&profile_with_xp(10)).unwrap();
+        let first = fs::read(storage.path()).unwrap();
+        storage.save(&profile_with_xp(20)).unwrap();
+
+        assert_eq!(previous_bytes(&storage), first);
+    }
+
+    #[test]
+    fn first_save_after_a_load_keeps_the_loaded_bytes() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        ProfileStorage::with_path(&path)
+            .save(&profile_with_xp(10))
+            .unwrap();
+        let loaded = fs::read(&path).unwrap();
+
+        let storage = ProfileStorage::with_path(&path);
+        let profile = storage.load().unwrap();
+        storage.save(&profile).unwrap();
+
+        assert_eq!(previous_bytes(&storage), loaded);
+    }
+
+    /// FR-121: bytes are never rotated from disk, so corruption of `profile.json` while the
+    /// app runs cannot overwrite the last good copy.
+    #[test]
+    fn external_corruption_between_saves_leaves_prev_intact() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        let good = fs::read(storage.path()).unwrap();
+
+        fs::write(storage.path(), "{corrupted while running").unwrap();
+        storage.save(&profile_with_xp(20)).unwrap();
+
+        assert_eq!(previous_bytes(&storage), good);
+        assert_eq!(storage.load().unwrap().total_xp, 20);
+    }
+
+    #[test]
+    fn start_fresh_does_not_rotate_the_corrupt_file_into_prev() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        fs::write(storage.path(), "{broken").unwrap();
+        assert!(storage.load().is_err());
+
+        storage.start_fresh().unwrap();
+
+        assert!(!previous_exists(&storage));
+    }
+
+    #[test]
+    fn clones_share_the_last_valid_bytes() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        let clone = storage.clone();
+
+        storage.save(&profile_with_xp(10)).unwrap();
+        let first = fs::read(storage.path()).unwrap();
+        clone.save(&profile_with_xp(20)).unwrap();
+
+        assert_eq!(previous_bytes(&storage), first);
+    }
+
+    #[test]
+    fn debug_output_never_contains_profile_contents() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(424_242)).unwrap();
+
+        let debug = format!("{storage:?}");
+
+        assert!(!debug.contains("424242"), "{debug}");
+        assert!(debug.contains("last_valid_bytes"), "{debug}");
+    }
+
+    #[test]
+    fn a_poisoned_lock_does_not_stop_saving() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        let shared = std::sync::Arc::clone(&storage.last_valid);
+        let _ = std::thread::spawn(move || {
+            let _guard = shared.lock().unwrap();
+            panic!("poison the lock");
+        })
+        .join();
+        assert!(storage.last_valid.is_poisoned());
+
+        storage.save(&profile_with_xp(20)).unwrap();
+
+        assert_eq!(storage.load().unwrap().total_xp, 20);
+    }
+
+    #[test]
+    fn a_failed_rotation_does_not_block_the_save() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        fs::create_dir(storage.path().with_added_extension("prev")).unwrap();
+
+        storage.save(&profile_with_xp(20)).unwrap();
+
+        assert_eq!(storage.load().unwrap().total_xp, 20);
+    }
+
+    #[test]
+    fn delete_removes_the_previous_copy_too() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        storage.save(&profile_with_xp(20)).unwrap();
+        assert!(previous_exists(&storage));
+
+        storage.delete().unwrap();
+
+        assert!(!previous_exists(&storage));
+        assert!(!storage.exists());
+    }
+
+    #[test]
+    fn delete_survives_an_unremovable_companion_file() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        let previous = storage.path().with_added_extension("prev");
+        fs::create_dir(&previous).unwrap();
+
+        storage.delete().unwrap();
+
+        assert!(!storage.exists());
+        assert!(previous.is_dir(), "the unremovable entry is left alone");
+    }
+
+    #[test]
+    fn previous_copy_reports_only_a_loadable_prev() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        assert_eq!(storage.previous_copy(), PreviousCopy::Unavailable);
+
+        storage.save(&profile_with_xp(10)).unwrap();
+        storage.save(&profile_with_xp(20)).unwrap();
+        assert_eq!(storage.previous_copy(), PreviousCopy::Available);
+
+        fs::write(storage.path().with_added_extension("prev"), "{bad").unwrap();
+        assert_eq!(storage.previous_copy(), PreviousCopy::Unavailable);
+    }
+
+    #[test]
+    fn restore_previous_writes_the_validated_bytes_and_keeps_the_backup() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        storage.save(&profile_with_xp(20)).unwrap();
+        let previous = previous_bytes(&storage);
+        fs::write(storage.path(), "{broken").unwrap();
+
+        let restored = storage.restore_previous().unwrap();
+
+        assert_eq!(restored.total_xp, 10);
+        assert_eq!(fs::read(storage.path()).unwrap(), previous);
+        assert_eq!(backups_in(dir.path()).len(), 1);
+    }
+
+    #[test]
+    fn restore_previous_refuses_a_prev_corrupted_after_the_offer() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        storage.save(&profile_with_xp(20)).unwrap();
+        fs::write(storage.path(), "{broken").unwrap();
+        assert_eq!(storage.previous_copy(), PreviousCopy::Available);
+
+        fs::write(storage.path().with_added_extension("prev"), "{rotten").unwrap();
+        let err = storage.restore_previous().unwrap_err();
+
+        assert!(matches!(err, StorageError::Corrupt { .. }), "{err}");
+        assert_eq!(fs::read_to_string(storage.path()).unwrap(), "{broken");
+    }
+
+    #[test]
+    fn restore_previous_without_a_backup_is_refused() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+
+        let err = storage.restore_previous().unwrap_err();
+
+        assert!(matches!(err, StorageError::NoBackup { .. }), "{err}");
+    }
+
+    #[test]
+    fn restore_previous_without_a_prev_file_is_a_read_error() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        fs::write(storage.path(), "{broken").unwrap();
+
+        let err = storage.restore_previous().unwrap_err();
+
+        assert!(matches!(err, StorageError::Read { .. }), "{err}");
+        assert_eq!(fs::read_to_string(storage.path()).unwrap(), "{broken");
+    }
+
+    #[test]
+    fn start_fresh_replaces_the_restorable_prev_on_the_next_save() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        storage.save(&profile_with_xp(10)).unwrap();
+        storage.save(&profile_with_xp(20)).unwrap();
+        let old_prev = previous_bytes(&storage);
+        fs::write(storage.path(), "{broken").unwrap();
+        assert!(storage.load().is_err());
+
+        storage.start_fresh().unwrap();
+        assert_eq!(previous_bytes(&storage), old_prev, "still restorable");
+        storage.save(&profile_with_xp(30)).unwrap();
+
+        assert_ne!(previous_bytes(&storage), old_prev);
     }
 }

@@ -1,4 +1,4 @@
-//! Tests for InputState enum
+//! Tests for `InputState` enum
 
 use super::nz;
 use crate::input::typestate::{FindType, InputState};

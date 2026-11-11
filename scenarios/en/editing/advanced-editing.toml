@@ -173,15 +173,19 @@ hints = [
 
 [scenarios.setup]
 file_content = """fn main() {
+    if true {
         let x = 1;
+    }
 }"""
-cursor_position = [1, 8]
+cursor_position = [2, 8]
 
 [scenarios.target]
 file_content = """fn main() {
+    if true {
     let x = 1;
+    }
 }"""
-cursor_position = [1, 4]
+cursor_position = [2, 4]
 
 [scenarios.solution]
 commands = ["<"]

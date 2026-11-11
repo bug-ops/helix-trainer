@@ -4,7 +4,13 @@
 //! `s`/`S` (regex select/split) are dispatched separately - see the comment
 //! above the registration block below.
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_ALIGN_SELECTIONS, CMD_COLLAPSE_SELECTION, CMD_COPY_SELECTION_NEXT, CMD_COPY_SELECTION_PREV,
+    CMD_EXTEND_LINE, CMD_KEEP_MATCHING, CMD_KEEP_PRIMARY_SELECTION, CMD_MERGE_CONSECUTIVE,
+    CMD_MERGE_SELECTIONS, CMD_REMOVE_MATCHING, CMD_REMOVE_PRIMARY_SELECTION, CMD_SELECT_ALL,
+    CMD_SELECT_LINE, CMD_SHRINK_TO_LINE_BOUNDS, CMD_SPLIT_SELECTION_NEWLINES, CMD_TOGGLE_COMMENTS,
+    CMD_TRIM_SELECTIONS,
+};
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
 use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior};
 use crate::helix::simulator::NormalMode;

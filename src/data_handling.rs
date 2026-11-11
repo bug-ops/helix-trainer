@@ -14,7 +14,8 @@ use helix_trainer::{
         QuestRegistrySlot, StreakChange, StreakManager, UserProfile,
     },
     learning::PerformanceTracker,
-    ui::{AppState, Notification, NotificationType},
+    security::error_chain,
+    ui::{AppState, Notification, NotificationType, state::Quarantine},
 };
 
 /// How long a data-loss-risk warning notification stays visible.
@@ -39,10 +40,12 @@ fn profile_load_failure_message(backup: &QuarantineOutcome) -> String {
 }
 
 /// Warning shown when a profile save fails; the next save retries.
-fn save_failed_notification(error: &impl std::fmt::Display) -> Notification {
+///
+/// Carries no error detail: paths and OS messages go to the log, not the screen.
+fn save_failed_notification() -> Notification {
     Notification::with_duration(
         NotificationType::Info {
-            message: format!("Failed to save progress: {error}. Will retry automatically."),
+            message: "Failed to save progress. Will retry automatically.".to_string(),
         },
         WARNING_NOTIFICATION_DURATION,
     )
@@ -171,7 +174,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
         }
 
         DataLoadMessage::ScenariosError(err) => {
-            tracing::error!("Failed to load scenarios: {}", err);
+            tracing::error!(error = %error_chain(&err), "Failed to load scenarios");
         }
 
         DataLoadMessage::ProfileReady(profile) => {
@@ -238,8 +241,11 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
                         }));
                 }
                 if let Err(e) = state.progress.save_immediate() {
-                    tracing::error!("Failed to save profile after startup unlocks: {}", e);
-                    state.ui.notifications.push(save_failed_notification(&e));
+                    tracing::error!(
+                        error = %error_chain(&e),
+                        "Failed to save profile after startup unlocks"
+                    );
+                    state.ui.notifications.push(save_failed_notification());
                 }
             }
 
@@ -250,16 +256,23 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
             error,
             fallback,
             backup,
+            previous,
         } => {
             state.progress.profile = fallback;
-            tracing::error!(backup = ?backup, "Profile load failed, saving disabled: {}", error);
+            tracing::error!(
+                backup = ?backup,
+                error = %error_chain(&error),
+                "Profile load failed, saving disabled"
+            );
             state.ui.notifications.push(Notification::with_duration(
                 NotificationType::Info {
                     message: profile_load_failure_message(&backup),
                 },
                 WARNING_NOTIFICATION_DURATION,
             ));
-            state.progress.quarantine_profile(backup);
+            state
+                .progress
+                .quarantine_profile(Quarantine { backup, previous });
             warn_if_other_instance_running(state);
         }
 
@@ -270,7 +283,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
         }
 
         DataLoadMessage::QuestRegistryError(err) => {
-            tracing::error!("Failed to load quest registry: {}", err);
+            tracing::error!(error = %error_chain(&err), "Failed to load quest registry");
             state.progress.quest_registry = QuestRegistrySlot::Unavailable;
             refresh_daily_quests_if_due(state);
         }
@@ -281,13 +294,13 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
         }
 
         DataLoadMessage::ProfileSaveError(err) => {
-            tracing::error!("Failed to save profile: {}", err);
+            tracing::error!(error = %error_chain(&*err), "Failed to save profile");
             // The optimistic `mark_saved()` made when the save was
             // dispatched was wrong: re-dirty so the next debounced or
             // immediate save retries, instead of the debounce gate
             // treating this failure as a successful save indefinitely.
             state.progress.mark_unsaved();
-            state.ui.notifications.push(save_failed_notification(&err));
+            state.ui.notifications.push(save_failed_notification());
         }
     }
 }
@@ -295,6 +308,11 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use helix_trainer::async_state::{LoaderError, SaveFailure};
+    use helix_trainer::config::json_store::{Document, StorageError};
+    use helix_trainer::gamification::{PreviousCopy, QuarantineError};
+    use helix_trainer::ids::{QuestId, ScenarioId};
+    use helix_trainer::security::UserError;
     use helix_trainer::{
         config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState},
         constants::STREAK_FREEZE_MAX_GAP_DAYS,
@@ -316,6 +334,18 @@ mod tests {
         ProfileStorage::with_path(dir.path().join(format!("profile-{id}.json")))
     }
 
+    fn corrupt_profile_error() -> StorageError {
+        StorageError::Corrupt {
+            doc: Document::Profile,
+            path: "profile.json".into(),
+            source: serde_json::from_str::<u8>("x").unwrap_err(),
+        }
+    }
+
+    fn no_backup() -> QuarantineOutcome {
+        QuarantineOutcome::Failed(Arc::new(QuarantineError::Missing))
+    }
+
     fn empty_test_app_state() -> AppState {
         let profile = UserProfile::new();
         let storage = test_profile_storage();
@@ -325,7 +355,7 @@ mod tests {
 
     fn default_test_scenario() -> Scenario {
         Scenario {
-            id: "test_scenario".to_string(),
+            id: ScenarioId::parse("test_scenario").unwrap(),
             name: "Test Scenario".to_string(),
             description: "Test scenario".to_string(),
             setup: Setup {
@@ -387,7 +417,9 @@ mod tests {
 
         handle_data_message(
             &mut state,
-            DataLoadMessage::ScenariosError("File not found".to_string()),
+            DataLoadMessage::ScenariosError(LoaderError::Scenarios(
+                UserError::scenario_load_error(),
+            )),
         );
 
         // Should not panic, just log error
@@ -721,7 +753,9 @@ mod tests {
 
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 6;
-        profile.completed_quests_today.insert("quest_0".to_string());
+        profile
+            .completed_quests_today
+            .insert(QuestId::parse("quest_0").unwrap());
         clock.advance_days(1);
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
@@ -934,9 +968,10 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::ProfileError {
-                error: "Corrupted file".to_string(),
+                error: corrupt_profile_error(),
                 fallback,
-                backup: QuarantineOutcome::Failed("test".to_string()),
+                backup: no_backup(),
+                previous: PreviousCopy::Unavailable,
             },
         );
 
@@ -963,9 +998,10 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::ProfileError {
-                error: "Failed to parse profile".to_string(),
+                error: corrupt_profile_error(),
                 fallback: UserProfile::new(),
                 backup: backup.clone(),
+                previous: PreviousCopy::Unavailable,
             },
         );
 
@@ -1107,9 +1143,10 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::ProfileError {
-                error: "Corrupted file".to_string(),
+                error: corrupt_profile_error(),
                 fallback: UserProfile::new(),
-                backup: QuarantineOutcome::Failed("test".to_string()),
+                backup: no_backup(),
+                previous: PreviousCopy::Unavailable,
             },
         );
 
@@ -1146,7 +1183,13 @@ mod tests {
 
         handle_data_message(
             &mut state,
-            DataLoadMessage::ProfileSaveError("Disk full".to_string()),
+            DataLoadMessage::ProfileSaveError(Arc::new(SaveFailure::Storage(
+                StorageError::Write {
+                    doc: Document::Profile,
+                    path: "profile.json".into(),
+                    source: std::io::Error::other("Disk full"),
+                },
+            ))),
         );
 
         assert!(
@@ -1156,7 +1199,7 @@ mod tests {
         assert!(
             state.ui.notifications.visible().iter().any(|n| matches!(
                 &n.notification_type,
-                NotificationType::Info { message } if message.contains("Disk full")
+                NotificationType::Info { message } if message.contains("Failed to save progress")
             )),
             "a failed save must surface a user-facing notification"
         );
@@ -1201,7 +1244,10 @@ mod tests {
             &mut state,
             DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
         );
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
 
         handle_data_message(
             &mut state,
@@ -1224,7 +1270,10 @@ mod tests {
             state.progress.quest_registry,
             QuestRegistrySlot::Pending
         ));
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
         assert_eq!(quest_warning_count(&state), 0);
 
         handle_data_message(
@@ -1248,14 +1297,19 @@ mod tests {
 
         handle_data_message(
             &mut state,
-            DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+            DataLoadMessage::QuestRegistryError(LoaderError::QuestRegistry(
+                UserError::scenario_load_error(),
+            )),
         );
 
         assert!(matches!(
             state.progress.quest_registry,
             QuestRegistrySlot::Unavailable
         ));
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
         assert_eq!(quest_warning_count(&state), 1);
     }
 
@@ -1264,7 +1318,9 @@ mod tests {
         let mut state = empty_test_app_state();
         handle_data_message(
             &mut state,
-            DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+            DataLoadMessage::QuestRegistryError(LoaderError::QuestRegistry(
+                UserError::scenario_load_error(),
+            )),
         );
         assert_eq!(quest_warning_count(&state), 0);
 
@@ -1273,7 +1329,10 @@ mod tests {
             DataLoadMessage::ProfileReady(UserProfile::new()),
         );
 
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
         assert_eq!(quest_warning_count(&state), 1);
     }
 
@@ -1290,7 +1349,10 @@ mod tests {
             DataLoadMessage::ProfileReady(UserProfile::new()),
         );
 
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
         assert_eq!(quest_warning_count(&state), 1);
     }
 
@@ -1305,13 +1367,17 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::ProfileError {
-                error: "bad".to_string(),
+                error: corrupt_profile_error(),
                 fallback: UserProfile::new(),
-                backup: QuarantineOutcome::Failed("x".to_string()),
+                backup: no_backup(),
+                previous: PreviousCopy::Unavailable,
             },
         );
 
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
     }
 
     #[test]
@@ -1320,9 +1386,55 @@ mod tests {
 
         handle_data_message(
             &mut state,
-            DataLoadMessage::QuestRegistryError("Invalid TOML".to_string()),
+            DataLoadMessage::QuestRegistryError(LoaderError::QuestRegistry(
+                UserError::scenario_load_error(),
+            )),
         );
 
         // Should not panic, just log error
+    }
+
+    /// FR-094: every loader and save failure arm logs the full cause chain.
+    #[test]
+    fn test_failure_arms_log_the_cause_chain() {
+        let cause = serde_json::from_str::<u8>("x").unwrap_err().to_string();
+        let logs = crate::log_capture::capture_logs(|| {
+            let mut state = empty_test_app_state();
+            handle_data_message(
+                &mut state,
+                DataLoadMessage::ProfileError {
+                    error: corrupt_profile_error(),
+                    fallback: UserProfile::new(),
+                    backup: no_backup(),
+                    previous: PreviousCopy::Unavailable,
+                },
+            );
+            handle_data_message(
+                &mut state,
+                DataLoadMessage::ScenariosError(LoaderError::Scenarios(
+                    UserError::scenario_load_error(),
+                )),
+            );
+            handle_data_message(
+                &mut state,
+                DataLoadMessage::QuestRegistryError(LoaderError::QuestRegistry(
+                    UserError::scenario_load_error(),
+                )),
+            );
+            handle_data_message(
+                &mut state,
+                DataLoadMessage::ProfileSaveError(Arc::new(SaveFailure::Storage(
+                    corrupt_profile_error(),
+                ))),
+            );
+        });
+
+        assert_eq!(logs.matches(&cause).count(), 2, "{logs}");
+        assert!(logs.contains("failed to load the scenarios: "), "{logs}");
+        assert!(
+            logs.contains("failed to load the quest templates: "),
+            "{logs}"
+        );
+        assert!(logs.contains("failed to save the profile: "), "{logs}");
     }
 }

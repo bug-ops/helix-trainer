@@ -147,7 +147,7 @@ mod tests {
     fn record(event: &'static str) {
         EVENTS
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((thread::current().id(), event));
     }
 
@@ -163,7 +163,7 @@ mod tests {
 
         let mine: Vec<_> = EVENTS
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .filter(|(id, _)| *id == thread::current().id())
             .map(|(_, event)| *event)

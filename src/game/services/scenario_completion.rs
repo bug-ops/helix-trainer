@@ -8,7 +8,8 @@ use crate::game::Feedback;
 use crate::gamification::{
     Achievement, AchievementEngine, UserProfile, XPCalculator, XPComponents, speed_time_ratio,
 };
-use crate::learning::{PerformanceTracker, ReviewableCommand, ScenarioMastery, Scheduler};
+use crate::ids::{CommandId, ScenarioId};
+use crate::learning::{PerformanceTracker, ScenarioMastery, Scheduler};
 use crate::ui::notification::{Notification, NotificationType};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
@@ -73,7 +74,7 @@ impl ScenarioCompletionService {
     #[must_use]
     pub fn record_and_scale_xp(
         profile: &mut UserProfile,
-        scenario_id: &str,
+        scenario_id: &ScenarioId,
         score: u32,
         base_xp: u64,
         now: DateTime<Utc>,
@@ -82,8 +83,9 @@ impl ScenarioCompletionService {
         let (_pre_mastery_level, pre_mastery_factor, pre_repeat_penalty) = profile
             .scenario_history
             .get(scenario_id)
-            .map(|c| (c.mastery_level, c.mastery_factor(), c.repeat_penalty()))
-            .unwrap_or((ScenarioMastery::Learning, 1.0, 1.0));
+            .map_or((ScenarioMastery::Learning, 1.0, 1.0), |c| {
+                (c.mastery_level, c.mastery_factor(), c.repeat_penalty())
+            });
 
         let actual_xp =
             profile
@@ -94,8 +96,7 @@ impl ScenarioCompletionService {
         let post_mastery_level = profile
             .scenario_history
             .get(scenario_id)
-            .map(|c| c.mastery_level)
-            .unwrap_or(ScenarioMastery::Learning);
+            .map_or(ScenarioMastery::Learning, |c| c.mastery_level);
 
         let applied_multiplier = pre_mastery_factor * pre_repeat_penalty;
 
@@ -121,7 +122,7 @@ impl ScenarioCompletionService {
     pub fn record_fsrs_data(
         scheduler: &mut Scheduler,
         tracker: &mut PerformanceTracker,
-        commands: &[String],
+        commands: &[CommandId],
         duration: Duration,
         success: bool,
     ) {
@@ -130,29 +131,26 @@ impl ScenarioCompletionService {
 
     /// Record commands and return mastery level changes
     ///
-    /// Returns list of (command, new_level_name) for commands that leveled up
+    /// Returns list of (command, `new_level_name`) for commands that leveled up
     pub fn record_fsrs_data_with_mastery(
         scheduler: &mut Scheduler,
         tracker: &mut PerformanceTracker,
-        commands: &[String],
+        commands: &[CommandId],
         duration: Duration,
         success: bool,
-    ) -> Vec<(String, String)> {
+    ) -> Vec<(CommandId, String)> {
         scheduler.record_scenario_commands_with_mastery(tracker, commands, duration, success)
     }
 
     /// Extract reviewable command ids from feedback
     ///
-    /// Goes through [`ReviewableCommand`]: typed text, `Escape` and argument
+    /// Goes through [`CommandId`]: typed text, `Escape` and argument
     /// characters yield no card, and register ops (`"ay` -> `"y`) and
     /// command-line invocations (`:g 3` -> `:goto`) are normalized so FSRS mints
     /// one learning card per skill.
     #[must_use]
-    pub fn extract_commands(feedback: &Feedback) -> Vec<String> {
-        ReviewableCommand::from_actions(feedback.user_actions.iter().map(|a| a.command.as_str()))
-            .into_iter()
-            .map(ReviewableCommand::into_string)
-            .collect()
+    pub fn extract_commands(feedback: &Feedback) -> Vec<CommandId> {
+        CommandId::from_actions(feedback.user_actions.iter().map(|a| a.command.as_str()))
     }
 
     /// Track exploration/speed achievement signals for a scenario completion:
@@ -160,7 +158,7 @@ impl ScenarioCompletionService {
     /// run counters when the completion fell under the respective time budget.
     ///
     /// Shared by Training and Arcade so speed/exploration achievements
-    /// (SpeedDemon, Speedrunner, Flash, Polyglot) are reachable identically
+    /// (`SpeedDemon`, Speedrunner, Flash, Polyglot) are reachable identically
     /// from either mode - see [`speed_time_ratio`]'s doc comment for why both
     /// modes derive "speed" from the same base per-difficulty budget.
     ///
@@ -278,11 +276,12 @@ impl ScenarioCompletionService {
 mod tests {
     use super::*;
     use crate::game::PerformanceRating;
+    use crate::testing::{cid, sid};
 
     fn create_test_feedback(score: u32, max_points: u32) -> Feedback {
         Feedback {
-            scenario_id: "test".to_string(),
-            success: true,
+            scenario_id: sid("test"),
+            outcome: crate::game::FeedbackOutcome::Optimal,
             score,
             max_points,
             rating: PerformanceRating::Perfect,
@@ -290,7 +289,6 @@ mod tests {
             optimal_actions: 1,
             duration: Duration::from_secs(5),
             hint: None,
-            is_optimal: true,
             user_actions: vec![],
         }
     }
@@ -419,7 +417,7 @@ mod tests {
         }];
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
-        assert_eq!(commands, vec!["dd"]);
+        assert_eq!(commands, vec![cid("dd")]);
     }
 
     #[test]
@@ -443,7 +441,7 @@ mod tests {
         ];
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
-        assert_eq!(commands, vec!["d", "w", "j"]);
+        assert_eq!(commands, vec![cid("d"), cid("w"), cid("j")]);
     }
 
     #[test]
@@ -460,7 +458,7 @@ mod tests {
             .collect();
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
-        assert_eq!(commands, vec!["h", "f", "T", "r", "/", "ma("]);
+        assert_eq!(commands, ["h", "f", "T", "r", "/", "ma("].map(cid).to_vec());
     }
 
     #[test]
@@ -468,7 +466,7 @@ mod tests {
         let mut profile = UserProfile::new();
         let result = ScenarioCompletionService::record_and_scale_xp(
             &mut profile,
-            "test_scenario",
+            &sid("test_scenario"),
             100,
             50,
             Utc::now(),
@@ -490,14 +488,14 @@ mod tests {
         for _ in 0..5 {
             let _ = ScenarioCompletionService::record_and_scale_xp(
                 &mut profile,
-                "test_scenario",
+                &sid("test_scenario"),
                 100,
                 50,
                 Utc::now(),
             );
         }
 
-        let completion = profile.scenario_history.get("test_scenario").unwrap();
+        let completion = profile.scenario_history.get(&sid("test_scenario")).unwrap();
         assert_eq!(completion.attempts, 5);
     }
 }

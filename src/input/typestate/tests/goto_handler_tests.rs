@@ -1,4 +1,4 @@
-//! Tests for GotoPending handler
+//! Tests for `GotoPending` handler
 
 use std::assert_matches;
 

@@ -1,7 +1,7 @@
 //! UI state management using Elm Architecture
 //!
 //! This module implements the Elm Architecture pattern for the TUI application.
-//! It provides a centralized AppState with pure update functions, enabling
+//! It provides a centralized `AppState` with pure update functions, enabling
 //! predictable state transitions and easy testing.
 //!
 //! # Architecture
@@ -20,11 +20,15 @@
 
 use crate::async_state::SaveRequest;
 use crate::config::Scenario;
-use crate::gamification::{ProfileStorage, QuarantineOutcome, UserProfile};
+use crate::gamification::{ProfileStorage, UserProfile};
+use crate::ids::{CommandId, ScenarioId};
 use crate::learning::PerformanceTracker;
 use crate::security::UserError;
 use crate::sound::SoundEffect;
 use crate::time::Clock;
+use crate::ui::layout::{
+    achievement_list_rows, clamp_achievement_scroll, clamp_menu_view, menu_list_rows,
+};
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -38,20 +42,23 @@ pub use effect::Effect;
 
 // Handler infrastructure for type-safe handlers
 mod handler_context;
+use handler_context::IntoHandlerResult;
 pub use handler_context::{HandlerContext, HandlerOutcome};
 
 // Sub-structures for organizing AppState
 mod substates;
-pub use substates::{ConfigState, GameState, ProfilePersistence, ProgressState, UIState};
+pub use substates::{
+    ConfigState, GameState, ProfilePersistence, ProgressState, Quarantine, UIState,
+};
 
 // Type-safe screen variants with required data
 pub mod screen;
 pub use screen::{
-    AchievementsData, CategoryFiltersData, CategoryProgress, CompletedOrAbandoned,
+    AchievementsData, CategoryFiltersData, CategoryProgress, CompletedOrAbandoned, CompletedTask,
     EndGameSummaryData, HintPanel, InputStateAccess, KeyHistory, MasteryInfo, MenuData,
     MiniGameData, MiniGameModeKind, MiniGameModeSelection, ModeSelectionData, NextStep,
-    ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData, TopMode,
-    TypedScreen,
+    ProfileData, ResultsData, ReturnDestination, ReviewData, StatisticsData, TaskData, TaskSession,
+    TopMode, TypedScreen,
 };
 
 /// Breakdown of XP earned from a scenario
@@ -99,7 +106,7 @@ pub struct QuestProgressChange {
 #[derive(Debug, Clone)]
 pub struct ReviewSessionState {
     /// Commands due for review, in review order.
-    pub due_commands: Vec<String>,
+    pub due_commands: Vec<CommandId>,
     /// Index of the command being reviewed.
     pub current_index: usize,
     /// When the session started.
@@ -110,10 +117,8 @@ pub struct ReviewSessionState {
 
 impl ReviewSessionState {
     /// The command currently being reviewed, `None` once every command is done
-    pub fn current_command(&self) -> Option<&str> {
-        self.due_commands
-            .get(self.current_index)
-            .map(String::as_str)
+    pub fn current_command(&self) -> Option<&CommandId> {
+        self.due_commands.get(self.current_index)
     }
 }
 
@@ -137,7 +142,7 @@ impl ReviewOutcome {
 #[derive(Debug, Clone)]
 pub struct ReviewResult {
     /// Reviewed command.
-    pub command: String,
+    pub command: CommandId,
     /// How the review ended.
     pub outcome: ReviewOutcome,
     /// Time the review took.
@@ -306,7 +311,7 @@ pub enum Message {
         /// Whether the run completed its scenario.
         scenario_completed: bool,
         /// Scenario the update refers to.
-        scenario_id: Option<String>,
+        scenario_id: Option<ScenarioId>,
         /// Time the run took.
         duration: Duration,
     },
@@ -346,6 +351,13 @@ pub enum Message {
 
     /// Replace the quarantined profile with a fresh one (only offered after a backup was made)
     StartFreshProfile,
+
+    /// Replace the quarantined profile with its validated previous copy (only offered when
+    /// a backup exists and the copy loads)
+    RestoreProfile,
+
+    /// The terminal was resized (or its size became known)
+    Resize(crate::ui::layout::Viewport),
 }
 
 /// Main application state
@@ -354,8 +366,8 @@ pub enum Message {
 /// This is the single source of truth for the application.
 ///
 /// Structure:
-/// - `screen`: Type-safe screen with required data (TypedScreen)
-/// - `ui`: Global UI rendering state (running, completion_time)
+/// - `screen`: Type-safe screen with required data (`TypedScreen`)
+/// - `ui`: Global UI rendering state (running flag, notifications, remembered menu position)
 /// - `game`: Game scenarios collection
 /// - `progress`: User progress (profile, learning, achievements)
 /// - `config`: Application configuration (filters, settings)
@@ -514,6 +526,36 @@ impl AppState {
         }
     }
 
+    /// Clamp the view state of the current screen to its list contents and the viewport
+    ///
+    /// The single normalization behind FR-022: `update()` runs it after every message and the
+    /// event loop after every background data message, so navigation, filter changes, loaded
+    /// scenarios, resizes and every rebuild of the menu from the remembered selection leave a
+    /// selection that exists and an offset that keeps it visible. Screens without a scrolling
+    /// list are untouched.
+    pub fn normalize_view(&mut self) {
+        match &mut self.screen {
+            TypedScreen::Menu(data) => {
+                let (selected_item, scroll_offset) = clamp_menu_view(
+                    data.selected_item,
+                    data.scroll_offset,
+                    self.game.scenario_collection.count(),
+                    menu_list_rows(self.ui.viewport),
+                );
+                data.selected_item = selected_item;
+                data.scroll_offset = scroll_offset;
+            }
+            TypedScreen::Achievements(data) => {
+                data.scroll_offset = clamp_achievement_scroll(
+                    data.scroll_offset,
+                    crate::gamification::AchievementEngine::all_achievements().len(),
+                    achievement_list_rows(self.ui.viewport),
+                );
+            }
+            _ => {}
+        }
+    }
+
     /// Get the number of available scenarios (filtered count)
     pub fn scenario_count(&self) -> usize {
         self.game.scenario_collection.count()
@@ -550,14 +592,14 @@ impl AppState {
 /// Helper macro to extract screen data and call type-safe handler
 ///
 /// This macro handles the pattern of:
-/// 1. Extract screen data from TypedScreen variant
+/// 1. Extract screen data from `TypedScreen` variant
 /// 2. Call handler with extracted data
-/// 3. Apply HandlerOutcome (transition or stay)
+/// 3. Apply `HandlerOutcome` (transition or stay)
 macro_rules! extract_screen {
     // Data-only handler (no context)
     ($state:expr, $variant:ident, $data:ident => $handler:expr) => {
         if let TypedScreen::$variant(ref mut $data) = $state.screen {
-            let outcome = $handler?;
+            let outcome = $handler.into_outcome()?;
             apply_outcome($state, outcome);
             Ok(())
         } else {
@@ -573,7 +615,7 @@ macro_rules! extract_screen {
                 &mut $state.progress,
                 &$state.config,
             );
-            let outcome = $handler?;
+            let outcome = $handler.into_outcome()?;
             apply_outcome($state, outcome);
             Ok(())
         } else {
@@ -593,7 +635,7 @@ macro_rules! extract_screen {
                 &mut $state.progress,
                 &$state.config,
             );
-            let outcome = $handler?;
+            let outcome = $handler.into_outcome()?;
             apply_outcome($state, outcome);
             Ok(())
         } else {
@@ -603,9 +645,9 @@ macro_rules! extract_screen {
 }
 
 /// Run a handler that needs only the shared (non-screen) state, then apply its outcome
-fn run_with_context(
+fn run_with_context<R: IntoHandlerResult>(
     state: &mut AppState,
-    handler: impl FnOnce(&mut HandlerContext<'_>) -> Result<HandlerOutcome, UserError>,
+    handler: impl FnOnce(&mut HandlerContext<'_>) -> R,
 ) -> Result<(), UserError> {
     let mut ctx = HandlerContext::new(
         &mut state.ui,
@@ -613,12 +655,12 @@ fn run_with_context(
         &mut state.progress,
         &state.config,
     );
-    let outcome = handler(&mut ctx)?;
+    let outcome = handler(&mut ctx).into_outcome()?;
     apply_outcome(state, outcome);
     Ok(())
 }
 
-/// Apply a HandlerOutcome to the state
+/// Apply a `HandlerOutcome` to the state
 ///
 /// If the outcome is a Transition, update the screen.
 /// If it's Stay, do nothing.
@@ -665,6 +707,8 @@ pub fn update(
     effects: &mut Vec<Effect>,
 ) -> Result<(), UserError> {
     let result = dispatch(state, msg);
+    // Every path that can change the list contents or the window funnels through here
+    state.normalize_view();
     // Delivered on the error path too: effects pushed before a failing step must not be lost
     effects.append(&mut state.ui.effects);
     result
@@ -675,12 +719,12 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
     match msg {
         // Navigation messages (don't require specific screen)
         Message::QuitApp => {
-            let outcome = handlers::handle_quit_app(state)?;
+            let outcome = handlers::handle_quit_app(state);
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::NavigateTo(screen) => {
-            let outcome = handlers::handle_navigate_to(screen)?;
+            let outcome = handlers::handle_navigate_to(screen);
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -691,7 +735,7 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
                 &mut state.progress,
                 &state.config,
             );
-            let outcome = handlers::handle_back_to_menu(&mut state.screen, &mut ctx)?;
+            let outcome = handlers::handle_back_to_menu(&mut state.screen, &mut ctx);
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -722,17 +766,23 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
             extract_screen!(state, MiniGame, mut data, ctx => handlers::handle_minigame_tick(data, &mut ctx))
         }
         Message::MiniGameCommand { keys, typed } => {
-            handlers::handle_minigame_command(state, keys, typed)
+            handlers::handle_minigame_command(state, &keys, &typed)
         }
-        Message::MiniGameTimeout => handlers::handle_minigame_timeout(state),
-        Message::MiniGameSessionTimeout => handlers::handle_minigame_session_timeout(state),
+        Message::MiniGameTimeout => {
+            handlers::handle_minigame_timeout(state);
+            Ok(())
+        }
+        Message::MiniGameSessionTimeout => {
+            handlers::handle_minigame_session_timeout(state);
+            Ok(())
+        }
         Message::MiniGameNextScenario => {
-            let outcome = handlers::handle_minigame_next_scenario(state)?;
+            let outcome = handlers::handle_minigame_next_scenario(state);
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::MiniGameBackToMenu => {
-            let outcome = handlers::handle_minigame_back_to_menu(state)?;
+            let outcome = handlers::handle_minigame_back_to_menu(state);
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -774,7 +824,7 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
         // Scenario lifecycle messages
         Message::CompleteScenario => {
             // This handler needs full AppState access to call update() for quest progress
-            let outcome = handlers::handle_complete_scenario(state)?;
+            let outcome = handlers::handle_complete_scenario(state);
             // Play success sound for training mode completion
             state
                 .ui
@@ -788,7 +838,7 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
             if let TypedScreen::Task(task_data) =
                 std::mem::replace(&mut state.screen, TypedScreen::Menu(MenuData::default()))
             {
-                let new_screen = handlers::handle_abandon_scenario(task_data)?;
+                let new_screen = handlers::handle_abandon_scenario(task_data);
                 // Play failure sound for abandoned scenario
                 state
                     .ui
@@ -848,7 +898,7 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
                     &mut state.progress,
                     &state.config,
                 );
-                let outcome = handlers::handle_go_to_scenario_list(results_data, &mut ctx)?;
+                let outcome = handlers::handle_go_to_scenario_list(results_data, &mut ctx);
                 apply_outcome(state, outcome);
                 Ok(())
             } else {
@@ -858,29 +908,29 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
 
         // Gameplay messages
         Message::ShowHint => {
-            let outcome = handlers::handle_show_hint(state)?;
+            let outcome = handlers::handle_show_hint(state);
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::ExecuteCommand { keys, typed } => {
-            let outcome = handlers::handle_execute_command(state, keys, typed)?;
+            let outcome = handlers::handle_execute_command(state, keys, &typed)?;
             apply_outcome(state, outcome);
             Ok(())
         }
 
         // Profile messages
         Message::ShowProfile => {
-            let outcome = handlers::handle_show_profile(&mut state.screen)?;
+            let outcome = handlers::handle_show_profile(&mut state.screen);
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::ShowStatistics => {
-            let outcome = handlers::handle_show_statistics(&mut state.screen)?;
+            let outcome = handlers::handle_show_statistics(&mut state.screen);
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::ShowAchievements => {
-            let outcome = handlers::handle_show_achievements(&mut state.screen)?;
+            let outcome = handlers::handle_show_achievements(&mut state.screen);
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -894,19 +944,22 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
             scenario_completed,
             scenario_id,
             duration,
-        } => handlers::handle_update_quest_progress(
-            state,
-            command,
-            scenario_completed,
-            scenario_id,
-            duration,
-        ),
+        } => {
+            handlers::handle_update_quest_progress(
+                state,
+                command.as_deref(),
+                scenario_completed,
+                scenario_id,
+                duration,
+            );
+            Ok(())
+        }
 
         // Filter messages
 
         // Category filters screen messages
         Message::ShowCategoryFilters => {
-            let outcome = handlers::handle_show_category_filters(&mut state.screen)?;
+            let outcome = handlers::handle_show_category_filters(&mut state.screen);
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -931,10 +984,10 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
                 &mut state.progress,
                 &state.config,
             );
-            let outcome = handlers::handle_start_review_session(&mut ctx)?;
+            let outcome = handlers::handle_start_review_session(&mut ctx);
             if outcome.is_transition() && state.minigame_session().is_some() {
                 // Starting a review leaves a paused arcade run behind for good
-                handlers::handle_minigame_game_over(state)?;
+                handlers::handle_minigame_game_over(state);
             }
             apply_outcome(state, outcome);
             Ok(())
@@ -948,20 +1001,40 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
 
         // Notification messages
         Message::CleanupNotifications => {
-            let outcome = handlers::handle_cleanup_notifications(&mut state.ui)?;
+            let outcome = handlers::handle_cleanup_notifications(&mut state.ui);
             apply_outcome(state, outcome);
             Ok(())
         }
         Message::StartFreshProfile => {
-            if matches!(
-                state.progress.persistence(),
-                ProfilePersistence::Quarantined(QuarantineOutcome::BackedUp(_))
-            ) {
+            if state
+                .progress
+                .persistence()
+                .quarantine()
+                .is_some_and(Quarantine::can_start_fresh)
+            {
                 // Leaves `Quarantined` until the result arrives, so a repeated request
                 // cannot queue a second start-fresh over the profile just written
                 state.progress.begin_profile_load();
                 state.ui.effects.push(Effect::StartFreshProfile);
             }
+            Ok(())
+        }
+        Message::RestoreProfile => {
+            if state
+                .progress
+                .persistence()
+                .quarantine()
+                .is_some_and(Quarantine::can_restore_previous)
+            {
+                // Same in-flight guard as Start fresh; a refusal re-quarantines with a fresh
+                // `previous` through `DataLoadMessage::ProfileError`
+                state.progress.begin_profile_load();
+                state.ui.effects.push(Effect::RestoreProfile);
+            }
+            Ok(())
+        }
+        Message::Resize(viewport) => {
+            state.ui.viewport = viewport;
             Ok(())
         }
         Message::ToggleSound => {

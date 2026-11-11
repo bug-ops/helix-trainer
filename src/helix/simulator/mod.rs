@@ -1,6 +1,6 @@
 //! Helix text editor simulator using helix-core primitives
 //!
-//! This module provides a HelixSimulator that uses the helix-core library
+//! This module provides a `HelixSimulator` that uses the helix-core library
 //! for text editing operations. It ensures unicode-correct handling of
 //! graphemes, supports multi-cursor operations, and maintains undo history.
 //!
@@ -27,6 +27,7 @@ mod tests;
 use crate::game::EditorState;
 use crate::game::editor_state::{CursorPosition, Selection as GameSelection};
 use crate::helix::indent::IndentUnit;
+use crate::helix::language::LanguageRules;
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
 use crate::security::UserError;
@@ -121,8 +122,11 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// commands of `exits_select_mode` clear it) and always false in Insert mode.
     pub(super) select_mode: bool,
 
-    /// Indent unit of the document language, used by `>`, `<` and Insert `Tab`
+    /// Indent unit of the document, used by `>`, `<`, `Tab` and new lines
     pub(super) indent_unit: IndentUnit,
+
+    /// Language rules for `J` comment tokens and new-line block openers
+    pub(super) language: &'static LanguageRules,
 
     /// Flag to prevent recording during repeat execution
     pub(super) is_repeating: bool,
@@ -150,7 +154,7 @@ impl<M: EditorMode> HelixSimulator<M> {
         M::name()
     }
 
-    /// Create an EditorSnapshot from current simulator state.
+    /// Create an `EditorSnapshot` from current simulator state.
     ///
     /// This is the preferred way to capture simulator state for:
     /// - Comparison with target state
@@ -187,8 +191,13 @@ impl<M: EditorMode> HelixSimulator<M> {
 
     /// Get current editor state
     ///
-    /// Exports ALL selections from helix_core::Selection to EditorState.
+    /// Exports ALL selections from `helix_core::Selection` to `EditorState`.
     /// Point selections (anchor == head) are skipped as they represent cursors without selection.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if a selection position cannot be converted into a valid
+    /// editor-state position.
     pub fn state(&self) -> Result<EditorState, UserError> {
         let max_pos = self.doc.len_chars();
 
@@ -288,12 +297,19 @@ impl<M: EditorMode> HelixSimulator<M> {
         self.macro_recorder.toggle();
     }
 
+    /// Adopt `language`, taking the indent unit from the current text when it
+    /// reveals one and from the language table otherwise
+    pub(super) fn set_language(&mut self, language: &'static LanguageRules) {
+        self.language = language;
+        self.indent_unit = IndentUnit::detect(&self.doc).unwrap_or(language.indent_unit);
+    }
+
     /// Apply transaction and save history
     ///
     /// No-op transactions (empty change set) are skipped entirely: they
     /// leave the document unchanged, so recording them would create a
     /// spurious undo step and needlessly discard valid redo history.
-    pub(super) fn apply_transaction(&mut self, transaction: Transaction) {
+    pub(super) fn apply_transaction(&mut self, transaction: &Transaction) {
         if transaction.changes().is_empty() {
             return;
         }
@@ -313,6 +329,10 @@ impl<M: EditorMode> HelixSimulator<M> {
 // Methods ONLY available in NormalMode
 impl HelixSimulator<NormalMode> {
     /// Create a new simulator with initial content (starts in Normal mode)
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "public constructor called with owned Strings throughout; the signature is the established API"
+    )]
     pub fn new(content: String) -> Self {
         Self {
             doc: Rope::from(content.as_str()),
@@ -323,6 +343,7 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
+            language: &LanguageRules::UNLISTED,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -334,7 +355,7 @@ impl HelixSimulator<NormalMode> {
         }
     }
 
-    /// Create a new simulator from an EditorSnapshot (starts in Normal mode)
+    /// Create a new simulator from an `EditorSnapshot` (starts in Normal mode)
     ///
     /// This is the preferred way to initialize from serialized state.
     /// Unlike `from_editor_state()`, this uses char offsets directly
@@ -369,6 +390,7 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
+            language: &LanguageRules::UNLISTED,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -380,10 +402,10 @@ impl HelixSimulator<NormalMode> {
         }
     }
 
-    /// Create a new simulator from an EditorState (starts in Normal mode)
+    /// Create a new simulator from an `EditorState` (starts in Normal mode)
     ///
     /// Initializes the simulator with the content, cursor position, and ALL selections
-    /// from the EditorState. This enables multi-cursor scenarios.
+    /// from the `EditorState`. This enables multi-cursor scenarios.
     pub fn from_editor_state(state: &EditorState) -> Self {
         let rope = Rope::from(state.content());
 
@@ -442,6 +464,7 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: RepeatBuffer::new(),
             select_mode: false,
             indent_unit: IndentUnit::DEFAULT,
+            language: &LanguageRules::UNLISTED,
             is_repeating: false,
             repeat_depth: 0,
             search_state: SearchState::new(),
@@ -482,6 +505,7 @@ impl HelixSimulator<NormalMode> {
             repeat_buffer: self.repeat_buffer,
             select_mode: false,
             indent_unit: self.indent_unit,
+            language: self.language,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -528,6 +552,7 @@ impl HelixSimulator<InsertMode> {
             repeat_buffer: self.repeat_buffer,
             select_mode: false,
             indent_unit: self.indent_unit,
+            language: self.language,
             is_repeating: self.is_repeating,
             repeat_depth: self.repeat_depth,
             search_state: self.search_state,
@@ -540,11 +565,11 @@ impl HelixSimulator<InsertMode> {
     }
 }
 
-/// Runtime mode-switching wrapper for HelixSimulator
+/// Runtime mode-switching wrapper for `HelixSimulator`
 ///
 /// This enum allows dynamic mode switching while maintaining the compile-time
 /// safety of the typed simulators internally. Use this when you need to store
-/// a simulator that can change modes at runtime (e.g., in GameSession).
+/// a simulator that can change modes at runtime (e.g., in `GameSession`).
 pub enum AnyModeSimulator {
     /// Simulator in Normal mode
     Normal(HelixSimulator<NormalMode>),
@@ -558,7 +583,7 @@ impl AnyModeSimulator {
         Self::Normal(HelixSimulator::new(content))
     }
 
-    /// Create from an EditorState in Normal mode
+    /// Create from an `EditorState` in Normal mode
     pub fn from_editor_state(state: &EditorState) -> Self {
         Self::Normal(HelixSimulator::from_editor_state(state))
     }
@@ -604,14 +629,17 @@ impl AnyModeSimulator {
 
     /// Declare the content language of the edited document
     ///
-    /// The language selects the indent unit used by `>`, `<` and Insert-mode
-    /// `Tab`; a language without a table entry keeps [`IndentUnit::DEFAULT`].
+    /// The indent unit is auto-detected from the current text (as `hx` does)
+    /// and falls back to the language table. The language also selects the
+    /// comment tokens `J` strips and the lines that open a block for
+    /// `o`/`O`/Enter; a language without a table entry gets the default unit,
+    /// no comment tokens and plain indent copying.
     #[must_use]
     pub fn with_language(mut self, language: &str) -> Self {
-        let unit = IndentUnit::for_language(language).unwrap_or_default();
+        let rules = LanguageRules::for_language(language).unwrap_or(&LanguageRules::UNLISTED);
         match &mut self {
-            Self::Normal(sim) => sim.indent_unit = unit,
-            Self::Insert(sim) => sim.indent_unit = unit,
+            Self::Normal(sim) => sim.set_language(rules),
+            Self::Insert(sim) => sim.set_language(rules),
         }
         self
     }
@@ -626,6 +654,10 @@ impl AnyModeSimulator {
     }
 
     /// Execute a command, handling mode transitions
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if the command does not exist or fails.
     pub fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
         commands::execute_command_any_mode(self, cmd)
     }
@@ -649,6 +681,11 @@ impl AnyModeSimulator {
     }
 
     /// Get current editor state
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if a selection position cannot be converted into a valid
+    /// editor-state position.
     pub fn state(&self) -> Result<EditorState, UserError> {
         match self {
             Self::Normal(sim) => sim.state(),
@@ -664,7 +701,7 @@ impl AnyModeSimulator {
         }
     }
 
-    /// Create an EditorSnapshot from current simulator state.
+    /// Create an `EditorSnapshot` from current simulator state.
     ///
     /// This is the preferred way to capture simulator state for:
     /// - Comparison with target state
@@ -699,7 +736,7 @@ impl AnyModeSimulator {
             }
     }
 
-    /// Create from an EditorSnapshot in Normal mode.
+    /// Create from an `EditorSnapshot` in Normal mode.
     pub fn from_snapshot(snapshot: &EditorSnapshot) -> Self {
         Self::Normal(HelixSimulator::from_snapshot(snapshot))
     }
@@ -740,9 +777,8 @@ impl AnyModeSimulator {
             Self::Insert(_) => return Ok(()), // Can't repeat in insert mode
         };
 
-        let action = match action {
-            Some(a) => a,
-            None => return Ok(()),
+        let Some(action) = action else {
+            return Ok(());
         };
 
         // Set repeating flag and increment depth, capturing the prior value
@@ -766,12 +802,12 @@ impl AnyModeSimulator {
                 expected_mode,
             } => {
                 // Validate mode
-                if expected_mode != &Mode::Normal {
-                    Ok(()) // No-op: requires Normal mode
-                } else {
+                if expected_mode == &Mode::Normal {
                     // Execute each command in sequence
                     // This handles compound actions like x+d (select line + delete)
                     execute_key_sequence(self, keys)
+                } else {
+                    Ok(()) // No-op: requires Normal mode
                 }
             }
             crate::helix::repeat::RepeatableAction::InsertSequence {
@@ -780,7 +816,7 @@ impl AnyModeSimulator {
                 keys,
             } => {
                 // Execute insert sequence through wrapper
-                use crate::helix::commands::*;
+                use crate::helix::commands::{CMD_ESCAPE, CMD_INSERT};
 
                 // Enter insert mode with the same command that was used originally
                 let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
@@ -864,7 +900,7 @@ impl AnyModeSimulator {
     }
 }
 
-/// Execute a sequence of KeyEvents as commands
+/// Execute a sequence of `KeyEvents` as commands
 ///
 /// This handles both simple commands and compound actions (e.g., x+d for select line + delete).
 /// Commands are parsed and executed in order, with multi-key sequences (gg, rx) handled properly.
@@ -872,7 +908,10 @@ fn execute_key_sequence(
     sim: &mut AnyModeSimulator,
     keys: &[crossterm::event::KeyEvent],
 ) -> Result<(), UserError> {
-    use crate::helix::commands::*;
+    use crate::helix::commands::{
+        CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
+        CMD_GOTO_FILE_START, CMD_SELECT_REGISTER,
+    };
     use crossterm::event::KeyCode;
 
     if keys.is_empty() {
@@ -910,15 +949,15 @@ fn execute_key_sequence(
                     }
                     ('r', _) => {
                         i += 2;
-                        Some(format!("r{}", ch2))
+                        Some(format!("r{ch2}"))
                     }
-                    ('f', _) | ('F', _) | ('t', _) | ('T', _) => {
+                    ('f' | 'F' | 't' | 'T', _) => {
                         i += 2;
-                        Some(format!("{}{}", ch1, ch2))
+                        Some(format!("{ch1}{ch2}"))
                     }
-                    ('g', 'h') | ('g', 'l') | ('g', 's') | ('g', 'e') => {
+                    ('g', 'h' | 'l' | 's' | 'e') => {
                         i += 2;
-                        Some(format!("{}{}", ch1, ch2))
+                        Some(format!("{ch1}{ch2}"))
                     }
                     _ => None, // Not a multi-key sequence, try single
                 }
@@ -950,19 +989,4 @@ fn execute_key_sequence(
     }
 
     Ok(())
-}
-
-// Implement CommandExecutor trait for AnyModeSimulator
-impl super::executor::CommandExecutor for AnyModeSimulator {
-    fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
-        self.execute_command(cmd)
-    }
-
-    fn state(&self) -> Result<EditorState, UserError> {
-        self.state()
-    }
-
-    fn mode(&self) -> Mode {
-        self.mode()
-    }
 }

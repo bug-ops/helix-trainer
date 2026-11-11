@@ -5,8 +5,9 @@
 //! - Sorting by name, difficulty, category, progress, mastery
 //! - Efficient index mapping for menu display
 
-use super::scenarios::{Difficulty, Scenario, ScenarioCategory};
+use super::scenarios::{Difficulty, Scenario, ScenarioCategory, ScenarioMetadata};
 use crate::gamification::UserProfile;
+use crate::ids::NormalizedCommand;
 use std::collections::HashSet;
 
 /// Collection of scenarios with filtering and sorting support
@@ -35,7 +36,7 @@ pub struct ScenarioFilter {
     pub difficulties: Option<HashSet<Difficulty>>,
 
     /// Include only scenarios teaching these commands (None = no filter)
-    pub commands: Option<HashSet<String>>,
+    pub commands: Option<HashSet<NormalizedCommand>>,
 
     /// Completion-status criterion (defaults to [`CompletionFilter::Any`])
     pub completion: CompletionFilter,
@@ -95,7 +96,7 @@ pub enum SortMode {
 impl ScenarioCollection {
     /// Create a new collection from a vector of scenarios
     ///
-    /// Applies the default sort mode (ByDifficultyThenCategory) on creation.
+    /// Applies the default sort mode (`ByDifficultyThenCategory`) on creation.
     pub fn new(scenarios: Vec<Scenario>) -> Self {
         let count = scenarios.len();
         let filtered_indices: Vec<usize> = (0..count).collect();
@@ -114,7 +115,7 @@ impl ScenarioCollection {
 
     /// Apply a filter to the collection
     ///
-    /// This updates the internal filtered_indices to only include scenarios
+    /// This updates the internal `filtered_indices` to only include scenarios
     /// that match all specified criteria.
     pub fn apply_filter(&mut self, filter: &ScenarioFilter, profile: Option<&UserProfile>) {
         self.active_filter = filter.clone();
@@ -123,7 +124,7 @@ impl ScenarioCollection {
             .scenarios
             .iter()
             .enumerate()
-            .filter(|(_, scenario)| self.matches_filter(scenario, filter, profile))
+            .filter(|(_, scenario)| Self::matches_filter(scenario, filter, profile))
             .map(|(idx, _)| idx)
             .collect();
     }
@@ -134,15 +135,17 @@ impl ScenarioCollection {
 
         match mode {
             SortMode::ByName => {
-                self.filtered_indices
-                    .sort_by(|&a, &b| self.scenarios[a].name.cmp(&self.scenarios[b].name));
+                self.filtered_indices.sort_by(|&a, &b| {
+                    self.scenarios
+                        .get(a)
+                        .map(|s| &s.name)
+                        .cmp(&self.scenarios.get(b).map(|s| &s.name))
+                });
             }
 
             SortMode::ByDifficulty => {
                 self.filtered_indices.sort_by_key(|&idx| {
-                    self.scenarios[idx]
-                        .metadata
-                        .as_ref()
+                    Self::metadata_of(&self.scenarios, idx)
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner) // Default to beginner if no metadata
                 });
@@ -151,12 +154,9 @@ impl ScenarioCollection {
             SortMode::ByCategory => {
                 self.filtered_indices.sort_by_key(|&idx| {
                     // Sort by category as integers (based on enum order)
-                    self.scenarios[idx]
-                        .metadata
-                        .as_ref()
+                    Self::metadata_of(&self.scenarios, idx)
                         .and_then(|m| m.category)
-                        .map(|c| c as u8)
-                        .unwrap_or(255) // Put scenarios without category at the end
+                        .map_or(255, |c| c as u8) // Put scenarios without category at the end
                 });
             }
 
@@ -164,8 +164,9 @@ impl ScenarioCollection {
                 if let Some(prof) = profile {
                     self.filtered_indices.sort_by_key(|&idx| {
                         // Completed scenarios go to the end
-                        let scenario_id = &self.scenarios[idx].id;
-                        prof.scenario_history.get(scenario_id).is_some()
+                        self.scenarios
+                            .get(idx)
+                            .is_some_and(|s| prof.scenario_history.get(&s.id).is_some())
                     });
                 }
                 // If no profile, don't change order
@@ -173,11 +174,8 @@ impl ScenarioCollection {
 
             SortMode::ByCategoryThenDifficulty => {
                 self.filtered_indices.sort_by_key(|&idx| {
-                    let metadata = self.scenarios[idx].metadata.as_ref();
-                    let category = metadata
-                        .and_then(|m| m.category)
-                        .map(|c| c as u8)
-                        .unwrap_or(255);
+                    let metadata = Self::metadata_of(&self.scenarios, idx);
+                    let category = metadata.and_then(|m| m.category).map_or(255, |c| c as u8);
                     let difficulty = metadata
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner);
@@ -187,14 +185,11 @@ impl ScenarioCollection {
 
             SortMode::ByDifficultyThenCategory => {
                 self.filtered_indices.sort_by_key(|&idx| {
-                    let metadata = self.scenarios[idx].metadata.as_ref();
+                    let metadata = Self::metadata_of(&self.scenarios, idx);
                     let difficulty = metadata
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner);
-                    let category = metadata
-                        .and_then(|m| m.category)
-                        .map(|c| c as u8)
-                        .unwrap_or(255);
+                    let category = metadata.and_then(|m| m.category).map_or(255, |c| c as u8);
                     (difficulty, category)
                 });
             }
@@ -203,11 +198,10 @@ impl ScenarioCollection {
                 if let Some(prof) = profile {
                     self.filtered_indices.sort_by_key(|&idx| {
                         // Sort by completion count (fewer completions = lower mastery = higher priority)
-                        let scenario_id = &self.scenarios[idx].id;
-                        prof.scenario_history
-                            .get(scenario_id)
-                            .map(|completion| completion.attempts)
-                            .unwrap_or(0) // Never attempted = highest priority
+                        self.scenarios
+                            .get(idx)
+                            .and_then(|s| prof.scenario_history.get(&s.id))
+                            .map_or(0, |completion| completion.attempts) // Never attempted = highest priority
                     });
                 }
                 // If no profile, don't change order
@@ -215,11 +209,15 @@ impl ScenarioCollection {
         }
     }
 
+    fn metadata_of(scenarios: &[Scenario], idx: usize) -> Option<&ScenarioMetadata> {
+        scenarios.get(idx).and_then(|s| s.metadata.as_ref())
+    }
+
     /// Filtered scenarios (references)
     pub fn filtered(&self) -> Vec<&Scenario> {
         self.filtered_indices
             .iter()
-            .map(|&idx| &self.scenarios[idx])
+            .filter_map(|&idx| self.scenarios.get(idx))
             .collect()
     }
 
@@ -227,7 +225,7 @@ impl ScenarioCollection {
     pub fn get_filtered_by_index(&self, filtered_idx: usize) -> Option<&Scenario> {
         self.filtered_indices
             .get(filtered_idx)
-            .map(|&original_idx| &self.scenarios[original_idx])
+            .and_then(|&original_idx| self.scenarios.get(original_idx))
     }
 
     /// Get total count of filtered scenarios
@@ -278,7 +276,6 @@ impl ScenarioCollection {
 
     /// Check if a scenario matches the current filter
     fn matches_filter(
-        &self,
         scenario: &Scenario,
         filter: &ScenarioFilter,
         profile: Option<&UserProfile>,
@@ -308,9 +305,7 @@ impl ScenarioCollection {
             let scenario_commands = scenario
                 .metadata
                 .as_ref()
-                .map(|m| &m.commands_taught)
-                .map(|v| v.as_slice())
-                .unwrap_or(&[]);
+                .map_or(&[][..], |m| m.commands_taught.as_slice());
 
             if !scenario_commands.iter().any(|cmd| commands.contains(cmd)) {
                 return false;
@@ -322,9 +317,7 @@ impl ScenarioCollection {
             let scenario_tags = scenario
                 .metadata
                 .as_ref()
-                .map(|m| &m.tags)
-                .map(|v| v.as_slice())
-                .unwrap_or(&[]);
+                .map_or(&[][..], |m| m.tags.as_slice());
 
             if !scenario_tags.iter().any(|tag| tags.contains(tag)) {
                 return false;
@@ -350,8 +343,7 @@ impl ScenarioCollection {
             let scenario_has_prereqs = scenario
                 .metadata
                 .as_ref()
-                .map(|m| !m.prerequisites.is_empty())
-                .unwrap_or(false);
+                .is_some_and(|m| !m.prerequisites.is_empty());
 
             if has_prereqs != scenario_has_prereqs {
                 return false;
@@ -393,6 +385,7 @@ impl ScenarioCollection {
     ///     CursorSpec, Scenario, ScenarioCollection, ScoringConfig, Setup, Solution, TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
+    /// use helix_trainer::ids::ScenarioId;
     ///
     /// fn minimal_scenario(id: &str) -> Scenario {
     ///     let cursor = CursorSpec {
@@ -402,7 +395,7 @@ impl ScenarioCollection {
     ///         selections: None,
     ///     };
     ///     Scenario {
-    ///         id: id.to_string(),
+    ///         id: ScenarioId::parse(id).unwrap(),
     ///         name: "Test".to_string(),
     ///         description: "Test".to_string(),
     ///         setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
@@ -423,7 +416,7 @@ impl ScenarioCollection {
     /// let mut profile = UserProfile::new();
     /// assert_eq!(collection.completed_count(&profile), 0);
     ///
-    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     /// assert_eq!(collection.completed_count(&profile), 1);
     /// ```
     pub fn completed_count(&self, profile: &UserProfile) -> usize {
@@ -446,6 +439,7 @@ impl ScenarioCollection {
     ///     CursorSpec, Scenario, ScenarioCollection, ScoringConfig, Setup, Solution, TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
+    /// use helix_trainer::ids::ScenarioId;
     ///
     /// fn minimal_scenario(id: &str) -> Scenario {
     ///     let cursor = CursorSpec {
@@ -455,7 +449,7 @@ impl ScenarioCollection {
     ///         selections: None,
     ///     };
     ///     Scenario {
-    ///         id: id.to_string(),
+    ///         id: ScenarioId::parse(id).unwrap(),
     ///         name: "Test".to_string(),
     ///         description: "Test".to_string(),
     ///         setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
@@ -476,7 +470,7 @@ impl ScenarioCollection {
     /// let mut profile = UserProfile::new();
     /// assert!(!collection.is_curriculum_complete(&profile));
     ///
-    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     /// assert!(collection.is_curriculum_complete(&profile));
     ///
     /// // An empty collection is never complete, even with no scenarios to finish.
@@ -504,6 +498,7 @@ impl ScenarioCollection {
     ///     ScoringConfig, Setup, Solution, TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
+    /// use helix_trainer::ids::ScenarioId;
     ///
     /// let cursor = CursorSpec {
     ///     cursor_position: Some((0, 0)),
@@ -512,7 +507,7 @@ impl ScenarioCollection {
     ///     selections: None,
     /// };
     /// let scenario = Scenario {
-    ///     id: "s1".to_string(),
+    ///     id: ScenarioId::parse("s1").unwrap(),
     ///     name: "Test".to_string(),
     ///     description: "Test".to_string(),
     ///     setup: Setup { file_content: "test".to_string(), language: None, cursor: cursor.clone() },
@@ -533,7 +528,7 @@ impl ScenarioCollection {
     ///
     /// let collection = ScenarioCollection::new(vec![scenario]);
     /// let mut profile = UserProfile::new();
-    /// profile.scenario_history.record_completion("s1", 100, 50, Utc::now());
+    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     ///
     /// let stats = collection.curriculum_stats(&profile);
     /// assert_eq!(stats.total, 1);
@@ -555,18 +550,18 @@ impl ScenarioCollection {
                 .is_some_and(|c| c.perfect_count > 0);
 
             if completed {
-                stats.completed += 1;
+                stats.completed = stats.completed.saturating_add(1);
             }
             if perfected {
-                stats.perfected += 1;
+                stats.perfected = stats.perfected.saturating_add(1);
             }
 
             if let Some(category) = scenario.metadata.as_ref().and_then(|m| m.category) {
                 match per_category.iter_mut().find(|(c, _, _)| *c == category) {
                     Some((_, cat_perfected, cat_total)) => {
-                        *cat_total += 1;
+                        *cat_total = cat_total.saturating_add(1);
                         if perfected {
-                            *cat_perfected += 1;
+                            *cat_perfected = cat_perfected.saturating_add(1);
                         }
                     }
                     None => per_category.push((category, usize::from(perfected), 1)),

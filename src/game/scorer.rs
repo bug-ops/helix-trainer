@@ -53,7 +53,7 @@ impl Scorer {
     /// * `max_points` - Maximum possible points for perfect solution
     ///
     /// # Returns
-    /// Score from 0 to max_points
+    /// Score from 0 to `max_points`
     ///
     /// # Errors
     /// Returns `SecurityError::ScoreOverflow` if:
@@ -103,7 +103,7 @@ impl Scorer {
 
     /// Calculate score using scenario's scoring configuration
     ///
-    /// Extracts the scoring parameters from a ScoringConfig and applies
+    /// Extracts the scoring parameters from a `ScoringConfig` and applies
     /// the standard scoring algorithm.
     ///
     /// # Errors
@@ -194,12 +194,16 @@ impl Scorer {
         clippy::cast_possible_truncation,
         reason = "percentage is truncated toward zero to select the rating band"
     )]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
+    )]
     pub fn rating(score: u32, max_points: u32) -> PerformanceRating {
         if max_points == 0 {
             return PerformanceRating::Poor;
         }
 
-        let percentage = (score as f64 / max_points as f64) * 100.0;
+        let percentage = (f64::from(score) / f64::from(max_points)) * 100.0;
 
         match percentage as u32 {
             100 => PerformanceRating::Perfect,

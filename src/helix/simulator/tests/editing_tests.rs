@@ -1,4 +1,4 @@
-//! Editing command tests for HelixSimulator
+//! Editing command tests for `HelixSimulator`
 //!
 //! Tests for text modification commands including:
 //! - Delete operations: d, x+d

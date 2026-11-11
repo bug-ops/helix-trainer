@@ -29,14 +29,16 @@
 //!
 //! // Render the new state (a test backend stands in for the terminal).
 //! let mut terminal = Terminal::new(TestBackend::new(80, 24))?;
-//! terminal.draw(|f| render(f, &mut app_state))?;
+//! terminal.draw(|f| render(f, &app_state))?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+pub mod layout;
 pub mod notification;
 pub mod render;
 pub mod state;
 
+pub use layout::Viewport;
 pub use notification::{Notification, NotificationQueue, NotificationType};
 pub use render::render;
 pub use state::{AppState, Message, NavTarget, update};

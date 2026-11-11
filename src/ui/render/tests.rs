@@ -2684,3 +2684,75 @@ fn localized_screens_use_only_existing_locale_keys() {
     }
     assert!(checked > 80, "only {checked} keys found");
 }
+
+mod english_text {
+    use super::create_test_app_state;
+    use crate::gamification::AchievementEngine;
+    use crate::ui::state::{
+        AchievementsData, AppState, ProfileData, ReturnDestination, TypedScreen,
+    };
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn screen_text(state: &AppState, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(140, height)).unwrap();
+        terminal.draw(|f| super::super::render(f, state)).unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect()
+    }
+
+    #[test]
+    fn profile_screen_keeps_its_english_text() {
+        let mut state = create_test_app_state(vec![]);
+        state.screen = TypedScreen::Profile(ProfileData {
+            return_to: ReturnDestination::Menu,
+        });
+        let text = screen_text(&state, 40);
+        for expected in [
+            "PLAYER PROFILE",
+            "Press 's' for detailed statistics | Press 'a' for achievements | Press 'm' to return to menu",
+            "Level 1 ",
+            "Statistics:",
+            "Total Scenarios: ",
+            "Perfect Runs: ",
+            "Total XP: ",
+            "Daily Quests:",
+            "Active Quests: ",
+            "Completed Today: ",
+            "Learning Progress:",
+            "Commands Learned: ",
+            "Commands Mastered: ",
+            "All caught up!",
+        ] {
+            assert!(text.contains(expected), "missing {expected:?} in {text}");
+        }
+    }
+
+    #[test]
+    fn achievements_screen_keeps_its_english_text() {
+        let mut state = create_test_app_state(vec![]);
+        state.screen = TypedScreen::Achievements(AchievementsData {
+            return_to: ReturnDestination::Menu,
+            scroll_offset: 0,
+        });
+        let total = AchievementEngine::all_achievements().len();
+
+        let tall = screen_text(&state, 80);
+        assert!(
+            tall.contains(&format!("ACHIEVEMENTS (0/{total})")),
+            "{tall}"
+        );
+        assert!(
+            tall.contains("'p': profile | 's': statistics | 'j'/'k': scroll | 'm': menu"),
+            "{tall}"
+        );
+
+        let short = screen_text(&state, 24);
+        assert!(short.contains("'m': menu | 1-"), "{short}");
+        assert!(short.contains(&format!("/{total}")), "{short}");
+    }
+}

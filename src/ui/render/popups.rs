@@ -263,13 +263,12 @@ pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
     }
 
     let backup_line = match backup {
-        QuarantineOutcome::BackedUp(path) => format!("Backup kept at: {}", path.display()),
-        QuarantineOutcome::Failed(reason) => format!("No backup made: {reason}"),
+        QuarantineOutcome::BackedUp(path) => {
+            t!("profile.backup_kept", path = path.display()).to_string()
+        }
+        QuarantineOutcome::Failed(reason) => t!("profile.no_backup", reason = reason).to_string(),
     };
-    let mut lines = vec![
-        "Profile load failed: saving is disabled this session.".to_string(),
-        backup_line,
-    ];
+    let mut lines = vec![t!("profile.load_failed").to_string(), backup_line];
     if quarantine.can_start_fresh() {
         lines.push(t!("profile.start_fresh_action").to_string());
     }
@@ -355,6 +354,20 @@ mod tests {
         let expected: String = path.split_whitespace().collect();
         assert!(joined.contains(&expected), "{rendered:#?}");
         assert!(rendered[0].contains("Profile load failed"));
+    }
+
+    #[test]
+    fn test_profile_load_banner_keeps_its_english_text() {
+        let state = quarantined_state("/tmp/p.corrupt");
+        let rendered = rows(&render_banner(&state, 100, 12));
+        assert!(
+            rendered[0].contains("Profile load failed: saving is disabled this session."),
+            "{rendered:#?}"
+        );
+        assert!(
+            rendered[1].contains("Backup kept at: /tmp/p.corrupt"),
+            "{rendered:#?}"
+        );
     }
 
     #[test]

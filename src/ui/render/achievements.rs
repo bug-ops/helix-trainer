@@ -10,6 +10,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
+use rust_i18n::t;
 
 /// Render the achievements screen, listing every achievement with its unlock status
 ///
@@ -29,11 +30,14 @@ pub(super) fn render_achievements_screen(frame: &mut Frame, state: &AppState) {
         .filter(|a| state.progress.profile.has_achievement(&a.id))
         .count();
 
-    let title = Paragraph::new(format!(
-        "ACHIEVEMENTS ({}/{})",
-        unlocked_count,
-        achievements.len()
-    ))
+    let title = Paragraph::new(
+        t!(
+            "achievements.title",
+            unlocked = unlocked_count,
+            total = achievements.len()
+        )
+        .to_string(),
+    )
     .style(
         Style::default()
             .fg(Color::Cyan)
@@ -46,16 +50,21 @@ pub(super) fn render_achievements_screen(frame: &mut Frame, state: &AppState) {
     let visible_range = render_achievements_content(frame, state, &achievements, chunks[1]);
 
     let scroll_hint = if let Some((first, last)) = visible_range {
-        format!(" | {}-{}/{}", first, last, achievements.len())
+        t!(
+            "achievements.scroll_hint",
+            first = first,
+            last = last,
+            total = achievements.len()
+        )
+        .to_string()
     } else {
         String::new()
     };
-    let instructions = Paragraph::new(format!(
-        "'p': profile | 's': statistics | 'j'/'k': scroll | 'm': menu{scroll_hint}"
-    ))
-    .style(Style::default().fg(Color::Gray))
-    .alignment(Alignment::Center)
-    .block(Block::default().borders(Borders::ALL));
+    let instructions =
+        Paragraph::new(t!("achievements.instructions", scroll_hint = scroll_hint).to_string())
+            .style(Style::default().fg(Color::Gray))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
     frame.render_widget(instructions, chunks[2]);
 }
 

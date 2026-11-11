@@ -32,6 +32,30 @@ use event_loop::run_async_event_loop;
 use logging::init_secure_logging;
 use terminal::{install_panic_hook, setup_terminal};
 
+/// Exit status when no data directory can be determined.
+const NO_DATA_DIR_EXIT_CODE: i32 = 1;
+
+/// Error text shown when no data directory can be determined.
+const NO_DATA_DIR_MESSAGE: &str = "cannot determine the configuration directory; \
+     set HOME or XDG_CONFIG_HOME to an absolute path";
+
+/// Turns an unresolved data directory into the startup error message.
+fn require_data_dir(resolved: Option<DataDir>) -> Result<DataDir, &'static str> {
+    resolved.ok_or(NO_DATA_DIR_MESSAGE)
+}
+
+/// Loads the user configuration; on failure falls back to the defaults and returns the
+/// notification text to show at startup.
+fn load_config_or_default(storage: &ConfigStorage) -> (AppConfig, Option<String>) {
+    match storage.load() {
+        Ok(config) => (config, None),
+        Err(e) => {
+            tracing::warn!(error = %error_chain(&e), "Failed to load config, using defaults");
+            (AppConfig::default(), Some(config_load_failed_message()))
+        }
+    }
+}
+
 /// Main entry point (async)
 ///
 /// Uses 2 worker threads - sufficient for our async workload:
@@ -57,12 +81,12 @@ async fn main() -> Result<()> {
     }
 
     // Resolved before logging and the terminal exist so the message is readable.
-    let Some(data_dir) = DataDir::resolve() else {
-        eprintln!(
-            "error: cannot determine the configuration directory; \
-             set HOME or XDG_CONFIG_HOME to an absolute path"
-        );
-        std::process::exit(1);
+    let data_dir = match require_data_dir(DataDir::resolve()) {
+        Ok(dir) => dir,
+        Err(message) => {
+            eprintln!("error: {message}");
+            std::process::exit(NO_DATA_DIR_EXIT_CODE);
+        }
     };
 
     // Warn if running debug build
@@ -82,13 +106,7 @@ async fn main() -> Result<()> {
 
     // Load application configuration
     let config_storage = ConfigStorage::in_data_dir(&data_dir);
-    let (app_config, config_startup_message) = match config_storage.load() {
-        Ok(config) => (config, None),
-        Err(e) => {
-            tracing::warn!(error = %error_chain(&e), "Failed to load config, using defaults");
-            (AppConfig::default(), Some(config_load_failed_message()))
-        }
-    };
+    let (app_config, config_startup_message) = load_config_or_default(&config_storage);
 
     // Resolve the gameplay keymap overlay from the user's Helix config, if
     // `use_helix_keymap` is enabled. Degrades to the stock keymap
@@ -214,4 +232,59 @@ async fn main() -> Result<()> {
     tracing::info!("Exiting Helix Keybindings Trainer");
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unresolved_data_dir_is_an_error_naming_both_variables() {
+        let message = require_data_dir(None).unwrap_err();
+        assert!(message.contains("HOME"), "{message}");
+        assert!(message.contains("XDG_CONFIG_HOME"), "{message}");
+        assert_eq!(NO_DATA_DIR_EXIT_CODE, 1);
+    }
+
+    #[test]
+    fn relative_bases_do_not_resolve_a_data_dir() {
+        let resolved = DataDir::resolve_for(
+            false,
+            None,
+            Some(std::path::PathBuf::from("relative/.config")),
+        );
+        assert!(require_data_dir(resolved).is_err());
+    }
+
+    #[test]
+    fn resolved_data_dir_passes_through() {
+        let base = std::env::temp_dir();
+        let resolved = DataDir::resolve_for(false, None, Some(base.clone()));
+        assert_eq!(
+            require_data_dir(resolved).unwrap().dir(),
+            base.join("helix-trainer")
+        );
+    }
+
+    #[test]
+    fn corrupt_config_falls_back_to_defaults_with_a_notification() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, "{ not json").unwrap();
+
+        let (config, message) = load_config_or_default(&ConfigStorage::with_path(&path));
+        assert_eq!(message, Some(config_load_failed_message()));
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            serde_json::to_value(AppConfig::default()).unwrap()
+        );
+    }
+
+    #[test]
+    fn missing_config_yields_defaults_without_a_notification() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, message) =
+            load_config_or_default(&ConfigStorage::with_path(dir.path().join("config.json")));
+        assert_eq!(message, None);
+    }
 }

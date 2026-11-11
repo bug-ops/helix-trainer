@@ -16,7 +16,9 @@ use std::path::{Path, PathBuf};
 const APP_DIR: &str = "helix-trainer";
 
 /// XDG-style base directory: `xdg_config_home` when it is a non-empty
-/// absolute path, otherwise `<home>/.config`.
+/// absolute path, otherwise `<home>/.config` when `home` is absolute.
+/// A relative value is treated as unset so the data directory never depends on
+/// the current working directory.
 ///
 /// # Examples
 ///
@@ -32,12 +34,13 @@ const APP_DIR: &str = "helix-trainer";
 ///     Some("/x".into())
 /// );
 /// assert_eq!(xdg_config_base(Some(OsStr::new("rel")), None), None);
+/// assert_eq!(xdg_config_base(None, Some(Path::new("rel"))), None);
 /// ```
 pub fn xdg_config_base(xdg_config_home: Option<&OsStr>, home: Option<&Path>) -> Option<PathBuf> {
     xdg_config_home
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
-        .or_else(|| home.map(|h| h.join(".config")))
+        .or_else(|| home.filter(|h| h.is_absolute()).map(|h| h.join(".config")))
 }
 
 /// [`xdg_config_base`] resolved from `$XDG_CONFIG_HOME` and the home directory.
@@ -79,8 +82,10 @@ impl DataDir {
         xdg_base: Option<PathBuf>,
         os_config_dir: Option<PathBuf>,
     ) -> Option<Self> {
-        let os_dir = os_config_dir.map(|d| d.join(APP_DIR));
-        match xdg_base {
+        let os_dir = os_config_dir
+            .filter(|d| d.is_absolute())
+            .map(|d| d.join(APP_DIR));
+        match xdg_base.filter(|b| b.is_absolute()) {
             Some(base) if macos => {
                 let current = base.join(APP_DIR);
                 let legacy = os_dir.filter(|d| *d != current);
@@ -139,6 +144,30 @@ mod tests {
         let fallback = Some(home.join(".config"));
         assert_eq!(base(Some(Path::new("")), Some(&home)), fallback);
         assert_eq!(base(Some(Path::new("rel")), Some(&home)), fallback);
+    }
+
+    #[test]
+    fn base_treats_relative_home_as_unset() {
+        assert_eq!(base(None, Some(Path::new("rel"))), None);
+        assert_eq!(base(Some(Path::new("rel")), Some(Path::new(""))), None);
+    }
+
+    #[test]
+    fn resolve_for_ignores_relative_bases() {
+        assert_eq!(
+            DataDir::resolve_for(false, None, Some(PathBuf::from("rel/.config"))),
+            None
+        );
+        assert_eq!(
+            DataDir::resolve_for(
+                true,
+                Some(PathBuf::from("rel")),
+                Some(PathBuf::from("rel2"))
+            ),
+            None
+        );
+        let dirs = DataDir::resolve_for(true, Some(PathBuf::from("rel")), Some(abs("os"))).unwrap();
+        assert_eq!(dirs.dir(), abs("os/helix-trainer"));
     }
 
     #[test]

@@ -116,6 +116,7 @@ fn mutate(document: &mut Value, mutations: &[Mutation], unknown_fields: usize) {
 }
 
 fn exercise_consumers(mut profile: UserProfile, clock_selector: usize) {
+    let level_before = profile.level;
     let now = match clock_selector % 3 {
         0 => Utc::now(),
         1 => DateTime::<Utc>::MIN_UTC,
@@ -138,10 +139,19 @@ fn exercise_consumers(mut profile: UserProfile, clock_selector: usize) {
 
     StreakManager::update_streak(&mut profile, now);
     AchievementEngine::check_and_unlock(&mut profile, &tracker);
-    let _ = QuestGenerator::generate_quests(&profile, &registry, Utc::now().date_naive());
+    let generated = QuestGenerator::generate_quests(&profile, &registry, Utc::now().date_naive());
+    assert!(!generated.quests.is_empty());
+    assert_eq!(
+        generated.unfilled_slots, 0,
+        "the embedded registry fills every slot"
+    );
     profile.add_xp(u64::MAX);
     let progress = profile.xp_progress();
-    assert!(!progress.is_nan());
+    assert!(
+        (0.0..=1.0).contains(&progress),
+        "xp progress {progress} out of range"
+    );
+    assert!(profile.level >= 1, "level started at {level_before}");
 }
 
 fn mutation_strategy() -> impl Strategy<Value = Mutation> {
@@ -150,7 +160,7 @@ fn mutation_strategy() -> impl Strategy<Value = Mutation> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(256))]
 
     #[test]
     fn mutated_profiles_never_panic_when_loaded_and_used(
@@ -165,7 +175,15 @@ proptest! {
         let path = dir.path().join("profile.json");
         std::fs::write(&path, document.to_string()).unwrap();
 
-        if let Ok(profile) = ProfileStorage::with_path(&path).load() {
+        let loaded = ProfileStorage::with_path(&path).load();
+        if mutations.is_empty() {
+            prop_assert!(
+                loaded.is_ok(),
+                "a valid document with only unknown fields must load: {:?}",
+                loaded.err()
+            );
+        }
+        if let Ok(profile) = loaded {
             exercise_consumers(profile, clock_selector);
         }
     }

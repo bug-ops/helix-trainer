@@ -13,7 +13,7 @@
 //! ```
 //!
 //! Where:
-//! - `overdue_factor` = `min(overdue_ratio`, 1.0), the days past due relative to the
+//! - `overdue_factor` = `min(overdue_ratio, 1.0)`, the days past due relative to the
 //!   scheduled interval (from [`command_urgency`])
 //! - `weakness_factor` = 1.0 - `success_rate`
 //!
@@ -181,7 +181,7 @@ impl<'a> ScenarioPrioritizer<'a> {
     /// ```
     ///
     /// Where (both from [`command_urgency`]):
-    /// - `overdue_factor` = `min(overdue_ratio`, 1.0), the days past due relative to the
+    /// - `overdue_factor` = `min(overdue_ratio, 1.0)`, the days past due relative to the
     ///   scheduled interval
     /// - `weakness_factor` = 1.0 - `success_rate`
     ///

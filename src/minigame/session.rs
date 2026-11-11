@@ -632,7 +632,7 @@ impl<R: Rng> MiniGameSession<R> {
             return Ok(()); // Ignore commands in non-playing states
         }
 
-        let current = self.current.as_mut().ok_or(UserError::OperationFailed)?;
+        let current = self.current.as_mut().ok_or(UserError::operation_failed())?;
 
         // The simulator interprets any count prefix (e.g. "3d", "2G")
         current.execute_single(command)?;
@@ -1188,7 +1188,10 @@ impl<R: Rng> MiniGameSession<R> {
     /// Returns `UserError` if scenario initialization fails or queue is empty.
     fn load_next_scenario(&mut self) -> Result<(), UserError> {
         // Pop from queue
-        let scenario = self.queue.pop_front().ok_or(UserError::OperationFailed)?;
+        let scenario = self
+            .queue
+            .pop_front()
+            .ok_or(UserError::operation_failed())?;
 
         // Get time limit based on mode
         let time_limit = self.get_scenario_time_limit(&scenario);

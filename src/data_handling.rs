@@ -417,7 +417,9 @@ mod tests {
 
         handle_data_message(
             &mut state,
-            DataLoadMessage::ScenariosError(LoaderError::Scenarios(UserError::ScenarioLoadError)),
+            DataLoadMessage::ScenariosError(LoaderError::Scenarios(
+                UserError::scenario_load_error(),
+            )),
         );
 
         // Should not panic, just log error
@@ -1296,7 +1298,7 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::QuestRegistryError(LoaderError::QuestRegistry(
-                UserError::ScenarioLoadError,
+                UserError::scenario_load_error(),
             )),
         );
 
@@ -1317,7 +1319,7 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::QuestRegistryError(LoaderError::QuestRegistry(
-                UserError::ScenarioLoadError,
+                UserError::scenario_load_error(),
             )),
         );
         assert_eq!(quest_warning_count(&state), 0);
@@ -1385,7 +1387,7 @@ mod tests {
         handle_data_message(
             &mut state,
             DataLoadMessage::QuestRegistryError(LoaderError::QuestRegistry(
-                UserError::ScenarioLoadError,
+                UserError::scenario_load_error(),
             )),
         );
 
@@ -1410,13 +1412,13 @@ mod tests {
             handle_data_message(
                 &mut state,
                 DataLoadMessage::ScenariosError(LoaderError::Scenarios(
-                    UserError::ScenarioLoadError,
+                    UserError::scenario_load_error(),
                 )),
             );
             handle_data_message(
                 &mut state,
                 DataLoadMessage::QuestRegistryError(LoaderError::QuestRegistry(
-                    UserError::ScenarioLoadError,
+                    UserError::scenario_load_error(),
                 )),
             );
             handle_data_message(

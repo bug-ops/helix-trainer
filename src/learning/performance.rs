@@ -938,6 +938,23 @@ mod tests {
     }
 
     #[test]
+    fn due_date_saturates_instead_of_overflowing() {
+        let mut card = CommandPerformance::new(Utc::now());
+        card.reps = 1;
+        let memory = MemoryState {
+            stability: 5.0,
+            difficulty: 5.0,
+            stability_fast: 5.0,
+        };
+
+        card.update_from_next_state(memory, 36_500.0, 2, DateTime::<Utc>::MAX_UTC)
+            .unwrap();
+
+        assert_eq!(card.due(), DateTime::<Utc>::MAX_UTC);
+        assert_eq!(card.reps(), 2);
+    }
+
+    #[test]
     fn review_after_loading_dropped_cards_does_not_panic() {
         let data = load(&[
             ("h", card_json("5.0", "6.0", 3, 2)),

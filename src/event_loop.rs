@@ -488,7 +488,7 @@ mod tests {
     fn test_recoverable_error_is_reported_and_session_continues() {
         let mut state = test_state();
 
-        report_update_error(&mut state, &UserError::OperationFailed);
+        report_update_error(&mut state, &UserError::operation_failed());
 
         assert!(state.ui.running);
         assert_eq!(state.ui.notifications.count(), 1);

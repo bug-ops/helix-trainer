@@ -30,7 +30,7 @@ impl ScenarioState {
     ///
     /// # Returns
     /// * `Ok(ScenarioState)` - Initialized state ready for gameplay
-    /// * `Err(UserError::ScenarioTooComplex)` - If state creation fails
+    /// * `Err(UserError::scenario_too_complex())` - If state creation fails
     ///
     /// # Examples
     ///

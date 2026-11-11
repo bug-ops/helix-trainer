@@ -145,3 +145,49 @@ fn profile_json_shape_is_unchanged_by_the_id_types() {
         assert_eq!(actual, expected, "{field}");
     }
 }
+
+fn load_error_for(
+    mutate: impl FnOnce(&mut Value),
+) -> helix_trainer::config::json_store::StorageError {
+    let mut profile = legacy_profile_json();
+    mutate(&mut profile);
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("profile.json");
+    std::fs::write(&path, json!({ "profile": profile }).to_string()).unwrap();
+    ProfileStorage::with_path(&path)
+        .load()
+        .expect_err("an invalid persisted id must not load")
+}
+
+fn rename_history_entry(profile: &mut Value, new_key: &str) {
+    let completions = &mut profile["scenario_history"]["completions"];
+    let entry = completions["delete_line_001"].take();
+    *completions = json!({ new_key: entry });
+}
+
+fn assert_corrupt(site: &str, mutate: impl FnOnce(&mut Value)) {
+    let err = load_error_for(mutate);
+    assert!(
+        matches!(
+            err,
+            helix_trainer::config::json_store::StorageError::Corrupt { .. }
+        ),
+        "{site}: {err}"
+    );
+}
+
+#[test]
+fn invalid_persisted_ids_are_a_corrupt_load_error() {
+    assert_corrupt("completed_quests_today", |p| {
+        p["completed_quests_today"] = json!(["bad id"]);
+    });
+    assert_corrupt("daily_quests[].id", |p| {
+        p["daily_quests"][0]["id"] = json!("bad id");
+    });
+    assert_corrupt("scenario_history key with a space", |p| {
+        rename_history_entry(p, "bad id");
+    });
+    assert_corrupt("scenario_history key over 64 bytes", |p| {
+        rename_history_entry(p, &"a".repeat(65));
+    });
+}

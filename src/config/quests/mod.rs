@@ -243,7 +243,7 @@ impl QuestLoader {
                 Err(e) => last_err = Some(e),
             }
         }
-        Err(last_err.unwrap_or(UserError::ScenarioLoadError))
+        Err(last_err.unwrap_or(UserError::scenario_load_error()))
     }
 
     /// Load quest templates from a TOML file
@@ -316,7 +316,7 @@ impl QuestLoader {
     pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<QuestTemplate>, UserError> {
         let content = embedded::get_embedded_quests(locale).ok_or_else(|| {
             tracing::warn!(locale = locale, "No embedded quests for locale");
-            UserError::ScenarioLoadError
+            UserError::scenario_load_error()
         })?;
 
         tracing::info!(locale = locale, "Loading quests from embedded data");

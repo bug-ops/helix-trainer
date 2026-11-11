@@ -752,6 +752,54 @@ fn test_active_filter_and_sort() {
     assert_eq!(collection.active_sort(), SortMode::ByName);
 }
 
+mod stale_index_tests {
+    use super::*;
+
+    const ALL_SORT_MODES: [SortMode; 7] = [
+        SortMode::ByName,
+        SortMode::ByDifficulty,
+        SortMode::ByCategory,
+        SortMode::ByProgress,
+        SortMode::ByCategoryThenDifficulty,
+        SortMode::ByDifficultyThenCategory,
+        SortMode::ByMastery,
+    ];
+
+    fn collection_with_stale_index() -> ScenarioCollection {
+        let mut collection = ScenarioCollection::new(vec![
+            create_scenario("001", "B", None, None, vec!["h"]),
+            create_scenario("002", "A", None, None, vec!["d"]),
+        ]);
+        collection.filtered_indices.push(99);
+        collection
+    }
+
+    #[test]
+    fn sorting_with_an_out_of_range_index_never_panics() {
+        let profile = UserProfile::new();
+        for mode in ALL_SORT_MODES {
+            let mut collection = collection_with_stale_index();
+            collection.sort(mode, Some(&profile));
+            collection.sort(mode, None);
+            assert_eq!(collection.filtered().len(), 2, "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn lookups_skip_an_out_of_range_index() {
+        let mut collection = collection_with_stale_index();
+        collection.sort(SortMode::ByName, None);
+
+        assert_eq!(collection.filtered().len(), 2);
+        let resolved: Vec<_> = (0..collection.count())
+            .filter_map(|i| collection.get_filtered_by_index(i))
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(resolved, ["A", "B"]);
+        assert_eq!(collection.count(), 3);
+    }
+}
+
 mod curriculum_stats_tests {
     use super::*;
 

@@ -530,7 +530,7 @@ impl ScenarioLoader {
 
         if all_scenarios.is_empty() {
             tracing::warn!("No scenario files found in directory");
-            return Err(UserError::ScenarioLoadError);
+            return Err(UserError::scenario_load_error());
         }
 
         tracing::info!(
@@ -551,7 +551,7 @@ impl ScenarioLoader {
     fn visit_toml_files(&self, dir: &Path) -> Result<(Vec<Scenario>, usize), UserError> {
         let entries = fs::read_dir(dir).map_err(|e| {
             tracing::error!("Failed to read directory: {}", e);
-            UserError::ScenarioLoadError
+            UserError::scenario_load_error()
         })?;
 
         let mut scenarios = Vec::new();
@@ -560,7 +560,7 @@ impl ScenarioLoader {
         for entry in entries {
             let entry = entry.map_err(|e| {
                 tracing::error!("Failed to read directory entry: {}", e);
-                UserError::ScenarioLoadError
+                UserError::scenario_load_error()
             })?;
 
             let path = entry.path();
@@ -661,7 +661,7 @@ impl ScenarioLoader {
 
         if embedded_contents.is_empty() {
             tracing::warn!(locale = locale, "No embedded scenarios for locale");
-            return Err(UserError::ScenarioLoadError);
+            return Err(UserError::scenario_load_error());
         }
 
         tracing::info!(

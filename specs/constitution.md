@@ -58,7 +58,9 @@ status: permanent
 - Optional audio: `rodio`, feature-gated behind `audio` (requires
   `libasound2-dev` on Linux).
 - Config/scenario data: TOML (`scenarios/en/<category>/*.toml`), user
-  profile/config: JSON in the OS config directory (`dirs::config_dir()/helix-trainer/`).
+  profile/config: JSON in the OS config directory (`dirs::config_dir()/helix-trainer/`;
+  macOS uses `~/.config/helix-trainer`). There is no current-directory fallback: when no
+  config directory can be resolved the application refuses to start (#457).
 - YAML tooling (when needed): `fast-yaml` (`fy` CLI) exclusively — never
   hand-edit YAML without validating via `fy` afterward.
 

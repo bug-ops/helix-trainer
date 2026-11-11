@@ -258,10 +258,13 @@ pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
         QuarantineOutcome::BackedUp(path) => format!("Backup kept at: {}", path.display()),
         QuarantineOutcome::Failed(reason) => format!("No backup made: {reason}"),
     };
-    let lines = [
+    let mut lines = vec![
         "Profile load failed: saving is disabled this session.".to_string(),
         backup_line,
     ];
+    if matches!(backup, QuarantineOutcome::BackedUp(_)) {
+        lines.push(t!("profile.start_fresh_action").to_string());
+    }
 
     // +1 line of slack because word wrapping can need more rows than a plain
     // character count suggests.
@@ -278,7 +281,7 @@ pub(super) fn render_profile_load_banner(frame: &mut Frame, state: &AppState) {
     let banner_area = Rect { height, ..area };
     frame.render_widget(Clear, banner_area);
     frame.render_widget(
-        Paragraph::new(lines.map(Line::from).to_vec())
+        Paragraph::new(lines.into_iter().map(Line::from).collect::<Vec<_>>())
             .wrap(Wrap { trim: false })
             .style(
                 Style::default()

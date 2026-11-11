@@ -36,6 +36,20 @@ use handlers::*;
 /// for command buffer management.
 pub fn handle_key_event(key: KeyEvent, state: &mut AppState) -> Option<Message> {
     use crate::ui::state::TypedScreen;
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    // Banner action (#518): offered only while a backed-up profile is quarantined
+    if key.code == KeyCode::Char('n')
+        && key.modifiers == KeyModifiers::CONTROL
+        && matches!(
+            state.progress.persistence(),
+            crate::ui::state::ProfilePersistence::Quarantined(
+                crate::gamification::QuarantineOutcome::BackedUp(_)
+            )
+        )
+    {
+        return Some(Message::StartFreshProfile);
+    }
 
     match &state.screen {
         TypedScreen::ModeSelection(_) => handle_mode_selection_keys(key),
@@ -49,5 +63,42 @@ pub fn handle_key_event(key: KeyEvent, state: &mut AppState) -> Option<Message> 
         TypedScreen::MiniGame(_) => handle_minigame_keys(key, state),
         TypedScreen::CategoryFilters(_) => handle_category_filters_keys(key),
         TypedScreen::EndGameSummary(_) => handle_end_game_summary_keys(key),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gamification::QuarantineOutcome;
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    fn ctrl_n() -> KeyEvent {
+        KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL)
+    }
+
+    /// #518: the start-fresh key only exists while a backed-up profile is quarantined
+    #[test]
+    fn test_ctrl_n_starts_a_fresh_profile_only_after_a_backup() {
+        let mut state = crate::testing::empty_test_app_state();
+        assert_ne!(
+            handle_key_event(ctrl_n(), &mut state),
+            Some(Message::StartFreshProfile)
+        );
+
+        state
+            .progress
+            .quarantine_profile(QuarantineOutcome::Failed("x".to_string()));
+        assert_ne!(
+            handle_key_event(ctrl_n(), &mut state),
+            Some(Message::StartFreshProfile)
+        );
+
+        state
+            .progress
+            .quarantine_profile(QuarantineOutcome::BackedUp("backup".into()));
+        assert_eq!(
+            handle_key_event(ctrl_n(), &mut state),
+            Some(Message::StartFreshProfile)
+        );
     }
 }

@@ -17,7 +17,9 @@
 
 use std::borrow::Cow;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+use crate::helix::commands::CMD_TOGGLE_COMMENTS;
 
 use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{
@@ -52,6 +54,10 @@ impl InputHandler<RegisterPending> for KeyHandler {
 impl InputHandler<RegisterOpPending> for KeyHandler {
     fn handle_key(state: &RegisterOpPending, key: KeyEvent) -> HandlerResult {
         match key.code {
+            // Helix runs `toggle_comments` and drops the pending register
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                HandlerResult::Execute(Cow::Borrowed(CMD_TOGGLE_COMMENTS))
+            }
             // Only y/p/P/R/d/c are register-scoped in this trainer
             KeyCode::Char(op @ ('y' | 'p' | 'P' | 'R' | 'd' | 'c')) => {
                 let cmd = format!("\"{}{}", state.register, op);
@@ -66,7 +72,6 @@ impl InputHandler<RegisterOpPending> for KeyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::KeyModifiers;
 
     fn key(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)

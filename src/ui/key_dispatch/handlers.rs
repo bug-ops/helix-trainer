@@ -1037,7 +1037,7 @@ mod tests {
     /// #570: `Ctrl-c` never quits a gameplay screen; each input state follows Helix
     mod ctrl_c_tests {
         use super::*;
-        use crate::helix::commands::{CMD_ESCAPE, CMD_INSERT, CMD_TOGGLE_COMMENTS};
+        use crate::helix::commands::{CMD_ESCAPE, CMD_TOGGLE_COMMENTS};
         use crate::ui::key_dispatch::handle_key_event;
 
         fn ctrl_c() -> KeyEvent {
@@ -1095,9 +1095,7 @@ mod tests {
 
         #[test]
         fn test_leader_and_prompt_states_cancel_on_ctrl_c() {
-            for opening in [
-                "g", "z", "m", "[", "]", "2g", "\"a", ":", "/", "?", "s", "S", "K",
-            ] {
+            for opening in ["g", "z", "m", "[", "]", "2g", ":", "/", "?", "s", "S", "K"] {
                 let state = task_state_after(&plain(opening));
                 assert_eq!(
                     handle_key_event(ctrl_c(), &state),
@@ -1113,18 +1111,71 @@ mod tests {
             );
         }
 
-        #[test]
-        fn test_insert_mode_ignores_ctrl_c() {
-            let mut state = create_test_app_state();
-            let session = match make_active_task_session()
-                .record_action(CMD_INSERT.to_string())
-                .unwrap()
-            {
-                crate::game::SessionAfterAction::StillActive(session) => session,
-                crate::game::SessionAfterAction::Completed(_) => unreachable!(),
+        fn press(state: &mut AppState, key: KeyEvent) {
+            use crate::testing::update_executing_effects as update;
+            if let Some(msg) = handle_key_event(key, state) {
+                update(state, msg).unwrap();
+            }
+        }
+
+        fn task_content(state: &AppState) -> String {
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
             };
-            state.screen = TypedScreen::Task(TaskData::new(session));
-            assert_eq!(handle_key_event(ctrl_c(), &state), None);
+            task_data.session.playable().current_content()
+        }
+
+        fn task_mode(state: &AppState) -> crate::helix::simulator::ModeKind {
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
+            };
+            task_data.session.playable().mode_kind()
+        }
+
+        fn fresh_task() -> AppState {
+            task_state_after(&[])
+        }
+
+        /// #599: hx inserts the character `c` for `Ctrl-c` in Insert mode and stays in it
+        #[test]
+        fn test_insert_mode_types_c_on_ctrl_c() {
+            let mut state = fresh_task();
+            for key in plain("i") {
+                press(&mut state, key);
+            }
+            press(&mut state, ctrl_c());
+            assert_eq!(task_content(&state), "ctest");
+            assert_eq!(task_mode(&state), crate::helix::simulator::ModeKind::Insert);
+        }
+
+        /// #599: a selected register awaiting a command forwards `Ctrl-c`
+        /// (`toggle_comments`) and drops the register
+        #[test]
+        fn test_register_op_pending_forwards_ctrl_c_and_drops_the_register() {
+            let state = task_state_after(&plain("\"a"));
+            let message = handle_key_event(ctrl_c(), &state);
+            assert!(
+                matches!(&message, Some(Message::ExecuteCommand { keys, .. }) if keys.as_str() == CMD_TOGGLE_COMMENTS),
+                "{message:?}"
+            );
+
+            let mut state = task_state_after(&plain("\"a"));
+            press(&mut state, ctrl_c());
+            assert_eq!(task_content(&state), "// test");
+            assert!(gameplay_input_state(&state).is_some_and(|m| m.state().is_base()));
+        }
+
+        /// #599: in Select mode `Ctrl-c` toggles comments and returns to Normal mode
+        #[test]
+        fn test_select_mode_ctrl_c_toggles_comments_and_leaves_select_mode() {
+            let mut state = fresh_task();
+            for key in plain("v") {
+                press(&mut state, key);
+            }
+            assert_eq!(task_mode(&state), crate::helix::simulator::ModeKind::Select);
+            press(&mut state, ctrl_c());
+            assert_eq!(task_content(&state), "// test");
+            assert_eq!(task_mode(&state), crate::helix::simulator::ModeKind::Normal);
         }
 
         #[test]

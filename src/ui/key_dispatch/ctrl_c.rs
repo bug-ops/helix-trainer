@@ -21,7 +21,8 @@ enum CtrlC {
     Ignore,
     /// The input state machine receives `Ctrl-c` itself (`toggle_comments`).
     Forward,
-    /// The pending command takes `c` as its argument; Helix ignores the modifier there.
+    /// `c` is typed: a pending command takes it as its argument, and Insert mode inserts it.
+    /// Helix ignores the modifier in both.
     AsPlainChar,
     /// The pending state or prompt is cancelled and the key is dropped.
     CancelPending,
@@ -71,15 +72,19 @@ fn action(state: &AppState) -> CtrlC {
 }
 
 fn gameplay_action(state: &AppState) -> CtrlC {
+    // Helix has no Insert-mode `C-c` binding; its fallback types the character.
     if is_gameplay_insert_mode(state) {
-        return CtrlC::Ignore;
+        return CtrlC::AsPlainChar;
     }
     gameplay_input_state(state).map_or(CtrlC::Ignore, |machine| pending_action(machine.state()))
 }
 
 fn pending_action(input: &InputState) -> CtrlC {
     match input {
-        InputState::Base | InputState::CountPending { .. } => CtrlC::Forward,
+        // A register waiting for its command drops out when `toggle_comments` runs.
+        InputState::Base
+        | InputState::CountPending { .. }
+        | InputState::RegisterOpPending { .. } => CtrlC::Forward,
         InputState::FindCharPending { .. }
         | InputState::CountedFindCharPending { .. }
         | InputState::ReplaceCharPending
@@ -90,14 +95,12 @@ fn pending_action(input: &InputState) -> CtrlC {
         | InputState::TextObjectAroundPending
         | InputState::TextObjectInsidePending
         | InputState::RegisterPending => CtrlC::AsPlainChar,
-        // ASSUMPTION: after `"<reg>` only y/p/P/R/d/c are register-scoped here, so Ctrl-c cancels.
         InputState::GotoPending
         | InputState::CountedGotoPending { .. }
         | InputState::ViewPending
         | InputState::MatchPending
         | InputState::UnmatchedPrevPending
         | InputState::UnmatchedNextPending
-        | InputState::RegisterOpPending { .. }
         | InputState::CommandLinePending { .. }
         | InputState::RegexPromptPending { .. } => CtrlC::CancelPending,
     }

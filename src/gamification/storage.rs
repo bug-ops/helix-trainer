@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::config::data_dir::DataDir;
-use crate::config::json_store::{JsonStore, unique_tmp_path};
-use crate::security::{limits::MAX_PROFILE_FILE_SIZE, private_fs};
+use crate::config::json_store::{JsonStore, create_unique_tmp};
+use crate::security::limits::{MAX_LOCK_FILE_SIZE, MAX_PROFILE_FILE_SIZE};
+use crate::security::{path_validator, private_fs};
 
 use super::{GamificationError, Result, UserProfile};
 
@@ -71,6 +72,30 @@ fn same_content(a: &mut fs::File, b: &mut fs::File) -> std::io::Result<bool> {
             Err(e) => return Err(e),
         }
     }
+}
+
+/// Whether `a` and `b` are the same file (same device and inode); always
+/// `false` where the platform exposes no such identity.
+#[cfg(unix)]
+fn same_file(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+
+#[cfg(not(unix))]
+fn same_file(_: &fs::Metadata, _: &fs::Metadata) -> bool {
+    false
+}
+
+/// Whether `candidate` is a regular file of `source_len` bytes that is not
+/// `source` itself, judged from metadata only (symlinks, FIFOs and hard links
+/// to the source never qualify as an independent copy).
+fn is_independent_copy_shape(
+    candidate: &fs::Metadata,
+    source: &fs::Metadata,
+    source_len: u64,
+) -> bool {
+    candidate.is_file() && candidate.len() == source_len && !same_file(candidate, source)
 }
 
 /// Wrapper for profile serialization
@@ -225,7 +250,14 @@ impl ProfileStorage {
 
     fn try_quarantine(&self) -> std::io::Result<PathBuf> {
         let not_regular = || std::io::Error::other("not a regular file");
-        if !fs::metadata(self.path())?.is_file() {
+        let metadata = match fs::metadata(self.path()) {
+            Ok(metadata) => metadata,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return self.untransferred_legacy().ok_or(e);
+            }
+            Err(e) => return Err(e),
+        };
+        if !metadata.is_file() {
             return Err(not_regular());
         }
         let mut source = fs::File::open(self.path())?;
@@ -261,13 +293,26 @@ impl ProfileStorage {
         Ok(backup_path)
     }
 
+    /// The previous-location file when it exists but could not be copied into
+    /// place: it is untouched, so it serves as the backup of the data that
+    /// failed to migrate.
+    fn untransferred_legacy(&self) -> Option<PathBuf> {
+        self.store
+            .legacy_path()
+            .filter(|legacy| fs::symlink_metadata(legacy).is_ok())
+            .map(Path::to_path_buf)
+    }
+
     /// An existing `<file>.corrupt-*` sibling that is byte-identical to
     /// `source`, so repeated launches with the same unreadable file do not pile
     /// up copies. Unreadable candidates are skipped (the caller then makes a
-    /// fresh copy, the safe direction).
+    /// fresh copy, the safe direction). Only independent regular files count:
+    /// a symlink or hard link to the source, or a FIFO, is never a backup, and
+    /// candidates are inspected with `lstat` before being opened.
     fn find_identical_backup(&self, source: &mut fs::File) -> Option<PathBuf> {
         let prefix = format!("{}.corrupt-", self.path().file_name()?.to_str()?);
-        let source_len = source.metadata().ok()?.len();
+        let source_meta = source.metadata().ok()?;
+        let source_len = source_meta.len();
         let mut candidates: Vec<PathBuf> = fs::read_dir(self.path().parent()?)
             .ok()?
             .filter_map(|entry| entry.ok())
@@ -276,14 +321,17 @@ impl ProfileStorage {
             .collect();
         candidates.sort();
         candidates.into_iter().find(|candidate| {
-            fs::File::open(candidate)
-                .and_then(|mut file| {
-                    if !file.metadata()?.is_file() || file.metadata()?.len() != source_len {
-                        return Ok(false);
-                    }
-                    same_content(source, &mut file)
-                })
-                .unwrap_or(false)
+            let is_candidate =
+                |meta: &fs::Metadata| is_independent_copy_shape(meta, &source_meta, source_len);
+            fs::symlink_metadata(candidate).is_ok_and(|meta| is_candidate(&meta))
+                && fs::File::open(candidate)
+                    .and_then(|mut file| {
+                        if !is_candidate(&file.metadata()?) {
+                            return Ok(false);
+                        }
+                        same_content(source, &mut file)
+                    })
+                    .unwrap_or(false)
         })
     }
 
@@ -387,14 +435,15 @@ impl ProfileStorage {
     /// durability across a power loss does not.
     fn refresh_lock(&self) {
         let lock_path = self.lock_path();
-        // Unique temp name: this must not collide with another
-        // `refresh_lock`/`save` call racing in the same process, e.g. the
-        // save writer refreshing the lock while a concurrent
-        // `check_and_refresh_lock` call is also mid-refresh.
-        let tmp_path = unique_tmp_path(&lock_path);
+        // Unique, exclusively created temp name: it must not collide with
+        // another `refresh_lock`/`save` call racing in the same process, nor
+        // follow a file or symlink planted at the predicted name.
+        let Ok((tmp_path, mut file)) = create_unique_tmp(&lock_path) else {
+            return;
+        };
 
-        let written = private_fs::create_file(&tmp_path)
-            .and_then(|mut file| file.write_all(std::process::id().to_string().as_bytes()));
+        let written = file.write_all(std::process::id().to_string().as_bytes());
+        drop(file);
         if written.is_ok() {
             let _ = fs::rename(&tmp_path, &lock_path);
         } else {
@@ -433,7 +482,7 @@ impl ProfileStorage {
     pub fn check_and_refresh_lock(&self) -> LockStatus {
         let current_pid = std::process::id();
 
-        let other_live_pid = fs::read_to_string(self.lock_path())
+        let other_live_pid = path_validator::read_capped(&self.lock_path(), MAX_LOCK_FILE_SIZE)
             .ok()
             .and_then(|contents| contents.trim().parse::<u32>().ok())
             .filter(|&pid| pid != current_pid && is_process_alive(pid));
@@ -941,6 +990,116 @@ mod tests {
         assert!(path.is_dir());
     }
 
+    fn backed_up_path(outcome: QuarantineOutcome) -> PathBuf {
+        let QuarantineOutcome::BackedUp(path) = outcome else {
+            panic!("expected a backup, got {outcome:?}");
+        };
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_quarantine_ignores_a_symlink_to_the_original_as_backup() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+        let link = dir.path().join("profile.json.corrupt-00000000T000000");
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+        let storage = ProfileStorage::with_path(&path);
+
+        let backup = backed_up_path(storage.quarantine());
+
+        assert_ne!(backup, link);
+        assert!(!fs::symlink_metadata(&backup).unwrap().is_symlink());
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "{broken");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_start_fresh_with_symlinked_backup_keeps_the_original_bytes() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+        let link = dir.path().join("profile.json.corrupt-00000000T000000");
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+
+        ProfileStorage::with_path(&path).start_fresh().unwrap();
+
+        let independent: Vec<_> = backups_in(dir.path())
+            .into_iter()
+            .filter(|p| !fs::symlink_metadata(p).unwrap().is_symlink())
+            .collect();
+        assert_eq!(independent.len(), 1);
+        assert_eq!(fs::read_to_string(&independent[0]).unwrap(), "{broken");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_quarantine_ignores_a_hard_link_to_the_original_as_backup() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+        let link = dir.path().join("profile.json.corrupt-00000000T000000");
+        fs::hard_link(&path, &link).unwrap();
+
+        let backup = backed_up_path(ProfileStorage::with_path(&path).quarantine());
+
+        assert_ne!(backup, link);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_quarantine_skips_a_fifo_candidate_without_blocking() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+        let fifo = dir.path().join("profile.json.corrupt-00000000T000000");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .unwrap()
+                .success()
+        );
+
+        let backup = backed_up_path(ProfileStorage::with_path(&path).quarantine());
+
+        assert_ne!(backup, fifo);
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "{broken");
+    }
+
+    /// When the backup cannot be created the original must stay byte-identical.
+    #[cfg(unix)]
+    #[test]
+    fn test_start_fresh_keeps_the_original_when_the_backup_fails() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("profile.json");
+        fs::write(&path, "{broken").unwrap();
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o500)).unwrap();
+        let writable = fs::write(dir.path().join("probe"), "").is_ok();
+
+        let result = ProfileStorage::with_path(&path).start_fresh();
+
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        if writable {
+            return;
+        }
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{broken");
+        assert!(backups_in(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn test_lock_file_read_is_size_capped() {
+        let dir = TempDir::new().unwrap();
+        let storage = ProfileStorage::with_path(dir.path().join("profile.json"));
+        let huge = format!("{}{}", std::process::id() + 1, " ".repeat(4096));
+        fs::write(storage.lock_path(), huge).unwrap();
+
+        assert_eq!(storage.check_and_refresh_lock(), LockStatus::Acquired);
+    }
+
     fn moved_data_dir(root: &Path) -> DataDir {
         DataDir::resolve_for(true, Some(root.join("xdg")), Some(root.join("os")))
     }
@@ -1019,7 +1178,49 @@ mod tests {
 
         assert!(storage.load().is_err());
         assert!(!storage.exists());
-        assert!(matches!(storage.quarantine(), QuarantineOutcome::Failed(_)));
+    }
+
+    /// A legacy profile that cannot be copied is itself the untouched backup,
+    /// so "Start fresh" stays reachable and never loses it.
+    #[test]
+    fn test_unmigratable_legacy_profile_is_the_backup_and_start_fresh_works() {
+        let root = TempDir::new().unwrap();
+        let data_dir = moved_data_dir(root.path());
+        let legacy = legacy_profile_path(root.path());
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        let oversized = usize::try_from(MAX_PROFILE_FILE_SIZE).unwrap() + 1;
+        fs::write(&legacy, " ".repeat(oversized)).unwrap();
+        let before = fs::read(&legacy).unwrap();
+        let storage = ProfileStorage::in_data_dir(&data_dir);
+        assert!(storage.load().is_err());
+
+        assert_eq!(backed_up_path(storage.quarantine()), legacy);
+        let fresh = storage.start_fresh().unwrap();
+
+        assert_eq!(fresh.level, 1);
+        assert_eq!(storage.load().unwrap().total_xp, 0);
+        assert_eq!(fs::read(&legacy).unwrap(), before);
+    }
+
+    /// A broken but small legacy file is copied, then fails to parse from the
+    /// new location, where the normal quarantine path applies.
+    #[test]
+    fn test_malformed_legacy_profile_fails_to_parse_and_can_start_fresh() {
+        let root = TempDir::new().unwrap();
+        let data_dir = moved_data_dir(root.path());
+        let legacy = legacy_profile_path(root.path());
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(&legacy, "{garbage").unwrap();
+        let storage = ProfileStorage::in_data_dir(&data_dir);
+
+        assert!(storage.load().is_err());
+        assert_eq!(fs::read_to_string(storage.path()).unwrap(), "{garbage");
+        let backup = backed_up_path(storage.quarantine());
+        assert_eq!(fs::read_to_string(backup).unwrap(), "{garbage");
+
+        storage.start_fresh().unwrap();
+        assert_eq!(storage.load().unwrap().level, 1);
+        assert_eq!(fs::read_to_string(&legacy).unwrap(), "{garbage");
     }
 
     #[test]

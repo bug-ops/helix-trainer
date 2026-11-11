@@ -32,6 +32,34 @@ pub(crate) fn unique_tmp_path(base_path: &Path) -> PathBuf {
     base_path.with_added_extension(format!("{}.{suffix}.tmp", std::process::id()))
 }
 
+/// Number of fresh temp names tried before giving up when each one is taken.
+const TMP_CREATE_ATTEMPTS: u32 = 16;
+
+/// Creates a new owner-private sibling temp file for `base_path`.
+///
+/// The file is created with `O_EXCL` semantics, so a pre-planted file or
+/// symlink at a predicted name is never followed or truncated: that name is
+/// skipped and the next one tried.
+///
+/// # Errors
+///
+/// Returns the underlying I/O error, or [`io::ErrorKind::AlreadyExists`] when
+/// every attempted name was taken.
+pub(crate) fn create_unique_tmp(base_path: &Path) -> io::Result<(PathBuf, fs::File)> {
+    for _ in 0..TMP_CREATE_ATTEMPTS {
+        let tmp_path = unique_tmp_path(base_path);
+        match private_fs::create_new_file(&tmp_path) {
+            Ok(file) => return Ok((tmp_path, file)),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "no free temporary file name",
+    ))
+}
+
 /// Fsync a file's parent directory so a preceding `fs::rename` into it is
 /// durable across a power loss, not just visible after a normal process
 /// restart. POSIX does not guarantee a directory-entry update is on disk
@@ -66,13 +94,10 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
         private_fs::create_dir_all(parent)?;
     }
 
-    let tmp_path = unique_tmp_path(path);
-    let result = private_fs::create_file(&tmp_path)
-        .and_then(|mut file| {
-            file.write_all(bytes)?;
-            file.sync_all()
-        })
-        .and_then(|()| fs::rename(&tmp_path, path));
+    let (tmp_path, mut file) = create_unique_tmp(path)?;
+    let written = file.write_all(bytes).and_then(|()| file.sync_all());
+    drop(file);
+    let result = written.and_then(|()| fs::rename(&tmp_path, path));
     if let Err(e) = result {
         let _ = fs::remove_file(&tmp_path);
         return Err(e);
@@ -223,6 +248,11 @@ impl<T> JsonStore<T> {
     /// Path of the document file.
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// The previous location declared with [`JsonStore::migrating_from`].
+    pub fn legacy_path(&self) -> Option<&Path> {
+        self.legacy.as_deref()
     }
 
     /// Whether the document file exists.
@@ -393,28 +423,79 @@ mod tests {
         assert_eq!(names, ["doc.json"]);
     }
 
-    /// Failure is injected by pre-occupying the exact temp path the next save
-    /// will use with a directory, which fails deterministically even as root.
-    /// Relies on nextest's process-per-test isolation for the counter.
+    /// Failure is injected by making the destination a directory, so the final
+    /// rename fails deterministically even as root.
     #[test]
-    fn failed_save_does_not_corrupt_existing_document() {
+    fn failed_save_leaves_no_temp_file_and_reports_write_error() {
         let dir = tempfile::tempdir().unwrap();
         let store = store(dir.path(), 1024);
-        store.save(&Doc { value: 1 }).unwrap();
-        let before = fs::read_to_string(store.path()).unwrap();
-
-        let next = TMP_SUFFIX_COUNTER.load(Ordering::Relaxed);
-        let predicted = store
-            .path()
-            .with_added_extension(format!("{}.{next}.tmp", std::process::id()));
-        fs::create_dir(&predicted).unwrap();
+        fs::create_dir_all(store.path()).unwrap();
 
         assert!(matches!(
             store.save(&Doc { value: 2 }),
             Err(JsonStoreError::Write { .. })
         ));
-        assert_eq!(fs::read_to_string(store.path()).unwrap(), before);
-        assert_eq!(store.load().unwrap(), Some(Doc { value: 1 }));
+        assert!(store.path().is_dir());
+        let names: Vec<_> = fs::read_dir(store.path().parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, ["doc.json"]);
+    }
+
+    /// Relies on nextest's process-per-test isolation for the counter.
+    #[test]
+    fn save_skips_a_pre_planted_temp_name_and_leaves_it_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store(dir.path(), 1024);
+        store.save(&Doc { value: 1 }).unwrap();
+
+        let next = TMP_SUFFIX_COUNTER.load(Ordering::Relaxed);
+        let planted = store
+            .path()
+            .with_added_extension(format!("{}.{next}.tmp", std::process::id()));
+        fs::write(&planted, "planted").unwrap();
+
+        store.save(&Doc { value: 2 }).unwrap();
+
+        assert_eq!(store.load().unwrap(), Some(Doc { value: 2 }));
+        assert_eq!(fs::read_to_string(&planted).unwrap(), "planted");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_does_not_follow_a_symlink_planted_at_the_temp_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store(dir.path(), 1024);
+        store.save(&Doc { value: 1 }).unwrap();
+        let victim = dir.path().join("victim");
+        fs::write(&victim, "precious").unwrap();
+
+        let next = TMP_SUFFIX_COUNTER.load(Ordering::Relaxed);
+        let planted = store
+            .path()
+            .with_added_extension(format!("{}.{next}.tmp", std::process::id()));
+        std::os::unix::fs::symlink(&victim, &planted).unwrap();
+
+        store.save(&Doc { value: 2 }).unwrap();
+
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "precious");
+        assert_eq!(store.load().unwrap(), Some(Doc { value: 2 }));
+    }
+
+    #[test]
+    fn create_unique_tmp_gives_up_when_every_name_is_taken() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("doc.json");
+        let next = TMP_SUFFIX_COUNTER.load(Ordering::Relaxed);
+        for i in 0..u64::from(TMP_CREATE_ATTEMPTS) {
+            let taken =
+                base.with_added_extension(format!("{}.{}.tmp", std::process::id(), next + i));
+            fs::write(taken, "x").unwrap();
+        }
+
+        let err = create_unique_tmp(&base).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
     }
 
     #[test]

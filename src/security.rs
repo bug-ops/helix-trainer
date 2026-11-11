@@ -346,6 +346,9 @@ pub mod limits {
     /// revisiting.
     pub const MAX_PROFILE_FILE_SIZE: u64 = 1024 * 1024;
 
+    /// Maximum size of the `profile.json.lock` file: a decimal process id.
+    pub const MAX_LOCK_FILE_SIZE: u64 = 64;
+
     /// Maximum size of `config.json` (1 MB). `AppConfig` today is a
     /// handful of booleans (well under 1 KB serialized), so this leaves
     /// generous headroom for new settings fields.
@@ -465,8 +468,7 @@ pub mod path_validator {
 
 /// Creation of user-private files and directories for persisted data.
 ///
-/// On Unix directories are created `0700` and files `0600` (an existing file
-/// reopened through `create_file` is tightened to `0600`); other platforms
+/// On Unix directories are created `0700` and files `0600`; other platforms
 /// use the process defaults.
 pub mod private_fs {
     use std::fs;
@@ -486,21 +488,6 @@ pub mod private_fs {
         #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
         builder.create(path)
-    }
-
-    /// Creates or truncates `path` for writing, owner-only (`0600`) on Unix.
-    ///
-    /// # Errors
-    ///
-    /// Returns the underlying I/O error if the file cannot be opened or its
-    /// permissions cannot be tightened.
-    pub fn create_file(path: &Path) -> io::Result<fs::File> {
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true);
-        let file = private_options(&mut options).open(path)?;
-        #[cfg(unix)]
-        file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
-        Ok(file)
     }
 
     /// Creates `path` for writing, failing if it already exists, owner-only

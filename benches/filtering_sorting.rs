@@ -7,13 +7,17 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use helix_trainer::config::{
-    CompletionFilter, CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioCollection,
+    CompletionFilter, CursorSpec, Difficulty, Pos, Scenario, ScenarioCategory, ScenarioCollection,
     ScenarioFilter, ScenarioMetadata, ScoringConfig, Setup, Solution, SortMode, TargetState,
 };
 use helix_trainer::gamification::UserProfile;
 use helix_trainer::ids::{NormalizedCommand, ScenarioId};
 use std::collections::HashSet;
 use std::hint::black_box;
+
+fn cursor_at(row: usize, col: usize) -> CursorSpec {
+    CursorSpec::Point(Pos::try_from([row, col]).expect("valid position fixture"))
+}
 
 // Helper: Create a test scenario
 fn create_scenario(
@@ -29,21 +33,11 @@ fn create_scenario(
         setup: Setup {
             file_content: "line 1\nline 2\nline 3\n".to_string(),
             language: None,
-            cursor: CursorSpec {
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: cursor_at(0, 0),
         },
         target: TargetState {
             file_content: "line 2\nline 3\n".to_string(),
-            cursor: CursorSpec {
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: cursor_at(0, 0),
         },
         solution: Solution {
             commands: vec!["x".to_string()],

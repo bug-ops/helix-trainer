@@ -371,19 +371,14 @@ impl ScenarioCollection {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::config::{
-    ///     CursorSpec, Scenario, ScenarioCollection, ScenarioMetadata, ScoringConfig, Setup, Solution,
+    ///     CursorSpec, Pos, Scenario, ScenarioCollection, ScenarioMetadata, ScoringConfig, Setup, Solution,
     ///     TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::ids::ScenarioId;
     ///
     /// fn minimal_scenario(id: &str) -> Scenario {
-    ///     let cursor = CursorSpec {
-    ///         cursor_position: Some((0, 0)),
-    ///         selection: None,
-    ///         cursors: None,
-    ///         selections: None,
-    ///     };
+    ///     let cursor = CursorSpec::Point(Pos::try_from([0, 0]).unwrap());
     ///     Scenario {
     ///         id: ScenarioId::parse(id).unwrap(),
     ///         name: "Test".to_string(),
@@ -425,19 +420,14 @@ impl ScenarioCollection {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::config::{
-    ///     CursorSpec, Scenario, ScenarioCollection, ScenarioMetadata, ScoringConfig, Setup, Solution,
+    ///     CursorSpec, Pos, Scenario, ScenarioCollection, ScenarioMetadata, ScoringConfig, Setup, Solution,
     ///     TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::ids::ScenarioId;
     ///
     /// fn minimal_scenario(id: &str) -> Scenario {
-    ///     let cursor = CursorSpec {
-    ///         cursor_position: Some((0, 0)),
-    ///         selection: None,
-    ///         cursors: None,
-    ///         selections: None,
-    ///     };
+    ///     let cursor = CursorSpec::Point(Pos::try_from([0, 0]).unwrap());
     ///     Scenario {
     ///         id: ScenarioId::parse(id).unwrap(),
     ///         name: "Test".to_string(),
@@ -483,18 +473,13 @@ impl ScenarioCollection {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::config::{
-    ///     CursorSpec, Scenario, ScenarioCategory, ScenarioCollection, ScenarioMetadata,
+    ///     CursorSpec, Pos, Scenario, ScenarioCategory, ScenarioCollection, ScenarioMetadata,
     ///     ScoringConfig, Setup, Solution, TargetState,
     /// };
     /// use helix_trainer::gamification::UserProfile;
     /// use helix_trainer::ids::ScenarioId;
     ///
-    /// let cursor = CursorSpec {
-    ///     cursor_position: Some((0, 0)),
-    ///     selection: None,
-    ///     cursors: None,
-    ///     selections: None,
-    /// };
+    /// let cursor = CursorSpec::Point(Pos::try_from([0, 0]).unwrap());
     /// let scenario = Scenario {
     ///     id: ScenarioId::parse("s1").unwrap(),
     ///     name: "Test".to_string(),

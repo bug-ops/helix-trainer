@@ -316,7 +316,8 @@ mod tests {
     use helix_trainer::security::UserError;
     use helix_trainer::{
         config::{
-            CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+            CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution,
+            TargetState,
         },
         constants::STREAK_FREEZE_MAX_GAP_DAYS,
         gamification::{ProfileStorage, QuestTemplateRegistry},
@@ -364,21 +365,11 @@ mod tests {
             setup: Setup {
                 file_content: "line 1\nline 2\nline 3\n".to_string(),
                 language: None,
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: CursorSpec::Point(Pos::try_from([0, 0]).unwrap()),
             },
             target: TargetState {
                 file_content: "line 2\nline 3\n".to_string(),
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: CursorSpec::Point(Pos::try_from([0, 0]).unwrap()),
             },
             solution: Solution {
                 commands: vec!["x".to_string(), "d".to_string()],

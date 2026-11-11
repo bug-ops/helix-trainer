@@ -6,6 +6,7 @@ use crate::config::{
     CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioMetadata, ScoringConfig, Setup,
     Solution, TargetState,
 };
+use crate::testing::{point, selection};
 use std::num::NonZeroUsize;
 
 /// Builder for creating test scenarios with sensible defaults
@@ -26,11 +27,9 @@ pub struct ScenarioBuilder {
     description: String,
     setup_content: String,
     setup_language: Option<String>,
-    setup_cursor: (usize, usize),
-    setup_selection: Option<[usize; 4]>,
+    setup_cursor: CursorSpec,
     target_content: String,
-    target_cursor: (usize, usize),
-    target_selection: Option<[usize; 4]>,
+    target_cursor: CursorSpec,
     commands: Vec<String>,
     command_description: String,
     hints: Vec<String>,
@@ -57,11 +56,9 @@ impl ScenarioBuilder {
             description: "Test scenario description".to_string(),
             setup_content: "line 1\nline 2\nline 3\n".to_string(),
             setup_language: None,
-            setup_cursor: (0, 0),
-            setup_selection: None,
+            setup_cursor: point(0, 0),
             target_content: "line 2\nline 3\n".to_string(),
-            target_cursor: (0, 0),
-            target_selection: None,
+            target_cursor: point(0, 0),
             commands: vec!["x".to_string(), "d".to_string()],
             command_description: "Delete first line".to_string(),
             hints: vec![],
@@ -112,7 +109,7 @@ impl ScenarioBuilder {
     /// Set the initial cursor position (row, col)
     #[must_use]
     pub fn setup_cursor(mut self, row: usize, col: usize) -> Self {
-        self.setup_cursor = (row, col);
+        self.setup_cursor = point(row, col);
         self
     }
 
@@ -123,7 +120,7 @@ impl ScenarioBuilder {
     /// * `end` - End position as (row, col)
     #[must_use]
     pub fn setup_selection(mut self, start: (usize, usize), end: (usize, usize)) -> Self {
-        self.setup_selection = Some([start.0, start.1, end.0, end.1]);
+        self.setup_cursor = selection(start, end);
         self
     }
 
@@ -137,7 +134,7 @@ impl ScenarioBuilder {
     /// Set the target cursor position (row, col)
     #[must_use]
     pub fn target_cursor(mut self, row: usize, col: usize) -> Self {
-        self.target_cursor = (row, col);
+        self.target_cursor = point(row, col);
         self
     }
 
@@ -148,7 +145,7 @@ impl ScenarioBuilder {
     /// * `end` - End position as (row, col)
     #[must_use]
     pub fn target_selection(mut self, start: (usize, usize), end: (usize, usize)) -> Self {
-        self.target_selection = Some([start.0, start.1, end.0, end.1]);
+        self.target_cursor = selection(start, end);
         self
     }
 
@@ -250,21 +247,11 @@ impl ScenarioBuilder {
             setup: Setup {
                 file_content: self.setup_content,
                 language: self.setup_language,
-                cursor: CursorSpec {
-                    cursor_position: Some(self.setup_cursor),
-                    selection: self.setup_selection,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: self.setup_cursor,
             },
             target: TargetState {
                 file_content: self.target_content,
-                cursor: CursorSpec {
-                    cursor_position: Some(self.target_cursor),
-                    selection: self.target_selection,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: self.target_cursor,
             },
             solution: Solution {
                 commands: self.commands,

@@ -26,7 +26,6 @@ beta
 alpha
 gamma
 """
-cursor_position = [3, 0]
 selection = [2, 0, 3, 0]
 
 [scenarios.solution]

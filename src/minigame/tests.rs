@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::config::{
-    CursorSpec, Difficulty, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+    Difficulty, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
 };
 use crate::testing::sid;
 use std::sync::Arc;
@@ -17,21 +17,11 @@ fn create_simple_scenario(id: &str) -> Scenario {
         setup: Setup {
             file_content: "test".to_string(),
             language: None,
-            cursor: CursorSpec {
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: crate::testing::point(0, 0),
         },
         target: TargetState {
             file_content: String::new(),
-            cursor: CursorSpec {
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: crate::testing::point(0, 0),
         },
         solution: Solution {
             commands: vec!["x".to_string()],

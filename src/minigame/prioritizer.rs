@@ -213,9 +213,7 @@ impl<'a> ScenarioPrioritizer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-    };
+    use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
     use crate::testing::{cid, sid};
     use crate::time::{Clock, FakeClock};
     use chrono::Duration;
@@ -231,21 +229,11 @@ mod tests {
             setup: Setup {
                 file_content: "test content".to_string(),
                 language: None,
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             target: TargetState {
                 file_content: "target content".to_string(),
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             solution: Solution {
                 commands: commands.into_iter().map(String::from).collect(),

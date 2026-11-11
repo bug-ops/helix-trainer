@@ -411,36 +411,6 @@ impl EditorSnapshot {
 
         Self::with_selections(content, ranges, 0)
     }
-
-    /// Create from scenario Setup or `TargetState` config.
-    ///
-    /// Handles all cursor/selection formats (single, multi-cursor, multi-selection).
-    pub fn from_scenario_config(
-        content: String,
-        cursor_position: Option<(usize, usize)>,
-        selection: Option<[usize; 4]>,
-        cursors: Option<&[[usize; 2]]>,
-        selections: Option<&[[usize; 4]]>,
-    ) -> Self {
-        // Multi-selection takes priority
-        if let Some(sels) = selections {
-            return Self::from_multi_selection(content, sels);
-        }
-
-        // Multi-cursor next
-        if let Some(curs) = cursors {
-            return Self::from_multi_cursor(content, curs);
-        }
-
-        // Single selection
-        if let Some(sel) = selection {
-            return Self::from_row_col_selection(content, sel);
-        }
-
-        // Single cursor (or default)
-        let (row, col) = cursor_position.unwrap_or((0, 0));
-        Self::from_row_col(content, row, col)
-    }
 }
 
 /// Convert (row, col) to char offset in content.
@@ -691,48 +661,13 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_from_scenario_config_single_cursor() {
-        let snap = EditorSnapshot::from_scenario_config(
-            "test".to_string(),
-            Some((0, 2)),
-            None,
-            None,
-            None,
-        );
-
-        assert_eq!(snap.cursor_offset(), 2);
-        assert_eq!(snap.selections.len(), 1);
-    }
-
-    #[test]
-    fn test_snapshot_from_scenario_config_multi_selection_priority() {
-        // Multi-selection should take priority over cursor_position
-        let snap = EditorSnapshot::from_scenario_config(
-            "hello world".to_string(),
-            Some((0, 0)),                         // cursor
-            None,                                 // selection
-            None,                                 // cursors
-            Some(&[[0, 0, 0, 5], [0, 6, 0, 11]]), // multi-selections
-        );
-
-        // Should use multi-selections, not cursor_position
-        assert_eq!(snap.selections.len(), 2);
-    }
-
-    #[test]
     fn test_scenario_line_selection_conversion() {
         // Reproduce the select_line_001 scenario issue
         // Target: selection = [1, 0, 2, 0] means row 1 col 0 to row 2 col 0
         let content = "fn main() {\n    let x = 1;\n    let y = 2;\n}";
 
         // Target snapshot from TOML config
-        let target_snap = EditorSnapshot::from_scenario_config(
-            content.to_string(),
-            Some((1, 0)),       // cursor_position
-            Some([1, 0, 2, 0]), // selection
-            None,               // cursors
-            None,               // selections
-        );
+        let target_snap = EditorSnapshot::from_row_col_selection(content.to_string(), [1, 0, 2, 0]);
 
         // Calculate what the char offsets should be:
         // "fn main() {\n" = 12 chars (11 + 1 newline)
@@ -757,13 +692,7 @@ mod tests {
         let content = "fn main() {\n    let x = 1;\n    let y = 2;\n}";
 
         // Target: line selection from row 1 to row 2
-        let target = EditorSnapshot::from_scenario_config(
-            content.to_string(),
-            Some((1, 0)),
-            Some([1, 0, 2, 0]),
-            None,
-            None,
-        );
+        let target = EditorSnapshot::from_row_col_selection(content.to_string(), [1, 0, 2, 0]);
 
         // Current: same selection (as if we executed 'x' on line 1)
         // Row 1 starts at char 12, Row 2 starts at char 27
@@ -795,13 +724,7 @@ mod tests {
         let current_snap = sim.to_snapshot();
 
         // Target from TOML: selection = [1, 0, 2, 0]
-        let target_snap = EditorSnapshot::from_scenario_config(
-            content.to_string(),
-            Some((1, 0)),
-            Some([1, 0, 2, 0]),
-            None,
-            None,
-        );
+        let target_snap = EditorSnapshot::from_row_col_selection(content.to_string(), [1, 0, 2, 0]);
 
         // Helix produces (anchor=27, head=12), TOML produces (anchor=12, head=27)
         // These should match because they represent the same range

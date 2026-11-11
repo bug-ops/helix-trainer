@@ -1,7 +1,7 @@
 //! Tests for `ScenarioCollection`
 
 use super::*;
-use crate::config::{CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
+use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
 use crate::testing::{ncmd, sid};
 use chrono::Utc;
 
@@ -24,21 +24,11 @@ fn create_scenario(
         setup: Setup {
             file_content: "test".to_string(),
             language: None,
-            cursor: CursorSpec {
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: crate::testing::point(0, 0),
         },
         target: TargetState {
             file_content: "test".to_string(),
-            cursor: CursorSpec {
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: crate::testing::point(0, 0),
         },
         solution: Solution {
             commands: vec!["test".to_string()],
@@ -665,21 +655,11 @@ fn test_scenarios_without_metadata() {
         setup: Setup {
             file_content: "test".to_string(),
             language: None,
-            cursor: CursorSpec {
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: crate::testing::point(0, 0),
         },
         target: TargetState {
             file_content: "test".to_string(),
-            cursor: CursorSpec {
-                cursor_position: Some((0, 0)),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: crate::testing::point(0, 0),
         },
         solution: Solution {
             commands: vec!["test".to_string()],

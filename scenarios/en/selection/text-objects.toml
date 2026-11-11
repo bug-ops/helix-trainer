@@ -23,7 +23,6 @@ cursor_position = [0, 6]
 
 [scenarios.target]
 file_content = "hello beautiful world"
-cursor_position = [0, 6]
 selection = [0, 6, 0, 15]
 
 [scenarios.solution]
@@ -57,7 +56,6 @@ cursor_position = [0, 4]
 
 [scenarios.target]
 file_content = "let value = 42"
-cursor_position = [0, 4]
 selection = [0, 4, 0, 9]
 
 [scenarios.solution]
@@ -91,7 +89,6 @@ cursor_position = [0, 8]
 
 [scenarios.target]
 file_content = "hello beautiful world"
-cursor_position = [0, 16]
 selection = [0, 6, 0, 16]
 
 [scenarios.solution]
@@ -162,7 +159,6 @@ cursor_position = [0, 5]
 
 [scenarios.target]
 file_content = "First line.\nSecond line.\n\nAnother paragraph."
-cursor_position = [0, 0]
 selection = [0, 0, 2, 0]
 
 [scenarios.solution]
@@ -196,7 +192,6 @@ cursor_position = [1, 4]
 
 [scenarios.target]
 file_content = "fn main() {\n    println!(\"Hello\");\n    println!(\"World\");\n}\n\nfn other() {\n    todo!();\n}"
-cursor_position = [4, 0]
 selection = [0, 0, 4, 0]
 
 [scenarios.solution]
@@ -230,7 +225,6 @@ cursor_position = [2, 0]
 
 [scenarios.target]
 file_content = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
-cursor_position = [4, 0]
 selection = [2, 0, 4, 0]
 
 [scenarios.solution]
@@ -302,7 +296,6 @@ cursor_position = [0, 15]
 
 [scenarios.target]
 file_content = "fn calculate(x + y * 2)"
-cursor_position = [0, 13]
 selection = [0, 13, 0, 22]
 
 [scenarios.solution]
@@ -336,7 +329,6 @@ cursor_position = [0, 7]
 
 [scenarios.target]
 file_content = "call(arg1, arg2)"
-cursor_position = [0, 4]
 selection = [0, 4, 0, 16]
 
 [scenarios.solution]
@@ -374,7 +366,6 @@ cursor_position = [0, 12]
 
 [scenarios.target]
 file_content = "let arr = [1, 2, 3];"
-cursor_position = [0, 11]
 selection = [0, 11, 0, 18]
 
 [scenarios.solution]
@@ -408,7 +399,6 @@ cursor_position = [0, 6]
 
 [scenarios.target]
 file_content = "data[index]"
-cursor_position = [0, 4]
 selection = [0, 4, 0, 11]
 
 [scenarios.solution]
@@ -447,7 +437,6 @@ cursor_position = [0, 12]
 
 [scenarios.target]
 file_content = "if true { return 42; }"
-cursor_position = [0, 21]
 selection = [0, 9, 0, 21]
 
 [scenarios.solution]
@@ -481,7 +470,6 @@ cursor_position = [0, 14]
 
 [scenarios.target]
 file_content = "fn test() { body(); }"
-cursor_position = [0, 10]
 selection = [0, 10, 0, 21]
 
 [scenarios.solution]
@@ -519,7 +507,6 @@ cursor_position = [0, 15]
 
 [scenarios.target]
 file_content = "let msg = \"Hello World\";"
-cursor_position = [0, 11]
 selection = [0, 11, 0, 22]
 
 [scenarios.solution]
@@ -553,7 +540,6 @@ cursor_position = [0, 10]
 
 [scenarios.target]
 file_content = "print(\"old text\")"
-cursor_position = [0, 6]
 selection = [0, 6, 0, 16]
 
 [scenarios.solution]
@@ -591,7 +577,6 @@ cursor_position = [0, 9]
 
 [scenarios.target]
 file_content = "let c = 'x';"
-cursor_position = [0, 9]
 selection = [0, 9, 0, 10]
 
 [scenarios.solution]
@@ -625,7 +610,6 @@ cursor_position = [0, 7]
 
 [scenarios.target]
 file_content = "match 'a' =>"
-cursor_position = [0, 6]
 selection = [0, 6, 0, 9]
 
 [scenarios.solution]

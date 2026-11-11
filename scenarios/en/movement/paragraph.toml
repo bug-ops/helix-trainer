@@ -29,7 +29,6 @@ file_content = """fn first() {
 }
 
 fn second() {}"""
-cursor_position = [4, 0]
 selection = [0, 0, 4, 0]
 
 [scenarios.solution]
@@ -75,7 +74,6 @@ file_content = """fn add(a: i32) {
 fn sub(b: i32) {
     b - 1
 }"""
-cursor_position = [4, 0]
 selection = [0, 3, 4, 0]
 
 [scenarios.solution]
@@ -121,7 +119,6 @@ file_content = """fn one() {}
 fn two() {}
 
 fn three() {}"""
-cursor_position = [4, 0]
 selection = [4, 0, 4, 6]
 
 [scenarios.solution]
@@ -159,7 +156,6 @@ cursor_position = [1, 0]
 file_content = """let x = 1;
 
 let y = 2;"""
-cursor_position = [0, 0]
 selection = [0, 0, 1, 0]
 
 [scenarios.solution]

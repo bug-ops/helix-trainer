@@ -157,7 +157,6 @@ cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = """let count = 0;"""
-cursor_position = [0, 4]
 selection = [0, 0, 0, 4]
 
 [scenarios.solution]
@@ -191,7 +190,6 @@ cursor_position = [0, 12]
 
 [scenarios.target]
 file_content = """let value = 42;"""
-cursor_position = [0, 10]
 selection = [0, 10, 0, 12]
 
 [scenarios.solution]

@@ -551,9 +551,7 @@ mod tests {
     /// Build an `Active` `GameSession` for a minimal scenario, used to exercise
     /// insert/normal mode transitions in task-screen key handling tests.
     fn make_active_task_session() -> GameSession<crate::game::Active> {
-        use crate::config::{
-            CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-        };
+        use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
 
         let scenario = Scenario {
             id: sid("test"),
@@ -562,21 +560,11 @@ mod tests {
             setup: Setup {
                 file_content: "test".to_string(),
                 language: None,
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             target: TargetState {
                 file_content: "test2".to_string(),
-                cursor: CursorSpec {
-                    cursor_position: Some((0, 0)),
-                    selection: None,
-                    cursors: None,
-                    selections: None,
-                },
+                cursor: crate::testing::point(0, 0),
             },
             solution: Solution {
                 commands: vec!["x".to_string()],
@@ -1452,9 +1440,7 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_ignored_by_default() {
-            use crate::config::{
-                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-            };
+            use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
             use crate::ui::state::{ConfigState, screen::TaskData};
 
             let mut state = create_test_app_state();
@@ -1468,21 +1454,11 @@ mod tests {
                 setup: Setup {
                     file_content: "test".to_string(),
                     language: None,
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 solution: Solution {
                     commands: vec!["x".to_string()],
@@ -1517,9 +1493,7 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_mapped_when_enabled() {
-            use crate::config::{
-                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-            };
+            use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
             use crate::helix::commands::{
                 CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
             };
@@ -1536,21 +1510,11 @@ mod tests {
                 setup: Setup {
                     file_content: "test".to_string(),
                     language: None,
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 solution: Solution {
                     commands: vec!["x".to_string()],
@@ -1622,9 +1586,7 @@ mod tests {
 
         #[test]
         fn test_arrow_keys_with_modifiers_not_mapped() {
-            use crate::config::{
-                CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
-            };
+            use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
             use crate::ui::state::screen::TaskData;
 
             let mut state = create_test_app_state();
@@ -1638,21 +1600,11 @@ mod tests {
                 setup: Setup {
                     file_content: "test".to_string(),
                     language: None,
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 target: TargetState {
                     file_content: "test2".to_string(),
-                    cursor: CursorSpec {
-                        cursor_position: Some((0, 0)),
-                        selection: None,
-                        cursors: None,
-                        selections: None,
-                    },
+                    cursor: crate::testing::point(0, 0),
                 },
                 solution: Solution {
                     commands: vec!["x".to_string()],

@@ -18,7 +18,6 @@ cursor_position = [0, 8]
 
 [scenarios.target]
 file_content = """This is *important* information."""
-cursor_position = [0, 19]
 selection = [0, 8, 0, 19]
 
 [scenarios.solution]
@@ -53,7 +52,6 @@ cursor_position = [0, 8]
 
 [scenarios.target]
 file_content = """This is **important** information."""
-cursor_position = [0, 21]
 selection = [0, 8, 0, 21]
 
 [scenarios.solution]

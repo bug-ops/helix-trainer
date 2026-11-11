@@ -4,7 +4,7 @@
 //! like 'dd', 'gg', 'r<char>' through the typestate-based `InputStateMachine`.
 
 use helix_trainer::config::{
-    CursorSpec, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
+    CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
 };
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::input::keymap::CanonicalKeys;
@@ -57,6 +57,10 @@ fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
     AppState::new(scenarios, profile, storage, tracker)
 }
 
+fn cursor_at(row: usize, col: usize) -> CursorSpec {
+    CursorSpec::Point(Pos::try_from([row, col]).expect("valid position fixture"))
+}
+
 /// Helper to create a simple test scenario
 fn create_test_scenario(
     id: &str,
@@ -72,21 +76,11 @@ fn create_test_scenario(
         setup: Setup {
             file_content: setup_content.to_string(),
             language: None,
-            cursor: CursorSpec {
-                cursor_position: Some(setup_cursor),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: cursor_at(setup_cursor.0, setup_cursor.1),
         },
         target: TargetState {
             file_content: target_content.to_string(),
-            cursor: CursorSpec {
-                cursor_position: Some(target_cursor),
-                selection: None,
-                cursors: None,
-                selections: None,
-            },
+            cursor: cursor_at(target_cursor.0, target_cursor.1),
         },
         solution: Solution {
             commands: vec!["test".to_string()],

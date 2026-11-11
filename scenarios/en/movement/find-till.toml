@@ -23,7 +23,6 @@ file_content = """fn main() {
     let result = 42;
     println!("{}", result);
 }"""
-cursor_position = [1, 16]
 selection = [1, 4, 1, 16]
 
 [scenarios.solution]
@@ -61,7 +60,6 @@ cursor_position = [0, 0]
 file_content = """fn process(data: &str) -> Result<i32, Error> {
     Ok(42)
 }"""
-cursor_position = [0, 46]
 selection = [0, 0, 0, 46]
 
 [scenarios.solution]
@@ -134,7 +132,6 @@ cursor_position = [0, 4]
 [scenarios.target]
 file_content = """let items = vec![1, 2, 3];
 let sum = items.iter().sum();"""
-cursor_position = [0, 10]
 selection = [0, 4, 0, 10]
 
 [scenarios.solution]

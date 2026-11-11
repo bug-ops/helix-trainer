@@ -210,7 +210,7 @@ Known keymap changes on master relevant here:
 | FR-036 | WHILE in Select mode (`v`) THE SIMULATOR SHALL, for `/`, `?`, `n` and `N`, push a new range for the found match as `hx` 25.07.1 does (the existing ranges stay), and SHALL extend the current ranges for `Ctrl-d`, `Ctrl-u`, `]p`, `[p` and `mm` as `hx` does | #534 | must |
 | FR-037 | THE INDENT UNIT of a document SHALL first be auto-detected from the initial text with `helix_core::indent::auto_detect_indent_style` (consistent indentation wins, so a scenario indented with 8 spaces uses 8), and fall back to the per-language table of FR-028 when detection yields nothing. `align_selections` (`&`) SHALL pad by display width (grapheme display columns, as hx), not by character count | #535 | must |
 | FR-038 | WHEN `J` joins lines THE SIMULATOR SHALL remove the leading comment token of the joined line as `hx` `join_selections_impl` does, using one per-language comment-token table (`rs`: `///`, `//!`, `//`; `py`: `#`; `md`: none) that lives in the same module as the indent table of FR-028 (one language table, not two) | #521 | must |
-| FR-039 | WHEN `o`, `O` or Enter creates a new line THE SIMULATOR SHALL derive its indent with a per-language rule, with no new dependency and no syntax tree: for `rs`, the current line's indent plus one indent unit when the line (ignoring trailing whitespace) ends in `{`, `(` or `[`; for `py`, plus one unit when it ends in `:`; otherwise copy the current line's indent (FR-026); for languages without a rule (`md`) copy. The rule applies to every input; correctness is claimed only for the recorded golden cases of FR-040 | #516 | must |
+| FR-039 | WHEN `o`, `O` or Enter creates a new line THE SIMULATOR SHALL derive its indent with a per-language rule, with no new dependency and no syntax tree: for `rs`, the current line's indent plus one indent unit when the line (ignoring trailing whitespace) ends in `{`, `(` or `[`; for `py`, plus one unit when it ends in `:`; otherwise copy the current line's indent (FR-026); for languages without a rule (`md`) copy. For `O` the rule is the indent `o` would give below the PREVIOUS line (this matches the recorded goldens); on the first line, and for languages without openers, `O` copies the current line. The rule applies to every input; correctness is claimed only for the recorded golden cases of FR-040 | #516 | must |
 | FR-040 | THE GOLDEN TRACES for FR-039 SHALL be recorded from a local `hx` 25.07.1 started with an empty configuration (`hx -c <empty file>`, no user `languages.toml`, so `indent-heuristic` and other overrides cannot change the result) for every bundled scenario that uses `o`, `O` or Enter, plus canonical cases per language. Any recorded case where the rule differs from `hx` is listed in 3.8.4 and tracked by the follow-up defect issue | #516 | must |
 
 ### 3.8.1 Acceptance Criteria
@@ -283,7 +283,18 @@ WHEN  a scenario is indented with 8 spaces and the user presses >
 
 | Case | hx 25.07.1 result | Simulator result | Status |
 |------|-------------------|------------------|--------|
-| (filled in from the golden recording, FR-040) | | | |
+| `rs`: `let a = foo(1,` then `o` | 4 spaces (argument continuation) | 0 | open |
+| `rs`: blank line inside a block, `o` on the blank line | 4 | 0 | open |
+| `rs`: unclosed block (`fn f() -> u8 {`, no `}`), Enter at line end | 0 (parse error) | 4 | open |
+| `rs`: `// foo (` then `o` (any comment line; `py`: `# note:`) | continues the comment (`// y`, `# y`) | rule fires inside the comment (4 spaces) | open |
+| `rs`: Enter between `{}` (`fn f() {}`) | `}` on its own line (`{` / `    y` / `}`) | `{` / `    y}` | open |
+| `py`: `return` or `pass` line then `o` | dedents to 0 | copies 4 | open |
+| `py`: `x = {`, `x = [`, `x = foo(` then `o` | +1 unit | 0 (the `py` rule is `:` only; adding `{ ( [` to the `py` openers would fix this class) | open |
+| `md`: `- a`, `1. a`, `> q` then `o` | copies indent | copies indent | matches |
+
+Also not matched (separate follow-ups, P4): `Ctrl-d`/`Ctrl-u`/`Ctrl-f`/`Ctrl-b` move a fixed number of lines while hx moves by view height, so Select-mode extension by these keys (FR-036) cannot be golden-compared; tab width is fixed at 4 while hx uses the language `tab-width` (2 for `md`).
+
+Scenario corrections: `dedent_001` and `dedent_line_001` were rewritten with 4-space nesting, because hx auto-detects an 8-space unit for an 8-space file (FR-037) and `<` removes all 8 spaces.
 
 ### 3.8.5 Success Criteria
 

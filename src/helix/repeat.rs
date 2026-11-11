@@ -470,9 +470,6 @@ pub fn is_repeatable_command(key: &KeyEvent) -> bool {
             'p' | 'P' => true, // paste
             '>' | '<' => true, // indent/dedent
 
-            // Hint key alternative
-            '?' => false,
-
             // All other printable characters are repeatable
             // (they can be used as arguments to 'r' command, or in insert mode)
             _ if ch.is_ascii_graphic() || ch == ' ' => true,
@@ -756,8 +753,6 @@ mod tests {
         // Hint keys
         let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         assert!(!is_repeatable_command(&f1)); // hint (F1)
-        let question = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
-        assert!(!is_repeatable_command(&question)); // hint (?)
 
         // Esc key
         let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);

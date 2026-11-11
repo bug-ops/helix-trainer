@@ -74,7 +74,7 @@ pub fn get_bracket_pair(ch: char) -> (char, char) {
 ///
 /// # Returns
 ///
-/// Option containing (open_row, open_col, close_row, close_col) if found
+/// Option containing (`open_row`, `open_col`, `close_row`, `close_col`) if found
 ///
 /// # Examples
 ///

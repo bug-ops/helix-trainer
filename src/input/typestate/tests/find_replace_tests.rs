@@ -1,4 +1,4 @@
-//! Tests for FindCharPending and ReplaceCharPending handlers
+//! Tests for `FindCharPending` and `ReplaceCharPending` handlers
 
 use std::assert_matches;
 

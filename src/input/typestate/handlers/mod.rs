@@ -1,6 +1,6 @@
 //! Input handler implementations for each state
 //!
-//! Each state has its own handler implementing the InputHandler trait.
+//! Each state has its own handler implementing the `InputHandler` trait.
 //! The handlers are dispatched based on the current state.
 
 mod base;
@@ -32,6 +32,6 @@ pub trait InputHandler<S: HandlerState> {
     fn handle_key(state: &S, key: KeyEvent) -> HandlerResult;
 }
 
-/// Marker struct for implementing InputHandler
+/// Marker struct for implementing `InputHandler`
 #[derive(Debug, Clone, Copy)]
 pub struct KeyHandler;

@@ -138,47 +138,51 @@ impl QuestType {
 }
 
 impl crate::learning::ProgressTracker for QuestType {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn progress(&self) -> f64 {
         match self {
             QuestType::CommandPractice {
                 target, current, ..
-            } => (*current as f64 / (*target).max(1) as f64).min(1.0),
+            } => (f64::from(*current) / f64::from((*target).max(1))).min(1.0),
             QuestType::ScenarioCompletion { target, current } => {
-                (*current as f64 / (*target).max(1) as f64).min(1.0)
+                (f64::from(*current) / f64::from((*target).max(1))).min(1.0)
             }
             QuestType::SpeedRun { .. } => 0.0,
             QuestType::TimeInvested {
                 target_minutes,
                 current_minutes,
-            } => (*current_minutes as f64 / (*target_minutes).max(1) as f64).min(1.0),
+            } => (f64::from(*current_minutes) / f64::from((*target_minutes).max(1))).min(1.0),
             QuestType::Exploration {
                 target_commands,
                 commands_used,
-            } => (commands_used.len() as f64 / (*target_commands).max(1) as f64).min(1.0),
+            } => (commands_used.len() as f64 / f64::from((*target_commands).max(1))).min(1.0),
         }
     }
 
     fn current(&self) -> u64 {
         match self {
-            QuestType::CommandPractice { current, .. } => *current as u64,
-            QuestType::ScenarioCompletion { current, .. } => *current as u64,
+            QuestType::CommandPractice { current, .. } => u64::from(*current),
+            QuestType::ScenarioCompletion { current, .. } => u64::from(*current),
             QuestType::SpeedRun { .. } => 0,
             QuestType::TimeInvested {
                 current_minutes, ..
-            } => *current_minutes as u64,
+            } => u64::from(*current_minutes),
             QuestType::Exploration { commands_used, .. } => commands_used.len() as u64,
         }
     }
 
     fn target(&self) -> u64 {
         match self {
-            QuestType::CommandPractice { target, .. } => *target as u64,
-            QuestType::ScenarioCompletion { target, .. } => *target as u64,
+            QuestType::CommandPractice { target, .. } => u64::from(*target),
+            QuestType::ScenarioCompletion { target, .. } => u64::from(*target),
             QuestType::SpeedRun { .. } => 1,
-            QuestType::TimeInvested { target_minutes, .. } => *target_minutes as u64,
+            QuestType::TimeInvested { target_minutes, .. } => u64::from(*target_minutes),
             QuestType::Exploration {
                 target_commands, ..
-            } => *target_commands as u64,
+            } => u64::from(*target_commands),
         }
     }
 }
@@ -452,7 +456,7 @@ impl QuestTemplateRegistry {
     /// Get all eligible quests based on user conditions
     ///
     /// Filters quests by:
-    /// - Level requirements (min_level, max_level)
+    /// - Level requirements (`min_level`, `max_level`)
     /// - Required commands (user must have used these)
     /// - Required scenarios (user must have completed these)
     pub fn get_eligible_quests(

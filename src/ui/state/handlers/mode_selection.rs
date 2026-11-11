@@ -1,7 +1,7 @@
 //! Message handlers for mode selection screen
 //!
-//! Type-safe handlers that receive ModeSelectionData directly instead of
-//! performing runtime checks on AppState.
+//! Type-safe handlers that receive `ModeSelectionData` directly instead of
+//! performing runtime checks on `AppState`.
 
 use crate::minigame::MiniGameSession;
 use crate::ui::notification::{Notification, NotificationType};
@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 /// Handle mode selection up navigation
 ///
-/// Type-safe handler that only accepts ModeSelectionData, ensuring compile-time
+/// Type-safe handler that only accepts `ModeSelectionData`, ensuring compile-time
 /// guarantee that it's called on the correct screen.
 pub(in crate::ui::state) fn handle_mode_selection_up(
     data: &mut ModeSelectionData,
@@ -31,7 +31,7 @@ pub(in crate::ui::state) fn handle_mode_selection_up(
 
 /// Handle mode selection down navigation
 ///
-/// Type-safe handler that only accepts ModeSelectionData.
+/// Type-safe handler that only accepts `ModeSelectionData`.
 pub(in crate::ui::state) fn handle_mode_selection_down(
     data: &mut ModeSelectionData,
 ) -> HandlerOutcome {
@@ -47,7 +47,7 @@ pub(in crate::ui::state) fn handle_mode_selection_down(
 /// Handle mode selection confirmation
 ///
 /// Type-safe handler that transitions to the selected mode screen.
-/// Uses HandlerContext to delegate to other handlers.
+/// Uses `HandlerContext` to delegate to other handlers.
 pub(in crate::ui::state) fn handle_mode_selection_select(
     data: &mut ModeSelectionData,
     ctx: &mut HandlerContext<'_>,

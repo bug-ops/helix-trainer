@@ -19,7 +19,7 @@ use crate::ui::state::{
 use crate::ui::state::{CategoryProgress, MasteryInfo};
 use rust_i18n::t;
 
-/// Handle StartScenario message
+/// Handle `StartScenario` message
 ///
 /// Initializes a new game session with the selected scenario
 pub fn handle_start_scenario(
@@ -143,11 +143,11 @@ fn record_scenario_completion(
     }
 }
 
-/// Handle CompleteScenario message
+/// Handle `CompleteScenario` message
 ///
 /// Processes scenario completion: awards XP, updates quests, records FSRS data
 ///
-/// Note: This handler needs full AppState access to call update() for quest progress
+/// Note: This handler needs full `AppState` access to call `update()` for quest progress
 pub fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
     let menu = || {
         TypedScreen::Menu(MenuData {
@@ -251,11 +251,11 @@ pub fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
     HandlerOutcome::Transition(Box::new(TypedScreen::Results(results_data)))
 }
 
-/// Handle AbandonScenario message
+/// Handle `AbandonScenario` message
 ///
 /// Marks the session as abandoned and shows results
 ///
-/// Takes ownership of TaskData to consume the session
+/// Takes ownership of `TaskData` to consume the session
 pub fn handle_abandon_scenario(task_data: TaskData) -> TypedScreen {
     // A finished task has nothing left to abandon: it keeps its success animation
     let TaskSession::Active(session) = task_data.session else {
@@ -271,11 +271,11 @@ pub fn handle_abandon_scenario(task_data: TaskData) -> TypedScreen {
     TypedScreen::Results(results_data)
 }
 
-/// Handle RetryScenario message
+/// Handle `RetryScenario` message
 ///
 /// Resets the current scenario to initial state
 ///
-/// Takes ownership of ResultsData to extract scenario
+/// Takes ownership of `ResultsData` to extract scenario
 pub fn handle_retry_scenario(
     results_data: ResultsData,
     ctx: &mut HandlerContext<'_>,
@@ -300,11 +300,11 @@ pub fn handle_retry_scenario(
     Ok(TypedScreen::Task(task_data))
 }
 
-/// Handle NextLesson message
+/// Handle `NextLesson` message
 ///
 /// Navigates to the next scenario in the filtered list.
 /// If at the end of the list, stays on Results screen.
-/// If no scenario_index is available, returns to Menu screen with restored position.
+/// If no `scenario_index` is available, returns to Menu screen with restored position.
 pub fn handle_next_lesson(
     results_data: &ResultsData,
     ctx: &mut HandlerContext<'_>,
@@ -443,10 +443,10 @@ fn next_steps(ctx: &HandlerContext<'_>, imperfect: usize) -> Vec<NextStep> {
     steps
 }
 
-/// Handle GoToScenarioList message
+/// Handle `GoToScenarioList` message
 ///
 /// Navigates directly to the Menu screen (scenario list).
-/// Unlike BackToMenu which goes to ModeSelection, this goes directly to Menu.
+/// Unlike `BackToMenu` which goes to `ModeSelection`, this goes directly to Menu.
 ///
 /// Auto-advance behavior: If the scenario was completed successfully, the cursor
 /// moves to the next scenario in the list. Otherwise, it stays at the current position.
@@ -460,8 +460,9 @@ pub fn handle_go_to_scenario_list(
         // Clamp to last valid index; saturating_sub handles empty collection case
         results_data
             .scenario_index
-            .map(|i| (i + 1).min(ctx.game.scenario_collection.count().saturating_sub(1)))
-            .unwrap_or(ctx.ui.last_menu_selected)
+            .map_or(ctx.ui.last_menu_selected, |i| {
+                (i + 1).min(ctx.game.scenario_collection.count().saturating_sub(1))
+            })
     } else {
         // Stay at current position for abandoned scenarios
         results_data
@@ -1153,7 +1154,7 @@ mod tests {
         ));
     }
 
-    /// Same as above but through the level-up (save_immediate) branch.
+    /// Same as above but through the level-up (`save_immediate`) branch.
     #[test]
     fn test_record_scenario_completion_persists_fsrs_data_on_level_up() {
         use crate::gamification::{ProfileStorage, XPCalculator};
@@ -1386,7 +1387,7 @@ mod tests {
         );
         assert_eq!(
             total_xp_gained,
-            actual_xp + quest_xp_reward as u64,
+            actual_xp + u64::from(quest_xp_reward),
             "quest XP must be added exactly once alongside scenario XP, not twice"
         );
     }

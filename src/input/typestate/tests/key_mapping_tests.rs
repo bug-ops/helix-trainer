@@ -1,4 +1,4 @@
-//! Tests for key_mapping module
+//! Tests for `key_mapping` module
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -561,7 +561,7 @@ fn test_insert_mode_unbound_modified_chars_are_dropped() {
     }
 }
 
-/// Windows reports AltGr characters as Ctrl+Alt+char; they must still type.
+/// Windows reports `AltGr` characters as Ctrl+Alt+char; they must still type.
 #[test]
 fn test_insert_mode_altgr_chars_are_typed() {
     let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;

@@ -281,8 +281,7 @@ impl AchievementEngine {
             .filter(|cmd| {
                 tracker
                     .performance(cmd)
-                    .map(|perf| perf.mastery_level() == MasteryLevel::Master)
-                    .unwrap_or(false)
+                    .is_some_and(|perf| perf.mastery_level() == MasteryLevel::Master)
             })
             .count();
 
@@ -351,31 +350,30 @@ impl AchievementEngine {
 
     /// Get all possible achievements
     pub fn all_achievements() -> Vec<Achievement> {
-        use AchievementId::*;
         vec![
             // Streaks
-            Streak7Days,
-            Streak30Days,
-            Streak90Days,
-            Streak365Days,
+            AchievementId::Streak7Days,
+            AchievementId::Streak30Days,
+            AchievementId::Streak90Days,
+            AchievementId::Streak365Days,
             // Mastery
-            FirstPerfect,
-            Perfect10,
-            Perfect100,
-            MasterOneCommand,
-            MasterTenCommands,
+            AchievementId::FirstPerfect,
+            AchievementId::Perfect10,
+            AchievementId::Perfect100,
+            AchievementId::MasterOneCommand,
+            AchievementId::MasterTenCommands,
             // Speed
-            SpeedDemon,
-            Speedrunner,
-            Flash,
+            AchievementId::SpeedDemon,
+            AchievementId::Speedrunner,
+            AchievementId::Flash,
             // Exploration
-            JackOfAllTrades,
-            Specialist,
-            Polyglot,
+            AchievementId::JackOfAllTrades,
+            AchievementId::Specialist,
+            AchievementId::Polyglot,
             // Milestones
-            Centurion,
-            Veteran,
-            Legend,
+            AchievementId::Centurion,
+            AchievementId::Veteran,
+            AchievementId::Legend,
         ]
         .into_iter()
         .map(Achievement::new)
@@ -507,7 +505,7 @@ mod tests {
 
         // Use 20 different commands
         for i in 0..20 {
-            let cmd = format!("cmd{}", i);
+            let cmd = format!("cmd{i}");
             tracker.record_attempt(
                 &cid(&cmd),
                 std::time::Duration::from_secs(1),

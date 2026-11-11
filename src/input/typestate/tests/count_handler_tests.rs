@@ -1,4 +1,4 @@
-//! Tests for CountPending handler
+//! Tests for `CountPending` handler
 
 use std::assert_matches;
 use std::borrow::Cow;

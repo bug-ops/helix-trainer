@@ -13,9 +13,9 @@
 //! ```
 //!
 //! Where:
-//! - `overdue_factor` = min(overdue_ratio, 1.0), the days past due relative to the
+//! - `overdue_factor` = `min(overdue_ratio`, 1.0), the days past due relative to the
 //!   scheduled interval (from [`command_urgency`])
-//! - `weakness_factor` = 1.0 - success_rate
+//! - `weakness_factor` = 1.0 - `success_rate`
 //!
 //! Novel commands (no tracker entry) receive a fixed novelty weight.
 //!
@@ -181,9 +181,9 @@ impl<'a> ScenarioPrioritizer<'a> {
     /// ```
     ///
     /// Where (both from [`command_urgency`]):
-    /// - `overdue_factor` = min(overdue_ratio, 1.0), the days past due relative to the
+    /// - `overdue_factor` = `min(overdue_ratio`, 1.0), the days past due relative to the
     ///   scheduled interval
-    /// - `weakness_factor` = 1.0 - success_rate
+    /// - `weakness_factor` = 1.0 - `success_rate`
     ///
     /// For novel commands (no tracker entry):
     /// ```text
@@ -270,9 +270,7 @@ mod tests {
         // Never practiced command should get novelty weight
         assert!(
             (score - FSRS_NOVELTY_WEIGHT).abs() < 0.001,
-            "Expected novelty weight {}, got {}",
-            FSRS_NOVELTY_WEIGHT,
-            score
+            "Expected novelty weight {FSRS_NOVELTY_WEIGHT}, got {score}"
         );
     }
 
@@ -300,8 +298,7 @@ mod tests {
         // Score should be very low
         assert!(
             score < 0.1,
-            "Expected low score for mastered command, got {}",
-            score
+            "Expected low score for mastered command, got {score}"
         );
     }
 
@@ -337,8 +334,7 @@ mod tests {
         // Expected: 0.4 * 0.8 = 0.32
         assert!(
             score >= 0.2,
-            "Expected higher score for weak command, got {}",
-            score
+            "Expected higher score for weak command, got {score}"
         );
     }
 
@@ -394,8 +390,7 @@ mod tests {
         // Empty commands should return neutral score
         assert!(
             (score - 0.5).abs() < 0.001,
-            "Expected neutral score 0.5 for empty commands, got {}",
-            score
+            "Expected neutral score 0.5 for empty commands, got {score}"
         );
     }
 
@@ -415,18 +410,15 @@ mod tests {
         // All should get novelty weight since tracker is empty
         assert!(
             (score1 - FSRS_NOVELTY_WEIGHT).abs() < 0.001,
-            "Expected novelty weight for scenario1, got {}",
-            score1
+            "Expected novelty weight for scenario1, got {score1}"
         );
         assert!(
             (score2 - FSRS_NOVELTY_WEIGHT).abs() < 0.001,
-            "Expected novelty weight for scenario2, got {}",
-            score2
+            "Expected novelty weight for scenario2, got {score2}"
         );
         assert!(
             (score3 - FSRS_NOVELTY_WEIGHT).abs() < 0.001,
-            "Expected novelty weight for scenario3, got {}",
-            score3
+            "Expected novelty weight for scenario3, got {score3}"
         );
     }
 
@@ -451,15 +443,11 @@ mod tests {
             let score = scorer.score_command(&cid(cmd));
             assert!(
                 score >= 0.0,
-                "Score for {} should be >= 0.0, got {}",
-                cmd,
-                score
+                "Score for {cmd} should be >= 0.0, got {score}"
             );
             assert!(
                 score <= 1.0,
-                "Score for {} should be <= 1.0, got {}",
-                cmd,
-                score
+                "Score for {cmd} should be <= 1.0, got {score}"
             );
         }
     }
@@ -507,15 +495,11 @@ mod tests {
         // Verify relative ordering: weak > novelty > mastered
         assert!(
             dd_score > p_score || (dd_score - p_score).abs() < 0.1,
-            "Weak command should score >= novelty: dd={}, p={}",
-            dd_score,
-            p_score
+            "Weak command should score >= novelty: dd={dd_score}, p={p_score}"
         );
         assert!(
             p_score > h_score,
-            "Novelty should score higher than mastered: p={}, h={}",
-            p_score,
-            h_score
+            "Novelty should score higher than mastered: p={p_score}, h={h_score}"
         );
 
         // Scenario with all three should use max
@@ -525,9 +509,7 @@ mod tests {
 
         assert!(
             (scenario_score - expected_max).abs() < 0.001,
-            "Scenario should use max score: expected {}, got {}",
-            expected_max,
-            scenario_score
+            "Scenario should use max score: expected {expected_max}, got {scenario_score}"
         );
     }
 
@@ -556,6 +538,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn test_score_command_overdue_is_relative_to_the_interval() {
         let (tracker, interval) = tracker_with_one_attempt("x");
         let due = tracker.performance(&cid("x")).unwrap().due();

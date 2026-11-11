@@ -68,7 +68,7 @@ impl<'de> Deserialize<'de> for PerformanceData {
             let card = CardRecord::deserialize(value)
                 .map_err(|e| e.to_string())
                 .and_then(|record| {
-                    CommandPerformance::from_record(record).map_err(|e| e.to_string())
+                    CommandPerformance::from_record(&record).map_err(|e| e.to_string())
                 });
             match card {
                 Ok(card) => {
@@ -127,6 +127,10 @@ impl From<HashMap<CommandId, CommandPerformance>> for PerformanceData {
     }
 }
 
+#[expect(
+    clippy::implicit_hasher,
+    reason = "PerformanceData wraps the default-hasher map, so only that map type can be produced"
+)]
 impl From<PerformanceData> for HashMap<CommandId, CommandPerformance> {
     fn from(data: PerformanceData) -> Self {
         data.0
@@ -295,7 +299,7 @@ impl CommandPerformance {
         }
     }
 
-    fn from_record(record: CardRecord) -> Result<Self, LearningError> {
+    fn from_record(record: &CardRecord) -> Result<Self, LearningError> {
         if record.successes > record.attempts {
             return Err(LearningError::InvalidCounters {
                 attempts: record.attempts,
@@ -409,6 +413,10 @@ impl CommandPerformance {
     /// Recall probability (0.0-1.0) at `now`, derived from the memory state and the time
     /// since the last review. A card that was never reviewed has probability 1.0.
     #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn retrievability(&self, now: DateTime<Utc>) -> f32 {
         let Some(memory) = self.memory_state() else {
             return 1.0;
@@ -446,11 +454,11 @@ impl CommandPerformance {
         if self.attempts == 0 {
             0.0
         } else {
-            self.successes as f64 / self.attempts as f64
+            f64::from(self.successes) / f64::from(self.attempts)
         }
     }
 
-    /// Get MemoryState for FSRS (None if New)
+    /// Get `MemoryState` for FSRS (None if New)
     pub fn memory_state(&self) -> Option<MemoryState> {
         if self.reps == 0 {
             None
@@ -463,7 +471,7 @@ impl CommandPerformance {
         }
     }
 
-    /// Update from FSRS NextState and determine card state
+    /// Update from FSRS `NextState` and determine card state
     ///
     /// # Errors
     ///
@@ -491,11 +499,11 @@ impl CommandPerformance {
                 }
             }
             // Hard (1) - struggled but passed
-            (CardState::New, 1) | (CardState::Learning, 1) => CardState::Learning,
+            (CardState::New | CardState::Learning, 1) => CardState::Learning,
             (CardState::Relearning, 1) => CardState::Relearning,
             (CardState::Review, 1) => CardState::Review,
             // Good (2) or Easy (3) - succeeded well
-            (CardState::New, _) | (CardState::Learning, _) => {
+            (CardState::New | CardState::Learning, _) => {
                 if interval >= 1.0 {
                     CardState::Review
                 } else {
@@ -728,7 +736,7 @@ impl PerformanceTracker {
 
     /// Record an attempt and return mastery level change if any
     ///
-    /// Returns Some((command, old_level, new_level)) if mastery level changed
+    /// Returns Some((command, `old_level`, `new_level`)) if mastery level changed
     pub fn record_attempt_with_mastery_change(
         &mut self,
         command: &CommandId,
@@ -740,14 +748,16 @@ impl PerformanceTracker {
         let old_level = self
             .stats
             .get(command)
-            .map(|p| p.mastery_level())
-            .unwrap_or(MasteryLevel::Beginner);
+            .map_or(MasteryLevel::Beginner, CommandPerformance::mastery_level);
 
         // Record the attempt
         self.record_attempt(command, duration, success, optimal_time);
 
         // Get new mastery level
-        let new_level = self.stats.get(command).map(|p| p.mastery_level())?;
+        let new_level = self
+            .stats
+            .get(command)
+            .map(CommandPerformance::mastery_level)?;
 
         // Return change if level improved
         if new_level.tier_level() > old_level.tier_level() {
@@ -1309,8 +1319,8 @@ mod tests {
             // Same starting state + same rating sequence + same simulated elapsed
             // time between reviews must always produce the same resulting FSRS
             // state -- no hidden randomness or wall-clock reads.
-            prop_assert_eq!(first.stability(), second.stability());
-            prop_assert_eq!(first.difficulty(), second.difficulty());
+            prop_assert_eq!(first.stability().to_bits(), second.stability().to_bits());
+            prop_assert_eq!(first.difficulty().to_bits(), second.difficulty().to_bits());
             prop_assert_eq!(first.state, second.state);
             prop_assert_eq!(first.reps, second.reps);
             prop_assert_eq!(first.lapses, second.lapses);

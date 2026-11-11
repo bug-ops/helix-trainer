@@ -369,7 +369,7 @@ mod key_context_tests {
             },
         ];
         for state in literal_states {
-            assert_eq!(state.key_context(), None, "{:?} must not translate", state);
+            assert_eq!(state.key_context(), None, "{state:?} must not translate");
         }
     }
 }

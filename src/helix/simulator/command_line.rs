@@ -30,6 +30,11 @@ impl CommandLine {
     /// assert_eq!(CommandLine::parse(":g 3").unwrap(), CommandLine::Goto(3));
     /// assert!(CommandLine::parse(":nope").is_err());
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if `input` does not start with `:`, names no command or an unknown
+    /// command, or has a missing, surplus or non-numeric argument.
     pub fn parse(input: &str) -> Result<Self, UserError> {
         let body = input.strip_prefix(':').ok_or_else(|| {
             UserError::command_failed(format!("not a command: '{}'", bound(input)))
@@ -68,6 +73,11 @@ impl CommandLine {
     }
 
     /// Execute this command against the simulator.
+    ///
+    /// # Errors
+    ///
+    /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+    /// with the fallible commands that share the registry's function type.
     pub fn execute<M: EditorMode>(&self, sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
         match self {
             Self::Goto(n) => {

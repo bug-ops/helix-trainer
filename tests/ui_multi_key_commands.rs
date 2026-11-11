@@ -1,7 +1,7 @@
 //! Integration tests for UI state with multi-key command handling
 //!
 //! These tests verify that the UI layer correctly handles multi-key commands
-//! like 'dd', 'gg', 'r<char>' through the typestate-based InputStateMachine.
+//! like 'dd', 'gg', 'r<char>' through the typestate-based `InputStateMachine`.
 
 use helix_trainer::config::{CursorSpec, Scenario, ScoringConfig, Setup, Solution, TargetState};
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
@@ -42,7 +42,7 @@ fn start_scenario_from_menu(state: &mut AppState, index: usize) -> Result<(), Us
     update(state, Message::MenuSelect)
 }
 
-/// Helper to create AppState for testing
+/// Helper to create `AppState` for testing
 fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
     let profile = UserProfile::new();
     let storage = ProfileStorage::with_path(

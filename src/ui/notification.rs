@@ -97,7 +97,7 @@ pub struct Notification {
     pub notification_type: NotificationType,
 
     /// When the notification was created
-    /// Note: This field is excluded from PartialEq comparison
+    /// Note: This field is excluded from `PartialEq` comparison
     pub(crate) created_at: Instant,
 
     /// How long to display the notification (default 3 seconds)
@@ -168,17 +168,17 @@ impl Notification {
     /// Get title text for this notification
     pub fn title(&self) -> String {
         match &self.notification_type {
-            NotificationType::LevelUp { new_level } => format!("Level Up! Level {}", new_level),
-            NotificationType::Achievement { name, .. } => format!("Achievement Unlocked: {}", name),
+            NotificationType::LevelUp { new_level } => format!("Level Up! Level {new_level}"),
+            NotificationType::Achievement { name, .. } => format!("Achievement Unlocked: {name}"),
             NotificationType::QuestComplete { .. } => "Quest Complete!".to_string(),
-            NotificationType::StreakMilestone { streak } => format!("{} Day Streak!", streak),
+            NotificationType::StreakMilestone { streak } => format!("{streak} Day Streak!"),
             NotificationType::StreakFreezeGranted => "Streak Freeze Earned!".to_string(),
             NotificationType::StreakFreezeUsed => "Streak Freeze Used".to_string(),
             NotificationType::StreakBroken { .. } => "Streak Broken".to_string(),
             NotificationType::Info { .. } => "Info".to_string(),
             NotificationType::ReviewSessionComplete { .. } => "Review Complete!".to_string(),
             NotificationType::MasteryLevelUp { command, .. } => {
-                format!("Mastery Up: {}", command)
+                format!("Mastery Up: {command}")
             }
         }
     }
@@ -187,22 +187,21 @@ impl Notification {
     pub fn message(&self) -> String {
         match &self.notification_type {
             NotificationType::LevelUp { new_level } => {
-                format!("You've reached level {}!", new_level)
+                format!("You've reached level {new_level}!")
             }
             NotificationType::Achievement { description, .. } => description.clone(),
             NotificationType::QuestComplete {
                 description,
                 xp_reward,
             } => {
-                format!("{} (+{} XP)", description, xp_reward)
+                format!("{description} (+{xp_reward} XP)")
             }
             NotificationType::StreakMilestone { streak } => {
-                format!("Keep it up! {} days in a row", streak)
+                format!("Keep it up! {streak} days in a row")
             }
             NotificationType::StreakFreezeGranted => {
                 format!(
-                    "Away for up to {} days without breaking your streak",
-                    STREAK_FREEZE_MAX_GAP_DAYS
+                    "Away for up to {STREAK_FREEZE_MAX_GAP_DAYS} days without breaking your streak"
                 )
             }
             NotificationType::StreakFreezeUsed => {
@@ -214,14 +213,10 @@ impl Notification {
             } => {
                 if *freeze_could_not_cover_gap {
                     format!(
-                        "Your {} day streak was reset - you were away longer than your freeze covers ({} days max)",
-                        was_streak, STREAK_FREEZE_MAX_GAP_DAYS
+                        "Your {was_streak} day streak was reset - you were away longer than your freeze covers ({STREAK_FREEZE_MAX_GAP_DAYS} days max)"
                     )
                 } else {
-                    format!(
-                        "Your {} day streak was reset after a missed day",
-                        was_streak
-                    )
+                    format!("Your {was_streak} day streak was reset after a missed day")
                 }
             }
             NotificationType::Info { message } => message.clone(),
@@ -230,13 +225,10 @@ impl Notification {
                 success_count,
                 xp_earned,
             } => {
-                format!(
-                    "{}/{} correct (+{} XP)",
-                    success_count, completed, xp_earned
-                )
+                format!("{success_count}/{completed} correct (+{xp_earned} XP)")
             }
             NotificationType::MasteryLevelUp { new_level, .. } => {
-                format!("Reached {} level!", new_level)
+                format!("Reached {new_level} level!")
             }
         }
     }
@@ -312,7 +304,7 @@ impl NotificationQueue {
         before - self.notifications.len()
     }
 
-    /// Get visible notifications (up to max_visible, oldest first)
+    /// Get visible notifications (up to `max_visible`, oldest first)
     ///
     /// Returns a slice of the most recent notifications that should be displayed.
     pub fn visible(&self) -> &[Notification] {
@@ -462,8 +454,7 @@ mod tests {
         assert_eq!(
             freeze_granted.message(),
             format!(
-                "Away for up to {} days without breaking your streak",
-                STREAK_FREEZE_MAX_GAP_DAYS
+                "Away for up to {STREAK_FREEZE_MAX_GAP_DAYS} days without breaking your streak"
             )
         );
 
@@ -495,8 +486,7 @@ mod tests {
         assert_eq!(
             streak_broken_freeze_insufficient.message(),
             format!(
-                "Your 5 day streak was reset - you were away longer than your freeze covers ({} days max)",
-                STREAK_FREEZE_MAX_GAP_DAYS
+                "Your 5 day streak was reset - you were away longer than your freeze covers ({STREAK_FREEZE_MAX_GAP_DAYS} days max)"
             )
         );
 

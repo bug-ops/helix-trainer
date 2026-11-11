@@ -3,6 +3,7 @@
 //! `fixtures/fsrs6_goldens.json` was captured from the `fsrs` 6.6.2 build. The `fsrs` 7 build
 //! must reproduce it within [`REL_TOLERANCE`]; outputs are not bitwise identical across the bump.
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -98,7 +99,7 @@ fn play(ratings: &[Rating], gaps_days: &[i64]) -> SequenceGolden {
     for (index, rating) in ratings.iter().enumerate() {
         if index > 0 {
             clock.advance_days(gaps_days[index - 1]);
-            label.push_str(&format!("+{}d>", gaps_days[index - 1]));
+            write!(label, "+{}d>", gaps_days[index - 1]).unwrap();
         }
         label.push(rating.tag());
         let (duration, success) = rating.attempt();

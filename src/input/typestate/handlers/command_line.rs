@@ -1,4 +1,4 @@
-//! CommandLinePending handler
+//! `CommandLinePending` handler
 //!
 //! Accumulates a `:`-prefixed command-line buffer. The simulator never
 //! enters a "command mode" — this handler only collects text; the assembled

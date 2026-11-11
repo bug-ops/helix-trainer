@@ -1,4 +1,4 @@
-//! Tests for UnmatchedPrevPending and UnmatchedNextPending handlers
+//! Tests for `UnmatchedPrevPending` and `UnmatchedNextPending` handlers
 
 use std::assert_matches;
 

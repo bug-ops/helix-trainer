@@ -1242,7 +1242,10 @@ mod tests {
             &mut state,
             DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
         );
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
 
         handle_data_message(
             &mut state,
@@ -1265,7 +1268,10 @@ mod tests {
             state.progress.quest_registry,
             QuestRegistrySlot::Pending
         ));
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
         assert_eq!(quest_warning_count(&state), 0);
 
         handle_data_message(
@@ -1298,7 +1304,10 @@ mod tests {
             state.progress.quest_registry,
             QuestRegistrySlot::Unavailable
         ));
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
         assert_eq!(quest_warning_count(&state), 1);
     }
 
@@ -1318,7 +1327,10 @@ mod tests {
             DataLoadMessage::ProfileReady(UserProfile::new()),
         );
 
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
         assert_eq!(quest_warning_count(&state), 1);
     }
 
@@ -1335,7 +1347,10 @@ mod tests {
             DataLoadMessage::ProfileReady(UserProfile::new()),
         );
 
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
         assert_eq!(quest_warning_count(&state), 1);
     }
 
@@ -1357,7 +1372,10 @@ mod tests {
             },
         );
 
-        assert!(state.progress.profile.daily_quests.is_empty());
+        assert_eq!(
+            state.progress.profile.daily_quests,
+            [] as [helix_trainer::gamification::Quest; 0]
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Helix text editor simulator using helix-core primitives
 //!
-//! This module provides a HelixSimulator that uses the helix-core library
+//! This module provides a `HelixSimulator` that uses the helix-core library
 //! for text editing operations. It ensures unicode-correct handling of
 //! graphemes, supports multi-cursor operations, and maintains undo history.
 //!
@@ -154,7 +154,7 @@ impl<M: EditorMode> HelixSimulator<M> {
         M::name()
     }
 
-    /// Create an EditorSnapshot from current simulator state.
+    /// Create an `EditorSnapshot` from current simulator state.
     ///
     /// This is the preferred way to capture simulator state for:
     /// - Comparison with target state
@@ -191,8 +191,13 @@ impl<M: EditorMode> HelixSimulator<M> {
 
     /// Get current editor state
     ///
-    /// Exports ALL selections from helix_core::Selection to EditorState.
+    /// Exports ALL selections from `helix_core::Selection` to `EditorState`.
     /// Point selections (anchor == head) are skipped as they represent cursors without selection.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if a selection position cannot be converted into a valid
+    /// editor-state position.
     pub fn state(&self) -> Result<EditorState, UserError> {
         let max_pos = self.doc.len_chars();
 
@@ -304,7 +309,7 @@ impl<M: EditorMode> HelixSimulator<M> {
     /// No-op transactions (empty change set) are skipped entirely: they
     /// leave the document unchanged, so recording them would create a
     /// spurious undo step and needlessly discard valid redo history.
-    pub(super) fn apply_transaction(&mut self, transaction: Transaction) {
+    pub(super) fn apply_transaction(&mut self, transaction: &Transaction) {
         if transaction.changes().is_empty() {
             return;
         }
@@ -324,6 +329,10 @@ impl<M: EditorMode> HelixSimulator<M> {
 // Methods ONLY available in NormalMode
 impl HelixSimulator<NormalMode> {
     /// Create a new simulator with initial content (starts in Normal mode)
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "public constructor called with owned Strings throughout; the signature is the established API"
+    )]
     pub fn new(content: String) -> Self {
         Self {
             doc: Rope::from(content.as_str()),
@@ -346,7 +355,7 @@ impl HelixSimulator<NormalMode> {
         }
     }
 
-    /// Create a new simulator from an EditorSnapshot (starts in Normal mode)
+    /// Create a new simulator from an `EditorSnapshot` (starts in Normal mode)
     ///
     /// This is the preferred way to initialize from serialized state.
     /// Unlike `from_editor_state()`, this uses char offsets directly
@@ -393,10 +402,10 @@ impl HelixSimulator<NormalMode> {
         }
     }
 
-    /// Create a new simulator from an EditorState (starts in Normal mode)
+    /// Create a new simulator from an `EditorState` (starts in Normal mode)
     ///
     /// Initializes the simulator with the content, cursor position, and ALL selections
-    /// from the EditorState. This enables multi-cursor scenarios.
+    /// from the `EditorState`. This enables multi-cursor scenarios.
     pub fn from_editor_state(state: &EditorState) -> Self {
         let rope = Rope::from(state.content());
 
@@ -556,11 +565,11 @@ impl HelixSimulator<InsertMode> {
     }
 }
 
-/// Runtime mode-switching wrapper for HelixSimulator
+/// Runtime mode-switching wrapper for `HelixSimulator`
 ///
 /// This enum allows dynamic mode switching while maintaining the compile-time
 /// safety of the typed simulators internally. Use this when you need to store
-/// a simulator that can change modes at runtime (e.g., in GameSession).
+/// a simulator that can change modes at runtime (e.g., in `GameSession`).
 pub enum AnyModeSimulator {
     /// Simulator in Normal mode
     Normal(HelixSimulator<NormalMode>),
@@ -574,7 +583,7 @@ impl AnyModeSimulator {
         Self::Normal(HelixSimulator::new(content))
     }
 
-    /// Create from an EditorState in Normal mode
+    /// Create from an `EditorState` in Normal mode
     pub fn from_editor_state(state: &EditorState) -> Self {
         Self::Normal(HelixSimulator::from_editor_state(state))
     }
@@ -645,6 +654,10 @@ impl AnyModeSimulator {
     }
 
     /// Execute a command, handling mode transitions
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if the command does not exist or fails.
     pub fn execute_command(&mut self, cmd: &str) -> Result<(), UserError> {
         commands::execute_command_any_mode(self, cmd)
     }
@@ -668,6 +681,11 @@ impl AnyModeSimulator {
     }
 
     /// Get current editor state
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if a selection position cannot be converted into a valid
+    /// editor-state position.
     pub fn state(&self) -> Result<EditorState, UserError> {
         match self {
             Self::Normal(sim) => sim.state(),
@@ -683,7 +701,7 @@ impl AnyModeSimulator {
         }
     }
 
-    /// Create an EditorSnapshot from current simulator state.
+    /// Create an `EditorSnapshot` from current simulator state.
     ///
     /// This is the preferred way to capture simulator state for:
     /// - Comparison with target state
@@ -718,7 +736,7 @@ impl AnyModeSimulator {
             }
     }
 
-    /// Create from an EditorSnapshot in Normal mode.
+    /// Create from an `EditorSnapshot` in Normal mode.
     pub fn from_snapshot(snapshot: &EditorSnapshot) -> Self {
         Self::Normal(HelixSimulator::from_snapshot(snapshot))
     }
@@ -759,9 +777,8 @@ impl AnyModeSimulator {
             Self::Insert(_) => return Ok(()), // Can't repeat in insert mode
         };
 
-        let action = match action {
-            Some(a) => a,
-            None => return Ok(()),
+        let Some(action) = action else {
+            return Ok(());
         };
 
         // Set repeating flag and increment depth, capturing the prior value
@@ -785,12 +802,12 @@ impl AnyModeSimulator {
                 expected_mode,
             } => {
                 // Validate mode
-                if expected_mode != &Mode::Normal {
-                    Ok(()) // No-op: requires Normal mode
-                } else {
+                if expected_mode == &Mode::Normal {
                     // Execute each command in sequence
                     // This handles compound actions like x+d (select line + delete)
                     execute_key_sequence(self, keys)
+                } else {
+                    Ok(()) // No-op: requires Normal mode
                 }
             }
             crate::helix::repeat::RepeatableAction::InsertSequence {
@@ -799,7 +816,7 @@ impl AnyModeSimulator {
                 keys,
             } => {
                 // Execute insert sequence through wrapper
-                use crate::helix::commands::*;
+                use crate::helix::commands::{CMD_ESCAPE, CMD_INSERT};
 
                 // Enter insert mode with the same command that was used originally
                 let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
@@ -883,7 +900,7 @@ impl AnyModeSimulator {
     }
 }
 
-/// Execute a sequence of KeyEvents as commands
+/// Execute a sequence of `KeyEvents` as commands
 ///
 /// This handles both simple commands and compound actions (e.g., x+d for select line + delete).
 /// Commands are parsed and executed in order, with multi-key sequences (gg, rx) handled properly.
@@ -891,7 +908,10 @@ fn execute_key_sequence(
     sim: &mut AnyModeSimulator,
     keys: &[crossterm::event::KeyEvent],
 ) -> Result<(), UserError> {
-    use crate::helix::commands::*;
+    use crate::helix::commands::{
+        CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
+        CMD_GOTO_FILE_START, CMD_SELECT_REGISTER,
+    };
     use crossterm::event::KeyCode;
 
     if keys.is_empty() {
@@ -929,15 +949,15 @@ fn execute_key_sequence(
                     }
                     ('r', _) => {
                         i += 2;
-                        Some(format!("r{}", ch2))
+                        Some(format!("r{ch2}"))
                     }
-                    ('f', _) | ('F', _) | ('t', _) | ('T', _) => {
+                    ('f' | 'F' | 't' | 'T', _) => {
                         i += 2;
-                        Some(format!("{}{}", ch1, ch2))
+                        Some(format!("{ch1}{ch2}"))
                     }
-                    ('g', 'h') | ('g', 'l') | ('g', 's') | ('g', 'e') => {
+                    ('g', 'h' | 'l' | 's' | 'e') => {
                         i += 2;
-                        Some(format!("{}{}", ch1, ch2))
+                        Some(format!("{ch1}{ch2}"))
                     }
                     _ => None, // Not a multi-key sequence, try single
                 }

@@ -195,7 +195,7 @@ fn test_render_leaves_the_state_as_normalized_at_every_height() {
                 .buffer()
                 .content
                 .iter()
-                .map(|c| c.symbol())
+                .map(ratatui::buffer::Cell::symbol)
                 .collect();
             assert!(text.contains("Quit"), "Quit hidden at {rows} rows");
         }

@@ -74,14 +74,14 @@ impl ViewState {
 
     /// Get the last visible line (exclusive)
     ///
-    /// Uses saturating_add to prevent overflow on extreme values.
+    /// Uses `saturating_add` to prevent overflow on extreme values.
     pub fn bottom_line(&self) -> usize {
         self.top_line.saturating_add(self.visible_lines)
     }
 
     /// Get the last visible column (exclusive)
     ///
-    /// Uses saturating_add to prevent overflow on extreme values.
+    /// Uses `saturating_add` to prevent overflow on extreme values.
     pub fn right_col(&self) -> usize {
         self.left_col.saturating_add(self.visible_cols)
     }
@@ -94,7 +94,7 @@ impl ViewState {
 
     /// Center the viewport vertically on a given line
     ///
-    /// Adjusts top_line so that cursor_line is in the center of the viewport.
+    /// Adjusts `top_line` so that `cursor_line` is in the center of the viewport.
     pub fn center_on_line(&mut self, cursor_line: usize, total_lines: usize) {
         let half_viewport = self.visible_lines / 2;
         if cursor_line < half_viewport {
@@ -139,7 +139,7 @@ impl ViewState {
 
     /// Scroll right by count columns
     ///
-    /// Uses saturating_add to prevent overflow.
+    /// Uses `saturating_add` to prevent overflow.
     /// Note: No upper bound check is performed here since line width varies.
     /// Call site should ensure reasonable bounds if needed.
     pub fn scroll_right(&mut self, count: usize, max_col: Option<usize>) {

@@ -289,6 +289,10 @@ impl UserProfile {
     /// profile.add_xp(50); // 50/100 XP to level 2
     /// assert_eq!(profile.xp_progress(), 0.5);
     /// ```
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn xp_progress(&self) -> f64 {
         let (current, next) = self.level_bounds();
         let xp_needed = next.saturating_sub(current);
@@ -395,7 +399,7 @@ impl XPCalculator {
 
     /// Calculate level from total XP
     ///
-    /// Uses binary search to find the highest level where threshold <= total_xp
+    /// Uses binary search to find the highest level where threshold <= `total_xp`
     ///
     /// # Examples
     ///
@@ -506,9 +510,13 @@ impl XPCalculator {
         clippy::cast_sign_loss,
         reason = "XP formula: the result is non-negative and far below u64::MAX"
     )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn scenario_xp(score: u32, multiplier: f64) -> u64 {
         // Base XP per 100 points scored
-        let base_xp = (score as u64 * SCENARIO_BASE_XP_PER_100_POINTS) / 100;
+        let base_xp = (u64::from(score) * SCENARIO_BASE_XP_PER_100_POINTS) / 100;
         (base_xp as f64 * multiplier).round() as u64
     }
 
@@ -584,6 +592,10 @@ impl XPCalculator {
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         reason = "XP formula: the result is non-negative and far below u64::MAX"
+    )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
     )]
     pub fn review_session_xp(completed: usize, recalled: usize) -> u64 {
         let success_rate = if completed > 0 {

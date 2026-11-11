@@ -114,7 +114,7 @@ impl Scheduler {
 
     /// Record commands and track mastery level changes
     ///
-    /// Returns list of (command, new_level_name) for commands that leveled up
+    /// Returns list of (command, `new_level_name`) for commands that leveled up
     pub fn record_scenario_commands_with_mastery(
         &self,
         tracker: &mut PerformanceTracker,
@@ -214,9 +214,9 @@ impl Scheduler {
     /// Higher priority = more urgent to review
     ///
     /// Review projection of [`command_urgency`]:
-    /// - `overdue_ratio` = days_overdue / scheduled_days (how late is it?)
+    /// - `overdue_ratio` = `days_overdue` / `scheduled_days` (how late is it?)
     /// - `difficulty_weight` = difficulty / 5.0 (harder = more important)
-    /// - `priority` = overdue_ratio * difficulty_weight
+    /// - `priority` = `overdue_ratio` * `difficulty_weight`
     ///
     /// A [`Urgency::Novel`] command has no card and is never queued, so it scores 0.
     fn calculate_priority(perf: &CommandPerformance, now: DateTime<Utc>) -> f64 {
@@ -259,7 +259,7 @@ impl Scheduler {
         let review_items = self.get_review_queue(tracker, review_count);
 
         // Get new content (weak commands + untried commands)
-        let new_content = self.get_new_content(tracker, new_content_count);
+        let new_content = Self::get_new_content(tracker, new_content_count);
 
         // Combine and return
         let mut session: Vec<CommandId> = review_items.into_iter().map(|item| item.id).collect();
@@ -279,7 +279,7 @@ impl Scheduler {
     ///
     /// # Returns
     /// Command IDs for new/weak content
-    fn get_new_content(&self, tracker: &PerformanceTracker, count: usize) -> Vec<CommandId> {
+    fn get_new_content(tracker: &PerformanceTracker, count: usize) -> Vec<CommandId> {
         if count == 0 {
             return Vec::new();
         }
@@ -406,6 +406,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn test_priority_keeps_the_pre_urgency_formula_exactly() {
         let now = Utc::now();
         for (difficulty, scheduled_days, days_overdue) in [
@@ -420,8 +424,8 @@ mod tests {
             perf.set_scheduled_days(scheduled_days);
             perf.set_due(now - ChronoDuration::days(days_overdue));
 
-            let expected = days_overdue as f64 / scheduled_days.max(1) as f64
-                * (perf.difficulty() as f64 / 5.0);
+            let expected = days_overdue as f64 / f64::from(scheduled_days.max(1))
+                * (f64::from(perf.difficulty()) / 5.0);
 
             assert_eq!(Scheduler::calculate_priority(&perf, now), expected);
         }
@@ -528,10 +532,8 @@ mod tests {
             );
         }
 
-        let scheduler = Scheduler::new();
-
         // Get new content
-        let new_content = scheduler.get_new_content(&tracker, 5);
+        let new_content = Scheduler::get_new_content(&tracker, 5);
 
         // Should have up to 5 items
         assert!(new_content.len() <= 5);
@@ -553,9 +555,8 @@ mod tests {
     #[test]
     fn test_get_new_content_empty_when_count_zero() {
         let tracker = PerformanceTracker::new();
-        let scheduler = Scheduler::new();
 
-        let new_content = scheduler.get_new_content(&tracker, 0);
+        let new_content = Scheduler::get_new_content(&tracker, 0);
         assert!(new_content.is_empty());
     }
 
@@ -605,7 +606,7 @@ mod tests {
             "not due yet relative to the fake clock"
         );
 
-        clock.advance_days(scheduled_days as i64);
+        clock.advance_days(i64::from(scheduled_days));
         assert_eq!(
             scheduler.get_due_reviews(&tracker),
             vec![cid("x")],

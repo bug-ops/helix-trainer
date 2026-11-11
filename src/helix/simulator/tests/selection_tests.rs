@@ -1,4 +1,4 @@
-//! Selection command tests for HelixSimulator
+//! Selection command tests for `HelixSimulator`
 //!
 //! Tests for selection operations including:
 //! - Line selection: x

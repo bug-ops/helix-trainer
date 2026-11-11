@@ -11,7 +11,7 @@
 //! The two are recorded through fundamentally different call sites and
 //! shapes for real reasons: `.`-repeat stores `KeyEvent`s (needed to
 //! faithfully replay count prefixes and mode-specific insert sequences),
-//! while macros store resolved command *strings*, since the KeyEvent
+//! while macros store resolved command *strings*, since the `KeyEvent`
 //! conversion (`cmd_to_key_events`) is lossy for parameterised commands like
 //! `:goto 3` or `s <pattern>`. Unifying them is deferred; see the `TODO`
 //! below.
@@ -38,8 +38,8 @@
 //! # Known limitation
 //!
 //! Macro state lives on the simulator, not the screen. Bare `q` is consumed
-//! by the Task/MiniGame screens themselves in a few states (MiniGame
-//! game-over -> `QuitApp`, MiniGame paused -> `MiniGameBackToMenu`; see
+//! by the Task/MiniGame screens themselves in a few states (`MiniGame`
+//! game-over -> `QuitApp`, `MiniGame` paused -> `MiniGameBackToMenu`; see
 //! `input/handlers.rs`), so pausing or ending a session mid-recording
 //! silently drops the in-progress recording along with the rest of the
 //! simulator state. Not addressed here - out of scope for this change.

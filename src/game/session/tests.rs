@@ -1,4 +1,4 @@
-//! Tests for GameSession
+//! Tests for `GameSession`
 
 use super::*;
 use crate::testing::ScenarioBuilder;

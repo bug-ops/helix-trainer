@@ -329,6 +329,10 @@ impl ScenarioHistory {
     /// assert_eq!(xp, 50); // First attempt, full XP
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn record_completion(
         &mut self,
         scenario_id: &ScenarioId,
@@ -349,8 +353,7 @@ impl ScenarioHistory {
         let multiplier = self
             .completions
             .get(scenario_id)
-            .map(|c| c.xp_multiplier())
-            .unwrap_or(1.0); // First attempt = full XP
+            .map_or(1.0, ScenarioCompletion::xp_multiplier); // First attempt = full XP
 
         // Round to nearest integer to avoid floating point truncation issues
         #[expect(
@@ -652,7 +655,7 @@ mod tests {
 
         // Fill to just below limit
         for i in 0..MAX_SCENARIOS_TRACKED {
-            history.record_completion(&sid(&format!("scenario_{}", i)), 100, 50, Utc::now());
+            history.record_completion(&sid(&format!("scenario_{i}")), 100, 50, Utc::now());
         }
 
         assert_eq!(history.completions.len(), MAX_SCENARIOS_TRACKED);

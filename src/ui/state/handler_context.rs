@@ -14,7 +14,7 @@ use crate::ui::state::{ConfigState, GameState, ProgressState, TypedScreen, UISta
 ///
 /// # Usage
 ///
-/// Simple handlers that only modify screen data don't need HandlerContext:
+/// Simple handlers that only modify screen data don't need `HandlerContext`:
 ///
 /// ```
 /// use helix_trainer::ui::state::{HandlerOutcome, MenuData};
@@ -46,9 +46,9 @@ pub struct HandlerContext<'a> {
 }
 
 impl<'a> HandlerContext<'a> {
-    /// Create a HandlerContext from mutable references
+    /// Create a `HandlerContext` from mutable references
     ///
-    /// This is called by the update() function to provide context to handlers.
+    /// This is called by the `update()` function to provide context to handlers.
     ///
     /// # Examples
     ///
@@ -89,7 +89,7 @@ impl<'a> HandlerContext<'a> {
 /// or transition to a new screen. This makes screen transitions explicit
 /// and trackable.
 ///
-/// TypedScreen is boxed to reduce size difference between variants.
+/// `TypedScreen` is boxed to reduce size difference between variants.
 ///
 /// # Examples
 ///

@@ -173,10 +173,10 @@ fn render_mastery_bar(
     let bar = format!("{}{}", "|".repeat(filled), ".".repeat(empty));
 
     lines.push(Line::from(vec![
-        Span::raw(format!("  {:12}: ", label)),
-        Span::styled(format!("{:3} ", count), Style::default().fg(Color::White)),
+        Span::raw(format!("  {label:12}: ")),
+        Span::styled(format!("{count:3} "), Style::default().fg(Color::White)),
         Span::styled(bar, Style::default().fg(color)),
-        Span::raw(format!("  {:3}%", percentage)),
+        Span::raw(format!("  {percentage:3}%")),
     ]));
 }
 
@@ -214,7 +214,7 @@ fn render_review_status_section(lines: &mut Vec<Line<'static>>, state: &AppState
 
     lines.push(Line::from(vec![
         Span::raw("  Due for Review: "),
-        Span::styled(format!("{}", due_count), Style::default().fg(due_color)),
+        Span::styled(format!("{due_count}"), Style::default().fg(due_color)),
         Span::styled(
             if due_count > 5 {
                 " (practice recommended!)"
@@ -231,7 +231,7 @@ fn render_review_status_section(lines: &mut Vec<Line<'static>>, state: &AppState
     lines.push(Line::from(vec![
         Span::raw("  Commands Tracked: "),
         Span::styled(
-            format!("{}", total_commands),
+            format!("{total_commands}"),
             Style::default().fg(Color::Cyan),
         ),
     ]));
@@ -287,7 +287,7 @@ fn render_weak_commands_section(lines: &mut Vec<Line<'static>>, state: &AppState
 
             lines.push(Line::from(vec![
                 Span::raw(format!("  {}. ", i + 1)),
-                Span::styled(format!("{:10}", cmd), Style::default().fg(Color::White)),
+                Span::styled(format!("{cmd:10}"), Style::default().fg(Color::White)),
                 Span::raw(" - "),
                 Span::styled(
                     format!("{:.0}% success", success_rate * 100.0),
@@ -353,7 +353,7 @@ fn render_scenario_mastery_section(lines: &mut Vec<Line<'static>>, state: &AppSt
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::raw("  Total Scenarios Attempted: "),
-        Span::styled(format!("{}", total), Style::default().fg(Color::White)),
+        Span::styled(format!("{total}"), Style::default().fg(Color::White)),
     ]));
 }
 
@@ -374,7 +374,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Daily Quests Completed: "),
         Span::styled(
-            format!("{}", completed_today),
+            format!("{completed_today}"),
             Style::default().fg(Color::Green),
         ),
     ]));
@@ -386,7 +386,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Current Streak: "),
         Span::styled(
-            format!("{} days", current_streak),
+            format!("{current_streak} days"),
             Style::default().fg(Color::Yellow),
         ),
     ]));
@@ -394,7 +394,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Longest Streak: "),
         Span::styled(
-            format!("{} days", longest_streak),
+            format!("{longest_streak} days"),
             Style::default().fg(Color::Cyan),
         ),
     ]));
@@ -426,14 +426,14 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
 
     lines.push(Line::from(vec![
         Span::raw("  Average Score: "),
-        Span::styled(format!("{}%", avg_score), Style::default().fg(Color::Cyan)),
+        Span::styled(format!("{avg_score}%"), Style::default().fg(Color::Cyan)),
     ]));
 
     // Total scenarios completed
     lines.push(Line::from(vec![
         Span::raw("  Scenarios Completed: "),
         Span::styled(
-            format!("{}", scenarios_completed),
+            format!("{scenarios_completed}"),
             Style::default().fg(Color::Green),
         ),
     ]));
@@ -442,7 +442,7 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw("  Perfect Completions: "),
         Span::styled(
-            format!("{}", perfect_scenarios),
+            format!("{perfect_scenarios}"),
             Style::default().fg(Color::Yellow),
         ),
     ]));
@@ -454,9 +454,9 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
     let remaining_minutes = minutes % 60;
 
     let time_str = if hours > 0 {
-        format!("{}h {}m", hours, remaining_minutes)
+        format!("{hours}h {remaining_minutes}m")
     } else {
-        format!("{}m", minutes)
+        format!("{minutes}m")
     };
 
     lines.push(Line::from(vec![

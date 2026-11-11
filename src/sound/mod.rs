@@ -81,6 +81,10 @@ mod stub {
         }
 
         /// Always succeeds without touching any device.
+        ///
+        /// # Errors
+        ///
+        /// Never fails: this build has no audio backend, so there is nothing to initialise.
         pub fn try_init(&mut self) -> Result<(), SoundError> {
             // No-op: audio not available
             Ok(())

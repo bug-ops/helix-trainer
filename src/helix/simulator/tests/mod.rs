@@ -1,4 +1,4 @@
-//! Tests for HelixSimulator organized by functionality
+//! Tests for `HelixSimulator` organized by functionality
 //!
 //! This module contains comprehensive tests for the Helix editor simulator:
 //! - `basic_tests`: Core simulator creation and initialization

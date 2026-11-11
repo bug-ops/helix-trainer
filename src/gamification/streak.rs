@@ -83,15 +83,15 @@ impl StreakManager {
             }
             1 => {
                 // Next day - increment if completed any quest today
-                if !profile.completed_quests_today.is_empty() {
+                if profile.completed_quests_today.is_empty() {
+                    // Activity but no quest completion - don't increment
+                    StreakChange::Continued
+                } else {
                     profile.current_streak = profile.current_streak.saturating_add(1);
                     profile.longest_streak = profile.longest_streak.max(profile.current_streak);
                     StreakChange::Incremented {
                         new_streak: profile.current_streak,
                     }
-                } else {
-                    // Activity but no quest completion - don't increment
-                    StreakChange::Continued
                 }
             }
             _ => {
@@ -570,13 +570,13 @@ mod tests {
 
         for i in 0..3 {
             profile.daily_quests.push(Quest::new(
-                qid(&format!("quest_{}", i)),
+                qid(&format!("quest_{i}")),
                 QuestType::CommandPractice {
                     command: ncmd("x"),
                     target: 1,
                     current: 0,
                 },
-                format!("Quest {}", i),
+                format!("Quest {i}"),
                 QuestDifficulty::Easy,
             ));
         }
@@ -587,7 +587,7 @@ mod tests {
         // Not eligible - already has freeze, even if all quests are completed
         profile.streak_freeze_available = true;
         for i in 0..3 {
-            profile.complete_quest(qid(&format!("quest_{}", i)));
+            profile.complete_quest(qid(&format!("quest_{i}")));
         }
         assert!(!StreakManager::check_freeze_eligibility(&profile));
 

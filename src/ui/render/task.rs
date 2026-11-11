@@ -45,12 +45,13 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
             .split(area);
 
         // Title with scenario number for progress tracking
-        let title_text = if let Some(index) = task_data.scenario_index {
-            let total = state.game.scenario_collection.count();
-            format!("Scenario {}/{}: {}", index + 1, total, scenario.name)
-        } else {
-            format!("Scenario: {}", scenario.name)
-        };
+        let title_text = task_data.scenario_index.map_or_else(
+            || format!("Scenario: {}", scenario.name),
+            |index| {
+                let total = state.game.scenario_collection.count();
+                format!("Scenario {}/{}: {}", index + 1, total, scenario.name)
+            },
+        );
         let title = Paragraph::new(title_text)
             .style(
                 Style::default()
@@ -118,7 +119,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         let mode = playable.mode_kind();
         let progress = session
             .active()
-            .map_or(100u8, |active| active.completion_progress());
+            .map_or(100u8, crate::game::GameSession::completion_progress);
         let elapsed_secs = elapsed.as_secs_f32();
 
         // Color code mode: green for Normal, yellow for Insert
@@ -145,13 +146,13 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
 
         // Create colored mode indicator
         let mode_span = Span::styled(
-            format!("Mode: {} ", mode_display),
+            format!("Mode: {mode_display} "),
             Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
         );
 
         // Create colored progress indicator
         let progress_span = Span::styled(
-            format!("| Progress: {}% ", progress),
+            format!("| Progress: {progress}% "),
             Style::default()
                 .fg(progress_color)
                 .add_modifier(Modifier::BOLD),
@@ -192,11 +193,10 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
             " [F1: Hint] "
         };
 
-        let last_cmd_text = if let Some(cmd) = &task_data.last_command {
-            format!(" Last: {} |", cmd)
-        } else {
-            String::new()
-        };
+        let last_cmd_text = task_data
+            .last_command
+            .as_ref()
+            .map_or_else(String::new, |cmd| format!(" Last: {cmd} |"));
 
         // Live feedback for an in-progress '"'-register selection,
         // ':'-command-line buffer, or 's'/'S' regex-selection prompt, so the
@@ -206,7 +206,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         let macro_indicator = if task_data
             .session
             .active()
-            .is_some_and(|active| active.is_recording_macro())
+            .is_some_and(crate::game::GameSession::is_recording_macro)
         {
             " [q: REC] "
         } else {
@@ -214,8 +214,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
         };
 
         let instructions = Paragraph::new(format!(
-            "{}{}{}{}| Ctrl-Q: Abandon | Ctrl-C: Quit",
-            pending_text, macro_indicator, hint_indicator, last_cmd_text
+            "{pending_text}{macro_indicator}{hint_indicator}{last_cmd_text}| Ctrl-Q: Abandon | Ctrl-C: Quit"
         ))
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)

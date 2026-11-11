@@ -131,7 +131,7 @@ fn test_find_type_clone() {
 #[test]
 fn test_find_type_debug() {
     let find_type = FindType::FindForward;
-    assert!(format!("{:?}", find_type).contains("FindForward"));
+    assert!(format!("{find_type:?}").contains("FindForward"));
 }
 
 // ============================================================================
@@ -187,16 +187,16 @@ fn test_find_char_pending_equality() {
 // Test all state types are Debug
 #[test]
 fn test_all_state_types_debug() {
-    assert!(!format!("{:?}", BaseState).is_empty());
-    assert!(!format!("{:?}", GotoPending).is_empty());
-    assert!(!format!("{:?}", ViewPending).is_empty());
-    assert!(!format!("{:?}", MatchPending).is_empty());
-    assert!(!format!("{:?}", SurroundAddPending).is_empty());
-    assert!(!format!("{:?}", SurroundDeletePending).is_empty());
-    assert!(!format!("{:?}", SurroundReplaceFromPending).is_empty());
+    assert!(!format!("{BaseState:?}").is_empty());
+    assert!(!format!("{GotoPending:?}").is_empty());
+    assert!(!format!("{ViewPending:?}").is_empty());
+    assert!(!format!("{MatchPending:?}").is_empty());
+    assert!(!format!("{SurroundAddPending:?}").is_empty());
+    assert!(!format!("{SurroundDeletePending:?}").is_empty());
+    assert!(!format!("{SurroundReplaceFromPending:?}").is_empty());
     assert!(!format!("{:?}", SurroundReplaceToPending { from_char: '(' }).is_empty());
-    assert!(!format!("{:?}", TextObjectAroundPending).is_empty());
-    assert!(!format!("{:?}", TextObjectInsidePending).is_empty());
+    assert!(!format!("{TextObjectAroundPending:?}").is_empty());
+    assert!(!format!("{TextObjectInsidePending:?}").is_empty());
     assert!(
         !format!(
             "{:?}",
@@ -206,8 +206,8 @@ fn test_all_state_types_debug() {
         )
         .is_empty()
     );
-    assert!(!format!("{:?}", ReplaceCharPending).is_empty());
+    assert!(!format!("{ReplaceCharPending:?}").is_empty());
     assert!(!format!("{:?}", CountPending { count: nz(5) }).is_empty());
-    assert!(!format!("{:?}", UnmatchedPrevPending).is_empty());
-    assert!(!format!("{:?}", UnmatchedNextPending).is_empty());
+    assert!(!format!("{UnmatchedPrevPending:?}").is_empty());
+    assert!(!format!("{UnmatchedNextPending:?}").is_empty());
 }

@@ -51,7 +51,7 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
     // Note: We need to record failures or multiple attempts to make reviews due sooner
     if due_count > 0 {
         for i in 0..due_count {
-            let command = format!("cmd_{}", i);
+            let command = format!("cmd_{i}");
             // Record failed attempts to make reviews due immediately
             tracker.record_attempt(
                 &cid(&command),
@@ -332,8 +332,7 @@ fn test_performance_tracker_updated() {
         .progress
         .performance_tracker
         .performance(&command)
-        .map(|p| p.attempts())
-        .unwrap_or(0);
+        .map_or(0, helix_trainer::learning::CommandPerformance::attempts);
 
     // Complete review
     update(
@@ -349,8 +348,7 @@ fn test_performance_tracker_updated() {
         .progress
         .performance_tracker
         .performance(&command)
-        .map(|p| p.attempts())
-        .unwrap_or(0);
+        .map_or(0, helix_trainer::learning::CommandPerformance::attempts);
 
     assert!(
         attempts_after > attempts_before,

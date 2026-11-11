@@ -1,6 +1,6 @@
 //! Editor state representation and management.
 //!
-//! This module defines the EditorState type which represents the state of a text editor
+//! This module defines the `EditorState` type which represents the state of a text editor
 //! at a given moment, including file content, cursor position, and selections.
 //!
 //! Supports multiple selections (multi-cursor) with a primary selection for backward
@@ -377,12 +377,16 @@ impl EditorState {
         Self::new(file_content.to_string(), cursor, sel)
     }
 
-    /// Create EditorState from target configuration with optional selection
+    /// Create `EditorState` from target configuration with optional selection
     ///
     /// # Arguments
     /// * `file_content` - The content string
     /// * `cursor_position` - Array [row, col]
-    /// * `selection` - Optional selection range [start_row, start_col, end_row, end_col]
+    /// * `selection` - Optional selection range [`start_row`, `start_col`, `end_row`, `end_col`]
+    ///
+    /// # Errors
+    ///
+    /// Returns a `SecurityError` if `cursor_position` is not a valid cursor position.
     pub fn from_target(
         file_content: &str,
         cursor_position: [usize; 2],
@@ -402,7 +406,7 @@ impl EditorState {
         Self::new(file_content.to_string(), cursor, sel)
     }
 
-    /// Create EditorState from scenario setup with multi-cursor support.
+    /// Create `EditorState` from scenario setup with multi-cursor support.
     ///
     /// Handles both single-cursor and multi-cursor formats:
     /// - Single cursor: uses `cursor_position` and optional `selection`
@@ -427,7 +431,7 @@ impl EditorState {
         )
     }
 
-    /// Create EditorState from scenario target with multi-cursor support.
+    /// Create `EditorState` from scenario target with multi-cursor support.
     ///
     /// Handles both single-cursor and multi-cursor formats:
     /// - Single cursor: uses `cursor_position` and optional `selection`
@@ -452,7 +456,7 @@ impl EditorState {
         )
     }
 
-    /// Internal helper for creating EditorState from multi-cursor configuration.
+    /// Internal helper for creating `EditorState` from multi-cursor configuration.
     fn from_multi_cursor_config(
         file_content: &str,
         cursor_position: Option<(usize, usize)>,
@@ -491,11 +495,9 @@ impl EditorState {
                 .collect();
 
             // Use first selection's end as cursor position
-            let cursor = if let Some(first) = selections.first() {
-                first.end
-            } else {
-                CursorPosition { row: 0, col: 0 }
-            };
+            let cursor = selections
+                .first()
+                .map_or(CursorPosition { row: 0, col: 0 }, |first| first.end);
 
             return Self::with_selections(file_content.to_string(), cursor, selections, 0);
         }
@@ -528,14 +530,12 @@ impl EditorState {
                 })
                 .collect();
 
-            let cursor = if let Some(first) = curs.first() {
-                CursorPosition {
+            let cursor = curs
+                .first()
+                .map_or(CursorPosition { row: 0, col: 0 }, |first| CursorPosition {
                     row: first[0],
                     col: first[1],
-                }
-            } else {
-                CursorPosition { row: 0, col: 0 }
-            };
+                });
 
             return Self::with_selections(file_content.to_string(), cursor, selections, 0);
         }
@@ -842,7 +842,7 @@ impl EditorState {
     ///
     /// # Errors
     ///
-    /// Returns `InvalidInput` if any selection is out of bounds or primary_idx is invalid.
+    /// Returns `InvalidInput` if any selection is out of bounds or `primary_idx` is invalid.
     ///
     /// # Examples
     ///

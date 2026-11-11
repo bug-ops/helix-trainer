@@ -1,4 +1,4 @@
-//! Tests for TextObject handlers
+//! Tests for `TextObject` handlers
 
 use std::assert_matches;
 

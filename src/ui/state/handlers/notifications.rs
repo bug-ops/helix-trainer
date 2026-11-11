@@ -2,7 +2,7 @@
 
 use crate::ui::state::handler_context::HandlerOutcome;
 
-/// Handle CleanupNotifications message
+/// Handle `CleanupNotifications` message
 ///
 /// Removes expired notifications from the queue
 pub(in crate::ui::state) fn handle_cleanup_notifications(

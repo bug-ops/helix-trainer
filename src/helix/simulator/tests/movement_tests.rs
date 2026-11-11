@@ -1,4 +1,4 @@
-//! Movement command tests for HelixSimulator
+//! Movement command tests for `HelixSimulator`
 //!
 //! Tests for cursor movement commands including:
 //! - Basic movement: h, l, j, k
@@ -185,7 +185,7 @@ fn test_goto_last_line_ge_command() {
 
     // Execute 'ge' to go to last line
     let result = sim.execute_command(CMD_GOTO_LAST_LINE);
-    assert!(result.is_ok(), "ge command should succeed: {:?}", result);
+    assert!(result.is_ok(), "ge command should succeed: {result:?}");
 
     let state = sim.state().unwrap();
     assert_eq!(

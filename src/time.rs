@@ -71,7 +71,7 @@ impl FakeMonotonicClock {
         *self
             .offset
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) += duration;
+            .unwrap_or_else(std::sync::PoisonError::into_inner) += duration;
     }
 }
 
@@ -87,7 +87,7 @@ impl MonotonicClock for FakeMonotonicClock {
             + *self
                 .offset
                 .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
@@ -169,7 +169,7 @@ impl FakeClock {
         *self
             .now
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = now;
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = now;
     }
 
     /// Advances the clock by the given duration.
@@ -177,7 +177,7 @@ impl FakeClock {
         let mut guard = self
             .now
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *guard += duration;
     }
 
@@ -192,7 +192,7 @@ impl Clock for FakeClock {
         *self
             .now
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 

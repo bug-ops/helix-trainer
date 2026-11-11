@@ -1,4 +1,4 @@
-//! GotoPending handler - handles input after 'g' prefix
+//! `GotoPending` handler - handles input after 'g' prefix
 //!
 //! Processes the second key of goto commands like 'gg', 'gh', 'gl', etc.
 
@@ -6,7 +6,10 @@ use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_GOTO_FILE_START, CMD_GOTO_FIRST_NONWHITESPACE, CMD_GOTO_LAST_LINE, CMD_GOTO_LINE_END,
+    CMD_GOTO_LINE_START,
+};
 
 use super::count::goto_line_command;
 use super::{InputHandler, KeyHandler};

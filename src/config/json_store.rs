@@ -602,7 +602,7 @@ mod tests {
     fn oversized_file_is_rejected_as_too_large() {
         let dir = tempfile::tempdir().unwrap();
         let store = store(dir.path(), 8);
-        store.save(&Doc { value: 1234567 }).unwrap();
+        store.save(&Doc { value: 1_234_567 }).unwrap();
         let err = store.load().unwrap_err();
         assert!(matches!(err, StorageError::TooLarge { .. }), "{err}");
         assert!(err.to_string().contains("too large"));
@@ -680,7 +680,7 @@ mod tests {
     fn oversized_source_fails_migration_and_creates_no_destination() {
         let dir = tempfile::tempdir().unwrap();
         let (old, new) = migrating_store(dir.path(), 8);
-        old.save(&Doc { value: 1234567 }).unwrap();
+        old.save(&Doc { value: 1_234_567 }).unwrap();
 
         assert!(matches!(new.load(), Err(StorageError::Migrate { .. })));
         assert!(!new.exists());

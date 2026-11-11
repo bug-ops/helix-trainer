@@ -1,6 +1,6 @@
 //! Async event loop
 //!
-//! Core event loop using tokio::select! for non-blocking I/O.
+//! Core event loop using `tokio::select`! for non-blocking I/O.
 
 use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
@@ -134,24 +134,21 @@ fn settle_update(
 fn is_minigame_countdown(state: &AppState) -> bool {
     state
         .minigame_session()
-        .map(|s| s.state().is_countdown())
-        .unwrap_or(false)
+        .is_some_and(|s| s.state().is_countdown())
 }
 
 /// Check if mini-game is in playing state
 fn is_minigame_playing(state: &AppState) -> bool {
     state
         .minigame_session()
-        .map(|s| s.state().is_playing())
-        .unwrap_or(false)
+        .is_some_and(|s| s.state().is_playing())
 }
 
 /// Check if current mini-game scenario has timed out
 fn is_minigame_timed_out(state: &AppState) -> bool {
     state
         .minigame_session()
-        .map(|s| s.is_timed_out())
-        .unwrap_or(false)
+        .is_some_and(helix_trainer::minigame::MiniGameSession::is_timed_out)
 }
 
 /// Check if the mini-game's session-level time limit has elapsed (e.g. Arcade's 60 seconds)
@@ -162,24 +159,20 @@ fn is_minigame_timed_out(state: &AppState) -> bool {
 /// run overrun the limit by up to the transition delay before the check fires
 /// again on the next scenario.
 fn is_minigame_session_expired(state: &AppState) -> bool {
-    state
-        .minigame_session()
-        .map(|s| {
-            let playing_or_transitioning = s.state().is_playing() || s.state().is_transition();
-            playing_or_transitioning && s.is_session_expired()
-        })
-        .unwrap_or(false)
+    state.minigame_session().is_some_and(|s| {
+        let playing_or_transitioning = s.state().is_playing() || s.state().is_transition();
+        playing_or_transitioning && s.is_session_expired()
+    })
 }
 
 /// Check if mini-game should auto-advance to next scenario
 fn should_minigame_advance(state: &AppState) -> bool {
     state
         .minigame_session()
-        .map(|s| s.should_advance_to_next())
-        .unwrap_or(false)
+        .is_some_and(helix_trainer::minigame::MiniGameSession::should_advance_to_next)
 }
 
-/// Async event loop using tokio::select!
+/// Async event loop using `tokio::select`!
 ///
 /// This function runs the core event loop that:
 /// 1. Renders the current state
@@ -523,7 +516,8 @@ mod tests {
         let message = shown
             .iter()
             .map(|n| format!("{:?}", n.notification_type))
-            .collect::<String>();
+            .collect::<Vec<_>>()
+            .concat();
         assert!(!message.contains("/secret"), "{message}");
     }
 }

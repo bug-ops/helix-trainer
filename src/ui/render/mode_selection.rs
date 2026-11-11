@@ -121,7 +121,7 @@ fn render_mode_option(
     let lines = vec![
         Line::from(vec![
             Span::styled(prefix, style),
-            Span::styled(format!("{} {}", icon, name), style),
+            Span::styled(format!("{icon} {name}"), style),
         ]),
         Line::from(vec![
             Span::raw("      "),
@@ -141,6 +141,7 @@ fn render_minigame_mode_submenu(
     today: chrono::NaiveDate,
     challenge_progress: &crate::minigame::ChallengeProgress,
 ) {
+    const ICONS: [&str; MiniGameModeSelection::MODE_COUNT] = ["🎮", "💀", "📅"];
     // Vertical stride per entry (1 content row + 1 blank spacer row); also used
     // below to derive submenu_height, keeping the two in lockstep.
     const ENTRY_STRIDE: u16 = 2;
@@ -182,7 +183,6 @@ fn render_minigame_mode_submenu(
     // (the same single source of truth `selected_mode`/`mode_name`/`mode_description`
     // use) so this menu can't silently omit or misdescribe a mode; icons are a
     // render-only concern paired on by index.
-    const ICONS: [&str; MiniGameModeSelection::MODE_COUNT] = ["🎮", "💀", "📅"];
     let modes = MiniGameModeSelection::all_modes(today);
 
     for (idx, ((mode, kind), icon)) in modes

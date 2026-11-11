@@ -29,6 +29,10 @@ impl Analytics {
     ///
     /// # Arguments
     /// * `tracker` - Reference to performance tracker
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn get_mastery_summary(tracker: &PerformanceTracker) -> MasterySummary {
         let all_commands = tracker.all_commands();
         let total_commands = all_commands.len();
@@ -122,15 +126,15 @@ impl Analytics {
 
         // Simulate historical progress (linear growth for now)
         // In production, this would be actual historical data
-        let current_avg = summary.avg_stability as f64;
-        let step = current_avg / days as f64;
+        let current_avg = f64::from(summary.avg_stability);
+        let step = current_avg / f64::from(days);
 
         (0..=days)
             .map(|day| {
                 let timestamp = now
                     .checked_sub_signed(chrono::Duration::days(i64::from(days.saturating_sub(day))))
                     .unwrap_or(DateTime::<Utc>::MIN_UTC);
-                let avg_stability = step * day as f64;
+                let avg_stability = step * f64::from(day);
                 (timestamp, avg_stability)
             })
             .collect()
@@ -145,6 +149,10 @@ impl Analytics {
     ///
     /// # Arguments
     /// * `tracker` - Reference to performance tracker
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn identify_plateaus(tracker: &PerformanceTracker) -> Vec<String> {
         const MIN_ATTEMPTS: u32 = 5;
 
@@ -180,6 +188,10 @@ impl Analytics {
     ///
     /// # Arguments
     /// * `tracker` - Reference to performance tracker
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     pub fn avg_success_rate(tracker: &PerformanceTracker) -> f64 {
         let all_commands = tracker.all_commands();
         if all_commands.is_empty() {
@@ -189,7 +201,7 @@ impl Analytics {
         let total: f64 = all_commands
             .iter()
             .filter_map(|&cmd| tracker.performance(cmd))
-            .map(|perf| perf.success_rate())
+            .map(crate::learning::CommandPerformance::success_rate)
             .sum();
 
         total / all_commands.len() as f64
@@ -348,7 +360,7 @@ mod tests {
 
         // Last point should match current avg stability
         let summary = Analytics::get_mastery_summary(&tracker);
-        assert_eq!(progress.last().unwrap().1, summary.avg_stability as f64);
+        assert_eq!(progress.last().unwrap().1, f64::from(summary.avg_stability));
 
         // Values should increase monotonically
         for window in progress.windows(2) {

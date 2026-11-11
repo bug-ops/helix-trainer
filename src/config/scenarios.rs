@@ -118,11 +118,11 @@ pub struct ScenarioMetadata {
     #[serde(default)]
     pub difficulty: Option<Difficulty>,
 
-    /// Tags for flexible filtering (e.g., ["delete", "motion", "word"])
+    /// Tags for flexible filtering (e.g., `["delete", "motion", "word"]`)
     #[serde(default)]
     pub tags: Vec<String>,
 
-    /// Commands taught in this scenario (e.g., ["d", "w"])
+    /// Commands taught in this scenario (e.g., `["d", "w"]`)
     #[serde(default)]
     pub commands_taught: Vec<NormalizedCommand>,
 
@@ -251,7 +251,7 @@ impl Scenario {
 /// - Single cursor: `cursor_position = [row, col]` with optional `selection`
 /// - Multi-cursor: `cursors = [[row, col], ...]` or `selections = [[start_row, start_col, end_row, end_col], ...]`
 ///
-/// INVARIANT: at least one of cursor_position/cursors/selections must be set,
+/// INVARIANT: at least one of `cursor_position/cursors/selections` must be set,
 /// checked by `ScenarioLoader::validate_setup_or_target_config`.
 #[derive(Deserialize, Debug, Clone)]
 pub struct CursorSpec {
@@ -259,7 +259,7 @@ pub struct CursorSpec {
     #[serde(default)]
     pub cursor_position: Option<(usize, usize)>,
 
-    /// Single selection range [start_row, start_col, end_row, end_col]
+    /// Single selection range [`start_row`, `start_col`, `end_row`, `end_col`]
     #[serde(default)]
     pub selection: Option<[usize; 4]>,
 
@@ -267,7 +267,7 @@ pub struct CursorSpec {
     #[serde(default)]
     pub cursors: Option<Vec<[usize; 2]>>,
 
-    /// Multiple selection ranges [[start_row, start_col, end_row, end_col], ...]
+    /// Multiple selection ranges [[`start_row`, `start_col`, `end_row`, `end_col`], ...]
     #[serde(default)]
     pub selections: Option<Vec<[usize; 4]>>,
 }
@@ -506,7 +506,7 @@ impl ScenarioLoader {
     /// - Total scenarios across all files must not exceed reasonable limits
     ///
     /// # Errors
-    /// Returns UserError if any file fails to load or validation fails
+    /// Returns `UserError` if any file fails to load or validation fails
     ///
     /// Not reached from production code today — see the [`ScenarioLoader`] type
     /// docs for why this filesystem path is retained.
@@ -544,7 +544,7 @@ impl ScenarioLoader {
 
     /// Recursively visit all .toml files in a directory
     ///
-    /// Returns tuple of (scenarios, file_count)
+    /// Returns tuple of (scenarios, `file_count`)
     ///
     /// Not reached from production code today — see the [`ScenarioLoader`] type
     /// docs for why this filesystem path is retained.
@@ -593,13 +593,13 @@ impl ScenarioLoader {
     ///
     /// # Security Validations
     /// - Path must be within allowed directories (prevents path traversal)
-    /// - File size must not exceed MAX_SCENARIO_FILE_SIZE
+    /// - File size must not exceed `MAX_SCENARIO_FILE_SIZE`
     /// - TOML must be valid
-    /// - Scenario count must not exceed MAX_SCENARIOS_PER_FILE
+    /// - Scenario count must not exceed `MAX_SCENARIOS_PER_FILE`
     /// - Each scenario is validated for content size, cursor positions, etc.
     ///
     /// # Errors
-    /// Returns UserError with sanitized message if any validation fails
+    /// Returns `UserError` with sanitized message if any validation fails
     ///
     /// Not reached from production code today — see the [`ScenarioLoader`] type
     /// docs for why this filesystem path is retained.
@@ -622,7 +622,7 @@ impl ScenarioLoader {
         let scenarios = super::loader::parse_and_validate::<ScenariosFile>(
             &content,
             MAX_SCENARIOS_PER_FILE,
-            |s| self.validate_scenario(s),
+            Self::validate_scenario,
         )
         .map_err(UserError::from)?;
 
@@ -643,7 +643,7 @@ impl ScenarioLoader {
     ///
     /// # Errors
     ///
-    /// Returns UserError if no embedded data exists for the locale or
+    /// Returns `UserError` if no embedded data exists for the locale or
     /// if validation fails.
     ///
     /// # Examples
@@ -677,7 +677,7 @@ impl ScenarioLoader {
             let scenarios = super::loader::parse_and_validate::<ScenariosFile>(
                 content,
                 MAX_SCENARIOS_PER_FILE,
-                |s| self.validate_scenario(s),
+                Self::validate_scenario,
             )
             .map_err(|e| {
                 tracing::error!(
@@ -703,7 +703,7 @@ impl ScenarioLoader {
 
     /// Validate a single scenario for security and correctness
     /// Validate content size is within limits
-    fn validate_content_size(&self, content: &str) -> Result<(), SecurityError> {
+    fn validate_content_size(content: &str) -> Result<(), SecurityError> {
         if content.len() > MAX_FILE_CONTENT_LENGTH {
             Err(SecurityError::ContentTooLarge {
                 max: MAX_FILE_CONTENT_LENGTH,
@@ -715,7 +715,7 @@ impl ScenarioLoader {
     }
 
     /// Validate command sequence length
-    fn validate_command_sequence(&self, commands: &[String]) -> Result<(), SecurityError> {
+    fn validate_command_sequence(commands: &[String]) -> Result<(), SecurityError> {
         if commands.len() > MAX_COMMAND_SEQUENCE_LENGTH {
             Err(SecurityError::CommandSequenceTooLong {
                 max: MAX_COMMAND_SEQUENCE_LENGTH,
@@ -725,16 +725,16 @@ impl ScenarioLoader {
         }
     }
 
-    fn validate_scenario(&self, scenario: &Scenario) -> Result<(), SecurityError> {
+    fn validate_scenario(scenario: &Scenario) -> Result<(), SecurityError> {
         // Validate content sizes
-        self.validate_content_size(&scenario.setup.file_content)?;
-        self.validate_content_size(&scenario.target.file_content)?;
+        Self::validate_content_size(&scenario.setup.file_content)?;
+        Self::validate_content_size(&scenario.target.file_content)?;
 
         // Validate setup cursor/selection configuration
-        self.validate_setup_or_target_config(&scenario.setup.cursor)?;
+        Self::validate_setup_or_target_config(&scenario.setup.cursor)?;
 
         // Validate target cursor/selection configuration
-        self.validate_setup_or_target_config(&scenario.target.cursor)?;
+        Self::validate_setup_or_target_config(&scenario.target.cursor)?;
 
         // Validate collection sizes
         if scenario.hints.len() > MAX_HINTS {
@@ -748,16 +748,16 @@ impl ScenarioLoader {
         }
 
         // Validate command sequences
-        self.validate_command_sequence(&scenario.solution.commands)?;
+        Self::validate_command_sequence(&scenario.solution.commands)?;
         for alt in &scenario.alternatives {
-            self.validate_command_sequence(&alt.commands)?;
+            Self::validate_command_sequence(&alt.commands)?;
         }
 
         Ok(())
     }
 
     /// Validate cursor position bounds for a single position
-    fn validate_cursor_position(&self, pos: (usize, usize)) -> Result<(), SecurityError> {
+    fn validate_cursor_position(pos: (usize, usize)) -> Result<(), SecurityError> {
         const MAX_POSITION: usize = 10000;
         if pos.0 > MAX_POSITION || pos.1 > MAX_POSITION {
             return Err(SecurityError::InvalidCursorPosition);
@@ -768,9 +768,9 @@ impl ScenarioLoader {
     /// Validate setup or target configuration
     ///
     /// Ensures that:
-    /// - At least cursor_position, cursors, or selections is specified
+    /// - At least `cursor_position`, cursors, or selections is specified
     /// - All cursor positions are within bounds
-    fn validate_setup_or_target_config(&self, spec: &CursorSpec) -> Result<(), SecurityError> {
+    fn validate_setup_or_target_config(spec: &CursorSpec) -> Result<(), SecurityError> {
         // Must have at least one cursor specification
         if spec.cursor_position.is_none() && spec.cursors.is_none() && spec.selections.is_none() {
             return Err(SecurityError::InvalidInput(
@@ -780,13 +780,13 @@ impl ScenarioLoader {
 
         // Validate single cursor_position
         if let Some(pos) = spec.cursor_position {
-            self.validate_cursor_position(pos)?;
+            Self::validate_cursor_position(pos)?;
         }
 
         // Validate single selection
         if let Some(sel) = &spec.selection {
-            self.validate_cursor_position((sel[0], sel[1]))?;
-            self.validate_cursor_position((sel[2], sel[3]))?;
+            Self::validate_cursor_position((sel[0], sel[1]))?;
+            Self::validate_cursor_position((sel[2], sel[3]))?;
         }
 
         // Validate multi-cursor positions (with array length limit check)
@@ -799,7 +799,7 @@ impl ScenarioLoader {
                 )));
             }
             for pos in positions {
-                self.validate_cursor_position((pos[0], pos[1]))?;
+                Self::validate_cursor_position((pos[0], pos[1]))?;
             }
         }
 
@@ -813,8 +813,8 @@ impl ScenarioLoader {
                 )));
             }
             for sel in sels {
-                self.validate_cursor_position((sel[0], sel[1]))?;
-                self.validate_cursor_position((sel[2], sel[3]))?;
+                Self::validate_cursor_position((sel[0], sel[1]))?;
+                Self::validate_cursor_position((sel[2], sel[3]))?;
             }
         }
 

@@ -1,4 +1,4 @@
-//! RegisterPending and RegisterOpPending handlers
+//! `RegisterPending` and `RegisterOpPending` handlers
 //!
 //! Handles input after the `"` prefix for named-register-scoped clipboard
 //! operations:

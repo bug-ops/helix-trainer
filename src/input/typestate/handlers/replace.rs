@@ -1,4 +1,4 @@
-//! ReplaceCharPending handler - handles input after 'r'
+//! `ReplaceCharPending` handler - handles input after 'r'
 //!
 //! Waits for a character to replace with and produces the full command.
 
@@ -15,7 +15,7 @@ impl InputHandler<ReplaceCharPending> for KeyHandler {
             // Accept any printable character (including space, newline, etc.)
             KeyCode::Char(c) => {
                 // Dynamic command with character argument requires allocation
-                let cmd = format!("r{}", c);
+                let cmd = format!("r{c}");
                 HandlerResult::Execute(Cow::Owned(cmd))
             }
             // Enter - replace with newline

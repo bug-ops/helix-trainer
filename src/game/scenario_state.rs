@@ -11,7 +11,7 @@ use crate::security::UserError;
 ///
 /// Contains the Helix simulator (source of truth) and target snapshot
 /// for efficient completion checking. All state queries go through
-/// the simulator's EditorDisplay facade.
+/// the simulator's `EditorDisplay` facade.
 pub struct ScenarioState {
     /// Helix simulator for command execution (source of truth)
     pub simulator: AnyModeSimulator,
@@ -43,6 +43,10 @@ impl ScenarioState {
     /// assert!(!state.is_completed());
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Never fails: always returns `Ok`.
     pub fn from_scenario(scenario: &Scenario) -> Result<Self, UserError> {
         // Create initial snapshot from scenario setup
         let initial_snapshot = EditorSnapshot::from_scenario_config(

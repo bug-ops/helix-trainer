@@ -25,7 +25,11 @@ use crossterm::event::KeyEvent;
 
 use crate::ui::{AppState, Message};
 
-use handlers::*;
+use handlers::{
+    handle_category_filters_keys, handle_end_game_summary_keys, handle_menu_keys,
+    handle_minigame_keys, handle_mode_selection_keys, handle_profile_stats_keys,
+    handle_results_keys, handle_review_keys, handle_task_keys,
+};
 
 /// Handle keyboard events and convert them to messages
 ///

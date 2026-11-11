@@ -1,9 +1,9 @@
 //! Tests for multi-cursor state conversion (Issue #141)
 //!
 //! These tests verify that:
-//! - `state()` exports ALL selections from helix_core::Selection
-//! - `from_editor_state()` imports ALL selections into helix_core::Selection
-//! - Round-trip: EditorState -> Simulator -> EditorState preserves all selections
+//! - `state()` exports ALL selections from `helix_core::Selection`
+//! - `from_editor_state()` imports ALL selections into `helix_core::Selection`
+//! - Round-trip: `EditorState` -> Simulator -> `EditorState` preserves all selections
 
 use crate::game::EditorState;
 use crate::game::editor_state::{CursorPosition, Selection};

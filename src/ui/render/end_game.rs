@@ -77,6 +77,10 @@ fn render_content(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
 }
 
 /// Render the level/XP progress gauge, matching the Profile screen's style.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+)]
 fn render_level_gauge(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
     let current_level_xp = XPCalculator::xp_for_level(data.level);
     let next_level_xp = XPCalculator::xp_for_level(data.level.saturating_add(1));
@@ -228,7 +232,7 @@ fn render_stats(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
                 Span::styled(
                     t!(
                         "end_game.category_row",
-                        category = category_display_name(category),
+                        category = category_display_name(*category),
                         perfected = perfected,
                         total = total
                     )
@@ -283,7 +287,11 @@ mod tests {
             .unwrap();
 
         let buffer = terminal.backend().buffer().clone();
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let text: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(text.contains("136"));
     }
 
@@ -301,7 +309,11 @@ mod tests {
             .unwrap();
 
         let buffer = terminal.backend().buffer().clone();
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let text: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             text.contains("What's next"),
             "next-steps header must be visible at 80x24, got: {text}"

@@ -2,8 +2,8 @@
 //!
 //! Handles menu navigation and selection
 //!
-//! Type-safe handlers that receive MenuData directly instead of
-//! performing runtime checks on AppState.
+//! Type-safe handlers that receive `MenuData` directly instead of
+//! performing runtime checks on `AppState`.
 
 use crate::input::typestate::{HandlerResult, InputState};
 use crate::security::UserError;
@@ -31,7 +31,7 @@ fn is_menu_pending(state: &InputState) -> bool {
     )
 }
 
-/// Handle MenuKey message
+/// Handle `MenuKey` message
 ///
 /// Feeds the key to the menu's [`InputStateMachine`](crate::input::typestate::InputStateMachine)
 /// and applies a completed navigation command. The menu grammar is count, `g` and count + `g`;
@@ -80,10 +80,10 @@ fn apply_menu_command(
     }
 }
 
-/// Handle MenuUp message
+/// Handle `MenuUp` message
 ///
 /// Moves menu selection up (with bounds checking).
-/// Type-safe handler that only accepts MenuData.
+/// Type-safe handler that only accepts `MenuData`.
 pub fn handle_menu_up(data: &mut MenuData) -> HandlerOutcome {
     data.input_state.reset();
     if data.selected_item > 0 {
@@ -92,10 +92,10 @@ pub fn handle_menu_up(data: &mut MenuData) -> HandlerOutcome {
     HandlerOutcome::Stay
 }
 
-/// Handle MenuDown message
+/// Handle `MenuDown` message
 ///
 /// Moves menu selection down (with bounds checking).
-/// Type-safe handler that only accepts MenuData and HandlerContext for scenario count.
+/// Type-safe handler that only accepts `MenuData` and `HandlerContext` for scenario count.
 pub fn handle_menu_down(data: &mut MenuData, ctx: &HandlerContext<'_>) -> HandlerOutcome {
     data.input_state.reset();
     let max_items = total_menu_items(ctx);
@@ -105,7 +105,7 @@ pub fn handle_menu_down(data: &mut MenuData, ctx: &HandlerContext<'_>) -> Handle
     HandlerOutcome::Stay
 }
 
-/// Handle MenuUpBy message
+/// Handle `MenuUpBy` message
 ///
 /// Moves menu selection up by N items (with bounds checking).
 pub fn handle_menu_up_by(data: &mut MenuData, count: usize) -> HandlerOutcome {
@@ -113,7 +113,7 @@ pub fn handle_menu_up_by(data: &mut MenuData, count: usize) -> HandlerOutcome {
     HandlerOutcome::Stay
 }
 
-/// Handle MenuDownBy message
+/// Handle `MenuDownBy` message
 ///
 /// Moves menu selection down by N items (with bounds checking).
 pub fn handle_menu_down_by(
@@ -127,7 +127,7 @@ pub fn handle_menu_down_by(
     HandlerOutcome::Stay
 }
 
-/// Handle MenuJumpToFirst message (gg)
+/// Handle `MenuJumpToFirst` message (gg)
 ///
 /// Jumps to first menu item.
 pub fn handle_menu_jump_to_first(data: &mut MenuData) -> HandlerOutcome {
@@ -135,7 +135,7 @@ pub fn handle_menu_jump_to_first(data: &mut MenuData) -> HandlerOutcome {
     HandlerOutcome::Stay
 }
 
-/// Handle MenuJumpToLast message (G)
+/// Handle `MenuJumpToLast` message (G)
 ///
 /// Jumps to last menu item.
 pub fn handle_menu_jump_to_last(data: &mut MenuData, ctx: &HandlerContext<'_>) -> HandlerOutcome {
@@ -144,7 +144,7 @@ pub fn handle_menu_jump_to_last(data: &mut MenuData, ctx: &HandlerContext<'_>) -
     HandlerOutcome::Stay
 }
 
-/// Handle MenuJumpTo message ({n}G or {n}gg)
+/// Handle `MenuJumpTo` message ({n}G or {n}gg)
 ///
 /// Jumps to specific menu item (1-indexed like Helix line numbers).
 pub fn handle_menu_jump_to(
@@ -159,10 +159,10 @@ pub fn handle_menu_jump_to(
     HandlerOutcome::Stay
 }
 
-/// Handle MenuSelect message
+/// Handle `MenuSelect` message
 ///
 /// Executes action based on currently selected menu item.
-/// Uses HandlerContext to delegate to other handlers and perform transitions.
+/// Uses `HandlerContext` to delegate to other handlers and perform transitions.
 pub fn handle_menu_select(
     selected: usize,
     state: &mut AppState,

@@ -235,6 +235,10 @@ impl ProfileStorage {
     /// (it outlives any single test), relying on the OS to reclaim it; this mirrors
     /// the tradeoff every other `tempfile::TempDir`-based test already makes, just
     /// centralized instead of per-call-site.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the shared temporary directory cannot be created.
     #[cfg(test)]
     pub fn for_test() -> Self {
         use std::sync::OnceLock;
@@ -463,7 +467,7 @@ impl ProfileStorage {
         let source_len = source_meta.len();
         let mut candidates: Vec<PathBuf> = fs::read_dir(self.path().parent()?)
             .ok()?
-            .filter_map(|entry| entry.ok())
+            .filter_map(Result::ok)
             .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
             .map(|entry| entry.path())
             .collect();
@@ -654,10 +658,7 @@ impl ProfileStorage {
 
         self.refresh_lock();
 
-        match other_live_pid {
-            Some(pid) => LockStatus::OtherInstanceRunning(pid),
-            None => LockStatus::Acquired,
-        }
+        other_live_pid.map_or(LockStatus::Acquired, LockStatus::OtherInstanceRunning)
     }
 
     /// Check if profile file exists

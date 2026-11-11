@@ -113,7 +113,7 @@ pub(crate) fn selection_to_row(selected_item: usize, scenario_count: usize) -> u
 /// Both `selected` and `total_items` must be in the same coordinate space as the rendered
 /// row list (see `selection_to_row`) — this function has no way to detect a space mismatch.
 ///
-/// Returns (scroll_offset, visible_count) tuple
+/// Returns (`scroll_offset`, `visible_count`) tuple
 pub(crate) fn calculate_menu_scroll(
     selected: usize,
     current_offset: usize,

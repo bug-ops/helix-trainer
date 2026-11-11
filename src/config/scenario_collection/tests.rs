@@ -1,4 +1,4 @@
-//! Tests for ScenarioCollection
+//! Tests for `ScenarioCollection`
 
 use super::*;
 use crate::config::{CursorSpec, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
@@ -6,6 +6,10 @@ use crate::testing::{ncmd, sid};
 use chrono::Utc;
 
 /// Helper to create a test scenario with metadata
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "call sites pass `vec![..]` literals by value"
+)]
 fn create_scenario(
     id: &str,
     name: &str,

@@ -1,6 +1,6 @@
 //! Game session management for training scenarios
 //!
-//! This module provides the GameSession type which manages the user's attempt
+//! This module provides the `GameSession` type which manages the user's attempt
 //! at solving a scenario. It tracks user actions, maintains game state, and
 //! provides feedback based on performance.
 //!
@@ -43,9 +43,9 @@ use std::time::{Duration, Instant};
 
 pub use typestate::{Abandoned, Active, Completed, SessionState};
 
-/// Helper to execute operations on a target snapshot's EditorDisplay
+/// Helper to execute operations on a target snapshot's `EditorDisplay`
 ///
-/// Creates a temporary EditorDisplay from the snapshot and passes it to the closure.
+/// Creates a temporary `EditorDisplay` from the snapshot and passes it to the closure.
 /// This avoids repeating the Rope/Selection/Display creation pattern.
 fn with_target_display<T, F>(snapshot: &EditorSnapshot, f: F) -> T
 where
@@ -115,7 +115,7 @@ pub enum FeedbackOutcome {
 pub struct Feedback {
     /// ID of the scenario that was completed
     pub scenario_id: ScenarioId,
-    /// Score earned (0 to max_points)
+    /// Score earned (0 to `max_points`)
     pub score: u32,
     /// Maximum possible points for this scenario
     pub max_points: u32,
@@ -293,7 +293,7 @@ impl<State: SessionState> std::fmt::Debug for GameSession<State> {
             .field("hints_shown", &self.hints_shown)
             .field("elapsed", &self.elapsed())
             .field("state", &std::any::type_name::<State>())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -416,7 +416,7 @@ impl<S: SessionState> GameSession<S> {
         // target while still in Insert mode (e.g. right after `o`), but the
         // scenario isn't actually complete until Escape returns to Normal
         // mode, so don't report 100% until then.
-        let cap = if self.mode() != Mode::Normal { 99 } else { 100 };
+        let cap = if self.mode() == Mode::Normal { 100 } else { 99 };
         u8::try_from(percentage.min(cap)).unwrap_or(100)
     }
 
@@ -444,8 +444,11 @@ fn selection_distance(current: &EditorSnapshot, target: &EditorSnapshot) -> (usi
         .max(target.content.chars().count())
         .max(1);
 
-    let target_is_cursor_only =
-        target.selections.len() <= 1 && target.selections.iter().all(|r| r.is_point());
+    let target_is_cursor_only = target.selections.len() <= 1
+        && target
+            .selections
+            .iter()
+            .all(crate::helix::simulator::SerializableRange::is_point);
     if target_is_cursor_only {
         let distance = current.cursor_offset().abs_diff(target.cursor_offset());
         return (distance.min(doc_len), doc_len);
@@ -871,6 +874,11 @@ impl GameSession<Completed> {
     /// println!("{}", feedback.summary());
     /// # Ok::<(), helix_trainer::security::UserError>(())
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the session carries no completion time, which the typestate rules
+    /// out for a completed session.
     pub fn feedback(&self) -> Result<Feedback, SecurityError> {
         let actions_taken = self.user_actions.len();
         let optimal_actions = self.scenario.scoring.optimal_count.get();
@@ -975,6 +983,10 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
         self.simulator.display().cursor_position()
     }
 
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+    )]
     fn target_cursor(&self) -> (usize, usize) {
         with_target_display(&self.target_snapshot, |d| d.cursor_position())
     }
@@ -983,6 +995,10 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
         self.simulator.display().selection()
     }
 
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+    )]
     fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
         with_target_display(&self.target_snapshot, |d| d.selection())
     }
@@ -1024,6 +1040,10 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
             .collect()
     }
 
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+    )]
     fn all_target_cursors(&self) -> Vec<(usize, usize)> {
         with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
     }

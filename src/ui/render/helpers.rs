@@ -99,7 +99,7 @@ pub(super) fn pending_input_indicator(
     input_state: &crate::input::typestate::InputStateMachine,
 ) -> String {
     if let Some(buffer) = input_state.pending_command_line() {
-        return format!(" :{} ", buffer);
+        return format!(" :{buffer} ");
     }
     if let Some((kind, pattern)) = input_state.pending_regex_prompt() {
         return format!(" {}{} ", kind.prefix(), pattern);
@@ -108,7 +108,7 @@ pub(super) fn pending_input_indicator(
         use crate::input::typestate::RegisterPreview;
         return match preview {
             RegisterPreview::SelectingRegister => " [Register: _] ".to_string(),
-            RegisterPreview::AwaitingOperator(r) => format!(" [Register: {}] ", r),
+            RegisterPreview::AwaitingOperator(r) => format!(" [Register: {r}] "),
         };
     }
     String::new()

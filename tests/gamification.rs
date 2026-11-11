@@ -44,7 +44,7 @@ fn test_complete_user_flow() {
     // Check if any quests completed
     let completions = QuestTracker::check_completions(&quests);
     if let Some((quest_id, xp_reward)) = completions.first() {
-        profile.add_xp(*xp_reward as u64);
+        profile.add_xp(u64::from(*xp_reward));
         profile.complete_quest(quest_id.clone());
     }
 
@@ -153,7 +153,10 @@ fn test_achievement_progression() {
 
     // No achievements initially
     let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
-    assert!(unlocked.is_empty());
+    assert_eq!(
+        unlocked,
+        [] as [helix_trainer::gamification::AchievementId; 0]
+    );
 
     // Unlock FirstPerfect
     profile.perfect_scenarios = 1;
@@ -380,8 +383,8 @@ fn test_all_achievement_metadata() {
 
     // Verify all achievements have metadata
     for achievement in achievements {
-        assert!(!achievement.name.is_empty());
-        assert!(!achievement.description.is_empty());
+        assert_ne!(achievement.name, "");
+        assert_ne!(achievement.description, "");
         assert!(!achievement.is_unlocked());
     }
 }
@@ -415,20 +418,20 @@ fn test_freeze_eligibility() {
     // Generate today's quests
     for i in 0..3 {
         profile.daily_quests.push(Quest::new(
-            qid(&format!("quest_{}", i)),
+            qid(&format!("quest_{i}")),
             QuestType::CommandPractice {
                 command: ncmd("x"),
                 target: 1,
                 current: 0,
             },
-            format!("Quest {}", i),
+            format!("Quest {i}"),
             QuestDifficulty::Easy,
         ));
     }
 
     // Complete all of today's quests
     for i in 0..3 {
-        profile.complete_quest(qid(&format!("quest_{}", i)));
+        profile.complete_quest(qid(&format!("quest_{i}")));
     }
 
     // Now eligible - all of today's quests completed

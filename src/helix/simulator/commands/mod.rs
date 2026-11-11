@@ -12,7 +12,14 @@ use super::{
     AnyModeSimulator, FindDirection, FindType, HelixSimulator, InsertCommand, InsertMode, Mode,
     NormalMode,
 };
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_APPEND, CMD_APPEND_LINE_END, CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP,
+    CMD_BACKSPACE, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_COMMAND_LINE, CMD_ESCAPE,
+    CMD_FLIP_SELECTIONS, CMD_GOTO_FILE_START, CMD_GOTO_LINE, CMD_INSERT, CMD_INSERT_LINE_START,
+    CMD_KEEP_MATCHING, CMD_MATCH_BRACKETS, CMD_OPEN_ABOVE, CMD_OPEN_BELOW, CMD_REMOVE_MATCHING,
+    CMD_REPEAT, CMD_REPLAY_MACRO, CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD, CMD_SELECT_REGEX,
+    CMD_SELECT_REGISTER, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
+};
 use crate::helix::registry::{
     CountBehavior, NativeCounted, normal_registry, parse_counted_command,
 };
@@ -397,8 +404,7 @@ pub(super) fn execute_normal_mode_command_internal(
                 // `is_insert_command` recognizing this register-scoped form.
                 'c' => sim.change_selection_from_register(Some(register)),
                 _ => Err(UserError::command_failed(format!(
-                    "unknown register operation '{}'",
-                    op
+                    "unknown register operation '{op}'"
                 ))),
             };
         }
@@ -624,6 +630,10 @@ mod tests {
     // Unit tests for is_insert_command()
     mod is_insert_command_tests {
         use super::*;
+        use crate::helix::commands::{
+            CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK, CMD_MOVE_DOWN, CMD_MOVE_LEFT,
+            CMD_MOVE_RIGHT, CMD_MOVE_UP, CMD_PASTE_AFTER, CMD_YANK,
+        };
 
         #[test]
         fn test_insert_command_insert() {

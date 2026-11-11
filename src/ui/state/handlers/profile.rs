@@ -6,7 +6,7 @@ use crate::ui::state::{
     AchievementsData, HandlerOutcome, ProfileData, StatisticsData, TypedScreen,
 };
 
-/// Handle ShowProfile message
+/// Handle `ShowProfile` message
 ///
 /// Navigates to the profile screen, tracking where to return
 pub fn handle_show_profile(screen: &mut TypedScreen) -> HandlerOutcome {
@@ -14,7 +14,7 @@ pub fn handle_show_profile(screen: &mut TypedScreen) -> HandlerOutcome {
     HandlerOutcome::Transition(Box::new(TypedScreen::Profile(ProfileData { return_to })))
 }
 
-/// Handle ShowStatistics message
+/// Handle `ShowStatistics` message
 ///
 /// Navigates to the statistics screen, tracking where to return
 pub fn handle_show_statistics(screen: &mut TypedScreen) -> HandlerOutcome {
@@ -24,7 +24,7 @@ pub fn handle_show_statistics(screen: &mut TypedScreen) -> HandlerOutcome {
     })))
 }
 
-/// Handle ShowAchievements message
+/// Handle `ShowAchievements` message
 ///
 /// Navigates to the achievements screen, tracking where to return
 pub fn handle_show_achievements(screen: &mut TypedScreen) -> HandlerOutcome {
@@ -35,7 +35,7 @@ pub fn handle_show_achievements(screen: &mut TypedScreen) -> HandlerOutcome {
     })))
 }
 
-/// Handle ScrollAchievements message
+/// Handle `ScrollAchievements` message
 ///
 /// Adjusts the achievement list scroll offset by `delta` rows (negative scrolls up).
 /// Only clamped to zero here; the upper bound depends on the rendered viewport height

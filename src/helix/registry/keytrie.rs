@@ -1,4 +1,4 @@
-//! KeyTrie for multi-key sequence resolution
+//! `KeyTrie` for multi-key sequence resolution
 //!
 //! Handles sequences like `gg`, `gh`, `fx`, `rx`, and count prefixes like `3h`, `10j`
 //! by determining if a buffer contains a complete command, partial sequence, or invalid input.
@@ -31,8 +31,8 @@ pub enum KeyMatch {
 pub fn split_count_prefix(buffer: &str) -> (Option<usize>, &str) {
     let digit_end = buffer
         .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .map(|c| c.len_utf8())
+        .take_while(char::is_ascii_digit)
+        .map(char::len_utf8)
         .sum();
 
     if digit_end == 0 {
@@ -75,7 +75,7 @@ pub fn parse_counted_command(cmd: &str) -> Option<(NonZeroUsize, &str)> {
     Some((NonZeroUsize::new(count)?, base))
 }
 
-/// KeyTrie for resolving multi-key command sequences
+/// `KeyTrie` for resolving multi-key command sequences
 ///
 /// Handles three types of sequences:
 /// 1. Single-key commands: "h", "j", "d", etc.
@@ -92,7 +92,7 @@ pub struct KeyTrie {
 }
 
 impl KeyTrie {
-    /// Create a new KeyTrie with standard Helix sequences
+    /// Create a new `KeyTrie` with standard Helix sequences
     pub fn new() -> Self {
         let mut trie = Self {
             multi_key: HashMap::new(),
@@ -134,7 +134,7 @@ impl KeyTrie {
         self.single_key.contains(key)
     }
 
-    /// Resolve a command buffer to a KeyMatch
+    /// Resolve a command buffer to a `KeyMatch`
     ///
     /// # Arguments
     /// * `buffer` - The accumulated key sequence
@@ -144,9 +144,9 @@ impl KeyTrie {
     /// * `Partial` - Buffer is a valid prefix, waiting for more input
     /// * `Invalid` - Buffer is not a valid command or prefix
     pub fn resolve(&self, buffer: &str) -> KeyMatch {
-        if buffer.is_empty() {
+        let Some(first_char) = buffer.chars().next() else {
             return KeyMatch::Invalid;
-        }
+        };
 
         // Check for modifier key commands first (Alt-*, Ctrl-*)
         // These are registered as single commands but have longer strings
@@ -157,9 +157,7 @@ impl KeyTrie {
         // Check for count prefix (e.g., "3h", "12j", "10w")
         // Note: "0" alone is NOT a command in Helix (use "gh" for goto line start)
         // Count prefixes must start with 1-9, but can contain 0 (e.g., "10j")
-        let first_char = buffer.chars().next().unwrap();
-        let has_count_prefix =
-            first_char.is_ascii_digit() && first_char != '0' && !buffer.is_empty();
+        let has_count_prefix = first_char.is_ascii_digit() && first_char != '0';
 
         if has_count_prefix {
             let (count, cmd_part) = split_count_prefix(buffer);
@@ -173,8 +171,9 @@ impl KeyTrie {
 
                 // Validate the command part (only single-key commands with count)
                 // Multi-key commands like "3gg" and char-input like "3fx" are not supported
-                if cmd_part.len() == 1 {
-                    let cmd_char = cmd_part.chars().next().unwrap();
+                if cmd_part.len() == 1
+                    && let Some(cmd_char) = cmd_part.chars().next()
+                {
                     // Don't allow count with char-input prefixes (f, t, r, etc.),
                     // goto prefix (g), or match mode prefix (m)
                     if !self.char_input_prefixes.contains(&cmd_char)
@@ -192,7 +191,6 @@ impl KeyTrie {
 
         // No count prefix - use standard resolution
         let len = buffer.len();
-        let first_char = buffer.chars().next().unwrap();
 
         // Named register prefix ("<reg><op>): "<reg> is always partial,
         // waiting for the operator character. No allow-list on the register
@@ -208,11 +206,9 @@ impl KeyTrie {
             if char_count <= 2 {
                 return KeyMatch::Partial;
             }
-            if char_count == 3 {
-                let op = buffer
-                    .chars()
-                    .nth(2)
-                    .expect("char_count == 3 checked above");
+            if char_count == 3
+                && let Some(op) = buffer.chars().nth(2)
+            {
                 return if matches!(op, 'y' | 'p' | 'P' | 'R' | 'd' | 'c') {
                     KeyMatch::Complete(buffer.to_string())
                 } else {
@@ -254,8 +250,10 @@ impl KeyTrie {
         }
 
         // Check for 3-char match mode commands
-        if len == 3 && first_char == 'm' {
-            let second_char = buffer.chars().nth(1).unwrap();
+        if len == 3
+            && first_char == 'm'
+            && let Some(second_char) = buffer.chars().nth(1)
+        {
             // Text object commands: ma{obj} or mi{obj}
             if second_char == 'a' || second_char == 'i' {
                 return KeyMatch::Complete(buffer.to_string());
@@ -565,7 +563,7 @@ mod tests {
         assert_eq!(trie.resolve("\"_c"), KeyMatch::Complete("\"_c".to_string()));
     }
 
-    /// Regression test: the KeyTrie must reject register ops outside
+    /// Regression test: the `KeyTrie` must reject register ops outside
     /// y/p/P/R/d/c, matching `RegisterOpPending`'s cancel behavior, instead
     /// of reporting `Complete` for an operator the real UI would never
     /// execute.

@@ -1,7 +1,7 @@
-//! Sub-structures for organizing AppState
+//! Sub-structures for organizing `AppState`
 //!
 //! This module defines focused sub-structures that group related fields
-//! from AppState, improving code organization and maintainability.
+//! from `AppState`, improving code organization and maintainability.
 
 use crate::async_state::SaveRequest;
 use crate::config::{AppConfig, ScenarioCollection};
@@ -24,7 +24,7 @@ use crate::ui::notification::NotificationQueue;
 /// UI rendering and display state
 ///
 /// Contains global UI state that persists across screen transitions.
-/// Screen-specific data is stored in TypedScreen variants.
+/// Screen-specific data is stored in `TypedScreen` variants.
 #[derive(Debug)]
 pub struct UIState {
     /// Whether the application is running
@@ -50,7 +50,7 @@ pub struct UIState {
 }
 
 impl UIState {
-    /// Create new UIState with default values
+    /// Create new `UIState` with default values
     pub fn new() -> Self {
         Self {
             running: true,
@@ -77,7 +77,7 @@ pub struct GameState {
 }
 
 impl GameState {
-    /// Create new GameState with scenarios
+    /// Create new `GameState` with scenarios
     pub fn new(scenarios: Vec<crate::config::Scenario>) -> Self {
         Self {
             scenario_collection: ScenarioCollection::new(scenarios),
@@ -215,7 +215,7 @@ pub struct ProgressState {
 }
 
 impl ProgressState {
-    /// Create new ProgressState backed by the system clock
+    /// Create new `ProgressState` backed by the system clock
     pub fn new(
         profile: UserProfile,
         performance_tracker: PerformanceTracker,
@@ -229,7 +229,7 @@ impl ProgressState {
         )
     }
 
-    /// Create new ProgressState with an explicit clock
+    /// Create new `ProgressState` with an explicit clock
     ///
     /// The clock is propagated to every clock-consuming field (`performance_tracker`,
     /// `scheduler`) so they observe the same time, not just `self.clock`.
@@ -360,10 +360,8 @@ impl ProgressState {
 
     /// Check if enough time has passed since last save
     pub fn should_save(&self) -> bool {
-        match self.last_save_time {
-            Some(last) => last.elapsed() >= PROFILE_SAVE_DEBOUNCE,
-            None => true,
-        }
+        self.last_save_time
+            .is_none_or(|last| last.elapsed() >= PROFILE_SAVE_DEBOUNCE)
     }
 
     /// Mark save as completed
@@ -526,7 +524,7 @@ impl std::fmt::Debug for ProgressState {
             .field("performance_tracker", &"<PerformanceTracker>")
             .field("scenarios_completed_today", &self.scenarios_completed_today)
             .field("commands_used_today", &self.commands_used_today.len())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -901,7 +899,7 @@ mod tests {
         // Simulate a save that happened long enough ago for the debounce to elapse,
         // without needing to sleep in the test.
         progress.last_save_time =
-            Some(Instant::now() - PROFILE_SAVE_DEBOUNCE - Duration::from_secs(1));
+            Instant::now().checked_sub(PROFILE_SAVE_DEBOUNCE + Duration::from_secs(1));
 
         progress.performance_tracker.record_attempt(
             &cid("j"),
@@ -1069,6 +1067,7 @@ mod tests {
     /// an earlier call could race ahead of (and overwrite) a later one.
     #[tokio::test]
     async fn test_save_immediate_calls_are_applied_in_request_order() {
+        const REQUESTED_XP_VALUES: [u64; 5] = [100, 150, 200, 250, 300];
         use crate::async_state::DataLoadMessage;
         use crate::data_loader::spawn_save_writer;
         use crate::gamification::{ProfileStorage, UserProfile};
@@ -1088,7 +1087,6 @@ mod tests {
         let (save_tx, writer_handle) = spawn_save_writer(result_tx);
         progress.set_save_channel(save_tx.clone());
 
-        const REQUESTED_XP_VALUES: [u64; 5] = [100, 150, 200, 250, 300];
         for &xp in &REQUESTED_XP_VALUES {
             progress.profile.total_xp = xp;
             progress.save_immediate().unwrap();

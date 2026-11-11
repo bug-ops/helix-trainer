@@ -15,6 +15,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 use rust_i18n::t;
+use std::collections::VecDeque;
 use tui_big_text::{BigText, PixelSize};
 
 /// Render a centered hint popup
@@ -61,7 +62,11 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 /// border - regardless of how wide the key text grows. If the inner area is
 /// smaller than the minimum legible popup size, rendering is skipped for
 /// that frame instead of drawing illegibly clipped glyphs.
-pub(super) fn render_key_history_popup(frame: &mut Frame, key_history: &[String], bounds: Rect) {
+pub(super) fn render_key_history_popup(
+    frame: &mut Frame,
+    key_history: &VecDeque<String>,
+    bounds: Rect,
+) {
     if key_history.is_empty() {
         return;
     }
@@ -398,7 +403,7 @@ mod tests {
                 // Simulate the Target panel's own border, matching what
                 // `render_editor_pair` renders into `bounds` in production.
                 frame.render_widget(Block::default().borders(Borders::ALL), bounds);
-                render_key_history_popup(frame, keys, bounds);
+                render_key_history_popup(frame, &keys.iter().cloned().collect(), bounds);
             })
             .unwrap();
         terminal.backend().buffer().clone()

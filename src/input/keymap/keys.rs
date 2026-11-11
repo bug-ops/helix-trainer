@@ -110,7 +110,7 @@ impl PhysicalKey {
             KeyCode::Right => label.push_str("Right"),
             KeyCode::Up => label.push_str("Up"),
             KeyCode::Down => label.push_str("Down"),
-            other => label.push_str(&format!("{other:?}")),
+            other => label = format!("{label}{other:?}"),
         }
         label
     }

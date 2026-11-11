@@ -81,8 +81,7 @@ fn test_quit_app_after_timeout_game_over_does_not_double_award() {
     assert!(
         state
             .minigame_session()
-            .map(|s| s.state().is_game_over())
-            .unwrap_or(false)
+            .is_some_and(|s| s.state().is_game_over())
     );
 
     let xp_after_timeout_game_over = state.progress.profile.total_xp;
@@ -173,6 +172,10 @@ fn test_quit_app_persists_fsrs_data() {
 /// active scenario, then fires Ctrl-C and asserts the resulting FSRS record
 /// - not a manually seeded one - is what gets persisted.
 #[test]
+#[expect(
+    clippy::redundant_closure_for_method_calls,
+    reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+)]
 fn test_quit_app_persists_fsrs_data_from_live_action() {
     use crate::gamification::ProfileStorage;
     use tempfile::TempDir;

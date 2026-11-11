@@ -242,8 +242,7 @@ fn test_previously_completed_quests_tracking() {
         let quest = &profile.daily_quests[0];
         assert!(
             quest.is_completed(),
-            "Quest should be completed after executing 'x'. Quest state: {:?}",
-            quest
+            "Quest should be completed after executing 'x'. Quest state: {quest:?}"
         );
     }
 

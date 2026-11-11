@@ -2,7 +2,10 @@
 //!
 //! Registers view/viewport commands (z, zz, zt, zb, zm, zj, zk)
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_SCROLL_DOWN, CMD_SCROLL_UP, CMD_VIEW_BOTTOM, CMD_VIEW_CENTER, CMD_VIEW_CENTER_HORIZONTAL,
+    CMD_VIEW_TOP,
+};
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
 use crate::helix::registry::metadata::{Category, CommandMetadata};
 use crate::helix::simulator::NormalMode;

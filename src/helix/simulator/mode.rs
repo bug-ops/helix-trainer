@@ -55,9 +55,9 @@ pub enum ModeKind {
     Select,
 }
 
-/// Private module for sealing the EditorMode trait
+/// Private module for sealing the `EditorMode` trait
 ///
-/// This prevents external crates from implementing EditorMode,
+/// This prevents external crates from implementing `EditorMode`,
 /// allowing us to add methods in the future without breaking changes.
 mod private {
     pub trait Sealed {}

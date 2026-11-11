@@ -96,7 +96,7 @@ pub enum SortMode {
 impl ScenarioCollection {
     /// Create a new collection from a vector of scenarios
     ///
-    /// Applies the default sort mode (ByDifficultyThenCategory) on creation.
+    /// Applies the default sort mode (`ByDifficultyThenCategory`) on creation.
     pub fn new(scenarios: Vec<Scenario>) -> Self {
         let count = scenarios.len();
         let filtered_indices: Vec<usize> = (0..count).collect();
@@ -115,7 +115,7 @@ impl ScenarioCollection {
 
     /// Apply a filter to the collection
     ///
-    /// This updates the internal filtered_indices to only include scenarios
+    /// This updates the internal `filtered_indices` to only include scenarios
     /// that match all specified criteria.
     pub fn apply_filter(&mut self, filter: &ScenarioFilter, profile: Option<&UserProfile>) {
         self.active_filter = filter.clone();
@@ -124,7 +124,7 @@ impl ScenarioCollection {
             .scenarios
             .iter()
             .enumerate()
-            .filter(|(_, scenario)| self.matches_filter(scenario, filter, profile))
+            .filter(|(_, scenario)| Self::matches_filter(scenario, filter, profile))
             .map(|(idx, _)| idx)
             .collect();
     }
@@ -156,8 +156,7 @@ impl ScenarioCollection {
                     // Sort by category as integers (based on enum order)
                     Self::metadata_of(&self.scenarios, idx)
                         .and_then(|m| m.category)
-                        .map(|c| c as u8)
-                        .unwrap_or(255) // Put scenarios without category at the end
+                        .map_or(255, |c| c as u8) // Put scenarios without category at the end
                 });
             }
 
@@ -176,10 +175,7 @@ impl ScenarioCollection {
             SortMode::ByCategoryThenDifficulty => {
                 self.filtered_indices.sort_by_key(|&idx| {
                     let metadata = Self::metadata_of(&self.scenarios, idx);
-                    let category = metadata
-                        .and_then(|m| m.category)
-                        .map(|c| c as u8)
-                        .unwrap_or(255);
+                    let category = metadata.and_then(|m| m.category).map_or(255, |c| c as u8);
                     let difficulty = metadata
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner);
@@ -193,10 +189,7 @@ impl ScenarioCollection {
                     let difficulty = metadata
                         .and_then(|m| m.difficulty)
                         .unwrap_or(Difficulty::Beginner);
-                    let category = metadata
-                        .and_then(|m| m.category)
-                        .map(|c| c as u8)
-                        .unwrap_or(255);
+                    let category = metadata.and_then(|m| m.category).map_or(255, |c| c as u8);
                     (difficulty, category)
                 });
             }
@@ -208,8 +201,7 @@ impl ScenarioCollection {
                         self.scenarios
                             .get(idx)
                             .and_then(|s| prof.scenario_history.get(&s.id))
-                            .map(|completion| completion.attempts)
-                            .unwrap_or(0) // Never attempted = highest priority
+                            .map_or(0, |completion| completion.attempts) // Never attempted = highest priority
                     });
                 }
                 // If no profile, don't change order
@@ -284,7 +276,6 @@ impl ScenarioCollection {
 
     /// Check if a scenario matches the current filter
     fn matches_filter(
-        &self,
         scenario: &Scenario,
         filter: &ScenarioFilter,
         profile: Option<&UserProfile>,
@@ -314,9 +305,7 @@ impl ScenarioCollection {
             let scenario_commands = scenario
                 .metadata
                 .as_ref()
-                .map(|m| &m.commands_taught)
-                .map(|v| v.as_slice())
-                .unwrap_or(&[]);
+                .map_or(&[][..], |m| m.commands_taught.as_slice());
 
             if !scenario_commands.iter().any(|cmd| commands.contains(cmd)) {
                 return false;
@@ -328,9 +317,7 @@ impl ScenarioCollection {
             let scenario_tags = scenario
                 .metadata
                 .as_ref()
-                .map(|m| &m.tags)
-                .map(|v| v.as_slice())
-                .unwrap_or(&[]);
+                .map_or(&[][..], |m| m.tags.as_slice());
 
             if !scenario_tags.iter().any(|tag| tags.contains(tag)) {
                 return false;
@@ -356,8 +343,7 @@ impl ScenarioCollection {
             let scenario_has_prereqs = scenario
                 .metadata
                 .as_ref()
-                .map(|m| !m.prerequisites.is_empty())
-                .unwrap_or(false);
+                .is_some_and(|m| !m.prerequisites.is_empty());
 
             if has_prereqs != scenario_has_prereqs {
                 return false;

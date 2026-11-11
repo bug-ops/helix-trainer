@@ -2,7 +2,10 @@
 //!
 //! Registers search commands (/, ?, n, N, *, Alt-*)
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_SEARCH_BACKWARD, CMD_SEARCH_FORWARD, CMD_SEARCH_NEXT, CMD_SEARCH_PREV,
+    CMD_SEARCH_SELECTION, CMD_SEARCH_WORD,
+};
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
 use crate::helix::registry::metadata::{Category, CommandMetadata};
 use crate::helix::simulator::NormalMode;

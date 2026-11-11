@@ -330,7 +330,7 @@ fn test_quest_progress_changes_tracking() {
     // Execute command to trigger progress
     let quest_update = crate::ui::state::handlers::apply_quest_progress(
         &mut state,
-        Some("x".to_string()),
+        Some("x"),
         false,
         None,
         Duration::from_secs(0),
@@ -341,7 +341,7 @@ fn test_quest_progress_changes_tracking() {
     let change = &quest_update.changes[0];
     assert_eq!(change.old_progress, 0);
     assert_eq!(change.new_progress, 1);
-    assert!(change.quest_description.contains("x"));
+    assert!(change.quest_description.contains('x'));
 }
 
 /// Regression test for #267: completing a quest through the live message-passing
@@ -463,7 +463,7 @@ fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
                 target: 1,
                 current: 0,
             },
-            format!("Use {}", id),
+            format!("Use {id}"),
             QuestDifficulty::Easy,
         ));
     }

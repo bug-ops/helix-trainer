@@ -1,4 +1,4 @@
-//! RegexPromptPending handler
+//! `RegexPromptPending` handler
 //!
 //! Accumulates the pattern buffer for the `s`/`S`/`K`/`Alt-K` regex-selection
 //! prompts and the `/`/`?` search prompts.

@@ -95,6 +95,11 @@ pub enum KeymapLoadError {
 /// non-user-controlled `dirs::config_dir()/helix/config.toml` (see M2 in
 /// the design decision record) — never an arbitrary path derived from
 /// user input — so there is no traversal surface to validate against.
+///
+/// # Errors
+///
+/// Returns [`KeymapLoadError::NotFound`] if `path` does not exist, or
+/// [`KeymapLoadError::Security`] if the file is too large, unreadable, or fails [`resolve_str`].
 pub fn load_keymap_file(path: &Path) -> Result<(KeymapOverlay, KeymapReport), KeymapLoadError> {
     if !path.exists() {
         return Err(KeymapLoadError::NotFound);
@@ -119,6 +124,11 @@ pub fn load_keymap_file(path: &Path) -> Result<(KeymapOverlay, KeymapReport), Ke
 /// assert_eq!(report.ignored.len(), 1); // "move_char_up" isn't a real Helix command
 /// assert!(overlay.is_empty());
 /// ```
+///
+/// # Errors
+///
+/// Returns [`SecurityError::InvalidToml`] if `content` is not valid TOML, or
+/// [`SecurityError::TooManyKeymapBindings`] if it declares more bindings than the limit.
 pub fn resolve_str(content: &str) -> Result<(KeymapOverlay, KeymapReport), SecurityError> {
     let root: Value =
         toml::from_str(content).map_err(|e| SecurityError::InvalidToml(e.to_string()))?;
@@ -373,6 +383,7 @@ fn resolves_cleanly_from_base(canonical: &CanonicalKeys) -> bool {
 mod tests {
     use super::*;
     use std::assert_matches;
+    use std::fmt::Write as _;
 
     /// M1: `resolves_cleanly_from_base`'s "final token may transition"
     /// exception is scoped to `tokens.len() == 1` because *today*, by
@@ -672,8 +683,8 @@ mod tests {
     #[test]
     fn too_many_bindings_is_a_security_error() {
         let mut toml = String::from("[keys.normal]\n");
-        for i in 0..(limits::MAX_KEYMAP_BINDINGS + 1) {
-            toml.push_str(&format!("k{i} = \"move_char_left\"\n"));
+        for i in 0..=limits::MAX_KEYMAP_BINDINGS {
+            writeln!(toml, "k{i} = \"move_char_left\"").unwrap();
         }
         let err = resolve_str(&toml).unwrap_err();
         assert_matches!(err, SecurityError::TooManyKeymapBindings { .. });

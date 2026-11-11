@@ -1,9 +1,9 @@
 //! Type-safe screen variants with required data
 //!
-//! This module implements the TypedScreen pattern, where each screen variant
+//! This module implements the `TypedScreen` pattern, where each screen variant
 //! carries the data required for that screen. This makes invalid states
 //! unrepresentable at compile time - you can't be on the Task screen without
-//! an active GameSession.
+//! an active `GameSession`.
 
 use crate::config::Scenario;
 use crate::config::ScenarioCategory;
@@ -16,6 +16,7 @@ use crate::learning::ScenarioMastery;
 use crate::minigame::MiniGameSession;
 use crate::security::SecurityError;
 use crate::ui::state::{QuestProgressChange, ReviewSessionState, XPBreakdown};
+use std::collections::VecDeque;
 use std::time::Instant;
 
 /// Maximum number of keys to keep in history
@@ -23,26 +24,26 @@ const KEY_HISTORY_CAPACITY: usize = 5;
 
 /// Shared key history for tracking recent keypresses
 ///
-/// Used by both training mode (TaskData) and arcade mode (MiniGameData)
+/// Used by both training mode (`TaskData`) and arcade mode (`MiniGameData`)
 /// to display recent key presses in the UI. Keeps the last 5 keys
 /// with most recent first.
 #[derive(Debug, Clone, Default)]
 pub struct KeyHistory {
     /// History of keypresses (most recent first)
-    keys: Vec<String>,
+    keys: VecDeque<String>,
 }
 
 impl KeyHistory {
     /// Create a new empty key history
     pub fn new() -> Self {
         Self {
-            keys: Vec::with_capacity(KEY_HISTORY_CAPACITY),
+            keys: VecDeque::with_capacity(KEY_HISTORY_CAPACITY),
         }
     }
 
     /// Add a key to the history (keeps last 5, most recent first)
     pub fn push(&mut self, key: String) {
-        self.keys.insert(0, key);
+        self.keys.push_front(key);
         if self.keys.len() > KEY_HISTORY_CAPACITY {
             self.keys.truncate(KEY_HISTORY_CAPACITY);
         }
@@ -53,8 +54,8 @@ impl KeyHistory {
         self.keys.clear();
     }
 
-    /// Get the keys as a slice (most recent first)
-    pub fn keys(&self) -> &[String] {
+    /// Get the keys, most recent first
+    pub fn keys(&self) -> &VecDeque<String> {
         &self.keys
     }
 
@@ -359,7 +360,7 @@ pub struct TaskData {
     /// state machine that tracks pending input states (goto, find, count, etc.)
     pub input_state: InputStateMachine,
 
-    /// History of recent keypresses (shared KeyHistory struct)
+    /// History of recent keypresses (shared `KeyHistory` struct)
     pub key_history: KeyHistory,
 
     /// Hint panel state
@@ -374,7 +375,7 @@ pub struct TaskData {
 }
 
 impl TaskData {
-    /// Create new TaskData with an active session
+    /// Create new `TaskData` with an active session
     ///
     /// # Arguments
     /// * `session` - Active game session
@@ -389,7 +390,7 @@ impl TaskData {
         }
     }
 
-    /// Create new TaskData with an active session and scenario index
+    /// Create new `TaskData` with an active session and scenario index
     ///
     /// # Arguments
     /// * `session` - Active game session
@@ -452,7 +453,7 @@ pub struct ResultsData {
 }
 
 impl ResultsData {
-    /// Create new ResultsData from a completed session
+    /// Create new `ResultsData` from a completed session
     ///
     /// # Arguments
     /// * `session` - Completed game session
@@ -473,7 +474,7 @@ impl ResultsData {
         }
     }
 
-    /// Create new ResultsData from an abandoned session
+    /// Create new `ResultsData` from an abandoned session
     ///
     /// # Arguments
     /// * `session` - Abandoned game session
@@ -584,7 +585,7 @@ pub struct ReviewData {
 }
 
 impl ReviewData {
-    /// Create new ReviewData with a review session
+    /// Create new `ReviewData` with a review session
     pub fn new(session: ReviewSessionState) -> Self {
         Self { session }
     }
@@ -653,11 +654,13 @@ pub enum TopMode {
 
 impl TopMode {
     /// The mode above this one, or itself at the top
+    #[must_use]
     pub fn previous(self) -> Self {
         Self::Training
     }
 
     /// The mode below this one, or itself at the bottom
+    #[must_use]
     pub fn next(self) -> Self {
         Self::Arcade
     }
@@ -690,6 +693,7 @@ impl MiniGameModeKind {
     pub const ALL: [Self; 3] = [Self::Arcade, Self::Survival, Self::Challenge];
 
     /// The mode above this one, wrapping from the first to the last
+    #[must_use]
     pub fn previous(self) -> Self {
         match self {
             Self::Arcade => Self::Challenge,
@@ -699,6 +703,7 @@ impl MiniGameModeKind {
     }
 
     /// The mode below this one, wrapping from the last to the first
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             Self::Arcade => Self::Survival,
@@ -803,7 +808,7 @@ pub struct MiniGameData {
     pub input_state: InputStateMachine,
     /// Last XP earned (for popup display during transition)
     pub last_xp_earned: Option<u64>,
-    /// History of recent keypresses (shared KeyHistory struct)
+    /// History of recent keypresses (shared `KeyHistory` struct)
     pub key_history: KeyHistory,
 }
 
@@ -840,7 +845,7 @@ impl MiniGameData {
 
 /// Trait for types that use typestate-based input state machine
 ///
-/// TaskData and MiniGameData use `InputStateMachine` for handling multi-key
+/// `TaskData` and `MiniGameData` use `InputStateMachine` for handling multi-key
 /// Helix commands with compile-time safety. This trait provides uniform
 /// access to the input state machine.
 ///
@@ -1034,7 +1039,7 @@ mod tests {
         let mut task_data = TaskData::new(session);
 
         for i in 0..7 {
-            task_data.add_key_to_history(format!("key{}", i));
+            task_data.add_key_to_history(format!("key{i}"));
         }
 
         // Should only keep last 5

@@ -123,9 +123,9 @@ mod tests {
     #[test]
     fn test_state_markers_implement_debug() {
         // All markers should implement Debug
-        let _active = format!("{:?}", Active);
-        let _completed = format!("{:?}", Completed);
-        let _abandoned = format!("{:?}", Abandoned);
+        let _active = format!("{Active:?}");
+        let _completed = format!("{Completed:?}");
+        let _abandoned = format!("{Abandoned:?}");
     }
 
     #[test]

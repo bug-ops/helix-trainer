@@ -108,12 +108,12 @@ fn test_complete_learning_workflow() {
     let mastery_summary = Analytics::get_mastery_summary(&tracker);
     assert_eq!(mastery_summary.total_commands, 3);
     // Commands should be distributed across mastery levels
-    assert!(
+    assert_eq!(
         mastery_summary.beginner
             + mastery_summary.intermediate
             + mastery_summary.advanced
-            + mastery_summary.master
-            == 3
+            + mastery_summary.master,
+        3
     );
 
     // Check progress over time
@@ -167,7 +167,7 @@ fn test_analytics_empty_tracker() {
     assert!(progress.len() <= 8);
 
     let plateaus = Analytics::identify_plateaus(&tracker);
-    assert!(plateaus.is_empty());
+    assert_eq!(plateaus, [] as [std::string::String; 0]);
 }
 
 #[test]
@@ -269,7 +269,7 @@ fn test_analytics_commands_by_mastery() {
 
     // Get commands by mastery level
     let beginners = Analytics::get_commands_by_mastery(&tracker, MasteryLevel::Beginner);
-    assert!(!beginners.is_empty());
+    assert_ne!(beginners, [] as [std::string::String; 0]);
 
     // Check total commands
     assert_eq!(Analytics::total_commands(&tracker), 2);
@@ -298,5 +298,5 @@ fn test_analytics_plateau_detection() {
     let plateaus = Analytics::identify_plateaus(&tracker);
 
     // Should identify commands that need different practice approach
-    assert!(!plateaus.is_empty());
+    assert_ne!(plateaus, [] as [std::string::String; 0]);
 }

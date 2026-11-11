@@ -29,7 +29,7 @@ pub struct EditorSnapshot {
     pub primary_idx: usize,
 }
 
-/// Serializable representation of a helix_core::Range.
+/// Serializable representation of a `helix_core::Range`.
 ///
 /// Stores anchor and head as char offsets (not row/col) for direct
 /// compatibility with helix-core.
@@ -57,13 +57,13 @@ impl SerializableRange {
         }
     }
 
-    /// Convert to helix_core::Range.
+    /// Convert to `helix_core::Range`.
     #[inline]
     pub fn to_range(self) -> Range {
         Range::new(self.anchor, self.head)
     }
 
-    /// Create from helix_core::Range.
+    /// Create from `helix_core::Range`.
     #[inline]
     pub fn from_range(range: &Range) -> Self {
         Self {
@@ -119,7 +119,7 @@ impl EditorSnapshot {
         }
     }
 
-    /// Convert selections to helix_core::Selection.
+    /// Convert selections to `helix_core::Selection`.
     ///
     /// # Panics
     ///
@@ -139,10 +139,7 @@ impl EditorSnapshot {
     /// Get primary cursor position (head of primary selection).
     #[inline]
     pub fn cursor_offset(&self) -> usize {
-        self.selections
-            .get(self.primary_idx)
-            .map(|r| r.head)
-            .unwrap_or(0)
+        self.selections.get(self.primary_idx).map_or(0, |r| r.head)
     }
 
     /// Check if content matches another snapshot (ignoring cursor/selection).
@@ -181,8 +178,8 @@ impl EditorSnapshot {
         let mut self_normalized: Vec<_> = self.selections.iter().map(normalize).collect();
         let mut other_normalized: Vec<_> = other.selections.iter().map(normalize).collect();
 
-        self_normalized.sort();
-        other_normalized.sort();
+        self_normalized.sort_unstable();
+        other_normalized.sort_unstable();
 
         self_normalized == other_normalized
     }
@@ -249,7 +246,7 @@ impl<'a> EditorDisplay<'a> {
             .collect()
     }
 
-    /// Get primary selection bounds as ((start_row, start_col), (end_row, end_col)).
+    /// Get primary selection bounds as ((`start_row`, `start_col`), (`end_row`, `end_col`)).
     ///
     /// Returns None if primary selection is a point (no actual selection).
     pub fn primary_selection_bounds(&self) -> Option<((usize, usize), (usize, usize))> {
@@ -269,7 +266,7 @@ impl<'a> EditorDisplay<'a> {
         }
     }
 
-    /// Get primary selection as SelectionBounds for UI rendering.
+    /// Get primary selection as `SelectionBounds` for UI rendering.
     ///
     /// Returns None if primary selection is a point (no actual selection).
     /// This is the preferred method for UI code.
@@ -373,7 +370,7 @@ impl EditorSnapshot {
     ///
     /// # Arguments
     /// * `content` - Document content
-    /// * `sel` - Selection as [start_row, start_col, end_row, end_col]
+    /// * `sel` - Selection as [`start_row`, `start_col`, `end_row`, `end_col`]
     pub fn from_row_col_selection(content: String, sel: [usize; 4]) -> Self {
         let anchor = row_col_to_char_offset(&content, sel[0], sel[1]);
         let head = row_col_to_char_offset(&content, sel[2], sel[3]);
@@ -415,7 +412,7 @@ impl EditorSnapshot {
         Self::with_selections(content, ranges, 0)
     }
 
-    /// Create from scenario Setup or TargetState config.
+    /// Create from scenario Setup or `TargetState` config.
     ///
     /// Handles all cursor/selection formats (single, multi-cursor, multi-selection).
     pub fn from_scenario_config(
@@ -781,18 +778,18 @@ mod tests {
 
     #[test]
     fn test_helix_select_line_matches_toml_target() {
+        use crate::helix::HelixSimulator;
+        use crate::helix::registry::normal_registry;
         // Verify that helix-core 'x' command result matches TOML target
         // even when anchor/head are in different order
         let content = "fn main() {\n    let x = 1;\n    let y = 2;\n}";
 
-        use crate::helix::HelixSimulator;
         let mut sim = HelixSimulator::new(content.to_string());
 
         // Position at row 1, col 6 (char 18)
         sim.selection = helix_core::Selection::point(18);
 
         // Execute select line command
-        use crate::helix::registry::normal_registry;
         normal_registry().execute(&mut sim, "x").unwrap();
 
         let current_snap = sim.to_snapshot();

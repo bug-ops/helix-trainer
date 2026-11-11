@@ -46,6 +46,10 @@ impl Ratio {
         clippy::cast_possible_truncation,
         reason = "the value is within 0.0..=1.0, so the rounded percentage always fits in u8"
     )]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
+    )]
     pub fn as_percent(self) -> u8 {
         (self.0 * 100.0).round() as u8
     }

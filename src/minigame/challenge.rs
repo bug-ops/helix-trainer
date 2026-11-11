@@ -17,7 +17,7 @@ use super::ChallengeConfig;
 
 /// Tracks player's progress on daily challenges.
 ///
-/// Persisted to UserProfile for cross-session tracking.
+/// Persisted to `UserProfile` for cross-session tracking.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChallengeProgress {
     /// Date of current/last challenge; serialized as `YYYY-MM-DD`.
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn test_select_challenge_scenarios_deterministic() {
         let scenarios: Vec<Scenario> = (0..20)
-            .map(|i| create_test_scenario(&format!("scenario_{}", i)))
+            .map(|i| create_test_scenario(&format!("scenario_{i}")))
             .collect();
 
         let config =
@@ -365,7 +365,7 @@ mod tests {
     #[test]
     fn test_select_challenge_scenarios_different_days() {
         let scenarios: Vec<Scenario> = (0..20)
-            .map(|i| create_test_scenario(&format!("scenario_{}", i)))
+            .map(|i| create_test_scenario(&format!("scenario_{i}")))
             .collect();
 
         let config1 =
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn test_select_challenge_scenarios_not_enough() {
         let scenarios: Vec<Scenario> = (0..5)
-            .map(|i| create_test_scenario(&format!("scenario_{}", i)))
+            .map(|i| create_test_scenario(&format!("scenario_{i}")))
             .collect();
 
         let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn test_select_challenge_scenarios_truncates() {
         let scenarios: Vec<Scenario> = (0..50)
-            .map(|i| create_test_scenario(&format!("scenario_{}", i)))
+            .map(|i| create_test_scenario(&format!("scenario_{i}")))
             .collect();
 
         let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();

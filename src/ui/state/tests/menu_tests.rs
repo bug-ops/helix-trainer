@@ -214,7 +214,7 @@ fn test_menu_with_zero_scenarios() {
     assert_matches!(state.screen, TypedScreen::Profile(_));
 
     // Statistics at index 2
-    state.screen = TypedScreen::Menu(Default::default());
+    state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 2;
     }
@@ -222,7 +222,7 @@ fn test_menu_with_zero_scenarios() {
     assert_matches!(state.screen, TypedScreen::Statistics(_));
 
     // Quit at index 3
-    state.screen = TypedScreen::Menu(Default::default());
+    state.screen = TypedScreen::Menu(crate::ui::state::MenuData::default());
     state.ui.running = true;
     if let TypedScreen::Menu(menu_data) = &mut state.screen {
         menu_data.selected_item = 3;

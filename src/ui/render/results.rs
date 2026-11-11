@@ -12,7 +12,7 @@ use ratatui::{
 use rust_i18n::t;
 
 /// Get localized description for performance rating
-fn rating_description(rating: &PerformanceRating) -> String {
+fn rating_description(rating: PerformanceRating) -> String {
     match rating {
         PerformanceRating::Perfect => t!("results.rating_perfect").to_string(),
         PerformanceRating::Excellent => t!("results.rating_excellent").to_string(),
@@ -75,7 +75,7 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
             format!(
                 "{} {}",
                 feedback.rating.emoji(),
-                rating_description(&feedback.rating)
+                rating_description(feedback.rating)
             ),
             Style::default()
                 .fg(Color::Yellow)
@@ -232,21 +232,22 @@ fn render_progression_panel(
 
         // Mastery level factor (only show if < 1.0, i.e., Proficient or Mastered)
         if xp.mastery_factor < 1.0 {
-            let mastery_text = if let Some(info) = &results_data.scenario_mastery {
-                format!(
-                    "  {} {}: ",
-                    info.mastery.emoji(),
-                    info.mastery.display_name()
-                )
-            } else {
-                "  Mastery: ".to_string()
-            };
+            let mastery_text = results_data.scenario_mastery.as_ref().map_or_else(
+                || "  Mastery: ".to_string(),
+                |info| {
+                    format!(
+                        "  {} {}: ",
+                        info.mastery.emoji(),
+                        info.mastery.display_name()
+                    )
+                },
+            );
 
             let reduction_pct = crate::numeric::floor_percent(1.0 - xp.mastery_factor);
             lines.push(Line::from(vec![
                 Span::raw(mastery_text),
                 Span::styled(
-                    format!("-{}%", reduction_pct),
+                    format!("-{reduction_pct}%"),
                     Style::default().fg(Color::Yellow),
                 ),
             ]));
@@ -258,7 +259,7 @@ fn render_progression_panel(
             lines.push(Line::from(vec![
                 Span::raw("  🔄 Repeat: "),
                 Span::styled(
-                    format!("-{}%", reduction_pct),
+                    format!("-{reduction_pct}%"),
                     Style::default().fg(Color::Red),
                 ),
             ]));
@@ -274,7 +275,7 @@ fn render_progression_panel(
                 Span::raw("  Quest ("),
                 Span::styled(desc.clone(), Style::default().fg(Color::Magenta)),
                 Span::raw("): "),
-                Span::styled(format!("+{}", bonus_xp), Style::default().fg(Color::Cyan)),
+                Span::styled(format!("+{bonus_xp}"), Style::default().fg(Color::Cyan)),
             ]));
         }
 
@@ -352,13 +353,13 @@ fn render_progression_panel(
     lines.push(Line::from(vec![
         Span::raw("  Level: "),
         Span::styled(
-            format!("{}", level),
+            format!("{level}"),
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            format!("  ({}/{} XP)", xp_in_level, xp_needed_for_level),
+            format!("  ({xp_in_level}/{xp_needed_for_level} XP)"),
             Style::default().fg(Color::Gray),
         ),
     ]));
@@ -367,23 +368,19 @@ fn render_progression_panel(
     let earned_xp = results_data.xp_breakdown.as_ref().map(|xp| xp.total_xp);
     lines.push(Line::from(vec![
         Span::raw("  Total XP: "),
-        Span::styled(format!("{}", total_xp), Style::default().fg(Color::Yellow)),
-        if let Some(earned) = earned_xp {
-            Span::styled(
-                format!("  (+{})", earned),
-                Style::default().fg(Color::Green),
-            )
-        } else {
-            Span::raw("")
-        },
+        Span::styled(format!("{total_xp}"), Style::default().fg(Color::Yellow)),
+        earned_xp.map_or_else(
+            || Span::raw(""),
+            |earned| Span::styled(format!("  (+{earned})"), Style::default().fg(Color::Green)),
+        ),
     ]));
 
     // Scenarios completed
     lines.push(Line::from(vec![
         Span::raw("  Scenarios: "),
-        Span::styled(format!("{}", scenarios), Style::default().fg(Color::Green)),
+        Span::styled(format!("{scenarios}"), Style::default().fg(Color::Green)),
         Span::styled(
-            format!(" ({} perfect)", perfect),
+            format!(" ({perfect} perfect)"),
             Style::default().fg(Color::Gray),
         ),
     ]));
@@ -393,7 +390,7 @@ fn render_progression_panel(
         lines.push(Line::from(vec![
             Span::raw("  Streak: "),
             Span::styled(
-                format!("{} days", streak),
+                format!("{streak} days"),
                 Style::default().fg(Color::Magenta),
             ),
             Span::raw(" 🔥"),

@@ -87,7 +87,10 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
         return QuestXpAward::default();
     }
 
-    let total_bonus_xp: u64 = newly_completed.iter().map(|(_, _, xp)| *xp as u64).sum();
+    let total_bonus_xp: u64 = newly_completed
+        .iter()
+        .map(|(_, _, xp)| u64::from(*xp))
+        .sum();
     let profile = &mut state.progress.profile;
     let leveled_up = profile.add_xp(total_bonus_xp);
     for (quest_id, _, _) in &newly_completed {
@@ -99,7 +102,7 @@ pub fn award_quest_completion_xp(state: &mut AppState, was_completed: &[bool]) -
         .iter()
         .map(|(_, description, xp_reward)| QuestBonus {
             quest: description.clone(),
-            xp: *xp_reward as u64,
+            xp: u64::from(*xp_reward),
         })
         .collect();
     for (_, description, xp_reward) in newly_completed {
@@ -135,15 +138,16 @@ pub fn snapshot_quest_completion(state: &AppState) -> Vec<bool> {
 
 /// Get current progress value from quest type
 fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
-    use QuestType::*;
     match quest_type {
-        CommandPractice { current, .. } => *current,
-        ScenarioCompletion { current, .. } => *current,
-        TimeInvested {
+        QuestType::CommandPractice { current, .. } => *current,
+        QuestType::ScenarioCompletion { current, .. } => *current,
+        QuestType::TimeInvested {
             current_minutes, ..
         } => *current_minutes,
-        Exploration { commands_used, .. } => u32::try_from(commands_used.len()).unwrap_or(u32::MAX),
-        SpeedRun { .. } => 0, // Single-attempt quest
+        QuestType::Exploration { commands_used, .. } => {
+            u32::try_from(commands_used.len()).unwrap_or(u32::MAX)
+        }
+        QuestType::SpeedRun { .. } => 0, // Single-attempt quest
     }
 }
 
@@ -156,13 +160,13 @@ pub struct QuestUpdate {
     pub award: QuestXpAward,
 }
 
-/// Handle UpdateQuestProgress message
+/// Handle `UpdateQuestProgress` message
 ///
 /// Updates quest progress after a command; the per-update outcome is only needed at
 /// scenario completion, which calls [`apply_quest_progress`] directly.
 pub fn handle_update_quest_progress(
     state: &mut AppState,
-    command: Option<String>,
+    command: Option<&str>,
     scenario_completed: bool,
     scenario_id: Option<ScenarioId>,
     duration: Duration,
@@ -174,7 +178,7 @@ pub fn handle_update_quest_progress(
 /// changed so callers can hand it on by value.
 pub fn apply_quest_progress(
     state: &mut AppState,
-    command: Option<String>,
+    command: Option<&str>,
     scenario_completed: bool,
     scenario_id: Option<ScenarioId>,
     duration: Duration,
@@ -195,7 +199,7 @@ pub fn apply_quest_progress(
     let was_completed = snapshot_quest_completion(state);
 
     // Update command practice quests and exploration quests
-    if let Some(cmd) = &command {
+    if let Some(cmd) = command {
         track_command_for_quests(state, cmd);
     }
 
@@ -240,16 +244,15 @@ pub fn apply_quest_progress(
 
 /// Format quest type as readable description
 pub fn format_quest_description(quest_type: &QuestType) -> String {
-    use QuestType::*;
     match quest_type {
-        CommandPractice {
+        QuestType::CommandPractice {
             command, target, ..
-        } => format!("Use '{}' {} times", command, target),
-        ScenarioCompletion { target, .. } => format!("Complete {} scenarios", target),
-        SpeedRun { scenario_id, .. } => format!("Speed run: {}", scenario_id),
-        TimeInvested { target_minutes, .. } => format!("Practice {} min", target_minutes),
-        Exploration {
+        } => format!("Use '{command}' {target} times"),
+        QuestType::ScenarioCompletion { target, .. } => format!("Complete {target} scenarios"),
+        QuestType::SpeedRun { scenario_id, .. } => format!("Speed run: {scenario_id}"),
+        QuestType::TimeInvested { target_minutes, .. } => format!("Practice {target_minutes} min"),
+        QuestType::Exploration {
             target_commands, ..
-        } => format!("Try {} commands", target_commands),
+        } => format!("Try {target_commands} commands"),
     }
 }

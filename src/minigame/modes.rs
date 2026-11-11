@@ -123,7 +123,7 @@ pub struct ArcadeConfig {
 impl Default for ArcadeConfig {
     fn default() -> Self {
         Self {
-            session_duration: Duration::from_secs(60),
+            session_duration: Duration::from_mins(1),
             starting_lives: 3,
             max_lives: 5,
             extra_life_milestone: EXTRA_LIFE_SCORE_MILESTONE,
@@ -156,7 +156,7 @@ pub struct SurvivalConfig {
 /// How time limit decreases with level in Survival mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TimeDecreaseMode {
-    /// Linear: time = base - (level * decrease_per_level)
+    /// Linear: time = base - (level * `decrease_per_level`)
     #[default]
     Linear,
     /// Exponential: time = base * 0.95^level (smoother curve)
@@ -192,14 +192,14 @@ impl SurvivalConfig {
     pub fn time_limit_for_level(&self, level: u8) -> Duration {
         match self.decrease_mode {
             TimeDecreaseMode::Linear => {
-                let decrease = self.time_decrease_per_level * (level.saturating_sub(1) as u32);
+                let decrease = self.time_decrease_per_level * u32::from(level.saturating_sub(1));
                 let time = self.base_time_per_scenario.saturating_sub(decrease);
                 time.max(self.min_time_per_scenario)
             }
             TimeDecreaseMode::Exponential => {
                 // Note: powi() is O(log n) and level is bounded to u8 (max 255),
                 // so precomputation table is not needed. Factor is always positive.
-                let factor = 0.95_f64.powi((level.saturating_sub(1)) as i32);
+                let factor = 0.95_f64.powi(i32::from(level.saturating_sub(1)));
                 let time_secs = self.base_time_per_scenario.as_secs_f64() * factor;
                 let time = Duration::from_secs_f64(time_secs);
                 time.max(self.min_time_per_scenario)
@@ -241,12 +241,11 @@ impl ChallengeConfig {
     /// Create a challenge config for a specific date
     pub fn for_date(date: chrono::NaiveDate) -> Self {
         // Seed = days since Unix epoch, ensuring same seed for same date
-        // SAFETY: and_hms_opt(0, 0, 0) always succeeds for any valid NaiveDate
-        let seed = date
-            .and_hms_opt(0, 0, 0)
-            .expect("midnight is always valid for any NaiveDate")
-            .and_utc()
-            .timestamp() as u64;
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "pre-1970 dates wrap to a different but still deterministic seed"
+        )]
+        let seed = date.and_time(chrono::NaiveTime::MIN).and_utc().timestamp() as u64;
 
         Self {
             scenario_count: CHALLENGE_SCENARIO_COUNT,
@@ -309,11 +308,17 @@ mod tests {
 
         // Level 2 should be base - 500ms
         let time = config.time_limit_for_level(2);
-        assert_eq!(time, SURVIVAL_BASE_TIME - Duration::from_millis(500));
+        assert_eq!(
+            time,
+            SURVIVAL_BASE_TIME.saturating_sub(Duration::from_millis(500))
+        );
 
         // Level 3 should be base - 1000ms
         let time = config.time_limit_for_level(3);
-        assert_eq!(time, SURVIVAL_BASE_TIME - Duration::from_millis(1000));
+        assert_eq!(
+            time,
+            SURVIVAL_BASE_TIME.saturating_sub(Duration::from_millis(1000))
+        );
     }
 
     #[test]

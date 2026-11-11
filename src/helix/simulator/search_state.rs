@@ -9,7 +9,7 @@ use std::ops::Range;
 /// Maximum number of matches to collect (prevents unbounded memory usage)
 const MAX_MATCHES: usize = 10_000;
 
-/// Maximum pattern length (prevents regex DoS attacks)
+/// Maximum pattern length (prevents regex `DoS` attacks)
 const MAX_PATTERN_LENGTH: usize = 1000;
 
 /// Search direction for forward or backward search
@@ -82,6 +82,10 @@ impl SearchState {
     ///
     /// Compiles the regex and clears cached matches.
     /// Returns an error if the pattern is invalid regex or exceeds length limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`regex::Error`] if `pattern` exceeds the length limit or is not a valid regex.
     pub fn set_pattern(
         &mut self,
         pattern: &str,
@@ -90,8 +94,7 @@ impl SearchState {
         // Security: limit pattern length to prevent regex DoS
         if pattern.len() > MAX_PATTERN_LENGTH {
             return Err(regex::Error::Syntax(format!(
-                "pattern exceeds maximum length of {} characters",
-                MAX_PATTERN_LENGTH
+                "pattern exceeds maximum length of {MAX_PATTERN_LENGTH} characters"
             )));
         }
 
@@ -108,6 +111,11 @@ impl SearchState {
     /// Set search pattern with word boundaries (for * command)
     ///
     /// Wraps the word in \b...\b for whole-word matching.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`regex::Error`] if the generated pattern exceeds the length limit; see
+    /// [`Self::set_pattern`].
     pub fn set_word_pattern(
         &mut self,
         word: &str,
@@ -120,6 +128,11 @@ impl SearchState {
     /// Set search pattern without word boundaries (for Alt-* command)
     ///
     /// Uses the selection text as-is (escaped for regex safety).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`regex::Error`] if the generated pattern exceeds the length limit; see
+    /// [`Self::set_pattern`].
     pub fn set_selection_pattern(
         &mut self,
         selection: &str,
@@ -133,7 +146,7 @@ impl SearchState {
     ///
     /// Scans the document and caches all match positions.
     /// Uses a document version to skip re-scanning when document is unchanged.
-    /// Limits matches to MAX_MATCHES to prevent unbounded memory usage.
+    /// Limits matches to `MAX_MATCHES` to prevent unbounded memory usage.
     pub fn update_matches_with_version(&mut self, content: &str, doc_version: u64) {
         // Skip re-scan if document hasn't changed since last update
         if self.cached_doc_version == Some(doc_version) && !self.matches.is_empty() {
@@ -448,7 +461,10 @@ mod tests {
         state.set_pattern("x", SearchDirection::Forward).unwrap();
 
         // Create many matches to test binary search
-        let content = (0..100).map(|i| format!("x{}", i)).collect::<String>();
+        let content = (0..100)
+            .map(|i| format!("x{i}"))
+            .collect::<Vec<_>>()
+            .concat();
         state.update_matches(&content);
 
         // Test finding next at various positions
@@ -467,7 +483,10 @@ mod tests {
         state.set_pattern("x", SearchDirection::Forward).unwrap();
 
         // Create many matches to test binary search
-        let content = (0..100).map(|i| format!("x{}", i)).collect::<String>();
+        let content = (0..100)
+            .map(|i| format!("x{i}"))
+            .collect::<Vec<_>>()
+            .concat();
         state.update_matches(&content);
 
         // Position at 0 should wrap to last

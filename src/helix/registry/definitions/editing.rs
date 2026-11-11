@@ -2,7 +2,13 @@
 //!
 //! Registers all editing commands (d, c, J, >, <, ~, etc.)
 
-use crate::helix::commands::*;
+use crate::helix::commands::{
+    CMD_APPEND, CMD_APPEND_LINE_END, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_CTRL_R,
+    CMD_DEDENT, CMD_DELETE_SELECTION, CMD_DELETE_SELECTION_NOYANK, CMD_ESCAPE, CMD_INDENT,
+    CMD_INSERT, CMD_INSERT_LINE_START, CMD_JOIN_LINES, CMD_JOIN_SELECTIONS_SPACE, CMD_OPEN_ABOVE,
+    CMD_OPEN_BELOW, CMD_REDO, CMD_REPEAT, CMD_REPLACE, CMD_REPLACE_WITH_YANKED, CMD_SWITCH_CASE,
+    CMD_SWITCH_CASE_ALT, CMD_SWITCH_TO_UPPERCASE, CMD_UNDO,
+};
 use crate::helix::registry::command_registry::{Command, CommandRegistry};
 use crate::helix::registry::metadata::{Category, CommandMetadata, CountBehavior, ModeTransition};
 use crate::helix::simulator::commands::editing;

@@ -1,10 +1,10 @@
 //! Memory profiling with DHAT for scenario mastery system
 //!
 //! Run with:
-//!   cargo run --release --example memory_profile
+//!   cargo run --release --example `memory_profile`
 //!
 //! View results:
-//!   Open dhat-heap.json at https://nnethercote.github.io/dh_view/dh_view.html
+//!   Open dhat-heap.json at <https://nnethercote.github.io/dh_view/dh_view.html>
 
 #![expect(
     clippy::cast_possible_truncation,
@@ -130,10 +130,17 @@ impl ScenarioHistoryTracker {
     fn get_xp_multiplier(&self, scenario_id: &str) -> f64 {
         self.completions
             .get(scenario_id)
-            .map(|c| c.xp_multiplier())
-            .unwrap_or(1.0)
+            .map_or(1.0, ScenarioCompletion::xp_multiplier)
     }
 
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "a float-to-int `as` saturates, so a negative value maps to 0"
+    )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn record_completion(&mut self, scenario_id: &str, score: u32, base_xp: u64) -> u64 {
         let multiplier = self.get_xp_multiplier(scenario_id);
         let actual_xp = (base_xp as f64 * multiplier) as u64;
@@ -160,7 +167,7 @@ fn main() {
     {
         let mut tracker = ScenarioHistoryTracker::new();
         for i in 0..50 {
-            let scenario_id = format!("scenario_{:03}", i);
+            let scenario_id = format!("scenario_{i:03}");
             // Simulate 3 attempts per scenario
             tracker.record_completion(&scenario_id, 80, 50);
             tracker.record_completion(&scenario_id, 95, 50);
@@ -175,7 +182,7 @@ fn main() {
     {
         let mut tracker = ScenarioHistoryTracker::new();
         for i in 0..200 {
-            let scenario_id = format!("scenario_{:03}", i);
+            let scenario_id = format!("scenario_{i:03}");
             tracker.record_completion(&scenario_id, 80, 50);
             tracker.record_completion(&scenario_id, 95, 50);
             tracker.record_completion(&scenario_id, 100, 50);
@@ -189,7 +196,7 @@ fn main() {
     {
         let mut tracker = ScenarioHistoryTracker::new();
         for i in 0..1000 {
-            let scenario_id = format!("scenario_{:03}", i);
+            let scenario_id = format!("scenario_{i:03}");
             tracker.record_completion(&scenario_id, 80, 50);
             tracker.record_completion(&scenario_id, 95, 50);
             tracker.record_completion(&scenario_id, 100, 50);
@@ -203,7 +210,7 @@ fn main() {
     {
         let mut tracker = ScenarioHistoryTracker::new();
         for i in 0..10 {
-            let scenario_id = format!("scenario_{:03}", i);
+            let scenario_id = format!("scenario_{i:03}");
             for _ in 0..100 {
                 tracker.record_completion(&scenario_id, 100, 50);
             }
@@ -217,7 +224,7 @@ fn main() {
     {
         let mut tracker = ScenarioHistoryTracker::new();
         for i in 0..10000 {
-            let scenario_id = format!("scenario_{:05}", i);
+            let scenario_id = format!("scenario_{i:05}");
             tracker.record_completion(&scenario_id, 100, 50);
         }
         let json = tracker.to_json();

@@ -35,12 +35,11 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
                 .metadata
                 .as_ref()
                 .and_then(|m| m.difficulty)
-                .map(|d| match d {
+                .map_or("  ", |d| match d {
                     crate::config::Difficulty::Beginner => "🟢",
                     crate::config::Difficulty::Intermediate => "🟡",
                     crate::config::Difficulty::Advanced => "🔴",
-                })
-                .unwrap_or("  ");
+                });
 
             // Get completion status
             let completion_indicator = if profile.scenario_history.get(&scenario.id).is_some() {
@@ -57,7 +56,7 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
                 scenario.name,
                 completion_indicator
             );
-            ListItem::new(format!("{}{}", prefix, display)).style(style)
+            ListItem::new(format!("{prefix}{display}")).style(style)
         })
         .collect();
 
@@ -91,7 +90,7 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
             "{}Review Commands (r){}",
             review_prefix,
             if due_count > 0 {
-                format!(" [{}]", due_count)
+                format!(" [{due_count}]")
             } else {
                 String::new()
             }
@@ -111,7 +110,7 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
     };
     let profile_prefix = if profile_selected { "> " } else { "  " };
     menu_items
-        .push(ListItem::new(format!("{}View Profile (p)", profile_prefix)).style(profile_style));
+        .push(ListItem::new(format!("{profile_prefix}View Profile (p)")).style(profile_style));
 
     // Add Statistics option
     let stats_index = scenario_count + 2;
@@ -124,7 +123,7 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
         Style::default().fg(Color::Cyan)
     };
     let stats_prefix = if stats_selected { "> " } else { "  " };
-    menu_items.push(ListItem::new(format!("{}Statistics (s)", stats_prefix)).style(stats_style));
+    menu_items.push(ListItem::new(format!("{stats_prefix}Statistics (s)")).style(stats_style));
 
     // Add Quit option at the end
     let quit_index = scenario_count + 3;
@@ -194,7 +193,7 @@ fn render_scrollbar(
 /// Render the main menu screen as a background (for overlay popups)
 ///
 /// This renders a simplified version of the menu without selection highlighting,
-/// used when CategoryFilters or other popups need to show the menu behind them.
+/// used when `CategoryFilters` or other popups need to show the menu behind them.
 pub(super) fn render_main_menu_background(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
@@ -430,7 +429,7 @@ fn render_quest_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &Ap
     frame.render_widget(panel, area);
 }
 
-/// Format quest progress string using ProgressTracker trait
+/// Format quest progress string using `ProgressTracker` trait
 fn format_quest_progress(quest_type: &crate::gamification::QuestType) -> String {
     use crate::gamification::QuestType;
     use crate::learning::ProgressTracker;
@@ -482,7 +481,11 @@ mod tests {
                 update(&mut state, Message::MenuDown).unwrap();
                 terminal.draw(|f| render_main_menu(f, &state)).unwrap();
                 let buffer = terminal.backend().buffer().clone();
-                last_text = buffer.content.iter().map(|c| c.symbol()).collect();
+                last_text = buffer
+                    .content
+                    .iter()
+                    .map(ratatui::buffer::Cell::symbol)
+                    .collect();
             }
 
             let TypedScreen::Menu(menu_data) = &state.screen else {

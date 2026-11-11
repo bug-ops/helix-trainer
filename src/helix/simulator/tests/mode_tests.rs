@@ -1,4 +1,4 @@
-//! Mode transition and insert mode tests for HelixSimulator
+//! Mode transition and insert mode tests for `HelixSimulator`
 //!
 //! Tests for mode changes and insert mode operations including:
 //! - Mode transitions: i, a, I, A, Escape
@@ -115,7 +115,7 @@ fn test_append_at_line_end_and_insert() {
 
 #[test]
 fn test_insert_multiple_chars() {
-    let mut sim = AnyModeSimulator::new("".to_string());
+    let mut sim = AnyModeSimulator::new(String::new());
 
     // Enter insert mode
     sim.execute_command(CMD_INSERT).unwrap();

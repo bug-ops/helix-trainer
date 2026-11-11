@@ -1,4 +1,4 @@
-//! Test AppState builder for creating test fixtures
+//! Test `AppState` builder for creating test fixtures
 //!
 //! Provides utilities for creating `AppState` instances in tests.
 
@@ -15,14 +15,14 @@ use crate::ui::state::{
 };
 use std::sync::Arc;
 
-/// Create a test AppState with no scenarios
+/// Create a test `AppState` with no scenarios
 ///
 /// Uses default profile, storage, and tracker.
 pub fn empty_test_app_state() -> AppState {
     test_app_state_with_scenarios(vec![])
 }
 
-/// Create a test AppState with the provided scenarios
+/// Create a test `AppState` with the provided scenarios
 ///
 /// Uses default profile, storage, and tracker.
 pub fn test_app_state_with_scenarios(scenarios: Vec<Scenario>) -> AppState {
@@ -34,7 +34,7 @@ pub fn test_app_state_with_scenarios(scenarios: Vec<Scenario>) -> AppState {
     state
 }
 
-/// Builder for creating test AppState with custom configuration
+/// Builder for creating test `AppState` with custom configuration
 pub struct TestAppStateBuilder {
     scenarios: Vec<Scenario>,
     profile: Option<UserProfile>,
@@ -62,42 +62,48 @@ impl TestAppStateBuilder {
     }
 
     /// Add a scenario
+    #[must_use]
     pub fn scenario(mut self, scenario: Scenario) -> Self {
         self.scenarios.push(scenario);
         self
     }
 
     /// Set all scenarios
+    #[must_use]
     pub fn scenarios(mut self, scenarios: Vec<Scenario>) -> Self {
         self.scenarios = scenarios;
         self
     }
 
     /// Set a custom user profile
+    #[must_use]
     pub fn profile(mut self, profile: UserProfile) -> Self {
         self.profile = Some(profile);
         self
     }
 
     /// Set a custom profile storage
+    #[must_use]
     pub fn storage(mut self, storage: ProfileStorage) -> Self {
         self.storage = Some(storage);
         self
     }
 
     /// Set a custom performance tracker
+    #[must_use]
     pub fn tracker(mut self, tracker: PerformanceTracker) -> Self {
         self.tracker = Some(tracker);
         self
     }
 
     /// Set a custom clock (e.g. [`crate::time::FakeClock`]) for deterministic time-based tests
+    #[must_use]
     pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Self {
         self.clock = Some(clock);
         self
     }
 
-    /// Build the AppState
+    /// Build the `AppState`
     pub fn build(self) -> AppState {
         let profile = self.profile.unwrap_or_default();
         let storage = self.storage.unwrap_or_else(ProfileStorage::for_test);

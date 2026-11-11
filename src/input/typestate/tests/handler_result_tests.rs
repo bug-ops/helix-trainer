@@ -1,4 +1,4 @@
-//! Tests for HandlerResult enum
+//! Tests for `HandlerResult` enum
 
 use std::borrow::Cow;
 

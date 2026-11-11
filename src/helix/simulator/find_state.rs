@@ -35,11 +35,11 @@ impl FindDirection {
 #[derive(Debug, Clone, Default)]
 pub struct FindState {
     /// Last searched character
-    last_char: Option<char>,
+    ch: Option<char>,
     /// Type of last motion (find or till)
-    last_type: Option<FindType>,
+    find_type: Option<FindType>,
     /// Direction of last motion
-    last_direction: Option<FindDirection>,
+    direction: Option<FindDirection>,
 }
 
 impl FindState {
@@ -51,15 +51,15 @@ impl FindState {
 
     /// Record a find/till motion
     pub fn set(&mut self, ch: char, find_type: FindType, direction: FindDirection) {
-        self.last_char = Some(ch);
-        self.last_type = Some(find_type);
-        self.last_direction = Some(direction);
+        self.ch = Some(ch);
+        self.find_type = Some(find_type);
+        self.direction = Some(direction);
     }
 
     /// Get the last motion if available
     #[must_use]
     pub fn get(&self) -> Option<(char, FindType, FindDirection)> {
-        match (self.last_char, self.last_type, self.last_direction) {
+        match (self.ch, self.find_type, self.direction) {
             (Some(ch), Some(ft), Some(dir)) => Some((ch, ft, dir)),
             _ => None,
         }
@@ -68,14 +68,14 @@ impl FindState {
     /// Check if there is a recorded motion
     #[must_use]
     pub fn has_motion(&self) -> bool {
-        self.last_char.is_some()
+        self.ch.is_some()
     }
 
     /// Clear the stored motion
     pub fn clear(&mut self) {
-        self.last_char = None;
-        self.last_type = None;
-        self.last_direction = None;
+        self.ch = None;
+        self.find_type = None;
+        self.direction = None;
     }
 }
 

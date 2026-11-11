@@ -47,7 +47,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     // Use TypedScreen pattern for type-safe dispatch
     match &state.screen {
         crate::ui::state::TypedScreen::ModeSelection(_) => {
-            mode_selection::render_mode_selection(frame, state)
+            mode_selection::render_mode_selection(frame, state);
         }
         crate::ui::state::TypedScreen::Menu(_) => menu::render_main_menu(frame, state),
         crate::ui::state::TypedScreen::Task(_) => {
@@ -56,10 +56,10 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         crate::ui::state::TypedScreen::Results(_) => results::render_results_screen(frame, state),
         crate::ui::state::TypedScreen::Profile(_) => profile::render_profile_screen(frame, state),
         crate::ui::state::TypedScreen::Statistics(_) => {
-            statistics::render_statistics_screen(frame, state)
+            statistics::render_statistics_screen(frame, state);
         }
         crate::ui::state::TypedScreen::Achievements(_) => {
-            achievements::render_achievements_screen(frame, state)
+            achievements::render_achievements_screen(frame, state);
         }
         crate::ui::state::TypedScreen::CategoryFilters(filters_data) => {
             // Render background screen first based on return destination
@@ -72,16 +72,16 @@ pub fn render(frame: &mut Frame, state: &AppState) {
                 }
             }
             // Render category filters popup on top
-            category_filters::render_category_filters(frame, state)
+            category_filters::render_category_filters(frame, state);
         }
         crate::ui::state::TypedScreen::Review(data) => {
-            review::render_review_screen(frame, state, data)
+            review::render_review_screen(frame, state, data);
         }
         crate::ui::state::TypedScreen::MiniGame(data) => {
-            minigame::render_minigame(frame, state, data)
+            minigame::render_minigame(frame, state, data);
         }
         crate::ui::state::TypedScreen::EndGameSummary(data) => {
-            end_game::render_end_game_summary(frame, data)
+            end_game::render_end_game_summary(frame, data);
         }
     }
 

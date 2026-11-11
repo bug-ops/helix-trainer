@@ -88,7 +88,7 @@ target = 3
             assert_eq!(command.as_str(), "x");
             assert_eq!(target, 3);
         }
-        other => panic!("Wrong variant: {:?}", other),
+        other => panic!("Wrong variant: {other:?}"),
     }
 }
 
@@ -104,7 +104,7 @@ target = 5
         QuestSpec::ScenarioCompletion { target } => {
             assert_eq!(target, 5);
         }
-        other => panic!("Wrong variant: {:?}", other),
+        other => panic!("Wrong variant: {other:?}"),
     }
 }
 
@@ -125,7 +125,7 @@ time_limit_seconds = 5
             assert_eq!(scenario_id.as_str(), "delete_line_001");
             assert_eq!(time_limit_seconds, 5);
         }
-        other => panic!("Wrong variant: {:?}", other),
+        other => panic!("Wrong variant: {other:?}"),
     }
 }
 
@@ -174,7 +174,7 @@ fn test_load_daily_quests_toml() {
     }
 
     let result = loader.load(quest_file);
-    assert!(result.is_ok(), "Failed to load daily quests: {:?}", result);
+    assert!(result.is_ok(), "Failed to load daily quests: {result:?}");
 
     let quests = result.unwrap();
     assert_eq!(quests.len(), 70, "Expected 70 quest templates");
@@ -247,7 +247,7 @@ target_minutes = 10
         QuestSpec::TimeInvested { target_minutes } => {
             assert_eq!(target_minutes, 10);
         }
-        other => panic!("Wrong variant: {:?}", other),
+        other => panic!("Wrong variant: {other:?}"),
     }
 }
 
@@ -263,7 +263,7 @@ target_commands = 15
         QuestSpec::Exploration { target_commands } => {
             assert_eq!(target_commands, 15);
         }
-        other => panic!("Wrong variant: {:?}", other),
+        other => panic!("Wrong variant: {other:?}"),
     }
 }
 
@@ -589,8 +589,7 @@ fn test_validate_all_quest_templates() {
 
         assert!(
             is_valid,
-            "Quest references invalid/unknown Helix command: {}",
-            command
+            "Quest references invalid/unknown Helix command: {command}"
         );
     }
 

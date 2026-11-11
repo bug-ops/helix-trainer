@@ -12,7 +12,7 @@ use std::sync::Arc;
 fn create_simple_scenario(id: &str) -> Scenario {
     Scenario {
         id: sid(id),
-        name: format!("Test {}", id),
+        name: format!("Test {id}"),
         description: "Test scenario".to_string(),
         setup: Setup {
             file_content: "test".to_string(),
@@ -25,7 +25,7 @@ fn create_simple_scenario(id: &str) -> Scenario {
             },
         },
         target: TargetState {
-            file_content: "".to_string(),
+            file_content: String::new(),
             cursor: CursorSpec {
                 cursor_position: Some((0, 0)),
                 selection: None,

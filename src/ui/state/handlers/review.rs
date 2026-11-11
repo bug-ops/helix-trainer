@@ -13,7 +13,7 @@ use crate::ui::state::{
 };
 use std::time::Instant;
 
-/// Handle StartReviewSession message
+/// Handle `StartReviewSession` message
 ///
 /// Initializes a new review session with due commands
 pub fn handle_start_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
@@ -45,12 +45,12 @@ pub fn handle_start_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutco
     ))))
 }
 
-/// Handle CompleteReviewCommand message
+/// Handle `CompleteReviewCommand` message
 ///
 /// Records review result and updates performance tracker
 ///
 /// Note: This handler mutates review session data and then delegates to
-/// handle_next_review_command for screen transitions
+/// `handle_next_review_command` for screen transitions
 pub fn handle_complete_review_command(
     data: &mut ReviewData,
     ctx: &mut HandlerContext<'_>,
@@ -90,7 +90,7 @@ pub fn handle_complete_review_command(
     handle_next_review_command(data, ctx)
 }
 
-/// Handle NextReviewCommand message
+/// Handle `NextReviewCommand` message
 ///
 /// Advances to next review command or completes session
 fn handle_next_review_command(
@@ -137,7 +137,7 @@ fn handle_next_review_command(
     HandlerOutcome::Stay
 }
 
-/// Handle AbandonReviewSession message
+/// Handle `AbandonReviewSession` message
 ///
 /// Cancels the current review session
 pub fn handle_abandon_review_session(ctx: &mut HandlerContext<'_>) -> HandlerOutcome {

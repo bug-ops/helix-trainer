@@ -2,7 +2,6 @@
 //!
 //! Handles command execution and hint display
 
-use std::borrow::Cow;
 use std::time::Duration;
 
 use crate::game::format_key_for_display;
@@ -13,11 +12,11 @@ use crate::ui::state::{
     AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, dispatch,
 };
 
-/// Handle ShowHint message
+/// Handle `ShowHint` message
 ///
 /// Toggles hint panel visibility and fetches next hint
 ///
-/// Note: This handler operates on TaskData screen, so it uses AppState to access the screen
+/// Note: This handler operates on `TaskData` screen, so it uses `AppState` to access the screen
 pub fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
     // Only handle if we're on Task screen
     let TypedScreen::Task(task_data) = &mut state.screen else {
@@ -34,14 +33,14 @@ pub fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
     if let Some(hint) = task_data
         .session
         .active_mut()
-        .and_then(|session| session.hint())
+        .and_then(crate::game::GameSession::hint)
     {
         task_data.hint = HintPanel::Shown(hint);
     }
     HandlerOutcome::Stay
 }
 
-/// Handle ExecuteCommand message
+/// Handle `ExecuteCommand` message
 ///
 /// Processes user commands in normal or insert mode, tracks for quests.
 /// Uses the typestate-based `InputStateMachine` for multi-key command handling.
@@ -53,12 +52,12 @@ pub fn handle_show_hint(state: &mut AppState) -> HandlerOutcome {
 /// target spans more than one canonical key, e.g. `G` -> `"ge"`) is
 /// applied atomically via [`InputStateMachine::apply_canonical_expansion`].
 ///
-/// Note: This handler operates on TaskData screen and calls update() for quest progress,
-/// so it requires full AppState access
+/// Note: This handler operates on `TaskData` screen and calls `update()` for quest progress,
+/// so it requires full `AppState` access
 pub fn handle_execute_command(
     state: &mut AppState,
     keys: crate::input::keymap::CanonicalKeys,
-    typed: Cow<'static, str>,
+    typed: &str,
 ) -> Result<HandlerOutcome, UserError> {
     // Only handle if we're on Task screen
     if !matches!(state.screen, TypedScreen::Task(_)) {
@@ -126,7 +125,7 @@ fn execute_on_task(
     state: &mut AppState,
     task_data: &mut crate::ui::state::TaskData,
     keys: crate::input::keymap::CanonicalKeys,
-    typed: Cow<'static, str>,
+    typed: &str,
 ) -> Result<Option<ExecutedCommand>, UserError> {
     // A finished task shows its success animation; it takes no more input
     if task_data.session.active().is_none() {
@@ -137,7 +136,7 @@ fn execute_on_task(
     // physically-typed key, not the translated command - and, matching
     // pre-keymap-overlay behavior, happens for every keystroke
     // unconditionally, including ones that only extend a pending prefix.
-    let display_key = format_key_for_display(typed.as_ref());
+    let display_key = format_key_for_display(typed);
     task_data.add_key_to_history(display_key);
 
     // Show key history popup after first keypress
@@ -168,12 +167,7 @@ fn execute_on_task(
         // an empty `tokens`; `apply_canonical_expansion` handles that by
         // returning `None`, unlike the old `tokens[0]` indexing this
         // replaced, which would have panicked.
-        let resolved = if !keys.is_single_token() {
-            let tokens = keys.tokens();
-            task_data
-                .input_state_mut()
-                .apply_canonical_expansion(&tokens)
-        } else {
+        let resolved = if keys.is_single_token() {
             match task_data
                 .input_state_mut()
                 .process_key(command_to_key_event(keys.as_str()))
@@ -185,6 +179,11 @@ fn execute_on_task(
                     return Ok(None);
                 }
             }
+        } else {
+            let tokens = keys.tokens();
+            task_data
+                .input_state_mut()
+                .apply_canonical_expansion(&tokens)
         };
 
         let Some(cmd_str) = resolved else {
@@ -294,10 +293,10 @@ mod tests {
         // `a(` is an invalid search regex: Enter is rejected by the simulator.
         for c in "/a(".chars() {
             let key = crate::input::keymap::CanonicalKeys::from_owned(c.to_string());
-            handle_execute_command(&mut state, key, Cow::Owned(c.to_string())).unwrap();
+            handle_execute_command(&mut state, key, &c.to_string()).unwrap();
         }
         let enter = crate::input::keymap::CanonicalKeys::from_static("Enter");
-        let result = handle_execute_command(&mut state, enter, Cow::Borrowed("Enter"));
+        let result = handle_execute_command(&mut state, enter, "Enter");
 
         assert!(result.is_err());
         let TypedScreen::Task(task_data) = &state.screen else {

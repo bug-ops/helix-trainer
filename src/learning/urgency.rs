@@ -63,6 +63,10 @@ pub enum Urgency {
 /// }
 /// ```
 #[must_use]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+)]
 pub fn command_urgency(perf: Option<&CommandPerformance>, now: DateTime<Utc>) -> Urgency {
     let Some(perf) = perf else {
         return Urgency::Novel;

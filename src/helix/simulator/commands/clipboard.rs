@@ -15,6 +15,11 @@ use std::slice::Iter;
 /// single character under that cursor. If every range is empty (e.g. all
 /// cursors sit past the end of the document), the register is left
 /// untouched.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     yank_to_register(sim, None)
 }
@@ -23,6 +28,11 @@ pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError>
 ///
 /// `register: None` addresses the unnamed register, matching Helix where
 /// `""y` and `y` behave identically. See [`yank`] for the selection rules.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn yank_to_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
@@ -66,6 +76,11 @@ enum PastePlacement {
 /// Paste the unnamed register's content after the selection
 ///
 /// See [`paste_after_from_register`].
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     paste_after_from_register(sim, None)
 }
@@ -80,6 +95,11 @@ pub fn paste_after<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Use
 /// Otherwise the value goes right after the range (one past a point
 /// cursor). Every range then selects its pasted text, so a following
 /// `d`/`c`/`y` acts on exactly that text.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn paste_after_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
@@ -91,6 +111,11 @@ pub fn paste_after_from_register<M: EditorMode>(
 /// Paste the unnamed register's content before the selection
 ///
 /// See [`paste_before_from_register`].
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
+/// fallible commands that share the registry's function type.
 pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), UserError> {
     paste_before_from_register(sim, None)
 }
@@ -101,6 +126,11 @@ pub fn paste_before<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Us
 /// and resulting selection as [`paste_after_from_register`]; the paste goes
 /// at the start of each range, or at the start of its first line when
 /// linewise.
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
 pub fn paste_before_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     register: Option<char>,
@@ -174,7 +204,7 @@ fn paste_from_register<M: EditorMode>(
     });
 
     let primary = sim.selection.primary_index();
-    sim.apply_transaction(transaction);
+    sim.apply_transaction(&transaction);
     sim.selection = Selection::new(pasted.into(), primary);
 }
 

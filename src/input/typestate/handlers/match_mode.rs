@@ -1,4 +1,4 @@
-//! MatchPending and surround handlers
+//! `MatchPending` and surround handlers
 //!
 //! Handles input after 'm' prefix for match/surround commands:
 //! - 'mm' - match brackets
@@ -12,7 +12,7 @@ use std::borrow::Cow;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::helix::commands::*;
+use crate::helix::commands::CMD_MATCH_BRACKETS;
 
 use super::{InputHandler, KeyHandler};
 use crate::input::typestate::{
@@ -60,7 +60,7 @@ impl InputHandler<SurroundAddPending> for KeyHandler {
         match key.code {
             // Accept any printable character for surrounding
             KeyCode::Char(c) => {
-                let cmd = format!("ms{}", c);
+                let cmd = format!("ms{c}");
                 HandlerResult::Execute(Cow::Owned(cmd))
             }
             // Escape - cancel
@@ -80,7 +80,7 @@ impl InputHandler<SurroundDeletePending> for KeyHandler {
         match key.code {
             // Accept any printable character for deletion target
             KeyCode::Char(c) => {
-                let cmd = format!("md{}", c);
+                let cmd = format!("md{c}");
                 HandlerResult::Execute(Cow::Owned(cmd))
             }
             // Escape - cancel

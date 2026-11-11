@@ -140,18 +140,20 @@ fn handle_task_special_keys(key: KeyEvent) -> Option<Message> {
 
 /// Check if current gameplay session is in Insert mode
 ///
-/// Works for both training mode (Task screen) and arcade mode (MiniGame screen).
+/// Works for both training mode (Task screen) and arcade mode (`MiniGame` screen).
 fn is_gameplay_insert_mode(state: &AppState) -> bool {
     match &state.screen {
         TypedScreen::Task(task_data) => task_data.session.playable().is_insert_mode(),
-        TypedScreen::MiniGame(_) => state.minigame_session().is_some_and(|s| s.is_insert_mode()),
+        TypedScreen::MiniGame(_) => state
+            .minigame_session()
+            .is_some_and(crate::minigame::MiniGameSession::is_insert_mode),
         _ => false,
     }
 }
 
 /// Get the gameplay `InputStateMachine` for the current screen, if any.
 ///
-/// Works for both training mode (Task screen) and arcade mode (MiniGame
+/// Works for both training mode (Task screen) and arcade mode (`MiniGame`
 /// screen). Used to check for a pending prefix/command-line state before
 /// routing keys that would otherwise bypass the state machine (Esc, arrows).
 fn gameplay_input_state(state: &AppState) -> Option<&InputStateMachine> {
@@ -234,9 +236,7 @@ where
     // not letters appended - see the CommandLinePending handler's Stay-on-arrow rule).
     if state.config.persistent.enable_arrow_keys_in_normal_mode
         && key.modifiers.is_empty()
-        && gameplay_input_state(state)
-            .map(|s| s.pending_command_line().is_none())
-            .unwrap_or(true)
+        && gameplay_input_state(state).is_none_or(|s| s.pending_command_line().is_none())
         && let Some(mapped_cmd) = map_arrow_to_movement(key.code)
     {
         let stock = Cow::Borrowed(mapped_cmd);
@@ -258,7 +258,7 @@ where
 /// - Modifier commands (Alt-C, Ctrl-r)
 ///
 /// Uses `map_key_to_helix_command` for known commands (which returns constants
-/// like CMD_COPY_SELECTION_PREV = "Alt-C"), and builds strings for prefix keys
+/// like `CMD_COPY_SELECTION_PREV` = "Alt-C"), and builds strings for prefix keys
 /// that the state machine needs to handle.
 fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
     // First try to get the command constant from map_key_to_helix_command
@@ -399,12 +399,12 @@ pub fn handle_review_keys(key: KeyEvent) -> Option<Message> {
 /// Handle keyboard events on category filters screen
 ///
 /// Key bindings:
-/// - `j` or `Down` - Move selection down (CategoryFilterDown)
-/// - `k` or `Up` - Move selection up (CategoryFilterUp)
-/// - `Space` or `Enter` - Toggle selected category filter (CategoryFilterToggle)
-/// - `a` - Select all (clear filters) (CategoryFilterSelectAll)
-/// - `Esc` or `q` - Return to previous screen (BackToMenu)
-/// - `Ctrl-Q` - Return to previous screen (BackToMenu)
+/// - `j` or `Down` - Move selection down (`CategoryFilterDown`)
+/// - `k` or `Up` - Move selection up (`CategoryFilterUp`)
+/// - `Space` or `Enter` - Toggle selected category filter (`CategoryFilterToggle`)
+/// - `a` - Select all (clear filters) (`CategoryFilterSelectAll`)
+/// - `Esc` or `q` - Return to previous screen (`BackToMenu`)
+/// - `Ctrl-Q` - Return to previous screen (`BackToMenu`)
 pub fn handle_category_filters_keys(key: KeyEvent) -> Option<Message> {
     // Ctrl-Q returns to previous screen (unified exit key)
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -491,8 +491,7 @@ pub fn handle_minigame_keys(key: KeyEvent, state: &AppState) -> Option<Message> 
         // every keystroke until it resolves or times out, costing lives.
         if key.code == KeyCode::Esc {
             let has_pending_state = gameplay_input_state(state)
-                .map(|s| s.is_prefix_state())
-                .unwrap_or(false);
+                .is_some_and(crate::input::typestate::InputStateMachine::is_prefix_state);
             if has_pending_state {
                 return handle_gameplay_input(key, state, |keys, typed| Message::MiniGameCommand {
                     keys,
@@ -1900,7 +1899,7 @@ mod tests {
                 Message::ExecuteCommand { keys, .. } => {
                     assert_eq!(keys, CanonicalKeys::from_static("ge"));
                 }
-                other => panic!("expected ExecuteCommand, got {:?}", other),
+                other => panic!("expected ExecuteCommand, got {other:?}"),
             }
         }
 

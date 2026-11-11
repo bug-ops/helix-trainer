@@ -51,8 +51,7 @@ pub(super) fn render_achievements_screen(frame: &mut Frame, state: &AppState) {
         String::new()
     };
     let instructions = Paragraph::new(format!(
-        "'p': profile | 's': statistics | 'j'/'k': scroll | 'm': menu{}",
-        scroll_hint
+        "'p': profile | 's': statistics | 'j'/'k': scroll | 'm': menu{scroll_hint}"
     ))
     .style(Style::default().fg(Color::Gray))
     .alignment(Alignment::Center)
@@ -103,7 +102,7 @@ fn render_achievements_content(
         };
 
         lines.push(Line::from(vec![
-            Span::raw(format!("  {} ", marker)),
+            Span::raw(format!("  {marker} ")),
             Span::styled(format!("{:20}", achievement.name), name_style),
             Span::raw(" - "),
             Span::styled(achievement.description.clone(), desc_style),

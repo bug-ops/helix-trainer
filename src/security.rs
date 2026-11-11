@@ -3,7 +3,6 @@
 //! This module provides security-related functionality including
 //! error definitions, validation utilities, and security helpers.
 
-use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 /// Security-specific errors raised while validating untrusted input.
@@ -247,14 +246,14 @@ pub enum UserError {
 }
 
 impl UserError {
-    /// Create an InvalidState error with a descriptive message
+    /// Create an `InvalidState` error with a descriptive message
     pub fn invalid_state(message: &str) -> Self {
         Self::InvalidState {
             message: message.to_string(),
         }
     }
 
-    /// Create a CommandFailed error with context for debugging
+    /// Create a `CommandFailed` error with context for debugging
     pub fn command_failed(context: impl Into<String>) -> Self {
         Self::CommandFailed {
             context: context.into(),
@@ -446,11 +445,18 @@ pub mod limits {
 
 /// Path validation utilities
 pub mod path_validator {
-    use super::*;
+    use super::{CappedReadError, SecurityError};
     use std::fs;
     use std::io::Read;
+    use std::path::{Path, PathBuf};
 
     /// Validates that a path is safe to access
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError::InvalidPath`] if `path` cannot be canonicalized,
+    /// [`SecurityError::PathTraversal`] if it lies outside every allowed base, or
+    /// [`SecurityError::SuspiciousPath`] if it matches a suspicious pattern.
     pub fn validate_path(path: &Path, allowed_bases: &[PathBuf]) -> Result<PathBuf, SecurityError> {
         // Canonicalize path to resolve symlinks and .. components
         let canonical = path
@@ -460,11 +466,8 @@ pub mod path_validator {
         // Check if path is within allowed directories
         let is_allowed = allowed_bases.iter().any(|base| {
             // Canonicalize base path
-            if let Ok(canonical_base) = base.canonicalize() {
-                canonical.starts_with(&canonical_base)
-            } else {
-                false
-            }
+            base.canonicalize()
+                .is_ok_and(|canonical_base| canonical.starts_with(&canonical_base))
         });
 
         if !is_allowed {
@@ -608,6 +611,11 @@ pub mod validators {
     /// `"c++"` or `"h++"` - rejecting only control characters, whitespace, and oversized
     /// values; the value is only ever used as an exact-match lookup key into syntect's
     /// `SyntaxSet`, never as a path or shell argument, so it carries no injection risk.
+    ///
+    /// # Errors
+    ///
+    /// Returns the deserializer's error, or a custom error if the language exceeds the length
+    /// limit or contains control characters or whitespace.
     pub fn validate_language_field<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -617,8 +625,7 @@ pub mod validators {
         if let Some(ref language) = opt {
             if language.len() > MAX_LANGUAGE_LENGTH {
                 return Err(serde::de::Error::custom(format!(
-                    "Invalid language: max {} characters",
-                    MAX_LANGUAGE_LENGTH
+                    "Invalid language: max {MAX_LANGUAGE_LENGTH} characters"
                 )));
             }
             if language
@@ -637,7 +644,8 @@ pub mod validators {
 
 /// Content sanitization utilities
 pub mod sanitizer {
-    use super::*;
+    use super::{SecurityError, limits};
+    use std::path::Path;
 
     /// Sanitizes string for terminal output
     pub fn sanitize_terminal_output(input: &str) -> String {
@@ -648,6 +656,12 @@ pub mod sanitizer {
     }
 
     /// Sanitizes file content
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecurityError::InvalidContent`] if `content` contains a null byte,
+    /// [`SecurityError::ContentTooLarge`] if it exceeds the size limit, or
+    /// [`SecurityError::InvalidEncoding`] if it is not valid UTF-8.
     pub fn sanitize_content(content: &str) -> Result<String, SecurityError> {
         // Check for null bytes
         if content.contains('\0') {
@@ -683,7 +697,7 @@ pub mod sanitizer {
 
 /// Safe arithmetic operations for scoring and calculations
 pub mod arithmetic {
-    use super::*;
+    use super::SecurityError;
 
     /// Safely calculates score with overflow prevention
     ///
@@ -709,7 +723,7 @@ pub mod arithmetic {
         }
 
         // Use checked arithmetic to prevent overflow
-        let numerator = (max_points as u64)
+        let numerator = u64::from(max_points)
             .checked_mul(optimal_count as u64)
             .ok_or(SecurityError::ScoreOverflow)?;
 
@@ -788,6 +802,7 @@ pub mod arithmetic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn test_suspicious_path_detection() {

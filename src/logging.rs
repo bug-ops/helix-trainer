@@ -13,7 +13,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 /// Initialize secure logging
 ///
 /// In release mode, logging is disabled by default to avoid interfering with TUI.
-/// Set RUST_LOG environment variable to enable logging (e.g., RUST_LOG=debug).
+/// Set `RUST_LOG` environment variable to enable logging (e.g., `RUST_LOG=debug`).
 ///
 /// # Security
 ///

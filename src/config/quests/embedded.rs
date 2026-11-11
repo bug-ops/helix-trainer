@@ -151,8 +151,7 @@ mod tests {
             let quests_file = parsed.unwrap();
             assert!(
                 !quests_file.quests.is_empty(),
-                "Quest file for locale '{}' should have at least one quest",
-                locale
+                "Quest file for locale '{locale}' should have at least one quest"
             );
         }
     }

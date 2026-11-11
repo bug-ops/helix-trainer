@@ -2,14 +2,14 @@
 //!
 //! Handles screen transitions and application lifecycle messages
 //!
-//! Type-safe handlers that use HandlerOutcome for explicit transitions.
+//! Type-safe handlers that use `HandlerOutcome` for explicit transitions.
 
 use crate::ui::state::{
     AchievementsData, AppState, CategoryFiltersData, HandlerContext, HandlerOutcome, MenuData,
     ModeSelectionData, NavTarget, ProfileData, ReturnDestination, StatisticsData, TypedScreen,
 };
 
-/// Handle QuitApp message
+/// Handle `QuitApp` message
 ///
 /// The single sink for exiting the application: sets the running flag to
 /// false so the event loop stops. Every code path that quits the app (the
@@ -27,7 +27,7 @@ pub fn handle_quit_app(state: &mut AppState) -> HandlerOutcome {
     HandlerOutcome::Stay
 }
 
-/// Handle NavigateTo message
+/// Handle `NavigateTo` message
 ///
 /// Changes the current screen to the target screen.
 /// Returns a Transition outcome with the new screen.
@@ -43,12 +43,12 @@ pub fn handle_navigate_to(target: NavTarget) -> HandlerOutcome {
     HandlerOutcome::Transition(Box::new(new_screen))
 }
 
-/// Handle BackToMenu message
+/// Handle `BackToMenu` message
 ///
 /// Returns to the appropriate screen based on context:
 /// - From Profile/Statistics/Achievements/CategoryFilters opened from a paused mini-game:
 ///   returns to that paused mini-game
-/// - From CategoryFilters opened from the menu: returns to Menu (scenario list)
+/// - From `CategoryFilters` opened from the menu: returns to Menu (scenario list)
 /// - Otherwise: returns to mode selection screen (the main menu)
 pub fn handle_back_to_menu(
     current_screen: &mut TypedScreen,

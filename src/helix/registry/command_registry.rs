@@ -54,7 +54,7 @@ pub struct CommandRegistry<M: EditorMode> {
     /// sequence that triggers it. Excludes `alias_only` entries, which have
     /// no corresponding upstream Helix command name to index by.
     by_name: HashMap<&'static str, &'static str>,
-    /// KeyTrie for multi-key resolution
+    /// `KeyTrie` for multi-key resolution
     key_trie: KeyTrie,
     /// Mode marker
     _mode: PhantomData<M>,
@@ -126,6 +126,10 @@ impl<M: EditorMode> CommandRegistry<M> {
     /// * `Ok(Some(transition))` - Command executed, may trigger mode transition
     /// * `Ok(None)` - Command executed, no mode transition
     /// * `Err(_)` - Command not found or execution failed
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UserError` if `key` is not a registered command or its handler fails.
     pub fn execute(
         &self,
         sim: &mut HelixSimulator<M>,
@@ -136,8 +140,7 @@ impl<M: EditorMode> CommandRegistry<M> {
             Ok(cmd.metadata.mode_change)
         } else {
             Err(UserError::command_failed(format!(
-                "unknown command '{}'",
-                key
+                "unknown command '{key}'"
             )))
         }
     }
@@ -161,16 +164,14 @@ impl<M: EditorMode> CommandRegistry<M> {
     pub fn commands_in_category(&self, category: Category) -> &[&'static str] {
         self.by_category
             .get(&category)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+            .map_or(&[][..], Vec::as_slice)
     }
 
     /// Check if a command is repeatable
     pub fn is_repeatable(&self, key: &str) -> bool {
         self.commands
             .get(key)
-            .map(|c| c.metadata.repeatable)
-            .unwrap_or(false)
+            .is_some_and(|c| c.metadata.repeatable)
     }
 
     /// How a count prefix applies to `base` (a command string without count).
@@ -210,7 +211,7 @@ impl<M: EditorMode> CommandRegistry<M> {
         }
     }
 
-    /// Get the KeyTrie for multi-key resolution
+    /// Get the `KeyTrie` for multi-key resolution
     pub fn key_trie(&self) -> &KeyTrie {
         &self.key_trie
     }

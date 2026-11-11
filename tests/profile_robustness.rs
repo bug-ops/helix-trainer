@@ -13,6 +13,7 @@ use helix_trainer::ids::{CommandId, ScenarioId};
 use helix_trainer::learning::PerformanceTracker;
 use proptest::prelude::*;
 use serde_json::{Value, json};
+use std::fmt::Write as _;
 use std::time::Duration;
 
 const PERFORMANCE_FIXTURE: &str = include_str!("fixtures/fsrs6_profile_performance.json");
@@ -49,7 +50,7 @@ fn leaf_pointers(value: &Value) -> Vec<(String, bool)> {
             Value::Array(items) => {
                 for (i, item) in items.iter().enumerate() {
                     let len = pointer.len();
-                    pointer.push_str(&format!("/{i}"));
+                    write!(pointer, "/{i}").unwrap();
                     walk(item, pointer, out);
                     pointer.truncate(len);
                 }

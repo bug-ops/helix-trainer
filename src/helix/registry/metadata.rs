@@ -124,7 +124,7 @@ impl NativeCounted {
 /// for a single command. Used for help screens and hint generation.
 #[derive(Debug, Clone)]
 pub struct CommandMetadata {
-    /// Internal name (e.g., "move_left")
+    /// Internal name (e.g., "`move_left`")
     pub name: &'static str,
     /// Key sequence that triggers this command (e.g., "h", "gg", "fx")
     pub key: &'static str,

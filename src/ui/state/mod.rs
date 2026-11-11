@@ -1,7 +1,7 @@
 //! UI state management using Elm Architecture
 //!
 //! This module implements the Elm Architecture pattern for the TUI application.
-//! It provides a centralized AppState with pure update functions, enabling
+//! It provides a centralized `AppState` with pure update functions, enabling
 //! predictable state transitions and easy testing.
 //!
 //! # Architecture
@@ -366,7 +366,7 @@ pub enum Message {
 /// This is the single source of truth for the application.
 ///
 /// Structure:
-/// - `screen`: Type-safe screen with required data (TypedScreen)
+/// - `screen`: Type-safe screen with required data (`TypedScreen`)
 /// - `ui`: Global UI rendering state (running flag, notifications, remembered menu position)
 /// - `game`: Game scenarios collection
 /// - `progress`: User progress (profile, learning, achievements)
@@ -592,9 +592,9 @@ impl AppState {
 /// Helper macro to extract screen data and call type-safe handler
 ///
 /// This macro handles the pattern of:
-/// 1. Extract screen data from TypedScreen variant
+/// 1. Extract screen data from `TypedScreen` variant
 /// 2. Call handler with extracted data
-/// 3. Apply HandlerOutcome (transition or stay)
+/// 3. Apply `HandlerOutcome` (transition or stay)
 macro_rules! extract_screen {
     // Data-only handler (no context)
     ($state:expr, $variant:ident, $data:ident => $handler:expr) => {
@@ -660,7 +660,7 @@ fn run_with_context<R: IntoHandlerResult>(
     Ok(())
 }
 
-/// Apply a HandlerOutcome to the state
+/// Apply a `HandlerOutcome` to the state
 ///
 /// If the outcome is a Transition, update the screen.
 /// If it's Stay, do nothing.
@@ -766,7 +766,7 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
             extract_screen!(state, MiniGame, mut data, ctx => handlers::handle_minigame_tick(data, &mut ctx))
         }
         Message::MiniGameCommand { keys, typed } => {
-            handlers::handle_minigame_command(state, keys, typed)
+            handlers::handle_minigame_command(state, &keys, &typed)
         }
         Message::MiniGameTimeout => {
             handlers::handle_minigame_timeout(state);
@@ -913,7 +913,7 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
             Ok(())
         }
         Message::ExecuteCommand { keys, typed } => {
-            let outcome = handlers::handle_execute_command(state, keys, typed)?;
+            let outcome = handlers::handle_execute_command(state, keys, &typed)?;
             apply_outcome(state, outcome);
             Ok(())
         }
@@ -947,7 +947,7 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
         } => {
             handlers::handle_update_quest_progress(
                 state,
-                command,
+                command.as_deref(),
                 scenario_completed,
                 scenario_id,
                 duration,

@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn test_sound_effect_debug() {
         let effect = SoundEffect::GameOver;
-        let debug_str = format!("{:?}", effect);
+        let debug_str = format!("{effect:?}");
         assert_eq!(debug_str, "GameOver");
     }
 

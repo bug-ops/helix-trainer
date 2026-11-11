@@ -1,4 +1,4 @@
-//! FindCharPending handler - handles input after 'f'/'F'/'t'/'T'
+//! `FindCharPending` handler - handles input after 'f'/'F'/'t'/'T'
 //!
 //! Waits for a character to search for and produces the full command.
 

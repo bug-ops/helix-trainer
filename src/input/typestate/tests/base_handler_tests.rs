@@ -1,4 +1,4 @@
-//! Tests for BaseState handler
+//! Tests for `BaseState` handler
 
 use std::assert_matches;
 
@@ -231,7 +231,7 @@ fn base_key(c: char, modifiers: KeyModifiers) -> HandlerResult {
     KeyHandler::handle_key(&BaseState, KeyEvent::new(KeyCode::Char(c), modifiers))
 }
 
-/// #487: Alt-s must run split_selection_on_newline, not open the `s` prompt.
+/// #487: Alt-s must run `split_selection_on_newline`, not open the `s` prompt.
 #[test]
 fn test_base_state_alt_s_executes_split_selection_on_newline() {
     assert_eq!(

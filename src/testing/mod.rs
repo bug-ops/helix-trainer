@@ -56,24 +56,40 @@ pub fn failed_backup() -> QuarantineOutcome {
 }
 
 /// Build a [`ScenarioId`] from a literal, panicking on an invalid test fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a valid fixture value.
 #[must_use]
 pub fn sid(raw: &str) -> ScenarioId {
     ScenarioId::parse(raw).expect("valid scenario id fixture")
 }
 
 /// Build a [`QuestId`] from a literal, panicking on an invalid test fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a valid fixture value.
 #[must_use]
 pub fn qid(raw: &str) -> QuestId {
     QuestId::parse(raw).expect("valid quest id fixture")
 }
 
 /// Build a [`CommandId`] from a canonical card id literal.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a canonical card id.
 #[must_use]
 pub fn cid(raw: &str) -> CommandId {
     CommandId::from_card_id(raw).expect("canonical card id fixture")
 }
 
 /// Build a [`NormalizedCommand`] from a literal, panicking on an invalid test fixture.
+///
+/// # Panics
+///
+/// Panics if `raw` is not a valid fixture value.
 #[must_use]
 pub fn ncmd(raw: &str) -> NormalizedCommand {
     NormalizedCommand::from_raw(raw).expect("valid command fixture")

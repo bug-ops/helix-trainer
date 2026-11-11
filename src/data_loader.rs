@@ -154,19 +154,21 @@ pub fn spawn_save_writer(
                 Ok(Err(e)) => Some(SaveFailure::Storage(e)),
                 Err(e) => Some(SaveFailure::Task(e)),
             };
-            let (msg, latest_outcome) = match failure {
-                None => (
-                    DataLoadMessage::ProfileSaved,
-                    SaveWriterOutcome::LastSaveSucceeded,
-                ),
-                Some(failure) => {
+            let (msg, latest_outcome) = failure.map_or_else(
+                || {
+                    (
+                        DataLoadMessage::ProfileSaved,
+                        SaveWriterOutcome::LastSaveSucceeded,
+                    )
+                },
+                |failure| {
                     let failure = Arc::new(failure);
                     (
                         DataLoadMessage::ProfileSaveError(Arc::clone(&failure)),
                         SaveWriterOutcome::LastSaveFailed(failure),
                     )
-                }
-            };
+                },
+            );
             outcome = latest_outcome;
             if result_tx.send(msg).await.is_err() {
                 // The receiver is intentionally gone once the event loop has exited at shutdown.
@@ -421,8 +423,7 @@ mod tests {
                 let error_msg = e.to_string();
                 assert!(
                     error_msg.contains("Scenario") || error_msg.contains("load"),
-                    "Error should mention scenarios or loading: {}",
-                    error_msg
+                    "Error should mention scenarios or loading: {error_msg}"
                 );
             }
         }
@@ -514,9 +515,8 @@ mod tests {
             Err(e) => {
                 // If this fails, the quests directory may be missing
                 panic!(
-                    "Quest registry should load successfully. Error: {}. \
-                     Make sure quests/en/daily.toml exists.",
-                    e
+                    "Quest registry should load successfully. Error: {e}. \
+                     Make sure quests/en/daily.toml exists."
                 );
             }
         }
@@ -562,12 +562,14 @@ mod tests {
         for _ in 0..3 {
             if let Ok(msg) = tokio::time::timeout(DATA_LOADING_TIMEOUT, rx.recv()).await {
                 match msg {
-                    Some(DataLoadMessage::ScenariosReady(_))
-                    | Some(DataLoadMessage::ScenariosError(_)) => {
+                    Some(
+                        DataLoadMessage::ScenariosReady(_) | DataLoadMessage::ScenariosError(_),
+                    ) => {
                         scenarios_received = true;
                     }
-                    Some(DataLoadMessage::ProfileReady(_))
-                    | Some(DataLoadMessage::ProfileError { .. }) => {
+                    Some(
+                        DataLoadMessage::ProfileReady(_) | DataLoadMessage::ProfileError { .. },
+                    ) => {
                         profile_received = true;
                     }
                     _ => {}

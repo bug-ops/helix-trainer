@@ -488,7 +488,11 @@ mod screen_render_tests {
             .unwrap();
 
         let buffer: Buffer = terminal.backend().buffer().clone();
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let text: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             text.contains("menu"),
             "instructions bar text must be rendered at 80x24, got buffer text: {text}"
@@ -690,7 +694,7 @@ mod screen_render_tests {
     #[test]
     fn test_render_menu_with_many_scenarios() {
         let scenarios: Vec<_> = (0..100)
-            .map(|i| create_test_scenario_with_id(&format!("scenario_{}", i)))
+            .map(|i| create_test_scenario_with_id(&format!("scenario_{i}")))
             .collect();
         let mut terminal = create_terminal();
         let mut state = create_test_app_state(scenarios);
@@ -1086,7 +1090,7 @@ mod results_tests {
             .build()
     }
 
-    /// Create an abandoned session and ResultsData from it
+    /// Create an abandoned session and `ResultsData` from it
     fn create_abandoned_results_data(scenario: Scenario) -> ResultsData {
         let session = GameSession::new(scenario).unwrap();
         let abandoned = session.abandon();
@@ -1094,6 +1098,10 @@ mod results_tests {
         ResultsData::from_abandoned(abandoned, feedback, Some(0))
     }
 
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "integer counters and scores stay far below 2^52, so the f64 value is exact"
+    )]
     fn create_xp_breakdown(
         base: u64,
         perfect_bonus: u64,
@@ -1160,7 +1168,11 @@ mod results_tests {
             .unwrap();
 
         let buffer: Buffer = terminal.backend().buffer().clone();
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let text: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             text.contains("All scenarios complete"),
             "expected the curriculum-complete hint to render, got: {text}"
@@ -1211,7 +1223,11 @@ mod results_tests {
             .unwrap();
 
         let buffer: Buffer = terminal.backend().buffer().clone();
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let text: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             !text.contains("All scenarios complete"),
             "hint must not show mid-list even when the curriculum is complete"
@@ -1237,7 +1253,11 @@ mod results_tests {
             .unwrap();
 
         let buffer: Buffer = terminal.backend().buffer().clone();
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let text: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(!text.contains("All scenarios complete"));
     }
 
@@ -1962,7 +1982,11 @@ mod mode_selection_extended_tests {
             .unwrap();
 
         let buffer: Buffer = terminal.backend().buffer().clone();
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let text: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         for mode in MiniGameModeSelection::all_modes(chrono::Utc::now().date_naive()) {
             let mode_name = mode.name();
             assert!(
@@ -2005,7 +2029,11 @@ mod mode_selection_extended_tests {
             .unwrap();
 
         let buffer: Buffer = terminal.backend().buffer().clone();
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let text: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             text.contains("(2/3)"),
             "Daily Challenge entry must show attempts remaining, got buffer text: {text}"

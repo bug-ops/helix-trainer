@@ -43,26 +43,26 @@ fn test_all_scenarios_load_successfully() {
                             "Failed to create GameSession for '{}' ({}): {:?}",
                             scenario.name, scenario.id, e
                         );
-                        println!("    ✗ {}", error_msg);
+                        println!("    ✗ {error_msg}");
                         failed_scenarios.push((scenario.id.clone(), error_msg));
                     }
                 }
             }
         }
         Err(e) => {
-            panic!("Failed to load embedded scenarios: {:?}", e);
+            panic!("Failed to load embedded scenarios: {e:?}");
         }
     }
 
     println!("\n{}", "=".repeat(60));
     println!("Validation Summary:");
-    println!("  Total scenarios validated: {}", total_scenarios);
+    println!("  Total scenarios validated: {total_scenarios}");
     println!("  Failed scenarios: {}", failed_scenarios.len());
 
     if !failed_scenarios.is_empty() {
         println!("\nFailed scenarios:");
         for (id, error) in &failed_scenarios {
-            println!("  - {}: {}", id, error);
+            println!("  - {id}: {error}");
         }
         panic!(
             "Scenario validation failed! {} scenario(s) have errors",
@@ -208,8 +208,7 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
         if cmd.starts_with(':') {
             if let Err(e) = CommandLine::parse(cmd) {
                 return Err(format!(
-                    "Command {} '{}': :-command failed to parse: {:?}",
-                    i, cmd, e
+                    "Command {i} '{cmd}': :-command failed to parse: {e:?}"
                 ));
             }
             continue;
@@ -237,8 +236,7 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
         if let Some(pattern) = regex_pattern {
             if let Err(e) = helix_stdx::rope::Regex::new(pattern) {
                 return Err(format!(
-                    "Command {} '{}': regex-selection pattern failed to compile: {:?}",
-                    i, cmd, e
+                    "Command {i} '{cmd}': regex-selection pattern failed to compile: {e:?}"
                 ));
             }
             continue;
@@ -252,8 +250,7 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
             }
             // Multi-char strings in insert mode should use <insert:...> format
             return Err(format!(
-                "Command {} '{}': Multi-char command in insert mode should use <insert:...> format",
-                i, cmd
+                "Command {i} '{cmd}': Multi-char command in insert mode should use <insert:...> format"
             ));
         }
 
@@ -264,7 +261,7 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
 
         // Validate command through command buffer parsing (normal mode)
         if let Err(e) = validate_single_command(cmd) {
-            return Err(format!("Command {} '{}': {}", i, cmd, e));
+            return Err(format!("Command {i} '{cmd}': {e}"));
         }
     }
 
@@ -282,8 +279,7 @@ fn validate_single_command(cmd: &str) -> Result<(), String> {
             HandlerResult::Execute(resolved) => {
                 if resolved.as_ref() != cmd {
                     return Err(format!(
-                        "Input resolved to '{}' but expected '{}' at char {} ('{}')",
-                        resolved, cmd, i, ch
+                        "Input resolved to '{resolved}' but expected '{cmd}' at char {i} ('{ch}')"
                     ));
                 }
                 return Ok(());
@@ -294,7 +290,7 @@ fn validate_single_command(cmd: &str) -> Result<(), String> {
                 }
             }
             HandlerResult::Cancel | HandlerResult::Stay => {
-                return Err(format!("Became invalid at char {} ('{}')", i, ch));
+                return Err(format!("Became invalid at char {i} ('{ch}')"));
             }
         }
     }
@@ -353,6 +349,7 @@ fn test_after_taught_commands_scenarios_declare_taught_commands() {
 
 #[test]
 fn test_all_scenarios_execute_solution() {
+    use helix_trainer::game::SessionAfterAction;
     let loader = ScenarioLoader::new();
     let mut total_scenarios = 0;
     let mut failed_scenarios = Vec::new();
@@ -370,7 +367,7 @@ fn test_all_scenarios_execute_solution() {
         if let Err(e) = validate_commands_ui_style(&scenario.solution.commands) {
             failed_scenarios.push((
                 scenario.id.clone(),
-                format!("UI-style validation failed: {}", e),
+                format!("UI-style validation failed: {e}"),
             ));
         }
 
@@ -380,14 +377,13 @@ fn test_all_scenarios_execute_solution() {
             Err(e) => {
                 failed_scenarios.push((
                     scenario.id.clone(),
-                    format!("Failed to create session: {:?}", e),
+                    format!("Failed to create session: {e:?}"),
                 ));
                 continue;
             }
         };
 
         // Execute solution commands
-        use helix_trainer::game::SessionAfterAction;
         let mut session_or_completed: Option<SessionAfterAction> =
             Some(SessionAfterAction::StillActive(session));
 
@@ -413,7 +409,7 @@ fn test_all_scenarios_execute_solution() {
                         if let Some(e) = execution_error {
                             failed_scenarios.push((
                                 scenario.id.clone(),
-                                format!("Failed at command {} '{}': {:?}", i, cmd, e),
+                                format!("Failed at command {i} '{cmd}': {e:?}"),
                             ));
                             break;
                         }
@@ -482,13 +478,13 @@ fn test_all_scenarios_execute_solution() {
 
     println!("\n{}", "=".repeat(60));
     println!("Execution Summary:");
-    println!("  Total scenarios tested: {}", total_scenarios);
+    println!("  Total scenarios tested: {total_scenarios}");
     println!("  Failed scenarios: {}", failed_scenarios.len());
 
     if !failed_scenarios.is_empty() {
         println!("\nFailed scenarios:");
         for (id, error) in &failed_scenarios {
-            println!("  - {}: {}", id, error);
+            println!("  - {id}: {error}");
         }
         panic!(
             "Scenario execution failed! {} scenario(s) have errors",

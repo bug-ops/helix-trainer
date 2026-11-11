@@ -116,16 +116,19 @@ fn render_line_with_multi_cursor(
         // Check if any cursor is at this position
         let cursor_at_pos = cursors.iter().find(|c| c.col == col);
 
-        let style = if let Some(cursor) = cursor_at_pos {
-            cursor.style()
-        } else if preview_positions.contains(&col) {
-            Style::default()
-                .bg(preview_color)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(line_color)
-        };
+        let style = cursor_at_pos.map_or_else(
+            || {
+                if preview_positions.contains(&col) {
+                    Style::default()
+                        .bg(preview_color)
+                        .fg(Color::Black)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(line_color)
+                }
+            },
+            CursorInfo::style,
+        );
 
         spans.push(Span::styled(char_str.to_string(), style));
         byte_pos += char_len;
@@ -141,7 +144,7 @@ fn render_line_with_multi_cursor(
 
 /// Render a line with multiple selections.
 ///
-/// Handles overlapping selections by using a HashSet to track highlighted columns.
+/// Handles overlapping selections by using a `HashSet` to track highlighted columns.
 fn render_line_with_multi_selection(
     line_text: &str,
     line_idx: usize,
@@ -208,7 +211,7 @@ fn get_preview_positions(preview: Option<PreviewHighlight>, line_idx: usize) -> 
     if line_idx == p.close_row {
         positions.push(p.close_col);
     }
-    positions.sort();
+    positions.sort_unstable();
     positions
 }
 
@@ -236,7 +239,7 @@ pub(super) fn render_editor_with_diff(
     selections: &[SelectionBounds],
     preview: Option<PreviewHighlight>,
 ) -> Vec<Line<'static>> {
-    let preview_color = preview.map(|p| p.color()).unwrap_or(Color::Yellow);
+    let preview_color = preview.map_or(Color::Yellow, |p| p.color());
 
     let current_lines: Vec<&str> = current_content.lines().collect();
     let target_lines: Vec<&str> = target_content.lines().collect();
@@ -245,10 +248,7 @@ pub(super) fn render_editor_with_diff(
         .iter()
         .enumerate()
         .map(|(line_idx, &line_text)| {
-            let matches_target = target_lines
-                .get(line_idx)
-                .map(|&t| t == line_text)
-                .unwrap_or(false);
+            let matches_target = target_lines.get(line_idx).is_some_and(|&t| t == line_text);
 
             let line_color = if matches_target {
                 Color::Green
@@ -395,11 +395,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     // panels identically, so a line that runs past the panel's inner width scrolls into view
     // around the cursor while keeping Current/Target columns aligned.
     let panel_inner_width = current_area.width.saturating_sub(2) as usize;
-    let primary_cursor_col = cursors
-        .iter()
-        .find(|c| c.is_primary)
-        .map(|c| c.col)
-        .unwrap_or(0);
+    let primary_cursor_col = cursors.iter().find(|c| c.is_primary).map_or(0, |c| c.col);
     let h_off: u16 = if primary_cursor_col < panel_inner_width {
         0
     } else {
@@ -416,11 +412,7 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     // (a trailing `\n` makes `Rope::char_to_line` report a phantom final row that `str::lines()`
     // drops), so this clamp is required for correctness, not just polish.
     let panel_inner_height = current_area.height.saturating_sub(2) as usize;
-    let primary_cursor_row = cursors
-        .iter()
-        .find(|c| c.is_primary)
-        .map(|c| c.row)
-        .unwrap_or(0);
+    let primary_cursor_row = cursors.iter().find(|c| c.is_primary).map_or(0, |c| c.row);
     let max_v_offset = current_lines.len().saturating_sub(panel_inner_height);
     let v_off_raw = primary_cursor_row
         .saturating_sub(panel_inner_height / 2)
@@ -1093,7 +1085,11 @@ mod tests {
         use crate::testing::ScenarioBuilder;
         use ratatui::{Terminal, backend::TestBackend};
 
-        let content: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        let content = lines
+            .iter()
+            .map(|l| format!("{l}\n"))
+            .collect::<Vec<_>>()
+            .concat();
         let scenario = ScenarioBuilder::new()
             .id("vertical_scroll_test")
             .setup_content(content.clone())

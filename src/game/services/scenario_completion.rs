@@ -83,8 +83,9 @@ impl ScenarioCompletionService {
         let (_pre_mastery_level, pre_mastery_factor, pre_repeat_penalty) = profile
             .scenario_history
             .get(scenario_id)
-            .map(|c| (c.mastery_level, c.mastery_factor(), c.repeat_penalty()))
-            .unwrap_or((ScenarioMastery::Learning, 1.0, 1.0));
+            .map_or((ScenarioMastery::Learning, 1.0, 1.0), |c| {
+                (c.mastery_level, c.mastery_factor(), c.repeat_penalty())
+            });
 
         let actual_xp =
             profile
@@ -95,8 +96,7 @@ impl ScenarioCompletionService {
         let post_mastery_level = profile
             .scenario_history
             .get(scenario_id)
-            .map(|c| c.mastery_level)
-            .unwrap_or(ScenarioMastery::Learning);
+            .map_or(ScenarioMastery::Learning, |c| c.mastery_level);
 
         let applied_multiplier = pre_mastery_factor * pre_repeat_penalty;
 
@@ -131,7 +131,7 @@ impl ScenarioCompletionService {
 
     /// Record commands and return mastery level changes
     ///
-    /// Returns list of (command, new_level_name) for commands that leveled up
+    /// Returns list of (command, `new_level_name`) for commands that leveled up
     pub fn record_fsrs_data_with_mastery(
         scheduler: &mut Scheduler,
         tracker: &mut PerformanceTracker,
@@ -158,7 +158,7 @@ impl ScenarioCompletionService {
     /// run counters when the completion fell under the respective time budget.
     ///
     /// Shared by Training and Arcade so speed/exploration achievements
-    /// (SpeedDemon, Speedrunner, Flash, Polyglot) are reachable identically
+    /// (`SpeedDemon`, Speedrunner, Flash, Polyglot) are reachable identically
     /// from either mode - see [`speed_time_ratio`]'s doc comment for why both
     /// modes derive "speed" from the same base per-difficulty budget.
     ///

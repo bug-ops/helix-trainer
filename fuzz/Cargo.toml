@@ -1,0 +1,30 @@
+[package]
+name = "helix-trainer-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+helix-trainer = { path = "..", default-features = false }
+libfuzzer-sys = "0.4.13"
+tempfile = "3"
+
+# Its own workspace keeps the fuzz crate out of the main workspace and gate.
+[workspace]
+
+[[bin]]
+name = "config_load"
+path = "fuzz_targets/config_load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "keymap_resolve"
+path = "fuzz_targets/keymap_resolve.rs"
+test = false
+doc = false
+bench = false

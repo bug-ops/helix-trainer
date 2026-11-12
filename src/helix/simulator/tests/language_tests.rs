@@ -93,6 +93,22 @@ fn align_pads_by_display_width() {
 }
 
 #[test]
+fn align_counts_a_tab_at_the_language_tab_width() {
+    let keys = [CMD_SELECT_ALL, "s x", CMD_ALIGN_SELECTIONS];
+    let text = "\tx\nabcd x\n";
+    assert_eq!(run_in(Language::Rs, text, &keys), "\t x\nabcd x\n");
+    assert_eq!(run_in(Language::Md, text, &keys), "\t   x\nabcd x\n");
+}
+
+#[test]
+fn dedent_counts_a_tab_at_the_language_tab_width() {
+    let text = "    a\n    b\n\t\tx\n";
+    let keys = [CMD_MOVE_DOWN, CMD_MOVE_DOWN, CMD_DEDENT];
+    assert_eq!(run_in(Language::Rs, text, &keys), "    a\n    b\n\tx\n");
+    assert_eq!(run_in(Language::Md, text, &keys), "    a\n    b\nx\n");
+}
+
+#[test]
 fn join_strips_the_comment_token_of_the_next_line() {
     assert_eq!(
         run_in(Language::Rs, "// a\n// b\n", &[CMD_JOIN_LINES]),

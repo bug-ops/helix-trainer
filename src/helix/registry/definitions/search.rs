@@ -65,7 +65,7 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
         .with_help(
             "Search for the selection text (escaped), adding word boundaries where the selection starts or ends at a word edge; the selection is unchanged.",
         ),
-        search::search_word_under_cursor,
+        search::search_selection_detect_word_boundaries,
     ));
 
     registry.register(Command::new(

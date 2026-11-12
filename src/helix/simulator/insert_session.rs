@@ -7,12 +7,13 @@
 //! [`HelixSimulator::begin_insert`](super::HelixSimulator::begin_insert) with an
 //! [`InsertEntryCommand`], so an unclosed boundary cannot exist.
 
+use super::composed_changes::ComposedChanges;
 use super::undo::HistoryEntry;
 use crate::grammar::commands::{
     CMD_APPEND, CMD_APPEND_LINE_END, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_INSERT,
     CMD_INSERT_LINE_START, CMD_OPEN_ABOVE, CMD_OPEN_BELOW, CMD_SELECT_REGISTER,
 };
-use helix_core::{Assoc, ChangeSet, Operation, Rope, Selection};
+use helix_core::{Assoc, ChangeSet, Operation, Range, Rope, Selection};
 use std::num::NonZeroUsize;
 
 /// A command that enters Insert mode.
@@ -182,6 +183,11 @@ pub(super) enum InsertEntry {
     /// `a`: Escape selects, per range, from the original selection start
     /// through the inserted text; each anchor follows the document changes.
     Append { anchors: Vec<usize> },
+    /// `i`: Escape restores, per cursor, the range Helix holds. It starts as
+    /// the flipped original range (a point for a point range) and follows
+    /// every change through helix-core's own [`Range::map`]; a cursor motion
+    /// drops the ranges, as Helix replaces them.
+    Insert { ranges: Vec<Range> },
     /// Every other entry.
     Other,
 }
@@ -199,7 +205,7 @@ pub struct InsertSession {
     /// Every change of the session, the entering command's edit included,
     /// composed into one: what Helix inspects to strip an unused indent.
     /// Boxed to keep the Insert-mode simulator from outgrowing the Normal one.
-    changes: Box<ChangeSet>,
+    changes: Box<ComposedChanges>,
 }
 
 impl InsertSession {
@@ -208,7 +214,7 @@ impl InsertSession {
         saved_redo: Vec<HistoryEntry>,
         change: SessionChange,
         entry: InsertEntry,
-        changes: ChangeSet,
+        changes: ComposedChanges,
     ) -> Self {
         Self {
             history_len,
@@ -237,8 +243,31 @@ impl InsertSession {
                     .map(|anchor| (anchor, Assoc::AfterSticky)),
             );
         }
-        let composed = std::mem::replace(&mut *self.changes, ChangeSet::with_capacity(0));
-        *self.changes = composed.compose(changes.clone());
+        if let InsertEntry::Insert { ranges } = &mut self.entry {
+            for range in ranges {
+                *range = range.map(changes);
+            }
+        }
+        self.changes.push(changes.clone());
+    }
+
+    /// Forget what the entry command selected after the cursors moved: Helix
+    /// replaces the selection on a motion, so each cursor stays the point it
+    /// now is.
+    pub(super) fn drop_entry_ranges(&mut self, cursors: &Selection) {
+        match &mut self.entry {
+            InsertEntry::Insert { ranges } => {
+                *ranges = cursors
+                    .ranges()
+                    .iter()
+                    .map(|r| Range::point(r.head))
+                    .collect();
+            }
+            InsertEntry::Append { anchors } => {
+                *anchors = cursors.ranges().iter().map(|r| r.head).collect();
+            }
+            InsertEntry::Other => {}
+        }
     }
 
     /// Whether the session as a whole is one new line break followed only by
@@ -246,11 +275,12 @@ impl InsertSession {
     /// `line_end`: Helix's `inserted_a_new_blank_line`, whose result decides
     /// if `Escape` strips the auto-indent.
     pub(super) fn inserted_a_new_blank_line(&self, cursor: usize, line_end: usize) -> bool {
+        let composed = self.changes.composed();
         let [
             Operation::Retain(moved),
             Operation::Insert(inserted),
             Operation::Retain(_),
-        ] = self.changes.changes()
+        ] = composed.changes()
         else {
             return false;
         };

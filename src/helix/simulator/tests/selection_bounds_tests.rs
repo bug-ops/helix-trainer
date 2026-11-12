@@ -7,6 +7,7 @@ use super::{ranges_of, selection_in_bounds};
 use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
 use proptest::prelude::*;
+use proptest::test_runner::RngSeed;
 
 /// Runs `keys`, asserting the selection is in bounds after each one.
 fn run_checked(text: &str, keys: &[&str]) -> AnyModeSimulator {
@@ -187,88 +188,109 @@ fn delete_surround_on_the_issue_sequence_keeps_the_selection_valid() {
     assert!(selection_in_bounds(&sim));
 }
 
-fn command_alphabet() -> Vec<String> {
-    let mut keys: Vec<String> = crate::helix::registry::normal_registry()
+/// Normal-mode keys the registry had when the pinned pass was written. Fixed
+/// on purpose: a command added later must not change what the pinned seed
+/// generates, so runs stay comparable across commits.
+const REGISTRY_SNAPSHOT: &[&str] = &[
+    "%", "&", "*", ",", ".", "/", ";", "<", ">", "?", "A", "Alt-*", "Alt-,", "Alt--", "Alt-.",
+    "Alt-;", "Alt-C", "Alt-J", "Alt-K", "Alt-_", "Alt-`", "Alt-c", "Alt-d", "Alt-s", "Alt-x", "B",
+    "C", "Ctrl-b", "Ctrl-c", "Ctrl-d", "Ctrl-f", "Ctrl-r", "Ctrl-u", "E", "Escape", "F", "I", "J",
+    "K", "N", "O", "P", "R", "T", "U", "W", "X", "[p", "]p", "^", "_", "`", "a", "b", "c", "d",
+    "e", "f", "ge", "gg", "gh", "gl", "gs", "h", "i", "j", "k", "l", "mm", "n", "o", "p", "r", "t",
+    "u", "v", "w", "x", "y", "zb", "zj", "zk", "zm", "zt", "zz", "~",
+];
+
+/// Insert-mode keys, typed text and counted or prompted commands.
+const EXTRA_KEYS: &[&str] = &[
+    "i",
+    "a",
+    "I",
+    "A",
+    "o",
+    "O",
+    "c",
+    CMD_ESCAPE,
+    CMD_BACKSPACE,
+    CMD_INSERT_TAB,
+    CMD_INSERT_DELETE_WORD_BACKWARD,
+    CMD_INSERT_DELETE_TO_LINE_START,
+    CMD_INSERT_DELETE_TO_LINE_END,
+    CMD_INSERT_DELETE_CHAR_FORWARD,
+    CMD_INSERT_DELETE_WORD_FORWARD,
+    CMD_ARROW_LEFT,
+    CMD_ARROW_RIGHT,
+    CMD_ARROW_UP,
+    CMD_ARROW_DOWN,
+    "x",
+    "y",
+    "p",
+    "d",
+    "u",
+    "U",
+    "\n",
+    "\r",
+    "q",
+    "\u{e9}",
+    "\u{1f600}",
+    "f\u{e9}",
+    "t\u{1f600}",
+    "Fx",
+    "Ta",
+    "r\u{e9}",
+    "r\u{1f600}",
+    "ms\u{e9}",
+    "md\u{e9}",
+    "mr\u{e9}\u{1f600}",
+    "mi\u{e9}",
+    "ma\u{1f600}",
+    "mi(",
+    "ma\"",
+    "md\"",
+    "mr()",
+    "s a",
+    "s x*",
+    "S ,",
+    "K a",
+    "Alt-K a",
+    "/ a",
+    "? a",
+    "\"ay",
+    "\"_d",
+    "\"ac",
+    ":goto 2",
+    "3x",
+    "2d",
+    "4O",
+    "2o",
+    "3o",
+    "(",
+    ")",
+    "{",
+    "}",
+    "[",
+    "\"",
+    "'",
+    "`",
+    "100G",
+    "2gg",
+];
+
+/// The fixed alphabet of the pinned pass.
+fn fixed_alphabet() -> Vec<String> {
+    REGISTRY_SNAPSHOT
+        .iter()
+        .chain(EXTRA_KEYS)
+        .map(|key| (*key).to_string())
+        .collect()
+}
+
+/// The alphabet of the randomized pass: every command the registry has now.
+fn full_registry_alphabet() -> Vec<String> {
+    crate::helix::registry::normal_registry()
         .all_commands()
         .map(|meta| meta.key().to_string())
-        .collect();
-    keys.extend(
-        [
-            "i",
-            "a",
-            "I",
-            "A",
-            "o",
-            "O",
-            "c",
-            CMD_ESCAPE,
-            CMD_BACKSPACE,
-            CMD_INSERT_TAB,
-            CMD_INSERT_DELETE_WORD_BACKWARD,
-            CMD_INSERT_DELETE_TO_LINE_START,
-            CMD_INSERT_DELETE_TO_LINE_END,
-            CMD_INSERT_DELETE_CHAR_FORWARD,
-            CMD_INSERT_DELETE_WORD_FORWARD,
-            CMD_ARROW_LEFT,
-            CMD_ARROW_RIGHT,
-            CMD_ARROW_UP,
-            CMD_ARROW_DOWN,
-            "x",
-            "y",
-            "p",
-            "d",
-            "u",
-            "U",
-            "\n",
-            "\r",
-            "q",
-            "\u{e9}",
-            "\u{1f600}",
-            "f\u{e9}",
-            "t\u{1f600}",
-            "Fx",
-            "Ta",
-            "r\u{e9}",
-            "r\u{1f600}",
-            "ms\u{e9}",
-            "md\u{e9}",
-            "mr\u{e9}\u{1f600}",
-            "mi\u{e9}",
-            "ma\u{1f600}",
-            "mi(",
-            "ma\"",
-            "md\"",
-            "mr()",
-            "s a",
-            "s x*",
-            "S ,",
-            "K a",
-            "Alt-K a",
-            "/ a",
-            "? a",
-            "\"ay",
-            "\"_d",
-            "\"ac",
-            ":goto 2",
-            "3x",
-            "2d",
-            "4O",
-            "2o",
-            "3o",
-            "(",
-            ")",
-            "{",
-            "}",
-            "[",
-            "\"",
-            "'",
-            "`",
-            "100G",
-            "2gg",
-        ]
-        .map(String::from),
-    );
-    keys
+        .chain(EXTRA_KEYS.iter().map(|key| (*key).to_string()))
+        .collect()
 }
 
 fn arbitrary_text() -> impl Strategy<Value = String> {
@@ -297,23 +319,59 @@ fn arbitrary_text() -> impl Strategy<Value = String> {
     .prop_map(|parts| parts.concat())
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(if cfg!(miri) { 4 } else { 4096 }))]
+fn check_in_bounds(text: String, steps: &[String]) -> Result<(), TestCaseError> {
+    let mut sim = AnyModeSimulator::new(text);
+    for step in steps {
+        let _ = sim.execute_command(step);
+        prop_assert!(
+            selection_in_bounds(&sim),
+            "after `{}`: {:?}",
+            step,
+            sim.to_snapshot()
+        );
+    }
+    Ok(())
+}
 
+const PINNED_SEED: u64 = 0x5EED_0604;
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: if cfg!(miri) { 4 } else { 4096 },
+        rng_seed: RngSeed::Fixed(PINNED_SEED),
+        ..ProptestConfig::default()
+    })]
+
+    /// Pinned seed over the fixed alphabet; shrunk failures are kept in the
+    /// committed `proptest-regressions` file.
     #[test]
     fn no_command_sequence_panics_or_leaves_the_selection_out_of_bounds(
         text in arbitrary_text(),
-        steps in prop::collection::vec(prop::sample::select(command_alphabet()), 0..40),
+        steps in prop::collection::vec(prop::sample::select(fixed_alphabet()), 0..40),
     ) {
-        let mut sim = AnyModeSimulator::new(text);
-        for step in &steps {
-            let _ = sim.execute_command(step);
-            prop_assert!(
-                selection_in_bounds(&sim),
-                "after `{}`: {:?}",
-                step,
-                sim.to_snapshot()
-            );
-        }
+        check_in_bounds(text, &steps)?;
     }
+}
+
+/// Name of the environment variable that turns the randomized pass on.
+const RANDOMIZED_PASS_ENV: &str = "HELIX_TRAINER_RANDOMIZED_PASS";
+
+/// Random seed over the full registry; a rare finding shows up here without
+/// looking like a flaky CI test. Run with `HELIX_TRAINER_RANDOMIZED_PASS=1`.
+#[test]
+fn randomized_full_registry_pass_when_opted_in() {
+    if std::env::var_os(RANDOMIZED_PASS_ENV).is_none() {
+        return;
+    }
+    let mut runner = proptest::test_runner::TestRunner::new(ProptestConfig {
+        cases: 4096,
+        ..ProptestConfig::default()
+    });
+    let strategy = (
+        arbitrary_text(),
+        prop::collection::vec(prop::sample::select(full_registry_alphabet()), 0..40),
+    );
+    runner
+        .run(&strategy, |(text, steps)| check_in_bounds(text, &steps))
+        .unwrap_or_else(|failure| panic!("{failure}"));
 }

@@ -142,6 +142,77 @@ fn deleting_keys_at_document_edges_do_not_panic() {
 }
 
 #[test]
+fn typed_period_in_insert_mode_is_inserted_not_repeated() {
+    let out = run("ab", &[CMD_MOVE_RIGHT, CMD_INSERT, CMD_REPEAT, CMD_ESCAPE]);
+    assert_eq!(out, "a.b");
+}
+
+#[test]
+fn typed_period_is_replayed_as_text_by_dot_and_macro() {
+    let out = run(
+        "ab\ncd",
+        &[
+            CMD_INSERT,
+            CMD_REPEAT,
+            "x",
+            CMD_ESCAPE,
+            CMD_MOVE_DOWN,
+            CMD_GOTO_LINE_START,
+            CMD_REPEAT,
+        ],
+    );
+    assert_eq!(out, ".xab\n.xcd");
+
+    let out = run(
+        "ab\ncd",
+        &[
+            CMD_TOGGLE_MACRO_RECORDING,
+            CMD_INSERT,
+            CMD_REPEAT,
+            CMD_ESCAPE,
+            CMD_TOGGLE_MACRO_RECORDING,
+            CMD_MOVE_DOWN,
+            CMD_GOTO_LINE_START,
+            CMD_REPLAY_MACRO,
+        ],
+    );
+    assert_eq!(out, ".ab\n.cd");
+}
+
+#[test]
+fn dot_replays_backspace_inside_an_insert_session() {
+    let out = run(
+        "ab\ncd",
+        &[
+            CMD_APPEND_LINE_END,
+            "x",
+            CMD_BACKSPACE,
+            "y",
+            CMD_ESCAPE,
+            CMD_MOVE_DOWN,
+            CMD_REPEAT,
+        ],
+    );
+    assert_eq!(out, "aby\ncdy");
+}
+
+#[test]
+fn dot_replays_pair_deleting_backspace() {
+    let out = run(
+        "ab\ncd",
+        &[
+            CMD_INSERT,
+            "(",
+            CMD_BACKSPACE,
+            CMD_ESCAPE,
+            CMD_MOVE_DOWN,
+            CMD_REPEAT,
+        ],
+    );
+    assert_eq!(out, "ab\ncd");
+}
+
+#[test]
 fn dot_repeats_insert_session_with_deleting_keys() {
     let out = run(
         "foo bar\nfoo bar\n",

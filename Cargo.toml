@@ -72,6 +72,10 @@ harness = false
 name = "filtering_sorting"
 harness = false
 
+[[bench]]
+name = "insert_session"
+harness = false
+
 [profile.release]
 opt-level = "z"        # Optimize for size
 lto = "fat"            # Full Link-Time Optimization for maximum size reduction

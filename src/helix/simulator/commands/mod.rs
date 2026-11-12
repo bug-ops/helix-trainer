@@ -13,8 +13,7 @@ use super::{
     NormalMode,
 };
 use crate::grammar::commands::{
-    CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_COMMAND_LINE,
-    CMD_ESCAPE, CMD_REPEAT,
+    CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_COMMAND_LINE, CMD_ESCAPE,
 };
 use crate::grammar::find::{FindDirection, FindKind};
 use crate::helix::error::SimulatorError;
@@ -22,8 +21,21 @@ use crate::helix::normal_command::{
     MacroOp, NormalCommand, PromptKind, RegisterOp, SurroundOp, TextObjectScope,
 };
 use crate::helix::registry::{CountBehavior, normal_registry};
-use crate::helix::repeat::is_repeatable_command;
+use crate::helix::repeat::{Movement, is_repeatable_command};
 use crossterm::event::KeyEvent;
+
+type ArrowStep = fn(&mut HelixSimulator<InsertMode>, usize) -> Result<(), SimulatorError>;
+
+/// The cursor motion of an Insert-mode arrow key and how `.` records it.
+fn insert_arrow(cmd: &str) -> Option<(ArrowStep, Movement)> {
+    match cmd {
+        CMD_ARROW_LEFT => Some((movement::move_left, Movement::Left)),
+        CMD_ARROW_RIGHT => Some((movement::move_right, Movement::Right)),
+        CMD_ARROW_UP => Some((movement::move_up, Movement::Up)),
+        CMD_ARROW_DOWN => Some((movement::move_down, Movement::Down)),
+        _ => None,
+    }
+}
 
 fn execute_insert_mode_command_internal(
     sim: &mut HelixSimulator<InsertMode>,
@@ -35,38 +47,15 @@ fn execute_insert_mode_command_internal(
             sim.repeat_buffer.set_last_action(action);
         }
         Ok(())
-    } else if cmd == CMD_BACKSPACE {
-        sim.backspace()
-    } else if cmd == CMD_ARROW_LEFT {
-        let result = movement::move_left(sim, 1);
-        if result.is_ok() && !sim.is_repeating {
-            sim.repeat_buffer
-                .insert_recorder_mut()
-                .record_movement(crate::helix::repeat::Movement::Left);
-        }
-        result
-    } else if cmd == CMD_ARROW_RIGHT {
-        let result = movement::move_right(sim, 1);
-        if result.is_ok() && !sim.is_repeating {
-            sim.repeat_buffer
-                .insert_recorder_mut()
-                .record_movement(crate::helix::repeat::Movement::Right);
-        }
-        result
-    } else if cmd == CMD_ARROW_UP {
-        let result = movement::move_up(sim, 1);
-        if result.is_ok() && !sim.is_repeating {
-            sim.repeat_buffer
-                .insert_recorder_mut()
-                .record_movement(crate::helix::repeat::Movement::Up);
-        }
-        result
-    } else if cmd == CMD_ARROW_DOWN {
-        let result = movement::move_down(sim, 1);
-        if result.is_ok() && !sim.is_repeating {
-            sim.repeat_buffer
-                .insert_recorder_mut()
-                .record_movement(crate::helix::repeat::Movement::Down);
+    } else if let Some((step, movement)) = insert_arrow(cmd) {
+        let result = step(sim, 1);
+        if result.is_ok() {
+            sim.session.drop_entry_ranges(&sim.selection);
+            if !sim.is_repeating {
+                sim.repeat_buffer
+                    .insert_recorder_mut()
+                    .record_movement(movement);
+            }
         }
         result
     } else if let Some(command) = InsertCommand::parse(cmd) {
@@ -211,6 +200,10 @@ fn transition<R>(
     let placeholder = AnyModeSimulator::Normal(HelixSimulator::new(String::new()));
     let (result, next) = run(std::mem::replace(sim, placeholder));
     *sim = next;
+    match sim {
+        AnyModeSimulator::Normal(normal_sim) => view::ensure_cursor_in_view(normal_sim),
+        AnyModeSimulator::Insert(insert_sim) => view::ensure_cursor_in_view(insert_sim),
+    }
     result
 }
 
@@ -228,10 +221,6 @@ pub(super) fn execute_command_any_mode(
     sim: &mut AnyModeSimulator,
     cmd: &str,
 ) -> Result<(), SimulatorError> {
-    // `.` repeats in every mode (a no-op in Insert mode, where it cannot run).
-    if cmd == CMD_REPEAT {
-        return sim.execute_repeat();
-    }
     transition(sim, |sim| match sim {
         AnyModeSimulator::Normal(normal_sim) => match NormalCommand::parse(cmd) {
             Ok(command) => run_normal(normal_sim, &command),

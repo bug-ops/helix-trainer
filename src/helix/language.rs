@@ -4,9 +4,9 @@
 //! One table serves `>`, `<`, Insert-mode `Tab` (unit), `J` (comment tokens)
 //! and `o`/`O`/Enter (new-line rule), so a language is declared exactly once.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use super::indent::{FOUR_SPACES, IndentUnit, TWO_SPACES};
+use super::indent::{FOUR_SPACES, IndentUnit, TWO_SPACES, TabWidth};
 
 /// Content language of a scenario, a closed set parsed at scenario load
 ///
@@ -21,7 +21,7 @@ use super::indent::{FOUR_SPACES, IndentUnit, TWO_SPACES};
 ///
 /// assert_eq!(Language::Py.rules().comment_tokens, ["#"]);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Language {
     /// Rust, the default of scenarios that name no language
     #[serde(rename = "rs")]
@@ -45,6 +45,19 @@ impl Language {
     }
 }
 
+/// Where Insert-mode `Tab` goes when text precedes the cursor on its line
+///
+/// `hx` moves to the end of the parent syntax node; the simulator has no
+/// syntax tree, so a language either approximates that with brackets or stays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SmartTab {
+    /// The cursor does not move
+    Stay,
+    /// The cursor moves after the closer of the innermost enclosing bracket
+    /// pair, or after the closing brace of the block the line opens
+    BracketCloser,
+}
+
 /// Language-dependent editing rules mirroring the `hx` 25.07.1 `languages.toml`
 ///
 /// # Examples
@@ -59,6 +72,10 @@ impl Language {
 pub struct LanguageRules {
     /// Indent unit used when the document text does not reveal one
     pub indent_unit: IndentUnit,
+    /// Columns a tab character counts for `&`, `<`, `C` and Backspace
+    pub tab_width: TabWidth,
+    /// What `Tab` does after text on the line
+    pub smart_tab: SmartTab,
     /// Line-comment tokens, longest first so `///` wins over `//`
     pub comment_tokens: &'static [&'static str],
     /// Opener and closer pairs typed text closes automatically and Enter
@@ -131,6 +148,8 @@ impl LanguageRules {
     /// comment tokens and no new-line rule; no scenario can select them
     pub const PLAIN: Self = Self {
         indent_unit: IndentUnit::DEFAULT,
+        tab_width: TabWidth::FOUR,
+        smart_tab: SmartTab::Stay,
         comment_tokens: &[],
         auto_pairs: helix_core::auto_pairs::DEFAULT_PAIRS,
         newline: None,
@@ -138,6 +157,8 @@ impl LanguageRules {
 
     pub(crate) const RUST: Self = Self {
         indent_unit: FOUR_SPACES,
+        tab_width: TabWidth::FOUR,
+        smart_tab: SmartTab::BracketCloser,
         comment_tokens: &["///", "//!", "//"],
         auto_pairs: DEFAULT_PAIRS,
         newline: Some(NewlineRules {
@@ -154,6 +175,8 @@ impl LanguageRules {
 
     pub(crate) const MARKDOWN: Self = Self {
         indent_unit: TWO_SPACES,
+        tab_width: TabWidth::TWO,
+        smart_tab: SmartTab::Stay,
         comment_tokens: &[],
         auto_pairs: PAIRS_WITH_SINGLE_QUOTE,
         newline: None,
@@ -161,6 +184,8 @@ impl LanguageRules {
 
     pub(crate) const PYTHON: Self = Self {
         indent_unit: FOUR_SPACES,
+        tab_width: TabWidth::FOUR,
+        smart_tab: SmartTab::Stay,
         comment_tokens: &["#"],
         auto_pairs: PAIRS_WITH_SINGLE_QUOTE,
         newline: Some(NewlineRules {
@@ -230,6 +255,10 @@ mod tests {
         assert_eq!(Language::Rs.rules().indent_unit, FOUR_SPACES);
         assert_eq!(Language::Md.rules().indent_unit, TWO_SPACES);
         assert_eq!(Language::Py.rules().indent_unit, FOUR_SPACES);
+        assert_eq!(Language::Rs.rules().tab_width, TabWidth::FOUR);
+        assert_eq!(Language::Md.rules().tab_width, TabWidth::TWO);
+        assert_eq!(Language::Py.rules().tab_width, TabWidth::FOUR);
+        assert_eq!(LanguageRules::PLAIN.tab_width, TabWidth::FOUR);
     }
 
     #[test]

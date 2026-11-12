@@ -16,6 +16,8 @@
 //! ```
 
 pub mod error;
+#[cfg(any(test, feature = "test-util"))]
+pub mod goldens;
 pub mod indent;
 pub mod language;
 pub mod macro_recorder;
@@ -25,8 +27,8 @@ pub mod registry;
 pub mod repeat;
 pub mod simulator;
 
-pub use indent::IndentUnit;
-pub use language::{Language, LanguageRules};
+pub use indent::{IndentUnit, TabWidth};
+pub use language::{Language, LanguageRules, SmartTab};
 pub use repeat::{
     InsertAction, InsertKey, Movement, RepeatBuffer, RepeatableAction, is_repeatable_command,
 };

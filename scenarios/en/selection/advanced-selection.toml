@@ -140,25 +140,25 @@ commands_taught = ["Alt-C"]
 
 [[scenarios]]
 id = "copy_selection_next_clamp_001"
-name = "Copy cursor clamps to shorter line"
-description = "When next line is shorter, cursor is clamped to line end"
+name = "Copy cursor skips shorter lines"
+description = "When the next line is too short for the cursor column, 'C' skips it and copies to the next line that is long enough"
 hints = [
-    "'C' clamps the column if the next line is shorter",
-    "Prevents cursor from going past line end",
+    "'C' keeps the visual column and skips lines that are too short",
+    "The copy lands on the next line that reaches the column",
 ]
 [scenarios.setup]
-file_content = """fn calculate() -> i32 {
-    42
-}"""
+file_content = """let total = first + second;
+let x = 1;
+let total = first + second;"""
 cursor_position = [0, 18]
 [scenarios.target]
-file_content = """fn calculate() -> i32 {
-    42
-}"""
-cursors = [[0, 18], [1, 6]]
+file_content = """let total = first + second;
+let x = 1;
+let total = first + second;"""
+cursors = [[0, 18], [2, 18]]
 [scenarios.solution]
 commands = ["C"]
-description = "Press 'C' to add cursor on next line (column clamped)"
+description = "Press 'C' to copy the cursor past the short line"
 [scenarios.scoring]
 optimal_count = 1
 max_points = 100
@@ -166,7 +166,7 @@ tolerance = 0
 [scenarios.metadata]
 category = "selection"
 difficulty = "intermediate"
-tags = ["selection", "multi-cursor", "clamping"]
+tags = ["selection", "multi-cursor", "line"]
 commands_taught = ["C"]
 
 # ============================================================================

@@ -1,16 +1,18 @@
 //! Insert mode operations
 
 use super::commands::{self, clipboard::yank_to_register};
+use super::composed_changes::ComposedChanges;
 use super::insert_session::{
     EntrySelection, InsertEntry, InsertEntryCommand, InsertSession, SessionChange,
 };
 use super::{HelixSimulator, InsertMode, NormalMode};
 use crate::grammar::commands::{
-    CMD_INSERT_ALT_BACKSPACE, CMD_INSERT_DELETE_CHAR_FORWARD, CMD_INSERT_DELETE_KEY,
+    CMD_BACKSPACE, CMD_INSERT_ALT_BACKSPACE, CMD_INSERT_DELETE_CHAR_FORWARD, CMD_INSERT_DELETE_KEY,
     CMD_INSERT_DELETE_TO_LINE_END, CMD_INSERT_DELETE_TO_LINE_START,
     CMD_INSERT_DELETE_WORD_BACKWARD, CMD_INSERT_DELETE_WORD_FORWARD, CMD_INSERT_TAB,
 };
 use crate::helix::error::SimulatorError;
+use crate::helix::language::SmartTab;
 use crate::helix::newline_indent::{
     CommentContinuation, NewLineStart, NewlineIndent, leading_whitespace,
 };
@@ -42,8 +44,7 @@ enum OpenSide {
     Above,
 }
 
-/// An Insert-mode editing key beyond typed characters, `Backspace` and the
-/// arrow keys.
+/// An Insert-mode editing key beyond typed characters and the arrow keys.
 ///
 /// This is a closed set, so a modified key or `Tab` is never mistaken for
 /// literal text. Each variant mirrors the Helix 25.07.1 default binding.
@@ -60,6 +61,9 @@ enum OpenSide {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InsertCommand {
+    /// `Backspace`: delete the character before the cursor, both halves of an
+    /// auto-pair when the cursor sits between them.
+    DeleteCharBackward,
     /// `Ctrl-w` / `Alt-Backspace`: delete the word before the cursor.
     DeleteWordBackward,
     /// `Ctrl-u`: delete back to the first non-blank (or line start).
@@ -70,11 +74,12 @@ pub enum InsertCommand {
     DeleteCharForward,
     /// `Alt-d`: delete the word after the cursor.
     DeleteWordForward,
-    /// `Tab`: insert one indent unit of the document language at the cursor.
+    /// `Tab`: insert one indent unit when every cursor has only whitespace
+    /// before it on its line; otherwise insert nothing and move the cursors as
+    /// the language's [`SmartTab`] says (`hx` smart-tab).
     ///
-    /// ASSUMPTION: `hx` jumps to the end of the parent syntax node when the
-    /// cursor is not in leading whitespace; the simulator has no syntax tree
-    /// and always inserts the unit.
+    /// ASSUMPTION: `hx` moves to the end of the parent syntax node; without a
+    /// syntax tree the simulator approximates it with brackets.
     Indent,
 }
 
@@ -82,6 +87,7 @@ impl InsertCommand {
     /// Parse a canonical command string, returning `None` for anything else.
     pub fn parse(cmd: &str) -> Option<Self> {
         match cmd {
+            CMD_BACKSPACE => Some(Self::DeleteCharBackward),
             CMD_INSERT_DELETE_WORD_BACKWARD | CMD_INSERT_ALT_BACKSPACE => {
                 Some(Self::DeleteWordBackward)
             }
@@ -97,6 +103,7 @@ impl InsertCommand {
     /// The canonical command string, accepted back by [`Self::parse`].
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::DeleteCharBackward => CMD_BACKSPACE,
             Self::DeleteWordBackward => CMD_INSERT_DELETE_WORD_BACKWARD,
             Self::DeleteToLineStart => CMD_INSERT_DELETE_TO_LINE_START,
             Self::DeleteToLineEnd => CMD_INSERT_DELETE_TO_LINE_END,
@@ -105,6 +112,12 @@ impl InsertCommand {
             Self::Indent => CMD_INSERT_TAB,
         }
     }
+}
+
+/// The range `i` leaves Helix with: reversed, so the cursor sits at the
+/// start; a point stays a point.
+fn flipped(range: Range) -> Range {
+    Range::new(range.to(), range.from())
 }
 
 /// A line opened by [`HelixSimulator::open_above_at`]
@@ -301,7 +314,7 @@ impl HelixSimulator<NormalMode> {
             let anchors: Vec<usize> = self.selection.ranges().iter().map(Range::from).collect();
             (anchors, self.append_selection())
         });
-        self.entry_changes = Some(ChangeSet::new(self.doc.slice(..)));
+        self.entry_changes = Some(ComposedChanges::new(ChangeSet::new(self.doc.slice(..))));
 
         if let Err(error) = self.run_entry_edit(entry) {
             self.entry_changes = None;
@@ -311,12 +324,22 @@ impl HelixSimulator<NormalMode> {
         let entry_changes = self
             .entry_changes
             .take()
-            .unwrap_or_else(|| ChangeSet::new(self.doc.slice(..)));
+            .unwrap_or_else(|| ComposedChanges::new(ChangeSet::new(self.doc.slice(..))));
         commands::record_insert_entry(&mut self, entry.uncounted());
 
-        let (append_restore, kind) = match appended {
-            Some((anchors, restore)) => (Some(restore), InsertEntry::Append { anchors }),
-            None => (None, InsertEntry::Other),
+        let (append_restore, kind) = match (appended, entry) {
+            (Some((anchors, restore)), _) => (Some(restore), InsertEntry::Append { anchors }),
+            (None, InsertEntryCommand::Insert) => (
+                None,
+                InsertEntry::Insert {
+                    ranges: original
+                        .ranges()
+                        .iter()
+                        .map(|&range| flipped(range))
+                        .collect(),
+                },
+            ),
+            (None, _) => (None, InsertEntry::Other),
         };
         let cursors = self.collapse_to_points();
         let change = match self.history.drain(history_len..).next() {
@@ -358,10 +381,7 @@ impl HelixSimulator<NormalMode> {
     fn run_entry_edit(&mut self, entry: InsertEntryCommand) -> Result<(), SimulatorError> {
         match entry {
             InsertEntryCommand::Insert => {
-                self.selection = self
-                    .selection
-                    .clone()
-                    .transform(|range| Range::new(range.to(), range.from()));
+                self.selection = self.selection.clone().transform(flipped);
                 Ok(())
             }
             InsertEntryCommand::Append => self.append(),
@@ -802,31 +822,6 @@ impl HelixSimulator<InsertMode> {
         self.apply_transaction(&transaction);
     }
 
-    /// Delete the character before every cursor (backspace), both halves of
-    /// an auto-pair when the cursor sits between them
-    ///
-    /// # Errors
-    ///
-    /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-    /// with the fallible commands that share the registry's function type.
-    pub fn backspace(&mut self) -> Result<(), SimulatorError> {
-        let slice = self.doc.slice(..);
-        let edits = self
-            .heads()
-            .into_iter()
-            .map(|head| {
-                let start = prev_grapheme_boundary(slice, head);
-                if self.between_auto_pair(head, 0) {
-                    CursorEdit::delete(start, next_grapheme_boundary(slice, head))
-                } else {
-                    CursorEdit::delete(start, head)
-                }
-            })
-            .collect();
-        self.apply_cursor_edits(edits);
-        Ok(())
-    }
-
     /// Execute an [`InsertCommand`] at every cursor.
     ///
     /// The deleted span is computed as in Helix's
@@ -838,8 +833,7 @@ impl HelixSimulator<InsertMode> {
     /// with the fallible commands that share the registry's function type.
     pub fn apply_insert_command(&mut self, command: InsertCommand) -> Result<(), SimulatorError> {
         if command == InsertCommand::Indent {
-            let unit = self.indent_unit.to_string();
-            return self.insert_text(&unit);
+            return self.tab();
         }
         let edits = self
             .heads()
@@ -853,9 +847,79 @@ impl HelixSimulator<InsertMode> {
         Ok(())
     }
 
+    /// The span Backspace deletes at `head`, as Helix's `delete_char_backward`.
+    ///
+    /// With only blanks before the cursor on its line, a preceding tab goes
+    /// alone and otherwise the blank width, rounded down to the previous
+    /// multiple of the indent width (a whole unit when aligned), is removed
+    /// as spaces. Elsewhere it is one grapheme, or both halves of an
+    /// auto-pair the cursor sits between.
+    fn backspace_span(&self, head: usize) -> (usize, usize) {
+        let text = self.doc.slice(..);
+        if head == 0 {
+            return (0, 0);
+        }
+        let line_start = text.line_to_char(text.char_to_line(head));
+        let fragment = text.slice(line_start..head);
+        if fragment.len_chars() > 0 && fragment.chars().all(|ch| matches!(ch, ' ' | '\t')) {
+            if text.char(head - 1) == '\t' {
+                return (head - 1, head);
+            }
+            let tab_width = self.language.tab_width;
+            let indent_width = self.indent_unit.width(tab_width);
+            let width: usize = fragment
+                .chars()
+                .map(|ch| if ch == '\t' { tab_width.get() } else { 1 })
+                .sum();
+            let drop = match width % indent_width {
+                0 => indent_width,
+                rest => rest,
+            };
+            let spaces = (head - drop.min(head - line_start)..head)
+                .rev()
+                .take_while(|&at| text.char(at) == ' ')
+                .count();
+            return (head - spaces, head);
+        }
+        let start = prev_grapheme_boundary(text, head);
+        if self.between_auto_pair(head, 0) {
+            (start, next_grapheme_boundary(text, head))
+        } else {
+            (start, head)
+        }
+    }
+
+    /// `Tab`: an indent unit in leading whitespace, otherwise a smart-tab move.
+    fn tab(&mut self) -> Result<(), SimulatorError> {
+        let text = self.doc.slice(..);
+        let heads = self.heads();
+        let after_text = heads.iter().any(|&head| {
+            let line_start = text.line_to_char(text.char_to_line(head));
+            !text
+                .slice(line_start..head)
+                .chars()
+                .all(char::is_whitespace)
+        });
+        if !after_text {
+            let unit = self.indent_unit.to_string();
+            return self.insert_text(&unit);
+        }
+        if self.language.smart_tab == SmartTab::BracketCloser {
+            let rule = self.newline_rule();
+            let cursors = heads
+                .iter()
+                .map(|&head| Range::point(rule.bracket_closer_after(head).unwrap_or(head)))
+                .collect();
+            self.selection = Selection::new(cursors, self.selection.primary_index());
+            self.session.drop_entry_ranges(&self.selection);
+        }
+        Ok(())
+    }
+
     fn insert_command_span(&self, command: InsertCommand, head: usize) -> (usize, usize) {
         let text = self.doc.slice(..);
         match command {
+            InsertCommand::DeleteCharBackward => self.backspace_span(head),
             InsertCommand::DeleteWordBackward => {
                 let start = movement::move_prev_word_start(text, Range::point(head), 1).from();
                 (start.min(head), head)

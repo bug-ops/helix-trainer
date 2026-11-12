@@ -1,8 +1,10 @@
 # Scrolling / Page Movement
 # Scenarios for Ctrl-d, Ctrl-u, Ctrl-f, Ctrl-b (half-page/page movement)
-# NOTE: this simulator moves the cursor by a fixed line delta (page = 20 lines,
-# half-page = 10 lines) rather than deriving it from a real terminal viewport
-# height, since no viewport/scroll-offset is tracked by the scenario scorer.
+# NOTE: scrolling follows hx 25.07.1 on a fixed logical view of 24 lines (the
+# terminal height is not used). Ctrl-d / Ctrl-u scroll the view by 12 lines and
+# move the cursor the same distance, keeping its column. Ctrl-f / Ctrl-b scroll
+# the view by 24 lines and move the cursor only when the view leaves it behind
+# the 5-line scrolloff band, to column 0 of the band's edge line.
 
 [[scenarios]]
 id = "scroll_half_page_down_001"
@@ -10,7 +12,7 @@ name = "Scroll half page down"
 description = "Use 'Ctrl-d' to move the cursor down half a page"
 
 hints = [
-    "'Ctrl-d' moves the cursor down about half a screen",
+    "'Ctrl-d' moves the cursor down 12 lines, half of the 24-line view",
     "The column position is preserved when possible",
 ]
 
@@ -78,7 +80,7 @@ line 27
 line 28
 line 29
 line 30"""
-cursor_position = [10, 5]
+cursor_position = [12, 5]
 
 [scenarios.solution]
 commands = ["Ctrl-d"]
@@ -169,7 +171,7 @@ line 27
 line 28
 line 29
 line 30"""
-cursor_position = [5, 5]
+cursor_position = [3, 5]
 
 [scenarios.solution]
 commands = ["Ctrl-u"]
@@ -192,7 +194,7 @@ name = "Scroll full page down"
 description = "Use 'Ctrl-f' to move the cursor down a full page"
 
 hints = [
-    "'Ctrl-f' moves the cursor down about a full screen",
+    "'Ctrl-f' scrolls a full 24-line page and puts the cursor at the start of a line near the top of the new page",
     "Useful for jumping through large files quickly",
 ]
 
@@ -260,7 +262,7 @@ line 27
 line 28
 line 29
 line 30"""
-cursor_position = [20, 5]
+cursor_position = [29, 0]
 
 [scenarios.solution]
 commands = ["Ctrl-f"]
@@ -351,7 +353,7 @@ line 27
 line 28
 line 29
 line 30"""
-cursor_position = [5, 5]
+cursor_position = [18, 0]
 
 [scenarios.solution]
 commands = ["Ctrl-b"]
@@ -370,12 +372,12 @@ commands_taught = ["Ctrl-b"]
 
 [[scenarios]]
 id = "scroll_page_up_clamp_001"
-name = "Scroll page up clamps to document start"
-description = "Use 'Ctrl-b' near the top of the document to see it clamp at line 1"
+name = "Scroll page up at the top of the document"
+description = "At the top of the document the view cannot scroll, so 'Ctrl-b' only brings the cursor up to the bottom of the visible page"
 
 hints = [
-    "'Ctrl-b' cannot move above the first line",
-    "The cursor stops at the document start instead of going out of bounds",
+    "The view is already at the top, so it cannot scroll any further",
+    "'Ctrl-b' still moves the cursor up to the last line of the visible page, to column 0",
 ]
 
 [scenarios.setup]
@@ -388,8 +390,28 @@ line 06
 line 07
 line 08
 line 09
-line 10"""
-cursor_position = [5, 5]
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [20, 5]
 
 [scenarios.target]
 file_content = """line 01
@@ -401,12 +423,32 @@ line 06
 line 07
 line 08
 line 09
-line 10"""
-cursor_position = [0, 5]
+line 10
+line 11
+line 12
+line 13
+line 14
+line 15
+line 16
+line 17
+line 18
+line 19
+line 20
+line 21
+line 22
+line 23
+line 24
+line 25
+line 26
+line 27
+line 28
+line 29
+line 30"""
+cursor_position = [18, 0]
 
 [scenarios.solution]
 commands = ["Ctrl-b"]
-description = "Press 'Ctrl-b' to scroll up, clamping at the first line"
+description = "Press 'Ctrl-b' to bring the cursor up to the bottom of the visible page"
 
 [scenarios.scoring]
 optimal_count = 1

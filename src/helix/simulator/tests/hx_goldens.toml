@@ -1,0 +1,1343 @@
+# Cases recorded from hx 25.07.1 (see examples/hx_differential.rs).
+# Regenerate the expected text with `cargo run --example hx_differential -- --write`.
+
+[[case]]
+id = "backspace_auto_indent_loses_a_unit"
+text = """
+fn f() {
+    x
+}"""
+language = "rs"
+keys = ["j", "o", "Backspace", "x", "Escape"]
+probe = "selection"
+expected = """
+fn f() {
+    x
+x@}"""
+
+[[case]]
+id = "backspace_misaligned_indent_rounds_down"
+text = """
+fn a() {
+    if x {
+      y
+    }
+}
+"""
+language = "rs"
+keys = ["j", "j", "I", "Backspace", "Escape"]
+probe = "selection"
+expected = """
+fn a() {
+    if x {
+    @
+    }
+}
+"""
+
+[[case]]
+id = "backspace_aligned_indent_loses_a_unit"
+text = """
+fn a() {
+    if x {
+      y
+    }
+}
+"""
+language = "rs"
+keys = ["j", "j", "I", "Backspace", "Backspace", "Escape"]
+probe = "selection"
+expected = """
+fn a() {
+    if x {
+@
+    }
+}
+"""
+
+[[case]]
+id = "backspace_after_two_tabs"
+text = "\t\tx"
+language = "rs"
+keys = ["l", "l", "i", "Backspace", "Escape"]
+probe = "selection"
+expected = "\t@"
+
+[[case]]
+id = "backspace_after_a_tab_and_a_space"
+text = "\t x"
+language = "rs"
+keys = ["l", "l", "i", "Backspace", "Escape"]
+probe = "selection"
+expected = "\t@"
+
+[[case]]
+id = "backspace_detected_two_space_unit"
+text = """
+a
+  b
+    c
+"""
+language = "rs"
+keys = ["j", "j", "I", "Backspace", "Escape"]
+probe = "selection"
+expected = """
+a
+  b
+  @
+"""
+
+[[case]]
+id = "insert_forward_range_comes_back"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "i", "a", "Escape"]
+probe = "selection"
+expected = """
+a@add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_backward_range_comes_back"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "Alt-;", "i", "a", "Escape"]
+probe = "selection"
+expected = """
+a@add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_multi_range_comes_back"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["%", "s i32", "i", "a", "Escape"]
+probe = "selection"
+expected = """
+fn add(a: a@, b: a@) -> a@ {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_adjacent_ranges_are_both_kept"
+text = "abcd"
+language = "rs"
+keys = ["%", "s ab|cd", "i", "x", "Escape"]
+probe = "selection"
+expected = "x@x@"
+
+[[case]]
+id = "insert_delete_leaves_a_point_after_typed_text"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "i", "Delete", "Delete", "Delete", "x", "Escape"]
+probe = "selection"
+expected = """
+x@dd(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_motion_drops_the_range"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "i", "Left", "a", "Escape"]
+probe = "selection"
+expected = """
+a@n add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "tab_after_text_a"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["a", "\t", "Escape"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}@"""
+
+[[case]]
+id = "tab_after_text_A"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["A", "\t", "Escape"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}@"""
+
+[[case]]
+id = "tab_after_text_w_a"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "a", "\t", "Escape"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}@"""
+
+[[case]]
+id = "tab_after_text_j_A"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "A", "\t", "Escape"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}@"""
+
+[[case]]
+id = "tab_after_text_j_j_A"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "j", "A", "\t", "Escape"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}@"""
+
+[[case]]
+id = "tab_in_leading_whitespace_indents"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "w", "i", "\t", "Escape"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    @let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "tab_at_line_start_indents"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["i", "\t", "Escape"]
+probe = "selection"
+expected = """
+    @n add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_dollar_selects_the_line_break"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["/ $"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {@    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_caret_selects_the_next_line_start"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["/ ^"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+@   let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_dollar_then_delete"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["/ $"]
+probe = "delete"
+expected = """
+fn add(a: i32, b: i32) -> i32 {    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_caret_then_delete"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["/ ^"]
+probe = "delete"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+   let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_forward_starts_after_the_selection"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "/ a"]
+probe = "selection"
+expected = """
+fn @dd(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_wraps_around"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["/ fn"]
+probe = "selection"
+expected = """
+@ add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_n_continues_forward"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["/ sum", "n"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    @
+}
+"""
+
+[[case]]
+id = "search_big_n_goes_backward_and_wraps"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["/ i32", "N"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> @ {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_backward_wraps_to_the_last_match"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["? sum"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    @
+}
+"""
+
+[[case]]
+id = "search_backward_from_the_second_line"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "? fn"]
+probe = "selection"
+expected = """
+@ add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_backward_from_the_third_line"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "j", "? sum"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let @ = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_moves_only_the_primary_range"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["%", "s i32", "/ b"]
+probe = "delete"
+expected = """
+fn add(a: i32, : ) ->  {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "search_in_select_mode_adds_a_range"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["v", "/ sum"]
+probe = "selection"
+expected = """
+@n add(a: i32, b: i32) -> i32 {
+    let @ = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "alt_star_on_a_point_searches_the_character"
+text = """
+a.b a.b
+"""
+language = "rs"
+keys = ["l", "Alt-*", "n"]
+probe = "selection"
+expected = """
+a.b a@b
+"""
+
+[[case]]
+id = "alt_star_on_a_point_searches_the_first_letter"
+text = """
+test test test
+"""
+language = "rs"
+keys = ["Alt-*", "n"]
+probe = "selection"
+expected = """
+tes@ test test
+"""
+
+[[case]]
+id = "copy_line_skips_short_lines"
+text = """
+abcdef
+ab
+abcdef
+"""
+language = "rs"
+keys = ["l", "l", "l", "C"]
+probe = "delete"
+expected = """
+abcef
+ab
+abcef
+"""
+
+[[case]]
+id = "copy_line_up_skips_short_lines"
+text = """
+abcdef
+ab
+abcdef
+"""
+language = "rs"
+keys = ["j", "j", "l", "l", "l", "Alt-C"]
+probe = "delete"
+expected = """
+abcef
+ab
+abcef
+"""
+
+[[case]]
+id = "copy_line_copies_a_range_whole"
+text = """
+abc def
+abc def
+"""
+language = "rs"
+keys = ["w", "C"]
+probe = "delete"
+expected = """
+def
+def
+"""
+
+[[case]]
+id = "copy_line_up_copies_a_range_whole"
+text = """
+abc def
+abc def
+"""
+language = "rs"
+keys = ["j", "w", "Alt-C"]
+probe = "delete"
+expected = """
+def
+def
+"""
+
+[[case]]
+id = "copy_line_counts_tabs_in_rust"
+text = """
+\tab
+    abcdef
+"""
+language = "rs"
+keys = ["l", "C"]
+probe = "delete"
+expected = """
+\tb
+    bcdef
+"""
+
+[[case]]
+id = "copy_line_skips_a_line_short_by_a_tab"
+text = """
+\tab
+  abcdef
+"""
+language = "rs"
+keys = ["l", "C"]
+probe = "delete"
+expected = """
+\tb
+  abdef
+"""
+
+[[case]]
+id = "copy_line_counts_tabs_in_markdown"
+text = """
+\tab
+    abcdef
+"""
+language = "md"
+keys = ["l", "C"]
+probe = "delete"
+expected = """
+\tb
+   abcdef
+"""
+
+[[case]]
+id = "copy_line_three_times"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["l", "C", "C", "C"]
+probe = "delete"
+expected = """
+f add(a: i32, b: i32) -> i32 {
+   let sum = a + b;
+   sum
+}"""
+
+[[case]]
+id = "align_counts_tabs_in_rust"
+text = """
+\tx
+abcd x
+"""
+language = "rs"
+keys = ["%", "s x", "&"]
+probe = "none"
+expected = """
+\t x
+abcd x
+"""
+
+[[case]]
+id = "align_counts_tabs_in_markdown"
+text = """
+\tx
+abcd x
+"""
+language = "md"
+keys = ["%", "s x", "&"]
+probe = "none"
+expected = """
+\t   x
+abcd x
+"""
+
+[[case]]
+id = "replace_with_yanked_on_a_point"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["y", "j", "R"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+@   let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "replace_with_yanked_after_word_motions"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "y", "j", "w", "R"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+  @let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "replace_with_yanked_after_a_word_yank"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "y", "j", "R"]
+probe = "selection"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+  @ let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "n_after_a_backward_search_moves_forward"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["? a", "n"]
+probe = "delete"
+expected = """
+fn dd(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "big_n_after_a_backward_search_moves_backward"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["? a", "N"]
+probe = "delete"
+expected = """
+fn add(: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "n_after_a_backward_search_from_the_third_column"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["l", "l", "? a", "n"]
+probe = "delete"
+expected = """
+fn dd(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "n_after_a_forward_search"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["/ a", "n"]
+probe = "delete"
+expected = """
+fn add(: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "star_keeps_the_selection"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "*"]
+probe = "selection"
+expected = """
+@add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "star_then_n_wraps_to_the_only_match"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "*", "n"]
+probe = "delete"
+expected = """
+add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "star_inside_a_word_selection_uses_boundaries"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["miw", "*", "n"]
+probe = "delete"
+expected = """
+ add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "merge_consecutive_selections_keeps_separate_ranges"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["%", "s a", "Alt-_"]
+probe = "delete"
+expected = """
+fn dd(: i32, b: i32) -> i32 {
+    let sum =  + b;
+    sum
+}
+"""
+
+[[case]]
+id = "merge_selections_spans_first_to_last_range"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["%", "s a", "Alt--"]
+probe = "delete"
+expected = """
+fn  + b;
+    sum
+}
+"""
+
+[[case]]
+id = "merge_consecutive_selections_joins_touching_ranges"
+text = "aaa b"
+language = "rs"
+keys = ["%", "s a", "Alt-_"]
+probe = "delete"
+expected = " b"
+
+[[case]]
+id = "match_brackets_from_an_opener"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["f(", "mm"]
+probe = "delete"
+expected = """
+fn add(a: i32, b: i32 -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "match_brackets_from_a_closer"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["f)", "mm"]
+probe = "delete"
+expected = """
+fn adda: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "match_brackets_from_a_brace"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["f{", "mm"]
+probe = "delete"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+
+"""
+
+[[case]]
+id = "match_brackets_on_a_single_character"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "mm"]
+probe = "delete"
+expected = """
+add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_at_line_start_goes_after_the_indent"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "I", "a", "b", "Escape"]
+probe = "none"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    ablet sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_at_line_start_then_escape_cursor"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "I", "a", "b", "Escape"]
+probe = "delete"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    abet sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_at_line_start_after_a_line_selection"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["x", "I", "a", "b", "Escape"]
+probe = "none"
+expected = """
+abfn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_at_line_start_on_an_empty_rust_line"
+text = """
+fn f() {
+
+}
+"""
+language = "rs"
+keys = ["j", "I", "a", "Escape"]
+probe = "none"
+expected = """
+fn f() {
+    a
+}
+"""
+
+[[case]]
+id = "insert_at_line_start_copies_the_indent_above"
+text = """
+fn add() {
+    x
+
+}
+"""
+language = "rs"
+keys = ["j", "j", "I", "a", "Escape"]
+probe = "none"
+expected = """
+fn add() {
+    x
+    a
+}
+"""
+
+[[case]]
+id = "insert_at_line_start_with_indent_is_one_undo_step"
+text = """
+fn f() {
+
+}
+"""
+language = "rs"
+keys = ["j", "I", "a", "Escape", "u"]
+probe = "none"
+expected = """
+fn f() {
+
+}
+"""
+
+[[case]]
+id = "change_line_keeps_the_rule_indent_third"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["l", "j", "l", "j", "x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    @
+}
+"""
+
+[[case]]
+id = "change_line_keeps_the_rule_indent_first"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["l", "x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+    @
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "change_line_after_a_word_motion"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+    @
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "change_the_last_line_indents_like_the_line_above"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "j", "j", "x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+    @
+"""
+
+[[case]]
+id = "change_a_line_below_a_comment_first"
+text = """
+// note
+fn f() {
+    x
+}
+"""
+language = "rs"
+keys = ["x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+@
+fn f() {
+    x
+}
+"""
+
+[[case]]
+id = "change_a_line_below_a_comment_second"
+text = """
+// note
+fn f() {
+    x
+}
+"""
+language = "rs"
+keys = ["j", "x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+// note
+@
+    x
+}
+"""
+
+[[case]]
+id = "change_a_line_below_a_comment_third"
+text = """
+// note
+fn f() {
+    x
+}
+"""
+language = "rs"
+keys = ["j", "j", "x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+// note
+fn f() {
+    @
+}
+"""
+
+[[case]]
+id = "change_a_python_block_line_first"
+text = """
+def f():
+    x
+    y
+z = 1
+"""
+language = "py"
+keys = ["j", "x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+def f():
+    @
+    y
+z = 1
+"""
+
+[[case]]
+id = "change_a_python_block_line_second"
+text = """
+def f():
+    x
+    y
+z = 1
+"""
+language = "py"
+keys = ["j", "j", "x", "c", "@", "Escape"]
+probe = "none"
+expected = """
+def f():
+    x
+    @
+z = 1
+"""
+
+[[case]]
+id = "change_a_whole_line_is_one_undo_step"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["j", "x", "c", "@", "Escape", "u"]
+probe = "none"
+expected = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_on_a_forward_selection"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "i", "a", "Escape"]
+probe = "none"
+expected = """
+afn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "insert_on_a_flipped_selection"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "Alt-;", "i", "a", "Escape"]
+probe = "none"
+expected = """
+afn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+
+[[case]]
+id = "append_on_a_selection"
+text = """
+fn add(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""
+language = "rs"
+keys = ["w", "a", "a", "Escape"]
+probe = "none"
+expected = """
+fn aadd(a: i32, b: i32) -> i32 {
+    let sum = a + b;
+    sum
+}
+"""

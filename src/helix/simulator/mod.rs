@@ -13,6 +13,7 @@
 
 pub mod command_line;
 pub mod commands;
+mod composed_changes;
 pub mod find_state;
 mod insert_mode;
 mod insert_session;
@@ -32,6 +33,8 @@ use crate::helix::indent::IndentUnit;
 use crate::helix::language::{Language, LanguageRules};
 use crate::helix::macro_recorder::MacroRecorder;
 use crate::helix::repeat::RepeatBuffer;
+
+use composed_changes::ComposedChanges;
 use helix_core::auto_pairs::AutoPairs;
 use helix_core::graphemes::next_grapheme_boundary;
 use helix_core::{ChangeSet, Range, Rope, Selection, Transaction};
@@ -146,7 +149,7 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
 
     /// Composition of the edits made while an Insert-entering command runs,
     /// so the Insert session can start from them; `None` the rest of the time.
-    pub(super) entry_changes: Option<ChangeSet>,
+    pub(super) entry_changes: Option<ComposedChanges>,
 
     /// What the mode carries between commands: nothing in Normal mode, the
     /// open Insert session in Insert mode
@@ -246,8 +249,7 @@ impl<M: EditorMode> HelixSimulator<M> {
                 },
             );
             if let Some(entry_changes) = &mut self.entry_changes {
-                let before = std::mem::replace(entry_changes, ChangeSet::with_capacity(0));
-                *entry_changes = before.compose(transaction.changes().clone());
+                entry_changes.push(transaction.changes().clone());
             }
             transaction.apply(&mut self.doc);
         }
@@ -373,7 +375,7 @@ impl HelixSimulator<NormalMode> {
                 restore: self.selection.clone(),
             }),
             insert_session::InsertEntry::Other,
-            ChangeSet::new(self.doc.slice(..)),
+            ComposedChanges::new(ChangeSet::new(self.doc.slice(..))),
         );
         self.into_mode(session)
     }
@@ -421,10 +423,35 @@ impl HelixSimulator<InsertMode> {
         let entry = self
             .session
             .close(&self.doc, &mut self.history, &mut self.redo_stack);
-        if let insert_session::InsertEntry::Append { anchors } = entry {
-            self.select_inserted_text(&anchors);
+        match entry {
+            insert_session::InsertEntry::Append { anchors } => self.select_inserted_text(&anchors),
+            insert_session::InsertEntry::Insert { ranges } => self.restore_entry_ranges(&ranges),
+            insert_session::InsertEntry::Other => {}
         }
         self.into_mode(())
+    }
+
+    /// Give each cursor back the range Helix holds for it. Cursors that
+    /// merged during the session leave fewer cursors than ranges: each cursor
+    /// takes the first range whose head is not past it, and keeps its point
+    /// when there is none.
+    fn restore_entry_ranges(&mut self, ranges: &[Range]) {
+        let mut pending = ranges.iter().copied().peekable();
+        let restored: Vec<Range> = self
+            .selection
+            .ranges()
+            .iter()
+            .map(|cursor| {
+                let first = pending.peek().copied().filter(|r| r.head <= cursor.head);
+                while pending.next_if(|r| r.head <= cursor.head).is_some() {}
+                first.unwrap_or(*cursor)
+            })
+            .collect();
+        let primary = self
+            .selection
+            .primary_index()
+            .min(restored.len().saturating_sub(1));
+        self.selection = Selection::new(restored.into(), primary);
     }
 
     /// Select, per range, from its anchor to the cursor; a single grapheme is

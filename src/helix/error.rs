@@ -131,6 +131,14 @@ pub enum SimulatorError {
     CommandLine(#[from] CommandLineError),
 }
 
+impl SimulatorError {
+    /// An invalid pattern reported by the rope regex engine, whose build error
+    /// type this crate cannot name: the engine's message travels as a syntax error.
+    pub(crate) fn invalid_pattern(error: &impl std::fmt::Display) -> Self {
+        Self::InvalidRegex(regex::Error::Syntax(error.to_string()))
+    }
+}
+
 impl From<SimulatorError> for UserError {
     fn from(err: SimulatorError) -> Self {
         UserError::CommandFailed {

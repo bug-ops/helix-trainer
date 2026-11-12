@@ -16,7 +16,7 @@ mod basic_tests;
 mod clipboard_tests;
 mod crlf_insert_tests;
 mod editing_tests;
-mod hx_differential_tests;
+mod hx_golden_table_tests;
 mod indent_tests;
 mod insert_indent_replace_tests;
 mod insert_keys_tests;
@@ -36,6 +36,8 @@ mod select_mode_extend_tests;
 mod select_mode_tests;
 mod selection_bounds_tests;
 mod selection_tests;
+mod smart_tab_tests;
+mod viewport_tests;
 
 use crate::helix::Language;
 use crate::helix::simulator::{AnyModeSimulator, EditorSnapshot};

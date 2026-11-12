@@ -256,13 +256,57 @@ impl NewlineIndent<'_> {
         (false, base_line)
     }
 
+    /// Where `Tab` after text sends a cursor at char index `pos`: just after
+    /// the closer of the innermost bracket pair around it or, with none, after
+    /// the closing brace of the first block opened later on its line (outside
+    /// every bracket). `None` when the language has no rule or nothing closes.
+    pub(crate) fn bracket_closer_after(&self, pos: usize) -> Option<usize> {
+        let rules = self.language.newline.as_ref()?;
+        let lexed = Lexed::new(self.doc, self.language, rules);
+        let line = self.doc.char_to_line(pos);
+        let col = pos - self.doc.line_to_char(line);
+        let enclosed = Self::bracket_depth(&lexed, line, col) > 0;
+        let split = lexed
+            .brackets
+            .partition_point(|b| (b.line, b.col) < (line, col));
+        let mut depth = 0usize;
+        let mut block_depth = None;
+        for bracket in &lexed.brackets[split..] {
+            match bracket.side {
+                Side::Open => {
+                    if !enclosed
+                        && block_depth.is_none()
+                        && depth == 0
+                        && bracket.line == line
+                        && bracket.shape == Shape::Brace
+                    {
+                        block_depth = Some(depth);
+                    }
+                    depth += 1;
+                }
+                Side::Close => {
+                    let closes_target = if enclosed {
+                        depth == 0
+                    } else {
+                        block_depth.is_some_and(|start| depth == start + 1)
+                    };
+                    if closes_target {
+                        return Some(self.doc.line_to_char(bracket.line) + bracket.col + 1);
+                    }
+                    depth = depth.saturating_sub(1);
+                }
+            }
+        }
+        None
+    }
+
     /// `indent` minus one unit (as much of it as exists)
     fn dedent(&self, indent: &str) -> String {
         match self.unit {
             IndentUnit::Tab => indent.strip_prefix('\t').unwrap_or(indent).to_string(),
-            IndentUnit::Spaces(_) => {
+            IndentUnit::Spaces(width) => {
                 let spaces = indent.chars().take_while(|ch| *ch == ' ').count();
-                let keep = spaces.saturating_sub(self.unit.width());
+                let keep = spaces.saturating_sub(usize::from(width.get()));
                 format!("{}{}", " ".repeat(keep), &indent[spaces..])
             }
         }

@@ -6,6 +6,7 @@
 //! `c @ Escape` that exposes the selection a command leaves behind.
 
 use crate::grammar::commands::*;
+use crate::helix::Language;
 use crate::helix::registry::{ModeTransition, normal_registry};
 use crate::helix::simulator::{
     AnyModeSimulator, HelixSimulator, InsertEntryCommand, NormalMode,
@@ -15,7 +16,7 @@ use std::num::NonZeroUsize;
 
 /// Content after `keys` and the probe `c @ Escape`.
 fn probed(keys: &[&str]) -> String {
-    super::probed(SCENARIO_14, "txt", keys)
+    super::probed(SCENARIO_14, keys)
 }
 
 fn first_line(content: &str) -> &str {
@@ -206,7 +207,7 @@ fn dot_repeat_of_a_session_is_one_undo_step() {
 
 #[test]
 fn auto_indent_is_kept_once_text_is_typed_after_it() {
-    let mut sim = AnyModeSimulator::new("foo {\n}".to_string()).with_language("rs");
+    let mut sim = AnyModeSimulator::new("foo {\n}".to_string()).with_language(Language::Rs);
     for key in [CMD_OPEN_BELOW, "x", CMD_ESCAPE] {
         sim.execute_command(key).unwrap();
     }
@@ -215,7 +216,7 @@ fn auto_indent_is_kept_once_text_is_typed_after_it() {
 
 #[test]
 fn unused_auto_indent_is_stripped_inside_the_same_undo_step() {
-    let mut sim = AnyModeSimulator::new("foo {\n".to_string()).with_language("rs");
+    let mut sim = AnyModeSimulator::new("foo {\n".to_string()).with_language(Language::Rs);
     for key in [CMD_OPEN_BELOW, CMD_ESCAPE] {
         sim.execute_command(key).unwrap();
     }

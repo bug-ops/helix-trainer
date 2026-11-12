@@ -172,6 +172,10 @@ fn test_repeat_buffer_records_replace_char() {
 // ============================================================================
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_insert_mode_recording_simple() {
     let mut sim = AnyModeSimulator::new("world".to_string());
 
@@ -301,6 +305,10 @@ fn test_insert_mode_recording_open_below() {
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_insert_mode_empty_recording() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 

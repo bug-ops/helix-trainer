@@ -35,7 +35,7 @@
 //!
 //! let score = scorer.score(&scenarios[0]);
 //! assert!((0.0..=1.0).contains(&score));
-//! # Ok::<(), helix_trainer::security::UserError>(())
+//! # Ok::<(), helix_trainer::error::UserError>(())
 //! ```
 
 use chrono::{DateTime, Utc};
@@ -140,7 +140,7 @@ impl<'a> ScenarioPrioritizer<'a> {
     ///
     /// // An untracked scenario consists of novel commands and gets the novelty weight.
     /// assert!(scorer.score(&scenarios[0]) > 0.0);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     #[must_use]
     pub fn score(&self, scenario: &Scenario) -> f64 {
@@ -384,6 +384,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::similar_names,
+        reason = "parallel names mirror the values they bind"
+    )]
     fn test_empty_tracker_gives_novelty_scores() {
         let tracker = PerformanceTracker::new();
         let scorer = ScenarioPrioritizer::new(&tracker);

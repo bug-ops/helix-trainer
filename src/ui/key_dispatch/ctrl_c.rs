@@ -1,8 +1,8 @@
 //! `Ctrl-c` routing
 //!
-//! `Ctrl-c` quits the application on every non-gameplay screen but is a
-//! Helix command (`toggle_comments`) during gameplay, so it can never be a
-//! global shortcut. [`message`] decides per screen and, on gameplay screens,
+//! `Ctrl-c` quits the application on every non-gameplay screen and on the
+//! Arcade countdown, pause and game-over states, but is a Helix command
+//! (`toggle_comments`) during gameplay, so it can never be a global shortcut. [`message`] decides per screen and, on gameplay screens,
 //! per input state, mirroring Helix 25.07.1.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -49,14 +49,13 @@ fn action(state: &AppState) -> CtrlC {
     match &state.screen {
         TypedScreen::Task(_) => gameplay_action(state),
         TypedScreen::MiniGame(_) => {
-            // ASSUMPTION: countdown, pause and game-over take no editor input; Ctrl-c is dropped there.
             if state
                 .minigame_session()
                 .is_some_and(|session| session.state().is_playing())
             {
                 gameplay_action(state)
             } else {
-                CtrlC::Ignore
+                CtrlC::Quit
             }
         }
         TypedScreen::ModeSelection(_)

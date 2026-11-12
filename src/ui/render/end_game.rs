@@ -120,6 +120,10 @@ fn next_step_line(step: &NextStep) -> String {
 /// (which grows one row per category and is the least essential section)
 /// so the actionable content stays visible on short terminals even when the
 /// breakdown itself scrolls out of the fixed content area.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 fn render_stats(frame: &mut Frame, data: &EndGameSummaryData, area: Rect) {
     // Fully perfected (imperfect == 0) gets a stronger highlight than partial progress.
     let perfected_style = if data.imperfect() == 0 {

@@ -5,9 +5,9 @@
 //! Type-safe handlers that receive `MenuData` directly instead of
 //! performing runtime checks on `AppState`.
 
+use crate::error::UserError;
 use crate::helix::normal_command::NormalCommand;
 use crate::input::typestate::{HandlerResult, InputState};
-use crate::security::UserError;
 use crate::ui::layout::FIXED_MENU_ITEMS;
 use crate::ui::state::{AppState, HandlerContext, HandlerOutcome, MenuData};
 use crossterm::event::KeyEvent;

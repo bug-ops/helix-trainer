@@ -3,15 +3,15 @@
 use std::sync::Arc;
 
 use super::SessionInput;
+use super::key_history;
 use crate::config::Scenario;
-use crate::game::format_key_for_display;
+use crate::error::UserError;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::XPCalculator;
 use crate::helix::ModeKind;
-use crate::input::resolve::{Resolution, ResolvedFrom, resolve_keys};
+use crate::input::resolve::{Resolution, resolve_keys};
 use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
-use crate::security::UserError;
 use crate::sound::SoundEffect;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
@@ -84,24 +84,10 @@ pub(in crate::ui::state) fn handle_minigame_tick(
 /// Handles command execution, quest progress updates, and completion detection.
 /// Uses shared quest tracking functions from quests module.
 ///
-/// `command` is the canonical command to dispatch; `display` is what's
-/// shown in `KeyHistory` (the physically-typed key when this resolution
-/// came from a single, directly-executed keystroke; otherwise the
-/// resolved command itself, matching pre-keymap-overlay behavior for
-/// multi-keystroke stock sequences like `"gg"`).
 fn execute_minigame_command(
     state: &mut AppState,
     input: SessionInput<'_>,
-    display: &str,
 ) -> Result<(), UserError> {
-    // Record key to history for display (using shared formatter)
-    if let TypedScreen::MiniGame(ref mut data) = state.screen {
-        data.add_key_to_history(format_key_for_display(display));
-    }
-
-    // Show key history popup after first keypress (reset on scenario transitions)
-    state.ui.show_key_history = true;
-
     // Snapshot quest completion status before updates
     let was_completed = super::snapshot_quest_completion(state);
 
@@ -261,7 +247,7 @@ fn execute_minigame_command(
 /// display.
 pub(in crate::ui::state) fn handle_minigame_command(
     state: &mut AppState,
-    keys: &crate::input::keymap::CanonicalKeys,
+    keys: &crate::input::keymap::GameplayKey,
     typed: &str,
 ) -> Result<(), UserError> {
     // Only handle if we're on the MiniGame screen
@@ -277,25 +263,14 @@ pub(in crate::ui::state) fn handle_minigame_command(
         return Ok(());
     };
 
+    key_history::record_key(&mut state.ui, &mut minigame_data.key_history, typed);
+
     match resolve_keys(minigame_data.input_state_mut(), mode, keys) {
-        // Insert mode is never translated (R1), so `keys` is a single token
-        // identical to `typed`.
         Resolution::Insert(command) => {
-            execute_minigame_command(state, SessionInput::Text(&command), typed)
+            execute_minigame_command(state, SessionInput::Text(&command))
         }
-        Resolution::Execute { command, from } => {
-            let text = command.to_string();
-            // Only the physically-typed key is more informative than the
-            // resolved command when this single keystroke, from Base,
-            // resolved it directly. A multi-keystroke stock sequence
-            // (e.g. "gg") only completes on its final keystroke, from a
-            // non-Base context - showing the resolved command there
-            // matches pre-keymap-overlay behavior.
-            let display = match from {
-                ResolvedFrom::Base => typed,
-                ResolvedFrom::Pending => &text,
-            };
-            execute_minigame_command(state, SessionInput::Command(&command), display)
+        Resolution::Execute { command, .. } => {
+            execute_minigame_command(state, SessionInput::Command(&command))
         }
         Resolution::Pending | Resolution::Discarded => Ok(()),
     }
@@ -371,6 +346,10 @@ pub(in crate::ui::state) fn handle_minigame_next_scenario(state: &mut AppState) 
 /// - Calculates and awards XP
 /// - Updates high scores
 /// - Saves profile to disk (non-fatal on error)
+#[expect(
+    clippy::similar_names,
+    reason = "parallel names mirror the values they bind"
+)]
 pub(in crate::ui::state) fn handle_minigame_game_over(state: &mut AppState) {
     let should_process = state
         .minigame_session_mut()
@@ -569,6 +548,11 @@ mod tests {
         assert!(!state.ui.show_key_history);
     }
 
+    fn press_h(state: &mut AppState) {
+        let key = crate::input::keymap::GameplayKey::Keys(crate::testing::keys("h"));
+        handle_minigame_command(state, &key, "h").unwrap();
+    }
+
     #[test]
     fn test_execute_minigame_command_shows_key_history() {
         let mut state = create_test_state();
@@ -582,7 +566,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("h"), "h");
+        press_h(&mut state);
 
         assert!(
             state.ui.show_key_history,
@@ -604,13 +588,12 @@ mod tests {
 
         let mut state = create_test_state();
         state.progress.profile.daily_quests = vec![Quest {
-            id: qid("cmd_practice_h"),
+            id: qid("cmd_h_easy"),
             quest_type: QuestType::CommandPractice {
                 command: ncmd("h"),
                 target: 1,
                 current: 0,
             },
-            description: "Use 'h' 1 time".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 50,
             completed: false,
@@ -624,7 +607,7 @@ mod tests {
         }
         let initial_xp = state.progress.profile.total_xp;
 
-        execute_minigame_command(&mut state, SessionInput::Text("h"), "h").unwrap();
+        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
 
         // The scenario itself must not have completed - only the quest should have.
         if let Some(session) = state.minigame_session() {
@@ -643,7 +626,7 @@ mod tests {
             state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
                 crate::ui::notification::NotificationType::QuestComplete { description, .. }
-                    if description == "Use 'h' 1 time"
+                    if description == "Move cursor left 1 times using 'h'"
             )),
             "expected a QuestComplete notification"
         );
@@ -663,13 +646,12 @@ mod tests {
         state.progress.profile.total_xp = xp_for_level_2 - 1;
         state.progress.profile.level = 1;
         state.progress.profile.daily_quests = vec![Quest {
-            id: qid("cmd_practice_h"),
+            id: qid("cmd_h_easy"),
             quest_type: QuestType::CommandPractice {
                 command: ncmd("h"),
                 target: 1,
                 current: 0,
             },
-            description: "Use 'h' 1 time".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 1,
             completed: false,
@@ -682,7 +664,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        execute_minigame_command(&mut state, SessionInput::Text("h"), "h").unwrap();
+        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
 
         assert!(
             state.progress.profile.level >= 2,
@@ -710,7 +692,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        execute_minigame_command(&mut state, SessionInput::Text("h"), "h").unwrap();
+        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
 
         assert!(
             !state.ui.notifications.visible().any(|n| matches!(
@@ -742,8 +724,8 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"), "x");
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"), "d");
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
 
         assert!(
             state.progress.profile.level >= 2,
@@ -1060,7 +1042,6 @@ mod tests {
                     target: 5,
                     current: 0,
                 },
-                description: "Practice j command".to_string(),
                 difficulty: QuestDifficulty::Easy,
                 xp_reward: 100,
                 completed: false,
@@ -1238,7 +1219,7 @@ mod tests {
         // Command might fail (OperationFailed) but function should return gracefully
         let _ = handle_minigame_command(
             &mut state,
-            &crate::input::keymap::CanonicalKeys::from_static("j"),
+            &crate::input::keymap::GameplayKey::Keys(crate::testing::keys("j")),
             "j",
         );
 
@@ -1262,14 +1243,14 @@ mod tests {
         // First 'd' may be buffered or rejected depending on mode
         let _ = handle_minigame_command(
             &mut state,
-            &crate::input::keymap::CanonicalKeys::from_static("d"),
+            &crate::input::keymap::GameplayKey::Keys(crate::testing::keys("d")),
             "d",
         );
 
         // Second 'd' should attempt to complete sequence (might fail but shouldn't panic)
         let _ = handle_minigame_command(
             &mut state,
-            &crate::input::keymap::CanonicalKeys::from_static("d"),
+            &crate::input::keymap::GameplayKey::Keys(crate::testing::keys("d")),
             "d",
         );
 
@@ -1293,7 +1274,7 @@ mod tests {
         // double-counting every resolved keystroke.
         let _ = handle_minigame_command(
             &mut state,
-            &crate::input::keymap::CanonicalKeys::from_static("j"),
+            &crate::input::keymap::GameplayKey::Keys(crate::testing::keys("j")),
             "j",
         );
 
@@ -1316,7 +1297,7 @@ mod tests {
     /// (count-prefixed, find-char, and stock two-key) sequences.
     #[test]
     fn test_handle_minigame_command_key_history_matches_stock_dispatch_under_identity_overlay() {
-        use crate::input::keymap::CanonicalKeys;
+        use crate::input::keymap::GameplayKey;
 
         let mut state = create_test_state();
         start_minigame(&mut state);
@@ -1331,20 +1312,17 @@ mod tests {
         );
 
         let press = |state: &mut AppState, key: &'static str| {
-            handle_minigame_command(state, &CanonicalKeys::from_static(key), key).unwrap();
+            handle_minigame_command(state, &GameplayKey::Keys(crate::testing::keys(key)), key)
+                .unwrap();
         };
 
-        press(&mut state, "x"); // single-key, executes immediately
-        press(&mut state, "3"); // count prefix - no history push
-        press(&mut state, "j"); // "3j" resolves and executes
-        press(&mut state, "f"); // find-char prefix - no history push
-        press(&mut state, "x"); // "fx" resolves and executes
-        press(&mut state, "g"); // goto prefix - no history push
-        press(&mut state, "g"); // "gg" resolves and executes
+        for key in ["x", "3", "j", "f", "x", "g", "g"] {
+            press(&mut state, key);
+        }
 
         if let TypedScreen::MiniGame(ref data) = state.screen {
             // `keys()` is newest-first.
-            assert_eq!(*data.key_history.keys(), ["gg", "fx", "3j", "x"]);
+            assert_eq!(*data.key_history.keys(), ["g", "g", "x", "f", "j"]);
         } else {
             panic!("expected MiniGame screen");
         }
@@ -1358,7 +1336,7 @@ mod tests {
         // Should handle gracefully without session
         let result = handle_minigame_command(
             &mut state,
-            &crate::input::keymap::CanonicalKeys::from_static("j"),
+            &crate::input::keymap::GameplayKey::Keys(crate::testing::keys("j")),
             "j",
         );
         assert!(result.is_ok());
@@ -1371,7 +1349,7 @@ mod tests {
 
         let result = handle_minigame_command(
             &mut state,
-            &crate::input::keymap::CanonicalKeys::from_static("j"),
+            &crate::input::keymap::GameplayKey::Keys(crate::testing::keys("j")),
             "j",
         );
         assert!(result.is_ok());
@@ -1476,8 +1454,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        // Execute command (might fail validation but should add to history)
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("h"), "h");
+        press_h(&mut state);
 
         // Key should be added to history regardless of command success
         if let TypedScreen::MiniGame(ref data) = state.screen {
@@ -1529,15 +1506,11 @@ mod tests {
             session.tick_countdown();
         }
 
-        let result = execute_minigame_command(
-            &mut state,
-            SessionInput::Text("not_a_command"),
-            "not_a_command",
-        );
+        let result = execute_minigame_command(&mut state, SessionInput::Text("not_a_command"));
 
         assert!(result.is_err());
         assert!(state.minigame_session().is_some());
-        assert!(matches!(state.screen, TypedScreen::MiniGame(_)));
+        assert_matches!(state.screen, TypedScreen::MiniGame(_));
     }
 
     #[test]
@@ -1691,8 +1664,8 @@ mod tests {
 
         // Complete the scenario ("x" selects the line, "d" deletes it) essentially
         // immediately, so time_ratio stays near 0.0.
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"), "x");
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"), "d");
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
 
         assert_eq!(state.progress.profile.speed_run_count, 1);
         assert_eq!(state.progress.profile.flash_run_count, 1);
@@ -1743,8 +1716,8 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"), "x");
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"), "d");
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
 
         assert!(
             state
@@ -1792,8 +1765,8 @@ mod tests {
 
         clock.advance(std::time::Duration::from_millis(3_500));
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"), "x");
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"), "d");
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
 
         assert_eq!(state.progress.profile.speed_run_count, 0);
         assert_eq!(state.progress.profile.flash_run_count, 0);
@@ -1834,8 +1807,8 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"), "x");
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"), "d");
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
 
         assert_eq!(state.progress.profile.scenarios_completed, 1);
         assert_eq!(state.progress.profile.perfect_scenarios, 1);
@@ -1872,8 +1845,8 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"), "x");
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"), "d");
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
+        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
 
         assert_eq!(state.progress.profile.scenarios_completed, 1);
         assert_eq!(state.progress.profile.perfect_scenarios, 0);

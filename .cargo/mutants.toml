@@ -1,0 +1,28 @@
+# cargo-mutants configuration: non-gating mutation run on the critical paths.
+# Run locally with `cargo mutants`; the weekly workflow is .github/workflows/mutants.yml.
+
+examine_globs = [
+    "src/game/scorer.rs",
+    "src/learning/scheduler.rs",
+    "src/learning/performance.rs",
+    "src/gamification/quests.rs",
+]
+
+# Build and test without the `audio` feature, so no sound device is needed.
+additional_cargo_args = ["--no-default-features"]
+additional_cargo_test_args = ["--lib", "--bins"]
+test_tool = "nextest"
+
+# Noise: logging, formatting and rendering code has no behaviour a test pins down.
+exclude_re = [
+    "tracing::",
+    "(debug|info|warn|error|trace)!",
+    "impl (std::)?(fmt::)?(Display|Debug) for",
+    "impl PartialEq for ReviewItem",
+    "fmt::Formatter",
+    "ratatui::",
+]
+
+# A hanging mutant is cut off instead of stalling the job.
+minimum_test_timeout = 60
+timeout_multiplier = 3.0

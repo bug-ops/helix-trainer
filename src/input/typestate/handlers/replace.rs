@@ -9,6 +9,10 @@ use crate::helix::normal_command::NormalCommand;
 use crate::input::typestate::{handler_result::HandlerResult, state_types::ReplaceCharPending};
 
 impl InputHandler<ReplaceCharPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &ReplaceCharPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any printable character (including space, newline, etc.)

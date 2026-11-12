@@ -8,7 +8,7 @@ use thiserror::Error;
 /// Security-specific errors raised while validating untrusted input.
 ///
 /// These carry internal detail for logs; they are converted to the sanitized
-/// [`UserError`] before reaching the UI.
+/// [`UserError`](crate::error::UserError) before reaching the UI.
 #[derive(Error, Debug)]
 pub enum SecurityError {
     /// A path resolved outside the allowed base directory.
@@ -87,14 +87,6 @@ pub enum SecurityError {
     /// Bytes are not valid UTF-8.
     #[error("Invalid UTF-8 encoding")]
     InvalidEncoding,
-
-    /// A quest template failed validation.
-    #[error("Invalid quest template: {0}")]
-    QuestTemplate(#[from] crate::config::quests::QuestTemplateError),
-
-    /// A scenario's cursor setup or target failed validation.
-    #[error("Invalid scenario: {0}")]
-    Scenario(#[from] crate::config::scenarios::ScenarioValidationError),
 
     /// The application reached a state that violates an invariant.
     #[error("Invalid state: {0}")]
@@ -201,214 +193,6 @@ pub fn error_chain(error: &dyn std::error::Error) -> String {
         source = cause.source();
     }
     rendered
-}
-
-/// Typed internal cause kept below a sanitized [`UserError`].
-///
-/// Never rendered to the user; it exists so [`error_chain`] can show the original failure in
-/// logs after a domain error was reduced to generic user-facing text.
-#[derive(Error, Debug)]
-pub enum ErrorCause {
-    /// Input validation or limit failure.
-    #[error(transparent)]
-    Security(#[from] SecurityError),
-
-    /// Gamification (quests, streaks, achievements) failure.
-    #[error(transparent)]
-    Gamification(#[from] crate::gamification::GamificationError),
-
-    /// Learning (FSRS, scheduling) failure.
-    #[error(transparent)]
-    Learning(#[from] crate::learning::LearningError),
-
-    /// Helix simulator command failure.
-    #[error(transparent)]
-    Simulator(#[from] crate::helix::error::SimulatorError),
-}
-
-/// User-facing error messages (sanitized)
-///
-/// The `Display` text is path-free and generic. Variants produced from a domain error keep it
-/// as a typed [`ErrorCause`] source for logs.
-#[derive(Error, Debug)]
-pub enum UserError {
-    /// An internal invariant was violated; the message is for logs, the
-    /// displayed text is generic.
-    #[error("Invalid application state. Please restart the application.")]
-    InvalidState {
-        /// Diagnostic detail that is never shown to the user.
-        message: String,
-        /// Original failure, if the state error was derived from one.
-        #[source]
-        cause: Option<ErrorCause>,
-    },
-
-    /// A message arrived for a screen other than the current one (e.g. a stale
-    /// timer message racing a key-driven transition). Not a user-visible fault.
-    #[error("That action is not available on the current screen.")]
-    WrongScreen,
-
-    /// A scenario file could not be loaded or parsed.
-    #[error("Failed to load scenario file. Please check the file path and format.")]
-    ScenarioLoadError {
-        /// Original failure, if any.
-        #[source]
-        cause: Option<ErrorCause>,
-    },
-
-    /// A scenario file breaches a size or count limit.
-    #[error("The scenario file is too large or complex. Please use a smaller file.")]
-    ScenarioTooComplex {
-        /// Original failure, if any.
-        #[source]
-        cause: Option<ErrorCause>,
-    },
-
-    /// A generic failure with no actionable detail for the user.
-    #[error("Operation failed. Please try again.")]
-    OperationFailed {
-        /// Original failure, if any.
-        #[source]
-        cause: Option<ErrorCause>,
-    },
-
-    /// A Helix command failed to execute in the simulator.
-    #[error("Command execution failed: {context}")]
-    CommandFailed {
-        /// What was being executed, for debugging.
-        context: String,
-        /// Original failure, if any.
-        #[source]
-        cause: Option<ErrorCause>,
-    },
-
-    /// Reading or writing the saved profile or configuration failed. The cause is kept as a
-    /// source for logs; the displayed text carries no paths or OS messages.
-    #[error("Could not read or save your data. Please try again.")]
-    Storage(#[source] crate::config::json_store::StorageError),
-}
-
-impl UserError {
-    /// Create an `InvalidState` error with a descriptive message
-    pub fn invalid_state(message: &str) -> Self {
-        Self::InvalidState {
-            message: message.to_string(),
-            cause: None,
-        }
-    }
-
-    /// Create a `CommandFailed` error with context for debugging
-    pub fn command_failed(context: impl Into<String>) -> Self {
-        Self::CommandFailed {
-            context: context.into(),
-            cause: None,
-        }
-    }
-
-    /// A [`UserError::ScenarioLoadError`] without an underlying cause.
-    #[must_use]
-    pub fn scenario_load_error() -> Self {
-        Self::ScenarioLoadError { cause: None }
-    }
-
-    /// A [`UserError::ScenarioTooComplex`] without an underlying cause.
-    #[must_use]
-    pub fn scenario_too_complex() -> Self {
-        Self::ScenarioTooComplex { cause: None }
-    }
-
-    /// A [`UserError::OperationFailed`] without an underlying cause.
-    #[must_use]
-    pub fn operation_failed() -> Self {
-        Self::OperationFailed { cause: None }
-    }
-}
-
-impl From<SecurityError> for UserError {
-    fn from(err: SecurityError) -> Self {
-        match err {
-            e @ (SecurityError::PathTraversal
-            | SecurityError::InvalidPath
-            | SecurityError::SuspiciousPath
-            | SecurityError::InvalidToml(_)) => UserError::ScenarioLoadError {
-                cause: Some(e.into()),
-            },
-
-            e @ (SecurityError::FileTooLarge { .. }
-            | SecurityError::TooManyScenarios { .. }
-            | SecurityError::ContentTooLarge { .. }
-            | SecurityError::TooManyHints { .. }) => UserError::ScenarioTooComplex {
-                cause: Some(e.into()),
-            },
-
-            SecurityError::InvalidState(msg) => UserError::InvalidState {
-                message: msg.clone(),
-                cause: Some(SecurityError::InvalidState(msg).into()),
-            },
-
-            e @ (SecurityError::InvalidCursorPosition
-            | SecurityError::TooManyActions
-            | SecurityError::ScoreOverflow
-            | SecurityError::CommandSequenceTooLong { .. }
-            | SecurityError::InvalidContent
-            | SecurityError::InvalidEncoding
-            | SecurityError::QuestTemplate(_)
-            | SecurityError::Scenario(_)
-            | SecurityError::TooManyKeymapBindings { .. }
-            | SecurityError::NotRegularFile
-            | SecurityError::ReadFailed(_)) => UserError::OperationFailed {
-                cause: Some(e.into()),
-            },
-        }
-    }
-}
-
-impl From<crate::gamification::GamificationError> for UserError {
-    fn from(err: crate::gamification::GamificationError) -> Self {
-        use crate::gamification::GamificationError;
-
-        match err {
-            e @ GamificationError::InvalidLevel(_) => UserError::InvalidState {
-                message: "Invalid level".to_string(),
-                cause: Some(e.into()),
-            },
-            e @ (GamificationError::QuestNotFound(_)
-            | GamificationError::StreakFreezeUnavailable
-            | GamificationError::StreakFreezeNothingToProtect
-            | GamificationError::StreakFreezeGapOutOfRange { .. }
-            | GamificationError::AchievementAlreadyUnlocked(_)) => UserError::OperationFailed {
-                cause: Some(e.into()),
-            },
-        }
-    }
-}
-
-impl From<crate::learning::LearningError> for UserError {
-    fn from(err: crate::learning::LearningError) -> Self {
-        use crate::learning::LearningError;
-
-        match err {
-            e @ (LearningError::InvalidStability(_)
-            | LearningError::InvalidDifficulty(_)
-            | LearningError::InvalidCounters { .. }) => UserError::InvalidState {
-                message: "Invalid learning parameters".to_string(),
-                cause: Some(e.into()),
-            },
-            e @ LearningError::CommandNotFound(_) => UserError::CommandFailed {
-                context: "Command not found in registry".to_string(),
-                cause: Some(e.into()),
-            },
-            e @ LearningError::FsrsError(_) => UserError::OperationFailed {
-                cause: Some(e.into()),
-            },
-        }
-    }
-}
-
-impl From<crate::config::json_store::StorageError> for UserError {
-    fn from(err: crate::config::json_store::StorageError) -> Self {
-        Self::Storage(err)
-    }
 }
 
 /// Path validation utilities
@@ -567,52 +351,6 @@ pub mod private_fs {
     }
 }
 
-/// Shared serde validators for scenario/quest configuration fields
-pub mod validators {
-    use crate::limits::MAX_LANGUAGE_LENGTH;
-    use serde::Deserialize;
-
-    /// Custom deserialization for `Setup.language` to validate format
-    ///
-    /// Unlike a content id, an explicit empty string is accepted rather than
-    /// rejected: it is a valid "unsupported language" value that the syntax highlighter
-    /// resolves to plain-text rendering rather than a load-time error (see
-    /// `specs/language-aware-syntax-highlighting/spec.md` edge cases). The character set is
-    /// deliberately permissive - real syntect extension tokens include symbols such as
-    /// `"c++"` or `"h++"` - rejecting only control characters, whitespace, and oversized
-    /// values; the value is only ever used as an exact-match lookup key into syntect's
-    /// `SyntaxSet`, never as a path or shell argument, so it carries no injection risk.
-    ///
-    /// # Errors
-    ///
-    /// Returns the deserializer's error, or a custom error if the language exceeds the length
-    /// limit or contains control characters or whitespace.
-    pub fn validate_language_field<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let opt: Option<String> = Option::deserialize(deserializer)?;
-
-        if let Some(ref language) = opt {
-            if language.len() > MAX_LANGUAGE_LENGTH {
-                return Err(serde::de::Error::custom(format!(
-                    "Invalid language: max {MAX_LANGUAGE_LENGTH} characters"
-                )));
-            }
-            if language
-                .chars()
-                .any(|c| c.is_control() || c.is_whitespace())
-            {
-                return Err(serde::de::Error::custom(
-                    "Invalid language: must not contain control characters or whitespace",
-                ));
-            }
-        }
-
-        Ok(opt)
-    }
-}
-
 /// Content sanitization utilities
 pub mod sanitizer {
     use std::path::Path;
@@ -741,6 +479,7 @@ pub mod arithmetic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     use std::path::Path;
 
     #[test]
@@ -805,130 +544,6 @@ mod tests {
         let path = Path::new("/");
         let sanitized = sanitizer::sanitize_path_for_logging(path);
         assert_eq!(sanitized, "[redacted]");
-    }
-
-    #[test]
-    fn test_error_conversion() {
-        let err = SecurityError::PathTraversal;
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to load scenario file. Please check the file path and format."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_invalid_path() {
-        let err = SecurityError::InvalidPath;
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to load scenario file. Please check the file path and format."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_suspicious_path() {
-        let err = SecurityError::SuspiciousPath;
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to load scenario file. Please check the file path and format."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_invalid_toml() {
-        let err = SecurityError::InvalidToml("parse error".to_string());
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to load scenario file. Please check the file path and format."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_file_too_large() {
-        let err = SecurityError::FileTooLarge {
-            max: 1000,
-            actual: 2000,
-        };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_too_many_scenarios() {
-        let err = SecurityError::TooManyScenarios {
-            max: 100,
-            actual: 200,
-        };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_content_too_large() {
-        let err = SecurityError::ContentTooLarge {
-            max: 1000,
-            actual: 2000,
-        };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_too_many_hints() {
-        let err = SecurityError::TooManyHints { max: 10 };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_invalid_state() {
-        let err = SecurityError::InvalidState("bad state".to_string());
-        let user_err = UserError::from(err);
-        assert!(user_err.to_string().contains("Invalid application state"));
-    }
-
-    #[test]
-    fn test_error_conversion_others_map_to_operation_failed() {
-        let err = SecurityError::InvalidCursorPosition;
-        let user_err = UserError::from(err);
-        assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
-
-        let err = SecurityError::ScoreOverflow;
-        let user_err = UserError::from(err);
-        assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
-
-        let err = SecurityError::TooManyActions;
-        let user_err = UserError::from(err);
-        assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
-    }
-
-    #[test]
-    fn test_user_error_invalid_state_constructor() {
-        let err = UserError::invalid_state("test message");
-        assert!(err.to_string().contains("Invalid application state"));
-    }
-
-    #[test]
-    fn test_user_error_command_failed_constructor() {
-        let err = UserError::command_failed("test context");
-        assert!(err.to_string().contains("Command execution failed"));
-        assert!(err.to_string().contains("test context"));
     }
 
     // Arithmetic safety tests
@@ -1117,90 +732,10 @@ mod tests {
         );
         assert!(SecurityError::InvalidEncoding.to_string().contains("UTF-8"));
         assert!(
-            SecurityError::from(crate::config::quests::QuestTemplateError::NameTooLong {
-                max: 1,
-                actual: 2
-            })
-            .to_string()
-            .contains("Invalid quest template")
-        );
-        assert!(
             SecurityError::InvalidState("err".to_string())
                 .to_string()
                 .contains("Invalid state")
         );
-    }
-
-    // User error display tests
-    #[test]
-    fn test_user_error_display() {
-        assert!(
-            UserError::invalid_state("test")
-                .to_string()
-                .contains("Invalid application state")
-        );
-        assert!(
-            UserError::scenario_load_error()
-                .to_string()
-                .contains("load scenario")
-        );
-        assert!(
-            UserError::scenario_too_complex()
-                .to_string()
-                .contains("too large")
-        );
-        assert!(
-            UserError::operation_failed()
-                .to_string()
-                .contains("Operation failed")
-        );
-        assert!(
-            UserError::command_failed("test")
-                .to_string()
-                .contains("Command")
-        );
-    }
-
-    #[test]
-    fn user_error_keeps_typed_cause_for_logs() {
-        let user = UserError::from(SecurityError::TooManyActions);
-        assert_eq!(user.to_string(), "Operation failed. Please try again.");
-        assert_eq!(
-            error_chain(&user),
-            "Operation failed. Please try again.: Too many actions (max: 1000000)"
-        );
-
-        let user = UserError::from(SecurityError::InvalidToml("bad key".to_string()));
-        assert!(error_chain(&user).ends_with("Invalid TOML format: bad key"));
-        assert!(!user.to_string().contains("bad key"));
-
-        let user = UserError::from(SecurityError::InvalidState("broken".to_string()));
-        assert!(error_chain(&user).contains("Invalid state: broken"));
-
-        let user = UserError::from(crate::gamification::GamificationError::StreakFreezeUnavailable);
-        assert!(matches!(
-            std::error::Error::source(&user).and_then(|e| e.downcast_ref::<ErrorCause>()),
-            Some(ErrorCause::Gamification(_))
-        ));
-    }
-
-    #[test]
-    fn error_chain_joins_every_cause() {
-        let root = std::io::Error::other("disk full");
-        let storage = crate::config::json_store::StorageError::Write {
-            doc: crate::config::json_store::Document::Profile,
-            path: "/secret/profile.json".into(),
-            source: root,
-        };
-        let chain = error_chain(&storage);
-        assert_eq!(
-            chain,
-            "failed to write the profile file /secret/profile.json: disk full"
-        );
-
-        let user = UserError::from(storage);
-        assert!(!user.to_string().contains("/secret"), "{user}");
-        assert_eq!(error_chain(&user).matches("disk full").count(), 1);
     }
 
     mod read_capped {
@@ -1219,19 +754,19 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("f.txt");
             std::fs::write(&path, "123456").unwrap();
-            assert!(matches!(
+            assert_matches!(
                 path_validator::read_capped(&path, 5),
                 Err(CappedReadError::TooLarge { max: 5, .. })
-            ));
+            );
         }
 
         #[test]
         fn rejects_directory() {
             let dir = tempfile::tempdir().unwrap();
-            assert!(matches!(
+            assert_matches!(
                 path_validator::read_capped(dir.path(), 5),
                 Err(CappedReadError::NotRegularFile)
-            ));
+            );
         }
 
         #[test]
@@ -1239,10 +774,10 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("f.bin");
             std::fs::write(&path, [0xff, 0xfe]).unwrap();
-            assert!(matches!(
+            assert_matches!(
                 path_validator::read_capped(&path, 5),
                 Err(CappedReadError::InvalidUtf8(_))
-            ));
+            );
         }
 
         #[test]
@@ -1250,10 +785,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let err = path_validator::read_capped(&dir.path().join("nope"), 5).unwrap_err();
             assert!(err.is_not_found(), "{err}");
-            assert!(matches!(
-                SecurityError::from(err),
-                SecurityError::InvalidPath
-            ));
+            assert_matches!(SecurityError::from(err), SecurityError::InvalidPath);
         }
 
         #[cfg(unix)]
@@ -1263,21 +795,15 @@ mod tests {
             let file = dir.path().join("f.txt");
             std::fs::write(&file, "x").unwrap();
             let err = path_validator::read_capped(&file.join("child"), 5).unwrap_err();
-            assert!(matches!(err, CappedReadError::Inaccessible(_)), "{err}");
+            assert_matches!(err, CappedReadError::Inaccessible(_), "{err}");
             assert!(!err.is_not_found(), "ENOTDIR is not NotFound");
-            assert!(matches!(
-                SecurityError::from(err),
-                SecurityError::InvalidPath
-            ));
+            assert_matches!(SecurityError::from(err), SecurityError::InvalidPath);
         }
 
         #[test]
         fn read_phase_io_errors_map_to_read_failed() {
             let err = CappedReadError::Io(std::io::Error::other("boom"));
-            assert!(matches!(
-                SecurityError::from(err),
-                SecurityError::ReadFailed(_)
-            ));
+            assert_matches!(SecurityError::from(err), SecurityError::ReadFailed(_));
         }
 
         #[cfg(unix)]
@@ -1286,10 +812,10 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let link = dir.path().join("zero.json");
             std::os::unix::fs::symlink("/dev/zero", &link).unwrap();
-            assert!(matches!(
+            assert_matches!(
                 path_validator::read_capped(&link, 1024),
                 Err(CappedReadError::NotRegularFile)
-            ));
+            );
         }
 
         #[cfg(unix)]
@@ -1302,10 +828,10 @@ mod tests {
                 .status()
                 .unwrap();
             assert!(status.success());
-            assert!(matches!(
+            assert_matches!(
                 path_validator::read_capped(&fifo, 1024),
                 Err(CappedReadError::NotRegularFile)
-            ));
+            );
         }
     }
 }

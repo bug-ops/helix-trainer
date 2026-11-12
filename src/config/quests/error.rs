@@ -4,38 +4,20 @@ use thiserror::Error;
 
 /// Why a quest template was rejected by `QuestLoader`.
 ///
-/// Wrapped in [`SecurityError::QuestTemplate`](crate::security::SecurityError::QuestTemplate);
+/// Wrapped in [`ConfigError::QuestTemplate`](crate::config::ConfigError::QuestTemplate);
 /// the text is for logs, the user only sees the sanitized
-/// [`UserError`](crate::security::UserError).
+/// [`UserError`](crate::error::UserError).
 ///
 /// # Examples
 ///
 /// ```
 /// use helix_trainer::config::quests::QuestTemplateError;
 ///
-/// let err = QuestTemplateError::NameTooLong { max: 50, actual: 60 };
-/// assert_eq!(err.to_string(), "quest name too long (max 50, got 60)");
+/// let err = QuestTemplateError::XpRewardTooHigh { max: 50, actual: 60 };
+/// assert_eq!(err.to_string(), "custom XP reward exceeds the maximum (max 50, got 60)");
 /// ```
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum QuestTemplateError {
-    /// The quest name exceeds the length cap.
-    #[error("quest name too long (max {max}, got {actual})")]
-    NameTooLong {
-        /// Maximum allowed length in bytes.
-        max: usize,
-        /// Observed length in bytes.
-        actual: usize,
-    },
-
-    /// The quest description exceeds the length cap.
-    #[error("quest description too long (max {max}, got {actual})")]
-    DescriptionTooLong {
-        /// Maximum allowed length in bytes.
-        max: usize,
-        /// Observed length in bytes.
-        actual: usize,
-    },
-
     /// The custom XP reward exceeds the cap.
     #[error("custom XP reward exceeds the maximum (max {max}, got {actual})")]
     XpRewardTooHigh {

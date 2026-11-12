@@ -3,10 +3,10 @@
 //! Provides utilities for creating `AppState` instances in tests.
 
 use crate::config::Scenario;
+use crate::error::UserError;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
-use crate::security::UserError;
 use crate::testing::default_test_scenario;
 use crate::time::{Clock, MonotonicClock, SystemClock, SystemMonotonicClock};
 use crate::ui::state::{

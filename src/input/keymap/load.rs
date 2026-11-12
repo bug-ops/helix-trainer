@@ -5,8 +5,7 @@
 //! (Helix's own `config.toml` location: `$XDG_CONFIG_HOME/helix/` or
 //! `~/.config/helix/` on Unix, `%AppData%\helix\` on Windows — no arbitrary
 //! user-supplied path) and calls [`load_keymap_file`] to produce a
-//! [`KeymapOverlay`] plus a startup notification
-//! summarizing what was applied and ignored.
+//! [`KeymapOverlay`] plus a [`KeymapStatus`] for the `ui` layer to report.
 
 use std::path::PathBuf;
 
@@ -44,6 +43,40 @@ fn default_helix_config_path() -> Option<PathBuf> {
     Some(base?.join("helix").join("config.toml"))
 }
 
+/// How the startup keymap resolution ended; the `ui` layer renders the matching message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeymapStatus {
+    /// `use_helix_keymap` is off: nothing was loaded and nothing is worth telling the user.
+    Disabled,
+    /// The Helix config was loaded; [`StartupKeymap::report`] counts what was applied and ignored.
+    Applied,
+    /// The Helix config file (or the directory it lives in) was not found.
+    NotFound,
+    /// The Helix config file could not be loaded (invalid TOML, too many bindings, ...).
+    Invalid,
+}
+
+/// The result of resolving the keymap at startup.
+#[derive(Debug, Clone)]
+pub struct StartupKeymap {
+    /// The gameplay overlay; the identity overlay unless [`status`](Self::status) is `Applied`.
+    pub overlay: KeymapOverlay,
+    /// What was applied and ignored; empty unless [`status`](Self::status) is `Applied`.
+    pub report: KeymapReport,
+    /// How the resolution ended.
+    pub status: KeymapStatus,
+}
+
+impl StartupKeymap {
+    fn fallback(status: KeymapStatus) -> Self {
+        Self {
+            overlay: KeymapOverlay::identity(),
+            report: KeymapReport::default(),
+            status,
+        }
+    }
+}
+
 /// Resolve the gameplay keymap overlay for a freshly-loaded [`AppConfig`].
 ///
 /// Returns [`KeymapOverlay::identity`] (no translation) whenever
@@ -52,38 +85,32 @@ fn default_helix_config_path() -> Option<PathBuf> {
 /// blocks startup or falls back to a partially-applied overlay.
 ///
 /// Alongside the overlay, returns the [`KeymapReport`] (empty when the
-/// feature is off or loading failed) and a localized summary message, if
-/// there's anything worth telling the user about. The caller is expected
-/// to store the report on `ConfigState` — a startup toast alone is gone
-/// within seconds, and `tracing` output isn't visible in the TUI, so the
-/// report is what keeps this information reachable for as long as the
-/// session runs (e.g. a future status screen render).
+/// feature is off or loading failed) and the [`KeymapStatus`] the `ui` layer
+/// turns into a message. The caller is expected to store the report on
+/// `ConfigState` — a startup toast alone is gone within seconds, and
+/// `tracing` output isn't visible in the TUI, so the report is what keeps
+/// this information reachable for as long as the session runs (e.g. a future
+/// status screen render).
 ///
 /// # Examples
 ///
 /// ```
 /// use helix_trainer::config::AppConfig;
-/// use helix_trainer::input::keymap::resolve_startup_overlay;
+/// use helix_trainer::input::keymap::{KeymapStatus, resolve_startup_overlay};
 ///
-/// let (overlay, report, message) = resolve_startup_overlay(&AppConfig::default());
-/// assert!(overlay.is_empty());
-/// assert_eq!(report.applied, 0);
-/// assert!(message.is_none()); // use_helix_keymap defaults to false
+/// let keymap = resolve_startup_overlay(&AppConfig::default());
+/// assert!(keymap.overlay.is_empty());
+/// assert_eq!(keymap.report.applied, 0);
+/// assert_eq!(keymap.status, KeymapStatus::Disabled); // use_helix_keymap defaults to false
 /// ```
-pub fn resolve_startup_overlay(
-    config: &AppConfig,
-) -> (KeymapOverlay, KeymapReport, Option<String>) {
+pub fn resolve_startup_overlay(config: &AppConfig) -> StartupKeymap {
     if !config.use_helix_keymap {
-        return (KeymapOverlay::identity(), KeymapReport::default(), None);
+        return StartupKeymap::fallback(KeymapStatus::Disabled);
     }
 
     let Some(path) = default_helix_config_path() else {
         tracing::warn!("Helix keymap enabled but the OS config directory could not be determined");
-        return (
-            KeymapOverlay::identity(),
-            KeymapReport::default(),
-            Some(t!("keymap.startup_not_found").to_string()),
-        );
+        return StartupKeymap::fallback(KeymapStatus::NotFound);
     };
     match load_keymap_file(&path) {
         Ok((overlay, report)) => {
@@ -93,32 +120,22 @@ pub fn resolve_startup_overlay(
                 path = %path.display(),
                 "Helix keymap loaded"
             );
-            let message = t!(
-                "keymap.startup_summary",
-                applied = report.applied,
-                ignored = report.ignored.len()
-            )
-            .to_string();
-            (overlay, report, Some(message))
+            StartupKeymap {
+                overlay,
+                report,
+                status: KeymapStatus::Applied,
+            }
         }
         Err(KeymapLoadError::NotFound) => {
             tracing::warn!(
                 path = %path.display(),
                 "Helix keymap enabled but config file not found"
             );
-            (
-                KeymapOverlay::identity(),
-                KeymapReport::default(),
-                Some(t!("keymap.startup_not_found").to_string()),
-            )
+            StartupKeymap::fallback(KeymapStatus::NotFound)
         }
         Err(KeymapLoadError::Security(e)) => {
             tracing::warn!(error = %e, path = %path.display(), "Failed to load Helix keymap config");
-            (
-                KeymapOverlay::identity(),
-                KeymapReport::default(),
-                Some(t!("keymap.startup_invalid").to_string()),
-            )
+            StartupKeymap::fallback(KeymapStatus::Invalid)
         }
     }
 }
@@ -139,11 +156,15 @@ mod tests {
     use super::*;
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn disabled_config_returns_empty_overlay_and_report_together() {
-        let (overlay, report, message) = resolve_startup_overlay(&AppConfig::default());
-        assert!(overlay.is_empty());
-        assert_eq!(report.applied, 0);
-        assert!(report.ignored.is_empty());
-        assert!(message.is_none());
+        let keymap = resolve_startup_overlay(&AppConfig::default());
+        assert!(keymap.overlay.is_empty());
+        assert_eq!(keymap.report.applied, 0);
+        assert!(keymap.report.ignored.is_empty());
+        assert_eq!(keymap.status, KeymapStatus::Disabled);
     }
 }

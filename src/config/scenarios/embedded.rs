@@ -210,6 +210,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_get_embedded_scenarios_unknown_locale() {
         let scenarios = get_embedded_scenarios("xx");
         assert!(scenarios.is_empty());

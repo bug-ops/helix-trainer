@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- cargo-fuzz targets for config loading and keymap resolution with a weekly workflow, and a fuzz crate compile check in CI (#634)
+- cargo-mutants configuration and weekly workflow for the scoring, FSRS scheduling and quest critical paths (#634)
+- Dev-only `fsrs_model_eval` example comparing FSRS-6 and FSRS-7 on a seeded synthetic corpus; the adoption decision is DEFER (#634)
+- `examples/hx_differential.rs`, a differential check against a live Helix, and `benches/insert_session.rs` (#634)
 - Specs for single-step Insert undo, shared level XP progress and cargo-mutants on critical paths (#590)
 - Syntect highlighting is pre-warmed on a background thread after the first frame, removing the first-view hitch (#538, #547)
 - Restore action (Ctrl-R) on the corrupt-profile banner restores `profile.json.prev`, a validated copy rotated from the last good in-memory bytes on every save (#545)
@@ -20,6 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking**: scenario TOML with unknown `[scenarios.metadata]` keys fails to load (#634)
+- **Breaking**: scenario `language` is the closed `helix::Language` enum (`rs`, `md`, `py`); unknown or empty values are a load error (#634)
+- **Breaking**: quest and achievement text moves to `locales/`; quest templates reject `name` and `description` and saved quests no longer carry `description`, so older builds quarantine a newer profile (#634)
+- **Breaking**: `UserError` and `ErrorCause` move from `security` to the new `error` module with typed `GameError` and `ConfigError` (#634)
+- **Breaking**: `resolve_startup_overlay` returns `StartupKeymap` with a `KeymapStatus` (#634)
+- **Breaking**: Ctrl-c quits from the Arcade countdown, pause and game-over screens; key input is typed and register prompts honor modifiers (#634)
+- Helix simulator follows Helix 25.07.1 for Insert-session dot-repeat and Backspace, smart Tab, zero-width search, copied-cursor delete, `i` on a selection, per-language tab width and scrolling (#634)
+- Insert-session change composition cost no longer grows with session length (#634)
+- Task and Arcade screens share one key-history policy and the Review screen uses the common margin (#634)
+- Scenario list sorting by progress and mastery is 60-80% faster (#634)
+- Pedantic lints `assert_is_empty`, `match_same_arms`, `similar_names` and `too_many_lines` are no longer allowed crate-wide; offenders carry a local `#[expect]` (#634)
+- Modern std APIs, shared id newtype macro and saturating challenge counters (#634)
 - **Breaking**: `LanguageRules::opens_block` and `LanguageRules::block_openers` are removed; newline indent is a bracket and comment aware rule in `helix::newline_indent` (#540, #547)
 - Newline indent matches Helix 25.07.1 for comment continuation, Enter between auto-pairs, python dedent and brackets, argument continuation, blank lines and unclosed blocks (#540, #547)
 - **Breaking**: the app exits with code 1 without an absolute config directory instead of falling back to the current directory; `ProfileStorage::new`, `ConfigStorage::new` and their `Default` are removed and `DataDir::resolve` returns `Option` (#545)
@@ -80,6 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A malformed `last_challenge_date` no longer resets the daily challenge attempt limit (#634)
+- An unknown future keymap fingerprint tag no longer quarantines the whole profile (#634)
 - `i` on a forward selection inserts at the selection start; `a` merges adjacent ranges and appends after a flipped selection (#593, #596, #618)
 - `A` on an empty line auto-indents and uses the cursor line; Enter, `o` and `O` keep CRLF line endings (#594, #618)
 - Insert-mode Ctrl-k and Backspace on CRLF text no longer panic and join lines like Helix (#595, #618)

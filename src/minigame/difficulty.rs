@@ -387,7 +387,7 @@ impl DifficultyController {
     /// let controller = DifficultyController::new();
     /// let limit = controller.time_limit_for(beginner);
     /// assert_eq!(limit.as_secs(), 10); // Beginner at level 1
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn time_limit_for(&self, scenario: &Scenario) -> Duration {
         // Get base time from scenario metadata
@@ -452,7 +452,7 @@ impl DifficultyController {
     /// if let Some(scenario) = controller.next_scenario(&scenarios, None, &mut rand::rng()) {
     ///     println!("Selected: {}", scenario.name);
     /// }
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn next_scenario<R: RngExt + ?Sized>(
         &mut self,
@@ -1670,6 +1670,10 @@ mod tests {
         }
 
         #[test]
+        #[expect(
+            clippy::similar_names,
+            reason = "parallel names mirror the values they bind"
+        )]
         fn test_fallback_to_random_when_tracker_is_none() {
             let mut controller = DifficultyController::new();
 
@@ -1762,6 +1766,10 @@ mod tests {
         }
 
         #[test]
+        #[expect(
+            clippy::similar_names,
+            reason = "parallel names mirror the values they bind"
+        )]
         fn test_empty_tracker_gives_novelty_weight_to_all() {
             let mut controller = DifficultyController::new();
             let tracker = PerformanceTracker::new(); // Empty tracker

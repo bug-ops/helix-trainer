@@ -2,14 +2,15 @@
 //!
 //! This module handles loading TOML scenario files with security validations.
 
+use crate::config::ConfigError;
 use crate::constants::{ADVANCED_TIME_LIMIT, BEGINNER_TIME_LIMIT, INTERMEDIATE_TIME_LIMIT};
+use crate::helix::Language;
 use crate::ids::{CommandId, NormalizedCommand, ScenarioId};
 use crate::limits::{
     MAX_COMMAND_SEQUENCE_LENGTH, MAX_FILE_CONTENT_LENGTH, MAX_HINTS, MAX_SCENARIO_FILE_SIZE,
     MAX_SCENARIOS_PER_FILE,
 };
-use crate::security::validators::validate_language_field;
-use crate::security::{SecurityError, UserError, path_validator, sanitizer};
+use crate::security::{SecurityError, path_validator, sanitizer};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
@@ -22,7 +23,7 @@ pub use cursor::{BoundError, Bounded, CursorField, CursorRange, CursorSpec, Pos}
 
 /// Why a scenario's cursor setup or target was rejected.
 ///
-/// Wrapped in [`SecurityError::Scenario`];
+/// Wrapped in [`ConfigError::Scenario`];
 /// the text is for logs only.
 ///
 /// # Examples
@@ -178,6 +179,7 @@ impl CompletionRule {
 
 /// Scenario metadata for filtering, sorting, and quest generation
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ScenarioMetadata {
     /// Completion rule (defaults to [`CompletionRule::TargetState`])
     #[serde(default)]
@@ -332,8 +334,8 @@ impl Scenario {
 /// Matches the syntax highlighter's original hardcoded behavior (see FR-002 in
 /// `specs/language-aware-syntax-highlighting/spec.md`). Shared by
 /// `PlayableScenario::language`'s default implementation and its `GameSession`/
-/// `ActiveMiniScenario` overrides so the fallback literal exists in exactly one place.
-pub const DEFAULT_LANGUAGE: &str = "rs";
+/// `ActiveMiniScenario` overrides so the fallback exists in exactly one place.
+pub const DEFAULT_LANGUAGE: Language = Language::Rs;
 
 /// Initial editor setup
 #[derive(Deserialize, Debug, Clone)]
@@ -341,12 +343,12 @@ pub struct Setup {
     /// Initial document text.
     pub file_content: String,
 
-    /// Content's language as a file-extension-style token (e.g. `"rs"`, `"md"`, `"py"`),
-    /// resolved by the syntax highlighter against syntect's bundled `SyntaxSet`.
+    /// Content's language (`rs`, `md` or `py` in the scenario file); any other value,
+    /// including an empty one, is a scenario load error.
     /// `None` (the default for scenarios that omit this field) is treated as
     /// [`DEFAULT_LANGUAGE`], preserving the highlighter's original hardcoded behavior.
-    #[serde(default, deserialize_with = "validate_language_field")]
-    pub language: Option<String>,
+    #[serde(default)]
+    pub language: Option<Language>,
 
     /// Cursor and selection placement at the start.
     #[serde(flatten)]
@@ -469,18 +471,17 @@ impl ScenarioLoader {
     /// - Total scenarios across all files must not exceed reasonable limits
     ///
     /// # Errors
-    /// Returns `UserError` if any file fails to load or validation fails
+    /// Returns [`ConfigError`] if any file fails to load or validation fails
     ///
     /// Not reached from production code today — see the [`ScenarioLoader`] type
     /// docs for why this filesystem path is retained.
-    pub fn load_directory(&self, dir_path: &Path) -> Result<Vec<Scenario>, UserError> {
+    pub fn load_directory(&self, dir_path: &Path) -> Result<Vec<Scenario>, ConfigError> {
         // Validate directory path
-        let canonical = path_validator::validate_path(dir_path, &self.allowed_base_paths)
-            .map_err(UserError::from)?;
+        let canonical = path_validator::validate_path(dir_path, &self.allowed_base_paths)?;
 
         if !canonical.is_dir() {
             tracing::error!("Path is not a directory");
-            return Err(UserError::from(SecurityError::InvalidPath));
+            return Err(SecurityError::InvalidPath.into());
         }
 
         tracing::info!(
@@ -493,7 +494,7 @@ impl ScenarioLoader {
 
         if all_scenarios.is_empty() {
             tracing::warn!("No scenario files found in directory");
-            return Err(UserError::scenario_load_error());
+            return Err(ConfigError::NotFound);
         }
 
         tracing::info!(
@@ -511,20 +512,14 @@ impl ScenarioLoader {
     ///
     /// Not reached from production code today — see the [`ScenarioLoader`] type
     /// docs for why this filesystem path is retained.
-    fn visit_toml_files(&self, dir: &Path) -> Result<(Vec<Scenario>, usize), UserError> {
-        let entries = fs::read_dir(dir).map_err(|e| {
-            tracing::error!("Failed to read directory: {}", e);
-            UserError::scenario_load_error()
-        })?;
+    fn visit_toml_files(&self, dir: &Path) -> Result<(Vec<Scenario>, usize), ConfigError> {
+        let entries = fs::read_dir(dir).map_err(ConfigError::Io)?;
 
         let mut scenarios = Vec::new();
         let mut file_count: usize = 0;
 
         for entry in entries {
-            let entry = entry.map_err(|e| {
-                tracing::error!("Failed to read directory entry: {}", e);
-                UserError::scenario_load_error()
-            })?;
+            let entry = entry.map_err(ConfigError::Io)?;
 
             let path = entry.path();
 
@@ -535,13 +530,12 @@ impl ScenarioLoader {
                 file_count = file_count.saturating_add(sub_count);
             } else if path.extension().and_then(|s| s.to_str()) == Some("toml") {
                 // Load scenarios from this file
-                let file_scenarios = self.load(&path).map_err(|e| {
+                let file_scenarios = self.load(&path).inspect_err(|e| {
                     tracing::error!(
                         file = %sanitizer::sanitize_path_for_logging(&path),
                         "Failed to load scenario file: {:?}",
                         e
                     );
-                    e
                 })?;
 
                 file_count = file_count.saturating_add(1);
@@ -562,14 +556,13 @@ impl ScenarioLoader {
     /// - Each scenario is validated for content size, cursor positions, etc.
     ///
     /// # Errors
-    /// Returns `UserError` with sanitized message if any validation fails
+    /// Returns [`ConfigError`] if any validation fails
     ///
     /// Not reached from production code today — see the [`ScenarioLoader`] type
     /// docs for why this filesystem path is retained.
-    pub fn load(&self, path: &Path) -> Result<Vec<Scenario>, UserError> {
+    pub fn load(&self, path: &Path) -> Result<Vec<Scenario>, ConfigError> {
         // Validate path to prevent path traversal attacks
-        let canonical = path_validator::validate_path(path, &self.allowed_base_paths)
-            .map_err(UserError::from)?;
+        let canonical = path_validator::validate_path(path, &self.allowed_base_paths)?;
 
         // Log with sanitized path (doesn't leak full path)
         tracing::info!(
@@ -579,15 +572,14 @@ impl ScenarioLoader {
 
         // Bounded read of a regular file to prevent resource exhaustion
         let content = path_validator::read_capped(&canonical, MAX_SCENARIO_FILE_SIZE)
-            .map_err(|e| UserError::from(SecurityError::from(e)))?;
+            .map_err(SecurityError::from)?;
 
         // Parse, count-check, and validate each scenario
         let scenarios = super::loader::parse_and_validate::<ScenariosFile>(
             &content,
             MAX_SCENARIOS_PER_FILE,
             Self::validate_scenario,
-        )
-        .map_err(UserError::from)?;
+        )?;
 
         tracing::info!(count = scenarios.len(), "Successfully loaded scenarios");
 
@@ -606,7 +598,7 @@ impl ScenarioLoader {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if no embedded data exists for the locale or
+    /// Returns [`ConfigError`] if no embedded data exists for the locale or
     /// if validation fails.
     ///
     /// # Examples
@@ -617,14 +609,14 @@ impl ScenarioLoader {
     /// let loader = ScenarioLoader::new();
     /// let scenarios = loader.load_from_embedded("en")?;
     /// assert!(!scenarios.is_empty());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<Scenario>, UserError> {
+    pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<Scenario>, ConfigError> {
         let embedded_contents = embedded::get_embedded_scenarios(locale);
 
         if embedded_contents.is_empty() {
             tracing::warn!(locale = locale, "No embedded scenarios for locale");
-            return Err(UserError::scenario_load_error());
+            return Err(ConfigError::NotFound);
         }
 
         tracing::info!(
@@ -642,14 +634,13 @@ impl ScenarioLoader {
                 MAX_SCENARIOS_PER_FILE,
                 Self::validate_scenario,
             )
-            .map_err(|e| {
+            .inspect_err(|e| {
                 tracing::error!(
                     locale = locale,
                     index = index,
                     "Failed to load embedded scenario file: {:?}",
                     e
                 );
-                UserError::from(e)
             })?;
 
             all_scenarios.extend(scenarios);
@@ -667,35 +658,29 @@ impl ScenarioLoader {
     /// Validate a single scenario for security and correctness
     /// Validate content size is within limits
     fn validate_content_size(content: &str) -> Result<(), SecurityError> {
-        if content.len() > MAX_FILE_CONTENT_LENGTH {
-            Err(SecurityError::ContentTooLarge {
-                max: MAX_FILE_CONTENT_LENGTH,
-                actual: content.len(),
-            })
-        } else {
-            Ok(())
-        }
+        (content.len() <= MAX_FILE_CONTENT_LENGTH).ok_or(SecurityError::ContentTooLarge {
+            max: MAX_FILE_CONTENT_LENGTH,
+            actual: content.len(),
+        })
     }
 
     /// Validate command sequence length
     fn validate_command_sequence(commands: &[String]) -> Result<(), SecurityError> {
-        if commands.len() > MAX_COMMAND_SEQUENCE_LENGTH {
-            Err(SecurityError::CommandSequenceTooLong {
+        (commands.len() <= MAX_COMMAND_SEQUENCE_LENGTH).ok_or(
+            SecurityError::CommandSequenceTooLong {
                 max: MAX_COMMAND_SEQUENCE_LENGTH,
-            })
-        } else {
-            Ok(())
-        }
+            },
+        )
     }
 
-    fn validate_scenario(scenario: &Scenario) -> Result<(), SecurityError> {
+    fn validate_scenario(scenario: &Scenario) -> Result<(), ConfigError> {
         // Validate content sizes
         Self::validate_content_size(&scenario.setup.file_content)?;
         Self::validate_content_size(&scenario.target.file_content)?;
 
         // Validate collection sizes
         if scenario.hints.len() > MAX_HINTS {
-            return Err(SecurityError::TooManyHints { max: MAX_HINTS });
+            return Err(SecurityError::TooManyHints { max: MAX_HINTS }.into());
         }
 
         // Validate command sequences

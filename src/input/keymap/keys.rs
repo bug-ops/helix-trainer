@@ -10,7 +10,7 @@ use std::borrow::Cow;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::input::typestate::key_mapping::{
-    is_named_key, map_macos_composed_char, parse_helix_key_string,
+    is_named_key, key_to_command_string, map_macos_composed_char, parse_helix_key_string,
 };
 
 /// A normalized, hashable representation of a physically-pressed key.
@@ -197,28 +197,107 @@ impl TryFrom<&str> for PhysicalKey {
 /// stock keymap would call the command. A `CanonicalKeys` is produced only
 /// by [`KeymapOverlay`](super::overlay::KeymapOverlay) resolution or by
 /// wrapping an already-canonical single key (the identity/no-remap case).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CanonicalKeys(Cow<'static, str>);
+///
+/// The key events are parsed once, at construction, and carried as typed
+/// values. Equality, hashing and the keymap fingerprint use the source text
+/// only, so they stay independent of how the events are represented.
+#[derive(Debug, Clone)]
+pub struct CanonicalKeys {
+    text: Cow<'static, str>,
+    keys: Keys,
+}
+
+#[derive(Debug, Clone)]
+enum Keys {
+    One(KeyEvent),
+    /// Two or more events; `CanonicalKeys::parse` is the only constructor.
+    Many(Box<[KeyEvent]>),
+}
+
+impl PartialEq for CanonicalKeys {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+    }
+}
+
+impl Eq for CanonicalKeys {}
+
+impl std::hash::Hash for CanonicalKeys {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.text.hash(state);
+    }
+}
 
 impl CanonicalKeys {
-    /// Wrap a `'static` canonical key string (e.g. a `CMD_*` constant).
-    pub const fn from_static(s: &'static str) -> Self {
-        Self(Cow::Borrowed(s))
+    /// Parse a canonical key string (e.g. a `CMD_*` constant) into its key events.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParsePhysicalKeyError`] when `text` is empty or one of its
+    /// [`tokens`](Self::tokens) is not a key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::input::keymap::CanonicalKeys;
+    ///
+    /// assert_eq!(CanonicalKeys::parse("gg").unwrap().events().len(), 2);
+    /// assert!(CanonicalKeys::parse("Alt-nonsense").is_err());
+    /// ```
+    pub fn parse(text: impl Into<Cow<'static, str>>) -> Result<Self, ParsePhysicalKeyError> {
+        let text = text.into();
+        let mut events = tokenize(&text)
+            .into_iter()
+            .map(|token| {
+                parse_helix_key_string(token)
+                    .ok_or_else(|| ParsePhysicalKeyError(token.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let keys = match events.len() {
+            0 => return Err(ParsePhysicalKeyError(text.into_owned())),
+            1 => Keys::One(events.remove(0)),
+            _ => Keys::Many(events.into()),
+        };
+        Ok(Self { text, keys })
     }
 
-    /// Wrap an owned, dynamically-built canonical key string.
-    pub fn from_owned(s: String) -> Self {
-        Self(Cow::Owned(s))
+    /// The canonical keys a stock Normal-mode key press stands for, or `None`
+    /// where the key has no command (it is dropped).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    /// use helix_trainer::input::keymap::CanonicalKeys;
+    ///
+    /// let x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+    /// assert_eq!(CanonicalKeys::from_event(x).unwrap().as_str(), "x");
+    /// let f5 = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
+    /// assert!(CanonicalKeys::from_event(f5).is_none());
+    /// ```
+    pub fn from_event(event: KeyEvent) -> Option<Self> {
+        let text = key_to_command_string(event)?;
+        Self::parse(text)
+            .inspect_err(|error| tracing::warn!(%error, "unparsable key token; dropping"))
+            .ok()
     }
 
     /// The underlying key string.
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.text
     }
 
-    /// Consume `self`, returning the underlying `Cow`.
-    pub fn into_cow(self) -> Cow<'static, str> {
-        self.0
+    /// The underlying key string, cheap to clone for a `'static` text.
+    pub fn to_cow(&self) -> Cow<'static, str> {
+        self.text.clone()
+    }
+
+    /// The key events, in the order the `InputStateMachine` consumes them.
+    pub fn events(&self) -> &[KeyEvent] {
+        match &self.keys {
+            Keys::One(event) => std::slice::from_ref(event),
+            Keys::Many(events) => events,
+        }
     }
 
     /// Split into the individual keys/tokens the `InputStateMachine` would
@@ -238,40 +317,57 @@ impl CanonicalKeys {
     /// ```
     /// use helix_trainer::input::keymap::CanonicalKeys;
     ///
-    /// assert_eq!(CanonicalKeys::from_static("gg").tokens(), vec!["g", "g"]);
-    /// assert_eq!(CanonicalKeys::from_static("mi(").tokens(), vec!["m", "i", "("]);
-    /// assert_eq!(CanonicalKeys::from_static("Alt-*").tokens(), vec!["Alt-*"]);
-    /// assert_eq!(CanonicalKeys::from_static("Escape").tokens(), vec!["Escape"]);
+    /// assert_eq!(CanonicalKeys::parse("gg").unwrap().tokens(), vec!["g", "g"]);
+    /// assert_eq!(CanonicalKeys::parse("mi(").unwrap().tokens(), vec!["m", "i", "("]);
+    /// assert_eq!(CanonicalKeys::parse("Alt-*").unwrap().tokens(), vec!["Alt-*"]);
+    /// assert_eq!(CanonicalKeys::parse("Escape").unwrap().tokens(), vec!["Escape"]);
     /// ```
     pub fn tokens(&self) -> Vec<&str> {
-        tokenize(&self.0)
+        tokenize(&self.text)
     }
 
-    /// Returns `true` when [`tokens`](Self::tokens) would produce exactly
-    /// one token equal to the whole string, without allocating.
-    ///
-    /// Callers on the keystroke hot path (the overwhelmingly common case is
-    /// a single, un-remapped key) should check this first and dispatch on
-    /// [`as_str`](Self::as_str) directly, falling back to `tokens()` only
-    /// when this returns `false`.
+    /// Returns `true` when the sequence is exactly one key.
     ///
     /// # Examples
     ///
     /// ```
     /// use helix_trainer::input::keymap::CanonicalKeys;
     ///
-    /// assert!(CanonicalKeys::from_static("f").is_single_token());
-    /// assert!(CanonicalKeys::from_static("Alt-*").is_single_token());
-    /// assert!(!CanonicalKeys::from_static("gg").is_single_token());
+    /// assert!(CanonicalKeys::parse("f").unwrap().is_single_token());
+    /// assert!(CanonicalKeys::parse("Alt-*").unwrap().is_single_token());
+    /// assert!(!CanonicalKeys::parse("gg").unwrap().is_single_token());
     /// ```
     pub fn is_single_token(&self) -> bool {
-        is_single_token(&self.0)
+        matches!(self.keys, Keys::One(_))
     }
 }
 
-impl From<Cow<'static, str>> for CanonicalKeys {
-    fn from(s: Cow<'static, str>) -> Self {
-        Self(s)
+/// What a gameplay screen receives for one keystroke.
+///
+/// Insert-mode text is never a canonical key (it can be a space, a non-ASCII
+/// character or composed text), so it travels as [`Typed`](Self::Typed) and is
+/// never parsed; every other mode receives [`Keys`](Self::Keys).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GameplayKey {
+    /// Text typed in Insert mode, inserted as is.
+    Typed(Cow<'static, str>),
+    /// A canonical key sequence for the Normal- or Select-mode state machine.
+    Keys(CanonicalKeys),
+}
+
+impl GameplayKey {
+    /// The key text: the typed text, or the canonical key string.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Typed(text) => text,
+            Self::Keys(keys) => keys.as_str(),
+        }
+    }
+}
+
+impl From<CanonicalKeys> for GameplayKey {
+    fn from(keys: CanonicalKeys) -> Self {
+        Self::Keys(keys)
     }
 }
 
@@ -284,23 +380,14 @@ fn starts_with_modifier_prefix(s: &str) -> bool {
     })
 }
 
-/// Mirrors `tokenize`'s token-count logic (rules 1-3) without allocating a
-/// `Vec` - used by [`CanonicalKeys::is_single_token`] on the hot path. The
-/// single-`char` check is tried first since it's both the cheapest test and
-/// the dominant case (a bare, un-remapped key), ahead of the string-prefix
-/// and named-key comparisons rules 1-2 need.
-fn is_single_token(s: &str) -> bool {
-    !s.is_empty()
-        && (s.chars().next().is_some_and(|c| c.len_utf8() == s.len())
-            || starts_with_modifier_prefix(s)
-            || is_named_key(s))
-}
-
 fn tokenize(s: &str) -> Vec<&str> {
     if s.is_empty() {
         return Vec::new();
     }
-    if is_single_token(s) {
+    let is_one_token = s.chars().next().is_some_and(|c| c.len_utf8() == s.len())
+        || starts_with_modifier_prefix(s)
+        || is_named_key(s);
+    if is_one_token {
         return vec![s];
     }
     let mut tokens = Vec::with_capacity(s.len());
@@ -339,7 +426,7 @@ mod tests {
             KeyEvent::new(KeyCode::Char('g'), KeyModifiers::SHIFT),
         ];
         let normalized: Vec<_> = spellings.into_iter().map(PhysicalKey::from_event).collect();
-        assert!(normalized.windows(2).all(|w| w[0] == w[1]));
+        assert!(normalized.array_windows::<2>().all(|[a, b]| a == b));
     }
 
     #[test]
@@ -399,76 +486,85 @@ mod tests {
         }
     }
 
-    #[test]
-    fn tokens_examples() {
-        assert_eq!(CanonicalKeys::from_static("gg").tokens(), vec!["g", "g"]);
-        assert_eq!(
-            CanonicalKeys::from_static("mi(").tokens(),
-            vec!["m", "i", "("]
-        );
-        assert_eq!(CanonicalKeys::from_static("Alt-*").tokens(), vec!["Alt-*"]);
-        assert_eq!(
-            CanonicalKeys::from_static("Ctrl-b").tokens(),
-            vec!["Ctrl-b"]
-        );
-        assert_eq!(CanonicalKeys::from_static("f").tokens(), vec!["f"]);
-        assert_eq!(
-            CanonicalKeys::from_static("Escape").tokens(),
-            vec!["Escape"]
-        );
+    fn keys(text: &'static str) -> CanonicalKeys {
+        CanonicalKeys::parse(text).unwrap()
     }
 
-    /// Total-function gate (R2): every one of the registry's 84 real key
-    /// strings must tokenize into tokens that each round-trip through
-    /// `parse_helix_key_string`, so the tokenizer and the parser can never
-    /// silently drift apart.
-    ///
-    /// Was 86 before `select_regex`/`split_selection` (`s`/`S`) were pulled
-    /// out of the registry — their handlers take a `pattern` argument that
-    /// doesn't fit the registry's fixed `CommandHandler` signature, so they
-    /// dispatch directly instead of through a registered entry.
     #[test]
-    fn tokenizes_all_registry_keys_into_reparsable_tokens() {
+    fn tokens_examples() {
+        assert_eq!(keys("gg").tokens(), vec!["g", "g"]);
+        assert_eq!(keys("mi(").tokens(), vec!["m", "i", "("]);
+        assert_eq!(keys("Alt-*").tokens(), vec!["Alt-*"]);
+        assert_eq!(keys("Ctrl-b").tokens(), vec!["Ctrl-b"]);
+        assert_eq!(keys("f").tokens(), vec!["f"]);
+        assert_eq!(keys("Escape").tokens(), vec!["Escape"]);
+    }
+
+    /// Total-function gate (R2): every one of the registry's real key
+    /// strings must parse, so the tokenizer and the parser can never
+    /// silently drift apart.
+    #[test]
+    fn parses_every_registry_key_and_command_constant() {
         let registry = normal_registry();
         let mut checked = 0;
         for meta in registry.all_commands() {
             checked += 1;
-            for token in CanonicalKeys::from_static(meta.key()).tokens() {
-                assert!(
-                    parse_helix_key_string(token).is_some(),
-                    "token {:?} of registry key {:?} does not round-trip",
-                    token,
-                    meta.key()
-                );
-            }
+            let parsed = CanonicalKeys::parse(meta.key())
+                .unwrap_or_else(|error| panic!("registry key {:?}: {error}", meta.key()));
+            assert_eq!(
+                parsed.events().len(),
+                parsed.tokens().len(),
+                "{:?}",
+                meta.key()
+            );
         }
         assert!(checked >= 84);
     }
 
-    /// Equivalence gate: `is_single_token` must never drift from
-    /// `tokenize().len() == 1` - it exists purely to answer that question
-    /// without allocating, so a mismatch would silently break the
-    /// keystroke hot path's fast case.
     #[test]
-    fn is_single_token_matches_tokens_len_across_inputs() {
-        let mut inputs: Vec<&str> = vec![
-            "",       // empty string: zero tokens
-            "é",      // single multi-byte char: one token
-            "Escape", // named key: one token
-            "Alt-*",  // modifier-prefixed: one token
-            "gg",     // two single-char tokens
-            "mi(",    // three single-char tokens
-        ];
-        let registry = normal_registry();
-        for meta in registry.all_commands() {
-            inputs.push(meta.key());
-        }
-        for s in inputs {
-            assert_eq!(
-                is_single_token(s),
-                tokenize(s).len() == 1,
-                "is_single_token/tokenize mismatch for {s:?}"
-            );
-        }
+    fn single_and_multi_key_sequences_are_told_apart() {
+        assert!(keys("f").is_single_token());
+        assert!(keys("Alt-*").is_single_token());
+        assert!(keys("é").is_single_token());
+        assert!(!keys("gg").is_single_token());
+        assert_eq!(keys("mi(").events().len(), 3);
+    }
+
+    #[test]
+    fn parse_rejects_empty_and_unparsable_text() {
+        assert!(CanonicalKeys::parse("").is_err());
+        assert!(CanonicalKeys::parse("Alt-").is_err());
+    }
+
+    #[test]
+    fn equality_and_hash_follow_the_source_text() {
+        use std::hash::{BuildHasher, RandomState};
+        let hasher = RandomState::new();
+        assert_eq!(keys("Escape"), keys("Escape"));
+        assert_eq!(hasher.hash_one(keys("gg")), hasher.hash_one(keys("gg")));
+        // Same event, different spelling: still two distinct canonical texts.
+        assert_ne!(keys("Escape"), keys("esc"));
+    }
+
+    #[test]
+    fn from_event_matches_the_stock_command_string() {
+        let key = |code, modifiers| CanonicalKeys::from_event(KeyEvent::new(code, modifiers));
+        assert_eq!(key(KeyCode::Char('x'), KeyModifiers::NONE), Some(keys("x")));
+        assert_eq!(
+            key(KeyCode::Char('G'), KeyModifiers::SHIFT),
+            Some(keys("G"))
+        );
+        assert_eq!(key(KeyCode::Enter, KeyModifiers::NONE), Some(keys("Enter")));
+        assert_eq!(
+            key(KeyCode::Char('d'), KeyModifiers::CONTROL),
+            Some(keys("Ctrl-d"))
+        );
+        assert_eq!(key(KeyCode::F(5), KeyModifiers::NONE), None);
+        assert_eq!(key(KeyCode::Char('é'), KeyModifiers::NONE), None);
+    }
+
+    #[test]
+    fn gameplay_key_wraps_canonical_keys() {
+        assert_eq!(GameplayKey::from(keys("x")), GameplayKey::Keys(keys("x")));
     }
 }

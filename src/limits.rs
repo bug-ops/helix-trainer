@@ -57,21 +57,11 @@ pub(crate) const MAX_SPEED_RUN_TIME_SECONDS: u64 = 3600;
 /// Maximum custom XP reward
 pub(crate) const MAX_CUSTOM_XP_REWARD: u32 = 1000;
 
-/// Maximum quest name length
-pub(crate) const MAX_QUEST_NAME_LENGTH: usize = 100;
-
-/// Maximum quest description length
-pub(crate) const MAX_QUEST_DESCRIPTION_LENGTH: usize = 500;
-
 /// Maximum version string length
 pub(crate) const MAX_VERSION_LENGTH: usize = 20;
 
 /// Maximum locale string length
 pub(crate) const MAX_LOCALE_LENGTH: usize = 10;
-
-/// Maximum length of a scenario `Setup.language` token (file-extension-style,
-/// e.g. "rs", "md", "py" — longest bundled syntect extensions are well under this)
-pub(crate) const MAX_LANGUAGE_LENGTH: usize = 20;
 
 /// Maximum required conditions count
 pub(crate) const MAX_REQUIRED_CONDITIONS: usize = 20;

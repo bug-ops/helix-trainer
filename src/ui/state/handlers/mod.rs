@@ -63,6 +63,7 @@ impl SessionInput<'_> {
 
 mod category_filters;
 mod gameplay;
+mod key_history;
 pub(super) mod menu;
 mod minigame;
 mod mode_selection;

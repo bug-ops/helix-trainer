@@ -541,6 +541,51 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
     }
 }
 
+/// The `h`/`j`/`k`/`l` key an arrow key stands for in Normal mode; the caller checks modifiers.
+pub(crate) fn arrow_movement(key_code: KeyCode) -> Option<KeyEvent> {
+    let movement = match key_code {
+        KeyCode::Left => 'h',
+        KeyCode::Right => 'l',
+        KeyCode::Up => 'k',
+        KeyCode::Down => 'j',
+        _ => return None,
+    };
+    Some(KeyEvent::new(KeyCode::Char(movement), KeyModifiers::NONE))
+}
+
+/// Convert a key event to a command string for the state machine
+///
+/// In normal mode, all keys are passed to `InputStateMachine` which handles:
+/// - Multi-key commands (gg, dd)
+/// - Character arguments (fx, rx)
+/// - Count prefixes (3j, 10k)
+/// - Modifier commands (Alt-C, Ctrl-r)
+///
+/// Uses `map_key_to_helix_command` for known commands (which returns constants
+/// like `CMD_COPY_SELECTION_PREV` = "Alt-C"), and builds strings for prefix keys
+/// that the state machine needs to handle.
+pub(crate) fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
+    if let Some(cmd) = map_key_to_helix_command(key) {
+        return Some(Cow::Borrowed(cmd));
+    }
+
+    let key = normalize_key_event(key);
+
+    match key.code {
+        // An unmapped Alt/Ctrl char is dropped, never serialized as the bare char.
+        KeyCode::Char(c)
+            if c.is_ascii()
+                && !key.modifiers.contains(KeyModifiers::ALT)
+                && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
+            Some(Cow::Owned(c.to_string()))
+        }
+        KeyCode::Enter => Some(Cow::Borrowed("Enter")),
+        KeyCode::Tab => Some(Cow::Borrowed("Tab")),
+        _ => None,
+    }
+}
+
 /// Handle insert mode input and convert to command string
 ///
 /// Returns the character/command to insert or execute in insert mode.
@@ -548,6 +593,10 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
 /// Helix insert-mode editing chords (`Ctrl-w`, `Ctrl-u`, `Ctrl-k`, `Ctrl-d`,
 /// `Alt-d`, `Alt-Backspace`, `Delete`). A `Ctrl`/`Alt`-modified character with
 /// no insert-mode binding yields `None`: it must never be typed as text (#489).
+#[expect(
+    clippy::match_same_arms,
+    reason = "arms stay apart to document each case"
+)]
 pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
     let chord = Chord::of(key.modifiers);
     let borrowed = |cmd: &'static str| Some(Cow::Borrowed(cmd));

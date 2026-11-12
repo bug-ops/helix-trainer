@@ -4,11 +4,11 @@
 
 use super::apply_quest_progress;
 use crate::config::Difficulty;
+use crate::error::UserError;
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::UserProfile;
 use crate::learning::{Analytics, ProgressionTier, ReferenceTime};
-use crate::security::UserError;
 use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
@@ -679,7 +679,6 @@ mod tests {
                 target: 1,
                 current: 0,
             },
-            description: "Complete 1 scenario".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 100,
             completed: false,
@@ -729,7 +728,6 @@ mod tests {
                 target: 1,
                 current: 1,
             },
-            description: "Complete 1 scenario".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 100,
             completed: true,
@@ -1313,7 +1311,6 @@ mod tests {
                 target: 1,
                 current: 0,
             },
-            description: "Complete 1 scenario".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 1,
             completed: false,
@@ -1370,7 +1367,6 @@ mod tests {
                 target: 1,
                 current: 0,
             },
-            description: "Complete 1 scenario".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: quest_xp_reward,
             completed: false,
@@ -1955,7 +1951,6 @@ mod tests {
                 target: 1,
                 current: 0,
             },
-            description: "Complete 1 scenario".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 10,
             completed: false,

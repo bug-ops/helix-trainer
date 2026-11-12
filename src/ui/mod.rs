@@ -38,9 +38,10 @@ pub mod layout;
 pub mod notification;
 pub mod render;
 pub mod state;
+pub mod text;
 
 pub use key_dispatch::handle_key_event;
 pub use layout::Viewport;
-pub use notification::{Notification, NotificationQueue, NotificationType};
+pub use notification::{Notification, NotificationQueue, NotificationType, keymap_status_message};
 pub use render::render;
 pub use state::{AppState, Message, NavTarget, update};

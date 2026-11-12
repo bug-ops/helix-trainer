@@ -15,17 +15,16 @@
 //! ([`crate::helix::simulator::register_file::BLACKHOLE_REGISTER`]) is
 //! reached, since it can't be addressed as the default register.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::grammar::commands::CMD_TOGGLE_COMMENTS;
-
-use super::{InputHandler, KeyHandler, execute_registered};
+use super::{InputHandler, KeyHandler};
 use crate::helix::normal_command::{NormalCommand, RegisterOp};
 use crate::helix::simulator::InsertEntryCommand;
 use crate::input::typestate::{
     handler_result::HandlerResult,
     input_state::InputState,
-    state_types::{RegisterOpPending, RegisterPending},
+    key_mapping::Chord,
+    state_types::{BaseState, RegisterOpPending, RegisterPending},
 };
 
 // ============================================================================
@@ -33,6 +32,10 @@ use crate::input::typestate::{
 // ============================================================================
 
 impl InputHandler<RegisterPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &RegisterPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any character as the register name
@@ -53,11 +56,14 @@ impl InputHandler<RegisterPending> for KeyHandler {
 
 impl InputHandler<RegisterOpPending> for KeyHandler {
     fn handle_key(state: &RegisterOpPending, key: KeyEvent) -> HandlerResult {
+        // Helix drops the pending register and runs the chord as its own command
+        if Chord::of(key.modifiers) != Chord::Plain {
+            return match KeyHandler::handle_key(&BaseState, key) {
+                HandlerResult::Stay => HandlerResult::Cancel,
+                other => other,
+            };
+        }
         match key.code {
-            // Helix runs `toggle_comments` and drops the pending register
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                execute_registered(CMD_TOGGLE_COMMENTS)
-            }
             // Only y/p/P/R/d/c are register-scoped in this trainer
             KeyCode::Char('c') => {
                 HandlerResult::Execute(NormalCommand::InsertEntry(InsertEntryCommand::Change {
@@ -79,6 +85,8 @@ impl InputHandler<RegisterOpPending> for KeyHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyModifiers;
+
     use crate::testing::normal;
 
     fn key(c: char) -> KeyEvent {
@@ -159,6 +167,50 @@ mod tests {
         assert_eq!(
             KeyHandler::handle_key(&state, key('x')),
             HandlerResult::Cancel
+        );
+    }
+
+    fn modified(c: char, modifiers: KeyModifiers) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), modifiers)
+    }
+
+    #[test]
+    fn register_op_pending_runs_ctrl_key_as_its_own_command_and_drops_register() {
+        let state = RegisterOpPending { register: 'a' };
+        for c in ['c', 'b', 'f', 'u', 'd', 'r'] {
+            let key = modified(c, KeyModifiers::CONTROL);
+            assert_eq!(
+                KeyHandler::handle_key(&state, key),
+                KeyHandler::handle_key(&BaseState, key),
+                "Ctrl-{c}"
+            );
+        }
+        assert_eq!(
+            KeyHandler::handle_key(&state, modified('d', KeyModifiers::CONTROL)),
+            HandlerResult::Execute(normal("Ctrl-d"))
+        );
+    }
+
+    #[test]
+    fn register_op_pending_cancels_unbound_ctrl_key() {
+        let state = RegisterOpPending { register: 'a' };
+        assert_eq!(
+            KeyHandler::handle_key(&state, modified('x', KeyModifiers::CONTROL)),
+            HandlerResult::Cancel
+        );
+    }
+
+    #[test]
+    fn register_op_pending_runs_alt_key_as_its_own_command() {
+        let state = RegisterOpPending { register: 'a' };
+        let key = modified('c', KeyModifiers::ALT);
+        assert_eq!(
+            KeyHandler::handle_key(&state, key),
+            KeyHandler::handle_key(&BaseState, key)
+        );
+        assert_ne!(
+            KeyHandler::handle_key(&state, key),
+            HandlerResult::Execute(normal("\"ac"))
         );
     }
 

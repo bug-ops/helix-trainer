@@ -682,6 +682,7 @@ fn remove_companion_file(path: &Path, what: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     use tempfile::TempDir;
 
     #[test]
@@ -731,7 +732,10 @@ mod tests {
             let loaded = storage
                 .load()
                 .unwrap_or_else(|e| panic!("{malformed}: {e}"));
-            assert!(loaded.challenge_progress.last_challenge_date.is_none());
+            assert_eq!(
+                loaded.challenge_progress.last_challenge_date,
+                crate::gamification::ChallengeDay::Unreadable
+            );
             assert_eq!(loaded.challenge_progress.all_time_best_score, 42);
             assert_eq!(loaded.total_xp, profile.total_xp);
         }
@@ -1048,7 +1052,7 @@ mod tests {
         let first = storage.quarantine();
         let second = storage.quarantine();
 
-        assert!(matches!(first, QuarantineOutcome::BackedUp(_)));
+        assert_matches!(first, QuarantineOutcome::BackedUp(_));
         std::assert_matches!((&first, &second), (QuarantineOutcome::BackedUp(a), QuarantineOutcome::BackedUp(b)) if a == b);
         assert_eq!(backups_in(dir.path()).len(), 1);
     }
@@ -1218,6 +1222,10 @@ mod tests {
     /// When the backup cannot be created the original must stay byte-identical.
     #[cfg(unix)]
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_start_fresh_keeps_the_original_when_the_backup_fails() {
         use std::os::unix::fs::PermissionsExt;
         let dir = TempDir::new().unwrap();
@@ -1374,13 +1382,10 @@ mod tests {
     fn test_quarantine_fails_without_a_regular_file() {
         let temp_dir = TempDir::new().unwrap();
         let storage = ProfileStorage::with_path(temp_dir.path().join("missing.json"));
-        assert!(matches!(storage.quarantine(), QuarantineOutcome::Failed(_)));
+        assert_matches!(storage.quarantine(), QuarantineOutcome::Failed(_));
 
         let dir_storage = ProfileStorage::with_path(temp_dir.path());
-        assert!(matches!(
-            dir_storage.quarantine(),
-            QuarantineOutcome::Failed(_)
-        ));
+        assert_matches!(dir_storage.quarantine(), QuarantineOutcome::Failed(_));
     }
 
     #[test]
@@ -1400,14 +1405,12 @@ mod tests {
 
         let err = ProfileStorage::with_path(&path).load().unwrap_err();
 
-        assert!(
-            matches!(
-                err,
-                StorageError::Read {
-                    source: crate::security::CappedReadError::NotRegularFile,
-                    ..
-                }
-            ),
+        assert_matches!(
+            err,
+            StorageError::Read {
+                source: crate::security::CappedReadError::NotRegularFile,
+                ..
+            },
             "{err}"
         );
     }
@@ -1476,7 +1479,7 @@ mod tests {
 
         let err = storage.start_fresh().unwrap_err();
 
-        assert!(matches!(err, StorageError::NoBackup { .. }), "{err}");
+        assert_matches!(err, StorageError::NoBackup { .. }, "{err}");
         let chain = crate::security::error_chain(&err);
         assert_eq!(chain.matches("no profile file").count(), 1, "{chain}");
         assert!(!storage.exists());
@@ -1490,7 +1493,7 @@ mod tests {
 
         let err = ProfileStorage::with_path(&path).delete().unwrap_err();
 
-        assert!(matches!(err, StorageError::Delete { .. }), "{err}");
+        assert_matches!(err, StorageError::Delete { .. }, "{err}");
     }
 
     #[test]
@@ -1709,7 +1712,7 @@ mod tests {
         fs::write(storage.path().with_added_extension("prev"), "{rotten").unwrap();
         let err = storage.restore_previous().unwrap_err();
 
-        assert!(matches!(err, StorageError::Corrupt { .. }), "{err}");
+        assert_matches!(err, StorageError::Corrupt { .. }, "{err}");
         assert_eq!(fs::read_to_string(storage.path()).unwrap(), "{broken");
     }
 
@@ -1720,7 +1723,7 @@ mod tests {
 
         let err = storage.restore_previous().unwrap_err();
 
-        assert!(matches!(err, StorageError::NoBackup { .. }), "{err}");
+        assert_matches!(err, StorageError::NoBackup { .. }, "{err}");
     }
 
     #[test]
@@ -1731,7 +1734,7 @@ mod tests {
 
         let err = storage.restore_previous().unwrap_err();
 
-        assert!(matches!(err, StorageError::Read { .. }), "{err}");
+        assert_matches!(err, StorageError::Read { .. }, "{err}");
         assert_eq!(fs::read_to_string(storage.path()).unwrap(), "{broken");
     }
 

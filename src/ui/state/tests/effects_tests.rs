@@ -69,6 +69,10 @@ fn test_start_fresh_profile_requires_a_backed_up_quarantine() {
 
 /// #531: restore is offered only with a backup on disk and a loadable previous copy
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_restore_profile_requires_a_backup_and_an_available_previous_copy() {
     use crate::gamification::{PreviousCopy, QuarantineOutcome};
     use crate::ui::state::{Effect, ProfilePersistence, Quarantine};

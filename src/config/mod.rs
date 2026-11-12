@@ -15,6 +15,7 @@
 
 pub mod app_config;
 pub mod data_dir;
+mod error;
 pub mod json_store;
 pub mod keymap;
 mod loader;
@@ -22,6 +23,7 @@ pub mod quests;
 pub mod scenarios;
 
 pub use app_config::{AppConfig, ConfigStorage};
+pub use error::ConfigError;
 pub use quests::{
     QuestConditions, QuestDifficulty, QuestLoader, QuestSpec, QuestTemplate, QuestsFile,
     QuestsMetadata, XpConfig,

@@ -6,10 +6,12 @@
 //! stored value ([`KeymapFingerprint::Fnv1a64V1`]) so a future change cannot be
 //! mistaken for a keymap change.
 
-use serde::{Deserialize, Serialize};
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize};
 
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+const CURRENT_TAG: &str = "Fnv1a64V1";
 
 /// Incremental FNV-1a 64-bit hasher.
 #[derive(Debug, Clone, Copy)]
@@ -98,6 +100,38 @@ impl StoredKeymapFingerprint {
     }
 }
 
+/// Field-level deserializer for `Option<StoredKeymapFingerprint>` that reads a
+/// fingerprint written by a newer version as absent.
+///
+/// A JSON object with a single unknown tag key maps to `None`, the same no-notice
+/// path as a first activation; the next save replaces it with the current tag. Any
+/// other malformed shape is still an error so the profile is quarantined as before.
+///
+/// # Errors
+///
+/// Returns the underlying error for a value that is neither `null`, a legacy number,
+/// a well-formed current tag nor an object with exactly one unknown key.
+pub fn lenient_stored_fingerprint<'de, D>(
+    deserializer: D,
+) -> Result<Option<StoredKeymapFingerprint>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if let Some(object) = value.as_object()
+        && object.len() == 1
+        && !object.contains_key(CURRENT_TAG)
+    {
+        return Ok(None);
+    }
+    StoredKeymapFingerprint::deserialize(value)
+        .map(Some)
+        .map_err(D::Error::custom)
+}
+
 impl From<KeymapFingerprint> for StoredKeymapFingerprint {
     fn from(fingerprint: KeymapFingerprint) -> Self {
         Self::Current(fingerprint)
@@ -142,6 +176,55 @@ mod tests {
             tagged,
             StoredKeymapFingerprint::Current(KeymapFingerprint::Fnv1a64V1(7))
         );
+    }
+
+    #[derive(Deserialize)]
+    struct Holder {
+        #[serde(default, deserialize_with = "lenient_stored_fingerprint")]
+        fingerprint: Option<StoredKeymapFingerprint>,
+    }
+
+    fn load(json: &str) -> Result<Option<StoredKeymapFingerprint>, serde_json::Error> {
+        serde_json::from_str::<Holder>(json).map(|holder| holder.fingerprint)
+    }
+
+    #[test]
+    fn current_tag_constant_matches_the_serialized_tag() {
+        let json = serde_json::to_value(KeymapFingerprint::Fnv1a64V1(1)).unwrap();
+        assert!(json.as_object().unwrap().contains_key(CURRENT_TAG));
+    }
+
+    #[test]
+    fn unknown_single_tag_reads_as_absent() {
+        assert_eq!(load(r#"{"fingerprint":{"Sha256V2":"abc"}}"#).unwrap(), None);
+        assert_eq!(load(r#"{"fingerprint":{"Sha256V2":[1,2]}}"#).unwrap(), None);
+    }
+
+    #[test]
+    fn known_shapes_still_load() {
+        assert_eq!(load("{}").unwrap(), None);
+        assert_eq!(load(r#"{"fingerprint":null}"#).unwrap(), None);
+        assert_eq!(
+            load(r#"{"fingerprint":5}"#).unwrap(),
+            Some(StoredKeymapFingerprint::Legacy(5))
+        );
+        assert_eq!(
+            load(r#"{"fingerprint":{"Fnv1a64V1":7}}"#).unwrap(),
+            Some(KeymapFingerprint::Fnv1a64V1(7).into())
+        );
+    }
+
+    #[test]
+    fn other_malformed_shapes_remain_errors() {
+        for json in [
+            r#"{"fingerprint":"text"}"#,
+            r#"{"fingerprint":{"A":1,"B":2}}"#,
+            r#"{"fingerprint":{"Fnv1a64V1":"x"}}"#,
+            r#"{"fingerprint":{}}"#,
+            r#"{"fingerprint":[1]}"#,
+        ] {
+            assert!(load(json).is_err(), "{json}");
+        }
     }
 
     #[test]

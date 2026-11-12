@@ -2,9 +2,7 @@
 
 use super::IdError;
 use crate::limits::MAX_ID_LENGTH;
-use serde::{Deserialize, Serialize, Serializer};
-use std::borrow::Borrow;
-use std::fmt;
+use serde::Deserialize;
 use std::str::FromStr;
 
 fn validate(raw: &str) -> Result<(), IdError> {
@@ -38,12 +36,6 @@ macro_rules! content_id {
                 validate(raw)?;
                 Ok(Self(raw.into()))
             }
-
-            /// The identifier as a string slice.
-            #[must_use]
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
         }
 
         impl TryFrom<String> for $name {
@@ -63,23 +55,7 @@ macro_rules! content_id {
             }
         }
 
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(&self.0)
-            }
-        }
-
-        impl Borrow<str> for $name {
-            fn borrow(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl Serialize for $name {
-            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                serializer.serialize_str(&self.0)
-            }
-        }
+        str_id_impls!($name);
     };
 }
 

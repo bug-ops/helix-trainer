@@ -155,6 +155,10 @@ fn test_find_char_pending_equality() {
 
 // Test all state types are Debug
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_all_state_types_debug() {
     assert!(!format!("{BaseState:?}").is_empty());
     assert!(!format!("{GotoPending:?}").is_empty());

@@ -2,6 +2,7 @@
 
 use crate::ui::layout::{FIXED_MENU_ITEMS, RENDERED_FIXED_ROWS, clamp_menu_view, menu_chunks};
 use crate::ui::state::{AppState, TypedScreen};
+use crate::ui::text;
 use ratatui::{
     Frame,
     layout::Alignment,
@@ -13,6 +14,10 @@ use rust_i18n::t;
 /// Build menu items with scenario list and navigation options
 ///
 /// Returns list of menu items with proper styling and indicators
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>> {
     let filtered_scenarios = state.game.scenario_collection.filtered();
     let profile = &state.progress.profile;
@@ -413,7 +418,10 @@ fn render_quest_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &Ap
             // Format: "✓ Delete 3 lines (3/3)    +25 XP"
             format!(
                 " {} {}{}    +{} XP",
-                icon, quest.description, progress_str, quest.xp_reward
+                icon,
+                text::quest_description(quest),
+                progress_str,
+                quest.xp_reward
             )
         })
         .collect();

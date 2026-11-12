@@ -18,6 +18,14 @@ use rust_i18n::t;
 /// Returns the Target editor panel's outer `Rect` (when on the Task screen),
 /// so tests can assert against the panel's real, production-computed layout
 /// instead of duplicating the layout math.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
+#[expect(
+    clippy::similar_names,
+    reason = "parallel names mirror the values they bind"
+)]
 pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<Rect> {
     // Extract TaskData from TypedScreen::Task
     let TypedScreen::Task(task_data) = &state.screen else {

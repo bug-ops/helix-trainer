@@ -15,8 +15,6 @@ locale = "en"
 
 [[quests]]
 id = "cmd_h_easy"
-name = "Move Left Practice"
-description = "Move cursor left 10 times using 'h'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -26,8 +24,6 @@ target = 10
 
 [[quests]]
 id = "cmd_j_easy"
-name = "Move Down Practice"
-description = "Move cursor down 10 times using 'j'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -37,8 +33,6 @@ target = 10
 
 [[quests]]
 id = "cmd_k_easy"
-name = "Move Up Practice"
-description = "Move cursor up 10 times using 'k'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -48,8 +42,6 @@ target = 10
 
 [[quests]]
 id = "cmd_l_easy"
-name = "Move Right Practice"
-description = "Move cursor right 10 times using 'l'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -59,8 +51,6 @@ target = 10
 
 [[quests]]
 id = "cmd_w_easy"
-name = "Word Navigation"
-description = "Move forward 5 words using 'w'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -70,8 +60,6 @@ target = 5
 
 [[quests]]
 id = "cmd_b_easy"
-name = "Word Back Navigation"
-description = "Move back 5 words using 'b'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -81,8 +69,6 @@ target = 5
 
 [[quests]]
 id = "cmd_0_easy"
-name = "Line Start Navigation"
-description = "Jump to line start 3 times using '0'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -92,8 +78,6 @@ target = 3
 
 [[quests]]
 id = "cmd_gg_easy"
-name = "Document Start"
-description = "Jump to document start 2 times using 'gg'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -103,8 +87,6 @@ target = 2
 
 [[quests]]
 id = "cmd_G_easy"
-name = "Document End"
-description = "Jump to document end 2 times using 'G'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -116,8 +98,6 @@ target = 2
 
 [[quests]]
 id = "cmd_x_easy"
-name = "Character Deletion"
-description = "Delete 5 characters using 'x'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -127,8 +107,6 @@ target = 5
 
 [[quests]]
 id = "cmd_dd_easy"
-name = "Line Selection Practice"
-description = "Select 3 lines using the 'x' command"
 type = "command_practice"
 difficulty = "easy"
 
@@ -138,8 +116,6 @@ target = 3
 
 [[quests]]
 id = "cmd_yy_easy"
-name = "Yank Lines"
-description = "Copy 3 lines to clipboard using 'yy'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -151,8 +127,6 @@ target = 3
 
 [[quests]]
 id = "scenario_1_easy"
-name = "First Scenario"
-description = "Complete 1 scenario"
 type = "scenario_completion"
 difficulty = "easy"
 
@@ -161,8 +135,6 @@ target = 1
 
 [[quests]]
 id = "time_2_easy"
-name = "Quick Practice"
-description = "Practice for 2 minutes"
 type = "time_invested"
 difficulty = "easy"
 
@@ -177,8 +149,6 @@ target_minutes = 2
 
 [[quests]]
 id = "cmd_w_medium"
-name = "Word Warrior"
-description = "Move forward 15 words using 'w'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -188,8 +158,6 @@ target = 15
 
 [[quests]]
 id = "cmd_b_medium"
-name = "Word Navigator"
-description = "Move back 15 words using 'b'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -199,8 +167,6 @@ target = 15
 
 [[quests]]
 id = "cmd_e_medium"
-name = "Word End Master"
-description = "Jump to word end 10 times using 'e'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -210,8 +176,6 @@ target = 10
 
 [[quests]]
 id = "cmd_0_medium"
-name = "Line Start Expert"
-description = "Jump to line start 10 times using '0'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -221,8 +185,6 @@ target = 10
 
 [[quests]]
 id = "cmd_dollar_medium"
-name = "Line End Expert"
-description = "Jump to line end 10 times using '$'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -234,8 +196,6 @@ target = 10
 
 [[quests]]
 id = "cmd_x_medium"
-name = "Character Surgeon"
-description = "Delete 15 characters using 'x'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -245,8 +205,6 @@ target = 15
 
 [[quests]]
 id = "cmd_dd_medium"
-name = "Line Selector"
-description = "Select 8 lines using 'x'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -256,8 +214,6 @@ target = 8
 
 [[quests]]
 id = "cmd_i_medium"
-name = "Insert Mode Master"
-description = "Use insert mode 5 times"
 type = "command_practice"
 difficulty = "medium"
 
@@ -267,8 +223,6 @@ target = 5
 
 [[quests]]
 id = "cmd_a_medium"
-name = "Append Mode Master"
-description = "Use append mode 5 times"
 type = "command_practice"
 difficulty = "medium"
 
@@ -278,8 +232,6 @@ target = 5
 
 [[quests]]
 id = "cmd_o_medium"
-name = "Open Line Master"
-description = "Open new lines 5 times using 'o'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -289,8 +241,6 @@ target = 5
 
 [[quests]]
 id = "cmd_c_medium"
-name = "Change Command"
-description = "Use change command 3 times"
 type = "command_practice"
 difficulty = "medium"
 
@@ -300,8 +250,6 @@ target = 3
 
 [[quests]]
 id = "cmd_r_medium"
-name = "Replace Characters"
-description = "Replace 5 characters using 'r'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -311,8 +259,6 @@ target = 5
 
 [[quests]]
 id = "cmd_J_medium"
-name = "Join Lines"
-description = "Join 3 lines using 'J'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -324,8 +270,6 @@ target = 3
 
 [[quests]]
 id = "cmd_y_medium"
-name = "Yank Practice"
-description = "Yank (copy) 5 times using 'y'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -335,8 +279,6 @@ target = 5
 
 [[quests]]
 id = "cmd_p_medium"
-name = "Paste After"
-description = "Paste 5 times using 'p'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -346,8 +288,6 @@ target = 5
 
 [[quests]]
 id = "cmd_P_medium"
-name = "Paste Before"
-description = "Paste before cursor 3 times using 'P'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -359,8 +299,6 @@ target = 3
 
 [[quests]]
 id = "cmd_u_medium"
-name = "Undo Practice"
-description = "Use undo 5 times"
 type = "command_practice"
 difficulty = "medium"
 
@@ -370,8 +308,6 @@ target = 5
 
 [[quests]]
 id = "cmd_U_medium"
-name = "Redo Practice"
-description = "Use redo 3 times"
 type = "command_practice"
 difficulty = "medium"
 
@@ -383,8 +319,6 @@ target = 3
 
 [[quests]]
 id = "scenario_2_medium"
-name = "Scenario Practice"
-description = "Complete 2 scenarios"
 type = "scenario_completion"
 difficulty = "medium"
 
@@ -393,8 +327,6 @@ target = 2
 
 [[quests]]
 id = "scenario_3_medium"
-name = "Scenario Trio"
-description = "Complete 3 scenarios"
 type = "scenario_completion"
 difficulty = "medium"
 
@@ -403,8 +335,6 @@ target = 3
 
 [[quests]]
 id = "time_5_medium"
-name = "Consistent Practice"
-description = "Practice for 5 minutes"
 type = "time_invested"
 difficulty = "medium"
 
@@ -413,8 +343,6 @@ target_minutes = 5
 
 [[quests]]
 id = "time_10_medium"
-name = "Extended Practice"
-description = "Practice for 10 minutes"
 type = "time_invested"
 difficulty = "medium"
 
@@ -423,8 +351,6 @@ target_minutes = 10
 
 [[quests]]
 id = "explore_5_medium"
-name = "Command Variety"
-description = "Use 5 different commands today"
 type = "exploration"
 difficulty = "medium"
 
@@ -439,8 +365,6 @@ target_commands = 5
 
 [[quests]]
 id = "cmd_w_hard"
-name = "Word Marathon"
-description = "Move forward 30 words using 'w'"
 type = "command_practice"
 difficulty = "hard"
 
@@ -450,8 +374,6 @@ target = 30
 
 [[quests]]
 id = "cmd_hjkl_hard"
-name = "Navigation Expert"
-description = "Use h, j, k, l a total of 50 times"
 type = "command_practice"
 difficulty = "hard"
 
@@ -463,8 +385,6 @@ target = 50
 
 [[quests]]
 id = "cmd_dd_hard"
-name = "Line Selection Master"
-description = "Select 15 lines using 'x'"
 type = "command_practice"
 difficulty = "hard"
 
@@ -474,8 +394,6 @@ target = 15
 
 [[quests]]
 id = "cmd_x_hard"
-name = "Character Assassin"
-description = "Delete 30 characters using 'x'"
 type = "command_practice"
 difficulty = "hard"
 
@@ -485,8 +403,6 @@ target = 30
 
 [[quests]]
 id = "cmd_c_hard"
-name = "Change Expert"
-description = "Use change command 10 times"
 type = "command_practice"
 difficulty = "hard"
 
@@ -496,8 +412,6 @@ target = 10
 
 [[quests]]
 id = "cmd_i_hard"
-name = "Insert Virtuoso"
-description = "Use insert mode 15 times"
 type = "command_practice"
 difficulty = "hard"
 
@@ -509,8 +423,6 @@ target = 15
 
 [[quests]]
 id = "scenario_5_hard"
-name = "Scenario Marathon"
-description = "Complete 5 scenarios"
 type = "scenario_completion"
 difficulty = "hard"
 
@@ -519,8 +431,6 @@ target = 5
 
 [[quests]]
 id = "scenario_7_hard"
-name = "Scenario Champion"
-description = "Complete 7 scenarios"
 type = "scenario_completion"
 difficulty = "hard"
 
@@ -529,8 +439,6 @@ target = 7
 
 [[quests]]
 id = "scenario_10_hard"
-name = "Scenario Legend"
-description = "Complete 10 scenarios"
 type = "scenario_completion"
 difficulty = "hard"
 
@@ -541,8 +449,6 @@ target = 10
 
 [[quests]]
 id = "speed_delete_hard"
-name = "Speed Run: Delete Line"
-description = "Complete 'delete_line_001' in under 5 seconds"
 type = "speed_run"
 difficulty = "hard"
 
@@ -555,8 +461,6 @@ requires_scenarios = ["delete_line_001"]
 
 [[quests]]
 id = "speed_move_hard"
-name = "Speed Run: Navigation"
-description = "Complete 'move_down_basic_001' in under 3 seconds"
 type = "speed_run"
 difficulty = "hard"
 
@@ -569,8 +473,6 @@ requires_scenarios = ["move_down_basic_001"]
 
 [[quests]]
 id = "speed_word_hard"
-name = "Speed Run: Word Jump"
-description = "Complete 'word_forward_basic_001' in under 3 seconds"
 type = "speed_run"
 difficulty = "hard"
 
@@ -585,8 +487,6 @@ requires_scenarios = ["word_forward_basic_001"]
 
 [[quests]]
 id = "time_15_hard"
-name = "Dedicated Practice"
-description = "Practice for 15 minutes"
 type = "time_invested"
 difficulty = "hard"
 
@@ -595,8 +495,6 @@ target_minutes = 15
 
 [[quests]]
 id = "time_20_hard"
-name = "Training Session"
-description = "Practice for 20 minutes"
 type = "time_invested"
 difficulty = "hard"
 
@@ -605,8 +503,6 @@ target_minutes = 20
 
 [[quests]]
 id = "time_30_hard"
-name = "Intensive Training"
-description = "Practice for 30 minutes"
 type = "time_invested"
 difficulty = "hard"
 
@@ -617,8 +513,6 @@ target_minutes = 30
 
 [[quests]]
 id = "explore_10_hard"
-name = "Command Explorer"
-description = "Use 10 different commands today"
 type = "exploration"
 difficulty = "hard"
 
@@ -627,8 +521,6 @@ target_commands = 10
 
 [[quests]]
 id = "explore_15_hard"
-name = "Command Master"
-description = "Use 15 different commands today"
 type = "exploration"
 difficulty = "hard"
 
@@ -637,8 +529,6 @@ target_commands = 15
 
 [[quests]]
 id = "explore_20_hard"
-name = "Command Guru"
-description = "Use 20 different commands today"
 type = "exploration"
 difficulty = "hard"
 
@@ -653,8 +543,6 @@ target_commands = 20
 
 [[quests]]
 id = "cmd_miw_medium"
-name = "Inner Word Selection"
-description = "Select inner word 5 times using 'miw'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -664,8 +552,6 @@ target = 5
 
 [[quests]]
 id = "cmd_maw_medium"
-name = "Around Word Selection"
-description = "Select around word 5 times using 'maw'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -675,8 +561,6 @@ target = 5
 
 [[quests]]
 id = "cmd_mip_hard"
-name = "Inner Paragraph"
-description = "Select inner paragraph 3 times using 'mip'"
 type = "command_practice"
 difficulty = "hard"
 
@@ -688,8 +572,6 @@ target = 3
 
 [[quests]]
 id = "cmd_ms_medium"
-name = "Add Surround"
-description = "Add surrounding pairs 3 times using 'ms'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -699,8 +581,6 @@ target = 3
 
 [[quests]]
 id = "cmd_md_medium"
-name = "Delete Surround"
-description = "Delete surrounding pairs 3 times using 'md'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -710,8 +590,6 @@ target = 3
 
 [[quests]]
 id = "cmd_mr_hard"
-name = "Replace Surround"
-description = "Replace surrounding pairs 3 times using 'mr'"
 type = "command_practice"
 difficulty = "hard"
 
@@ -723,8 +601,6 @@ target = 3
 
 [[quests]]
 id = "cmd_prev_paragraph_medium"
-name = "Previous Paragraph"
-description = "Jump to previous paragraph 5 times using '[p'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -734,8 +610,6 @@ target = 5
 
 [[quests]]
 id = "cmd_next_paragraph_medium"
-name = "Next Paragraph"
-description = "Jump to next paragraph 5 times using ']p'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -747,8 +621,6 @@ target = 5
 
 [[quests]]
 id = "cmd_underscore_medium"
-name = "Trim Selection"
-description = "Trim whitespace from selection 3 times using '_'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -758,8 +630,6 @@ target = 3
 
 [[quests]]
 id = "cmd_C_hard"
-name = "Copy Selection Next"
-description = "Copy selection to next line 3 times using 'C'"
 type = "command_practice"
 difficulty = "hard"
 
@@ -771,8 +641,6 @@ target = 3
 
 [[quests]]
 id = "cmd_tilde_medium"
-name = "Toggle Case"
-description = "Toggle character case 10 times using '~'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -782,8 +650,6 @@ target = 10
 
 [[quests]]
 id = "cmd_indent_medium"
-name = "Indent Lines"
-description = "Indent lines 5 times using '>'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -793,8 +659,6 @@ target = 5
 
 [[quests]]
 id = "cmd_dedent_medium"
-name = "Dedent Lines"
-description = "Remove indentation 5 times using '<'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -806,8 +670,6 @@ target = 5
 
 [[quests]]
 id = "cmd_star_medium"
-name = "Word Search"
-description = "Search for word under cursor 5 times using '*'"
 type = "command_practice"
 difficulty = "medium"
 
@@ -817,8 +679,6 @@ target = 5
 
 [[quests]]
 id = "cmd_n_medium"
-name = "Next Match Navigation"
-description = "Navigate to next search match 10 times using 'n'"
 type = "command_practice"
 difficulty = "medium"
 

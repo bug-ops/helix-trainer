@@ -22,7 +22,7 @@ related:
 
 > [!info] Metadata
 > **Source**: research CI cycle finding (priority P4, research)
-> **Status**: Proposed (not built)
+> **Status**: Evaluated 2026-11-12, decision record in section 11: DEFER. The corpus is synthetic only and the elapsed form that `LL7` uses was not fixed before the numbers were seen, so no GO is valid. Sensitivity: fractional elapsed fails the multi-day tolerance (NO-GO form); whole-day elapsed would pass both bars. The model switch stays unimplemented.
 > **Depth**: Lightweight spec, per this project's SDD scaling guidance. This is a go/no-go evaluation, not an implementation commitment: it specifies what must be measured and how the decision is made, not how the model is wired in.
 > **Prerequisite**: [[fsrs-7-crate-migration/spec|FSRS-7 crate migration]] (mechanical `fsrs` 6.x to 7.0.0 bump)
 
@@ -104,14 +104,16 @@ THEN the outcome is exactly one of GO, NO-GO, or DEFER, with the numbers that ju
 |----|------------|----------|
 | FR-001 | WHEN the evaluation runs THE SYSTEM SHALL replay recorded review sequences through both the FSRS-6 and FSRS-7 models using the crate's own simulation/evaluation facilities, entirely offline | must |
 | FR-002 | THE evaluation SHALL define its input corpus: (a) anonymized or synthetic review sequences modeled on trainer sessions (multiple same-session repeats per command), and (b) the maintainer's own profile history if available. [NEEDS CLARIFICATION: is a real recorded corpus available, or must sequences be synthesized? The profile stores current state, not a per-review log.] | must |
-| FR-003 | THE evaluation SHALL define a primary success metric and report it separately for same-day reviews (elapsed under 1 day) and multi-day reviews. Candidate: log-loss and RMSE (binned) of predicted retrievability against recalled/forgotten outcome. The mapping of a trainer attempt to the 1-4 FSRS rating is defined by [[fsrs-review-rating-and-session/spec]] (FR-004..FR-006: failure is Again; success is Easy for ratio <= 1.5, Good for <= 3.0, otherwise Hard); the binary recall outcome is success versus failure. The evaluation takes it from there, not invented. | must |
+| FR-003 | THE evaluation SHALL report ONE primary metric separately for same-day reviews (elapsed under 1 day) and multi-day reviews (elapsed of 1 day or more): the mean LOG-LOSS of the predicted retrievability against the recalled (1) or forgotten (0) outcome. Binned RMSE is reported as a secondary metric and does not enter the decision. The mapping of a trainer attempt to the 1-4 FSRS rating is defined by [[fsrs-review-rating-and-session/spec]] (FR-004..FR-006: failure is Again; success is Easy for ratio <= 1.5, Good for <= 3.0, otherwise Hard); the binary recall outcome is success versus failure. The evaluation takes it from there, not invented. | must |
 | FR-004 | WHEN comparing models THE evaluation SHALL use identical inputs, ratings, and timestamps for both, with FSRS-7 run both with default parameters and, if applicable, with the elapsed time passed as fractional days | must |
 | FR-005 | THE evaluation SHALL assess each candidate representation of sub-day elapsed time and interval (keep day-quantized, store fractional days, store seconds) for impact on `Scheduler` due-item selection and on daily quest generation and reset, which currently assume day granularity. [NEEDS CLARIFICATION: should "due" within a session be able to resurface a card minutes later, and does that conflict with the existing session/quest design?] | must |
-| FR-006 | THE evaluation SHALL fix decision criteria before results are inspected. Proposed: GO if FSRS-7 improves same-day RMSE by at least a declared margin and does not degrade multi-day RMSE beyond a declared tolerance; NO-GO if the same-day gain is below the margin; DEFER if the corpus is too small to separate the models. [NEEDS CLARIFICATION: numeric margin and tolerance.] | must |
+| FR-006 | THE decision criteria are FIXED here, before any result is inspected (user decision D-437, 2026-11-11). With `LL6` and `LL7` the mean log-loss of FSRS-6 and FSRS-7 on the same events and `gain_same = (LL6_same - LL7_same) / LL6_same`: (a) GO when the corpus is valid (FR-011) AND `gain_same >= 5%` (FSRS-7 at least 5% better on same-day reviews) AND `LL7_multi <= 1.01 * LL6_multi` (FSRS-7 at most 1% worse on multi-day reviews); (b) NO-GO when the corpus is valid and either `gain_same < 5%` or `LL7_multi > 1.01 * LL6_multi`; (c) DEFER when the corpus is NOT valid (FR-011). The numbers are reported as measured; nothing is averaged across the same-day and multi-day groups. ELAPSED FORM (clarification of 2026-11-12, see section 11): the form of elapsed time that reaches `LL7` MUST be declared BEFORE a run, as the form the production scheduler will actually feed to the model, and the verdict is stated for THAT form only; any other form is recorded as a sensitivity result and is not averaged in. A form chosen after the numbers are seen is not a valid basis for GO. The current scheduler is day-granular (`elapsed_days: u32`, day-quantized due dates) and the sub-day due and quest design of FR-005 is unresolved, so the form to declare for the next run is whole-day elapsed days; FSRS-7 fed fractional elapsed days is the sub-day sensitivity | must |
 | FR-007 | THE evaluation SHALL enumerate state-migration options for existing profiles (reset, derive `stability_fast` via serde default, replay of reconstructable history, approximate mapping) with the user-visible consequences of each | must |
 | FR-008 | THE evaluation SHALL confirm that retrievability for FSRS-7 is obtained through `FSRS::current_retrievability` rather than from `FSRS_PARAMS[20]` | must |
 | FR-009 | THE evaluation SHALL record the model/parameter-set choice that `FSRS::new` would make implicitly, and require it be pinned explicitly in any GO follow-up | should |
 | FR-010 | THE evaluation SHALL produce a written decision record in this package stating the outcome, evidence, and, for GO, the follow-up spec scope | must |
+| FR-011 | THE corpus-validity condition for DEFER is fixed in advance. A corpus is VALID only when ALL hold: (V1) it holds at least 5,000 scored same-day events and at least 5,000 scored multi-day events; (V2) the verdict of FR-006 computed separately on each of at least 5 generator seeds is the SAME on every seed (any disagreement is DEFER, not a majority vote); (V3) at most 10% of generated or recorded events are excluded (out-of-order timestamps, clock skew); (V4) the outcome generator is model-neutral, that is NEITHER FSRS-6 NOR FSRS-7 (for example power-law forgetting with seeded noise), and the decision record says so; a corpus generated by either FSRS model is invalid by construction. Real review logs of the maintainer may extend the corpus only under the Ask-First rule of section 8 | must |
+| FR-012 | THE evaluation tool SHALL be ONE dev-only example, `examples/fsrs_model_eval.rs`, committed with the change: seeded and offline (NFR-001, NFR-002), replaying the same events through FSRS-6 and FSRS-7 (FR-004) and printing the FR-003 metrics and the FR-006/FR-011 verdict. It adds no dependency, edits no manifest and does not change shipped code (NFR-004, section 8). The user approved this file (D-437). A follow-up issue records whatever the evaluation excludes. The decision record (FR-010) is written after the run, in this package | must |
 
 ## 4. Non-Functional Requirements
 
@@ -120,7 +122,7 @@ THEN the outcome is exactly one of GO, NO-GO, or DEFER, with the numbers that ju
 | NFR-001 | Determinism | WHEN run twice on the same inputs and seed THE evaluation SHALL produce identical metrics; any randomness is seeded. |
 | NFR-002 | Privacy / offline | The evaluation and any resulting scheduler SHALL run with no network access and SHALL NOT send review data off-device; no parameter optimization on user data may require a network. |
 | NFR-003 | Startup cost | A GO outcome SHALL not measurably increase application startup time; construction of the model and loading of profile data stays within the existing startup path. [NEEDS CLARIFICATION: current baseline startup measurement.] |
-| NFR-004 | Dependency hygiene | The evaluation SHALL NOT add dependencies to the shipped binary; any tooling is dev-only and passes `cargo deny check`. |
+| NFR-004 | Dependency hygiene | The evaluation SHALL NOT add dependencies to the shipped binary; the tooling is the dev-only example of FR-012, with no new dependency, and passes `cargo deny check`. |
 | NFR-005 | Reproducibility | The evaluation procedure and inputs SHALL be documented so a maintainer can rerun it against a future crate release. |
 
 ## 5. Data Model
@@ -184,14 +186,39 @@ THEN the outcome is exactly one of GO, NO-GO, or DEFER, with the numbers that ju
 ## 10. Open Questions
 
 > [!question] Unresolved
-> - [NEEDS CLARIFICATION: Is a per-review log available or capturable for a real corpus, given `profile.json` stores only aggregate state?]
+> - [NEEDS CLARIFICATION: Is a per-review log available or capturable for a real corpus, given `profile.json` stores only aggregate state? The DEFER of section 11 is re-run on such a corpus.]
 > - Closed 2026-11-11: trainer attempt to FSRS rating and recall-outcome mapping is defined in [[fsrs-review-rating-and-session/spec]] (FR-003 pointer).
-> - [NEEDS CLARIFICATION: Numeric GO margin and multi-day tolerance (FR-006).]
+> - Closed 2026-11-11 (user decision D-437): GO margin 5% relative log-loss on same-day reviews, multi-day tolerance 1% worse (FR-006), corpus validity per FR-011.
 > - [NEEDS CLARIFICATION: Should within-session resurfacing of a card be a product goal, or is day-level due sufficient with FSRS-7 used only for better stability estimates?]
 > - [NEEDS CLARIFICATION: Preferred migration for existing profiles (reset vs. replay vs. approximate).]
 > - [NEEDS CLARIFICATION: Startup-time baseline for NFR-003.]
 
-## 11. See Also
+## 11. Decision Record (2026-11-12)
+
+> [!important] Outcome
+> **DEFER.** The corpus is valid by FR-011 but SYNTHETIC only, and the elapsed form used for `LL7` was not declared before the numbers were seen (the first reading of FR-006 was ambiguous, and the clarification was written after the results). A GO resting on that post-hoc choice is not a valid adoption basis. Sensitivity results are kept: fractional elapsed is NO-GO, whole-day elapsed would pass both bars. The model switch is not adopted and nothing is implemented.
+
+Tool and corpus (FR-012, `examples/fsrs_model_eval.rs`, seeded, two runs identical): 5 seeds x 1,500 cards x 10 reviews from a model-neutral generator (stretched-exponential forgetting `0.9^((t/s)^0.8)` with hidden stability: success gain, failure shrink, lognormal noise; 55% same-day gaps of 1 minute to 12 hours, 45% multi-day gaps of 1 to 60 days; 2% of timestamps skewed backwards). Ratings use the trainer mapping of FR-003. Models: FSRS-6 with default parameters and whole-day elapsed (as shipped); FSRS-7 with default parameters, once with whole-day elapsed and once with fractional elapsed days. Retrievability is read through `FSRS::current_retrievability` for every model (FR-008 confirmed: no `FSRS_PARAMS[20]` indexing). Metric: mean log-loss, probabilities clamped to [1e-6, 1-1e-6].
+
+Corpus validity (FR-011): V1 36,535 scored same-day and 30,392 scored multi-day events (pass); V2 the same verdict on all 5 seeds for each form (pass); V3 0.76% of events excluded (pass); V4 generator neither FSRS-6 nor FSRS-7 (pass by construction). The corpus satisfies FR-011, so DEFER here does not come from FR-011 but from the decision of 2026-11-12: the elapsed form was not declared in advance and the evidence is synthetic only (FR-006 clarification).
+
+| Model and elapsed form | Same-day log-loss | Multi-day log-loss | Same-day gain vs FSRS-6 | Multi-day vs FSRS-6 | FR-006 verdict |
+|------------------------|-------------------|--------------------|-------------------------|---------------------|----------------|
+| FSRS-6, whole-day (shipped) | 0.7215 | 1.0554 | baseline | baseline | baseline |
+| FSRS-7, whole-day elapsed | 0.2443 | 0.9562 | 66% better | 9.4% better | would pass both bars on every seed (sensitivity, not a verdict) |
+| FSRS-7, fractional elapsed | 0.1964 | 1.1035 | 72.8% better | 4.6% worse (fails the 1% tolerance) | would fail on every seed (sensitivity, not a verdict) |
+
+Why no form is the verdict form: the first reading of FR-006 did not say how elapsed time reaches `LL7`, and the example printed the fractional form as primary. The whole-day form is the one the current scheduler feeds and needs no change to due selection, daily quests or the stored interval type, while the fractional form needs the sub-day design of FR-005 (not evaluated); that argument was made after the results, so it is the rule for the NEXT run (FR-006), not a basis for this one.
+
+Caveats that bound the conclusion:
+- The form clarification was written after the numbers were seen; choosing the whole-day form afterwards would be post-hoc, so both rows stay as sensitivity and neither is a verdict (decision of 2026-11-12).
+- Synthetic evidence only; the risk table of section 9 prefers DEFER over GO on synthetic-only evidence, and this record follows that rule.
+- FSRS-6 default parameters score worse than chance on this generator's same-day events (0.7215 is above ln 2), so most of the same-day gain measures how well FSRS-7 defaults fit this generator, not a real-learner effect.
+- FR-005 (sub-day due selection and quests) and FR-007 (migration options) were not evaluated numerically: `profile.json` stores state, not a review log, so replay of existing history is impossible for current users. FR-009: `FSRS::new(&[])` selects the FSRS-7 defaults, so any follow-up pins the parameter table explicitly.
+
+Follow-up: (1) #627, the follow-up issue to collect a real per-review-log corpus (the trainer persists state, not a log, so capture has to be designed first) and to re-run the evaluation with the elapsed form declared in advance (FR-006: whole-day, the form the production scheduler feeds, with fractional as sensitivity), re-checking FR-011 validity; (2) no adoption spec and no scheduler change until that re-run gives GO; (3) the fractional (sub-day) form failed the multi-day tolerance on the synthetic corpus and is not pursued unless a real corpus shows it within tolerance.
+
+## 12. See Also
 
 - [[constitution]] — project principles
 - [[MOC-specs]] — all specifications

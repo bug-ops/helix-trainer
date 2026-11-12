@@ -218,6 +218,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_get_due_reviews_empty_when_no_overdue() {
         let tracker = PerformanceTracker::new();
         let scheduler = Scheduler::new();
@@ -629,12 +633,12 @@ mod tests {
                 let (scheduler, tracker) = build(&events, final_days);
                 prop_assume!(!scheduler.get_due_reviews(&tracker).is_empty());
                 let queue = scheduler.get_review_queue(&tracker, limit);
-                for pair in queue.windows(2) {
+                for [first, second] in queue.array_windows::<2>() {
                     prop_assert!(
-                        pair[0].priority.total_cmp(&pair[1].priority) != Ordering::Less,
+                        first.priority.total_cmp(&second.priority) != Ordering::Less,
                         "queue not sorted: {} before {}",
-                        pair[0].priority,
-                        pair[1].priority
+                        first.priority,
+                        second.priority
                     );
                 }
             }

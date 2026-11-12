@@ -50,6 +50,10 @@ pub(super) fn render_statistics_screen(frame: &mut Frame, state: &AppState) {
 }
 
 /// Render the main statistics content
+#[expect(
+    clippy::similar_names,
+    reason = "parallel names mirror the values they bind"
+)]
 fn render_statistics_content(frame: &mut Frame, state: &AppState, area: ratatui::layout::Rect) {
     let content_block = Block::default().borders(Borders::ALL);
     let inner_area = content_block.inner(area);
@@ -319,6 +323,10 @@ fn render_weak_commands_section(lines: &mut Vec<Line<'static>>, state: &AppState
 }
 
 /// Render scenario mastery section using profile's scenario history
+#[expect(
+    clippy::similar_names,
+    reason = "parallel names mirror the values they bind"
+)]
 fn render_scenario_mastery_section(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![Span::styled(
         t!("statistics.scenario_header").to_string(),

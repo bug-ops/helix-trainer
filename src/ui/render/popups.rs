@@ -399,6 +399,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_profile_load_banner_leaves_bottom_row_untouched() {
         let state = quarantined_state("/tmp/profile.json.corrupt-1");
 

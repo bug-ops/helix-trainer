@@ -10,13 +10,13 @@ use helix_trainer::{
     async_state::DataLoadMessage,
     game::ScenarioCollection,
     gamification::{
-        Achievement, AchievementEngine, LockStatus, QuarantineOutcome, QuestGenerator,
-        QuestRegistrySlot, StreakChange, StreakManager, UserProfile,
+        AchievementEngine, LockStatus, QuarantineOutcome, QuestGenerator, QuestRegistrySlot,
+        StreakChange, StreakManager, UserProfile,
     },
     input::keymap::keymap_fingerprint_mismatch_message,
     learning::PerformanceTracker,
     security::error_chain,
-    ui::{AppState, Notification, NotificationType, state::Quarantine},
+    ui::{AppState, Notification, NotificationType, state::Quarantine, text},
 };
 
 /// How long a data-loss-risk warning notification stays visible.
@@ -101,6 +101,16 @@ fn refresh_daily_quests_if_due(state: &mut AppState) {
     }
 }
 
+/// Installs a loaded profile as the session profile.
+///
+/// The single place that assigns `state.progress.profile`: it settles an
+/// unreadable challenge day to today so the attempt limit is never refilled.
+fn install_profile(state: &mut AppState, mut profile: UserProfile) {
+    let today = state.progress.today();
+    profile.challenge_progress.settle_unreadable_day(today);
+    state.progress.profile = profile;
+}
+
 /// Warn the user if another live instance already appears to be using this
 /// profile — two instances writing the same file independently means
 /// "last save wins" silently discards one side's progress.
@@ -166,6 +176,10 @@ fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
 ///
 /// Processes async loading results and updates app state accordingly.
 /// Handles scenarios, profiles, quest registry, and save confirmations.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
     match msg {
         DataLoadMessage::ScenariosReady(scenarios) => {
@@ -215,7 +229,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
                 updated_profile.performance_data.clone(),
                 state.progress.clock(),
             );
-            state.progress.profile = updated_profile;
+            install_profile(state, updated_profile);
             state.progress.mark_profile_loaded();
 
             refresh_daily_quests_if_due(state);
@@ -232,13 +246,12 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
             );
             if !newly_unlocked.is_empty() {
                 for achievement_id in newly_unlocked {
-                    let achievement = Achievement::new(achievement_id);
                     state
                         .ui
                         .notifications
                         .push(Notification::new(NotificationType::Achievement {
-                            name: achievement.name,
-                            description: achievement.description,
+                            name: text::achievement_name(achievement_id),
+                            description: text::achievement_description(achievement_id),
                         }));
                 }
                 if let Err(e) = state.progress.save_immediate() {
@@ -259,7 +272,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
             backup,
             previous,
         } => {
-            state.progress.profile = fallback;
+            install_profile(state, fallback);
             tracing::error!(
                 backup = ?backup,
                 error = %error_chain(&error),
@@ -313,9 +326,9 @@ mod tests {
     use helix_trainer::config::json_store::QuarantineError;
     use helix_trainer::config::json_store::{Document, StorageError};
     use helix_trainer::config::keymap::fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
+    use helix_trainer::error::UserError;
     use helix_trainer::gamification::PreviousCopy;
     use helix_trainer::ids::{QuestId, ScenarioId};
-    use helix_trainer::security::UserError;
     use helix_trainer::{
         config::{
             CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution,
@@ -324,6 +337,7 @@ mod tests {
         constants::STREAK_FREEZE_MAX_GAP_DAYS,
         gamification::{ProfileStorage, QuestTemplateRegistry},
     };
+    use std::assert_matches;
 
     // Binary crate tests cannot access the library's #[cfg(test)]-gated
     // `ProfileStorage::for_test()`, so we mirror it locally here: a unique file
@@ -1181,6 +1195,40 @@ mod tests {
         handle_data_message(&mut state, DataLoadMessage::ProfileSaved);
     }
 
+    /// #615: an unreadable challenge day is settled to today on both install paths,
+    /// so the used attempts survive instead of the allowance being refilled.
+    #[test]
+    fn test_install_profile_settles_unreadable_challenge_day() {
+        use helix_trainer::gamification::ChallengeDay;
+
+        let unreadable = || {
+            let mut profile = UserProfile::new();
+            profile.challenge_progress.last_challenge_date = ChallengeDay::Unreadable;
+            profile.challenge_progress.attempts_used_today = 3;
+            profile
+        };
+
+        let mut ready = empty_test_app_state();
+        handle_data_message(&mut ready, DataLoadMessage::ProfileReady(unreadable()));
+        let mut fallback = empty_test_app_state();
+        handle_data_message(
+            &mut fallback,
+            DataLoadMessage::ProfileError {
+                error: corrupt_profile_error(),
+                fallback: unreadable(),
+                backup: no_backup(),
+                previous: PreviousCopy::Unavailable,
+            },
+        );
+
+        for state in [ready, fallback] {
+            let today = state.progress.today();
+            let progress = &state.progress.profile.challenge_progress;
+            assert_eq!(progress.last_challenge_date, ChallengeDay::On(today));
+            assert!(!progress.can_attempt(today));
+        }
+    }
+
     /// Regression test for critique finding B2: a failed async save must
     /// not be silently swallowed. Before this fix, `ProfileSaveError` was
     /// only logged — the optimistic `mark_saved()` made at dispatch time
@@ -1242,10 +1290,7 @@ mod tests {
             DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
         );
 
-        assert!(matches!(
-            state.progress.quest_registry,
-            QuestRegistrySlot::Ready(_)
-        ));
+        assert_matches!(state.progress.quest_registry, QuestRegistrySlot::Ready(_));
     }
 
     #[test]
@@ -1277,10 +1322,7 @@ mod tests {
             &mut state,
             DataLoadMessage::ProfileReady(UserProfile::new()),
         );
-        assert!(matches!(
-            state.progress.quest_registry,
-            QuestRegistrySlot::Pending
-        ));
+        assert_matches!(state.progress.quest_registry, QuestRegistrySlot::Pending);
         assert_eq!(
             state.progress.profile.daily_quests,
             [] as [helix_trainer::gamification::Quest; 0]
@@ -1313,10 +1355,10 @@ mod tests {
             )),
         );
 
-        assert!(matches!(
+        assert_matches!(
             state.progress.quest_registry,
             QuestRegistrySlot::Unavailable
-        ));
+        );
         assert_eq!(
             state.progress.profile.daily_quests,
             [] as [helix_trainer::gamification::Quest; 0]

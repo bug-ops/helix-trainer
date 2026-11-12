@@ -104,6 +104,7 @@ impl KeymapOverlay {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::keys;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn key(c: char) -> PhysicalKey {
@@ -119,14 +120,8 @@ mod tests {
 
     #[test]
     fn resolved_entry_is_found_by_context_and_key() {
-        let overlay = KeymapOverlay::from_entries([(
-            (KeyContext::Base, key('j')),
-            CanonicalKeys::from_static("k"),
-        )]);
-        assert_eq!(
-            overlay.lookup(KeyContext::Base, key('j')),
-            Some(&CanonicalKeys::from_static("k"))
-        );
+        let overlay = KeymapOverlay::from_entries([((KeyContext::Base, key('j')), keys("k"))]);
+        assert_eq!(overlay.lookup(KeyContext::Base, key('j')), Some(&keys("k")));
         // Same physical key, different context: miss.
         assert!(overlay.lookup(KeyContext::Goto, key('j')).is_none());
     }
@@ -142,24 +137,12 @@ mod tests {
     #[test]
     fn fingerprint_is_order_independent_and_content_sensitive() {
         let a = KeymapOverlay::from_entries([
-            (
-                (KeyContext::Base, key('j')),
-                CanonicalKeys::from_static("k"),
-            ),
-            (
-                (KeyContext::Base, key('k')),
-                CanonicalKeys::from_static("j"),
-            ),
+            ((KeyContext::Base, key('j')), keys("k")),
+            ((KeyContext::Base, key('k')), keys("j")),
         ]);
         let b = KeymapOverlay::from_entries([
-            (
-                (KeyContext::Base, key('k')),
-                CanonicalKeys::from_static("j"),
-            ),
-            (
-                (KeyContext::Base, key('j')),
-                CanonicalKeys::from_static("k"),
-            ),
+            ((KeyContext::Base, key('k')), keys("j")),
+            ((KeyContext::Base, key('j')), keys("k")),
         ]);
         assert_eq!(a.fingerprint(), b.fingerprint());
         assert_ne!(a.fingerprint(), KeymapOverlay::identity().fingerprint());
@@ -170,17 +153,13 @@ mod tests {
         let remap = |target| {
             KeymapOverlay::from_entries([((KeyContext::Base, key('j')), target)]).fingerprint()
         };
-        assert_ne!(
-            remap(CanonicalKeys::from_static("k")),
-            remap(CanonicalKeys::from_static("l"))
-        );
+        assert_ne!(remap(keys("k")), remap(keys("l")));
     }
 
     #[test]
     fn context_and_key_are_part_of_the_fingerprint() {
         let at = |context, c| {
-            KeymapOverlay::from_entries([((context, key(c)), CanonicalKeys::from_static("k"))])
-                .fingerprint()
+            KeymapOverlay::from_entries([((context, key(c)), keys("k"))]).fingerprint()
         };
         assert_ne!(at(KeyContext::Base, 'j'), at(KeyContext::Goto, 'j'));
         assert_ne!(at(KeyContext::Base, 'j'), at(KeyContext::Base, 'l'));
@@ -189,22 +168,33 @@ mod tests {
     /// Pins the algorithm: a change here invalidates every stored fingerprint.
     #[test]
     fn fingerprint_value_is_pinned() {
-        let overlay = KeymapOverlay::from_entries([(
-            (KeyContext::Base, key('j')),
-            CanonicalKeys::from_static("k"),
-        )]);
+        let overlay = KeymapOverlay::from_entries([((KeyContext::Base, key('j')), keys("k"))]);
         assert_eq!(
             overlay.fingerprint(),
             KeymapFingerprint::Fnv1a64V1(0x05aa_d1ba_399a_3e5d)
         );
     }
 
+    /// Pins the fingerprint of an overlay mixing contexts, modifiers and single-, multi-key and named targets.
+    #[test]
+    fn mixed_overlay_fingerprint_value_is_pinned() {
+        let chord = |s: &str| PhysicalKey::try_from(s).unwrap();
+        let overlay = KeymapOverlay::from_entries([
+            ((KeyContext::Base, key('j')), keys("gg")),
+            ((KeyContext::Base, chord("A-c")), keys("Alt-*")),
+            ((KeyContext::Base, chord("G")), keys("Escape")),
+            ((KeyContext::Goto, key('x')), keys("mi(")),
+            ((KeyContext::Base, chord("C-Left")), keys("Ctrl-d")),
+        ]);
+        assert_eq!(
+            overlay.fingerprint(),
+            KeymapFingerprint::Fnv1a64V1(0x36cb_e286_108c_02d8)
+        );
+    }
+
     #[test]
     fn clone_is_cheap_and_shares_state() {
-        let overlay = KeymapOverlay::from_entries([(
-            (KeyContext::Base, key('j')),
-            CanonicalKeys::from_static("k"),
-        )]);
+        let overlay = KeymapOverlay::from_entries([((KeyContext::Base, key('j')), keys("k"))]);
         let cloned = overlay.clone();
         assert_eq!(cloned.len(), overlay.len());
     }

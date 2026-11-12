@@ -6,6 +6,9 @@
 /// Default number of visible lines in the viewport
 const DEFAULT_VISIBLE_LINES: usize = 24;
 
+/// Lines `hx` keeps between the cursor and the view edge (`scrolloff`)
+const SCROLLOFF: usize = 5;
+
 /// Default number of visible columns in the viewport
 const DEFAULT_VISIBLE_COLS: usize = 80;
 
@@ -110,15 +113,58 @@ impl ViewState {
         }
     }
 
-    /// Scroll down by count lines
+    /// Scroll down by count lines, as far as the last line of the document
+    /// (`hx` lets the last line reach the top of the view)
     pub fn scroll_down(&mut self, count: usize, total_lines: usize) {
-        let max_top = total_lines.saturating_sub(self.visible_lines);
-        self.top_line = (self.top_line + count).min(max_top);
+        let last_line = total_lines.saturating_sub(1);
+        self.top_line = self.top_line.saturating_add(count).min(last_line);
     }
 
     /// Scroll up by count lines
     pub fn scroll_up(&mut self, count: usize) {
         self.top_line = self.top_line.saturating_sub(count);
+    }
+
+    /// Lines kept above the cursor: `hx` leaves a gap in the middle of a
+    /// view that is too small for the full `scrolloff`
+    pub fn top_margin(&self) -> usize {
+        SCROLLOFF.min(self.visible_lines.saturating_sub(1) / 2)
+    }
+
+    /// Lines kept below the cursor
+    pub fn bottom_margin(&self) -> usize {
+        SCROLLOFF.min(self.visible_lines / 2)
+    }
+
+    /// The line a forward page scroll puts the cursor on when it is above it
+    pub fn top_band_line(&self) -> usize {
+        self.top_line.saturating_add(self.top_margin())
+    }
+
+    /// The line a backward page scroll puts the cursor on when it is below it
+    pub fn bottom_band_line(&self) -> usize {
+        self.top_line
+            .saturating_add(self.visible_lines.saturating_sub(self.top_margin() + 1))
+    }
+
+    /// Move the view, never the cursor, until `cursor_line` is inside the
+    /// `scrolloff` margins (`hx` `ensure_cursor_in_view`)
+    pub fn ensure_cursor_in_view(&mut self, cursor_line: usize) {
+        let (top_margin, bottom_margin) = (self.top_margin(), self.bottom_margin());
+        if cursor_line < self.top_line.saturating_add(top_margin) {
+            self.top_line = cursor_line.saturating_sub(top_margin);
+        } else if cursor_line.saturating_add(bottom_margin) >= self.bottom_line() {
+            let below = self.visible_lines.saturating_sub(bottom_margin + 1);
+            self.top_line = cursor_line.saturating_sub(below);
+        }
+    }
+
+    /// Center the view on `cursor_line` unless it is already inside the view,
+    /// margins aside (`hx` `ensure_cursor_in_view_center`, used after a search)
+    pub fn center_if_outside(&mut self, cursor_line: usize) {
+        if cursor_line < self.top_line || cursor_line >= self.bottom_line() {
+            self.top_line = cursor_line.saturating_sub(self.visible_lines.saturating_sub(1) / 2);
+        }
     }
 }
 
@@ -194,9 +240,9 @@ mod tests {
         state.scroll_down(5, 100);
         assert_eq!(state.top_line(), 5);
 
-        // Don't scroll past end
+        // The last line may reach the top of the view
         state.scroll_down(100, 100);
-        assert_eq!(state.top_line(), 90);
+        assert_eq!(state.top_line(), 99);
     }
 
     #[test]
@@ -209,6 +255,53 @@ mod tests {
 
         // Don't scroll past start
         state.scroll_up(100);
+        assert_eq!(state.top_line(), 0);
+    }
+
+    #[test]
+    fn margins_leave_a_gap_in_a_small_view() {
+        assert_eq!(sized(24, 80).top_margin(), 5);
+        assert_eq!(sized(24, 80).bottom_margin(), 5);
+        assert_eq!(
+            (sized(6, 80).top_margin(), sized(6, 80).bottom_margin()),
+            (2, 3)
+        );
+        assert_eq!(
+            (sized(1, 80).top_margin(), sized(1, 80).bottom_margin()),
+            (0, 0)
+        );
+    }
+
+    #[test]
+    fn band_lines_follow_the_margins() {
+        let mut state = sized(24, 80);
+        state.top_line = 10;
+        assert_eq!(state.top_band_line(), 15);
+        assert_eq!(state.bottom_band_line(), 28);
+    }
+
+    #[test]
+    fn ensure_cursor_in_view_moves_the_view_just_enough() {
+        let mut state = sized(24, 80);
+        state.ensure_cursor_in_view(10);
+        assert_eq!(state.top_line(), 0);
+        state.ensure_cursor_in_view(29);
+        assert_eq!(state.top_line(), 11);
+        state.ensure_cursor_in_view(12);
+        assert_eq!(state.top_line(), 7);
+        state.ensure_cursor_in_view(0);
+        assert_eq!(state.top_line(), 0);
+    }
+
+    #[test]
+    fn center_if_outside_leaves_a_visible_cursor_alone() {
+        let mut state = sized(24, 80);
+        state.top_line = 10;
+        state.center_if_outside(12);
+        assert_eq!(state.top_line(), 10);
+        state.center_if_outside(50);
+        assert_eq!(state.top_line(), 39);
+        state.center_if_outside(3);
         assert_eq!(state.top_line(), 0);
     }
 

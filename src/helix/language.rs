@@ -4,23 +4,78 @@
 //! One table serves `>`, `<`, Insert-mode `Tab` (unit), `J` (comment tokens)
 //! and `o`/`O`/Enter (new-line rule), so a language is declared exactly once.
 
-use super::indent::{FOUR_SPACES, IndentUnit, TWO_SPACES};
+use serde::{Deserialize, Serialize};
+
+use super::indent::{FOUR_SPACES, IndentUnit, TWO_SPACES, TabWidth};
+
+/// Content language of a scenario, a closed set parsed at scenario load
+///
+/// An unknown or empty `language` value in a scenario file is a load error.
+/// Supporting a further language means adding a variant here together with
+/// its [`LanguageRules`] entry.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::helix::Language;
+///
+/// assert_eq!(Language::Py.rules().comment_tokens, ["#"]);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Language {
+    /// Rust, the default of scenarios that name no language
+    #[serde(rename = "rs")]
+    Rs,
+    /// Markdown
+    #[serde(rename = "md")]
+    Md,
+    /// Python
+    #[serde(rename = "py")]
+    Py,
+}
+
+impl Language {
+    /// The editing rules of this language; total, every variant has an entry
+    pub const fn rules(self) -> &'static LanguageRules {
+        match self {
+            Self::Rs => &LanguageRules::RUST,
+            Self::Md => &LanguageRules::MARKDOWN,
+            Self::Py => &LanguageRules::PYTHON,
+        }
+    }
+}
+
+/// Where Insert-mode `Tab` goes when text precedes the cursor on its line
+///
+/// `hx` moves to the end of the parent syntax node; the simulator has no
+/// syntax tree, so a language either approximates that with brackets or stays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SmartTab {
+    /// The cursor does not move
+    Stay,
+    /// The cursor moves after the closer of the innermost enclosing bracket
+    /// pair, or after the closing brace of the block the line opens
+    BracketCloser,
+}
 
 /// Language-dependent editing rules mirroring the `hx` 25.07.1 `languages.toml`
 ///
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::helix::LanguageRules;
+/// use helix_trainer::helix::Language;
 ///
-/// let rust = LanguageRules::for_language("rs").unwrap();
+/// let rust = Language::Rs.rules();
 /// assert_eq!(rust.comment_tokens, ["///", "//!", "//"]);
-/// assert!(LanguageRules::for_language("unknown").is_none());
 /// ```
 #[derive(Debug, PartialEq, Eq)]
 pub struct LanguageRules {
     /// Indent unit used when the document text does not reveal one
     pub indent_unit: IndentUnit,
+    /// Columns a tab character counts for `&`, `<`, `C` and Backspace
+    pub tab_width: TabWidth,
+    /// What `Tab` does after text on the line
+    pub smart_tab: SmartTab,
     /// Line-comment tokens, longest first so `///` wins over `//`
     pub comment_tokens: &'static [&'static str],
     /// Opener and closer pairs typed text closes automatically and Enter
@@ -89,17 +144,21 @@ const PAIRS_WITH_SINGLE_QUOTE: &[(char, char)] = &[
 ];
 
 impl LanguageRules {
-    /// Rules for scenarios naming no language or one outside the table: the
-    /// default unit, no comment tokens and no new-line rule
-    pub const UNLISTED: Self = Self {
+    /// Rules of a simulator created without a language: the default unit, no
+    /// comment tokens and no new-line rule; no scenario can select them
+    pub const PLAIN: Self = Self {
         indent_unit: IndentUnit::DEFAULT,
+        tab_width: TabWidth::FOUR,
+        smart_tab: SmartTab::Stay,
         comment_tokens: &[],
         auto_pairs: helix_core::auto_pairs::DEFAULT_PAIRS,
         newline: None,
     };
 
-    const RUST: Self = Self {
+    pub(crate) const RUST: Self = Self {
         indent_unit: FOUR_SPACES,
+        tab_width: TabWidth::FOUR,
+        smart_tab: SmartTab::BracketCloser,
         comment_tokens: &["///", "//!", "//"],
         auto_pairs: DEFAULT_PAIRS,
         newline: Some(NewlineRules {
@@ -114,15 +173,19 @@ impl LanguageRules {
         }),
     };
 
-    const MARKDOWN: Self = Self {
+    pub(crate) const MARKDOWN: Self = Self {
         indent_unit: TWO_SPACES,
+        tab_width: TabWidth::TWO,
+        smart_tab: SmartTab::Stay,
         comment_tokens: &[],
         auto_pairs: PAIRS_WITH_SINGLE_QUOTE,
         newline: None,
     };
 
-    const PYTHON: Self = Self {
+    pub(crate) const PYTHON: Self = Self {
         indent_unit: FOUR_SPACES,
+        tab_width: TabWidth::FOUR,
+        smart_tab: SmartTab::Stay,
         comment_tokens: &["#"],
         auto_pairs: PAIRS_WITH_SINGLE_QUOTE,
         newline: Some(NewlineRules {
@@ -140,29 +203,15 @@ impl LanguageRules {
         }),
     };
 
-    /// Rules for `language` (a file-extension token), or `None` when it has
-    /// no table entry
-    ///
-    /// A unit test over the embedded scenarios fails when a scenario uses a
-    /// language that is missing here.
-    pub fn for_language(language: &str) -> Option<&'static Self> {
-        match language {
-            "rs" => Some(&Self::RUST),
-            "md" => Some(&Self::MARKDOWN),
-            "py" => Some(&Self::PYTHON),
-            _ => None,
-        }
-    }
-
     /// The comment token `text` starts with after leading blanks (the
     /// longest one), if any
     ///
     /// # Examples
     ///
     /// ```
-    /// use helix_trainer::helix::LanguageRules;
+    /// use helix_trainer::helix::Language;
     ///
-    /// let rust = LanguageRules::for_language("rs").unwrap();
+    /// let rust = Language::Rs.rules();
     /// assert_eq!(rust.leading_comment_token("  /// doc"), Some("///"));
     /// assert_eq!(rust.leading_comment_token("a // b"), None);
     /// ```
@@ -175,9 +224,9 @@ impl LanguageRules {
     /// # Examples
     ///
     /// ```
-    /// use helix_trainer::helix::LanguageRules;
+    /// use helix_trainer::helix::Language;
     ///
-    /// let rust = LanguageRules::for_language("rs").unwrap();
+    /// let rust = Language::Rs.rules();
     /// assert_eq!(rust.comment_token_at(&"//! a".chars()), Some("//!"));
     /// assert_eq!(rust.comment_token_at(&"a //".chars()), None);
     /// ```
@@ -199,39 +248,59 @@ impl LanguageRules {
 mod tests {
     use super::*;
 
+    const ALL: [Language; 3] = [Language::Rs, Language::Md, Language::Py];
+
     #[test]
     fn table_entries_match_hx() {
-        assert_eq!(
-            LanguageRules::for_language("rs").unwrap().indent_unit,
-            FOUR_SPACES
-        );
-        assert_eq!(
-            LanguageRules::for_language("md").unwrap().indent_unit,
-            TWO_SPACES
-        );
-        assert_eq!(
-            LanguageRules::for_language("py").unwrap().indent_unit,
-            FOUR_SPACES
-        );
-        assert!(LanguageRules::for_language("js").is_none());
-        assert!(LanguageRules::for_language("").is_none());
+        assert_eq!(Language::Rs.rules().indent_unit, FOUR_SPACES);
+        assert_eq!(Language::Md.rules().indent_unit, TWO_SPACES);
+        assert_eq!(Language::Py.rules().indent_unit, FOUR_SPACES);
+        assert_eq!(Language::Rs.rules().tab_width, TabWidth::FOUR);
+        assert_eq!(Language::Md.rules().tab_width, TabWidth::TWO);
+        assert_eq!(Language::Py.rules().tab_width, TabWidth::FOUR);
+        assert_eq!(LanguageRules::PLAIN.tab_width, TabWidth::FOUR);
     }
 
     #[test]
     fn comment_tokens_are_sorted_longest_first() {
-        for language in ["rs", "md", "py"] {
-            let tokens = LanguageRules::for_language(language)
-                .unwrap()
-                .comment_tokens;
+        for language in ALL {
+            let tokens = language.rules().comment_tokens;
             assert!(tokens.is_sorted_by_key(|token| std::cmp::Reverse(token.len())));
         }
     }
 
     #[test]
     fn leading_comment_token_picks_the_longest_after_blanks() {
-        let rust = LanguageRules::for_language("rs").unwrap();
+        let rust = Language::Rs.rules();
         assert_eq!(rust.leading_comment_token("\t//! a"), Some("//!"));
         assert_eq!(rust.leading_comment_token("//// a"), Some("///"));
-        assert_eq!(LanguageRules::UNLISTED.leading_comment_token("// a"), None);
+        assert_eq!(LanguageRules::PLAIN.leading_comment_token("// a"), None);
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Holder {
+        language: Language,
+    }
+
+    #[test]
+    fn deserializes_exactly_the_extension_tokens() {
+        for (token, expected) in [
+            ("rs", Language::Rs),
+            ("md", Language::Md),
+            ("py", Language::Py),
+        ] {
+            let holder: Holder = toml::from_str(&format!("language = \"{token}\"")).unwrap();
+            assert_eq!(holder.language, expected);
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_empty_and_miscased_tokens() {
+        for token in ["", "js", "RS", "Rs", "rust", "rs drop", "c++"] {
+            assert!(
+                toml::from_str::<Holder>(&format!("language = \"{token}\"")).is_err(),
+                "{token:?}"
+            );
+        }
     }
 }

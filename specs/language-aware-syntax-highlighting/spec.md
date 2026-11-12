@@ -19,6 +19,9 @@ related:
 
 # Feature: Language-Aware Syntax Highlighting for Scenario Content
 
+> [!info] Amended 2026-11-11 (#544, user decision D-544 = A)
+> The language is a CLOSED `Language` enum (`rs`, `md`, `py`) parsed at scenario load. An unknown or empty `language` is a scenario LOAD ERROR, not a plain-text fallback: FR-001, FR-003..FR-006, NFR-002, the data model, the edge cases and SC-003 below are rewritten accordingly. This supersedes the original graceful-degradation design.
+
 > [!info] Metadata
 > **Depth**: Lightweight spec only, per this project's SDD scaling guidance
 > ("small bug / single function → 3-5 sentences + acceptance criteria") —
@@ -74,9 +77,9 @@ to render identically (defaulting to Rust) without any TOML changes.
   (verified during implementation review):** the bundled default set does
   *not* include TypeScript (`ts`/`typescript` resolve to neither
   `find_syntax_by_extension` nor `find_syntax_by_token`), unlike the other
-  languages listed above. A `language = "ts"` scenario degrades gracefully
-  to plain text per FR-004 rather than crashing, but does not get
-  TypeScript-specific coloring. `specs/multi-language-scenario-content/`
+  languages listed above. A `language = "ts"` scenario is a scenario
+  load error per FR-004 (#544): the closed `Language` enum has no TypeScript
+  variant. `specs/multi-language-scenario-content/`
   must account for this — either drop TypeScript from its initial scope or
   explicitly plan to pull in an extra `.sublime-syntax` definition (an
   "Ask First" action per this spec's Agent Boundaries) when it is authored.
@@ -90,19 +93,19 @@ Use EARS notation. Prefix with FR-NNN.
 
 | ID | Requirement | Priority |
 |----|------------|----------|
-| FR-001 | THE SYSTEM SHALL support an optional `language` field on `Setup` (`src/config/scenarios.rs`), deserialized as `Option<String>` with `#[serde(default)]`, so existing scenario TOML files that omit it continue to parse without modification | must |
+| FR-001 | THE SYSTEM SHALL support an optional `language` field on `Setup` (`src/config/scenarios.rs`), deserialized as `Option<Language>` where `Language` is a closed enum in `helix::language` (`Rs`, `Md`, `Py`, serialized as `rs`, `md`, `py`) with `#[serde(default)]`, so existing scenario TOML files that omit it continue to parse without modification | must |
 | FR-002 | WHEN a scenario's `Setup.language` is `None` THE SYSTEM SHALL treat it as `"rs"` (current hardcoded behavior), preserving identical rendering for all 149 existing scenarios | must |
-| FR-003 | WHEN `highlight_code_with_multi_cursor` is invoked THE SYSTEM SHALL resolve the syntect syntax via `find_syntax_by_extension` (or `find_syntax_by_token`, whichever syntect provides for the declared value) using the scenario's effective language string instead of the literal `"rs"` | must |
-| FR-004 | WHEN the declared `language` value does not match any syntax definition known to `SYNTAX_SET` THE SYSTEM SHALL fall back to `SYNTAX_SET.find_syntax_plain_text()` (plain, unhighlighted text) rather than panicking or silently reusing Rust highlighting | must |
-| FR-005 | THE SYSTEM SHALL accept `language` values as file-extension-style tokens (e.g. `"rs"`, `"md"`, `"py"`, `"js"`, `"go"`, `"c"`) consistent with the tokens syntect's bundled `SyntaxSet` resolves via `find_syntax_by_extension`, so scenario authors don't need to know syntect-internal syntax names | should |
-| FR-006 | THE SYSTEM SHALL validate `language` (if present) the same way other scenario string fields are validated/sanitized (see `src/security.rs`, `validators` and `sanitizer` modules), rejecting scenario files with malformed or oversized values consistent with existing `MAX_*` limits conventions | should |
+| FR-003 | WHEN `highlight_code_with_multi_cursor` is invoked THE SYSTEM SHALL resolve the syntect syntax through `find_syntax_by_extension` with the extension of the scenario's effective `Language` (`rs`, `md` or `py`), instead of the literal `"rs"` | must |
+| FR-004 | WHEN the declared `language` value is not one of the `Language` tokens (`rs`, `md`, `py`), including the empty string and a value with different case, THE SYSTEM SHALL reject the scenario at load time through the existing scenario-load error path (`UserError`, naming the scenario and the value), never panic, never fall back to plain text and never silently reuse Rust highlighting. The highlighter has no branch for an unknown language. IF the bundled `SyntaxSet` lacked the syntax of a variant, plain text would be used for that variant; a test asserts that all three variants resolve to a non-plain syntax | must |
+| FR-005 | THE SYSTEM SHALL accept exactly the `language` tokens `rs`, `md` and `py` (the file-extension tokens syntect resolves via `find_syntax_by_extension`). A further language (for example `js`, `go`, `c`) requires a new `Language` variant, a rules entry for it ([[helix-core-post-25-07-1-upgrade-readiness/spec]] FR-028) and its syntax; it is added by its own spec, never by free-form strings | must |
+| FR-006 | THE SYSTEM SHALL validate `language` by the enum parse itself: control characters, whitespace, oversized values and unknown tokens are all rejected as unknown variants. The free-form validator `validators::validate_language_field` in `src/security.rs` is removed | must |
 
 ## 3. Non-Functional Requirements
 
 | ID | Category | Requirement |
 |----|----------|-------------|
 | NFR-001 | Backward Compatibility | All 149 existing scenario TOML files under `scenarios/en/**/*.toml` MUST continue to load and render with zero visual diff — no `language` field needs to be added to any of them; `cargo nextest run scenario` MUST pass unchanged |
-| NFR-002 | Robustness | An unsupported/misspelled `language` value MUST NOT cause a panic, `unwrap()` failure, or crash on load or render — it degrades to plain text (FR-004), never to a hard error at scenario-load time |
+| NFR-002 | Robustness | An unsupported or misspelled `language` value MUST NOT cause a panic or `unwrap()` failure on load or render; it is a clear load error for that scenario naming the value (FR-004), reported through the same path as any other invalid scenario field |
 | NFR-003 | Performance | Syntax resolution is a `HashMap`-backed lookup in a `LazyLock`-cached `SyntaxSet` already paid for today; adding a language parameter must not introduce measurable per-frame overhead beyond the existing lookup cost |
 | NFR-004 | Maintainability | The change is confined to `Setup`/`highlight_code_with_multi_cursor` and their direct call sites — no new module, no new public API surface beyond the one struct field |
 
@@ -110,7 +113,7 @@ Use EARS notation. Prefix with FR-NNN.
 
 | Entity | Description | Key Attributes |
 |--------|-------------|----------------|
-| `Setup` (`src/config/scenarios.rs`) | Initial editor state for a scenario, currently `file_content: String` + flattened `CursorSpec` | + `language: Option<String>` (new, optional, defaults to `None` → treated as `"rs"`) |
+| `Setup` (`src/config/scenarios.rs`) | Initial editor state for a scenario, currently `file_content: String` + flattened `CursorSpec` | + `language: Option<Language>` (optional; `None` is treated as `rs`; unknown values are a load error, #544) |
 
 No new entities. `TargetState` is not touched — target content is compared
 structurally against the document, never syntax-highlighted, so it does not
@@ -122,8 +125,8 @@ need a `language` field.
 |----------|-------------------|
 | Existing scenario TOML with no `language` field | Parses as `None`, highlighter uses `"rs"` — identical to current behavior (FR-002) |
 | `language = "md"` and syntect's bundled defaults include Markdown | Highlighted using the Markdown syntax definition |
-| `language = "cobol"` (or any extension not in the bundled `SyntaxSet`) | Falls back to `find_syntax_plain_text()` — content renders unstyled but readable, no crash (FR-004) |
-| `language = ""` (empty string, explicitly set) | Treated as an unsupported value per FR-004 — falls back to plain text, not silently coerced to `"rs"` |
+| `language = "cobol"` (or any token other than `rs`, `md`, `py`) | The scenario fails to load with an error naming the scenario and the value (FR-004); the rest of the scenario set is unaffected |
+| `language = ""` (empty string, explicitly set) | Load error as any unknown token (FR-004), not coerced to `"rs"` |
 | Two scenarios in the same TOML file with different `language` values | Each resolves independently per its own `Setup.language` — no cross-scenario leakage, since `HighlightLines` is constructed fresh per call inside `highlight_code_with_multi_cursor` |
 
 ## 6. Success Criteria
@@ -134,7 +137,7 @@ Measurable metrics that prove the feature works:
 |----|--------|--------|
 | SC-001 | Existing scenario test suite | `cargo nextest run --workspace --all-features --lib --bins` and `cargo nextest run scenario` pass unchanged, 0 regressions |
 | SC-002 | Backward-compat rendering | All 149 existing scenarios render with the same highlighted output as before the change (no `language` field added to any of them) |
-| SC-003 | Unsupported-language handling | A regression test asserting that an unknown `language` value resolves to `find_syntax_plain_text()` and does not panic |
+| SC-003 | Unsupported-language handling | Regression tests assert that an unknown or empty `language` fails the scenario load with an error naming the value, that no panic occurs, and that `rs`, `md` and `py` resolve to non-plain syntaxes |
 | SC-004 | Unlocks dependent specs | `specs/writing-markup-scenario-track/` and `specs/multi-language-scenario-content/` can declare `language = "md"` / `language = "py"` (etc.) without further changes to `src/ui/render/highlight.rs` or `src/config/scenarios.rs` |
 
 ## 7. Agent Boundaries
@@ -147,6 +150,7 @@ Measurable metrics that prove the feature works:
   field explicitly to `Setup` rather than loosening field validation
 
 ### Ask First
+- Adding a `Language` variant (needs its rules entry and syntax, FR-005)
 - Adding a new dependency to expand syntect's bundled language coverage
   beyond `SyntaxSet::load_defaults_newlines` (e.g. a custom `.sublime-syntax`
   bundle) — the default set is expected to be sufficient for both
@@ -155,8 +159,8 @@ Measurable metrics that prove the feature works:
 ### Never
 - Add `language` to `TargetState` — target content is never rendered
   through the syntax highlighter
-- Change the fallback behavior for unresolved languages to reuse Rust
-  highlighting — that reintroduces a silent-wrong-coloring failure mode,
+- Reintroduce a fallback for unknown languages (neither reuse Rust
+  highlighting nor plain text: unknown is a load error, FR-004) — that reintroduces a silent-wrong-coloring failure mode,
   the same class of bug this spec exists to fix
 
 ## 8. Open Questions
@@ -165,11 +169,9 @@ Measurable metrics that prove the feature works:
   behavior (e.g. future language-aware scoring/diffing), or is its scope
   strictly limited to `highlight.rs` for now? Assumed strictly rendering-only
   for this spec; dependent specs should re-raise if that assumption breaks.]
-- **Resolved**: FR-006 is implemented as `validators::validate_language_field`
-  in `src/security.rs` (permissive character set — rejects only control
-  characters, whitespace, and oversized values; the value is only used as an
-  exact-match syntect lookup key). An earlier version of this spec cited a
-  separate `validators.rs` file that never existed; `validators` is an inline module of `src/security.rs`.
+- **Resolved**: FR-006 was first implemented as `validators::validate_language_field`
+  in `src/security.rs` (permissive character set); #544 removes it because the
+  closed `Language` enum parse is the validation.
 
 ## 9. See Also
 

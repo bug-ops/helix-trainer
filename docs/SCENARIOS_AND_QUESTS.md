@@ -54,9 +54,9 @@ file_content = "hello world"      # Initial buffer content
 cursor_position = [0, 0]          # [row, col] - 0-indexed; exactly ONE of cursor_position,
                                    # selection = [r0, c0, r1, c1], cursors = [[row, col], ...]
                                    # or selections = [[r0, c0, r1, c1], ...] is allowed
-language = "rs"                   # Optional: file-extension-style token for syntax highlighting
-                                   # (e.g. "rs", "md", "py"); defaults to "rs" when omitted;
-                                   # unrecognized values fall back to plain text, never crash
+language = "rs"                   # Optional: "rs", "md" or "py" (syntax highlighting and indentation
+                                   # rules); defaults to "rs" when omitted; any other value,
+                                   # including an empty string, is a scenario load error
 ```
 
 #### Target table
@@ -101,6 +101,8 @@ tags = ["word", "motion"]          # Flexible filtering tags
 commands_taught = ["w"]            # Commands this scenario teaches
 prerequisites = ["move_right_001"] # Scenarios to complete first
 ```
+
+Unknown keys in `[scenarios.metadata]` (for example the removed `estimated_time_seconds` or `locale`) make the scenario file fail to load with an error naming the key.
 
 ---
 
@@ -355,14 +357,24 @@ locale = "en"
 
 [[quests]]
 id = "quest_id"
-name = "Quest Name"
-description = "What the user needs to do"
 type = "command_practice"
 difficulty = "easy"
 
 [quests.params]
 # Type-specific parameters
 ```
+
+A quest template has no `name` or `description`: the loader rejects both keys. The player-visible text comes from `locales/<locale>.toml`, keyed by the quest `id`:
+
+```toml
+[quests.quest_id]
+name = "Quest Name"
+description = "Move forward %{target} words using '%{command}'"
+```
+
+`description` may use `%{target}` (`command_practice`, `scenario_completion`, `exploration`), `%{command}` (`command_practice`) and `%{minutes}` (`time_invested`), filled from the quest parameters. A `speed_run` description is plain text. Every template `id` needs both keys; a test fails when one is missing or a placeholder is left unresolved.
+
+Achievement text follows the same scheme: `[achievements.<AchievementId>]` with `name` and `description` in the locale file.
 
 ### Quest types
 
@@ -402,8 +414,6 @@ base_reward = 50                  # Custom XP reward (max 1000)
 ```toml
 [[quests]]
 id = "cmd_w_easy"
-name = "Word Navigation"
-description = "Move forward 5 words using 'w'"
 type = "command_practice"
 difficulty = "easy"
 
@@ -417,8 +427,6 @@ target = 5
 ```toml
 [[quests]]
 id = "scenario_3_medium"
-name = "Scenario Trio"
-description = "Complete 3 scenarios"
 type = "scenario_completion"
 difficulty = "medium"
 
@@ -431,8 +439,6 @@ target = 3
 ```toml
 [[quests]]
 id = "speed_delete_hard"
-name = "Speed Run: Delete Line"
-description = "Complete 'delete_line_001' in under 5 seconds"
 type = "speed_run"
 difficulty = "hard"
 
@@ -449,8 +455,6 @@ requires_scenarios = ["delete_line_001"]
 ```toml
 [[quests]]
 id = "time_10_medium"
-name = "Extended Practice"
-description = "Practice for 10 minutes"
 type = "time_invested"
 difficulty = "medium"
 
@@ -463,8 +467,6 @@ target_minutes = 10
 ```toml
 [[quests]]
 id = "explore_10_hard"
-name = "Command Explorer"
-description = "Use 10 different commands today"
 type = "exploration"
 difficulty = "hard"
 
@@ -496,8 +498,6 @@ target_commands = 10
 | `MAX_QUEST_TARGET` | 100 | Maximum target value for practice quests |
 | `MAX_SPEED_RUN_TIME_SECONDS` | 3600 | Maximum speed run time (1 hour) |
 | `MAX_CUSTOM_XP_REWARD` | 1000 | Maximum custom XP reward |
-| `MAX_QUEST_NAME_LENGTH` | 100 | Maximum name length |
-| `MAX_QUEST_DESCRIPTION_LENGTH` | 500 | Maximum description length |
 | `MAX_REQUIRED_CONDITIONS` | 20 | Maximum conditions per quest |
 
 ### Position limits

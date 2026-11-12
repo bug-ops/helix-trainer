@@ -97,6 +97,7 @@ pub enum ReviewStep {
 /// ```
 /// use helix_trainer::ids::CommandId;
 /// use helix_trainer::learning::{PerformanceTracker, ReviewOutcome, ReviewSession, ReviewStep};
+/// use std::assert_matches;
 /// use std::time::{Duration, Instant};
 ///
 /// let x = CommandId::from_card_id("x").unwrap();
@@ -110,7 +111,7 @@ pub enum ReviewStep {
 ///     t0 + Duration::from_secs(2),
 ///     &mut tracker,
 /// );
-/// assert!(matches!(step, ReviewStep::Finished(summary) if summary.successful == 1));
+/// assert_matches!(step, ReviewStep::Finished(summary) if summary.successful == 1);
 /// assert!(ReviewSession::start(Vec::new(), t0).is_none());
 /// ```
 #[derive(Debug, Clone)]

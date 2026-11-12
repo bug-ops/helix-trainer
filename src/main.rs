@@ -12,7 +12,7 @@ use helix_trainer::{
     input::keymap::resolve_startup_overlay,
     learning::PerformanceTracker,
     security::error_chain,
-    ui::{self, AppState, Notification, NotificationType},
+    ui::{self, AppState, Notification, NotificationType, keymap_status_message},
 };
 use std::io;
 use tokio::sync::mpsc;
@@ -61,6 +61,10 @@ fn load_config_or_default(storage: &ConfigStorage) -> (AppConfig, Option<String>
 /// - Background data loading (scenarios, profile)
 /// - Tick interval for animations
 #[tokio::main(worker_threads = 2)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 async fn main() -> Result<()> {
     match cli::parse_args(std::env::args_os().skip(1)) {
         cli::CliAction::Run => {}
@@ -109,7 +113,8 @@ async fn main() -> Result<()> {
     // Resolve the gameplay keymap overlay from the user's Helix config, if
     // `use_helix_keymap` is enabled. Degrades to the stock keymap
     // (identity overlay) on any failure - never blocks startup.
-    let (keymap, keymap_report, keymap_startup_message) = resolve_startup_overlay(&app_config);
+    let startup_keymap = resolve_startup_overlay(&app_config);
+    let keymap_startup_message = keymap_status_message(&startup_keymap);
 
     // Initialize app state (empty, will be populated by async loaders)
     let profile_storage = ProfileStorage::in_data_dir(&data_dir);
@@ -118,8 +123,8 @@ async fn main() -> Result<()> {
     // Create ConfigState from loaded AppConfig
     let config_state = ui::state::ConfigState {
         persistent: app_config,
-        keymap,
-        keymap_report,
+        keymap: startup_keymap.overlay,
+        keymap_report: startup_keymap.report,
     };
 
     // The loader shares the app's handle (clones share the last known-valid profile text), so the

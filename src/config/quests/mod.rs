@@ -3,13 +3,14 @@
 //! Loads quest definitions from TOML files, following the same
 //! security patterns as scenario loading.
 
+use crate::config::ConfigError;
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::limits::{
-    MAX_CUSTOM_XP_REWARD, MAX_LOCALE_LENGTH, MAX_QUEST_DESCRIPTION_LENGTH, MAX_QUEST_NAME_LENGTH,
-    MAX_QUEST_TARGET, MAX_QUEST_TEMPLATES_PER_FILE, MAX_REQUIRED_CONDITIONS,
-    MAX_SCENARIO_FILE_SIZE, MAX_SPEED_RUN_TIME_SECONDS, MAX_VERSION_LENGTH,
+    MAX_CUSTOM_XP_REWARD, MAX_LOCALE_LENGTH, MAX_QUEST_TARGET, MAX_QUEST_TEMPLATES_PER_FILE,
+    MAX_REQUIRED_CONDITIONS, MAX_SCENARIO_FILE_SIZE, MAX_SPEED_RUN_TIME_SECONDS,
+    MAX_VERSION_LENGTH,
 };
-use crate::security::{SecurityError, UserError, path_validator, sanitizer};
+use crate::security::{SecurityError, path_validator, sanitizer};
 
 mod error;
 pub use error::QuestTemplateError;
@@ -47,10 +48,6 @@ pub struct QuestsMetadata {
 pub struct QuestTemplate {
     /// Unique identifier, validated as a safe id.
     pub id: QuestId,
-    /// Display name shown on the quest card.
-    pub name: String,
-    /// One-line goal description shown to the player.
-    pub description: String,
 
     /// Difficulty tier, which selects the default XP reward.
     pub difficulty: QuestDifficulty,
@@ -235,11 +232,11 @@ impl QuestLoader {
     /// in order and returns the first that loads successfully.
     ///
     /// # Errors
-    /// Returns `UserError` if no candidate path loads or validation fails
+    /// Returns [`ConfigError`] if no candidate path loads or validation fails
     ///
     /// Not reached from production code today — see the [`QuestLoader`] type
     /// docs for why this filesystem path is retained.
-    pub fn load_for_locale(&self, locale: &str) -> Result<Vec<QuestTemplate>, UserError> {
+    pub fn load_for_locale(&self, locale: &str) -> Result<Vec<QuestTemplate>, ConfigError> {
         let mut last_err = None;
         for base in &self.allowed_base_paths {
             let path = base.join(locale).join("daily.toml");
@@ -248,7 +245,7 @@ impl QuestLoader {
                 Err(e) => last_err = Some(e),
             }
         }
-        Err(last_err.unwrap_or(UserError::scenario_load_error()))
+        Err(last_err.unwrap_or(ConfigError::NotFound))
     }
 
     /// Load quest templates from a TOML file
@@ -261,14 +258,13 @@ impl QuestLoader {
     /// - Each quest template is validated for parameter correctness
     ///
     /// # Errors
-    /// Returns `UserError` with sanitized message if any validation fails
+    /// Returns [`ConfigError`] if any validation fails
     ///
     /// Not reached from production code today — see the [`QuestLoader`] type
     /// docs for why this filesystem path is retained.
-    pub fn load(&self, path: &Path) -> Result<Vec<QuestTemplate>, UserError> {
+    pub fn load(&self, path: &Path) -> Result<Vec<QuestTemplate>, ConfigError> {
         // Validate path to prevent path traversal attacks
-        let canonical = path_validator::validate_path(path, &self.allowed_base_paths)
-            .map_err(UserError::from)?;
+        let canonical = path_validator::validate_path(path, &self.allowed_base_paths)?;
 
         // Log with sanitized path (doesn't leak full path)
         tracing::info!(
@@ -278,15 +274,14 @@ impl QuestLoader {
 
         // Bounded read of a regular file to prevent resource exhaustion
         let content = path_validator::read_capped(&canonical, MAX_SCENARIO_FILE_SIZE)
-            .map_err(|e| UserError::from(SecurityError::from(e)))?;
+            .map_err(SecurityError::from)?;
 
         // Parse, count-check, and validate each quest template
         let quests = super::loader::parse_and_validate::<QuestsFile>(
             &content,
             MAX_QUEST_TEMPLATES_PER_FILE,
             Self::validate_quest,
-        )
-        .map_err(UserError::from)?;
+        )?;
 
         tracing::info!(count = quests.len(), "Successfully loaded quest templates");
 
@@ -305,7 +300,7 @@ impl QuestLoader {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if no embedded data exists for the locale or
+    /// Returns [`ConfigError`] if no embedded data exists for the locale or
     /// if validation fails.
     ///
     /// # Examples
@@ -316,12 +311,12 @@ impl QuestLoader {
     /// let loader = QuestLoader::new();
     /// let templates = loader.load_from_embedded("en")?;
     /// assert!(!templates.is_empty());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<QuestTemplate>, UserError> {
+    pub fn load_from_embedded(&self, locale: &str) -> Result<Vec<QuestTemplate>, ConfigError> {
         let content = embedded::get_embedded_quests(locale).ok_or_else(|| {
             tracing::warn!(locale = locale, "No embedded quests for locale");
-            UserError::scenario_load_error()
+            ConfigError::NotFound
         })?;
 
         tracing::info!(locale = locale, "Loading quests from embedded data");
@@ -332,13 +327,12 @@ impl QuestLoader {
             MAX_QUEST_TEMPLATES_PER_FILE,
             Self::validate_quest,
         )
-        .map_err(|e| {
+        .inspect_err(|e| {
             tracing::error!(
                 locale = locale,
                 "Failed to load embedded quest file: {:?}",
                 e
             );
-            UserError::from(e)
         })?;
 
         tracing::info!(
@@ -351,24 +345,11 @@ impl QuestLoader {
     }
 
     /// Validate a single quest template for security and correctness
-    fn validate_quest(quest: &QuestTemplate) -> Result<(), SecurityError> {
+    fn validate_quest(quest: &QuestTemplate) -> Result<(), ConfigError> {
         Ok(Self::check_quest(quest)?)
     }
 
     fn check_quest(quest: &QuestTemplate) -> Result<(), QuestTemplateError> {
-        if quest.name.len() > MAX_QUEST_NAME_LENGTH {
-            return Err(QuestTemplateError::NameTooLong {
-                max: MAX_QUEST_NAME_LENGTH,
-                actual: quest.name.len(),
-            });
-        }
-        if quest.description.len() > MAX_QUEST_DESCRIPTION_LENGTH {
-            return Err(QuestTemplateError::DescriptionTooLong {
-                max: MAX_QUEST_DESCRIPTION_LENGTH,
-                actual: quest.description.len(),
-            });
-        }
-
         if let Some(xp_config) = &quest.xp
             && let Some(reward) = xp_config.base_reward
             && reward > MAX_CUSTOM_XP_REWARD

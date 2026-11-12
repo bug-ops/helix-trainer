@@ -8,6 +8,10 @@
 use crate::helix::simulator::{AnyModeSimulator, EditorSnapshot, HelixSimulator, NormalMode};
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_from_snapshot_single_cursor() {
     let sim = HelixSimulator::<NormalMode>::from_snapshot(&EditorSnapshot::from_row_col(
         "hello world".to_string(),
@@ -105,6 +109,10 @@ fn test_any_mode_simulator_multi_selection() {
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_point_selections_are_not_exported_as_bounds() {
     // Point selections (anchor == head) are cursors, not selections
     let sim = AnyModeSimulator::from_snapshot(&EditorSnapshot::from_row_col(
@@ -119,6 +127,10 @@ fn test_point_selections_are_not_exported_as_bounds() {
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_empty_content_multi_cursor() {
     let sim = HelixSimulator::<NormalMode>::from_snapshot(&EditorSnapshot::from_row_col(
         String::new(),

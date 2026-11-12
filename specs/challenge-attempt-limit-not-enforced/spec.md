@@ -19,6 +19,9 @@ related:
 
 # Feature: Daily Challenge Attempt Limit and Best-Score Tracking Enforcement
 
+> [!info] Amended 2026-11-11 (#615)
+> An unreadable `last_challenge_date` no longer resets the attempt limit: the day is a three-state `ChallengeDay` (FR-010, FR-011). This supersedes the lenient-`None` handling of #427 recorded in sections 5, 6 and 10.
+
 > [!info] Metadata
 > **Source**: rust-live-tester (live-test finding, escalated via CI cycle), priority P1
 > **Resolved by**: GitHub issue #376, merged via PR #384 (`e637c30`)
@@ -74,7 +77,7 @@ halves of the feature are broken.
 > This does not change the core finding: because nothing in production ever
 > calls `start_attempt`/`record_result`, the persisted value — wherever it
 > lives in the JSON tree — is permanently stuck at
-> `ChallengeProgress::default()` (all zeros, `last_challenge_date: None`).
+> `ChallengeProgress::default()` (all zeros, `last_challenge_date: NotStarted`, formerly `None`).
 > See Open Questions for the one item that needs confirmation before `/sdd plan`.
 
 ### Goal
@@ -183,6 +186,8 @@ Use EARS notation. Prefix with FR-NNN.
 | FR-007 | WHEN the current calendar date differs from `ChallengeProgress.last_challenge_date` THE SYSTEM SHALL treat this as a new day: `attempts_used_today`, `best_score_today`, and `best_scenarios_today` reset per the existing `start_attempt` reset logic (no new logic needed — this behavior already exists in `ChallengeProgress`, only the call site is missing) | must |
 | FR-008 | WHEN `UserProfile.challenge_progress` is updated during a Daily Challenge session THE SYSTEM SHALL persist it via the existing `save_immediate` / profile-save path used by `handle_minigame_game_over`, with no new persistence mechanism | must |
 | FR-009 | WHERE a Daily Challenge attempt is blocked by the cap THE SYSTEM SHALL still allow the player to freely play Arcade Mode and Survival Mode (the cap applies only to the Challenge `MiniGameMode` variant) | must |
+| FR-010 | THE stored day of `ChallengeProgress` SHALL be a closed `ChallengeDay { NotStarted, On(NaiveDate), Unreadable }` (in `gamification::challenge_progress`) instead of `Option<NaiveDate>`. A malformed date string or wrong type, and a null or missing date together with non-zero `attempts_used_today`, deserialize to `Unreadable`; a null or missing date with zero attempts is `NotStarted`. `is_new_day` is FALSE for `Unreadable` (never a reset), `Unreadable` serializes as `null`, and the method API (`can_attempt`, `start_attempt`, `attempts_remaining`) is unchanged, so the mode-selection and minigame handlers need no edit | must |
+| FR-011 | THE profile install point SHALL settle `Unreadable` to `On(today)` BEFORE any attempt is evaluated, so the used attempts and the best-today score are kept and counted against the current day (conservative: the allowance is never refilled). The settlement lives in ONE choke point, `install_profile(state, profile)` in `data_handling.rs`, used by both the `ProfileReady` arm and the `ProfileError`-fallback arm (the only two places that assign the profile). The profile is NOT quarantined for this field | must |
 
 ## 4. Non-Functional Requirements
 
@@ -200,7 +205,7 @@ currently dead in production.
 
 | Entity | Description | Key Attributes |
 |--------|-------------|----------------|
-| `ChallengeProgress` (existing, `src/minigame/challenge.rs`) | Per-player Daily Challenge attempt/score tracking, persisted inside `UserProfile` | `last_challenge_date: Option<NaiveDate>` (lenient deserializer; stored as `"YYYY-MM-DD"` or `null`), `attempts_used_today: u8`, `best_score_today: u64`, `best_scenarios_today: u8`, `all_time_best_score: u64`, `all_time_best_scenarios: u8`, `total_challenges_attempted: u32`, `total_challenges_completed: u32` |
+| `ChallengeProgress` (existing, `src/minigame/challenge.rs`) | Per-player Daily Challenge attempt/score tracking, persisted inside `UserProfile` | `last_challenge_date: ChallengeDay` (`NotStarted`, `On(NaiveDate)` or `Unreadable`, FR-010; stored as `"YYYY-MM-DD"` or `null`), `attempts_used_today: u8`, `best_score_today: u64`, `best_scenarios_today: u8`, `all_time_best_score: u64`, `all_time_best_scenarios: u8`, `total_challenges_attempted: u32`, `total_challenges_completed: u32` |
 | `UserProfile.challenge_progress` (existing field, `src/gamification/profile.rs:82`) | The canonical, persisted copy of `ChallengeProgress` — source of truth read/written across sessions | `crate::minigame::ChallengeProgress` |
 | `MiniGameData.challenge_progress` (removed) | Former per-screen `Option<ChallengeProgress>` snapshot. Removed as redundant: the render layer reads `state.progress.profile.challenge_progress` directly, so there is no stale copy after `record_result` | n/a |
 
@@ -211,8 +216,8 @@ currently dead in production.
 | Player has 0 attempts remaining and selects Daily Challenge | Launch is blocked (FR-002); mode-selection screen stays open with a clear "no attempts remaining today" message; Arcade/Survival remain launchable |
 | Player launches Daily Challenge, then quits mid-session (Ctrl-Q / back-to-menu) without completing any scenario | Counted as one used attempt (`start_attempt` already ran at launch); `record_result` is still called with whatever score/scenarios-completed the session had accumulated (may be 0/0) so the attempt is not "free" |
 | Day rolls over while a Daily Challenge session is already in progress (session started 23:59, ends 00:01 next day) | The in-progress session's `record_result` still applies to the day it was **started** on (`last_challenge_date` set at `start_attempt` time is not re-evaluated mid-session); the next NEW launch attempt is what triggers the day-rollover reset per FR-007 |
-| Corrupted/malformed `last_challenge_date` string in `profile.json` (e.g. hand-edited or from a future incompatible version) | Resolved by #427: the field is `Option<NaiveDate>` with a lenient deserializer, so a malformed value or wrong type loads as `None` (treated as never played) instead of failing the whole profile load; the storage format is unchanged |
-| Player has never played Daily Challenge (`ChallengeProgress::default()`, `last_challenge_date: None`) | `can_attempt` returns `true` (different-day branch triggers on `None != Some(today)`) — first launch succeeds and starts tracking, no special-case code needed |
+| Corrupted/malformed `last_challenge_date` string in `profile.json` (e.g. hand-edited or from a future incompatible version) | Resolved by #615 (replacing the #427 handling, where a malformed value became `None` and `is_new_day` reset the counters, bypassing the daily limit): the field is `Unreadable`, `is_new_day` is false, and `install_profile` settles it to `On(today)` so the used attempts and best-today score count for today (FR-010, FR-011). The profile still loads; the storage format is unchanged |
+| Player has never played Daily Challenge (`ChallengeProgress::default()`, `last_challenge_date: None`) | `can_attempt` returns `true` (`NotStarted` is a new day by definition) — first launch succeeds and starts tracking, no special-case code needed |
 | Scenario collection is empty when Daily Challenge is selected | Existing behavior in `handle_launch_minigame_mode` already returns `HandlerOutcome::Stay` with a warning log before any session is created — attempt-cap check (FR-001) must run before or alongside this existing empty-scenarios guard so an attempt is never consumed for a launch that can't actually start |
 
 ## 7. Success Criteria
@@ -225,6 +230,7 @@ Measurable metrics that prove the feature works:
 | SC-002 | `challenge_progress` field round-trips through a real save/reload cycle with non-default values after at least one Daily Challenge attempt | 100% (verified via live-test: start attempt, quit cleanly, inspect `profile.json`'s `profile.challenge_progress`, restart app, confirm values match) |
 | SC-003 | Regression: Arcade Mode and Survival Mode attempt counts | Unaffected — no attempt cap introduced for non-Challenge `MiniGameMode` variants |
 | SC-004 | Unit test coverage for `can_attempt`/`start_attempt`/`record_result` call sites | New handler-level tests added in addition to the existing struct-level tests in `challenge.rs`; `cargo nextest run --workspace --all-features --lib --bins` passes |
+| SC-005 | Unreadable date: a profile with all attempts used and a malformed `last_challenge_date` loads, and the next Daily Challenge launch is blocked; the same with a null date and non-zero attempts; a null date with zero attempts allows a first launch; `install_profile` is the only assignment site (tested through both the `ProfileReady` and the `ProfileError`-fallback paths) | Pass |
 
 ## 8. Agent Boundaries
 
@@ -278,7 +284,7 @@ Merged in PR #384 (issue #376, commit `e637c30`); recorded in `CHANGELOG.md`. Al
 - **Where to show attempts remaining?** In the submenu, on the mode name line as `(N/3)`. A first implementation appended it to the description line, which overflowed the submenu's fixed 43-column inner width and never reached the screen; entries are now single-line.
 - **`MiniGameData.challenge_progress` snapshot or direct read?** Direct read from the profile; the field was removed.
 - **Call-site wiring?** In `handle_launch_minigame_mode` and `handle_minigame_game_over`, no new wrapper.
-- **CR-013 (malformed `last_challenge_date` hard-errors profile load)?** Resolved by #427: `last_challenge_date` is now `Option<NaiveDate>` with a lenient deserializer (malformed value or wrong type becomes `None`); the `TODO: CR-013` marker and `today_string` were removed.
+- **CR-013 (malformed `last_challenge_date` hard-errors profile load)?** Resolved by #427, then superseded by #615 (an unreadable date settles to today instead of resetting the limit): `last_challenge_date` is now `Option<NaiveDate>` with a lenient deserializer (malformed value or wrong type becomes `None`); the `TODO: CR-013` marker and `today_string` were removed.
 - **Blocked-attempt copy?** `minigame.challenge_no_attempts_left` in `locales/en.toml`.
 
 ## 11. See Also

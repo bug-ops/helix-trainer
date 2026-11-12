@@ -1,7 +1,7 @@
 //! One key resolution for the Task and Arcade screens
 //!
-//! A screen receives a [`CanonicalKeys`] (the key after keymap-overlay
-//! translation) and must decide what it means for the player's input state:
+//! A screen receives a [`GameplayKey`] (typed Insert-mode text, or the key
+//! after keymap-overlay translation) and must decide what it means for the player's input state:
 //! typed text in Insert mode, a command to run, a prefix that waits for more
 //! keys, or nothing. [`resolve_keys`] is that decision, shared so both
 //! screens interpret keys identically; each screen keeps its own key-history
@@ -9,8 +9,8 @@
 
 use std::borrow::Cow;
 
-use super::keymap::CanonicalKeys;
-use super::typestate::{HandlerResult, InputStateMachine, parse_helix_key_string};
+use super::keymap::GameplayKey;
+use super::typestate::{HandlerResult, InputStateMachine};
 use crate::helix::ModeKind;
 use crate::helix::normal_command::NormalCommand;
 
@@ -45,29 +45,31 @@ pub(crate) enum Resolution {
     Discarded,
 }
 
-/// Resolve `keys` against `input` in `mode`.
+/// Resolve `key` against `input` in `mode`.
 ///
-/// Single-token keys, the overwhelmingly common case, are dispatched
-/// directly to avoid the `Vec` that [`CanonicalKeys::tokens`] allocates. A
-/// multi-token `keys` (a keymap remap whose target spans several canonical
-/// keys, e.g. `G` -> `"ge"`) is applied atomically through
+/// A single-key sequence, the overwhelmingly common case, is dispatched
+/// directly. A multi-key `keys` (a keymap remap whose target spans several
+/// canonical keys, e.g. `G` -> `"ge"`) is applied atomically through
 /// [`InputStateMachine::apply_canonical_expansion`], which leaves `input`
-/// untouched when it does not resolve cleanly. An empty `keys` (the keymap
-/// parser rejects empty bindings at load time) is [`Resolution::Discarded`].
+/// untouched when it does not resolve cleanly. Typed text outside Insert
+/// mode is a stale message (the mode changed after it was produced) and is
+/// [`Resolution::Discarded`].
 pub(crate) fn resolve_keys(
     input: &mut InputStateMachine,
     mode: ModeKind,
-    keys: &CanonicalKeys,
+    key: &GameplayKey,
 ) -> Resolution {
-    if mode == ModeKind::Insert {
-        return Resolution::Insert(keys.clone().into_cow());
-    }
-
-    if keys.is_single_token() {
-        let Some(key_event) = parse_helix_key_string(keys.as_str()) else {
-            tracing::warn!(keys = keys.as_str(), "unparsable key token; dropping");
+    let keys = match (mode, key) {
+        (ModeKind::Insert, GameplayKey::Typed(text)) => return Resolution::Insert(text.clone()),
+        (ModeKind::Insert, GameplayKey::Keys(keys)) => return Resolution::Insert(keys.to_cow()),
+        (_, GameplayKey::Typed(text)) => {
+            tracing::debug!(%text, "typed text outside Insert mode; discarding");
             return Resolution::Discarded;
-        };
+        }
+        (_, GameplayKey::Keys(keys)) => keys,
+    };
+
+    if let &[key_event] = keys.events() {
         let from = if input.state().is_base() {
             ResolvedFrom::Base
         } else {
@@ -80,8 +82,7 @@ pub(crate) fn resolve_keys(
         };
     }
 
-    let tokens = keys.tokens();
-    if let Some(command) = input.apply_canonical_expansion(&tokens) {
+    if let Some(command) = input.apply_canonical_expansion(keys.events()) {
         return Resolution::Execute {
             command,
             from: ResolvedFrom::Base,
@@ -99,7 +100,7 @@ mod tests {
     use super::*;
 
     fn resolve(input: &mut InputStateMachine, mode: ModeKind, keys: &'static str) -> Resolution {
-        resolve_keys(input, mode, &CanonicalKeys::from_static(keys))
+        resolve_keys(input, mode, &GameplayKey::Keys(crate::testing::keys(keys)))
     }
 
     fn execute(command: &'static str, from: ResolvedFrom) -> Resolution {
@@ -165,12 +166,32 @@ mod tests {
     }
 
     #[test]
-    fn an_unparsable_token_is_discarded() {
+    fn typed_text_is_inserted_as_is_in_insert_mode() {
+        let mut input = InputStateMachine::new();
+        for text in [" ", "-", "<", "A", "é", "Enter"] {
+            assert_eq!(
+                resolve_keys(
+                    &mut input,
+                    ModeKind::Insert,
+                    &GameplayKey::Typed(Cow::Borrowed(text))
+                ),
+                Resolution::Insert(Cow::Borrowed(text))
+            );
+        }
+    }
+
+    #[test]
+    fn typed_text_outside_insert_mode_is_discarded() {
         let mut input = InputStateMachine::new();
         assert_eq!(
-            resolve(&mut input, ModeKind::Normal, ""),
+            resolve_keys(
+                &mut input,
+                ModeKind::Normal,
+                &GameplayKey::Typed(Cow::Borrowed("x"))
+            ),
             Resolution::Discarded
         );
+        assert!(input.state().is_base());
     }
 
     #[test]

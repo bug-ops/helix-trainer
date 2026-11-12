@@ -134,7 +134,7 @@ fn render_mode_option(
     frame.render_widget(paragraph, area);
 }
 
-fn mode_label(mode: &crate::minigame::MiniGameMode) -> String {
+pub(super) fn mode_label(mode: &crate::minigame::MiniGameMode) -> String {
     use crate::minigame::MiniGameMode;
     match mode {
         MiniGameMode::Arcade(_) => t!("mode_selection.mode_arcade"),

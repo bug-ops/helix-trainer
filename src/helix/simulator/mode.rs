@@ -15,7 +15,7 @@
 //! let mut sim: HelixSimulator<InsertMode> = sim.enter_insert_mode();
 //! sim.insert_text("x")?;
 //! let _sim: HelixSimulator<NormalMode> = sim.exit_insert_mode();
-//! # Ok::<(), helix_trainer::security::UserError>(())
+//! # Ok::<(), helix_trainer::error::UserError>(())
 //! ```
 //!
 //! Text insertion is not available in Normal mode:
@@ -160,7 +160,8 @@ mod tests {
 
     #[test]
     fn test_any_mode_simulator_reports_mode_kind() {
-        let mut sim = crate::helix::AnyModeSimulator::new("abc".to_string()).with_language("rs");
+        let mut sim = crate::helix::AnyModeSimulator::new("abc".to_string())
+            .with_language(crate::helix::Language::Rs);
         assert_eq!(sim.mode_kind(), ModeKind::Normal);
         sim.execute_command("i").unwrap();
         assert_eq!(sim.mode_kind(), ModeKind::Insert);

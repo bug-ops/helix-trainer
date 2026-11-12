@@ -22,13 +22,12 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 
-use crate::input::keymap::{CanonicalKeys, PhysicalKey};
+use crate::input::keymap::{CanonicalKeys, GameplayKey, PhysicalKey};
 use crate::ui::state::InputStateAccess;
 use crate::ui::{AppState, Message, NavTarget, state::TypedScreen};
 
-use crate::input::typestate::{
-    InputStateMachine, handle_insert_mode_input, map_key_to_helix_command, normalize_key_event,
-};
+use crate::input::typestate::key_mapping::arrow_movement;
+use crate::input::typestate::{InputStateMachine, handle_insert_mode_input};
 
 /// Handle keyboard events on profile and statistics screens
 pub(crate) fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
@@ -92,6 +91,10 @@ pub(crate) fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Opti
 /// - gg: jump to first item
 /// - G: jump to last item
 /// - 15G/15gg: jump to item 15
+#[expect(
+    clippy::match_same_arms,
+    reason = "arms stay apart to document each case"
+)]
 pub(crate) fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Ctrl-Q exits application from anywhere
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -164,21 +167,6 @@ pub(super) fn gameplay_input_state(state: &AppState) -> Option<&InputStateMachin
     }
 }
 
-/// Map arrow keys to movement commands
-///
-/// Returns the corresponding movement command if the key is an arrow key,
-/// None otherwise.
-fn map_arrow_to_movement(key_code: KeyCode) -> Option<&'static str> {
-    use crate::grammar::commands::{CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP};
-    match key_code {
-        KeyCode::Left => Some(CMD_MOVE_LEFT),   // "h"
-        KeyCode::Right => Some(CMD_MOVE_RIGHT), // "l"
-        KeyCode::Up => Some(CMD_MOVE_UP),       // "k"
-        KeyCode::Down => Some(CMD_MOVE_DOWN),   // "j"
-        _ => None,
-    }
-}
-
 /// Handle gameplay input (insert mode or normal mode command)
 ///
 /// Shared logic for both training and arcade modes.
@@ -190,19 +178,19 @@ fn map_arrow_to_movement(key_code: KeyCode) -> Option<&'static str> {
 /// the user actually pressed, not the translated command).
 fn handle_gameplay_input<F>(key: KeyEvent, state: &AppState, make_message: F) -> Option<Message>
 where
-    F: FnOnce(CanonicalKeys, Cow<'static, str>) -> Message,
+    F: FnOnce(GameplayKey, Cow<'static, str>) -> Message,
 {
     if is_gameplay_insert_mode(state) {
         // Insert mode is raw character insertion, never translated by the
         // keymap overlay: only the normal-mode branch below consults it.
         // Translating here would corrupt typing for any remapped letter.
         return handle_insert_mode_input(key)
-            .map(|typed| make_message(typed.clone().into(), typed));
+            .map(|typed| make_message(GameplayKey::Typed(typed.clone()), typed));
     }
 
     // Normal mode: the keymap overlay is consulted first, directly on the
     // raw physical key, before the stock arrow-key mapping and before
-    // `key_to_command_string` - only a miss falls through to the stock
+    // `CanonicalKeys::from_event` - only a miss falls through to the stock
     // path. States that consume the next key literally (command-line
     // buffer, find/replace targets, register names, ...) report
     // `key_context() == None` and are therefore never translated here.
@@ -227,7 +215,7 @@ where
         && (canonical.is_single_token() || machine.state().is_base())
     {
         let typed = Cow::Owned(PhysicalKey::from_event(key).label());
-        return Some(make_message(canonical.clone(), typed));
+        return Some(make_message(canonical.clone().into(), typed));
     }
 
     // Normal mode: check if arrow keys should be mapped to movement commands
@@ -237,16 +225,18 @@ where
     if state.config.persistent.enable_arrow_keys_in_normal_mode
         && key.modifiers.is_empty()
         && gameplay_input_state(state).is_none_or(|s| s.pending_command_line().is_none())
-        && let Some(mapped_cmd) = map_arrow_to_movement(key.code)
+        && let Some(movement) = arrow_movement(key.code)
+        && let Some(keys) = CanonicalKeys::from_event(movement)
     {
-        let stock = Cow::Borrowed(mapped_cmd);
-        return Some(make_message(stock.clone().into(), stock));
+        let typed = keys.to_cow();
+        return Some(make_message(keys.into(), typed));
     }
 
     // Normal mode: convert key to string for InputStateMachine
     // State machine handles multi-key commands in gameplay.rs/minigame.rs
-    let stock = key_to_command_string(key)?;
-    Some(make_message(stock.clone().into(), stock))
+    let keys = CanonicalKeys::from_event(key)?;
+    let typed = keys.to_cow();
+    Some(make_message(keys.into(), typed))
 }
 
 /// Dispatch `key` as gameplay input on the current training or arcade screen.
@@ -261,50 +251,6 @@ pub(super) fn handle_gameplay_key(key: KeyEvent, state: &AppState) -> Option<Mes
         TypedScreen::MiniGame(_) => handle_gameplay_input(key, state, |keys, typed| {
             Message::MiniGameCommand { keys, typed }
         }),
-        _ => None,
-    }
-}
-
-/// Convert a key event to a command string for the state machine
-///
-/// In normal mode, all keys are passed to `InputStateMachine` which handles:
-/// - Multi-key commands (gg, dd)
-/// - Character arguments (fx, rx)
-/// - Count prefixes (3j, 10k)
-/// - Modifier commands (Alt-C, Ctrl-r)
-///
-/// Uses `map_key_to_helix_command` for known commands (which returns constants
-/// like `CMD_COPY_SELECTION_PREV` = "Alt-C"), and builds strings for prefix keys
-/// that the state machine needs to handle.
-fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
-    // First try to get the command constant from map_key_to_helix_command
-    // This handles all known single-key commands including modifier commands
-    if let Some(cmd) = map_key_to_helix_command(key) {
-        return Some(Cow::Borrowed(cmd));
-    }
-
-    // For unknown commands (prefix keys like 'g', 'm', 'f', etc.),
-    // normalize and return the character for the state machine to process.
-    // Guard is applied AFTER normalization so macOS Option-composed chars
-    // are judged on their post-normalization modifiers.
-    let key = normalize_key_event(key);
-
-    match key.code {
-        // Only bare ASCII chars fall through here: known ALT/CTRL commands
-        // are already returned above by `map_key_to_helix_command`, so an
-        // ALT/CTRL-carrying char reaching this arm is unmapped and must be
-        // dropped rather than silently serialized as the bare character
-        // (previously: unmapped Alt-x reached the state machine as plain
-        // "x", executing `select line` instead of being ignored).
-        KeyCode::Char(c)
-            if c.is_ascii()
-                && !key.modifiers.contains(KeyModifiers::ALT)
-                && !key.modifiers.contains(KeyModifiers::CONTROL) =>
-        {
-            Some(Cow::Owned(c.to_string()))
-        }
-        KeyCode::Enter => Some(Cow::Borrowed("Enter")),
-        KeyCode::Tab => Some(Cow::Borrowed("Tab")),
         _ => None,
     }
 }
@@ -636,7 +582,7 @@ mod tests {
         assert_eq!(
             msg,
             Some(Message::ExecuteCommand {
-                keys: CanonicalKeys::from_static(CMD_SEARCH_BACKWARD),
+                keys: GameplayKey::Keys(crate::testing::keys(CMD_SEARCH_BACKWARD)),
                 typed: Cow::Borrowed(CMD_SEARCH_BACKWARD),
             })
         );
@@ -651,7 +597,7 @@ mod tests {
         assert_eq!(
             msg,
             Some(Message::ExecuteCommand {
-                keys: CanonicalKeys::from_static(CMD_MOVE_LEFT),
+                keys: GameplayKey::Keys(crate::testing::keys(CMD_MOVE_LEFT)),
                 typed: Cow::Borrowed(CMD_MOVE_LEFT),
             })
         );
@@ -984,9 +930,9 @@ mod tests {
             handle_task_keys(key, state)
         }
 
-        fn expected_question_mark() -> Message {
+        fn expected_question_mark(keys: GameplayKey) -> Message {
             Message::ExecuteCommand {
-                keys: CanonicalKeys::from_static("?"),
+                keys,
                 typed: Cow::Borrowed("?"),
             }
         }
@@ -1009,7 +955,38 @@ mod tests {
             let state = insert_mode_state();
             assert_eq!(
                 question_mark_message(&state),
-                Some(expected_question_mark())
+                Some(expected_question_mark(GameplayKey::Typed(Cow::Borrowed(
+                    "?"
+                ))))
+            );
+        }
+
+        /// #614: Insert-mode text is never parsed as a canonical key, so characters
+        /// outside the key vocabulary reach the simulator unchanged
+        #[test]
+        fn test_insert_mode_types_any_character_unchanged() {
+            use crate::testing::update_executing_effects as update;
+
+            let mut state = insert_mode_state();
+            let text = " -<Aéå";
+            for c in text.chars() {
+                let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+                let message = handle_task_keys(key, &state).unwrap();
+                assert_eq!(
+                    message,
+                    Message::ExecuteCommand {
+                        keys: GameplayKey::Typed(Cow::Owned(c.to_string())),
+                        typed: Cow::Owned(c.to_string()),
+                    }
+                );
+                update(&mut state, message).unwrap();
+            }
+            let TypedScreen::Task(task_data) = &state.screen else {
+                panic!("expected Task screen");
+            };
+            assert_eq!(
+                task_data.session.playable().current_content(),
+                format!("{text}test")
             );
         }
 
@@ -1027,7 +1004,9 @@ mod tests {
                 state.screen = TypedScreen::Task(task_data);
                 assert_eq!(
                     question_mark_message(&state),
-                    Some(expected_question_mark()),
+                    Some(expected_question_mark(GameplayKey::Keys(
+                        crate::testing::keys("?")
+                    ))),
                     "after {opening_keys}"
                 );
             }
@@ -1062,7 +1041,7 @@ mod tests {
 
         fn command(keys: &'static str) -> Message {
             Message::ExecuteCommand {
-                keys: CanonicalKeys::from_static(keys),
+                keys: GameplayKey::Keys(crate::testing::keys(keys)),
                 typed: Cow::Borrowed(keys),
             }
         }
@@ -1197,6 +1176,18 @@ mod tests {
             assert!(gameplay_input_state(&state).is_some_and(|m| m.state().is_base()));
         }
 
+        /// #610: a Ctrl key after `"a` runs its own command, never `"ad`
+        #[test]
+        fn test_register_op_pending_ctrl_d_scrolls_instead_of_deleting() {
+            let mut state = task_state_after(&plain("\"a"));
+            press(
+                &mut state,
+                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+            );
+            assert_eq!(task_content(&state), "test");
+            assert!(gameplay_input_state(&state).is_some_and(|m| m.state().is_base()));
+        }
+
         /// #599: in Select mode `Ctrl-c` toggles comments and returns to Normal mode
         #[test]
         fn test_select_mode_ctrl_c_toggles_comments_and_leaves_select_mode() {
@@ -1210,10 +1201,11 @@ mod tests {
             assert_eq!(task_mode(&state), crate::helix::simulator::ModeKind::Normal);
         }
 
+        /// #616: `Ctrl-c` is forwarded while Playing and quits in every non-editing state
         #[test]
-        fn test_minigame_forwards_ctrl_c_only_while_playing() {
+        fn test_minigame_forwards_ctrl_c_while_playing_and_quits_otherwise() {
             use crate::minigame::MiniGameSession;
-            use crate::testing::ScenarioBuilder;
+            use crate::testing::{ScenarioBuilder, update_executing_effects as update};
             use crate::ui::state::MiniGameData;
             use std::sync::Arc;
 
@@ -1259,7 +1251,9 @@ mod tests {
                         "{name}: {message:?}"
                     );
                 } else {
-                    assert_eq!(message, None, "{name}");
+                    assert_eq!(message, Some(Message::QuitApp), "{name}");
+                    update(&mut state, Message::QuitApp).unwrap();
+                    assert!(!state.ui.running, "{name}");
                 }
             }
         }
@@ -1301,7 +1295,7 @@ mod tests {
             assert_eq!(
                 msg,
                 Some(Message::ExecuteCommand {
-                    keys: CanonicalKeys::from_static(crate::grammar::commands::CMD_ESCAPE),
+                    keys: GameplayKey::Typed(Cow::Borrowed(crate::grammar::commands::CMD_ESCAPE)),
                     typed: Cow::Borrowed(crate::grammar::commands::CMD_ESCAPE),
                 })
             );
@@ -1454,59 +1448,9 @@ mod tests {
         assert_eq!(msg, Some(Message::ToggleSound));
     }
 
-    // Unit tests for key_to_command_string()
-    mod key_to_command_string_tests {
+    // Unit tests for arrow-key handling in gameplay input
+    mod arrow_key_tests {
         use super::*;
-
-        #[test]
-        fn test_char_key() {
-            let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
-            assert_eq!(
-                key_to_command_string(key),
-                Some(Cow::Owned("h".to_string()))
-            );
-        }
-
-        #[test]
-        fn test_uppercase_char_key() {
-            let key = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT);
-            assert_eq!(
-                key_to_command_string(key),
-                Some(Cow::Owned("G".to_string()))
-            );
-        }
-
-        #[test]
-        fn test_escape_key() {
-            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Escape")));
-        }
-
-        #[test]
-        fn test_backspace_key() {
-            let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Backspace")));
-        }
-
-        #[test]
-        fn test_arrow_keys() {
-            assert_eq!(
-                key_to_command_string(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)),
-                Some(Cow::Borrowed("Left"))
-            );
-            assert_eq!(
-                key_to_command_string(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)),
-                Some(Cow::Borrowed("Right"))
-            );
-            assert_eq!(
-                key_to_command_string(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
-                Some(Cow::Borrowed("Up"))
-            );
-            assert_eq!(
-                key_to_command_string(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
-                Some(Cow::Borrowed("Down"))
-            );
-        }
 
         #[test]
         fn test_map_arrow_to_movement() {
@@ -1514,11 +1458,16 @@ mod tests {
                 CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
             };
 
-            assert_eq!(map_arrow_to_movement(KeyCode::Left), Some(CMD_MOVE_LEFT));
-            assert_eq!(map_arrow_to_movement(KeyCode::Right), Some(CMD_MOVE_RIGHT));
-            assert_eq!(map_arrow_to_movement(KeyCode::Up), Some(CMD_MOVE_UP));
-            assert_eq!(map_arrow_to_movement(KeyCode::Down), Some(CMD_MOVE_DOWN));
-            assert_eq!(map_arrow_to_movement(KeyCode::Char('h')), None);
+            let command = |code| {
+                arrow_movement(code)
+                    .and_then(CanonicalKeys::from_event)
+                    .map(|keys| keys.as_str().to_owned())
+            };
+            assert_eq!(command(KeyCode::Left).as_deref(), Some(CMD_MOVE_LEFT));
+            assert_eq!(command(KeyCode::Right).as_deref(), Some(CMD_MOVE_RIGHT));
+            assert_eq!(command(KeyCode::Up).as_deref(), Some(CMD_MOVE_UP));
+            assert_eq!(command(KeyCode::Down).as_deref(), Some(CMD_MOVE_DOWN));
+            assert_eq!(command(KeyCode::Char('h')), None);
         }
 
         #[test]
@@ -1662,12 +1611,6 @@ mod tests {
         }
 
         #[test]
-        fn test_enter_key() {
-            let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Enter")));
-        }
-
-        #[test]
         fn test_arrow_keys_with_modifiers_not_mapped() {
             use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
             use crate::ui::state::screen::TaskData;
@@ -1740,41 +1683,6 @@ mod tests {
                 }
                 _ => panic!("Expected ExecuteCommand with 'Right' for Shift+Right"),
             }
-        }
-
-        #[test]
-        fn test_tab_key() {
-            let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Tab")));
-        }
-
-        #[test]
-        fn test_unknown_key_returns_none() {
-            let key = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), None);
-        }
-
-        #[test]
-        fn test_home_key_returns_none() {
-            let key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), None);
-        }
-
-        /// Regression test: an unmapped Alt-modified key must be dropped by
-        /// the fallback, not silently serialized as the bare character. Prior
-        /// to this fix, an unmapped Alt-z would reach the state machine as
-        /// plain "z", executing whatever "z" resolves to (view mode prefix)
-        /// instead of being ignored as an unrecognized command.
-        #[test]
-        fn test_unmapped_alt_key_is_dropped_not_serialized_as_bare_char() {
-            let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::ALT);
-            assert_eq!(key_to_command_string(key), None);
-        }
-
-        #[test]
-        fn test_unmapped_ctrl_key_is_dropped_not_serialized_as_bare_char() {
-            let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL);
-            assert_eq!(key_to_command_string(key), None);
         }
     }
 
@@ -2043,7 +1951,6 @@ mod tests {
     /// `handle_gameplay_input` doc comment on the guard this exercises).
     mod multi_token_remap_outside_base_tests {
         use super::*;
-        use crate::input::keymap::CanonicalKeys;
         use crate::input::keymap::resolve_str;
         use crate::testing::update_executing_effects as update;
         use crate::ui::state::{ConfigState, TaskData};
@@ -2107,7 +2014,7 @@ mod tests {
             .unwrap();
             match msg {
                 Message::ExecuteCommand { keys, .. } => {
-                    assert_eq!(keys, CanonicalKeys::from_static("ge"));
+                    assert_eq!(keys, GameplayKey::Keys(crate::testing::keys("ge")));
                 }
                 other => panic!("expected ExecuteCommand, got {other:?}"),
             }
@@ -2264,7 +2171,7 @@ mod tests {
             state
         }
 
-        fn type_keys(state: &mut AppState, keys: &str) -> Result<(), crate::security::UserError> {
+        fn type_keys(state: &mut AppState, keys: &str) -> Result<(), crate::error::UserError> {
             for c in keys.chars() {
                 let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
                 if let Some(msg) = handle_task_keys(key, state) {

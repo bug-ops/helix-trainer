@@ -8,10 +8,10 @@ use tokio::task::JoinError;
 
 use crate::config::Scenario;
 use crate::config::json_store::StorageError;
+use crate::error::UserError;
 use crate::gamification::{
     PreviousCopy, ProfileStorage, QuarantineOutcome, QuestTemplateRegistry, UserProfile,
 };
-use crate::security::UserError;
 
 /// Failure of a background content loader.
 #[derive(Debug, Error)]

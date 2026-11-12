@@ -529,6 +529,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_get_preview_positions_none() {
         // When preview is None, should return empty vec
         let positions = get_preview_positions(None, 0);
@@ -536,6 +540,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_get_preview_positions_middle_line() {
         let preview = PreviewHighlight {
             open_row: 0,
@@ -649,6 +657,10 @@ mod tests {
     // ==================== render_line_with_multi_cursor tests ====================
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_line_with_multi_cursor_single() {
         let cursors = vec![CursorInfo {
             row: 0,
@@ -731,6 +743,10 @@ mod tests {
     // ==================== render_line_with_multi_selection tests ====================
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_line_with_multi_selection_single() {
         let selections = vec![SelectionBounds::new(0, 2, 0, 5)];
         let line = render_line_with_multi_selection("hello world", 0, Color::Green, &selections);
@@ -739,6 +755,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_line_with_multi_selection_overlapping() {
         let selections = vec![
             SelectionBounds::new(0, 0, 0, 5),
@@ -751,6 +771,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_line_with_multi_selection_spanning_lines() {
         // Selection from row 0 to row 2
         let selections = vec![SelectionBounds::new(0, 3, 2, 5)];
@@ -769,6 +793,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_line_with_multi_selection_no_selection_on_line() {
         let selections = vec![SelectionBounds::new(2, 0, 3, 5)];
         // Line 0 is not in the selection range (2-3)

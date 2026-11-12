@@ -1,6 +1,7 @@
 //! Tests for `GameSession`
 
 use super::*;
+use crate::helix::Language;
 use crate::testing::ScenarioBuilder;
 use crate::testing::sid;
 use crate::time::FakeMonotonicClock;
@@ -26,7 +27,7 @@ fn test_language_defaults_to_rs_when_scenario_omits_it() {
 
     let scenario = create_test_scenario();
     let session = GameSession::new(scenario).unwrap();
-    assert_eq!(session.language(), "rs");
+    assert_eq!(session.language(), Language::Rs);
 }
 
 #[test]
@@ -35,10 +36,10 @@ fn test_language_resolves_from_scenario_setup() {
 
     let scenario = ScenarioBuilder::new()
         .id("test_lang")
-        .setup_language("md")
+        .setup_language(Language::Md)
         .build();
     let session = GameSession::new(scenario).unwrap();
-    assert_eq!(session.language(), "md");
+    assert_eq!(session.language(), Language::Md);
 }
 
 #[test]
@@ -564,7 +565,7 @@ fn test_reset_keeps_language_indent_unit() {
 
     let scenario = ScenarioBuilder::new()
         .id("md_indent")
-        .setup_language("md")
+        .setup_language(Language::Md)
         .setup_content("item\n")
         .setup_cursor(0, 0)
         .target_content("  item\n")

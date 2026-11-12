@@ -85,67 +85,24 @@ fn test_scenario_with_valid_language_field() {
     );
     let result: Result<ScenariosFile, _> = toml::from_str(&toml);
     let file = result.expect("scenario with valid language field should parse");
-    assert_eq!(file.scenarios[0].setup.language, Some("md".to_string()));
+    assert_eq!(file.scenarios[0].setup.language, Some(Language::Md));
 }
 
 #[test]
-fn test_scenario_with_empty_language_field_accepted() {
-    // Edge case: explicit `language = ""` must load successfully rather than
-    // being rejected at parse time - the highlighter treats it as unsupported
-    // and falls back to plain text at render time (see highlight.rs tests).
-    let toml = format!(
-        "{}\n",
-        create_test_scenario_toml().replace(
-            "file_content = \"Hello, World!\"",
-            "file_content = \"Hello, World!\"\nlanguage = \"\""
-        )
-    );
-    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
-    let file = result.expect("scenario with empty language field should parse");
-    assert_eq!(file.scenarios[0].setup.language, Some(String::new()));
-}
-
-#[test]
-fn test_scenario_with_oversized_language_rejected() {
-    let oversized = "a".repeat(crate::limits::MAX_LANGUAGE_LENGTH + 1);
-    let toml = format!(
-        "{}\n",
-        create_test_scenario_toml().replace(
-            "file_content = \"Hello, World!\"",
-            &format!("file_content = \"Hello, World!\"\nlanguage = \"{oversized}\"")
-        )
-    );
-    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_scenario_with_whitespace_in_language_rejected() {
-    let toml = format!(
-        "{}\n",
-        create_test_scenario_toml().replace(
-            "file_content = \"Hello, World!\"",
-            "file_content = \"Hello, World!\"\nlanguage = \"rs drop\""
-        )
-    );
-    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_scenario_with_symbolic_language_extension_accepted() {
-    // S1 regression: real syntect bundled extensions include symbols, e.g. C++'s "c++"
-    // and "h++" - the validator must not restrict `language` to alphanumeric-only.
-    let toml = format!(
-        "{}\n",
-        create_test_scenario_toml().replace(
-            "file_content = \"Hello, World!\"",
-            "file_content = \"Hello, World!\"\nlanguage = \"c++\""
-        )
-    );
-    let result: Result<ScenariosFile, _> = toml::from_str(&toml);
-    let file = result.expect("scenario with symbolic language extension should parse");
-    assert_eq!(file.scenarios[0].setup.language, Some("c++".to_string()));
+fn test_scenario_with_unknown_language_is_a_load_error() {
+    // FR-004/FR-006: the closed `Language` enum rejects every other token,
+    // including the empty string, whitespace and a different case.
+    for token in ["", "c++", "js", "RS", "Rs", "python", "rs drop"] {
+        let toml = format!(
+            "{}\n",
+            create_test_scenario_toml().replace(
+                "file_content = \"Hello, World!\"",
+                &format!("file_content = \"Hello, World!\"\nlanguage = \"{token}\"")
+            )
+        );
+        let result: Result<ScenariosFile, _> = toml::from_str(&toml);
+        assert!(result.is_err(), "{token:?}");
+    }
 }
 
 #[test]
@@ -168,8 +125,8 @@ fn test_multi_scenario_toml_resolves_language_independently() {
     let result: Result<ScenariosFile, _> = toml::from_str(&toml);
     let file = result.expect("multi-scenario TOML with distinct languages should parse");
     assert_eq!(file.scenarios.len(), 2);
-    assert_eq!(file.scenarios[0].setup.language, Some("md".to_string()));
-    assert_eq!(file.scenarios[1].setup.language, Some("py".to_string()));
+    assert_eq!(file.scenarios[0].setup.language, Some(Language::Md));
+    assert_eq!(file.scenarios[1].setup.language, Some(Language::Py));
 }
 
 #[test]
@@ -536,17 +493,24 @@ fn test_removed_alternatives_field_is_rejected() {
     assert!(toml::from_str::<ScenariosFile>(base).is_ok());
 }
 
-/// Legacy keys inside `[scenarios.metadata]` stay silently ignored: only the scenario table
-/// itself rejects unknown fields.
+/// Stale keys inside `[scenarios.metadata]` are a load error naming the key.
 #[test]
-fn test_legacy_keys_in_metadata_table_are_ignored() {
-    let toml = create_test_scenario_toml();
-    let toml = format!("{toml}\nestimated_time_seconds = 30\nlocale = \"en\"\n");
-    let file: ScenariosFile = toml::from_str(&toml).unwrap();
-    assert_eq!(file.scenarios.len(), 1);
+fn test_unknown_keys_in_metadata_table_are_rejected() {
+    for key in ["estimated_time_seconds = 30", "locale = \"en\""] {
+        let toml = format!("{}\n{key}\n", create_test_scenario_toml());
+        let err = toml::from_str::<ScenariosFile>(&toml)
+            .unwrap_err()
+            .to_string();
+        let name = key.split(' ').next().unwrap();
+        assert!(err.contains(name), "{err}");
+    }
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_scenario_without_metadata_table_gets_default_metadata() {
     let toml = create_test_scenario_toml();
     let toml = toml.split("[scenarios.metadata]").next().unwrap();
@@ -557,6 +521,10 @@ fn test_scenario_without_metadata_table_gets_default_metadata() {
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_default_loader() {
     let loader = ScenarioLoader::default();
     assert!(!loader.allowed_base_paths.is_empty());
@@ -1603,7 +1571,7 @@ mod completion_rule {
     }
 }
 
-fn load_toml(toml: &str) -> Result<Vec<Scenario>, crate::security::UserError> {
+fn load_toml(toml: &str) -> Result<Vec<Scenario>, crate::config::ConfigError> {
     let mut temp_file = NamedTempFile::new().unwrap();
     temp_file.write_all(toml.as_bytes()).unwrap();
     temp_file.flush().unwrap();

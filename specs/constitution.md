@@ -52,8 +52,10 @@ status: permanent
   re-export shim. The ONLY exception is a fixed allow-list of four edges,
   `security -> {config, gamification, helix, learning}`, which exist because
   `UserError` (the public error type of about 32 files) lives in
-  `src/security.rs` (#606); the layering test fails when an allow-listed
-  edge disappears, so the list can only shrink.
+  `src/security.rs` until #606; the layering test fails when an allow-listed
+  edge disappears, so the list can only shrink. #606 removes the exception:
+  `UserError` moves to the rank-8 hub `src/error.rs` and the allow-list is
+  empty.
 
   | Rank | Modules |
   |------|---------|
@@ -65,7 +67,7 @@ status: permanent
   | 5 | `gamification` |
   | 6 | `game` |
   | 7 | `minigame` |
-  | 8 | `error` (reserved for the user-facing error hub, #606; no module yet) |
+  | 8 | `error` (the user-facing error hub: `UserError`, `ErrorCause` and the `From` conversions into `UserError`, #606; `error_chain` stays in `security`) |
   | 9 | `input` |
   | 10 | `async_state` |
   | 11 | `ui` |
@@ -136,7 +138,7 @@ status: permanent
   `#![forbid(unsafe_code)]` crate attributes in `main.rs` and `lib.rs`) MUST
   remain in force project-wide — no exceptions, no `#[allow(unsafe_code)]`
   overrides.
-- Clippy pedantic lints are enabled project-wide (#532). Kept allowed in `Cargo.toml`, each with a one-line reason: `module_name_repetitions` and `must_use_candidate` (user decision), and, as a deferred residual, `assert_is_empty`, `match_same_arms`, `similar_names` and `too_many_lines`.
+- Clippy pedantic lints are enabled project-wide (#532). Only `module_name_repetitions` and `must_use_candidate` stay allowed crate-wide in `Cargo.toml` (user decision, each with a one-line reason). #537 removed the four former residual allows (`assert_is_empty`, `match_same_arms`, `similar_names`, `too_many_lines`): every remaining offender (about 140 functions) carries a function-level `#[expect(.., reason = "..")]` and none was fixed by a machine rewrite, because the machine fix for `assert_is_empty` reads worse. A new crate-wide `allow` for a lint requires an explicit team decision recorded here.
 - Every `pub` type, trait, function, and method must have a `///` doc
   comment explaining *what* and *why*, not merely restating the name;
   non-trivial public APIs need a runnable `# Examples` doc-test.
@@ -158,8 +160,13 @@ status: permanent
 
 ## V. Security
 
-- All user-facing input validation and error types route through
-  `src/security.rs` (`UserError`, `SecurityError`) — never panic on
+- Input validation and `SecurityError` live in `src/security.rs` (rank 1);
+  the user-facing `UserError` and its conversions live in the error hub
+  `src/error.rs` (rank 8, #606; `src/security.rs` until that issue lands),
+  and domain modules return their own typed errors (`GameError`,
+  `GamificationError`, `LearningError`, config loader errors) that the upper
+  layers convert with `?`. All user-facing input validation and error types
+  route through these two modules — never panic on
   malformed user input (invalid register names, malformed command-line
   expressions, oversized input) and never silently no-op it either.
 - A recoverable `UserError` (including a message that arrives for a screen other than the current one, a failed background save, or a rejected simulator command) MUST NOT terminate the TUI session. The event loop reports it (user-visible notification where the user can act on it, `tracing` otherwise; a stale-screen message is a silent debug-level no-op) and keeps running. Only unrecoverable terminal I/O failure ends the session: an input-stream error is reported and the loop exits only after 5 consecutive errors, never by spinning. A `WrongScreen` error is ignored silently; every other `UserError` is shown as a notification. A single `apply_update` boundary in `src/event_loop.rs` owns this policy; `?` on `update()`/`handle_data_message()` inside the loop is forbidden.

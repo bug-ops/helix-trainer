@@ -1,7 +1,143 @@
-//! View commands (z, zt, zb, zm, zj, zk)
+//! View commands (z, zt, zb, zm, zj, zk) and the paging keys (Ctrl-b, Ctrl-f,
+//! Ctrl-u, Ctrl-d), which share one scroll of a fixed logical view
 
+use super::movement::move_vertically_all;
 use crate::helix::error::SimulatorError;
-use crate::helix::simulator::HelixSimulator;
+use crate::helix::simulator::{EditorMode, HelixSimulator};
+use helix_core::Range;
+use helix_core::movement::{Direction, Movement};
+
+/// Whether a scroll takes the cursor along (`hx` `sync_cursor`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorSync {
+    /// Every range moves as many lines as the view
+    Follow,
+    /// The cursor stays unless the view scrolled past it
+    Keep,
+}
+
+/// Scroll the view `offset` lines in `direction`, as `hx` `scroll`
+///
+/// With [`CursorSync::Follow`] every range moves by the same number of lines,
+/// extending in Select mode. With [`CursorSync::Keep`] the cursor stays unless
+/// the view left it behind the scrolloff band: then the primary range becomes
+/// a point at the start of the band's edge line (in Select mode only its head
+/// moves).
+fn scroll<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    offset: usize,
+    direction: Direction,
+    sync: CursorSync,
+) {
+    let total_lines = sim.doc.len_lines();
+    match direction {
+        Direction::Forward => sim.view_state.scroll_down(offset, total_lines),
+        Direction::Backward => sim.view_state.scroll_up(offset),
+    }
+
+    if sync == CursorSync::Follow {
+        let movement = if sim.select_mode {
+            Movement::Extend
+        } else {
+            Movement::Move
+        };
+        move_vertically_all(sim, direction, offset, movement);
+        return;
+    }
+
+    let text = sim.doc.slice(..);
+    let primary = sim.selection.primary();
+    let band_line = match direction {
+        Direction::Forward => sim.view_state.top_band_line(),
+        Direction::Backward => sim.view_state.bottom_band_line(),
+    };
+    let head = text.line_to_char(band_line.min(total_lines));
+    let cursor = primary.cursor(text);
+    let cursor_in_band = match direction {
+        Direction::Forward => head <= cursor,
+        Direction::Backward => head >= cursor,
+    };
+    if cursor_in_band {
+        return;
+    }
+    let anchor = if sim.select_mode {
+        primary.anchor
+    } else {
+        head
+    };
+    let primary_index = sim.selection.primary_index();
+    sim.selection = sim
+        .selection
+        .clone()
+        .replace(primary_index, Range::new(anchor, head));
+}
+
+/// Move the view, never the cursor, until the cursor is inside the `scrolloff`
+/// margins: what `hx` does after every key
+pub(super) fn ensure_cursor_in_view<M: EditorMode>(sim: &mut HelixSimulator<M>) {
+    let cursor = sim.selection.primary().cursor(sim.doc.slice(..));
+    sim.view_state
+        .ensure_cursor_in_view(sim.doc.char_to_line(cursor));
+}
+
+/// Center the view on the cursor when a search put it outside the view
+pub(super) fn center_if_outside_view<M: EditorMode>(sim: &mut HelixSimulator<M>) {
+    let cursor = sim.selection.primary().cursor(sim.doc.slice(..));
+    sim.view_state
+        .center_if_outside(sim.doc.char_to_line(cursor));
+}
+
+/// Page up (Ctrl-b command): scroll one view height, the cursor stays unless
+/// the view passed it
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
+pub fn page_up<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+    let height = sim.view_state.visible_lines();
+    scroll(sim, height, Direction::Backward, CursorSync::Keep);
+    Ok(())
+}
+
+/// Page down (Ctrl-f command): scroll one view height, the cursor stays unless
+/// the view passed it
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
+pub fn page_down<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+    let height = sim.view_state.visible_lines();
+    scroll(sim, height, Direction::Forward, CursorSync::Keep);
+    Ok(())
+}
+
+/// Half page up (Ctrl-u command): scroll half a view height and move every
+/// range with it
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
+pub fn half_page_up<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+    let half = sim.view_state.visible_lines() / 2;
+    scroll(sim, half, Direction::Backward, CursorSync::Follow);
+    Ok(())
+}
+
+/// Half page down (Ctrl-d command): scroll half a view height and move every
+/// range with it
+///
+/// # Errors
+///
+/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
+/// with the fallible commands that share the registry's function type.
+pub fn half_page_down<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+    let half = sim.view_state.visible_lines() / 2;
+    scroll(sim, half, Direction::Forward, CursorSync::Follow);
+    Ok(())
+}
 
 /// Center viewport on cursor line (z or zz command)
 ///
@@ -78,30 +214,27 @@ pub fn view_center_horizontal<M: crate::helix::simulator::EditorMode>(
     Ok(())
 }
 
-/// Scroll viewport down by one line (zj command)
+/// Scroll viewport down by one line (zj command); the cursor stays in the
+/// scrolloff band
 ///
 /// # Errors
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn scroll_down<M: crate::helix::simulator::EditorMode>(
-    sim: &mut HelixSimulator<M>,
-) -> Result<(), SimulatorError> {
-    let total_lines = sim.doc.len_lines();
-    sim.view_state.scroll_down(1, total_lines);
+pub fn scroll_down<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+    scroll(sim, 1, Direction::Forward, CursorSync::Keep);
     Ok(())
 }
 
-/// Scroll viewport up by one line (zk command)
+/// Scroll viewport up by one line (zk command); the cursor stays in the
+/// scrolloff band
 ///
 /// # Errors
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
-pub fn scroll_up<M: crate::helix::simulator::EditorMode>(
-    sim: &mut HelixSimulator<M>,
-) -> Result<(), SimulatorError> {
-    sim.view_state.scroll_up(1);
+pub fn scroll_up<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
+    scroll(sim, 1, Direction::Backward, CursorSync::Keep);
     Ok(())
 }
 
@@ -207,11 +340,10 @@ mod tests {
             scroll_down(&mut sim).unwrap();
         }
 
-        // Should stop at max (total_lines - visible_lines)
+        // The last line may reach the top of the view, as in hx
         // Note: create_multiline_sim creates lines with trailing \n, so rope may see 51 lines
-        let total_lines = sim.doc.len_lines();
-        let expected_max = total_lines.saturating_sub(20);
-        assert_eq!(sim.view_state.top_line(), expected_max);
+        let last_line = sim.doc.len_lines() - 1;
+        assert_eq!(sim.view_state.top_line(), last_line);
     }
 
     #[test]

@@ -19,7 +19,7 @@ fn cid(raw: &str) -> helix_trainer::ids::CommandId {
 }
 
 /// Run `update` and execute the effects it requests, as the event loop does
-fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
+fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::error::UserError> {
     let mut effects = Vec::new();
     let result = helix_trainer::ui::update(state, msg, &mut effects);
     for effect in effects {

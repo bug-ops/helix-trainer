@@ -4,6 +4,7 @@
 //! Expected buffers were captured from `hx` 25.07.1 on the same text and keys.
 
 use crate::grammar::commands::*;
+use crate::helix::Language;
 use crate::helix::simulator::{AnyModeSimulator, InsertCommand};
 
 const SCENARIO_14: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}\n";
@@ -141,6 +142,77 @@ fn deleting_keys_at_document_edges_do_not_panic() {
 }
 
 #[test]
+fn typed_period_in_insert_mode_is_inserted_not_repeated() {
+    let out = run("ab", &[CMD_MOVE_RIGHT, CMD_INSERT, CMD_REPEAT, CMD_ESCAPE]);
+    assert_eq!(out, "a.b");
+}
+
+#[test]
+fn typed_period_is_replayed_as_text_by_dot_and_macro() {
+    let out = run(
+        "ab\ncd",
+        &[
+            CMD_INSERT,
+            CMD_REPEAT,
+            "x",
+            CMD_ESCAPE,
+            CMD_MOVE_DOWN,
+            CMD_GOTO_LINE_START,
+            CMD_REPEAT,
+        ],
+    );
+    assert_eq!(out, ".xab\n.xcd");
+
+    let out = run(
+        "ab\ncd",
+        &[
+            CMD_TOGGLE_MACRO_RECORDING,
+            CMD_INSERT,
+            CMD_REPEAT,
+            CMD_ESCAPE,
+            CMD_TOGGLE_MACRO_RECORDING,
+            CMD_MOVE_DOWN,
+            CMD_GOTO_LINE_START,
+            CMD_REPLAY_MACRO,
+        ],
+    );
+    assert_eq!(out, ".ab\n.cd");
+}
+
+#[test]
+fn dot_replays_backspace_inside_an_insert_session() {
+    let out = run(
+        "ab\ncd",
+        &[
+            CMD_APPEND_LINE_END,
+            "x",
+            CMD_BACKSPACE,
+            "y",
+            CMD_ESCAPE,
+            CMD_MOVE_DOWN,
+            CMD_REPEAT,
+        ],
+    );
+    assert_eq!(out, "aby\ncdy");
+}
+
+#[test]
+fn dot_replays_pair_deleting_backspace() {
+    let out = run(
+        "ab\ncd",
+        &[
+            CMD_INSERT,
+            "(",
+            CMD_BACKSPACE,
+            CMD_ESCAPE,
+            CMD_MOVE_DOWN,
+            CMD_REPEAT,
+        ],
+    );
+    assert_eq!(out, "ab\ncd");
+}
+
+#[test]
 fn dot_repeats_insert_session_with_deleting_keys() {
     let out = run(
         "foo bar\nfoo bar\n",
@@ -201,12 +273,15 @@ fn tab_at_the_start_of_an_indented_line_keeps_the_existing_indent() {
 
 #[test]
 fn tab_unit_follows_the_language() {
-    for (language, text, expected) in [("md", "- a\n", "  z- a\n"), ("py", "x\n", "    zx\n")] {
+    for (language, text, expected) in [
+        (Language::Md, "- a\n", "  z- a\n"),
+        (Language::Py, "x\n", "    zx\n"),
+    ] {
         let mut sim = AnyModeSimulator::new(text.to_string()).with_language(language);
         for cmd in [CMD_INSERT, CMD_INSERT_TAB, "z", CMD_ESCAPE] {
             sim.execute_command(cmd).unwrap();
         }
-        assert_eq!(sim.display().content(), expected, "{language}");
+        assert_eq!(sim.display().content(), expected, "{language:?}");
     }
 }
 

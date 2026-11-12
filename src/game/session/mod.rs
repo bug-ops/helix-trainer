@@ -26,14 +26,15 @@
 //!         }
 //!     }
 //! }
-//! # Ok::<(), helix_trainer::security::UserError>(())
+//! # Ok::<(), helix_trainer::error::UserError>(())
 //! ```
 
 use crate::config::{LastAction, Scenario};
+use crate::game::GameError;
 use crate::game::{CommandExecutor, PerformanceRating, Scorer};
 use crate::helix::{AnyModeSimulator, EditorSnapshot, Mode};
 use crate::ids::ScenarioId;
-use crate::security::{self, SecurityError, UserError};
+use crate::security::{self, SecurityError};
 use crate::time::{MonotonicClock, SystemMonotonicClock};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
@@ -310,7 +311,7 @@ impl<S: SessionState> GameSession<S> {
     /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario.clone())?;
     /// assert_eq!(session.scenario().id, scenario.id);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn scenario(&self) -> &Scenario {
         &self.scenario
@@ -359,7 +360,7 @@ impl<S: SessionState> GameSession<S> {
     /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
     /// assert!(session.actions().is_empty());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn actions(&self) -> &[UserAction] {
         &self.user_actions
@@ -484,7 +485,7 @@ impl GameSession<Active> {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if:
+    /// Returns [`GameError`] if:
     /// - Scenario setup or target content is invalid
     /// - Cursor positions are out of bounds
     /// - Content size exceeds limits
@@ -498,9 +499,9 @@ impl GameSession<Active> {
     /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
     /// assert_eq!(session.action_count(), 0);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn new(scenario: Scenario) -> Result<Self, UserError> {
+    pub fn new(scenario: Scenario) -> Result<Self, GameError> {
         Self::with_clock(scenario, Arc::new(SystemMonotonicClock))
     }
 
@@ -515,7 +516,7 @@ impl GameSession<Active> {
     pub fn with_clock(
         scenario: Scenario,
         clock: Arc<dyn MonotonicClock>,
-    ) -> Result<Self, UserError> {
+    ) -> Result<Self, GameError> {
         // Use unified ScenarioState helper for initialization
         let state = crate::game::ScenarioState::from_scenario(&scenario);
 
@@ -547,7 +548,7 @@ impl GameSession<Active> {
     /// # Errors
     ///
     /// Returns `SecurityError::TooManyActions` if action count would
-    /// exceed the maximum allowed, or `UserError` if command execution fails.
+    /// exceed the maximum allowed, or [`GameError`] if command execution fails.
     ///
     /// # Examples
     ///
@@ -573,9 +574,9 @@ impl GameSession<Active> {
     ///     panic!("the solution completes the scenario");
     /// };
     /// assert!(done.feedback()?.success());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn record_action(mut self, command: String) -> Result<SessionAfterAction, UserError> {
+    pub fn record_action(mut self, command: String) -> Result<SessionAfterAction, GameError> {
         self.apply_action(command)?;
         Ok(self.finish_action())
     }
@@ -590,7 +591,7 @@ impl GameSession<Active> {
     ///
     /// Returns an error if the action limit is exceeded or the simulator
     /// rejects the command.
-    pub fn apply_action(&mut self, command: String) -> Result<(), UserError> {
+    pub fn apply_action(&mut self, command: String) -> Result<(), GameError> {
         self.apply(command, Self::execute_single)
     }
 
@@ -605,7 +606,7 @@ impl GameSession<Active> {
     pub(crate) fn apply_command(
         &mut self,
         command: &crate::helix::normal_command::NormalCommand,
-    ) -> Result<(), UserError> {
+    ) -> Result<(), GameError> {
         self.apply(command.to_string(), |session, _| {
             session.execute_typed(command)
         })
@@ -614,11 +615,10 @@ impl GameSession<Active> {
     fn apply(
         &mut self,
         recorded: String,
-        execute: impl FnOnce(&mut Self, &str) -> Result<(), UserError>,
-    ) -> Result<(), UserError> {
+        execute: impl FnOnce(&mut Self, &str) -> Result<(), GameError>,
+    ) -> Result<(), GameError> {
         // Validate action count doesn't exceed limits
-        security::arithmetic::validate_action_count(self.user_actions.len() + 1)
-            .map_err(UserError::from)?;
+        security::arithmetic::validate_action_count(self.user_actions.len() + 1)?;
 
         execute(self, &recorded)?;
 
@@ -632,7 +632,7 @@ impl GameSession<Active> {
     fn execute_typed(
         &mut self,
         command: &crate::helix::normal_command::NormalCommand,
-    ) -> Result<(), UserError> {
+    ) -> Result<(), GameError> {
         let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
         self.simulator.execute_normal(command)?;
         self.target_held_before_last = held_before;
@@ -685,7 +685,7 @@ impl GameSession<Active> {
     /// let scenario = ScenarioLoader::new().load_from_embedded("en")?.remove(0);
     /// let session = GameSession::new(scenario)?;
     /// assert!(!session.check_completion());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn check_completion(&self) -> bool {
         self.scenario.is_completed_by(
@@ -712,7 +712,7 @@ impl GameSession<Active> {
     /// let session = GameSession::new(scenario)?;
     /// // The setup text differs from the target until the player edits it
     /// assert!(!session.check_content_matches());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn check_content_matches(&self) -> bool {
         self.simulator
@@ -737,7 +737,7 @@ impl GameSession<Active> {
     ///     assert_eq!(session.hints_shown(), 1);
     ///     println!("Hint: {hint}");
     /// }
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn hint(&mut self) -> Option<String> {
         if self.hints_shown < self.scenario.hints.len() {
@@ -765,7 +765,7 @@ impl GameSession<Active> {
     /// let abandoned = session.abandon();
     /// let feedback = abandoned.feedback();
     /// assert_eq!(feedback.score, 0);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn abandon(self) -> GameSession<Abandoned> {
         GameSession {
@@ -805,7 +805,7 @@ impl GameSession<Active> {
     /// session.hint();
     /// session.reset()?;
     /// assert_eq!(session.hints_shown(), 0);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn reset(&mut self) -> Result<(), SecurityError> {
         // Same construction path as `new`, so the scenario's language (indent unit) survives
@@ -823,7 +823,7 @@ impl GameSession<Active> {
 
 // Implement CommandExecutor trait for unified count prefix handling
 impl CommandExecutor for GameSession<Active> {
-    fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
+    fn execute_single(&mut self, command: &str) -> Result<(), GameError> {
         let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
         self.simulator.execute_command(command)?;
         self.target_held_before_last = held_before;
@@ -871,7 +871,7 @@ impl GameSession<Completed> {
     /// # let session = completed.expect("the canonical solution completes the scenario");
     /// let score = session.score()?;
     /// assert!(score > 0);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn score(&self) -> Result<u32, SecurityError> {
         Scorer::score_with_config(&self.scenario.scoring, self.user_actions.len())
@@ -908,7 +908,7 @@ impl GameSession<Completed> {
     /// let feedback = session.feedback()?;
     /// assert!(feedback.success());
     /// println!("{}", feedback.summary());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     ///
     /// # Panics
@@ -978,7 +978,7 @@ impl GameSession<Abandoned> {
     /// let feedback = session.feedback();
     /// assert_eq!(feedback.score, 0);
     /// assert!(!feedback.success());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn feedback(&self) -> Feedback {
         Feedback {
@@ -1055,11 +1055,10 @@ impl<S: SessionState> super::PlayableScenario for GameSession<S> {
         S::session_elapsed(self.started_at, self.completed_at, self.clock.now())
     }
 
-    fn language(&self) -> &str {
+    fn language(&self) -> crate::helix::Language {
         self.scenario
             .setup
             .language
-            .as_deref()
             .unwrap_or(crate::config::DEFAULT_LANGUAGE)
     }
 

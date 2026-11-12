@@ -919,6 +919,7 @@ impl InputStateAccess for MiniGameData {
 mod tests {
     use super::*;
     use crate::testing::sid;
+    use std::assert_matches;
 
     #[test]
     fn test_menu_data_default() {
@@ -1100,17 +1101,17 @@ mod tests {
         assert!(selection.selected_mode(today).is_challenge());
     }
 
-    /// `all_modes` must stay in lockstep with `MiniGameModeKind::ALL`, and each
-    /// mode must have a name and description.
+    /// `all_modes` must stay in lockstep with `MiniGameModeKind::ALL`.
     #[test]
     fn test_all_modes_follow_the_kind_order() {
         let today = chrono::Utc::now().date_naive();
         let modes = MiniGameModeSelection::all_modes(today);
 
         for (kind, mode) in MiniGameModeKind::ALL.into_iter().zip(&modes) {
-            assert_eq!(kind.mode(today).name(), mode.name());
-            assert!(!mode.name().is_empty());
-            assert!(!mode.description().is_empty());
+            assert_eq!(
+                std::mem::discriminant(&kind.mode(today)),
+                std::mem::discriminant(mode)
+            );
         }
     }
 
@@ -1136,7 +1137,7 @@ mod tests {
     fn test_category_filters_data_default() {
         let data = CategoryFiltersData::default();
         assert_eq!(data.selected_index, 0);
-        assert!(matches!(data.return_to, ReturnDestination::Menu));
+        assert_matches!(data.return_to, ReturnDestination::Menu);
     }
 
     #[test]

@@ -6,18 +6,18 @@
 use helix_trainer::config::{
     CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
 };
+use helix_trainer::error::UserError;
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::input::keymap::CanonicalKeys;
 use helix_trainer::input::typestate::InputState;
 use helix_trainer::learning::PerformanceTracker;
-use helix_trainer::security::UserError;
 use helix_trainer::ui::state::{InputStateAccess, MenuData, TypedScreen};
 use helix_trainer::ui::{AppState, Message};
 use std::assert_matches;
 use std::borrow::Cow;
 
 /// Run `update` and execute the effects it requests, as the event loop does
-fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
+fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::error::UserError> {
     let mut effects = Vec::new();
     let result = helix_trainer::ui::update(state, msg, &mut effects);
     for effect in effects {
@@ -31,7 +31,7 @@ fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::secur
 /// keystroke these integration tests simulate.
 fn exec(key: &'static str) -> Message {
     Message::ExecuteCommand {
-        keys: CanonicalKeys::from_static(key),
+        keys: CanonicalKeys::parse(key).unwrap().into(),
         typed: Cow::Borrowed(key),
     }
 }
@@ -156,8 +156,8 @@ fn test_replace_command_multi_key() {
     }
 }
 
-/// #556: an unparsable key token is dropped, not replaced by Space (which would
-/// have completed the pending `f` as `f<space>`)
+/// #556: an unparsable key token cannot be built into a message, so it never
+/// reaches the pending `f` (which Space would have completed as `f<space>`)
 #[test]
 fn test_unparsable_key_token_is_dropped_and_keeps_the_pending_state() {
     let scenario = create_test_scenario("test_unparsable", "a b", (0, 0), "a b", (0, 2));
@@ -165,7 +165,7 @@ fn test_unparsable_key_token_is_dropped_and_keeps_the_pending_state() {
     start_scenario_from_menu(&mut state, 0).unwrap();
 
     update(&mut state, exec("f")).unwrap();
-    update(&mut state, exec("Alt-nonsense")).unwrap();
+    assert!(CanonicalKeys::parse("Alt-nonsense").is_err());
 
     let TypedScreen::Task(task_data) = &state.screen else {
         panic!("Should be on Task screen");
@@ -505,7 +505,7 @@ fn test_command_line_goto_multi_key() {
         update(
             &mut state,
             Message::ExecuteCommand {
-                keys: CanonicalKeys::from_owned(owned.clone()),
+                keys: CanonicalKeys::parse(owned.clone()).unwrap().into(),
                 typed: Cow::Owned(owned),
             },
         )

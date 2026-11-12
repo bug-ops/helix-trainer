@@ -1,10 +1,13 @@
 //! Selection commands (s, S, Alt-s, &, _, Alt--, Alt-_, C, Alt-C, K, Alt-K, Ctrl-c)
 
 use crate::helix::error::SimulatorError;
+use crate::helix::indent::TabWidth;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::limits::MAX_REGEX_SELECTION_MATCHES;
 use helix_core::comment::toggle_line_comments;
 use helix_core::graphemes::{ensure_grapheme_boundary_prev, grapheme_width};
+use helix_core::line_ending::line_end_char_index;
+use helix_core::movement::Direction;
 use helix_core::ropey::RopeSlice;
 use helix_core::selection::{
     keep_or_remove_matches, select_on_matches, split_on_matches, split_on_newline,
@@ -12,13 +15,11 @@ use helix_core::selection::{
 use helix_core::{Range, Selection, Transaction};
 use helix_stdx::rope::{Regex, RopeSliceExt};
 use std::borrow::Cow;
+use std::cmp::Ordering;
 
-/// Tab width `hx` assumes for `&` when the language does not set one
-const ALIGN_TAB_WIDTH: usize = 4;
-
-/// `(row, visual column)` of `pos`: tabs expand to `ALIGN_TAB_WIDTH` stops and
-/// every other grapheme counts its display width, as `hx` `align_selections`
-fn visual_position(slice: RopeSlice, pos: usize) -> (usize, usize) {
+/// `(row, visual column)` of `pos`: tabs advance to the next `tab_width` stop
+/// and every other grapheme counts its display width, as `hx` `align_selections`
+fn visual_position(slice: RopeSlice, pos: usize, tab_width: TabWidth) -> (usize, usize) {
     let row = slice.char_to_line(pos);
     let pos = ensure_grapheme_boundary_prev(slice, pos);
     let col = slice
@@ -26,7 +27,7 @@ fn visual_position(slice: RopeSlice, pos: usize) -> (usize, usize) {
         .graphemes()
         .fold(0, |col, grapheme| {
             if grapheme == "\t" {
-                col + ALIGN_TAB_WIDTH - col % ALIGN_TAB_WIDTH
+                tab_width.next_stop(col)
             } else {
                 col + grapheme_width(&Cow::from(grapheme))
             }
@@ -97,11 +98,89 @@ pub fn merge_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
     Ok(())
 }
 
+/// The char index on `row` at visual column `col`, or the start of the grapheme
+/// that column falls inside; the inverse of [`visual_position`]
+fn pos_at_visual(slice: RopeSlice, row: usize, col: usize, tab_width: TabWidth) -> usize {
+    let row = row.min(slice.len_lines() - 1);
+    let line_start = slice.line_to_char(row);
+    let line_end = line_end_char_index(&slice, row);
+    let mut remaining = col;
+    let mut offset = 0;
+    for grapheme in slice.slice(line_start..line_end).graphemes() {
+        let width = if grapheme == "\t" {
+            let at = col - remaining;
+            tab_width.next_stop(at) - at
+        } else {
+            grapheme_width(&Cow::from(grapheme))
+        };
+        if width > remaining {
+            break;
+        }
+        remaining -= width;
+        offset += grapheme.chars().count();
+    }
+    line_start + offset
+}
+
+/// Copy the primary range to the nearest line in `direction` that reaches its
+/// visual columns, as `hx` `copy_selection_on_line`: shorter lines are
+/// skipped, tabs count at the language tab width, and nothing happens when no
+/// line is left. The copy becomes the primary range; the other ranges are not
+/// copied (a user-approved simplification).
+fn copy_selection_on_line<M: EditorMode>(sim: &mut HelixSimulator<M>, direction: Direction) {
+    let text = sim.doc.slice(..);
+    let tab_width = sim.language.tab_width;
+    let range = sim.selection.primary();
+    // hx ranges are head-exclusive; a point here stands for the one character under it.
+    let (head, anchor) = match range.anchor.cmp(&range.head) {
+        Ordering::Less => (range.head - 1, range.anchor),
+        Ordering::Equal => (range.head, range.anchor),
+        Ordering::Greater => (range.head, range.anchor - 1),
+    };
+    let (head_row, head_col) = visual_position(text, head, tab_width);
+    let (anchor_row, anchor_col) = visual_position(text, anchor, tab_width);
+    let height = head_row.abs_diff(anchor_row) + 1;
+
+    for step in 1.. {
+        let offset = step * height;
+        let (anchor_to, head_to) = match direction {
+            Direction::Forward => (anchor_row + offset, head_row + offset),
+            Direction::Backward => (
+                anchor_row.saturating_sub(offset),
+                head_row.saturating_sub(offset),
+            ),
+        };
+        if anchor_to >= text.len_lines() || head_to >= text.len_lines() {
+            return;
+        }
+        let new_anchor = pos_at_visual(text, anchor_to, anchor_col, tab_width);
+        let new_head = pos_at_visual(text, head_to, head_col, tab_width);
+        if visual_position(text, new_anchor, tab_width).1 == anchor_col
+            && visual_position(text, new_head, tab_width).1 == head_col
+        {
+            let copy = if range.is_empty() {
+                Range::point(new_head)
+            } else {
+                Range::point(new_anchor).put_cursor(text, new_head, true)
+            };
+            let mut ranges = sim.selection.ranges().to_vec();
+            ranges.push(copy);
+            let primary = ranges.len() - 1;
+            sim.selection = Selection::new(ranges.into(), primary);
+            return;
+        }
+        if anchor_to == 0 && head_to == 0 {
+            return;
+        }
+    }
+}
+
 /// Copy selection to next line (C command)
 ///
-/// Copies the primary range one line down, each end at the same column as its
-/// original (with clamping), so a selection is copied whole and a cursor stays
-/// a cursor. Preserves existing ranges - the copy becomes the primary selection.
+/// Copies the primary range one line down at the same visual columns,
+/// skipping lines too short to hold it, so a selection is copied whole and a
+/// cursor stays a cursor. Preserves existing ranges - the copy becomes the
+/// primary selection.
 ///
 /// # Errors
 ///
@@ -110,39 +189,13 @@ pub fn merge_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<()
 pub fn copy_selection_next_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
-    let range = sim.selection.primary();
-    let total_lines = sim.doc.len_lines();
-
-    if sim.doc.char_to_line(range.head) + 1 >= total_lines {
-        return Ok(());
-    }
-
-    let one_line_down = |pos: usize| {
-        let line = sim.doc.char_to_line(pos);
-        let col = pos - sim.doc.line_to_char(line);
-        let next_line_start = sim.doc.line_to_char((line + 1).min(total_lines - 1));
-        let next_line_len = if line + 2 < total_lines {
-            sim.doc.line_to_char(line + 2) - next_line_start - 1 // -1 for newline
-        } else {
-            sim.doc.len_chars() - next_line_start
-        };
-        (next_line_start + col.min(next_line_len)).min(sim.doc.len_chars())
-    };
-
-    let copy = Range::new(one_line_down(range.anchor), one_line_down(range.head));
-    let mut ranges: Vec<Range> = sim.selection.ranges().to_vec();
-    ranges.push(copy);
-    let primary_index = ranges.len() - 1;
-    // Primary index is the newly added range (last index)
-    sim.selection = Selection::new(ranges.into(), primary_index);
-
+    copy_selection_on_line(sim, Direction::Forward);
     Ok(())
 }
 
 /// Copy selection to previous line (Alt-C command)
 ///
-/// Creates an additional cursor on the previous line at the same column (with clamping).
-/// Preserves existing cursors - the new cursor becomes the primary selection.
+/// The upward twin of [`copy_selection_next_line`].
 ///
 /// # Errors
 ///
@@ -151,31 +204,7 @@ pub fn copy_selection_next_line<M: EditorMode>(
 pub fn copy_selection_prev_line<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
-    let range = sim.selection.primary();
-    let head = range.head;
-    let current_line = sim.doc.char_to_line(head);
-
-    if current_line == 0 {
-        return Ok(());
-    }
-
-    let line_start = sim.doc.line_to_char(current_line);
-    let col = head - line_start;
-
-    let prev_line_start = sim.doc.line_to_char(current_line - 1);
-    let prev_line_len = line_start - prev_line_start - 1;
-
-    let new_col = col.min(prev_line_len);
-    let new_head = prev_line_start + new_col;
-
-    // Accumulate existing ranges and insert new cursor at beginning
-    let new_range = Range::point(new_head);
-    let mut ranges: Vec<Range> = sim.selection.ranges().to_vec();
-    // Insert at beginning since we're going backwards (maintains top-to-bottom order)
-    ranges.insert(0, new_range);
-    // Primary index is the newly added cursor (index 0)
-    sim.selection = Selection::new(ranges.into(), 0);
-
+    copy_selection_on_line(sim, Direction::Backward);
     Ok(())
 }
 
@@ -219,13 +248,14 @@ pub(crate) fn align_selections<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
     let slice = sim.doc.slice(..);
+    let tab_width = sim.language.tab_width;
     let mut columns: Vec<Vec<(usize, usize)>> = Vec::new();
     let mut last_row = slice.len_lines() + 1;
     let mut column = 0;
 
     for range in &sim.selection {
-        let head = visual_position(slice, range.head);
-        let anchor = visual_position(slice, range.anchor);
+        let head = visual_position(slice, range.head, tab_width);
+        let anchor = visual_position(slice, range.anchor, tab_width);
         if head.0 != anchor.0 {
             return Err(SimulatorError::AlignSpansLines);
         }
@@ -295,8 +325,7 @@ fn truncate_matches(selection: Selection, max: usize) -> Selection {
 /// The rope regex engine reports its own build error type, which this crate cannot name,
 /// so the failure is carried as a syntax error with the engine's message.
 fn compile_regex(pattern: &str) -> Result<Regex, SimulatorError> {
-    Regex::new(pattern)
-        .map_err(|e| SimulatorError::InvalidRegex(helix_core::regex::Error::Syntax(e.to_string())))
+    Regex::new(pattern).map_err(|e| SimulatorError::invalid_pattern(&e))
 }
 
 /// Select regex matches within the current selection (s command)
@@ -711,58 +740,40 @@ mod tests {
     }
 
     #[test]
-    fn test_copy_selection_next_line_column_clamping() {
+    fn test_copy_selection_next_line_skips_short_lines() {
         let mut sim: HelixSimulator<NormalMode> =
-            HelixSimulator::new("long line here\nshort".to_string());
-
-        // Position at column 12 of first line
+            HelixSimulator::new("long line here\nshort\nlong line here".to_string());
         sim.selection = Selection::point(12);
 
         copy_selection_next_line(&mut sim).unwrap();
 
-        // Should have 2 cursors now
-        assert_eq!(sim.selection.len(), 2);
-
-        // Primary cursor (new) should be on next line with clamped column
-        let head = sim.selection.primary().head;
-        let line = sim.doc.char_to_line(head);
-        assert_eq!(line, 1);
-
-        // Column should be clamped to "short" length (5)
-        let line_start = sim.doc.line_to_char(1);
-        let col = head - line_start;
-        assert!(col <= 5);
-
-        // Original cursor should still be at position 12
-        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
-        assert_eq!(ranges[0].head, 12);
+        let heads: Vec<_> = sim.selection.ranges().iter().map(|r| r.head).collect();
+        assert_eq!(heads, [12, 21 + 12]);
+        assert_eq!(sim.selection.primary().head, 21 + 12);
     }
 
     #[test]
-    fn test_copy_selection_prev_line_column_clamping() {
+    fn test_copy_selection_next_line_without_a_long_enough_line_changes_nothing() {
         let mut sim: HelixSimulator<NormalMode> =
-            HelixSimulator::new("short\nlong line here".to_string());
+            HelixSimulator::new("long line here\nshort".to_string());
+        sim.selection = Selection::point(12);
 
-        // Position at column 12 of second line
-        let line2_start = sim.doc.line_to_char(1);
-        sim.selection = Selection::point(line2_start + 12);
+        copy_selection_next_line(&mut sim).unwrap();
+
+        assert_eq!(sim.selection, Selection::point(12));
+    }
+
+    #[test]
+    fn test_copy_selection_prev_line_skips_short_lines() {
+        let mut sim: HelixSimulator<NormalMode> =
+            HelixSimulator::new("long line here\nshort\nlong line here".to_string());
+        sim.selection = Selection::point(21 + 12);
 
         copy_selection_prev_line(&mut sim).unwrap();
 
-        // Should have 2 cursors now
-        assert_eq!(sim.selection.len(), 2);
-
-        // Primary cursor (new, at index 0) should be on previous line with clamped column
-        let head = sim.selection.primary().head;
-        let line = sim.doc.char_to_line(head);
-        assert_eq!(line, 0);
-
-        // Column should be clamped to "short" length (5)
-        assert!(head <= 5);
-
-        // Original cursor should still be at position line2_start + 12
-        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
-        assert_eq!(ranges[1].head, line2_start + 12);
+        let heads: Vec<_> = sim.selection.ranges().iter().map(|r| r.head).collect();
+        assert_eq!(heads, [12, 21 + 12]);
+        assert_eq!(sim.selection.primary().head, 12);
     }
 
     #[test]
@@ -981,25 +992,17 @@ mod tests {
     }
 
     #[test]
-    fn test_copy_selection_column_clamp_multi_cursor() {
-        let mut sim: HelixSimulator<NormalMode> =
-            HelixSimulator::new("long line here\nshort\ntiny".to_string());
-
-        // Start at column 10 of first line
+    fn test_copy_selection_skips_short_lines_on_every_copy() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new(
+            "long line here\nshort\nlong line here\ntiny\nlong line here".to_string(),
+        );
         sim.selection = Selection::point(10);
 
-        // First C: column clamped to 5 on "short"
         copy_selection_next_line(&mut sim).unwrap();
-        assert_eq!(sim.selection.len(), 2);
-
-        // Second C: column clamped to 4 on "tiny"
         copy_selection_next_line(&mut sim).unwrap();
-        assert_eq!(sim.selection.len(), 3);
 
-        let ranges: Vec<_> = sim.selection.ranges().iter().collect();
-        assert_eq!(ranges[0].head, 10); // Original at col 10
-        assert_eq!(ranges[1].head, 20); // "short" is 5 chars, so clamped to end (15 + 5 = 20)
-        assert_eq!(ranges[2].head, 25); // "tiny" is 4 chars, so clamped to end (21 + 4 = 25)
+        let heads: Vec<_> = sim.selection.ranges().iter().map(|r| r.head).collect();
+        assert_eq!(heads, [10, 21 + 10, 41 + 10]);
     }
 
     // Regex selection tests (s / S commands)

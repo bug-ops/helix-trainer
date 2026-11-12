@@ -9,7 +9,7 @@ use helix_core::{
     graphemes::prev_grapheme_boundary,
     line_ending::line_end_char_index,
     match_brackets::find_matching_bracket_plaintext,
-    movement::{self, Movement},
+    movement::{self, Direction, Movement},
     search::{find_nth_next, find_nth_prev},
     text_annotations::TextAnnotations,
 };
@@ -25,8 +25,6 @@ pub fn move_left<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), SimulatorError> {
-    use helix_core::movement::Direction;
-
     let slice = sim.doc.slice(..);
     let text_fmt = TextFormat::default();
     let mut annotations = TextAnnotations::default();
@@ -57,8 +55,6 @@ pub fn move_right<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), SimulatorError> {
-    use helix_core::movement::Direction;
-
     let slice = sim.doc.slice(..);
     let text_fmt = TextFormat::default();
     let mut annotations = TextAnnotations::default();
@@ -79,6 +75,31 @@ pub fn move_right<M: EditorMode>(
     Ok(())
 }
 
+/// Move every range `count` lines in `direction`, extending it when `movement`
+/// says so (the vertical motion of `j`, `k` and the paging keys)
+pub(super) fn move_vertically_all<M: EditorMode>(
+    sim: &mut HelixSimulator<M>,
+    direction: Direction,
+    count: usize,
+    movement: Movement,
+) {
+    let slice = sim.doc.slice(..);
+    let text_fmt = TextFormat::default();
+    let mut annotations = TextAnnotations::default();
+
+    sim.selection = sim.selection.clone().transform(|range| {
+        movement::move_vertically(
+            slice,
+            range,
+            direction,
+            count,
+            movement,
+            &text_fmt,
+            &mut annotations,
+        )
+    });
+}
+
 /// Move down by count lines
 ///
 /// # Errors
@@ -89,25 +110,7 @@ pub fn move_down<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), SimulatorError> {
-    use helix_core::movement::Direction;
-
-    let slice = sim.doc.slice(..);
-    let text_fmt = TextFormat::default();
-    let mut annotations = TextAnnotations::default();
-
-    let new_selection = sim.selection.clone().transform(|range| {
-        movement::move_vertically(
-            slice,
-            range,
-            Direction::Forward,
-            count,
-            Movement::Move,
-            &text_fmt,
-            &mut annotations,
-        )
-    });
-
-    sim.selection = new_selection;
+    move_vertically_all(sim, Direction::Forward, count, Movement::Move);
     Ok(())
 }
 
@@ -121,25 +124,7 @@ pub fn move_up<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     count: usize,
 ) -> Result<(), SimulatorError> {
-    use helix_core::movement::Direction;
-
-    let slice = sim.doc.slice(..);
-    let text_fmt = TextFormat::default();
-    let mut annotations = TextAnnotations::default();
-
-    let new_selection = sim.selection.clone().transform(|range| {
-        movement::move_vertically(
-            slice,
-            range,
-            Direction::Backward,
-            count,
-            Movement::Move,
-            &text_fmt,
-            &mut annotations,
-        )
-    });
-
-    sim.selection = new_selection;
+    move_vertically_all(sim, Direction::Backward, count, Movement::Move);
     Ok(())
 }
 
@@ -608,134 +593,6 @@ pub fn repeat_last_motion<M: EditorMode>(
     Ok(())
 }
 
-const PAGE_SIZE: usize = 20;
-
-/// Page up movement (Ctrl-b command)
-///
-/// # Errors
-///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
-pub fn page_up<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    count: usize,
-) -> Result<(), SimulatorError> {
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(current_line);
-    let col = head - line_start;
-
-    let lines_to_move = PAGE_SIZE.saturating_mul(count.max(1));
-    let target_line = current_line.saturating_sub(lines_to_move);
-
-    let target_line_start = sim.doc.line_to_char(target_line);
-    let target_line_len = if target_line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(target_line + 1) - target_line_start - 1
-    } else {
-        sim.doc.len_chars() - target_line_start
-    };
-
-    let new_col = col.min(target_line_len);
-    sim.selection = Selection::point(target_line_start + new_col);
-
-    Ok(())
-}
-
-/// Page down movement (Ctrl-f command)
-///
-/// # Errors
-///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
-pub fn page_down<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    count: usize,
-) -> Result<(), SimulatorError> {
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(current_line);
-    let col = head - line_start;
-
-    let total_lines = sim.doc.len_lines();
-    let lines_to_move = PAGE_SIZE.saturating_mul(count.max(1));
-    let target_line = (current_line + lines_to_move).min(total_lines.saturating_sub(1));
-
-    let target_line_start = sim.doc.line_to_char(target_line);
-    let target_line_len = if target_line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(target_line + 1) - target_line_start - 1
-    } else {
-        sim.doc.len_chars() - target_line_start
-    };
-
-    let new_col = col.min(target_line_len);
-    sim.selection = Selection::point(target_line_start + new_col);
-
-    Ok(())
-}
-
-/// Half page up movement (Ctrl-u command)
-///
-/// # Errors
-///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
-pub fn half_page_up<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    count: usize,
-) -> Result<(), SimulatorError> {
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(current_line);
-    let col = head - line_start;
-
-    let lines_to_move = (PAGE_SIZE / 2).saturating_mul(count.max(1));
-    let target_line = current_line.saturating_sub(lines_to_move);
-
-    let target_line_start = sim.doc.line_to_char(target_line);
-    let target_line_len = if target_line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(target_line + 1) - target_line_start - 1
-    } else {
-        sim.doc.len_chars() - target_line_start
-    };
-
-    let new_col = col.min(target_line_len);
-    sim.selection = Selection::point(target_line_start + new_col);
-
-    Ok(())
-}
-
-/// Half page down movement (Ctrl-d command)
-///
-/// # Errors
-///
-/// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
-/// with the fallible commands that share the registry's function type.
-pub fn half_page_down<M: EditorMode>(
-    sim: &mut HelixSimulator<M>,
-    count: usize,
-) -> Result<(), SimulatorError> {
-    let head = sim.selection.primary().head;
-    let current_line = sim.doc.char_to_line(head);
-    let line_start = sim.doc.line_to_char(current_line);
-    let col = head - line_start;
-
-    let total_lines = sim.doc.len_lines();
-    let lines_to_move = (PAGE_SIZE / 2).saturating_mul(count.max(1));
-    let target_line = (current_line + lines_to_move).min(total_lines.saturating_sub(1));
-
-    let target_line_start = sim.doc.line_to_char(target_line);
-    let target_line_len = if target_line + 1 < sim.doc.len_lines() {
-        sim.doc.line_to_char(target_line + 1) - target_line_start - 1
-    } else {
-        sim.doc.len_chars() - target_line_start
-    };
-
-    let new_col = col.min(target_line_len);
-    sim.selection = Selection::point(target_line_start + new_col);
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -873,103 +730,6 @@ mod tests {
         goto_next_paragraph(&mut sim, 1).unwrap();
         // Should be at or past current position (end of doc)
         assert!(sim.selection.primary().head <= doc_len);
-    }
-
-    #[test]
-    fn test_page_down() {
-        // Create content with many lines
-        let content = (0..50)
-            .map(|i| format!("line {i}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let mut sim = HelixSimulator::new(content);
-
-        // Start at beginning
-        assert_eq!(sim.selection.primary().head, 0);
-
-        // Page down should move cursor down by PAGE_SIZE lines
-        page_down(&mut sim, 1).unwrap();
-
-        // Should be on a later line
-        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
-        assert!(new_line > 0);
-    }
-
-    #[test]
-    fn test_page_up() {
-        // Create content with many lines
-        let content = (0..50)
-            .map(|i| format!("line {i}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let mut sim = HelixSimulator::new(content);
-
-        // Start near the end
-        let last_line_start = sim.doc.line_to_char(40);
-        sim.selection = Selection::point(last_line_start);
-
-        // Page up should move cursor up
-        page_up(&mut sim, 1).unwrap();
-
-        // Should be on an earlier line
-        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
-        assert!(new_line < 40);
-    }
-
-    #[test]
-    fn test_half_page_down() {
-        let content = (0..50)
-            .map(|i| format!("line {i}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let mut sim = HelixSimulator::new(content);
-
-        half_page_down(&mut sim, 1).unwrap();
-
-        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
-        assert!(new_line > 0);
-    }
-
-    #[test]
-    fn test_half_page_up() {
-        let content = (0..50)
-            .map(|i| format!("line {i}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let mut sim = HelixSimulator::new(content);
-
-        let line_30_start = sim.doc.line_to_char(30);
-        sim.selection = Selection::point(line_30_start);
-
-        half_page_up(&mut sim, 1).unwrap();
-
-        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
-        assert!(new_line < 30);
-    }
-
-    #[test]
-    fn test_page_up_at_top() {
-        let mut sim = HelixSimulator::new("line 1\nline 2".to_string());
-        sim.selection = Selection::point(0);
-
-        // Page up at top should stay at top
-        page_up(&mut sim, 1).unwrap();
-
-        assert_eq!(sim.selection.primary().head, 0);
-    }
-
-    #[test]
-    fn test_page_down_at_bottom() {
-        let mut sim = HelixSimulator::new("line 1\nline 2".to_string());
-        let last_line_start = sim.doc.line_to_char(1);
-        sim.selection = Selection::point(last_line_start);
-
-        // Page down at bottom should stay near bottom
-        page_down(&mut sim, 1).unwrap();
-
-        // Should be on last line
-        let new_line = sim.doc.char_to_line(sim.selection.primary().head);
-        assert_eq!(new_line, 1);
     }
 
     /// Test to verify `helix_core::search` behavior across lines

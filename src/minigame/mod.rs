@@ -29,7 +29,7 @@
 //! if session.check_completion() {
 //!     session.advance_to_next();
 //! }
-//! # Ok::<(), helix_trainer::security::UserError>(())
+//! # Ok::<(), helix_trainer::error::UserError>(())
 //! ```
 
 mod challenge;

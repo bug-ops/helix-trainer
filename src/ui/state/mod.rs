@@ -20,10 +20,10 @@
 
 use crate::async_state::SaveRequest;
 use crate::config::Scenario;
+use crate::error::UserError;
 use crate::gamification::{ProfileStorage, UserProfile};
 use crate::ids::ScenarioId;
 use crate::learning::PerformanceTracker;
-use crate::security::UserError;
 use crate::sound::SoundEffect;
 use crate::time::{Clock, MonotonicClock};
 use crate::ui::layout::{
@@ -169,8 +169,8 @@ pub enum Message {
     /// `KeyHistory` display. Equal on every keystroke when the overlay is
     /// disabled or misses.
     MiniGameCommand {
-        /// Canonical command to dispatch.
-        keys: crate::input::keymap::CanonicalKeys,
+        /// Canonical command to dispatch, or the text typed in Insert mode.
+        keys: crate::input::keymap::GameplayKey,
         /// Physically pressed key, for key-history display.
         typed: std::borrow::Cow<'static, str>,
     },
@@ -230,8 +230,8 @@ pub enum Message {
     /// `KeyHistory` display. Equal on every keystroke when the overlay is
     /// disabled or misses.
     ExecuteCommand {
-        /// Canonical command to dispatch.
-        keys: crate::input::keymap::CanonicalKeys,
+        /// Canonical command to dispatch, or the text typed in Insert mode.
+        keys: crate::input::keymap::GameplayKey,
         /// Physically pressed key, for key-history display.
         typed: std::borrow::Cow<'static, str>,
     },
@@ -389,10 +389,11 @@ impl AppState {
     /// use helix_trainer::learning::PerformanceTracker;
     /// use helix_trainer::ui::AppState;
     /// use helix_trainer::ui::state::TypedScreen;
+    /// use std::assert_matches;
     ///
     /// let storage = ProfileStorage::with_path(std::env::temp_dir().join("doc-profile.json"));
     /// let state = AppState::new(vec![], UserProfile::new(), storage, PerformanceTracker::new());
-    /// assert!(matches!(state.screen, TypedScreen::ModeSelection(_)));
+    /// assert_matches!(state.screen, TypedScreen::ModeSelection(_));
     /// ```
     pub fn new(
         scenarios: Vec<Scenario>,
@@ -660,7 +661,7 @@ fn apply_outcome(state: &mut AppState, outcome: HandlerOutcome) {
 /// let mut effects = Vec::new();
 /// update(&mut state, Message::QuitApp, &mut effects)?;
 /// assert!(!state.ui.running);
-/// # Ok::<(), helix_trainer::security::UserError>(())
+/// # Ok::<(), helix_trainer::error::UserError>(())
 /// ```
 pub fn update(
     state: &mut AppState,
@@ -676,6 +677,10 @@ pub fn update(
 }
 
 /// Handle `msg` without draining the effect queue, for handlers that dispatch follow-up messages
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserError> {
     match msg {
         // Navigation messages (don't require specific screen)

@@ -9,6 +9,10 @@ use crate::testing::update_executing_effects as update;
 use crate::ui::state::{Message, TypedScreen};
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_start_scenario() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
@@ -211,7 +215,6 @@ fn test_previously_completed_quests_tracking() {
                 target: 1,
                 current: 0,
             },
-            "Select 1 line".to_string(),
             QuestDifficulty::Easy,
         ));
     }

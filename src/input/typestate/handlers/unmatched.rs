@@ -17,6 +17,10 @@ use crate::input::typestate::{
 // ============================================================================
 
 impl InputHandler<UnmatchedPrevPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &UnmatchedPrevPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // '[p' - goto previous paragraph
@@ -34,6 +38,10 @@ impl InputHandler<UnmatchedPrevPending> for KeyHandler {
 // ============================================================================
 
 impl InputHandler<UnmatchedNextPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &UnmatchedNextPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // ']p' - goto next paragraph

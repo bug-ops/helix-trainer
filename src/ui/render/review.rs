@@ -34,6 +34,7 @@ pub(super) fn render_review_screen(frame: &mut Frame, state: &AppState, data: &R
             Constraint::Min(0),    // Content
             Constraint::Length(3), // Footer with controls
         ])
+        .horizontal_margin(2)
         .split(frame.area());
 
     // Header with progress
@@ -84,7 +85,7 @@ fn render_review_content(frame: &mut Frame, area: Rect, state: &AppState, sessio
             Constraint::Min(10),   // Practice area
             Constraint::Length(3), // Instructions
         ])
-        .margin(2)
+        .vertical_margin(2)
         .split(area);
 
     // Command info panel
@@ -267,6 +268,52 @@ fn render_footer(frame: &mut Frame, area: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::learning::ReviewSession;
+    use crate::testing::{cid, empty_test_app_state};
+    use ratatui::{Terminal, backend::TestBackend};
+    use std::time::Instant;
+
+    fn render(width: u16, height: u16) -> Terminal<TestBackend> {
+        let state = empty_test_app_state();
+        let session = ReviewSession::start(vec![cid("h"), cid("j")], Instant::now())
+            .expect("fixture has commands");
+        let data = ReviewData { session };
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| render_review_screen(frame, &state, &data))
+            .unwrap();
+        terminal
+    }
+
+    fn first_non_blank_columns(terminal: &Terminal<TestBackend>) -> Vec<usize> {
+        let buffer = terminal.backend().buffer();
+        let width = usize::from(buffer.area.width);
+        buffer
+            .content()
+            .chunks(width)
+            .filter_map(|row| row.iter().position(|cell| cell.symbol() != " "))
+            .collect()
+    }
+
+    /// #586: the header, the body panels and the bottom bar share one margin
+    #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
+    fn test_every_box_starts_at_the_screen_margin() {
+        let columns = first_non_blank_columns(&render(130, 45));
+        assert!(!columns.is_empty());
+        assert!(columns.iter().all(|&column| column == 2), "{columns:?}");
+    }
+
+    #[test]
+    fn test_narrow_terminal_does_not_panic() {
+        for (width, height) in [(1, 1), (3, 3), (4, 10), (20, 5)] {
+            render(width, height);
+        }
+    }
 
     #[test]
     fn test_get_command_description_uses_registry() {

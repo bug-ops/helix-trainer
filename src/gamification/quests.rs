@@ -8,11 +8,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::config::ConfigError;
 use crate::config::quests::{
     QuestDifficulty as TemplateDifficulty, QuestLoader, QuestSpec, QuestTemplate,
 };
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
-use crate::security::UserError;
 
 use super::{UserProfile, XPCalculator};
 
@@ -164,6 +164,10 @@ impl crate::learning::ProgressTracker for QuestType {
         }
     }
 
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn current(&self) -> u64 {
         match self {
             QuestType::CommandPractice { current, .. } => u64::from(*current),
@@ -176,6 +180,10 @@ impl crate::learning::ProgressTracker for QuestType {
         }
     }
 
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn target(&self) -> u64 {
         match self {
             QuestType::CommandPractice { target, .. } => u64::from(*target),
@@ -196,8 +204,6 @@ pub struct Quest {
     pub id: QuestId,
     /// Quest type with its progress.
     pub quest_type: QuestType,
-    /// Text shown to the player.
-    pub description: String,
     /// Difficulty tier.
     pub difficulty: QuestDifficulty,
     /// XP granted on completion.
@@ -218,7 +224,7 @@ pub struct Quest {
 /// let quest = Quest::from(&templates[0]);
 /// assert_eq!(quest.id, templates[0].id);
 /// assert!(!quest.completed);
-/// # Ok::<(), helix_trainer::security::UserError>(())
+/// # Ok::<(), helix_trainer::error::UserError>(())
 /// ```
 impl From<&QuestTemplate> for Quest {
     fn from(template: &QuestTemplate) -> Self {
@@ -253,28 +259,17 @@ impl From<&QuestTemplate> for Quest {
             TemplateDifficulty::Medium => QuestDifficulty::Medium,
             TemplateDifficulty::Hard => QuestDifficulty::Hard,
         };
-        Self::new(
-            template.id.clone(),
-            quest_type,
-            template.description.clone(),
-            difficulty,
-        )
+        Self::new(template.id.clone(), quest_type, difficulty)
     }
 }
 
 impl Quest {
     /// Create a new quest
-    pub fn new(
-        id: QuestId,
-        quest_type: QuestType,
-        description: String,
-        difficulty: QuestDifficulty,
-    ) -> Self {
+    pub fn new(id: QuestId, quest_type: QuestType, difficulty: QuestDifficulty) -> Self {
         let xp_reward = XPCalculator::quest_xp_reward(&quest_type, difficulty);
         Self {
             id,
             quest_type,
-            description,
             difficulty,
             xp_reward,
             completed: false,
@@ -487,7 +482,7 @@ impl QuestTemplateRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if no templates are embedded for `locale` or they
+    /// Returns [`ConfigError`] if no templates are embedded for `locale` or they
     /// fail validation.
     ///
     /// # Examples
@@ -499,7 +494,7 @@ impl QuestTemplateRegistry {
     /// assert!(!registry.is_empty());
     /// assert!(QuestTemplateRegistry::from_embedded("zz").is_err());
     /// ```
-    pub fn from_embedded(locale: &str) -> Result<Self, UserError> {
+    pub fn from_embedded(locale: &str) -> Result<Self, ConfigError> {
         let loader = QuestLoader::new();
         let templates = loader.load_from_embedded(locale)?;
 
@@ -790,12 +785,7 @@ mod tests {
             target: 5,
             current: 0,
         };
-        let quest = Quest::new(
-            qid("test_quest"),
-            quest_type,
-            "Test quest".to_string(),
-            QuestDifficulty::Easy,
-        );
+        let quest = Quest::new(qid("test_quest"), quest_type, QuestDifficulty::Easy);
 
         assert_eq!(quest.id.as_str(), "test_quest");
         assert_eq!(quest.xp_reward, 25); // Easy command practice
@@ -856,6 +846,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_generate_quests_with_empty_registry_leaves_every_slot_unfilled() {
         let today = chrono::Utc::now().date_naive();
         for (level, slots) in [(1, 3), (10, 4), (20, 4)] {
@@ -899,7 +893,6 @@ mod tests {
                 target: 3,
                 current: 0,
             },
-            "Test".to_string(),
             QuestDifficulty::Easy,
         )];
 
@@ -919,7 +912,6 @@ mod tests {
                 target: 2,
                 current: 0,
             },
-            "Test".to_string(),
             QuestDifficulty::Medium,
         )];
 
@@ -946,7 +938,6 @@ mod tests {
                 scenario_id: sid("delete_line_001"),
                 time_limit: Duration::from_secs(5),
             },
-            "Test".to_string(),
             QuestDifficulty::Hard,
         )];
 
@@ -975,7 +966,6 @@ mod tests {
                 target_commands: 3,
                 commands_used: HashSet::new(),
             },
-            "Test".to_string(),
             QuestDifficulty::Hard,
         )];
 
@@ -998,7 +988,6 @@ mod tests {
                 target_minutes: 10,
                 current_minutes: 0,
             },
-            "Test".to_string(),
             QuestDifficulty::Medium,
         )];
 

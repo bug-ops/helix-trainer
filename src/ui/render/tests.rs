@@ -221,6 +221,10 @@ mod editor_tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_editor_with_diff_cursor_on_first_line() {
         let lines = super::super::editor::render_editor_with_diff(
             "hello world\nsecond line\n",
@@ -245,6 +249,10 @@ mod editor_tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_editor_with_diff_empty_content() {
         let lines =
             super::super::editor::render_editor_with_diff("", "", &primary_cursor(0, 0), &[], None);
@@ -1983,12 +1991,23 @@ mod mode_selection_extended_tests {
             .map(ratatui::buffer::Cell::symbol)
             .collect();
         for mode in MiniGameModeSelection::all_modes(chrono::Utc::now().date_naive()) {
-            let mode_name = mode.name();
+            let mode_name = crate::ui::render::mode_selection::mode_label(&mode);
+            let mode_name = mode_name.as_str();
             assert!(
                 text.contains(mode_name),
                 "submenu entry '{mode_name}' must be visible at 80x24, got buffer text: {text}"
             );
         }
+    }
+
+    #[test]
+    fn mode_label_names_each_minigame_mode() {
+        let today = chrono::Utc::now().date_naive();
+        let labels: Vec<String> = MiniGameModeSelection::all_modes(today)
+            .iter()
+            .map(crate::ui::render::mode_selection::mode_label)
+            .collect();
+        assert_eq!(labels, ["Arcade", "Survival", "Daily Challenge"]);
     }
 
     /// Regression test for critique S4: the FR-006 "attempts remaining"
@@ -2650,7 +2669,6 @@ mod shared_definitions {
                         target: 5,
                         current: 0,
                     },
-                    "Quest".to_string(),
                     QuestDifficulty::Easy,
                 )
             })

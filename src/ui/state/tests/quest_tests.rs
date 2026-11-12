@@ -25,7 +25,6 @@ fn test_quest_progress_command_practice() {
                 target: 3,
                 current: 0,
             },
-            "Delete 3 lines".to_string(),
             QuestDifficulty::Easy,
         ));
     }
@@ -94,7 +93,6 @@ fn test_quest_progress_scenario_completion() {
                 target: 2,
                 current: 0,
             },
-            "Complete 2 scenarios".to_string(),
             QuestDifficulty::Medium,
         ));
     }
@@ -161,7 +159,6 @@ fn test_quest_completion_awards_bonus_xp() {
                 target: 1,
                 current: 0,
             },
-            "Delete 1 character".to_string(),
             QuestDifficulty::Easy,
         ));
     }
@@ -205,7 +202,6 @@ fn test_exploration_quest_tracking() {
                 target_commands: 3,
                 commands_used: HashSet::new(),
             },
-            "Use 3 different commands".to_string(),
             QuestDifficulty::Hard,
         ));
     }
@@ -322,7 +318,6 @@ fn test_quest_progress_changes_tracking() {
                 target: 3,
                 current: 0,
             },
-            "Delete 3 lines".to_string(),
             QuestDifficulty::Easy,
         ));
     }
@@ -361,7 +356,6 @@ fn test_quest_completion_populates_completed_quests_today() {
                 target: 1,
                 current: 0,
             },
-            "Delete 1 character".to_string(),
             QuestDifficulty::Easy,
         ));
     }
@@ -415,7 +409,6 @@ fn test_streak_increments_next_day_after_live_quest_completion() {
                 target: 1,
                 current: 0,
             },
-            "Delete 1 character".to_string(),
             QuestDifficulty::Easy,
         ));
     }
@@ -463,7 +456,6 @@ fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
                 target: 1,
                 current: 0,
             },
-            format!("Use {id}"),
             QuestDifficulty::Easy,
         ));
     }
@@ -508,7 +500,6 @@ fn test_streak_freeze_not_granted_twice() {
             target: 1,
             current: 0,
         },
-        "Use x".to_string(),
         QuestDifficulty::Easy,
     ));
 

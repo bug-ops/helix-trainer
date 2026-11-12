@@ -81,13 +81,8 @@ impl ScenarioState {
         );
 
         // Initialize Helix simulator from initial snapshot
-        let simulator = AnyModeSimulator::from_snapshot(&initial_snapshot).with_language(
-            scenario
-                .setup
-                .language
-                .as_deref()
-                .unwrap_or(DEFAULT_LANGUAGE),
-        );
+        let simulator = AnyModeSimulator::from_snapshot(&initial_snapshot)
+            .with_language(scenario.setup.language.unwrap_or(DEFAULT_LANGUAGE));
 
         Self {
             simulator,

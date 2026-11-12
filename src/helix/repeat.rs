@@ -446,6 +446,10 @@ pub(crate) fn is_operator_command(key: &KeyEvent) -> bool {
 /// - Change: `c`
 /// - Clipboard: `y`, `p`, `P`
 /// - Indent: `>`, `<`
+#[expect(
+    clippy::match_same_arms,
+    reason = "arms stay apart to document each case"
+)]
 pub fn is_repeatable_command(key: &KeyEvent) -> bool {
     match key.code {
         KeyCode::Char(ch) => match ch {
@@ -525,6 +529,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_insert_mode_recorder_record_char() {
         let mut recorder = InsertModeRecorder::new();
         recorder.start(Some("i".to_string()));
@@ -595,6 +603,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_insert_mode_recorder_empty_recording() {
         let mut recorder = InsertModeRecorder::new();
         recorder.start(None);
@@ -617,6 +629,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_insert_mode_recorder_no_recording_without_start() {
         let mut recorder = InsertModeRecorder::new();
 

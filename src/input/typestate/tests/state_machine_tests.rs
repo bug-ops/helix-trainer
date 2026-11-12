@@ -353,10 +353,16 @@ fn test_pending_surround_replace_char_various_brackets() {
     }
 }
 
+fn events(keys: &[&str]) -> Vec<crossterm::event::KeyEvent> {
+    keys.iter()
+        .map(|key| crate::input::typestate::parse_helix_key_string(key).unwrap())
+        .collect()
+}
+
 #[test]
 fn test_apply_canonical_expansion_multi_token_commits_and_resolves() {
     let mut sm = InputStateMachine::new();
-    let resolved = sm.apply_canonical_expansion(&["g", "e"]);
+    let resolved = sm.apply_canonical_expansion(&events(&["g", "e"]));
     assert_eq!(resolved, Some(normal(CMD_GOTO_LAST_LINE)));
     assert!(sm.state().is_base());
 }
@@ -372,7 +378,7 @@ fn test_apply_canonical_expansion_single_token_landing_on_a_prefix_is_discarded(
     // requires the final token to execute, so given this input it
     // correctly discards rather than committing a half-resolved state.
     let mut sm = InputStateMachine::new();
-    let resolved = sm.apply_canonical_expansion(&["f"]);
+    let resolved = sm.apply_canonical_expansion(&events(&["f"]));
     assert_eq!(resolved, None);
     assert!(
         sm.state().is_base(),
@@ -384,7 +390,7 @@ fn test_apply_canonical_expansion_single_token_landing_on_a_prefix_is_discarded(
 fn test_apply_canonical_expansion_discards_on_cancel() {
     let mut sm = InputStateMachine::new();
     // "gx" is not a valid goto second key - GotoPending cancels on it.
-    let resolved = sm.apply_canonical_expansion(&["g", "x"]);
+    let resolved = sm.apply_canonical_expansion(&events(&["g", "x"]));
     assert_eq!(resolved, None);
     assert!(
         sm.state().is_base(),
@@ -421,12 +427,4 @@ fn test_prompts_cancel_on_escape_without_executing() {
     for opener in ["K", "Alt-K", "?"] {
         assert_eq!(run_keys(&[opener, "a", "Escape"]), None, "{opener}");
     }
-}
-
-#[test]
-fn test_apply_canonical_expansion_discards_on_unparsable_token() {
-    let mut sm = InputStateMachine::new();
-    let resolved = sm.apply_canonical_expansion(&["g", "not-a-key"]);
-    assert_eq!(resolved, None);
-    assert!(sm.state().is_base());
 }

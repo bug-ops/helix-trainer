@@ -127,7 +127,8 @@ pub fn indent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Sim
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
 pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
-    let unit_width = sim.indent_unit.width();
+    let tab_width = sim.language.tab_width;
+    let unit_width = sim.indent_unit.width(tab_width);
     let changes = touched_lines(sim)
         .into_iter()
         .filter_map(|line| {
@@ -136,7 +137,7 @@ pub fn dedent_line<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), Sim
             for ch in sim.doc.line(line).chars() {
                 match ch {
                     ' ' => width += 1,
-                    '\t' => width = (width / unit_width + 1) * unit_width,
+                    '\t' => width = tab_width.next_stop(width),
                     _ => break,
                 }
                 removable += 1;

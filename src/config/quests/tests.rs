@@ -147,6 +147,10 @@ target = 3
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_quest_conditions_default() {
     let conditions = QuestConditions::default();
     assert!(conditions.min_level.is_none());
@@ -218,8 +222,6 @@ fn test_load_daily_quests_toml() {
 fn test_quest_template_to_quest_conversion() {
     let template = QuestTemplate {
         id: qid("test_quest"),
-        name: "Test Quest".to_string(),
-        description: "Delete 3 lines".to_string(),
         difficulty: QuestDifficulty::Easy,
         spec: QuestSpec::CommandPractice {
             command: ncmd("x"),
@@ -231,7 +233,6 @@ fn test_quest_template_to_quest_conversion() {
 
     let quest = crate::gamification::Quest::from(&template);
     assert_eq!(quest.id.as_str(), "test_quest");
-    assert_eq!(quest.description, "Delete 3 lines");
     assert!(!quest.completed);
 }
 
@@ -351,8 +352,6 @@ unknown_field = "value"
 
 [[quests]]
 id = "test"
-name = "Test"
-description = "Test"
 type = "command_practice"
 difficulty = "easy"
 
@@ -375,8 +374,6 @@ version = "1.0"
 
 [[quests]]
 id = "test"
-name = "Test"
-description = "Test"
 type = "command_practice"
 difficulty = "easy"
 unknown_field = "value"
@@ -393,6 +390,20 @@ target = 3
 }
 
 #[test]
+fn test_quest_text_keys_are_rejected_in_templates() {
+    for key in ["name", "description"] {
+        let toml = format!(
+            "[metadata]\nversion = \"1.0\"\n\n[[quests]]\nid = \"test\"\n{key} = \"Test\"\ntype = \"scenario_completion\"\ndifficulty = \"easy\"\n\n[quests.params]\ntarget = 1\n"
+        );
+        assert!(toml::from_str::<QuestsFile>(&toml).is_err(), "{key}");
+    }
+}
+
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 fn test_validate_all_quest_templates() {
     use std::collections::{HashMap, HashSet};
 
@@ -424,28 +435,6 @@ fn test_validate_all_quest_templates() {
         );
 
         // 2. ID format is guaranteed by the `QuestId` type
-
-        // 3. Validate name and description are non-empty and within limits
-        assert!(
-            !template.name.is_empty(),
-            "Quest name is empty for ID: {}",
-            template.id
-        );
-        assert!(
-            template.name.len() <= 100,
-            "Quest name too long for ID: {}",
-            template.id
-        );
-        assert!(
-            !template.description.is_empty(),
-            "Quest description is empty for ID: {}",
-            template.id
-        );
-        assert!(
-            template.description.len() <= 500,
-            "Quest description too long for ID: {}",
-            template.id
-        );
 
         // 4. Validate quest spec parameters (type/params mismatch is unrepresentable
         //    at the type level, so no wildcard arm is needed here)
@@ -556,7 +545,6 @@ fn test_validate_all_quest_templates() {
         // 7. Validate template converts to runtime Quest
         let quest = crate::gamification::Quest::from(template);
         assert_eq!(quest.id, template.id);
-        assert_eq!(quest.description, template.description);
         assert!(!quest.completed, "New quest should not be completed");
     }
 
@@ -649,8 +637,6 @@ version = "1.0"
 
 [[quests]]
 id = "valid"
-name = "Valid"
-description = "Valid"
 type = "command_practice"
 difficulty = "easy"
 
@@ -681,25 +667,7 @@ target = 3
     }
 
     #[test]
-    fn text_and_xp_limits_have_their_own_variants() {
-        let long_name = QuestTemplate {
-            name: "n".repeat(MAX_QUEST_NAME_LENGTH + 1),
-            ..valid_template()
-        };
-        assert_matches!(
-            check(&long_name),
-            Err(QuestTemplateError::NameTooLong { .. })
-        );
-
-        let long_description = QuestTemplate {
-            description: "d".repeat(MAX_QUEST_DESCRIPTION_LENGTH + 1),
-            ..valid_template()
-        };
-        assert_matches!(
-            check(&long_description),
-            Err(QuestTemplateError::DescriptionTooLong { .. })
-        );
-
+    fn the_xp_limit_has_its_own_variant() {
         let rich = QuestTemplate {
             xp: Some(XpConfig {
                 base_reward: Some(MAX_CUSTOM_XP_REWARD + 1),
@@ -805,13 +773,15 @@ target = 3
     #[test]
     fn the_security_error_keeps_the_typed_cause() {
         let err = QuestLoader::validate_quest(&QuestTemplate {
-            name: "n".repeat(MAX_QUEST_NAME_LENGTH + 1),
+            xp: Some(XpConfig {
+                base_reward: Some(MAX_CUSTOM_XP_REWARD + 1),
+            }),
             ..valid_template()
         })
         .unwrap_err();
         assert_matches!(
             err,
-            SecurityError::QuestTemplate(QuestTemplateError::NameTooLong { .. })
+            ConfigError::QuestTemplate(QuestTemplateError::XpRewardTooHigh { .. })
         );
     }
 }

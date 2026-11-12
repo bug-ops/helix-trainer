@@ -17,9 +17,13 @@ use crate::helix::registry::metadata::{
     Binding, Category, CommandMetadata, CountBehavior, HelixName,
 };
 use crate::helix::simulator::NormalMode;
-use crate::helix::simulator::commands::{movement, select_mode};
+use crate::helix::simulator::commands::{movement, select_mode, view};
 
 /// Register all movement commands
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Basic cursor movement
     registry.register(Command::new(
@@ -240,6 +244,10 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 ///
 /// These commands require a target character and are handled specially
 /// by the dispatcher. This function registers metadata only.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub(crate) fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) {
     // Find char commands - metadata only, handlers are in dispatcher
     registry.register(Command::new(
@@ -344,7 +352,7 @@ pub(crate) fn register_parametric_metadata(registry: &mut CommandRegistry<Normal
         )
         .with_summary("Page up")
         .with_help("Move the cursor up by a full page."),
-        |sim| movement::page_up(sim, 1),
+        view::page_up,
     ));
 
     registry.register(Command::new(
@@ -355,7 +363,7 @@ pub(crate) fn register_parametric_metadata(registry: &mut CommandRegistry<Normal
         )
         .with_summary("Page down")
         .with_help("Move the cursor down by a full page."),
-        |sim| movement::page_down(sim, 1),
+        view::page_down,
     ));
 
     registry.register(Command::new(
@@ -366,7 +374,7 @@ pub(crate) fn register_parametric_metadata(registry: &mut CommandRegistry<Normal
         )
         .with_summary("Half page up")
         .with_help("Move the cursor up by half a page."),
-        |sim| movement::half_page_up(sim, 1),
+        view::half_page_up,
     ));
 
     registry.register(Command::new(
@@ -377,6 +385,6 @@ pub(crate) fn register_parametric_metadata(registry: &mut CommandRegistry<Normal
         )
         .with_summary("Half page down")
         .with_help("Move the cursor down by half a page."),
-        |sim| movement::half_page_down(sim, 1),
+        view::half_page_down,
     ));
 }

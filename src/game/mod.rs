@@ -8,6 +8,7 @@ use std::time::Duration;
 use crate::helix::{ModeKind, SelectionBounds};
 
 pub mod command_context;
+mod error;
 pub mod scenario_collection;
 pub mod scenario_state;
 pub mod scorer;
@@ -15,6 +16,7 @@ pub mod services;
 pub mod session;
 
 pub use command_context::{CommandExecutor, format_key_for_display};
+pub use error::GameError;
 pub use scenario_collection::{
     CompletionFilter, CurriculumStats, ScenarioCollection, ScenarioFilter, SortMode,
 };
@@ -73,13 +75,13 @@ pub trait PlayableScenario {
     /// Get elapsed time since scenario start
     fn elapsed(&self) -> Duration;
 
-    /// Get the scenario's effective content language as a file-extension-style token
-    /// (e.g. `"rs"`, `"md"`), used to select syntax highlighting for the target panel.
+    /// Get the scenario's effective content language, used to select syntax
+    /// highlighting for the target panel.
     ///
     /// Default implementation returns [`crate::config::DEFAULT_LANGUAGE`], matching the
     /// highlighter's historical hardcoded behavior; implementors backed by a `Scenario`
     /// should resolve this from `Setup.language`.
-    fn language(&self) -> &str {
+    fn language(&self) -> crate::helix::Language {
         crate::config::DEFAULT_LANGUAGE
     }
 

@@ -13,6 +13,10 @@ use super::{InputHandler, KeyHandler, execute_registered};
 use crate::input::typestate::{handler_result::HandlerResult, state_types::ViewPending};
 
 impl InputHandler<ViewPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &ViewPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // 'zz' - center view

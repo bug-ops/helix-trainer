@@ -133,6 +133,14 @@ fn render_level_section(
 }
 
 /// Render statistics and quest information
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
+#[expect(
+    clippy::similar_names,
+    reason = "parallel names mirror the values they bind"
+)]
 fn render_stats_section(
     frame: &mut Frame,
     state: &AppState,

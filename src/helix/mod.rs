@@ -12,10 +12,12 @@
 //! let mut sim = AnyModeSimulator::new("hello world".to_string());
 //! sim.execute_command("w")?;  // Move to next word
 //! assert_eq!(sim.display().cursor_position(), (0, 6));
-//! # Ok::<(), helix_trainer::security::UserError>(())
+//! # Ok::<(), helix_trainer::error::UserError>(())
 //! ```
 
 pub mod error;
+#[cfg(any(test, feature = "test-util"))]
+pub mod goldens;
 pub mod indent;
 pub mod language;
 pub mod macro_recorder;
@@ -25,8 +27,8 @@ pub mod registry;
 pub mod repeat;
 pub mod simulator;
 
-pub use indent::IndentUnit;
-pub use language::LanguageRules;
+pub use indent::{IndentUnit, TabWidth};
+pub use language::{Language, LanguageRules, SmartTab};
 pub use repeat::{
     InsertAction, InsertKey, Movement, RepeatBuffer, RepeatableAction, is_repeatable_command,
 };

@@ -28,6 +28,10 @@ use crate::input::typestate::{
 // ============================================================================
 
 impl InputHandler<MatchPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &MatchPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // 'mm' - match brackets
@@ -55,6 +59,10 @@ impl InputHandler<MatchPending> for KeyHandler {
 // ============================================================================
 
 impl InputHandler<SurroundAddPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &SurroundAddPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any printable character for surrounding
@@ -72,6 +80,10 @@ impl InputHandler<SurroundAddPending> for KeyHandler {
 // ============================================================================
 
 impl InputHandler<SurroundDeletePending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &SurroundDeletePending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any printable character for deletion target
@@ -91,6 +103,10 @@ impl InputHandler<SurroundDeletePending> for KeyHandler {
 // ============================================================================
 
 impl InputHandler<SurroundReplaceFromPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &SurroundReplaceFromPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any printable character as "from" character
@@ -110,6 +126,10 @@ impl InputHandler<SurroundReplaceFromPending> for KeyHandler {
 // ============================================================================
 
 impl InputHandler<SurroundReplaceToPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(state: &SurroundReplaceToPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any printable character as "to" character

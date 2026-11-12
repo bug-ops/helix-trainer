@@ -349,6 +349,10 @@ fn test_after_taught_commands_scenarios_declare_taught_commands() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 fn test_all_scenarios_execute_solution() {
     use helix_trainer::game::SessionAfterAction;
     let loader = ScenarioLoader::new();
@@ -573,7 +577,7 @@ fn type_through_ui(scenario_id: &str, keys: &[&'static str]) -> UiRun {
         send(
             &mut state,
             Message::ExecuteCommand {
-                keys: CanonicalKeys::from_static(key),
+                keys: CanonicalKeys::parse(*key).unwrap().into(),
                 typed: Cow::Borrowed(key),
             },
         );

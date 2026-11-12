@@ -20,7 +20,7 @@ pub mod storage;
 pub mod streak;
 
 pub use achievements::{Achievement, AchievementEngine, AchievementId, speed_time_ratio};
-pub use challenge_progress::ChallengeProgress;
+pub use challenge_progress::{ChallengeDay, ChallengeProgress};
 pub use profile::{LevelProgress, UserProfile, XPCalculator, XPComponents};
 pub use quests::{
     Quest, QuestDifficulty, QuestGeneration, QuestGenerator, QuestRegistrySlot,
